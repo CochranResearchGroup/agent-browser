@@ -5,14 +5,18 @@
 //! reuse the Guacamole protocol transport behind this interface.
 
 use agent_browser_service_model::{
-    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence, RouteKeeperPhase,
-    RouteKeeperProjection, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
-    RouteKeeperStopDisposition, RouteKeeperStopReceipt,
+    RecordedProcessIdentity, RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence,
+    RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperProjection,
+    RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStopDisposition,
+    RouteKeeperStopReceipt,
 };
 use std::path::{Path, PathBuf};
 use tokio::sync::{mpsc, watch};
 
 use super::browser_session_store::BrowserRuntimeSqliteStore;
+use crate::process_identity::{
+    assess_process_ownership, LegacyProfileProof, ProcessObservation, RuntimeProcessOwnership,
+};
 
 pub(crate) trait RouteKeeperRepository {
     fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String>;
@@ -49,6 +53,67 @@ impl RouteKeeperRepository for SqliteRouteKeeperRepository {
         BrowserRuntimeSqliteStore::open(&self.path)?
             .compare_and_swap_route_keeper_authority(expected, next)
     }
+}
+
+/// Append or idempotently reuse the exact process claim for the running host.
+///
+/// Allocation and publication happen against one SQLite authority snapshot.
+/// A conflict reloads rather than guessing whether another writer committed.
+pub(crate) fn register_route_keeper_host_process(
+    repository: &impl RouteKeeperRepository,
+    boot_epoch: &str,
+    process_identity: RecordedProcessIdentity,
+) -> Result<(RouteKeeperAuthority, u64), String> {
+    if boot_epoch.trim().is_empty() {
+        return Err("route_keeper_host_process_boot_epoch_invalid".to_string());
+    }
+    for _ in 0..3 {
+        let expected = repository.load_route_keeper_authority()?;
+        let mut matches = expected
+            .host_process_claims
+            .iter()
+            .filter_map(|(generation, claim)| {
+                (claim.boot_epoch == boot_epoch && claim.process_identity == process_identity)
+                    .then_some(*generation)
+            });
+        let existing_generation = matches.next();
+        if matches.next().is_some() {
+            return Err("route_keeper_host_process_claim_duplicate".to_string());
+        }
+        let generation = if let Some(generation) = existing_generation {
+            generation
+        } else {
+            expected
+                .host_process_claims
+                .keys()
+                .copied()
+                .chain(
+                    expected
+                        .records
+                        .values()
+                        .map(|record| record.fence.host_generation),
+                )
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or_else(|| "route_keeper_host_generation_exhausted".to_string())?
+        };
+        let mut next = expected.clone();
+        next.register_host_process_claim(RouteKeeperHostProcessClaim {
+            host_generation: generation,
+            boot_epoch: boot_epoch.to_string(),
+            process_identity: process_identity.clone(),
+        })?;
+        if next == expected {
+            return Ok((expected, generation));
+        }
+        match repository.compare_and_swap_route_keeper_authority(&expected, &next) {
+            Ok(()) => return Ok((next, generation)),
+            Err(error) if error == "route_keeper_authority_compare_and_swap_conflict" => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Err("route_keeper_host_process_claim_compare_and_swap_exhausted".to_string())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -464,6 +529,74 @@ pub(crate) struct VerifiedRouteKeeperPredecessorExit {
     successor_host_generation: u64,
 }
 
+/// Build the opaque predecessor-exit capability from one validated authority
+/// snapshot and one caller-supplied process observation.
+///
+/// This seam is pure and provider-free. The caller owns the OS observation;
+/// this function only classifies it against the exact durable process claim.
+pub(crate) fn try_prove_route_keeper_predecessor_exit(
+    authority: &RouteKeeperAuthority,
+    expected_ready: RouteKeeperProtocolReadyReceipt,
+    successor_host_generation: u64,
+    current_boot_epoch: &str,
+    observation: ProcessObservation,
+) -> Result<Option<VerifiedRouteKeeperPredecessorExit>, String> {
+    authority.projection()?;
+    if current_boot_epoch.trim().is_empty() {
+        return Err("route_keeper_predecessor_proof_boot_epoch_invalid".to_string());
+    }
+    let predecessor_generation = expected_ready.fence.host_generation;
+    if successor_host_generation <= predecessor_generation {
+        return Err("route_keeper_predecessor_proof_successor_generation_invalid".to_string());
+    }
+    let record = authority
+        .records
+        .get(&expected_ready.slot_id)
+        .ok_or_else(|| "route_keeper_predecessor_proof_candidate_changed".to_string())?;
+    if record.phase != RouteKeeperPhase::Ready
+        || record.keeper_id != expected_ready.keeper_id
+        || record.protocol_ready.as_ref() != Some(&expected_ready)
+        || record.fence != expected_ready.fence
+    {
+        return Err("route_keeper_predecessor_proof_candidate_changed".to_string());
+    }
+    let predecessor = authority
+        .host_process_claims
+        .get(&predecessor_generation)
+        .ok_or_else(|| {
+            format!("route_keeper_host_process_claim_missing:{predecessor_generation}")
+        })?;
+    let successor = authority
+        .host_process_claims
+        .get(&successor_host_generation)
+        .ok_or_else(|| {
+            format!("route_keeper_host_process_claim_missing:{successor_host_generation}")
+        })?;
+    if successor.boot_epoch != current_boot_epoch {
+        return Err("route_keeper_predecessor_proof_successor_boot_epoch_mismatch".to_string());
+    }
+
+    let predecessor_exited = if predecessor.boot_epoch != current_boot_epoch {
+        true
+    } else {
+        matches!(
+            assess_process_ownership(
+                Some(&predecessor.process_identity),
+                observation,
+                LegacyProfileProof::Unproven,
+            )
+            .ownership,
+            RuntimeProcessOwnership::Missing | RuntimeProcessOwnership::ReusedUnrelated
+        )
+    };
+    Ok(
+        predecessor_exited.then_some(VerifiedRouteKeeperPredecessorExit {
+            expected_ready,
+            successor_host_generation,
+        }),
+    )
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum RouteKeeperColdRecoveryProgress {
     Pending(RouteKeeperProjection),
@@ -733,8 +866,9 @@ fn require_stop_matches_action(
 mod tests {
     use super::*;
     use agent_browser_service_model::{
-        RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperPhase,
-        RouteKeeperStartPriority, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
+        RecordedProcessIdentity, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
+        RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperStartPriority,
+        RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -742,6 +876,20 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use crate::native::browser_session_store::LegacyBrowserRuntimeSources;
+    use crate::process_identity::{ObservedProcessIdentity, ProcessObservation};
+
+    fn host_process_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
+        RouteKeeperHostProcessClaim {
+            host_generation,
+            boot_epoch: "linux:boot:fixture".to_string(),
+            process_identity: RecordedProcessIdentity {
+                pid: u32::try_from(4_000 + host_generation).unwrap(),
+                start_token: format!("linux:start:{host_generation}"),
+                executable_path: Some("/opt/agent-browser".to_string()),
+                browser_family: None,
+            },
+        }
+    }
 
     struct TempDirectory(PathBuf);
 
@@ -778,6 +926,9 @@ mod tests {
         let original = store.load_route_keeper_authority().unwrap();
         let mut configured = original.clone();
         configured
+            .register_host_process_claim(host_process_claim(1))
+            .unwrap();
+        configured
             .replace_connection_catalog(
                 RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
                     RouteKeeperConnectionBinding {
@@ -795,6 +946,36 @@ mod tests {
             .compare_and_swap_route_keeper_authority(&original, &configured)
             .unwrap();
         SqliteRouteKeeperRepository::new(&database_path)
+    }
+
+    fn register_host_claim(
+        repository: &SqliteRouteKeeperRepository,
+        host_generation: u64,
+    ) -> RouteKeeperAuthority {
+        let expected = repository.load_route_keeper_authority().unwrap();
+        let mut next = expected.clone();
+        next.register_host_process_claim(host_process_claim(host_generation))
+            .unwrap();
+        repository
+            .compare_and_swap_route_keeper_authority(&expected, &next)
+            .unwrap();
+        next
+    }
+
+    fn prove_missing_predecessor(
+        authority: &RouteKeeperAuthority,
+        expected_ready: RouteKeeperProtocolReadyReceipt,
+        successor_host_generation: u64,
+    ) -> VerifiedRouteKeeperPredecessorExit {
+        try_prove_route_keeper_predecessor_exit(
+            authority,
+            expected_ready,
+            successor_host_generation,
+            "linux:boot:fixture",
+            ProcessObservation::Missing,
+        )
+        .unwrap()
+        .expect("the exact fixture predecessor must be absent")
     }
 
     #[derive(Default)]
@@ -1165,6 +1346,7 @@ mod tests {
         );
         assert_eq!(connector.starts.len(), 1);
 
+        register_host_claim(&repository, 2);
         let adopted = adopt_once(&repository, &mut connector, "route-slot-01", 2)
             .await
             .unwrap();
@@ -1207,10 +1389,8 @@ mod tests {
             .routes
             .insert(original.slot_id.clone(), original.clone());
 
-        let proof = VerifiedRouteKeeperPredecessorExit {
-            expected_ready: original.clone(),
-            successor_host_generation: 2,
-        };
+        let claimed = register_host_claim(&repository, 2);
+        let proof = prove_missing_predecessor(&claimed, original.clone(), 2);
         let RouteKeeperColdRecoveryProgress::Ready(projection) =
             recover_proven_cold_process_route(&repository, &mut successor, &proof)
                 .await
@@ -1243,6 +1423,129 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn predecessor_exit_proof_requires_exact_persisted_host_claim_and_absence() {
+        let directory = TempDirectory::new("route-keeper-predecessor-exit-proof");
+        let repository = repository(&directory);
+        let mut predecessor = FakeConnector::default();
+        let ready = make_minimum_ready(&repository, &mut predecessor).await;
+        let original = ready.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let authority = register_host_claim(&repository, 2);
+        let recorded = authority.host_process_claims[&1].process_identity.clone();
+
+        assert!(try_prove_route_keeper_predecessor_exit(
+            &authority,
+            original.clone(),
+            2,
+            "linux:boot:fixture",
+            ProcessObservation::Missing,
+        )
+        .unwrap()
+        .is_some());
+
+        let observed = |start_token: Option<&str>, executable_path: Option<&str>| {
+            ProcessObservation::Observed(ObservedProcessIdentity {
+                pid: recorded.pid,
+                start_token: start_token.map(str::to_string),
+                executable_path: executable_path.map(str::to_string),
+                browser_family: None,
+                command_line: None,
+            })
+        };
+        assert!(try_prove_route_keeper_predecessor_exit(
+            &authority,
+            original.clone(),
+            2,
+            "linux:boot:fixture",
+            observed(
+                Some(&recorded.start_token),
+                recorded.executable_path.as_deref()
+            ),
+        )
+        .unwrap()
+        .is_none());
+        assert!(try_prove_route_keeper_predecessor_exit(
+            &authority,
+            original.clone(),
+            2,
+            "linux:boot:fixture",
+            observed(
+                Some("linux:reused-process"),
+                recorded.executable_path.as_deref()
+            ),
+        )
+        .unwrap()
+        .is_some());
+        assert!(try_prove_route_keeper_predecessor_exit(
+            &authority,
+            original.clone(),
+            2,
+            "linux:boot:fixture",
+            observed(Some(&recorded.start_token), None),
+        )
+        .unwrap()
+        .is_none());
+        assert!(try_prove_route_keeper_predecessor_exit(
+            &authority,
+            original,
+            2,
+            "linux:boot:fixture",
+            ProcessObservation::Failed {
+                reason: "fixture observation failed".to_string(),
+            },
+        )
+        .unwrap()
+        .is_none());
+    }
+
+    #[tokio::test]
+    async fn host_process_registration_preserves_active_predecessor_and_reuses_successor() {
+        let directory = TempDirectory::new("route-keeper-host-process-registration");
+        let repository = repository(&directory);
+        let mut predecessor = FakeConnector::default();
+        let ready = make_minimum_ready(&repository, &mut predecessor).await;
+        let original = ready.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let successor_identity = RecordedProcessIdentity {
+            pid: 4_002,
+            start_token: "linux:start:successor".to_string(),
+            executable_path: Some("/opt/agent-browser".to_string()),
+            browser_family: None,
+        };
+
+        let (registered, successor_generation) = register_route_keeper_host_process(
+            &repository,
+            "linux:boot:fixture",
+            successor_identity.clone(),
+        )
+        .unwrap();
+        assert_eq!(successor_generation, 2);
+        assert_eq!(
+            registered.records["route-slot-01"].protocol_ready,
+            Some(original)
+        );
+        assert_eq!(registered.records["route-slot-01"].fence.host_generation, 1);
+        assert!(registered
+            .records
+            .values()
+            .filter(|record| record.phase == RouteKeeperPhase::Absent)
+            .all(|record| record.fence.host_generation == successor_generation));
+
+        let (replayed, replayed_generation) = register_route_keeper_host_process(
+            &repository,
+            "linux:boot:fixture",
+            successor_identity,
+        )
+        .unwrap();
+        assert_eq!(replayed_generation, successor_generation);
+        assert_eq!(replayed, registered);
+    }
+
+    #[tokio::test]
     async fn cold_process_recovery_rejects_route_rebound_after_initial_candidate_scan() {
         let directory = TempDirectory::new("route-keeper-cold-process-rebound");
         let inner = repository(&directory);
@@ -1252,6 +1555,8 @@ mod tests {
             .protocol_ready
             .clone()
             .unwrap();
+        let _ = register_host_claim(&inner, 2);
+        let original_authority = register_host_claim(&inner, 3);
 
         let mut degraded = original_authority.clone();
         degraded
@@ -1287,10 +1592,7 @@ mod tests {
             .routes
             .insert(original.slot_id.clone(), original.clone());
 
-        let proof = VerifiedRouteKeeperPredecessorExit {
-            expected_ready: original.clone(),
-            successor_host_generation: 3,
-        };
+        let proof = prove_missing_predecessor(&original_authority, original.clone(), 3);
         assert_eq!(
             recover_proven_cold_process_route(&repository, &mut successor, &proof).await,
             Err("route_keeper_cold_process_candidate_changed:route-slot-01".to_string())
@@ -1312,10 +1614,8 @@ mod tests {
             .protocol_ready
             .clone()
             .unwrap();
-        let proof = VerifiedRouteKeeperPredecessorExit {
-            expected_ready: original.clone(),
-            successor_host_generation: 2,
-        };
+        let ready = register_host_claim(&repository, 2);
+        let proof = prove_missing_predecessor(&ready, original.clone(), 2);
 
         let mut foreign = ready.clone();
         foreign
@@ -1357,10 +1657,8 @@ mod tests {
             .protocol_ready
             .clone()
             .unwrap();
-        let proof = VerifiedRouteKeeperPredecessorExit {
-            expected_ready: original.clone(),
-            successor_host_generation: 2,
-        };
+        let claimed = register_host_claim(&repository, 2);
+        let proof = prove_missing_predecessor(&claimed, original.clone(), 2);
         let mut successor = FakeConnector {
             adoption_error: Some("fixture_adoption_interrupted".to_string()),
             ..FakeConnector::default()
@@ -1400,10 +1698,8 @@ mod tests {
             .protocol_ready
             .clone()
             .unwrap();
-        let proof = VerifiedRouteKeeperPredecessorExit {
-            expected_ready: original.clone(),
-            successor_host_generation: 2,
-        };
+        let claimed = register_host_claim(&repository, 2);
+        let proof = prove_missing_predecessor(&claimed, original.clone(), 2);
         let mut successor = FakeConnector {
             adoption_pending_once: true,
             ..FakeConnector::default()

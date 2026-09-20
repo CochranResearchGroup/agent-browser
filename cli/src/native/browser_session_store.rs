@@ -9,7 +9,7 @@ use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState, RemoteViewHandoff,
     RouteKeeperAuthority, RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
     BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -323,7 +323,7 @@ impl BrowserRuntimeSqliteStore {
             save_document(
                 &transaction,
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT,
-                ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
                 &RouteKeeperAuthority::default(),
             )?;
             save_runtime_config_row(&transaction, &BrowserRuntimeConfig::default())?;
@@ -556,6 +556,13 @@ impl BrowserRuntimeSqliteStore {
         {
             return Err("route_keeper_connection_catalog_active".to_string());
         }
+        for (generation, claim) in &current.host_process_claims {
+            if next.host_process_claims.get(generation) != Some(claim) {
+                return Err(format!(
+                    "route_keeper_host_process_claim_changed:{generation}"
+                ));
+            }
+        }
         for (slot_id, current_record) in &current.records {
             let next_record = next
                 .records
@@ -572,7 +579,7 @@ impl BrowserRuntimeSqliteStore {
         save_document(
             &transaction,
             ROUTE_KEEPER_AUTHORITY_DOCUMENT,
-            ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
             next,
         )?;
         transaction
@@ -1270,15 +1277,21 @@ fn load_route_keeper_authority_document(
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT
             )
         })?;
-        if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 {
-            authority = authority.upgrade_from_v1()?;
-            if compare_and_swap_route_keeper_v1_upgrade(connection, &json, &authority)? {
+        if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 || schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V2
+        {
+            authority = if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 {
+                authority.upgrade_from_v1()?
+            } else {
+                authority.upgrade_from_v2()?
+            };
+            if compare_and_swap_route_keeper_schema_upgrade(connection, &schema, &json, &authority)?
+            {
                 authority.projection()?;
                 return Ok(authority);
             }
             continue;
         }
-        if schema != ROUTE_KEEPER_AUTHORITY_SCHEMA_V2 {
+        if schema != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3 {
             return Err(format!(
                 "browser_runtime_document_schema_unsupported:{}:{schema}",
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT
@@ -1290,8 +1303,9 @@ fn load_route_keeper_authority_document(
     Err("route_keeper_authority_migration_compare_and_swap_exhausted".to_string())
 }
 
-fn compare_and_swap_route_keeper_v1_upgrade(
+fn compare_and_swap_route_keeper_schema_upgrade(
     connection: &Connection,
+    source_schema: &str,
     expected_json: &str,
     upgraded: &RouteKeeperAuthority,
 ) -> Result<bool, String> {
@@ -1307,10 +1321,10 @@ fn compare_and_swap_route_keeper_v1_upgrade(
              SET schema_version = ?1, json = ?2
              WHERE kind = ?3 AND schema_version = ?4 AND json = ?5",
             params![
-                ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
                 upgraded_json,
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT,
-                ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+                source_schema,
                 expected_json
             ],
         )
@@ -1737,8 +1751,22 @@ fn atomic_replace(source: &Path, destination: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use agent_browser_service_model::{
-        BrowserProfileKind, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
+        BrowserProfileKind, RecordedProcessIdentity, RouteKeeperConnectionBinding,
+        RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
     };
+
+    fn route_keeper_host_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
+        RouteKeeperHostProcessClaim {
+            host_generation,
+            boot_epoch: format!("linux:boot:{host_generation}"),
+            process_identity: RecordedProcessIdentity {
+                pid: u32::try_from(4_000 + host_generation).unwrap(),
+                start_token: format!("linux:start:{host_generation}"),
+                executable_path: Some("/opt/agent-browser".to_string()),
+                browser_family: None,
+            },
+        }
+    }
 
     fn route_keeper_catalog() -> RouteKeeperConnectionCatalog {
         RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
@@ -1912,6 +1940,9 @@ mod tests {
         assert_eq!(original_authority, RouteKeeperAuthority::default());
         let mut authority = original_authority.clone();
         authority
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
+        authority
             .replace_connection_catalog(route_keeper_catalog())
             .unwrap();
 
@@ -1989,6 +2020,9 @@ mod tests {
             .unwrap();
         let before_start = store.load_route_keeper_authority().unwrap();
         let mut active = before_start.clone();
+        active
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
         active.next_reconcile_action().unwrap();
         store
             .compare_and_swap_route_keeper_authority(&before_start, &active)
@@ -2023,6 +2057,9 @@ mod tests {
             .unwrap();
         let before_start = store.load_route_keeper_authority().unwrap();
         let mut active = before_start.clone();
+        active
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
         active.next_reconcile_action().unwrap();
         store
             .compare_and_swap_route_keeper_authority(&before_start, &active)
@@ -2148,12 +2185,18 @@ mod tests {
             .unwrap();
         let stale = store.load_route_keeper_authority().unwrap();
         let mut current = stale.clone();
+        current
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
         current.next_reconcile_action().unwrap();
         store
             .compare_and_swap_route_keeper_authority(&stale, &current)
             .unwrap();
 
         let mut stale_next = stale.clone();
+        stale_next
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
         stale_next.next_reconcile_action().unwrap();
         assert_eq!(
             store.compare_and_swap_route_keeper_authority(&stale, &stale_next),
@@ -2205,7 +2248,7 @@ mod tests {
     }
 
     #[test]
-    fn route_keeper_v1_document_migrates_in_place_to_v2_with_empty_catalog() {
+    fn route_keeper_v1_document_migrates_in_place_to_v3_without_process_claim() {
         let directory = TempDirectory::new("browser-runtime-route-keeper-v1-migration");
         let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
         BrowserRuntimeSqliteStore::migrate_from_legacy(
@@ -2243,8 +2286,9 @@ mod tests {
         let migrated = store.load_route_keeper_authority().unwrap();
         assert_eq!(
             migrated.schema_version,
-            agent_browser_service_model::ROUTE_KEEPER_AUTHORITY_SCHEMA_V2
+            agent_browser_service_model::ROUTE_KEEPER_AUTHORITY_SCHEMA_V3
         );
+        assert!(migrated.host_process_claims.is_empty());
         assert!(migrated.connection_catalog.bindings.is_empty());
         let digest = migrated.connection_catalog.digest().unwrap();
         assert!(migrated
@@ -2259,9 +2303,12 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(persisted_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2);
+        assert_eq!(persisted_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3);
 
         let mut newer = migrated.clone();
+        newer
+            .register_host_process_claim(route_keeper_host_claim(2))
+            .unwrap();
         newer
             .replace_connection_catalog(route_keeper_catalog())
             .unwrap();
@@ -2316,10 +2363,13 @@ mod tests {
 
         let stale: RouteKeeperAuthority = serde_json::from_str(&legacy_json).unwrap();
         let stale = stale.upgrade_from_v1().unwrap();
-        assert!(
-            !compare_and_swap_route_keeper_v1_upgrade(&store.connection, &legacy_json, &stale,)
-                .unwrap()
-        );
+        assert!(!compare_and_swap_route_keeper_schema_upgrade(
+            &store.connection,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+            &legacy_json,
+            &stale,
+        )
+        .unwrap());
         assert_eq!(store.load_route_keeper_authority().unwrap(), newer);
 
         fn remove_catalog_digests(value: &mut serde_json::Value) {
@@ -2344,6 +2394,10 @@ mod tests {
             .as_object_mut()
             .unwrap()
             .remove("connectionCatalog");
+        active_v1
+            .as_object_mut()
+            .unwrap()
+            .remove("hostProcessClaims");
         remove_catalog_digests(&mut active_v1);
         store
             .connection
@@ -2369,6 +2423,37 @@ mod tests {
             )
             .unwrap();
         assert_eq!(retained_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1);
+
+        let mut active_v2 = serde_json::to_value(&newer).unwrap();
+        active_v2["schemaVersion"] = serde_json::json!(ROUTE_KEEPER_AUTHORITY_SCHEMA_V2);
+        active_v2
+            .as_object_mut()
+            .unwrap()
+            .remove("hostProcessClaims");
+        store
+            .connection
+            .execute(
+                "UPDATE state_documents SET schema_version = ?1, json = ?2 WHERE kind = ?3",
+                params![
+                    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+                    serde_json::to_string(&active_v2).unwrap(),
+                    ROUTE_KEEPER_AUTHORITY_DOCUMENT
+                ],
+            )
+            .unwrap();
+        assert_eq!(
+            store.load_route_keeper_authority(),
+            Err("route_keeper_v2_active_host_claim_migration_unproven".to_string())
+        );
+        let retained_schema: String = store
+            .connection
+            .query_row(
+                "SELECT schema_version FROM state_documents WHERE kind = ?1",
+                params![ROUTE_KEEPER_AUTHORITY_DOCUMENT],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retained_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2);
     }
 
     #[test]

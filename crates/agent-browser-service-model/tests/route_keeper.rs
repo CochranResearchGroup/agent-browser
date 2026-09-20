@@ -1,10 +1,24 @@
 use agent_browser_service_model::{
-    RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperConnectionBinding,
-    RouteKeeperConnectionCatalog, RouteKeeperFence, RouteKeeperPhase, RouteKeeperPolicy,
+    RecordedProcessIdentity, RouteKeeperAdoptionReceipt, RouteKeeperAuthority,
+    RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperFence,
+    RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy,
     RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
     RouteKeeperStartPriority, RouteKeeperStopDisposition, RouteKeeperStopReceipt,
-    RouteKeeperXrdpOwnershipWitness,
+    RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
 };
+
+fn host_process_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
+    RouteKeeperHostProcessClaim {
+        host_generation,
+        boot_epoch: format!("linux:boot:{host_generation}"),
+        process_identity: RecordedProcessIdentity {
+            pid: u32::try_from(4_000 + host_generation).unwrap(),
+            start_token: format!("linux:start:{host_generation}"),
+            executable_path: Some("/opt/agent-browser".to_string()),
+            browser_family: None,
+        },
+    }
+}
 
 fn connection_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
     RouteKeeperConnectionCatalog::new((1..=maximum_slots).map(|sequence| {
@@ -22,14 +36,67 @@ fn connection_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
 fn authority(host_generation: u64) -> RouteKeeperAuthority {
     let mut authority = RouteKeeperAuthority::new(host_generation).unwrap();
     authority
+        .register_host_process_claim(host_process_claim(host_generation))
+        .unwrap();
+    authority
         .replace_connection_catalog(connection_catalog(authority.policy.maximum_slots))
         .unwrap();
     authority
 }
 
 #[test]
+fn host_process_claims_are_append_only_and_fence_active_records() {
+    let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    assert_eq!(authority.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3);
+    assert!(authority.host_process_claims.is_empty());
+
+    let first = host_process_claim(1);
+    authority
+        .register_host_process_claim(first.clone())
+        .unwrap();
+    assert_eq!(authority.host_process_claims.get(&1), Some(&first));
+
+    authority
+        .replace_connection_catalog(connection_catalog(6))
+        .unwrap();
+    let (_, _, first_fence) = expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    assert_eq!(first_fence.host_generation, 1);
+
+    let rebound = RouteKeeperHostProcessClaim {
+        process_identity: RecordedProcessIdentity {
+            start_token: "linux:other-process".to_string(),
+            ..first.process_identity.clone()
+        },
+        ..first.clone()
+    };
+    assert_eq!(
+        authority.register_host_process_claim(rebound),
+        Err("route_keeper_host_process_claim_rebound:1".to_string())
+    );
+
+    let second = host_process_claim(2);
+    authority
+        .register_host_process_claim(second.clone())
+        .unwrap();
+    assert_eq!(authority.host_process_claims.get(&1), Some(&first));
+    assert_eq!(authority.host_process_claims.get(&2), Some(&second));
+    assert_eq!(
+        authority.records["route-slot-01"].fence.host_generation, 1,
+        "an active predecessor remains bound to its original process"
+    );
+    assert!(authority
+        .records
+        .values()
+        .filter(|record| record.phase == RouteKeeperPhase::Absent)
+        .all(|record| record.fence.host_generation == 2));
+}
+
+#[test]
 fn empty_catalog_blocks_start_and_catalog_digest_fences_every_action() {
     let mut empty = RouteKeeperAuthority::new(1).unwrap();
+    empty
+        .register_host_process_claim(host_process_claim(1))
+        .unwrap();
     assert_eq!(
         empty.next_reconcile_action(),
         Err("route_keeper_connection_catalog_empty".to_string())
@@ -188,6 +255,9 @@ fn make_one_ready() -> (RouteKeeperAuthority, RouteKeeperProtocolReadyReceipt) {
 #[test]
 fn ready_handoff_binding_joins_exact_catalog_keeper_and_xrdp_evidence() {
     let mut authority = RouteKeeperAuthority::new(1).unwrap();
+    authority
+        .register_host_process_claim(host_process_claim(1))
+        .unwrap();
     authority
         .replace_connection_catalog(
             RouteKeeperConnectionCatalog::with_provider_urls(
@@ -351,6 +421,9 @@ fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
         authority.records[&original_ready.slot_id].phase,
         RouteKeeperPhase::Degraded
     );
+    authority
+        .register_host_process_claim(host_process_claim(2))
+        .unwrap();
 
     let adoption_action = authority
         .begin_adoption(&original_ready.slot_id, 2)

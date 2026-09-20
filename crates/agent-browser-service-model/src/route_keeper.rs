@@ -4,8 +4,11 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
+use crate::RecordedProcessIdentity;
+
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V1: &str = "agent-browser.route-keeper-authority.v1";
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V2: &str = "agent-browser.route-keeper-authority.v2";
+pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V3: &str = "agent-browser.route-keeper-authority.v3";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -150,6 +153,18 @@ pub struct RouteKeeperPolicy {
     pub minimum_ready: u32,
     pub warm_target: u32,
     pub maximum_slots: u32,
+}
+
+/// Exact process instance that owns one route-keeper host generation.
+///
+/// Claims are append-only. Retaining predecessor claims allows a successor to
+/// prove one process generation exited while routes are adopted individually.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteKeeperHostProcessClaim {
+    pub host_generation: u64,
+    pub boot_epoch: String,
+    pub process_identity: RecordedProcessIdentity,
 }
 
 impl Default for RouteKeeperPolicy {
@@ -314,6 +329,8 @@ pub struct RouteKeeperAuthority {
     pub policy: RouteKeeperPolicy,
     #[serde(default)]
     pub connection_catalog: RouteKeeperConnectionCatalog,
+    #[serde(default)]
+    pub host_process_claims: BTreeMap<u64, RouteKeeperHostProcessClaim>,
     pub records: BTreeMap<String, RouteKeeperRecord>,
 }
 
@@ -382,11 +399,67 @@ impl RouteKeeperAuthority {
             })
             .collect();
         Ok(Self {
-            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V2.to_string(),
+            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V3.to_string(),
             policy,
             connection_catalog,
+            host_process_claims: BTreeMap::new(),
             records,
         })
+    }
+
+    /// Append one exact host-process claim and move only idle slots to it.
+    ///
+    /// Active routes remain fenced to their predecessor generation so they can
+    /// be recovered independently. A generation can never be rebound to a
+    /// different process instance.
+    pub fn register_host_process_claim(
+        &mut self,
+        claim: RouteKeeperHostProcessClaim,
+    ) -> Result<(), String> {
+        validate_host_process_claim(&claim)?;
+        if let Some(existing) = self.host_process_claims.get(&claim.host_generation) {
+            if existing != &claim {
+                return Err(format!(
+                    "route_keeper_host_process_claim_rebound:{}",
+                    claim.host_generation
+                ));
+            }
+            let generation = claim.host_generation;
+            for record in self
+                .records
+                .values_mut()
+                .filter(|record| record.phase == RouteKeeperPhase::Absent)
+            {
+                record.fence.host_generation = generation;
+                record.fence.operation_id.clear();
+                record.fence.operation_generation = 0;
+            }
+            return self.validate();
+        }
+        let highest_claimed = self.host_process_claims.keys().next_back().copied();
+        let highest_recorded = self
+            .records
+            .values()
+            .map(|record| record.fence.host_generation)
+            .max()
+            .unwrap_or(0);
+        if highest_claimed.is_some_and(|generation| claim.host_generation <= generation)
+            || claim.host_generation < highest_recorded
+        {
+            return Err("route_keeper_host_process_claim_generation_stale".to_string());
+        }
+        let generation = claim.host_generation;
+        self.host_process_claims.insert(generation, claim);
+        for record in self
+            .records
+            .values_mut()
+            .filter(|record| record.phase == RouteKeeperPhase::Absent)
+        {
+            record.fence.host_generation = generation;
+            record.fence.operation_id.clear();
+            record.fence.operation_generation = 0;
+        }
+        self.validate()
     }
 
     pub fn replace_connection_catalog(
@@ -434,6 +507,22 @@ impl RouteKeeperAuthority {
         for record in self.records.values_mut() {
             set_record_catalog_digest(record, &digest);
         }
+        self.upgrade_from_v2()
+    }
+
+    pub fn upgrade_from_v2(mut self) -> Result<Self, String> {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V2 {
+            return Err("route_keeper_schema_upgrade_source_invalid".to_string());
+        }
+        if self
+            .records
+            .values()
+            .any(|record| record.phase != RouteKeeperPhase::Absent)
+        {
+            return Err("route_keeper_v2_active_host_claim_migration_unproven".to_string());
+        }
+        self.schema_version = ROUTE_KEEPER_AUTHORITY_SCHEMA_V3.to_string();
+        self.host_process_claims.clear();
         self.validate()?;
         Ok(self)
     }
@@ -536,6 +625,11 @@ impl RouteKeeperAuthority {
         slot_id: &str,
         new_host_generation: u64,
     ) -> Result<RouteKeeperReconcileAction, String> {
+        if !self.host_process_claims.contains_key(&new_host_generation) {
+            return Err(format!(
+                "route_keeper_host_process_claim_missing:{new_host_generation}"
+            ));
+        }
         let record = self
             .records
             .get_mut(slot_id)
@@ -657,6 +751,15 @@ impl RouteKeeperAuthority {
             .records
             .get_mut(&slot_id)
             .ok_or_else(|| "route_keeper_slot_missing".to_string())?;
+        if !self
+            .host_process_claims
+            .contains_key(&record.fence.host_generation)
+        {
+            return Err(format!(
+                "route_keeper_host_process_claim_missing:{}",
+                record.fence.host_generation
+            ));
+        }
         let was_degraded = matches!(
             record.phase,
             RouteKeeperPhase::Degraded | RouteKeeperPhase::RecoveryFailed
@@ -917,10 +1020,16 @@ impl RouteKeeperAuthority {
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V2 {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3 {
             return Err("route_keeper_schema_unsupported".to_string());
         }
         validate_policy(&self.policy)?;
+        for (generation, claim) in &self.host_process_claims {
+            validate_host_process_claim(claim)?;
+            if *generation != claim.host_generation {
+                return Err("route_keeper_host_process_claim_key_mismatch".to_string());
+            }
+        }
         self.connection_catalog.validate()?;
         let connection_catalog_digest = self.connection_catalog.digest()?;
         for slot_id in self.connection_catalog.bindings.keys() {
@@ -939,9 +1048,47 @@ impl RouteKeeperAuthority {
                 .get(&slot_id)
                 .ok_or_else(|| "route_keeper_slot_identity_invalid".to_string())?;
             validate_record(record, &slot_id, &keeper_id, &connection_catalog_digest)?;
+            if record.phase != RouteKeeperPhase::Absent
+                && !self
+                    .host_process_claims
+                    .contains_key(&record.fence.host_generation)
+            {
+                return Err(format!(
+                    "route_keeper_host_process_claim_missing:{}",
+                    record.fence.host_generation
+                ));
+            }
+            if let Some(ready) = &record.protocol_ready {
+                if !self
+                    .host_process_claims
+                    .contains_key(&ready.fence.host_generation)
+                {
+                    return Err(format!(
+                        "route_keeper_host_process_claim_missing:{}",
+                        ready.fence.host_generation
+                    ));
+                }
+            }
         }
         Ok(())
     }
+}
+
+fn validate_host_process_claim(claim: &RouteKeeperHostProcessClaim) -> Result<(), String> {
+    if claim.host_generation == 0
+        || claim.boot_epoch.trim().is_empty()
+        || claim.process_identity.pid == 0
+        || claim.process_identity.start_token.trim().is_empty()
+        || claim
+            .process_identity
+            .executable_path
+            .as_deref()
+            .is_none_or(|path| path.trim().is_empty())
+        || claim.process_identity.browser_family.is_some()
+    {
+        return Err("route_keeper_host_process_claim_invalid".to_string());
+    }
+    Ok(())
 }
 
 fn validate_policy(policy: &RouteKeeperPolicy) -> Result<(), String> {

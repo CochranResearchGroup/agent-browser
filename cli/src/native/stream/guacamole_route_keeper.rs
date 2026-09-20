@@ -6,9 +6,10 @@ use super::guacamole_primary_transport::{
 };
 use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::presentation_route_keeper::{
-    run_configured_route_keeper_supervisor, PresentationRouteConnector,
-    RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation, RouteKeeperStopObservation,
-    RouteKeeperTerminalEvent, SqliteRouteKeeperRepository, SupervisedPresentationRouteConnector,
+    register_route_keeper_host_process, run_configured_route_keeper_supervisor,
+    PresentationRouteConnector, RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation,
+    RouteKeeperStopObservation, RouteKeeperTerminalEvent, SqliteRouteKeeperRepository,
+    SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
     RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt,
@@ -35,8 +36,19 @@ impl ConfiguredRouteKeeperSupervisorHandle {
         const HELPER_PATH: &str =
             "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
         let database_path = BrowserRuntimeSqliteStore::default_sqlite_path()?;
-        let authority =
-            BrowserRuntimeSqliteStore::open(&database_path)?.load_route_keeper_authority()?;
+        let repository = SqliteRouteKeeperRepository::new(&database_path);
+        let current_executable = std::env::current_exe()
+            .map_err(|error| format!("route_keeper_host_executable_unavailable:{error}"))?;
+        let process_identity = crate::process_identity::capture_process_identity(
+            std::process::id(),
+            Some(&current_executable),
+            None,
+        )
+        .ok_or_else(|| "route_keeper_host_process_identity_unavailable".to_string())?;
+        let boot_epoch = crate::process_identity::current_boot_epoch()
+            .ok_or_else(|| "route_keeper_host_boot_epoch_unavailable".to_string())?;
+        let (authority, _) =
+            register_route_keeper_host_process(&repository, &boot_epoch, process_identity)?;
         authority.projection()?;
         let provider_base = authority
             .connection_catalog
@@ -56,7 +68,6 @@ impl ConfiguredRouteKeeperSupervisorHandle {
             ));
         }
 
-        let repository = SqliteRouteKeeperRepository::new(&database_path);
         let factory = ConfiguredRouteKeeperPrimaryFactory::new(database_path.clone());
         let observer = ConfiguredXrdpRouteKeeperObserver::new(
             database_path.clone(),
@@ -968,7 +979,8 @@ mod tests {
         SqliteRouteKeeperRepository,
     };
     use agent_browser_service_model::{
-        RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperXrdpOwnershipWitness,
+        RecordedProcessIdentity, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
+        RouteKeeperHostProcessClaim, RouteKeeperXrdpOwnershipWitness,
     };
     use futures_util::{SinkExt, StreamExt};
     use std::fs;
@@ -981,6 +993,19 @@ mod tests {
     impl Drop for TempDirectory {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    fn host_process_claim() -> RouteKeeperHostProcessClaim {
+        RouteKeeperHostProcessClaim {
+            host_generation: 1,
+            boot_epoch: "linux:boot:fixture".to_string(),
+            process_identity: RecordedProcessIdentity {
+                pid: 4_001,
+                start_token: "linux:start:1".to_string(),
+                executable_path: Some("/opt/agent-browser".to_string()),
+                browser_family: None,
+            },
         }
     }
 
@@ -1004,6 +1029,9 @@ mod tests {
         let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
         let original = store.load_route_keeper_authority().unwrap();
         let mut configured = original.clone();
+        configured
+            .register_host_process_claim(host_process_claim())
+            .unwrap();
         configured
             .replace_connection_catalog(
                 RouteKeeperConnectionCatalog::with_provider_base(
