@@ -1682,9 +1682,17 @@ fn get_port_for_session(session: &str) -> u16 {
 
 #[cfg(test)]
 mod tests {
+    use super::super::browser_session_store::{
+        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
+    };
     use super::super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     #[allow(unused_imports)]
     use super::*;
+    use agent_browser_service_model::{
+        BrowserDesktopAssignment, BrowserSessionState, ControlInputProvider,
+        ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, RemoteViewHandoff,
+        ViewStreamProvider,
+    };
 
     #[test]
     fn journaled_open_routing_preserves_explicit_display_and_existing_replay() {
@@ -1717,6 +1725,151 @@ mod tests {
             Ok(())
         );
         assert_eq!(require_keeper_handoff_resolution(false, &[]), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn manager_handoff_resolution_loads_sqlite_keeper_authority_before_focus() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-manager-handoff-daemon-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(
+            &service_state_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": home.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let session_state_path = service_directory.join("browser-session-state.json");
+        let profile_catalog_path = service_directory.join("browser-profile-catalog.json");
+        let database_path = BrowserRuntimeSqliteStore::default_sqlite_path().unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_state_path,
+                profile_catalog_path: &profile_catalog_path,
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "session-a".to_string(),
+            ManagedBrowserSession {
+                id: "session-a".to_string(),
+                name: "alice".to_string(),
+                profile_id: "work".to_string(),
+                browser_id: "browser-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: u64::MAX,
+                current_tab_id: Some("tab-a".to_string()),
+            },
+        );
+        state.browsers.insert(
+            "browser-a".to_string(),
+            ManagedBrowserInstance {
+                id: "browser-a".to_string(),
+                profile_id: "work".to_string(),
+                pid: std::process::id(),
+                cdp_endpoint: "http://127.0.0.1:1".to_string(),
+                process_identity: None,
+                desktop: Some(BrowserDesktopAssignment {
+                    route_id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    live_browser_count: 0,
+                }),
+                active_session_ids: vec!["session-a".to_string()],
+            },
+        );
+        state.tabs.insert(
+            "tab-a".to_string(),
+            ManagedBrowserTab {
+                id: "tab-a".to_string(),
+                target_id: "target-a".to_string(),
+                browser_id: "browser-a".to_string(),
+                session_id: "session-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+            },
+        );
+        let handoff = RemoteViewHandoff {
+            id: "handoff-a".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": "session-a",
+                "presentationSlotId": "route-slot-01"
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/handoff-a".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some("browser-a".to_string()),
+            session_name: Some("alice".to_string()),
+            tab_id: Some("tab-a".to_string()),
+            target_id: Some("target-a".to_string()),
+            view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            last_route_id: Some("route-slot-01".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store.save_session_state(&state).unwrap();
+        store.save_manager_handoff(&handoff).unwrap();
+
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .try_resolve_manager_handoff(serde_json::json!({
+                "id": "resolve-a",
+                "action": "service_remote_view_handoff_resolve",
+                "params": { "handoffId": "handoff-a" }
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(response["success"], false);
+        assert_eq!(response["error"], "route_keeper_handoff_not_ready");
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_session_state()
+                .unwrap()
+                .sessions["session-a"]
+                .last_activity_at_ms,
+            1
+        );
+
+        router.shutdown().await.unwrap();
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[tokio::test]
