@@ -204,6 +204,16 @@ the complete provider-free Rust suite pass. Cold-process adoption or recovery
 for durable non-`Absent` keeper state, live supervisor health and readiness,
 public capacity use, remaining SQLite domains, and Desktop Services control
 remain open; no live or installed-runtime effect occurred.
+Checkpoint `b0a82574` adds the first provider-free cold-process recovery
+kernel without enabling configured startup recovery. One retained route may be
+adopted only with a private predecessor-exit proof bound to its complete ready
+receipt and a strictly newer host generation. Exact compare-and-swap and full
+operation-ID fencing reject rebound candidates; interrupted adoption replays
+the prepared action, and missing observation remains explicitly pending. All
+42 route-keeper tests, formatting, strict Clippy, and closed-world re-review
+pass. Runtime ownership proof construction, configured connector adoption,
+whole-authority phase recovery, absent-slot generation rollover, and live
+readiness remain open; no live or installed-runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 

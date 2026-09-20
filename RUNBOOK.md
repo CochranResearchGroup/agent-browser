@@ -9,6 +9,28 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 419 | 2026-09-19
+
+P211 source checkpoint `b0a82574` adds one proof-bound, provider-free
+cold-process recovery seam for a retained route. Persistence cannot construct
+the private predecessor-exit proof. The proof binds the complete prior ready
+receipt and a strictly newer successor host generation. Recovery first persists
+the exact disconnect, then prepares or replays one adoption. Compare-and-swap
+conflicts, route rebound, and a foreign operation ID fail before connector
+adoption. An interrupted connector call leaves replayable `Adopting` state, and
+a missing exact receipt returns `Pending` instead of claiming readiness.
+
+The first unsafe tracer was rejected because it manufactured disconnect proof,
+could strand partial multi-route recovery, and blurred whole-authority startup.
+The replacement passed four focused red-green cycles, all 42 route-keeper
+tests, formatting, strict workspace Clippy, and two closed-world reviews. This
+checkpoint does not construct predecessor process proof, rebase absent slots,
+clear quarantine, implement configured connector adoption, or remove the
+configured startup refusal. No provider, browser, Service State,
+installed-runtime, production, ingress, or release effect occurred. Next:
+bind exact predecessor process-exit evidence to this private proof without
+enabling live provider recovery.
+
 ## Turn 418 | 2026-09-19
 
 P211 implementation checkpoint `da9438a7` resolves Browser Session Manager
