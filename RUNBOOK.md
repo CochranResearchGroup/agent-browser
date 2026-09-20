@@ -9,6 +9,28 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 420 | 2026-09-20
+
+P211 source checkpoint `1ebfa757` advances the route-keeper authority to v3.
+Every host generation now carries an append-only exact host-process claim: boot
+epoch plus PID, start token, and executable identity. An active predecessor can
+remain bound to its original claim while an absent slot is rebased for a newer
+successor. A predecessor-exit proof is constructed only from those persisted
+claims: a different boot proves exit, while a same-boot observation must prove
+the exact predecessor missing or reused by an unrelated process. Ambiguous,
+failed, or exact-live observations do not construct proof. Configured startup
+registers its own exact claim, but continues to refuse cold recovery because the
+configured Guacamole connector cannot adopt a retained primary task.
+
+Diff hygiene, formatting, strict workspace Clippy, and all 44 focused
+route-keeper tests pass. The broad provider-free runner ended nonzero after 815
+seconds in its support lane; its slow workstation diagnostic rerun was stopped
+without a failure diagnosis, so that broader receipt remains an explicit gate.
+This is a source checkpoint only. No provider, browser, Service State,
+installed-runtime, production, ingress, or release effect occurred. Next: make
+the broad support-lane failure reproducible or clear it, then design the
+separate configured connector-adoption and runtime-evidence joins.
+
 ## Turn 419 | 2026-09-19
 
 P211 source checkpoint `b0a82574` adds one proof-bound, provider-free

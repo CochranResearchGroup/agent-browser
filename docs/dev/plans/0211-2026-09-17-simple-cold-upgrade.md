@@ -1665,6 +1665,28 @@ rollover, quarantine blocking, runtime-host integration, and live readiness
 remain open. No provider, browser, Service State, installed-runtime,
 production, ingress, or release effect occurred.
 
+Checkpoint `1ebfa757` advances the SQLite keeper authority to v3 with
+append-only host-generation claims. Each claim binds a boot epoch and the
+complete recorded host-process identity. A successor may rebase only `Absent`
+slots, preserving a retained active predecessor under its original claim.
+The provider-free predecessor-exit proof factory first validates the durable
+ready receipt and both claims. A different predecessor boot proves exit; on
+the same boot, only a missing process or an exact observation that classifies
+the recorded PID as reused by an unrelated process proves exit. Exact-live,
+ambiguous, incomplete, and failed observations return no proof. Configured
+startup records its exact current process claim but still rejects retained
+non-`Absent` recovery because the configured Guacamole connector has no
+retained-primary adoption implementation.
+
+Diff hygiene, formatting, strict workspace Clippy, and all 44 focused
+route-keeper tests pass. The complete provider-free runner ended nonzero after
+815 seconds in its support lane. A slow isolated workstation diagnostic rerun
+was deliberately stopped without a failure diagnosis, so the broad support
+lane remains an explicit validation gate. This checkpoint performs no provider,
+browser, Service State, installed-runtime, production, ingress, or release
+effect. The next bounded packet must first reproduce or clear that support-lane
+failure before joining configured connector adoption or broader runtime proof.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel

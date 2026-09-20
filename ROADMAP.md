@@ -214,6 +214,16 @@ the prepared action, and missing observation remains explicitly pending. All
 pass. Runtime ownership proof construction, configured connector adoption,
 whole-authority phase recovery, absent-slot generation rollover, and live
 readiness remain open; no live or installed-runtime effect occurred.
+Checkpoint `1ebfa757` advances the keeper authority to v3 with append-only
+host-generation claims, each binding a boot epoch to an exact recorded process
+identity. It preserves an active predecessor claim while a successor rebases
+only absent slots. The provider-free proof factory accepts an older boot or a
+same-boot missing or unrelated-process observation, but refuses exact-live,
+ambiguous, or failed observations. Configured startup registers its own claim
+and still refuses retained-task recovery because connector adoption is absent.
+Diff hygiene, formatting, strict Clippy, and all 44 focused route-keeper tests
+pass. The 815-second broad provider-free run ended nonzero in its support lane,
+so that lane remains an explicit validation gate. No runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 
