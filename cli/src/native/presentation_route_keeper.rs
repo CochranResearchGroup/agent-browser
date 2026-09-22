@@ -2819,7 +2819,15 @@ mod tests {
         ), Err(ref error) if error == "route_keeper_predecessor_proof_route_identity_mismatch"));
             assert_eq!(repository.load_route_keeper_authority().unwrap(), claimed);
             let mut drifted = claimed.clone();
-            drifted.policy.warm_target = 3;
+            // Policy updates are independent live intent. A changed retained
+            // route still invalidates the prepared startup recovery snapshot.
+            drifted
+                .record_disconnect(
+                    &first.slot_id,
+                    &first.fence,
+                    &first.guacamole_connection_uuid,
+                )
+                .unwrap();
             repository
                 .compare_and_swap_route_keeper_authority(&claimed, &drifted)
                 .unwrap();

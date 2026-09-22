@@ -54,6 +54,17 @@ pub(crate) struct BrowserRuntimeConfig {
     pub(crate) routine_storage_maximum_bytes: u64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BrowserRuntimeConfigPatch {
+    pub(crate) minimum_ready: Option<u32>,
+    pub(crate) warm_target: Option<u32>,
+    pub(crate) maximum_displays: Option<u32>,
+    pub(crate) maximum_browsers_per_display: Option<u32>,
+    pub(crate) maximum_queue_depth: Option<u32>,
+    pub(crate) request_deadline_ms: Option<u64>,
+}
+
 impl Default for BrowserRuntimeConfig {
     fn default() -> Self {
         Self {
@@ -589,9 +600,13 @@ impl BrowserRuntimeSqliteStore {
         let current = load_route_keeper_authority_document(&transaction)?;
         let effect_transition_preserves_demand =
             next.requested_ready_slots == expected.requested_ready_slots;
+        let effect_transition_preserves_policy = next.policy == expected.policy;
         let mut current_normalized = current.clone();
         if effect_transition_preserves_demand {
             current_normalized.requested_ready_slots = expected.requested_ready_slots;
+        }
+        if effect_transition_preserves_policy {
+            current_normalized.policy = expected.policy.clone();
         }
         if current_normalized != *expected {
             return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
@@ -627,6 +642,16 @@ impl BrowserRuntimeSqliteStore {
         let mut persisted = next.clone();
         if effect_transition_preserves_demand {
             persisted.requested_ready_slots = current.requested_ready_slots;
+        }
+        if effect_transition_preserves_policy {
+            persisted.policy = current.policy.clone();
+        }
+        // A waiter may have read the old cap before a configuration update.
+        // Fence its new demand against the current settings in this transaction.
+        if !effect_transition_preserves_demand {
+            persisted.requested_ready_slots = persisted
+                .requested_ready_slots
+                .min(load_runtime_config_row(&transaction)?.maximum_displays);
         }
         // Revalidate the merged intent against any policy change in this transition.
         persisted.projection()?;
@@ -672,6 +697,74 @@ impl BrowserRuntimeSqliteStore {
             .checked_add(1)
             .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?;
         save_runtime_config_row(&transaction, &next)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
+        Ok(next)
+    }
+
+    pub(crate) fn update_runtime_config(
+        &mut self,
+        patch: BrowserRuntimeConfigPatch,
+    ) -> Result<BrowserRuntimeConfig, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_config_begin_failed:{error}"))?;
+        let current = load_runtime_config_row(&transaction)?;
+        let authority = load_route_keeper_authority_document(&transaction)?;
+        let mut next = current.clone();
+        if let Some(value) = patch.minimum_ready {
+            next.minimum_ready = value;
+        }
+        if let Some(value) = patch.warm_target {
+            next.warm_target = value;
+        }
+        if let Some(value) = patch.maximum_displays {
+            next.maximum_displays = value;
+        }
+        if let Some(value) = patch.maximum_browsers_per_display {
+            next.maximum_browsers_per_display = value;
+        }
+        if let Some(value) = patch.maximum_queue_depth {
+            next.maximum_queue_depth = value;
+        }
+        if let Some(value) = patch.request_deadline_ms {
+            next.request_deadline_ms = value;
+        }
+        if next.maximum_displays > authority.policy.maximum_slots {
+            return Err(format!(
+                "browser_runtime_config_provisioned_capacity_exceeded:{}:{}",
+                next.maximum_displays, authority.policy.maximum_slots
+            ));
+        }
+        validate_runtime_config(&next)?;
+        let mut next_authority = authority.clone();
+        next_authority.policy.minimum_ready = next.minimum_ready;
+        next_authority.policy.warm_target = next.warm_target;
+        next_authority.requested_ready_slots = next_authority
+            .requested_ready_slots
+            .min(next.maximum_displays);
+        next_authority.projection()?;
+
+        let config_changed = next != current;
+        let authority_changed = next_authority != authority;
+        if !config_changed && !authority_changed {
+            return Ok(current);
+        }
+        if config_changed {
+            next.revision = current
+                .revision
+                .checked_add(1)
+                .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?;
+        }
+        save_runtime_config_row(&transaction, &next)?;
+        save_document(
+            &transaction,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+            &next_authority,
+        )?;
         transaction
             .commit()
             .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
@@ -2377,12 +2470,21 @@ mod tests {
         store
             .compare_and_swap_route_keeper_authority(&base, &demand_writer)
             .unwrap();
+        store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                minimum_ready: Some(2),
+                warm_target: Some(3),
+                ..BrowserRuntimeConfigPatch::default()
+            })
+            .unwrap();
 
         store
             .compare_and_swap_route_keeper_authority(&base, &effect_next)
             .unwrap();
         let after_effect = store.load_route_keeper_authority().unwrap();
         assert_eq!(after_effect.requested_ready_slots, 2);
+        assert_eq!(after_effect.policy.minimum_ready, 2);
+        assert_eq!(after_effect.policy.warm_target, 3);
         assert_eq!(
             after_effect.records[&slot_id].phase,
             agent_browser_service_model::RouteKeeperPhase::Starting
@@ -2401,6 +2503,11 @@ mod tests {
             store.compare_and_swap_route_keeper_authority(&after_effect, &phase_writer),
             Err("route_keeper_authority_compare_and_swap_conflict".to_string()),
             "a stale phase is not an independent intent merge"
+        );
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&base, &effect_next),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string()),
+            "only concurrent policy and demand intent may merge; stale fences remain refused"
         );
 
         let demand_snapshot = store.load_route_keeper_authority().unwrap();
@@ -2889,6 +2996,131 @@ mod tests {
             Err("browser_runtime_config_maximum_displays_invalid".to_string())
         );
         assert_eq!(store.load_runtime_config().unwrap(), defaults);
+    }
+
+    #[test]
+    fn runtime_config_patch_is_atomic_idempotent_and_syncs_keeper_policy() {
+        let directory = TempDirectory::new("browser-runtime-config-patch");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let original_config = store.load_runtime_config().unwrap();
+        let original_authority = store.load_route_keeper_authority().unwrap();
+        let patch = BrowserRuntimeConfigPatch {
+            minimum_ready: Some(2),
+            warm_target: Some(3),
+            maximum_displays: Some(5),
+            maximum_browsers_per_display: Some(2),
+            maximum_queue_depth: Some(12),
+            request_deadline_ms: Some(45_000),
+        };
+
+        let updated = store.update_runtime_config(patch.clone()).unwrap();
+        assert_eq!(updated.revision, original_config.revision + 1);
+        assert_eq!(updated.minimum_ready, 2);
+        assert_eq!(updated.warm_target, 3);
+        assert_eq!(updated.maximum_displays, 5);
+        assert_eq!(updated.maximum_browsers_per_display, 2);
+        assert_eq!(updated.maximum_queue_depth, 12);
+        assert_eq!(updated.request_deadline_ms, 45_000);
+        assert_eq!(
+            updated.scale_in_cooldown_ms, original_config.scale_in_cooldown_ms,
+            "unsupported cleanup controls remain untouched"
+        );
+        let synchronized = store.load_route_keeper_authority().unwrap();
+        assert_eq!(synchronized.policy.minimum_ready, 2);
+        assert_eq!(synchronized.policy.warm_target, 3);
+        assert_eq!(
+            synchronized.policy.maximum_slots, original_authority.policy.maximum_slots,
+            "logical display limits do not alter physical provisioned slots"
+        );
+        assert_eq!(synchronized.records, original_authority.records);
+        assert_eq!(
+            synchronized.connection_catalog,
+            original_authority.connection_catalog
+        );
+
+        assert_eq!(store.update_runtime_config(patch).unwrap(), updated);
+        assert_eq!(store.load_runtime_config().unwrap(), updated);
+
+        let before_active = store.load_route_keeper_authority().unwrap();
+        let mut active = before_active.clone();
+        active
+            .replace_connection_catalog(route_keeper_catalog())
+            .unwrap();
+        active
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
+        active.request_ready_slots(4).unwrap();
+        active.next_reconcile_action().unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&before_active, &active)
+            .unwrap();
+        let active_records = active.records.clone();
+
+        let lowered = store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                maximum_displays: Some(3),
+                ..BrowserRuntimeConfigPatch::default()
+            })
+            .unwrap();
+        assert_eq!(lowered.revision, updated.revision + 1);
+        assert_eq!(lowered.maximum_displays, 3);
+        let lowered_authority = store.load_route_keeper_authority().unwrap();
+        assert_eq!(lowered_authority.requested_ready_slots, 3);
+        assert_eq!(
+            lowered_authority.records, active_records,
+            "lowering logical capacity does not stop or rewrite active routes"
+        );
+        let mut stale_cap_demand = lowered_authority.clone();
+        stale_cap_demand.request_ready_slots(5).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&lowered_authority, &stale_cap_demand)
+            .unwrap();
+        assert_eq!(
+            store.load_route_keeper_authority().unwrap(),
+            lowered_authority,
+            "a waiter using a stale cap cannot restore excess demand"
+        );
+
+        assert_eq!(
+            store.update_runtime_config(BrowserRuntimeConfigPatch {
+                maximum_displays: Some(original_authority.policy.maximum_slots + 1),
+                ..BrowserRuntimeConfigPatch::default()
+            }),
+            Err(format!(
+                "browser_runtime_config_provisioned_capacity_exceeded:{}:{}",
+                original_authority.policy.maximum_slots + 1,
+                original_authority.policy.maximum_slots
+            ))
+        );
+        assert_eq!(store.load_runtime_config().unwrap(), lowered);
+        assert_eq!(
+            store.load_route_keeper_authority().unwrap(),
+            lowered_authority
+        );
+
+        assert_eq!(
+            store.update_runtime_config(BrowserRuntimeConfigPatch {
+                minimum_ready: Some(3),
+                warm_target: Some(2),
+                ..BrowserRuntimeConfigPatch::default()
+            }),
+            Err("browser_runtime_config_warm_target_invalid".to_string())
+        );
+        assert_eq!(store.load_runtime_config().unwrap(), lowered);
+        assert_eq!(
+            store.load_route_keeper_authority().unwrap(),
+            lowered_authority
+        );
     }
 
     #[test]

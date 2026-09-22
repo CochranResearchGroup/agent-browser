@@ -141,7 +141,8 @@ use super::service_challenge_task::handle_service_challenge_task;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
     handle_service_profile_policy_mutate, handle_service_profile_seeding_handoff_update,
-    handle_service_profile_upsert, handle_service_site_policy_delete,
+    handle_service_profile_upsert, handle_service_runtime_config_get,
+    handle_service_runtime_config_update, handle_service_site_policy_delete,
     handle_service_site_policy_upsert,
 };
 use super::service_diagnostics::handle_service_diagnostics;
@@ -295,6 +296,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
+            | "service_runtime_config_get"
+            | "service_runtime_config_update"
             | "service_profile_upsert"
             | "service_profile_policy_mutate"
             | "service_profile_tab_evict"
@@ -1066,6 +1069,8 @@ async fn execute_command_after_navigation_admission(
             "service_job_cancel" => handle_service_job_cancel(cmd).await,
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
+            "service_runtime_config_get" => handle_service_runtime_config_get(),
+            "service_runtime_config_update" => handle_service_runtime_config_update(cmd),
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
             "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
             "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,

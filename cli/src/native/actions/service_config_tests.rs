@@ -559,3 +559,52 @@ async fn test_service_reconcile_response_matches_contract() {
     assert_eq!(result["data"]["reconciled"], true);
     let _ = fs::remove_dir_all(&home);
 }
+
+#[tokio::test]
+async fn runtime_config_roundtrip_does_not_launch_browser() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("runtime-config-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let path =
+        crate::native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite_path()
+            .unwrap();
+    crate::native::browser_session_store::BrowserRuntimeSqliteStore::migrate_from_legacy(
+        &path,
+        crate::native::browser_session_store::LegacyBrowserRuntimeSources {
+            session_state_path: &home.join("sessions.json"),
+            profile_catalog_path: &home.join("profiles.json"),
+            service_state_path: &home.join("service.json"),
+        },
+    )
+    .unwrap();
+    let mut state = DaemonState::new();
+    let before = super::execute_command(
+        &json!({"id":"config-get","action":"service_runtime_config_get"}),
+        &mut state,
+    )
+    .await;
+    assert_eq!(before["success"], true);
+    let update = json!({"id":"config-set","action":"service_runtime_config_update","config":{"warmTarget":2,"maximumDisplays":4}});
+    let after = super::execute_command(&update, &mut state).await;
+    assert_eq!(after["success"], true);
+    assert_eq!(after["data"]["config"]["warmTarget"], 2);
+    assert_eq!(after["data"]["config"]["maximumDisplays"], 4);
+    let replay = super::execute_command(&update, &mut state).await;
+    assert_eq!(replay["data"], after["data"]);
+    let invalid = super::execute_command(
+        &json!({"id":"bad","action":"service_runtime_config_update","config":{"unknown":1}}),
+        &mut state,
+    )
+    .await;
+    assert_eq!(invalid["success"], false);
+    let readback = super::execute_command(
+        &json!({"id":"config-readback","action":"service_runtime_config_get"}),
+        &mut state,
+    )
+    .await;
+    assert_eq!(readback["data"], after["data"]);
+    assert!(state.browser.is_none());
+    drop(state);
+    fs::remove_dir_all(home).unwrap();
+}

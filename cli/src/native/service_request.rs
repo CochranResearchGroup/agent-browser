@@ -150,6 +150,7 @@ impl ServiceRequestFieldSpec {
 const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
     ServiceRequestFieldSpec::structural("action", FieldKind::String, true),
     ServiceRequestFieldSpec::structural("params", FieldKind::Object, false),
+    ServiceRequestFieldSpec::field("config", FieldKind::Object, true, false, false),
     ServiceRequestFieldSpec::field(
         "jobTimeoutMs",
         FieldKind::PositiveInteger,
@@ -993,6 +994,12 @@ fn validate_safety_gates(
     action: &str,
     request: &Map<String, Value>,
 ) -> Result<(), ServiceRequestIssue> {
+    if action == "service_runtime_config_update" && !request.contains_key("config") {
+        return Err(issue(
+            ServiceRequestIssueKind::InvalidFieldValue,
+            "service_runtime_config_update requires config",
+        ));
+    }
     reject_blocked_manual_service_request(request)?;
     reject_cdp_free_service_request(action, request)?;
     reject_cdp_attach_service_request(action, request)?;
@@ -2967,7 +2974,7 @@ mod tests {
         let canonical_names = sorted_names(properties.keys().cloned());
         let spec_names = spec_role_names(|_| true);
 
-        assert_eq!(canonical_names.len(), 102);
+        assert_eq!(canonical_names.len(), 103);
         assert_eq!(canonical_names, spec_names);
         assert_eq!(
             role_contract["canonicalPropertyCount"].as_u64(),
@@ -3151,6 +3158,29 @@ mod tests {
         assert_eq!(normalized.command["apply"], false);
         assert_eq!(normalized.command["staleCheckouts"], false);
         assert_eq!(normalized.command["stalePendingAcquisitions"], true);
+    }
+
+    #[test]
+    fn runtime_config_update_projects_the_strict_top_level_patch() {
+        let config = json!({
+            "maximumDisplays": 5,
+            "maximumBrowsersPerDisplay": 3,
+            "requestDeadlineMs": 45_000
+        });
+        let normalized = normalize(json!({
+            "action": "service_runtime_config_update",
+            "config": config
+        }))
+        .unwrap();
+
+        assert_eq!(normalized.command["config"], config);
+        assert!(normalized.trace.get("config").is_none());
+        let error = normalize(json!({"action": "service_runtime_config_update"})).unwrap_err();
+        assert_eq!(error.kind, ServiceRequestIssueKind::InvalidFieldValue);
+        assert_eq!(
+            error.message(),
+            "service_runtime_config_update requires config"
+        );
     }
 
     #[test]

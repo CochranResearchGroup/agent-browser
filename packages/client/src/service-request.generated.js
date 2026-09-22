@@ -115,6 +115,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "clear",
   "service_browser_close",
   "service_browser_repair",
+  "service_runtime_config_get",
+  "service_runtime_config_update",
   "service_browser_contamination_report",
   "service_browser_retirement_plan",
   "service_browser_retirement_apply",
@@ -231,6 +233,7 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
 ];
 
 export const SERVICE_REQUEST_OBJECT_FIELDS = [
+  "config",
   "monitorRunDueSummary",
   "serviceTabHandle",
   "probe",

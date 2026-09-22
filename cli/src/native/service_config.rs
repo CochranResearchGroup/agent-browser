@@ -2164,3 +2164,29 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
+
+/// Read the SQLite runtime settings without browser or provider effects.
+pub(crate) fn handle_service_runtime_config_get() -> Result<Value, String> {
+    let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    Ok(serde_json::json!({"config": store.load_runtime_config()?}))
+}
+
+/// Apply a partial settings update atomically with keeper policy. Clients do
+/// not carry revision tokens; SQLite serializes updates against current state.
+pub(crate) fn handle_service_runtime_config_update(cmd: &Value) -> Result<Value, String> {
+    let config = cmd.get("config").ok_or("Missing config")?;
+    if !config.is_object()
+        || config
+            .as_object()
+            .is_some_and(|fields| fields.values().any(Value::is_null))
+    {
+        return Err(
+            "browser_runtime_config_patch_invalid:expected non-null settings object".to_string(),
+        );
+    }
+    let patch: super::browser_session_store::BrowserRuntimeConfigPatch =
+        serde_json::from_value(config.clone())
+            .map_err(|error| format!("browser_runtime_config_patch_invalid:{error}"))?;
+    let mut store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    Ok(serde_json::json!({"config": store.update_runtime_config(patch)?}))
+}

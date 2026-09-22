@@ -2,11 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agent-browser.dev/contracts/service-request-field-roles.v1.json",
   "description": "Machine-readable role ledger for canonical service-request fields and transport-only compatibility fields.",
-  "canonicalPropertyCount": 102,
+  "canonicalPropertyCount": 103,
   "roles": {
     "structural": ["action", "params"],
     "command": [
-      "action", "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
+      "action", "config", "jobTimeoutMs", "serviceStateLockTimeoutMs", "profileLeasePolicy", "profileLeaseWaitTimeoutMs",
       "requiresCdpFree", "cdpAttachmentAllowed", "serviceTabHandle", "targetId", "tabId",
       "script", "expression", "returnByValue", "timeoutMs", "maxReturnBytes",
       "maxTextBytes", "maxBodyBytes", "includeScreenshot", "screenshotDir",

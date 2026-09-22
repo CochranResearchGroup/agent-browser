@@ -1457,6 +1457,37 @@ export interface ServiceBrowserRepairData {
   incident?: Record<string, unknown> | null;
 }
 
+export interface ServiceRuntimeConfigPatch {
+  minimumReady?: number;
+  warmTarget?: number;
+  maximumDisplays?: number;
+  maximumBrowsersPerDisplay?: number;
+  maximumQueueDepth?: number;
+  requestDeadlineMs?: number;
+}
+
+export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch> {
+  schemaVersion: "agent-browser.runtime-config.v1" | string;
+  revision: number;
+  scaleInCooldownMs: number;
+  sessionIdleTimeoutMs: number;
+  disposableInactivityMs: number;
+  maximumRetainedDisposableProfiles: number;
+  maximumDisposableProfileBytes: number;
+  liveDatabaseMaximumBytes: number;
+  exactUrlHistoryMaximumBytes: number;
+  routineStorageMaximumBytes: number;
+}
+
+export interface ServiceRuntimeConfigData {
+  config: ServiceRuntimeConfig;
+}
+
+export interface ServiceRuntimeConfigUpdateRequest extends Omit<ServiceRequest, "action" | "config"> {
+  action: "service_runtime_config_update";
+  config: ServiceRuntimeConfigPatch;
+}
+
 export interface ServiceAuthenticationRunData {
   schemaVersion: "agent-browser.service-authentication-run.v2" | string;
   runId: string;
@@ -1622,6 +1653,8 @@ export interface ServiceRequestActionDataMap {
   request_detail: ServiceTrackedRequest;
   service_browser_close: ServiceBrowserCloseData;
   service_browser_repair: ServiceBrowserRepairData;
+  service_runtime_config_get: ServiceRuntimeConfigData;
+  service_runtime_config_update: ServiceRuntimeConfigData;
   service_prune_retained: ServiceRetainedCleanupData;
   service_repair_retained: ServiceRetainedCleanupData;
 }

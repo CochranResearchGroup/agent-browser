@@ -1184,6 +1184,19 @@ fn service_mcp_tools() -> Vec<Value> {
                         "additionalProperties": true,
                         "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved."
                     },
+                    "config": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "minimumReady": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "warmTarget": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumDisplays": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumQueueDepth": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "requestDeadlineMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
+                        },
+                        "description": "Strict partial SQLite runtime configuration for service_runtime_config_update."
+                    },
                     "jobTimeoutMs": {
                         "type": "integer",
                         "minimum": 1,

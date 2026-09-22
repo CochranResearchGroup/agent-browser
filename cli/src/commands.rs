@@ -3556,6 +3556,23 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("runtime-config") => {
+                const USAGE: &str = "service runtime-config get | set <json-object>";
+                match (rest.get(1).copied(), rest.len()) {
+                    (Some("get"), 2) => Ok(json!({"id":id,"action":"service_runtime_config_get"})),
+                    (Some("set"), 3) => {
+                        let config: Value = serde_json::from_str(rest[2]).map_err(|error| ParseError::InvalidValue {
+                            message: format!("Invalid runtime config JSON: {error}"), usage: USAGE,
+                        })?;
+                        if !config.is_object() {
+                            return Err(ParseError::InvalidValue { message: "Runtime config must be a JSON object".to_string(), usage: USAGE });
+                        }
+                        Ok(json!({"id":id,"action":"service_runtime_config_update","config":config}))
+                    }
+                    _ => Err(ParseError::InvalidValue { message: "Expected runtime-config get or set with one JSON object".to_string(), usage: USAGE }),
+                }
+            }
+
             Some("connections") => {
                 if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
                     return Err(ParseError::InvalidValue {
@@ -8793,6 +8810,26 @@ mod tests {
 
             assert!(matches!(err, ParseError::InvalidValue { .. }));
             assert!(err.format().contains("Unknown flag for desktop capture"));
+        }
+    }
+
+    #[test]
+    fn runtime_config_commands_parse_without_revision_tokens() {
+        let get = parse_command(&args("service runtime-config get"), &default_flags()).unwrap();
+        assert_eq!(get["action"], "service_runtime_config_get");
+        let set = parse_command(
+            &args(r#"service runtime-config set {"warmTarget":2}"#),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(set["action"], "service_runtime_config_update");
+        assert_eq!(set["config"]["warmTarget"], 2);
+        for invalid in [
+            "service runtime-config",
+            "service runtime-config get extra",
+            "service runtime-config set []",
+        ] {
+            assert!(parse_command(&args(invalid), &default_flags()).is_err());
         }
     }
 

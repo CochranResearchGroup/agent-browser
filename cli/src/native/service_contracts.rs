@@ -274,6 +274,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "clear",
     "service_browser_close",
     "service_browser_repair",
+    "service_runtime_config_get",
+    "service_runtime_config_update",
     "service_browser_contamination_report",
     "service_browser_retirement_plan",
     "service_browser_retirement_apply",
