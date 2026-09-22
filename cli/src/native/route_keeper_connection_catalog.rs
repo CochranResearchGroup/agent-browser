@@ -1,7 +1,8 @@
 //! Bounded provider-to-SQLite publication for the route-keeper connection catalog.
 
 use super::browser_session_store::{
-    BrowserRuntimeSqliteStore, RouteKeeperConnectionCatalogPublication,
+    BrowserRuntimeSqliteStore, PresentationProvisioningConfig,
+    RouteKeeperConnectionCatalogPublication,
 };
 use agent_browser_service_model::{RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog};
 use serde::{Deserialize, Serialize};
@@ -19,6 +20,7 @@ struct PublicationDocument {
     provider_base: String,
     public_operator_url: String,
     bindings: Vec<RouteKeeperConnectionBinding>,
+    provisioning: Option<PresentationProvisioningConfig>,
 }
 
 #[derive(Debug, Serialize)]
@@ -46,7 +48,7 @@ fn publish_document(
     )?;
     let catalog_digest = catalog.digest()?;
     let binding_count = catalog.bindings.len();
-    let outcome = match store.publish_route_keeper_connection_catalog(catalog)? {
+    let outcome = match store.publish_route_keeper_configuration(catalog, document.provisioning)? {
         RouteKeeperConnectionCatalogPublication::Published => "published",
         RouteKeeperConnectionCatalogPublication::Unchanged => "unchanged",
     };
@@ -147,7 +149,11 @@ mod tests {
         let receipt = publish_document(document.to_string().as_bytes(), &mut store).unwrap();
         assert_eq!(receipt.outcome, "published");
         assert_eq!(receipt.binding_count, 6);
-        assert_eq!(receipt.catalog_digest.len(), 64);
+        // Fixed cross-language serialization oracle: URL fields precede slot-sorted bindings.
+        assert_eq!(
+            receipt.catalog_digest,
+            "3e350fe59192b4c34592d197a7435736e155cc1311750fdee7da0854ef7700c6"
+        );
         assert_eq!(
             store
                 .load_route_keeper_authority()

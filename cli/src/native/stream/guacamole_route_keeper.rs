@@ -1221,6 +1221,14 @@ where
         }
     }
 
+    async fn reconcile_capacity(&mut self) -> Result<(), String> {
+        crate::native::presentation_provisioning::reconcile_presentation_growth(
+            &self.database_path,
+            &mut crate::native::presentation_provisioning::InstalledProvisioningEffects,
+        )
+        .await
+    }
+
     async fn shutdown_primaries(&mut self) {
         self.shutting_down = true;
         for owned in self.tasks.values_mut() {

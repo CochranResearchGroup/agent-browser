@@ -51,12 +51,15 @@ fn require_keeper_handoff_resolution(
 fn presentation_keeper_status(
     authority: &agent_browser_service_model::RouteKeeperAuthority,
     probe: &super::stream::RouteKeeperSupervisorProbe,
+    config: &super::browser_session_store::BrowserRuntimeConfig,
 ) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
-    super::presentation_runtime_status::keeper_status(
+    let mut status = super::presentation_runtime_status::keeper_status(
         authority,
         probe.health(),
         Some(probe.host_generation()),
-    )
+    )?;
+    status.apply_runtime_config(config);
+    Ok(status)
 }
 
 fn current_presentation_keeper_status(
@@ -65,7 +68,7 @@ fn current_presentation_keeper_status(
     let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
     let authority = store.load_route_keeper_authority()?;
     let mut status = match probe {
-        Some(probe) => presentation_keeper_status(&authority, probe),
+        Some(probe) => presentation_keeper_status(&authority, probe, &store.load_runtime_config()?),
         None => super::presentation_runtime_status::keeper_status(
             &authority,
             super::stream::RouteKeeperSupervisorHealth::Unavailable {
@@ -74,6 +77,7 @@ fn current_presentation_keeper_status(
             None,
         ),
     }?;
+    status.apply_runtime_config(&store.load_runtime_config()?);
     let routes = if status.require_ready().is_ok() {
         status.usable_routes(&authority)?
     } else {
@@ -998,7 +1002,11 @@ impl RuntimeHostRouter {
                     let store =
                         super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
                     let authority = store.load_route_keeper_authority()?;
-                    let status = presentation_keeper_status(&authority, probe)?;
+                    let status = presentation_keeper_status(
+                        &authority,
+                        probe,
+                        &store.load_runtime_config()?,
+                    )?;
                     status.require_ready()?;
                     let routes = status.usable_routes(&authority)?;
                     (Some(authority), routes)
@@ -1278,7 +1286,7 @@ impl RuntimeHostRouter {
             // The handoff may have waited behind an earlier browser operation, so
             // validate the durable authority and live probe after acquiring the lock.
             let authority = store.load_route_keeper_authority()?;
-            let status = presentation_keeper_status(&authority, &probe)?;
+            let status = presentation_keeper_status(&authority, &probe, &store.load_runtime_config()?)?;
             status.require_ready()?;
             let routes = status.usable_routes(&authority)?;
             let route_id = handoff

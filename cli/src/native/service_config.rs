@@ -2168,7 +2168,9 @@ pub(crate) use service_commands::*;
 /// Read the SQLite runtime settings without browser or provider effects.
 pub(crate) fn handle_service_runtime_config_get() -> Result<Value, String> {
     let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-    Ok(serde_json::json!({"config": store.load_runtime_config()?}))
+    Ok(
+        serde_json::json!({"config": store.load_runtime_config()?, "capacityGrowth": store.presentation_growth_status()?}),
+    )
 }
 
 /// Apply a partial settings update atomically with keeper policy. Clients do
@@ -2188,5 +2190,7 @@ pub(crate) fn handle_service_runtime_config_update(cmd: &Value) -> Result<Value,
         serde_json::from_value(config.clone())
             .map_err(|error| format!("browser_runtime_config_patch_invalid:{error}"))?;
     let mut store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-    Ok(serde_json::json!({"config": store.update_runtime_config(patch)?}))
+    Ok(
+        serde_json::json!({"config": store.update_runtime_config(patch)?, "capacityGrowth": store.presentation_growth_status()?}),
+    )
 }

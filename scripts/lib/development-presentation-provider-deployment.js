@@ -85,6 +85,7 @@ export function resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, datab
     schemaVersion: ROUTE_KEEPER_CONNECTION_CATALOG_PUBLICATION_SCHEMA,
     providerBase: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
     publicOperatorUrl: descriptor.publicOperatorUrl,
+    provisioning: descriptor.provisioning,
     bindings,
   };
 }
@@ -182,6 +183,7 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
       ports: descriptor.ports,
       rdpTarget: descriptor.rdpTarget,
       connectionLimits: descriptor.connectionLimits,
+      provisioning: descriptor.provisioning,
       warmSlots: descriptor.warmSlots,
       hardMaxSlots: descriptor.hardMaxSlots,
       routes: descriptor.routes,
@@ -771,6 +773,8 @@ services:
     image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
     platform: linux/amd64
     container_name: ${descriptor.services.postgres}
+    labels:
+      agent-browser.environment: ${descriptor.environment}
     restart: unless-stopped
     stop_grace_period: 30s
     command: [postgres, -c, fsync=on, -c, synchronous_commit=on, -c, full_page_writes=on]

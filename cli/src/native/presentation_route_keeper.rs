@@ -209,6 +209,11 @@ pub(crate) trait SupervisedPresentationRouteConnector: PresentationRouteConnecto
 
     fn acknowledge_terminal_event(&mut self, event: &RouteKeeperTerminalEvent);
 
+    /// Reconcile one durable capacity operation without disrupting ready routes.
+    async fn reconcile_capacity(&mut self) -> Result<(), String> {
+        Ok(())
+    }
+
     async fn shutdown_primaries(&mut self);
 }
 
@@ -416,6 +421,7 @@ async fn supervise_once_at(
     now_ms: u64,
 ) -> Result<RouteKeeperProjection, String> {
     process_terminal_events(repository, connector)?;
+    connector.reconcile_capacity().await?;
     if let Some((stopping, action)) = repository.reserve_idle_route_stop(now_ms)? {
         let observation = match connector.stop(&action).await {
             Ok(observation) => observation,

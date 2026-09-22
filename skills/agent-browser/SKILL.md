@@ -612,23 +612,39 @@ persist settings and keeper policy in SQLite; clients need no revision token.
 Repeated identical updates preserve the revision. The generic `service_request`
 interface accepts `service_runtime_config_get` and
 `service_runtime_config_update` with a `config` object containing the patch.
-Readback returns `config`, including its revision; it is not readiness evidence.
+Readback returns `config`, including its revision, and `capacityGrowth`; neither is readiness evidence.
 
-Maximum displays cannot yet exceed the provisioned physical slot count
-(default six). Lowering limits preserves existing routes and browsers, caps
+When the installer has imported provisioning coordinates, raising
+`maximumDisplays` records durable growth intent, up to the imported ceiling
+(currently 64 in development). The supervisor provisions one new route at a
+time and preserves existing connections. Without those coordinates, the
+provisioned physical slot count remains the limit. Lowering limits preserves
+existing routes and browsers, caps
 new allocation and clamps retained demand. New queue deadlines apply to newly
 enqueued requests. The keeper retires at most one reference-free ready route
 above the warm target after cooldown. Browser and handoff references, pending
 operations, admission work, and unresolved route recovery prevent retirement.
 Clock regression, renewed use or changed ownership resets idle evidence. Stop
 intent commits before provider access; failed or unproven cleanup retains a
-quarantine obligation, rather than reporting successful reclamation. Automatic
-catalog expansion and public profile/storage cleanup settings remain pending.
+quarantine obligation, rather than reporting successful reclamation. Public
+profile/storage cleanup settings remain pending.
 The installer publication bridge can append provisioned connections without
 refencing active routes. Retained catalog digests remain valid only while every
 old binding and provider URL is unchanged. This preserves in-flight receipts;
-it does not provision new connections or raise the configured display maximum
+it does not change the requested display maximum. Replaying the original
+installer seed with identical provisioning coordinates preserves routes added
 automatically.
+
+`capacityGrowth` separates desired and provisioned maxima and reports `idle`,
+`pending`, `provisioning` or `failed`, with an operation ID, attempt count and
+redacted failure code. Provisioning requires the operation-owned helper
+capability and an exactly identified running provider database. Normal privilege
+installation refreshes an older helper that lacks this capability. A failed
+operation preserves its identity and cleanup obligation without stopping
+working routes. After correcting the cause, repeat an explicit
+`maximumDisplays` update to retry that same operation; at most three attempts
+are allowed across restarts. Desired minimum and warm targets remain visible
+while capacity is growing; settings acceptance does not prove route readiness.
 
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry

@@ -28,6 +28,21 @@ pub(crate) struct PresentationKeeperStatus {
 }
 
 impl PresentationKeeperStatus {
+    /// Desired settings remain authoritative while physical slots are still growing.
+    pub(crate) fn apply_runtime_config(
+        &mut self,
+        config: &super::browser_session_store::BrowserRuntimeConfig,
+    ) {
+        self.minimum_ready = config.minimum_ready;
+        self.warm_target = config.warm_target;
+        self.minimum_satisfied = self.ready_route_count >= config.minimum_ready;
+        self.warm_target_satisfied = self.ready_route_count >= config.warm_target;
+        if self.state == "ready" && !self.minimum_satisfied {
+            self.state = "recovering";
+            self.unavailable_reason = Some("presentation_keeper_minimum_pending".to_string());
+        }
+    }
+
     pub(crate) fn require_ready(&self) -> Result<(), String> {
         if self.state == "ready" && self.minimum_satisfied {
             Ok(())

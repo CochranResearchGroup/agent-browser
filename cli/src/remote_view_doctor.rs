@@ -4010,7 +4010,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-19.p211-route-desktop-v6",
+                "helperVersion": "2026-09-19.p211-route-desktop-v7",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -4037,6 +4037,11 @@ EOF
                     "pamBypassed": true,
                     "cryptMethod": "SHA512",
                     "shaRounds": 100000
+                },
+                "routeUserOwnedProvisioning": {
+                    "supported": true,
+                    "gecosOperationMarker": true,
+                    "retrySafe": true
                 }
             }
         });
@@ -4050,7 +4055,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-19.p211-route-desktop-v6",
+                "helperVersion": "2026-09-19.p211-route-desktop-v7",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -4077,6 +4082,11 @@ EOF
                     "pamBypassed": true,
                     "cryptMethod": "SHA512",
                     "shaRounds": 100000
+                },
+                "routeUserOwnedProvisioning": {
+                    "supported": true,
+                    "gecosOperationMarker": true,
+                    "retrySafe": true
                 }
             }
         });

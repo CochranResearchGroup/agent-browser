@@ -109,6 +109,10 @@ pub(crate) mod presentation_capacity;
 pub(crate) mod presentation_inventory;
 #[allow(dead_code)]
 pub(crate) mod presentation_lifecycle;
+mod presentation_provisioning;
+mod presentation_provisioning_sql;
+#[cfg(test)]
+mod presentation_provisioning_tests;
 mod presentation_request_admission;
 #[allow(dead_code)]
 pub(crate) mod presentation_route_keeper;

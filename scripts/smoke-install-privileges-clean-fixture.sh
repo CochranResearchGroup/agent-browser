@@ -341,6 +341,30 @@ if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; 
   exit 1
 fi
 
+# An older helper can satisfy the pre-owned-provisioning route-session contract
+# while lacking the operation-bound account capability. It must not take the
+# already-ready exit: refresh the bundled helper before growth can invoke it.
+sed -i \
+  's/"routeUserOwnedProvisioning"/"routeUserOwnedProvisioningLegacy"/' \
+  "$HELPER_PATH"
+if "$HELPER_PATH" status-json | grep -q 'routeUserOwnedProvisioning"'; then
+  echo "Owned-provisioning stale-helper fixture still advertises the current capability." >&2
+  exit 1
+fi
+
+sudo_v_count_before_owned_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+run_installer >/tmp/agent-browser-install-privileges-clean-fixture-owned-stale.out
+sudo_v_count_after_owned_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
+if [[ "$sudo_v_count_after_owned_stale_apply" != "$((sudo_v_count_before_owned_stale_apply + 1))" ]]; then
+  echo "Owned-provisioning stale helper replacement must cross one sudo -v boundary." >&2
+  cat "$LOG" >&2
+  exit 1
+fi
+if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
+  echo "Owned-provisioning stale helper was not refreshed from the bundled helper." >&2
+  exit 1
+fi
+
 # The exact read-only unit shipped without profile-traversal capability has one
 # guarded migration. It must retain the banked binary and authority state.
 AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"

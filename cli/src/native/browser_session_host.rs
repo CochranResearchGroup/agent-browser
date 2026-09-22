@@ -2027,6 +2027,18 @@ mod tests {
         assert!(ready.minimum_satisfied);
         assert!(!ready.warm_target_satisfied);
         assert_eq!(ready.usable_routes(&authority).unwrap().len(), 1);
+        let mut growing = ready.clone();
+        growing.apply_runtime_config(&super::super::browser_session_store::BrowserRuntimeConfig {
+            minimum_ready: 7,
+            warm_target: 7,
+            maximum_displays: 7,
+            ..Default::default()
+        });
+        assert_eq!(growing.minimum_ready, 7);
+        assert!(!growing.minimum_satisfied);
+        assert!(!growing.warm_target_satisfied);
+        assert!(growing.require_ready().is_err());
+
         assert_eq!(
             authority, persisted,
             "readiness must preserve retained evidence"

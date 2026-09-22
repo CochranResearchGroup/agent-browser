@@ -128,11 +128,97 @@ for (const file of files) {
     assert.equal(report.routeUserCredentialUpdate?.pamBypassed, true);
     assert.equal(report.routeUserCredentialUpdate?.cryptMethod, 'SHA512');
     assert.equal(report.routeUserCredentialUpdate?.shaRounds, 100000);
+    assert.equal(report.routeUserOwnedProvisioning?.supported, true);
+    assert.equal(report.routeUserOwnedProvisioning?.gecosOperationMarker, true);
+    assert.equal(report.routeUserOwnedProvisioning?.retrySafe, true);
     assert.equal(
       report.managedChromeSandboxPolicy?.profileName,
       'agent-browser-managed-chrome',
     );
     assert.equal(typeof report.managedChromeSandboxPolicy?.loaded, 'boolean');
+
+    const ownedFixture = mkdtempSync(join(tmpdir(), 'agent-browser-owned-route-helper-'));
+    const ownedBin = join(ownedFixture, 'bin');
+    const ownedPasswd = join(ownedFixture, 'passwd');
+    const ownedLog = join(ownedFixture, 'commands.log');
+    const ownedHome = join(ownedFixture, 'home');
+    const ownedUser = 'agent-browser-rdp-owned';
+    const ownedOperation = '123e4567-e89b-12d3-a456-426614174000';
+    try {
+      mkdirSync(ownedBin, { recursive: true });
+      writeFileSync(ownedLog, '');
+      writeFileSync(join(ownedBin, 'id'), '#!/bin/sh\nprintf "0\\n"\n', { mode: 0o755 });
+      writeFileSync(join(ownedBin, 'getent'), `#!/bin/sh
+if [ "$1" = passwd ] && [ -s ${JSON.stringify(ownedPasswd)} ]; then
+  /bin/cat ${JSON.stringify(ownedPasswd)}
+  exit 0
+fi
+exit 2
+`, { mode: 0o755 });
+      writeFileSync(join(ownedBin, 'useradd'), `#!/bin/sh
+comment=""
+user=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --comment) comment="$2"; shift 2 ;;
+    --create-home|--shell) shift 2 ;;
+    *) user="$1"; shift ;;
+  esac
+done
+mkdir -p ${JSON.stringify(ownedHome)}/"$user"
+printf '%s:x:2001:2001:%s:%s/%s:/bin/bash\\n' "$user" "$comment" ${JSON.stringify(ownedHome)} "$user" >${JSON.stringify(ownedPasswd)}
+printf 'useradd:%s\\n' "$comment" >>${JSON.stringify(ownedLog)}
+`, { mode: 0o755 });
+      writeFileSync(join(ownedBin, 'chpasswd'), `#!/bin/sh
+IFS= read -r value
+printf 'chpasswd:%s\\n' "$value" >>${JSON.stringify(ownedLog)}
+`, { mode: 0o755 });
+      writeFileSync(join(ownedBin, 'usermod'), `#!/bin/sh
+printf 'usermod:%s\\n' "$*" >>${JSON.stringify(ownedLog)}
+`, { mode: 0o755 });
+      writeFileSync(join(ownedBin, 'install'), `#!/bin/sh
+for target in "$@"; do :; done
+mkdir -p "$target"
+`, { mode: 0o755 });
+      for (const command of ['chmod', 'chown']) {
+        writeFileSync(join(ownedBin, command), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+      }
+      const ownedEnv = {
+        ...process.env,
+        PATH: `${ownedBin}:${process.env.PATH}`,
+        AGENT_BROWSER_HELPER_TEST_HOME_ROOT: ownedHome,
+      };
+      const invokeOwned = (operation = ownedOperation, password = 'fixture-password') => spawnSync(
+        'bash',
+        [file, 'ensure-rdp-route-user-owned', '--user', ownedUser, '--operation-id', operation],
+        { encoding: 'utf8', env: ownedEnv, input: `${password}\n` },
+      );
+
+      writeFileSync(ownedPasswd, `${ownedUser}:x:2001:2001:foreign owner:${ownedHome}/${ownedUser}:/bin/bash\n`);
+      const collision = invokeOwned();
+      assert.equal(collision.status, 2);
+      assert.match(collision.stderr, /owned route user identity collision/);
+      assert.equal(readFileSync(ownedLog, 'utf8'), '', 'collisions must not mutate the account');
+
+      writeFileSync(ownedPasswd, '');
+      const provisioned = invokeOwned();
+      assert.equal(provisioned.status, 0, provisioned.stderr);
+      assert.match(readFileSync(ownedPasswd, 'utf8'), new RegExp(`operation-id=${ownedOperation}`));
+      assert.match(readFileSync(ownedLog, 'utf8'), /useradd:agent-browser route-pool RDP session; operation-id=/);
+
+      writeFileSync(ownedLog, '');
+      const retried = invokeOwned(ownedOperation, 'retry-password');
+      assert.equal(retried.status, 0, retried.stderr);
+      assert.doesNotMatch(readFileSync(ownedLog, 'utf8'), /useradd:/);
+      assert.match(readFileSync(ownedLog, 'utf8'), /chpasswd:agent-browser-rdp-owned:retry-password/);
+
+      writeFileSync(ownedLog, '');
+      const foreignOperation = invokeOwned('123e4567-e89b-12d3-a456-426614174001');
+      assert.equal(foreignOperation.status, 2);
+      assert.equal(readFileSync(ownedLog, 'utf8'), '');
+    } finally {
+      rmSync(ownedFixture, { recursive: true, force: true });
+    }
 
     const fixture = mkdtempSync(join(tmpdir(), 'agent-browser-route-helper-'));
     const bin = join(fixture, 'bin');
@@ -148,7 +234,7 @@ for (const file of files) {
       writeFileSync(join(bin, 'id'), '#!/bin/sh\nprintf "0\\n"\n', { mode: 0o755 });
       writeFileSync(
         join(bin, 'getent'),
-        '#!/bin/sh\nprintf "%s:x:2001:2001:agent-browser route-pool RDP session:/home/%s:/bin/bash\\n" "$2" "$2"\n',
+        '#!/bin/sh\nprintf "%s:x:2001:2001:%s:/home/%s:/bin/bash\\n" "$2" "${FIXTURE_GECOS:-agent-browser route-pool RDP session}" "$2"\n',
         { mode: 0o755 },
       );
       writeFileSync(
@@ -252,6 +338,20 @@ fi
       assert.equal(observation.witness.xServerPid, 41003);
       assert.equal(observation.witness.x11SocketInode, 6101);
       assert.equal(readFileSync(join(scope, 'cgroup.kill'), 'utf8'), '');
+
+      const ownedMarkerObservation = spawnSync(
+        'bash',
+        [file, 'observe-rdp-route-session', '--user', 'agent-browser-rdp-dev-6'],
+        {
+          encoding: 'utf8',
+          env: {
+            ...helperEnv,
+            FIXTURE_GECOS: 'agent-browser route-pool RDP session; operation-id=123e4567-e89b-12d3-a456-426614174000',
+          },
+        },
+      );
+      assert.equal(ownedMarkerObservation.status, 0, ownedMarkerObservation.stderr);
+      assert.equal(JSON.parse(ownedMarkerObservation.stdout).state, 'ready');
 
       for (const socketRows of [
         [

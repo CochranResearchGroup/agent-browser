@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-09-19.p211-route-desktop-v6"
+HELPER_VERSION="2026-09-19.p211-route-desktop-v7"
+ROUTE_USER_LEGACY_COMMENT="agent-browser route-pool RDP session"
+ROUTE_USER_OWNED_COMMENT_PREFIX="agent-browser route-pool RDP session; operation-id="
 
 usage() {
   cat <<'EOF'
@@ -12,6 +14,7 @@ Commands:
   verify-install --group <group> --sudoers <path> --sha256 <digest> [--apparmor-profile-name <name>]
   status-json
   ensure-rdp-route-user --user <user>
+  ensure-rdp-route-user-owned --user <user> --operation-id <UUID>
   observe-rdp-route-session --user <user>
   terminate-rdp-route-session-exact [exact observed identity]
   restart-xrdp
@@ -35,6 +38,48 @@ require_route_user() {
     echo "route user must be agent-browser-rdp or agent-browser-rdp-<suffix>" >&2
     exit 2
   fi
+}
+
+require_operation_id() {
+  local operation_id="$1"
+  if [[ ! "$operation_id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]]; then
+    echo "operation ID must be a canonical UUID" >&2
+    exit 2
+  fi
+}
+
+route_user_home() {
+  local user_name="$1"
+  local test_home_root="${AGENT_BROWSER_HELPER_TEST_HOME_ROOT:-}"
+  if [[ -n "$test_home_root" ]]; then
+    if [[ "$EUID" == "0" ]]; then
+      echo "test route-user home is forbidden for a root helper" >&2
+      exit 2
+    fi
+    printf '%s/%s' "$test_home_root" "$user_name"
+    return 0
+  fi
+  printf '/home/%s' "$user_name"
+}
+
+owned_route_user_comment() {
+  printf '%s%s' "$ROUTE_USER_OWNED_COMMENT_PREFIX" "$1"
+}
+
+owned_route_user_identity_matches() {
+  local user_name="$1"
+  local operation_id="$2"
+  local passwd_entry account_name _password uid _gid comment home_dir shell expected_comment expected_home
+  passwd_entry="$(getent passwd "$user_name" || true)"
+  [[ -n "$passwd_entry" ]] || return 1
+  IFS=: read -r account_name _password uid _gid comment home_dir shell <<<"$passwd_entry"
+  expected_comment="$(owned_route_user_comment "$operation_id")"
+  expected_home="$(route_user_home "$user_name")"
+  [[ "$account_name" == "$user_name" \
+    && "$uid" =~ ^[1-9][0-9]*$ \
+    && "$comment" == "$expected_comment" \
+    && "$home_dir" == "$expected_home" \
+    && "$shell" == "/bin/bash" ]]
 }
 
 require_operator_user() {
@@ -150,13 +195,14 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
 write_xsession() {
   local user_name="$1"
-  local home_dir="/home/$user_name"
+  local home_dir
+  home_dir="$(route_user_home "$user_name")"
 
   install -d -m 700 -o "$user_name" -g "$user_name" "$home_dir/.config/openbox"
   cat >"$home_dir/.xsession" <<'EOF'
@@ -204,7 +250,7 @@ ensure_rdp_route_user() {
   fi
 
   if ! getent passwd "$user_name" >/dev/null; then
-    useradd --create-home --shell /bin/bash --comment "agent-browser route-pool RDP session" "$user_name"
+    useradd --create-home --shell /bin/bash --comment "$ROUTE_USER_LEGACY_COMMENT" "$user_name"
   fi
 
   # chpasswd's default path uses PAM, which can invoke pam_gnome_keyring and
@@ -216,6 +262,59 @@ ensure_rdp_route_user() {
   usermod -aG ssl-cert xrdp >/dev/null 2>&1 || true
   write_xsession "$user_name"
   echo "ensured RDP route user $user_name"
+}
+
+ensure_rdp_route_user_owned() {
+  require_root
+  local user_name=""
+  local operation_id=""
+  local password=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user)
+        user_name="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      --operation-id)
+        operation_id="$(arg_value "$1" "${2:-}")"
+        shift 2
+        ;;
+      *)
+        echo "Unknown ensure-rdp-route-user-owned argument: $1" >&2
+        exit 2
+        ;;
+    esac
+  done
+
+  if [[ -z "$user_name" || -z "$operation_id" ]]; then
+    echo "ensure-rdp-route-user-owned requires --user and --operation-id" >&2
+    exit 2
+  fi
+  require_route_user "$user_name"
+  require_operation_id "$operation_id"
+
+  IFS= read -r password || true
+  if [[ -z "$password" ]]; then
+    echo "ensure-rdp-route-user-owned requires a password on stdin" >&2
+    exit 2
+  fi
+
+  if ! getent passwd "$user_name" >/dev/null; then
+    useradd --create-home --shell /bin/bash \
+      --comment "$(owned_route_user_comment "$operation_id")" "$user_name"
+  fi
+  if ! owned_route_user_identity_matches "$user_name" "$operation_id"; then
+    echo "owned route user identity collision: $user_name" >&2
+    exit 2
+  fi
+
+  printf '%s:%s\n' "$user_name" "$password" \
+    | chpasswd --crypt-method SHA512 --sha-rounds 100000
+  usermod -aG ssl-cert "$user_name" >/dev/null 2>&1 || true
+  usermod -aG ssl-cert xrdp >/dev/null 2>&1 || true
+  write_xsession "$user_name"
+  echo "ensured owned RDP route user $user_name"
 }
 
 helper_observation_roots() {
@@ -244,7 +343,8 @@ managed_route_uid() {
   IFS=: read -r account_name _password uid _gid comment home_dir shell <<<"$passwd_entry"
   if [[ "$account_name" != "$user_name" \
     || ! "$uid" =~ ^[1-9][0-9]*$ \
-    || "$comment" != "agent-browser route-pool RDP session" \
+    || ( "$comment" != "$ROUTE_USER_LEGACY_COMMENT" \
+      && ! "$comment" =~ ^agent-browser\ route-pool\ RDP\ session\;\ operation-id=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ) \
     || "$home_dir" != "/home/$user_name" \
     || "$shell" != "/bin/bash" ]]; then
     echo "route user identity drifted: $user_name" >&2
@@ -635,6 +735,10 @@ case "${1:-}" in
   ensure-rdp-route-user)
     shift
     ensure_rdp_route_user "$@"
+    ;;
+  ensure-rdp-route-user-owned)
+    shift
+    ensure_rdp_route_user_owned "$@"
     ;;
   observe-rdp-route-session)
     shift

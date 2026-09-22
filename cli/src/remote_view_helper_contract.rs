@@ -10,10 +10,11 @@ use std::path::Path;
 
 pub(crate) const FIXED_HELPER_PATH: &str =
     "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
-const REQUIRED_COMMANDS: [&str; 7] = [
+const REQUIRED_COMMANDS: [&str; 8] = [
     "check",
     "status-json",
     "ensure-rdp-route-user",
+    "ensure-rdp-route-user-owned",
     "observe-rdp-route-session",
     "terminate-rdp-route-session-exact",
     "restart-xrdp",
@@ -95,6 +96,18 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .pointer("/parsed/routeUserCredentialUpdate/shaRounds")
             .and_then(Value::as_i64)
             == Some(100_000)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/supported")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/gecosOperationMarker")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/retrySafe")
+            .and_then(Value::as_bool)
+            == Some(true)
 }
 
 pub(crate) fn helper_contract_report(
@@ -163,6 +176,7 @@ fn evaluate_helper_contract(
             "routeSessionTermination": helper_status.pointer("/parsed/routeSessionTermination"),
             "displayAccess": helper_status.pointer("/parsed/displayAccess"),
             "routeUserCredentialUpdate": helper_status.pointer("/parsed/routeUserCredentialUpdate"),
+            "routeUserOwnedProvisioning": helper_status.pointer("/parsed/routeUserOwnedProvisioning"),
             "managedChromeSandboxPolicy": helper_status.pointer("/parsed/managedChromeSandboxPolicy"),
         },
         "checkReady": check_ready,
@@ -233,7 +247,7 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-19.p211-route-desktop-v6",
+                "helperVersion": "2026-09-19.p211-route-desktop-v7",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -262,6 +276,11 @@ mod tests {
                     "pamBypassed": true,
                     "cryptMethod": "SHA512",
                     "shaRounds": 100000
+                },
+                "routeUserOwnedProvisioning": {
+                    "supported": true,
+                    "gecosOperationMarker": true,
+                    "retrySafe": true
                 }
             }
         })
@@ -269,7 +288,7 @@ mod tests {
 
     #[test]
     fn compatible_helper_without_optional_verify_install_remains_ready() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], true);
@@ -281,7 +300,7 @@ mod tests {
 
     #[test]
     fn missing_required_helper_capability_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], false);
@@ -293,7 +312,7 @@ mod tests {
 
     #[test]
     fn legacy_pam_password_update_contract_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let mut status = compatible_status();
         status["parsed"]
             .as_object_mut()
@@ -305,5 +324,21 @@ mod tests {
         assert_eq!(report["ready"], false);
         assert_eq!(report["capabilities"]["ready"], false);
         assert_eq!(report["requiresInteractiveSudo"], false);
+    }
+
+    #[test]
+    fn helper_without_owned_provisioning_contract_is_stale() {
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let mut status = compatible_status();
+        status["parsed"]
+            .as_object_mut()
+            .expect("parsed helper status must be an object")
+            .remove("routeUserOwnedProvisioning");
+
+        let report = evaluate_helper_contract(source, &status, true, true, true);
+
+        assert_eq!(report["ready"], false);
+        assert_eq!(report["capabilities"]["ready"], false);
+        assert_eq!(report["missingRequiredCommands"], json!([]));
     }
 }

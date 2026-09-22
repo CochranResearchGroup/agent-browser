@@ -549,7 +549,8 @@ helper_contract_ready() {
     '"routeUserCredentialUpdate":{' \
     '"pamBypassed":true' \
     '"cryptMethod":"SHA512"' \
-    '"shaRounds":100000'; do
+    '"shaRounds":100000' \
+    '"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true}'; do
     [[ "$compact_status" == *"$required"* ]] || return 1
   done
 }

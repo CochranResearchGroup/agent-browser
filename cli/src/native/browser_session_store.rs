@@ -19,6 +19,9 @@ use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
+mod provisioning;
+pub(crate) use provisioning::{PresentationProvisioningConfig, PresentationProvisioningOperation};
+
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
@@ -165,6 +168,33 @@ struct BrowserRuntimeMigrationRejection {
 /// hashing, and legacy archival stay behind this interface.
 pub(crate) struct BrowserRuntimeSqliteStore {
     connection: Connection,
+}
+
+fn catalog_publication_authority(
+    current: &RouteKeeperAuthority,
+    catalog: RouteKeeperConnectionCatalog,
+) -> Result<RouteKeeperAuthority, String> {
+    let maximum_slots = u32::try_from(catalog.bindings.len())
+        .map_err(|_| "route_keeper_connection_catalog_slots_incomplete".to_string())?;
+    if maximum_slots < current.policy.maximum_slots
+        || (1..=maximum_slots).any(|sequence| {
+            !catalog
+                .bindings
+                .contains_key(&format!("route-slot-{sequence:02}"))
+        })
+    {
+        return Err("route_keeper_connection_catalog_slots_incomplete".to_string());
+    }
+    if current.connection_catalog == catalog {
+        return Ok(current.clone());
+    }
+    let mut next = current.clone();
+    if maximum_slots > current.policy.maximum_slots {
+        next.extend_connection_catalog(catalog, maximum_slots)?;
+    } else {
+        next.replace_connection_catalog(catalog)?;
+    }
+    Ok(next)
 }
 
 impl BrowserRuntimeSqliteStore {
@@ -573,33 +603,12 @@ impl BrowserRuntimeSqliteStore {
 
     /// Publish a complete installed catalog, preserving active evidence for
     /// append-only growth. Logical capacity settings remain independently owned.
+    #[cfg(test)]
     pub(crate) fn publish_route_keeper_connection_catalog(
         &mut self,
         catalog: RouteKeeperConnectionCatalog,
     ) -> Result<RouteKeeperConnectionCatalogPublication, String> {
-        let current = self.load_route_keeper_authority()?;
-        let maximum_slots = u32::try_from(catalog.bindings.len())
-            .map_err(|_| "route_keeper_connection_catalog_slots_incomplete".to_string())?;
-        if maximum_slots < current.policy.maximum_slots
-            || (1..=maximum_slots).any(|sequence| {
-                !catalog
-                    .bindings
-                    .contains_key(&format!("route-slot-{sequence:02}"))
-            })
-        {
-            return Err("route_keeper_connection_catalog_slots_incomplete".to_string());
-        }
-        if current.connection_catalog == catalog {
-            return Ok(RouteKeeperConnectionCatalogPublication::Unchanged);
-        }
-        let mut next = current.clone();
-        if maximum_slots > current.policy.maximum_slots {
-            next.extend_connection_catalog(catalog, maximum_slots)?;
-        } else {
-            next.replace_connection_catalog(catalog)?;
-        }
-        self.compare_and_swap_route_keeper_authority(&current, &next)?;
-        Ok(RouteKeeperConnectionCatalogPublication::Published)
+        self.publish_route_keeper_configuration(catalog, None)
     }
 
     pub(crate) fn compare_and_swap_route_keeper_authority(
@@ -830,16 +839,17 @@ impl BrowserRuntimeSqliteStore {
         if let Some(value) = patch.scale_in_cooldown_ms {
             next.scale_in_cooldown_ms = value;
         }
-        if next.maximum_displays > authority.policy.maximum_slots {
-            return Err(format!(
-                "browser_runtime_config_provisioned_capacity_exceeded:{}:{}",
-                next.maximum_displays, authority.policy.maximum_slots
-            ));
-        }
+        provisioning::authorize_growth_config(
+            &transaction,
+            next.maximum_displays,
+            authority.policy.maximum_slots,
+            patch.maximum_displays.is_some(),
+        )?;
         validate_runtime_config(&next)?;
         let mut next_authority = authority.clone();
-        next_authority.policy.minimum_ready = next.minimum_ready;
-        next_authority.policy.warm_target = next.warm_target;
+        next_authority.policy.minimum_ready =
+            next.minimum_ready.min(authority.policy.maximum_slots);
+        next_authority.policy.warm_target = next.warm_target.min(authority.policy.maximum_slots);
         next_authority.requested_ready_slots = next_authority
             .requested_ready_slots
             .min(next.maximum_displays);
@@ -848,6 +858,9 @@ impl BrowserRuntimeSqliteStore {
         let config_changed = next != current;
         let authority_changed = next_authority != authority;
         if !config_changed && !authority_changed {
+            transaction
+                .commit()
+                .map_err(|_| "browser_runtime_config_commit_failed".to_string())?;
             return Ok(current);
         }
         if config_changed {

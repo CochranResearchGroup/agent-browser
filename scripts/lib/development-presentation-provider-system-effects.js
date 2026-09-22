@@ -284,7 +284,13 @@ export function createDevelopmentPresentationProviderSystemEffects({
           .map((binding) => [binding.slotId, binding]),
       );
       const expectedDigest = createHash('sha256')
-        .update(JSON.stringify({ bindings: canonicalBindings }))
+        .update(JSON.stringify({
+          providerBase: publication.providerBase,
+          ...(publication.publicOperatorUrl == null
+            ? {}
+            : { publicOperatorUrl: publication.publicOperatorUrl }),
+          bindings: canonicalBindings,
+        }))
         .digest('hex');
       const command = join(
         descriptor.userHome,

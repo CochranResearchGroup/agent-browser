@@ -1605,6 +1605,14 @@ export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch
 
 export interface ServiceRuntimeConfigData {
   config: ServiceRuntimeConfig;
+  capacityGrowth: {
+    state: "idle" | "pending" | "provisioning" | "failed";
+    desiredMaximum: number;
+    provisionedMaximum: number;
+    operationId: string | null;
+    attempts: number;
+    failureCode: string | null;
+  };
 }
 
 export interface ServiceRuntimeConfigUpdateRequest extends Omit<ServiceRequest, "action" | "config"> {

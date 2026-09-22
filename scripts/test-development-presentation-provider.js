@@ -67,7 +67,13 @@ function routeKeeperPublicationDigest(publication) {
       .sort((left, right) => left.slotId.localeCompare(right.slotId))
       .map((binding) => [binding.slotId, binding]),
   );
-  return createHash('sha256').update(JSON.stringify({ bindings })).digest('hex');
+  return createHash('sha256').update(JSON.stringify({
+    providerBase: publication.providerBase,
+    ...(publication.publicOperatorUrl == null
+      ? {}
+      : { publicOperatorUrl: publication.publicOperatorUrl }),
+    bindings,
+  })).digest('hex');
 }
 
 function routeKeeperPublicationEffects(descriptor) {
@@ -221,6 +227,7 @@ try {
         assert.equal(options.env.HOME, namespaced.pseudoHome);
         const publication = JSON.parse(options.input);
         assert.equal(publication.bindings.length, namespaced.hardMaxSlots);
+        assert.deepEqual(publication.provisioning, namespaced.provisioning);
         return {
           status: 0,
           stdout: JSON.stringify({
@@ -329,6 +336,24 @@ try {
     maxConnections: 8,
     maxConnectionsPerUser: 8,
   });
+  assert.deepEqual(descriptor.provisioning, {
+    environment: 'development',
+    composeProject: descriptor.composeProject,
+    postgresContainer: descriptor.services.postgres,
+    postgresUser: descriptor.database.user,
+    postgresDatabase: descriptor.database.name,
+    rdpHost: descriptor.rdpTarget.host,
+    rdpPort: descriptor.rdpTarget.port,
+    routeUserPrefix: 'agent-browser-rdp-dev-',
+    connectionKeyPrefix: 'agent-browser-dev-connection-',
+    connectionNamePrefix: 'Agent Browser Dev RDP Route ',
+    sharingProfilePrefix: 'Agent Browser Shared Session development-route-',
+    maximumSlots: 64,
+    maxConnections: 8,
+    maxConnectionsPerUser: 8,
+  });
+  const providerBundle = renderDevelopmentPresentationProviderBundle(descriptor);
+  assert.match(providerBundle.files['compose.yml'], /agent-browser\.environment: development/);
   assert.equal(descriptor.routes.length, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.routeId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.user)).size, 6);
@@ -351,6 +376,15 @@ try {
     `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
   );
   assert.equal(resolvedKeeperCatalog.publicOperatorUrl, descriptor.publicOperatorUrl);
+  assert.deepEqual(resolvedKeeperCatalog.provisioning, descriptor.provisioning);
+  assert.notEqual(
+    routeKeeperPublicationDigest(resolvedKeeperCatalog),
+    createHash('sha256').update(JSON.stringify({
+      bindings: Object.fromEntries(
+        resolvedKeeperCatalog.bindings.map((binding) => [binding.slotId, binding]),
+      ),
+    })).digest('hex'),
+  );
   assert.deepEqual(
     resolvedKeeperCatalog.bindings.map((binding) => binding.slotId),
     descriptor.routes.map((_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`),
