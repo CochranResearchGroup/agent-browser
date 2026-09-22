@@ -1733,6 +1733,19 @@ reject every catalog or XRDP witness drift, and prove that a stale predecessor
 terminal event cannot affect the successor. Configured connector work follows
 only after that packet passes.
 
+Checkpoint `11f606a4` completes that provider-free model packet. Route Keeper
+Authority schema v4 now retains predecessor and current Guacamole tunnel
+occurrences separately, migrates historical v3 adoption evidence from the old
+same-UUID invariant, and accepts a successor occurrence only when the exact
+catalog digest, route user, and complete XRDP ownership witness remain stable.
+Disconnect processing remains bound to the current fence and occurrence, so a
+predecessor terminal event cannot degrade the successor. The focused service
+model suites, 44-test CLI route-keeper lane, v1-to-v4 SQLite migration test,
+format check, and strict workspace Clippy pass. Configured connector adoption
+joined to exact predecessor-exit proof is the next bounded source packet.
+Whole-authority recovery and runtime acceptance remain later gates. No runtime
+effect occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel

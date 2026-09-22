@@ -238,6 +238,12 @@ the digest-fenced configured connection plus the exact XRDP ownership witness;
 the tunnel UUID is one generation-bound transport occurrence. The next
 provider-free packet will revise adoption evidence and stale-event fencing
 before configured connector work resumes. No runtime effect is authorized.
+Checkpoint `11f606a4` completes that provider-free packet with authority schema
+v4, deterministic v3 migration, exact catalog and XRDP witness continuity, and
+separate predecessor and successor tunnel occurrences. Focused model, store,
+CLI route-keeper, format, and strict Clippy gates pass. Configured connector
+adoption joined to exact predecessor-exit proof is next; runtime effects remain
+unauthorized.
 
 ## P216 | Service Model Extraction Landing
 

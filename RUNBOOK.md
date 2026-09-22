@@ -9,6 +9,23 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 423 | 2026-09-21
+
+P211 checkpoint `11f606a4` completes the version 50 provider-free route
+identity packet. Authority schema v4 separates the durable configured route
+and exact XRDP witness from predecessor and successor Guacamole tunnel
+occurrences. Historical v3 adoption receipts migrate deterministically from
+their former same-UUID invariant. New adoption requires the exact catalog
+digest, route user, complete XRDP witness, predecessor occurrence, and successor
+fence. Stale predecessor disconnect evidence cannot degrade the successor.
+
+The service-model unit and integration suites pass, as do the 44-test focused
+CLI route-keeper lane, the SQLite v1-to-v4 migration test, formatting, and
+strict workspace Clippy. Configured connector adoption joined to the exact
+predecessor-exit capability is the next bounded packet. No provider, browser,
+Service State, installed-runtime, production, ingress, or release effect
+occurred.
+
 ## Turn 422 | 2026-09-21
 
 P211 version 50 corrects a configured-adoption identity contradiction before
