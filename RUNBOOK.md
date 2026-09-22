@@ -11,25 +11,25 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 58 source `2f138944` adds reference-free cooldown scale-in and
-public `scaleInCooldownMs`. SQLite checks browser/handoff references, pending
-operations and admission/recovery before reserving one exact stop. Failed cleanup
-retains quarantine without broad shutdown. Retained demand falls to the current
-warm/reference floor after idle cooldown, preventing immediate rewarming.
+P211 version 59 source `d25321dd` adds append-only catalog publication through
+the installer bridge, SQLite and configured keeper adapters. Exact historical
+catalogs preserve active fences and receipts. Same-host in-flight effects can
+merge independent appends; changed route or host state still conflicts. Initial
+unconfigured growth is supported. Logical runtime limits remain separate.
 
-Primary gates pass: four model, 29 store, six runtime-config, five MCP, 775
-native-other (57 ignored) and 253 stream tests; final format/strict Clippy,
-client, API/MCP parity and documentation checks. The
-[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-reference-free-cooldown-scale-in-amendment)
-records compile/lint repairs, corrected fixture expectations and retained gate
-scope. No installed/provider mutation occurred; this is not comprehensive or
-installed acceptance. Both workers are terminal.
+Primary gates pass: 318 model, final 31 store, 253 stream, 775 native-other
+(57 ignored), 16 host, final strict Clippy/format and documentation checks. The
+[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-additive-catalog-publication-amendment)
+records the repaired multi-append failure, final host guard and selective retained
+evidence. Both workers are terminal. No installed/provider mutation occurred;
+this is not comprehensive or installed acceptance.
 
-P211 remains OPEN. About 185 elapsed minutes since 02:46 UTC, older effort
-unknown, inherited ceiling unchanged. Next: automatic catalog expansion with
-retained identity and provider provisioning. Interrupted handoff recovery,
-causal discovery, quarantine, remaining persistence, Desktop Services and frozen
-isolated acceptance remain open. Production, ingress and release stay excluded.
+P211 remains OPEN. About 206 elapsed minutes since 02:46 UTC, older effort
+unknown, inherited ceiling unchanged. Next: provision only a new route and join
+publication to runtime-config growth intent. Automatic provisioning, interrupted
+handoff recovery, causal discovery, quarantine, remaining persistence, Desktop
+Services and frozen isolated acceptance remain open. Production, ingress and
+release stay excluded.
 
 ## Turn 425 | 2026-09-21
 

@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 58
+Plan version: 59
 
 State: OPEN
 
@@ -74,6 +74,96 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Additive Catalog Publication Amendment
+
+Version 59 starts from source `2f138944` and ledger `21d31c46`. The next
+capacity milestone is automatic growth preserving every active route. Current
+provisioning derives deterministic route users and connections from an installed
+descriptor, but publication requires an equal slot set and all-Absent catalog
+replacement. Full connection synchronization can rewrite retained connections.
+The first required integration is additive publication through the existing
+installer bridge, SQLite and configured start/observe/stop/adopt adapters.
+
+Retain exact historical catalogs by digest and accept their fences only when
+all old bindings and provider URLs remain unchanged in the current catalog.
+Append contiguous Absent slots without rewriting any retained record or receipt.
+Publish the whole extension atomically; keep logical runtime limits separate
+until the user configuration changes. Concurrent old effect receipts preserve an independently appended catalog only
+after exact retained-state equality; changed route evidence remains a conflict. Rebinding,
+removal, unknown digests and malformed slot sets remain errors.
+
+Primary owns SQLite publication, provider guards, integration fixtures, docs and
+qualification. Existing sol/medium worker owns the pure authority extension and
+its tests. Existing terra/high worker returned the bounded provisioning seam
+assessment; no provider effects were performed. Effective settings are unknown.
+Budget 20 implementation, 15 qualification and 5 custody minutes within the
+unchanged 360-minute ceiling, preserving 185 elapsed minutes and unknown older
+effort. No review or retry allowance resets. This removes the active-catalog
+publication blocker; it does not by itself prove automatic provisioning or the
+installed growth journey. A new-only provisioning operation and runtime-config
+trigger remain necessary, with no full-connection rewrite accepted as a shortcut.
+
+Acceptance requires retained Ready/Adopting/Stopping identity through additive
+publication, exact new-slot starts, immutable bindings, atomic SQLite rejection,
+old-fence configured observations/stops and startup recovery, plus required Rust
+quality and documentation gates. The original P211 objective and isolated
+acceptance matrix remain unchanged and OPEN.
+
+### Version 59 qualification
+
+Source `d25321dd` removes the active-catalog publication blocker. The installer
+publication bridge accepts a complete contiguous larger catalog, retaining old
+catalog snapshots, active fences and receipts. New slots are Absent; configured
+limits remain unchanged until a separate runtime-config update. Configured
+start, observation, adoption and stop resolve old fences through validated
+historical bindings. Pristine initial publication can establish provider URLs
+and larger capacity before the first host claim without retaining false history.
+
+SQLite merges independently appended catalogs into same-host in-flight effect
+receipts only after exact retained-state comparison. Multiple appends preserve
+intermediate digests for pristine added slots. Changed route state, binding,
+provider URL or host-claim transitions cannot use that merge. A host change must
+read fresh authority to rebase the newly added slots correctly.
+
+| Evidence | Result and scope |
+| --- | --- |
+| Full Service Model package | 318 pass; includes retained route start/stop/adoption, atomic invalid extension refusal, digest forgery rejection and initial unconfigured growth |
+| CLI store, final frozen source | 31 pass; active publication, configuration separation, new-slot start, two appends racing with old stop intent, and changed-route/host conflict refusal |
+| CLI native-stream | 253 pass; existing configured fixtures now append during observation, adoption and stopping before exact provider-helper calls |
+| CLI native-other | 775 pass, zero failures, 57 ignored; includes keeper startup, recovery, publication bridge and lifecycle regression coverage |
+| CLI browser-session host | 16 pass |
+| Quality and docs | Final strict workspace Clippy, formatting, docs build, documentation links and handoff docs and final active planning audit pass |
+
+Initial store qualification recorded 30 passes and one real multi-append merge
+failure: deterministic direct extension used the final digest for a slot that
+correctly retained its intermediate catalog. Primary repaired that comparison,
+verified the historical binding, and added explicit host-transition exclusion.
+The final frozen store run passes all 31 cases. A format check caught the last
+closure wrapping; it was applied and the final check passes. Initial receipts
+remain under `/tmp/p211-v59-*`; final store/quality logs use `*-frozen.log`.
+The model and configured adapter source were unchanged after their passing runs.
+Broader native and host results precede only the narrowly scoped SQLite
+multi-append/host-match correction and formatting; final store and quality gates
+cover that correction. This is selected provider-free qualification, not the
+comprehensive runner on final HEAD or installed acceptance. Unchanged v58
+client/schema/MCP evidence is retained because those surfaces did not change.
+
+The sol/medium worker supplied the bounded model implementation. Primary added
+initial-publication and synthetic-fixture compatibility requirements and used
+full historical validation at adoption. The terra/high worker returned the
+provisioning seam: descriptor-generated route identities, `ensureRouteUser`,
+`syncConnections`, exact connection-ID readback and the publication bridge.
+Both workers are terminal; effective settings are unknown. No new reviewer,
+worktree, installed candidate, provider or shared-runtime effect was used.
+
+Progress is `blocker_reduction` toward automatic capacity growth. About 206
+elapsed minutes since 02:46 UTC are recorded, with older effort unknown and the
+inherited 360-minute ceiling unchanged. The next outcome is provisioning only a
+new route and joining it to a durable runtime-config growth intent. Existing
+full-inventory synchronization may rewrite retained connections and is not an
+acceptable substitute. Remaining recovery, persistence/retention, Desktop
+Services and the complete frozen isolated acceptance matrix remain OPEN.
 
 ## September 22 Reference-Free Cooldown Scale-In Amendment
 
@@ -2525,7 +2615,7 @@ integrating any P207 implementation.
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
-| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `b2a3ff39` exposes six atomic CLI/HTTP/MCP settings and live keeper policy synchronization, preserving existing records and fencing stale demand; checkpoint `2f138944` adds provider-free qualified cooldown retirement and its public setting. Automatic catalog expansion and installed capacity acceptance remain pending |
+| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `b2a3ff39` exposes six atomic CLI/HTTP/MCP settings and live keeper policy synchronization, preserving existing records and fencing stale demand; checkpoint `2f138944` adds provider-free qualified cooldown retirement and its public setting. Checkpoint `d25321dd` qualifies additive publication preserving active evidence; automatic provisioning and installed capacity acceptance remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | `a9595ee2` qualifies bounded admission and durable demand; `f3d0a758` adds durable queue admission; `8ab466e8` joins exact journal recovery. Installed overflow and complete recovery acceptance remain open |
 | Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; interrupted-effect journal reconciliation and active-view control priority remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
