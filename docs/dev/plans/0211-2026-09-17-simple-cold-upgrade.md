@@ -4,11 +4,13 @@ Date: 2026-09-17
 
 Plan version: 65
 
-State: OPEN
+State: CANCELLED
 
 Consolidation: required
 
 Product lane: PL-PLATFORM
+
+Successor: [Plan 0217](0217-2026-09-22-availability-first-remote-view-reliability.md)
 
 Lane: P211
 
@@ -99,11 +101,16 @@ interview established two non-negotiable product requirements that the version
    frames, partial rectangle damage, hidden or unresponsive browser windows,
    and routes withheld solely by stale ownership metadata all fail acceptance.
 
-Plan 0211 remains open until one consolidated implementation removes or bypasses
+The unmet objective requires one consolidated implementation that removes or bypasses
 the denial-first ordinary-path machinery and one bounded visual-operational
 campaign proves the required experience across every warm route. Do not add
 another plan version or broaden unrelated architecture. The existing draft PR
 remains a review vehicle and is not integration-ready.
+
+Plan 0211 is superseded by Plan 0217. Its source and installed receipts remain
+bounded evidence, while the successor owns the unchanged unmet acceptance
+requirements and the cumulative 2,000,000-token completion campaign. Do not
+resume Plan 0211 revisions.
 
 Version 65 freezes the objective and replaces revision-driven continuation with
 one moderate-length `/goal` completion campaign. Historical versions remain
