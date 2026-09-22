@@ -265,12 +265,12 @@ two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
 qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
-Version 54 checkpoint `a9595ee2` adds bounded browser placement and durable
-keeper demand to the live-supervisor readiness qualified at `02ee03a2`. New
-browsers grow onto unused displays before sharing at the configured maximum,
-respect density, and preserve retained browsers after limits are lowered.
-Model and SQLite reconciliation fixtures pass. Durable queueing, public
-configuration, scale-in and the full installed journey remain open. See the
+Version 55 checkpoint `f3d0a758` adds SQLite queue admission and exact-request
+coalescing to bounded placement and keeper demand at `a9595ee2`. Ordinary remote
+requests use priority with aging, bounded depth/deadlines, and fenced completion;
+status exposes queue counts. Model and real SQLite admission fixtures pass.
+Interrupted-effect journal reconciliation, public configuration, scale-in and
+the full installed journey remain open. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and remaining
 gates.
 

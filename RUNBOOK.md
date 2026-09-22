@@ -11,27 +11,28 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 54 source `a9595ee2` qualifies bounded capacity admission. New
-browsers use an unused healthy display before sharing at the configured display
-maximum and density. Existing browser reuse consumes no new allocation; lowered
-limits preserve retained browsers and report over_target. Additional route
-demand persists in SQLite and the keeper reconciles it. Demand-only concurrent
-updates merge without ignoring phase or fence conflicts. Status and mandatory
-docs distinguish retained assignment counts from a live process census.
+P211 version 55 source `f3d0a758` qualifies durable admission for ordinary remote
+opens and manager handoff access. SQLite owns bounded depth, deadlines, priority
+with aging, duplicate results, and generation/sequence/attempt fencing. Startup
+makes queued work retryable and preserves interrupted admitted effects as
+recovery-required. Unstarted cancellation releases only the exact permit.
+Status exposes redacted queue counts; prior replay is not current visibility.
 
-Primary qualification: 299 Service Model tests, 770 native-other (57 ignored),
-253 stream, 16 host, 25 store, two output tests, formatting, strict Clippy,
-client suite and final types, API/MCP parity, final docs build, links, handoff
-docs and repo-local planning audit pass. The
-[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-capacity-admission-amendment)
-records the source, receipts, worker integration and limits of the evidence.
+Primary qualification: 308 Service Model tests, final native-other 773 with 57
+ignored, 253 stream, 16 host, 26 store, two output, format, strict Clippy, client,
+parity, docs build, links, handoff docs and active planning audit pass. Two
+integration gaps, retry retention and old-waiter request replacement, were fixed
+and covered before qualification. The
+[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-durable-admission-queue-amendment)
+records exact evidence and worker reconciliation.
 
-This is outcome progress; Plan 0211 remains OPEN. About 116 elapsed minutes are
-recorded since 02:46 UTC; older effort remains unknown. No installed or provider
-effect occurred. Next: durable bounded queueing and public configuration, then
-scale-in and remaining recovery, Desktop Services, persistence and isolated
-cold-start acceptance. Production, ingress and release remain excluded. This
-checkpoint is not full-suite or installed acceptance.
+This is outcome progress; P211 remains OPEN. About 138 elapsed minutes are
+recorded since 02:46 UTC, with older effort unknown. No installed/provider effect
+occurred. Next: interrupted queue admission joined to exact operation recovery,
+then public configuration and live keeper resizing. Scale-in, remaining recovery,
+Desktop Services, persistence and frozen isolated acceptance remain open.
+Production, external ingress and release remain excluded. This is provider-free
+qualification, not a comprehensive or installed acceptance claim.
 
 ## Turn 425 | 2026-09-21
 

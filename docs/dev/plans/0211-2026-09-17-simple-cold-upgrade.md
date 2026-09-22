@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 54
+Plan version: 55
 
 State: OPEN
 
@@ -74,6 +74,87 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 21 Durable Admission Queue Amendment
+
+Version 55 continues from qualified source `a9595ee2` and ledger `8e71381a`.
+The current worktree is clean at that checkpoint. The next integrated outcome
+is durable, bounded admission for ordinary remote opens and manager handoff
+access, with exact-request coalescing, generation-fenced completion, deadlines,
+and priority with aging. SQLite remains the only persistent queue authority.
+The existing host lock remains the browser-effect serialization boundary.
+
+The primary owns daemon integration and the asynchronous admission adapter.
+`/root/capacity_selection` owns only the pure Service Model queue and fixtures
+on its existing requested sol/medium route. `/root/startup_recovery` owns only
+the transactional SQLite document seam and rollback/reopen fixtures on its
+existing terra/high route. Effective settings are unknown. No extra worktree,
+review discovery, installed publication, or live provider effect is included.
+Budget 25 minutes implementation, 15 qualification and 5 custody within the
+inherited 360-minute allowance, preserving the recorded 116 elapsed minutes
+and unknown older active effort. This does not reset retries or prior review.
+
+Admission must persist before effects. Duplicate operation keys require the
+same payload fingerprint and wait for the same result; mismatched replay fails.
+At most one admitted queue request may enter the ordinary host effect path.
+Pending operations receive recovery priority; existing browser/handoff access
+precedes new opens; aged FIFO prevents starvation when capacity is available.
+A full display pool must not block an existing-handoff request behind an
+ineligible new allocation. Queued deadlines and bounded retained results prevent
+unlimited growth. A client cancellation never cancels another duplicate waiter;
+abandoned queued entries expire without an executor launching their requests.
+After host-generation change, queued entries are retryable and admitted entries
+retain an explicit external-effect recovery obligation, never blind replay.
+
+Qualification must cover real SQLite persistence, single-admission and duplicate
+results, depth/deadline/priority/aging, generation fencing and interrupted-state
+distinctions, then the existing affected runtime tests and strict quality gates.
+Public configuration, live keeper resizing, scale-in, active-view control joins,
+remaining persistence and complete installed acceptance remain open.
+
+Source `f3d0a758` qualifies this provider-free queue outcome. Ordinary remote
+opens and manager handoff resolution enqueue in SQLite before browser effects;
+only the exact generation, request sequence, and attempt token may execute or
+complete. Duplicate payloads coalesce and replay the prior result, which is not
+fresh visibility evidence. The proven keeper startup advances queue generation:
+queued work becomes retryable, admitted work retains recovery-required evidence.
+The blocking effect task persists its result even when its async caller leaves.
+An unstarted permit releases only its exact admission on drop. Safe terminal
+records are bounded at 128; recovery obligations are never silently evicted and
+new attempts stop at their bound. Status exposes redacted queue counts.
+
+Primary integration corrected two concrete gaps before final qualification:
+retrying an old safe entry cannot bypass the recovery-obligation bound, and an
+expired waiter cannot claim a same-generation replacement request. The latter
+required a sequence check both before and inside the admission transaction and
+at effect, completion and cancellation boundaries. Both have regression fixtures.
+`/root/queue_docs` completed the narrow four-surface documentation update using
+requested luna/medium with effective configuration unknown. All three workers
+are terminal. The primary retained integration and acceptance responsibility.
+
+Qualification passes: 308 Service Model tests; final native-other 773 with 57
+ignored (56.30 seconds), including all three real-SQLite admission tests;
+native-stream 253 (53.42 seconds); host 16, store 26 and output two tests;
+formatting and strict workspace Clippy; full client, API/MCP parity, docs build,
+links, handoff docs and active planning audit. Logs are
+`/tmp/p211-v55-model-final.log`, `/tmp/p211-v55-native-other-final.log`,
+`/tmp/p211-v55-{stream,host,store,output,clippy-final,client,parity,docs-build}.log`.
+Earlier passing native-other and model receipts are retained separately. The
+late sequence guard reopened only affected native admission and strict-quality
+checks; unchanged stream, client and document behavior retains its scoped pass.
+No Rust test failure, installed publication, browser or provider effect occurred.
+
+This is outcome progress, not full queue recovery or P211 acceptance. Admitted
+requests interrupted across restart remain explicitly recovery-required until
+the operation-journal reconciliation join is implemented; they are not blindly
+replayed. Active-view recovery/control priority still needs the Desktop Services
+join. Public live configuration, keeper policy/catalog resizing, reference-free
+scale-in, causal browser discovery, quarantine reconciliation, remaining SQLite
+and retention domains, and the frozen isolated acceptance matrix remain open.
+Next join interrupted queue admission to the existing exact operation journal,
+then expose and consume public runtime configuration. Approximately 138 elapsed
+minutes are recorded since 02:46 UTC; older active effort remains unknown. No
+scope, historical retry count, review allowance or 360-minute ceiling is reset.
 
 ## September 21 Capacity Admission Amendment
 
@@ -2249,6 +2330,7 @@ integrating any P207 implementation.
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | a9595ee2 qualifies bounded admission and durable demand with model and SQLite fixtures; durable queue and installed acceptance remain open |
+| Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; interrupted-effect journal reconciliation and active-view control priority remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
 | Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
