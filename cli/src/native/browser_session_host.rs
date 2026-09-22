@@ -111,7 +111,10 @@ pub(crate) fn browser_session_navigation_requires_handoff(
         return Err("internal_presentation_bootstrap_removed".to_string());
     }
     Ok(command.get("action").and_then(serde_json::Value::as_str)
-        == Some("browser_session_navigate"))
+        == Some("browser_session_navigate")
+        && optional_string(command, "profileId")
+            .or_else(|| optional_string(command, "runtimeProfile"))
+            .is_some())
 }
 
 pub(crate) trait BrowserSessionPersistence {
@@ -1979,6 +1982,16 @@ mod tests {
         assert_eq!(
             browser_session_navigation_requires_handoff(
                 &serde_json::json!({"action": "browser_session_navigate"}),
+                Some("development")
+            ),
+            Ok(false)
+        );
+        assert_eq!(
+            browser_session_navigation_requires_handoff(
+                &serde_json::json!({
+                    "action": "browser_session_navigate",
+                    "profileId": "named-profile"
+                }),
                 Some("development")
             ),
             Ok(true)
