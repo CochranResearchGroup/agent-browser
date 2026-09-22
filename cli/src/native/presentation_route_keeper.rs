@@ -1975,7 +1975,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn host_process_registration_preserves_active_predecessor_and_reuses_successor() {
+    async fn host_process_registration_rebases_absent_slots_and_reuses_successor_without_resetting_started_work(
+    ) {
         let directory = TempDirectory::new("route-keeper-host-process-registration");
         let repository = repository(&directory);
         let mut predecessor = FakeConnector::default();
@@ -2007,7 +2008,27 @@ mod tests {
             .records
             .values()
             .filter(|record| record.phase == RouteKeeperPhase::Absent)
-            .all(|record| record.fence.host_generation == successor_generation));
+            .all(|record| {
+                record.fence.host_generation == successor_generation
+                    && record.fence.operation_id.is_empty()
+                    && record.fence.operation_generation == 0
+            }));
+
+        let mut successor = FakeConnector::default();
+        reconcile_once(&repository, &mut successor).await.unwrap();
+        let Some(RouteKeeperReconcileAction::Start { slot_id, fence, .. }) =
+            successor.starts.first()
+        else {
+            panic!("the first successor reconciliation must start an absent slot");
+        };
+        assert_eq!(slot_id, "route-slot-02");
+        assert_eq!(fence.host_generation, successor_generation);
+        let active_before_replay = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            active_before_replay.records["route-slot-02"].phase,
+            RouteKeeperPhase::Observing
+        );
+        assert_eq!(active_before_replay.host_process_claims.len(), 2);
 
         let (replayed, replayed_generation) = register_route_keeper_host_process(
             &repository,
@@ -2016,7 +2037,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(replayed_generation, successor_generation);
-        assert_eq!(replayed, registered);
+        assert_eq!(replayed, active_before_replay);
+        assert_eq!(
+            replayed.records["route-slot-02"],
+            active_before_replay.records["route-slot-02"]
+        );
+        assert_eq!(replayed.host_process_claims.len(), 2);
     }
 
     #[tokio::test]
