@@ -3769,6 +3769,9 @@ mod tests {
                 request["agentName"] = json!("fixture-agent");
                 request["taskName"] = json!("observe-synthetic-prompt");
             }
+            "service_runtime_config_update" => {
+                request["config"] = json!({"maximumDisplays": 5});
+            }
             "service_authentication_run_start" => {
                 request = json!({
                     "action": action,
