@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 51
+Plan version: 52
 
 State: OPEN
 
@@ -74,6 +74,78 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 21 Whole-Phase Startup Recovery Amendment
+
+Version 52 continues the same full objective from qualified source `d0fb7abe`
+and ledger `50db55d6`, with clean remote parity and open draft PR #191 verified.
+The preceding startup packet is outcome progress; it does not satisfy the
+remaining cold-start matrix or installed acceptance. The next bounded outcome
+is recovery of `Starting`, `Observing`, `RecoveryFailed`, and `Stopping` in the
+same configured startup path. Quarantined ownership remains preserved and
+explicitly unavailable; this packet does not silently clear that obligation.
+
+Before provider work, classify every record and prove exit of its interrupted
+host. A retained ready witness additionally requires exit of its original host.
+Pending starts without a witness receive a newer host and operation fence,
+then recreate transport and observe real readiness. Pending or failed recovery
+with a witness enters adoption without discarding that witness. Interrupted
+adoption retains its monotonic operation number even after several recovery
+attempts. Pending stop intent is preserved: a separate guarded connector seam
+uses the exact durable XRDP witness without creating a tunnel, and publishes
+stop completion plus Absent-slot successor rebasing in one compare-and-swap.
+Transient errors retain intent; contradictory stop evidence is quarantined.
+No old-generation Absent slot is exposed to ordinary reconciliation.
+
+The primary owns the pure Service Model transitions and fixtures, all docs,
+validation and custody. The existing `/root/startup_recovery` worker owns the
+two CLI keeper modules and their fixtures under that frozen model contract.
+Its requested model remains `gpt-5.6-terra`, high effort; effective configuration
+is unknown. No new broad review, checkout, or runtime effect is introduced.
+Budget this successor within the inherited ceiling: up to 25 minutes for the
+parallel implementation, 15 for focused/model and quality checks, and 10 for
+integration and documentation. The approximately 54 prior elapsed minutes and
+unknown older cumulative consumption are retained, not reset. This packet can
+advance source recovery, not finish the whole P211 outcome. Candidate build,
+installed matrix, cross-platform browser discovery, readiness/capacity,
+remaining SQLite domains, and Desktop Services joins remain separate gates.
+
+Acceptance requires mixed-phase recovery through the real orchestrator,
+exact-fence and dual-host refusal without provider access, retained witness
+adoption, atomic stopped-slot rebasing, and cancellation/failure preservation.
+Run the model integration tests, focused keeper tests and strict quality gates;
+retain unrelated passed evidence only with an explicit dependency rationale.
+Source checkpoint `f651384f` implements and qualifies this provider-free phase-recovery packet. The worker
+returned the CLI classifier, reservation and dispatch paths, configured
+retained-stop seam, and mixed-phase fixtures. Primary integration requires an
+exact captured record before resumed effects, in addition to fence and phase;
+a substituted predecessor receipt cannot reuse earlier process proof. The
+primary also added stop-negative cases for unproven ownership, mismatched
+stopped receipts, transient errors and changed candidates. These retain stop
+intent or quarantine without exposing a successor-owned free slot.
+
+The complete Service Model package and all 18 route-keeper integration tests
+pass. The initial 57-test keeper run, docs links, handoff docs, docs build, and
+six installer/provider fixtures pass. After the record-binding correction,
+CLI native-other passes 765 tests with 57 ignored in 55.08 seconds; native-stream
+passes all 250 tests in 53.80 seconds. Workspace formatting and strict Clippy
+pass on the final source. Documentation links and the active planning audit
+also pass. Local reproducible logs are `/tmp/p211-v52-model-package.log`,
+`/tmp/p211-v52-record-bound-native-{other,stream}.log`, and
+`/tmp/p211-v52-record-bound-clippy.log`. This is changed-surface qualification
+with the earlier comprehensive baseline retained: workstation, service,
+browser, transport and integration code are unchanged by this packet, and no
+whole-suite or installed-candidate result is attributed to `f651384f`.
+The six fixtures
+use the existing local debug CLI plus unchanged fixture inputs and are retained
+installer-boundary evidence, not final-candidate installed acceptance.
+This is outcome progress: configured startup now processes every supported
+non-quarantined phase through the same proof-bound path. Roughly 70 elapsed
+minutes have accumulated since this continuation began, including prior
+qualification; older cumulative active effort remains unknown. The next
+outcome is truthful supervisor health/readiness and capacity use, followed by
+the remaining broader P211 gates. No optimized candidate or runtime effect
+occurred, and no new review or attempt allowance was created.
 
 ## September 21 Handoff Verification And Startup Recovery Amendment
 
@@ -2025,7 +2097,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. Whole-authority recovery, public health/readiness and live acceptance remain open |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. Quarantine handling, public health/readiness and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

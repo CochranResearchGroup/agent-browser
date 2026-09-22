@@ -11,30 +11,28 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 51 source checkpoints `ef43de73` and `7634325d` implement multi-route
-startup recovery. The prior handoff proved same-generation interrupted replay
-only. A truly restarted host now proves both the original ready host and
-interrupted adopter exited, then atomically reserves all pending transitions
-before exposing its supervisor. Cancellation skips ordinary supervision and
-closes only owned tunnel tasks, preserving retained XRDP routes.
+P211 version 52 source `f651384f` qualifies configured startup for pending
+starts, failed recovery, and retained stop intent. Qualified baseline `d0fb7abe` / ledger `50db55d6`
+includes comprehensive source `ef43de73` (both lanes, 842 seconds), final
+`7634325d` keeper/native-other checks, and the rollover proof. Those receipts
+remain baseline evidence, not qualification of the current implementation.
 
-Primary validation passes all 55 focused keeper tests, the Service Model
-package including 16 route-keeper integration cases, formatting, strict
-workspace Clippy, documentation links, handoff docs, planning audit, docs
-build, and six selector-recommended source-free installer/provider fixtures.
-Both comprehensive lanes pass on `ef43de73` in 842 seconds. Final `7634325d`
-adds pre-provider route-user validation and successful two-route coverage;
-55 keeper tests and quality gates pass again; native-other passes 761 with 57 ignored.
-Unchanged baseline evidence is retained; no runtime guidance was published.
+The primary owns pure model transitions, docs and validation; the existing
+startup worker owns the two CLI keeper modules and fixtures. The model now
+preserves retained witnesses through repeated adoption, advances pending-start
+fences, and rejects stale events. All 18 model integration tests and the full
+Service Model package pass. Final native-other passes 765 tests (57 ignored),
+native-stream passes 250, and format/strict Clippy pass. Exact-record preflight
+rejects changed predecessor evidence; stop-negative cases preserve intent or
+quarantine. Docs/link/planning and six fixture checks pass. About 70 elapsed
+minutes are recorded; older cumulative active effort remains unknown.
+The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-whole-phase-startup-recovery-amendment)
+records the exact phase contract, inherited bounds and remaining outcome gates.
 
-The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-handoff-verification-and-startup-recovery-amendment)
-records four closed-world review dispositions, worker ownership, inherited
-bounds and unavailable historical effort counters. No installed runtime or
-provider effect occurred. Conditional isolated-development authority remains
-behind candidate freeze and fresh production readback; production, ingress
-and release remain excluded. Test-only `d0fb7abe` proves Absent-slot rollover
-through registration, start and replay; focused, format and Clippy pass.
-Next: remaining whole-authority phase recovery and live readiness projection.
+No installed runtime or provider effect occurred. Conditional development
+acceptance remains behind candidate freeze and fresh production readback;
+production, ingress and release remain excluded. Next: supervisor health,
+readiness and capacity projection, then the remaining installed-outcome gates.
 
 ## Turn 425 | 2026-09-21
 
