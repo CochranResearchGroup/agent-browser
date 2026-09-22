@@ -4,7 +4,7 @@ Date: 2026-09-17
 
 Plan version: 65
 
-State: OPEN
+State: READY FOR PROTECTED INTEGRATION
 
 Consolidation: required
 
@@ -191,11 +191,11 @@ blocker.
 | --- | --- | --- |
 | Recoverable atomic candidate | `cf75aac1` and M1 qualification | complete |
 | Frozen provider-free qualification | candidate `8bc9a19b`; comprehensive Rust evidence with repaired 599-test service compartment; client, contract, dashboard, docs, policy and handoff gates green | complete |
-| One-command owned shutdown and cold replacement | provider-free shutdown, installer and workstation compartments green | installed development execution in M3 |
-| Named-profile ordinary client path | provider-free manager, session, handoff and durable-handoff coverage green | installed development execution in M3 |
-| Authenticated ready opaque handoff | contract and provider-free handoff coverage green | actual authenticated `operatorVisible.state=ready` `/remote-view/<handoff-id>` in M3 |
-| Close and residue | provider-free ownership and foreign-process preservation coverage green | fresh installed process and residue readback in M3 |
-| Protected integration handoff | branch and candidate are attributable | M4 review, ledger reconciliation, draft pull request and parity |
+| One-command owned shutdown and cold replacement | provider-free gates plus installed generation `0.28.0-1d808efe0797`; production unchanged; doctor and three disposable cycles pass | complete |
+| Named-profile ordinary client path | installed `default` profile opened through the ordinary client at source `9e7c5719` | complete |
+| Authenticated ready opaque handoff | installed response returned `operatorVisible.state=ready` and authenticated `/remote-view/manager-7805bbb24ed7a02530b4b842b505bbe1` | complete |
+| Close and residue | PID 26240, active browser and session absent after close; explicit-close history and four obligation-free warm routes retained | complete |
+| Protected integration handoff | draft PR #191 targets `main`; branch pushed at `9e7c5719` with zero divergence; ledgers reconciled | ready for maintainer merge |
 
 ### M3 | Isolated Installed Operator Journey
 
@@ -256,6 +256,32 @@ Continue M3 through these fixed sub-milestones without another plan version:
 
 The campaign proceeds to M4 only after all three sub-milestones pass.
 
+M3 completed at source checkpoint `9e7c5719` and installed development
+generation `0.28.0-1d808efe0797`. M3.1 added exact, proof-bound quarantine
+reconciliation and cleared the retained obligation without manual SQLite
+mutation. The installed helper and source both hash to
+`a40c8c997e31763253bd2240df93d288107fa7bf182b8c1d8e2950e5c641bbbc`.
+M3.2 proved production unchanged, development doctor success, three disposable
+open/read/close/residue cycles, and the ordinary named `default` profile. The
+named request returned `operatorVisible.state=ready` and only the authenticated
+opaque handoff
+`/remote-view/manager-7805bbb24ed7a02530b4b842b505bbe1`. Its exact Chrome
+process used `/opt/google/chrome/chrome` on route slot 01 display `:20`; close
+removed PID 26240 plus the active browser and session records, retained the
+explicit-close history, and left four ready XRDP scopes with no cleanup
+obligation. No Chrome for Testing browser was used by the acceptance journey.
+
+The final cold start also exposed an X11 authorization gap in the ordinary
+manager path. Checkpoint `9e7c5719` routes the selected keeper binding through
+the existing bounded display-access helper before Chrome launch. The affected
+browser-session lane passed 89 tests with two ignored browser-launch tests,
+the display-access error contract passed, and formatting plus strict workspace
+Clippy passed. The first cold supervisor observation finished before XRDP
+stabilized and failed closed; one exact runtime-host restart adopted the now
+ready sessions, after which doctor, disposable smoke, named open, opaque
+handoff, and close all passed. This retained first failure is provider startup
+timing evidence and does not weaken the final product receipt.
+
 ### M4 | Integration And Closeout Packet
 
 Budget reservation: at most 350,000 additional tokens; total campaign usage
@@ -272,6 +298,16 @@ Exit evidence: either an integration-ready candidate with every Plan 0211
 criterion supported at its stated boundary, or a truthful bounded closeout
 naming the exact unmet criterion. Deferred hardening becomes separately
 triaged follow-up work and cannot keep Plan 0211 open through more revisions.
+
+M4 completed as a protected-integration packet. Draft pull request #191 targets
+`main`, its head is the P211 branch, and the source branch is pushed with zero
+local or remote divergence. The version 65 requirement table, RUNBOOK, ROADMAP,
+and active-lane catalog now identify `9e7c5719` as the qualified source and
+`0.28.0-1d808efe0797` as the installed development generation. The last goal
+service readback available before closeout reported 1,644,153 cumulative
+tokens, below the 2,000,000 campaign ceiling. Protected merge remains a
+separate maintainer action; production installation, release, branch deletion,
+and worktree removal remain unauthorized.
 
 ### Campaign Controls
 

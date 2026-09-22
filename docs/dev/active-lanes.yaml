@@ -8,7 +8,7 @@ lanes:
     plan_ref: refs/heads/platform/p204-ci-validation-tiering
     branch: platform/p204-ci-validation-tiering
     target: main
-    plan_state: OPEN
+    plan_state: READY_FOR_PROTECTED_INTEGRATION
     custody_state: ACTIVE_WORKTREE
     checkpoint: ea254ecd
     remote_ref: refs/remotes/origin/platform/p204-ci-validation-tiering
@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 8bc9a19b
+    checkpoint: 9e7c5719
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: M1 and M2 complete; M3 installed execution repaired development shutdown targets, cold SQLite and catalog initialization, runtime-host helper access, XRDP leader identity, and empty profile classification; exact shutdown then quarantined route-slot-01 after its verified session disappeared just beyond the helper window; M3.1 quarantine reconciliation is the current product gate
-    validation_ref: 8bc9a19b
+    validation_status: M1 through M4 complete; exact quarantine reconciliation, full provider-free qualification, development doctor, three disposable cycles, ordinary named-profile ready opaque handoff, exact close and fresh residue evidence pass at source 9e7c5719 and installed generation 0.28.0-1d808efe0797; draft PR 191 is current with zero branch divergence
+    validation_ref: 9e7c5719
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: route-slot-01 retains an exact rdp_route_session_scope_not_empty cleanup obligation although fresh OS evidence proves session c5 and session-c5.scope absent; cold successors fail closed because proof-bound quarantine reconciliation is unimplemented; M3.1 must add that exact transition before one installed replay; manual SQLite repair, broad process cleanup, production, ingress, release and integration remain excluded
+    blocker: none within Plan 0211 acceptance; protected merge is a separate maintainer action and production install, release, branch deletion and worktree removal remain excluded
     updated_at: 2026-09-22

@@ -27,16 +27,16 @@ field evidence and acceptance records into the same model.
 
 ## P211 | Simple Install, Upgrade, And Remote View
 
-State: OPEN
+State: READY FOR PROTECTED INTEGRATION
 
-Version 65 M1 and M2 are complete at frozen candidate `8bc9a19b`. Atomic
-desktop-control activation and broad provider-free qualification are green.
-The installed development journey proved exact quarantine reconciliation is a
-completion blocker: witnessed XRDP session `c5` was removed, but the durable
-`route-slot-01` cleanup obligation remained quarantined after the bounded stop
-window and now prevents every cold successor. M3 is split into proof-bound
-quarantine reconciliation, one installed replay, and one qualification
-checkpoint. Manual SQLite repair is excluded.
+Version 65 M1 through M4 are complete. Source `9e7c5719` and installed
+development generation `0.28.0-1d808efe0797` pass the provider-free gates and
+the isolated operator journey. Exact quarantine reconciliation cleared the
+retained obligation without manual SQLite mutation. Development doctor, three
+disposable cycles, one ordinary named-profile ready opaque handoff, exact close,
+and fresh residue evidence pass with `/opt/google/chrome/chrome`. Draft PR #191
+is current with zero branch divergence. Protected merge is the remaining
+maintainer action; production install and release remain excluded.
 
 Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
 owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user

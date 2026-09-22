@@ -11,16 +11,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 429 | 2026-09-22
 
-P211 M3 has a proved product blocker. Installed execution repaired development
-shutdown targeting, cold SQLite and catalog initialization, runtime-host access
-to the narrow privileged helper, XRDP session-leader identity, and empty
-profile classification. Exact shutdown killed witnessed session `c5`, but the
-helper timed out before the scope disappeared and durably quarantined
-`route-slot-01`. Fresh `loginctl`, systemd, and cgroup readback proves both the
-session and scope are now absent. Cold startup still fails closed because no
-proof-bound transition can clear that exact cleanup obligation. Plan 0211 now
-routes M3 through exact quarantine reconciliation, one installed journey
-replay, and one qualification checkpoint. Manual SQLite repair is prohibited.
+P211 M3 and M4 are complete at source `9e7c5719` and installed development
+generation `0.28.0-1d808efe0797`, binary SHA-256
+`1d808efe0797dabdd1da2725d70947ae435a1cbb0a0a2a41fe1ee1ad839b5514`.
+Exact quarantine reconciliation cleared the retained obligation without manual
+SQLite mutation. Doctor and three disposable cycles passed using
+`/opt/google/chrome/chrome`. The ordinary named `default` profile returned a
+ready authenticated opaque handoff, then close removed the exact Chrome PID,
+browser, and active session while retaining explicit-close history and four
+ready obligation-free XRDP scopes. The final repair grants the service user
+access to the exact selected route display before managed Chrome launch; 89
+affected tests, the display-access contract, formatting, and strict Clippy
+pass. Draft PR #191 is current and branch divergence is zero. The candidate is
+ready for protected integration; merge, production install, release, branch
+deletion, and worktree removal remain separate maintainer actions.
 
 ## Turn 428 | 2026-09-22
 
