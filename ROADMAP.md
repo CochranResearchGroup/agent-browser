@@ -261,7 +261,8 @@ adopter exited. Checkpoint `ef43de73` joins that exact refence to
 provider-free multi-route classification, atomic pending-state publication, and
 owned-task cleanup. Both comprehensive lanes pass in 842 seconds. Final
 source `7634325d` adds pre-provider route-user validation and successful
-two-route coverage; focused and quality gates pass again. See the
+two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
+qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
 ## P216 | Service Model Extraction Landing

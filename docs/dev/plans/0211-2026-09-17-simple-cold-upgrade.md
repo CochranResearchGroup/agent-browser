@@ -153,12 +153,17 @@ local under `/tmp/p211-full-rust-v51.log` and
 commit identities here make the checks reproducible. These checks establish
 provider-free configured startup recovery, not live provider acceptance.
 
-The startup worker's bounded read-only follow-up found Absent-slot generation
-rollover already implemented in host registration. The primary verified the
-model transition and CLI CAS loop. Its next missing proof is a provider-free
-registration-to-start fixture with exact-host replay after the active
-transition; whole-authority phase recovery remains a separate open criterion.
-This continuation has used approximately 46 elapsed minutes through this
+The startup worker's bounded follow-up found Absent-slot generation rollover
+already implemented in host registration. The primary verified the model
+transition and CLI CAS loop, then accepted the worker's extension of the
+existing mixed-authority fixture. It proves cleared Absent operation fences,
+a real successor-generation start, and exact-host replay preserving the full
+active authority and two host claims. Whole-authority phase recovery remains
+a separate open criterion. Test-only checkpoint `d0fb7abe` passes the focused
+registration fixture, formatting, and strict workspace Clippy. Its unchanged
+production code retains the prior validation evidence; no broad rerun is
+needed for this assertion-only extension.
+This continuation has used approximately 54 elapsed minutes through this
 checkpoint, including the comprehensive run, with no installed candidate
 build or provider attempt. Historical cumulative active effort remains unknown.
 

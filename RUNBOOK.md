@@ -32,8 +32,9 @@ records four closed-world review dispositions, worker ownership, inherited
 bounds and unavailable historical effort counters. No installed runtime or
 provider effect occurred. Conditional isolated-development authority remains
 behind candidate freeze and fresh production readback; production, ingress
-and release remain excluded. Next: prove the existing Absent-slot rollover
-through registration and start, then address whole-authority phase recovery.
+and release remain excluded. Test-only `d0fb7abe` proves Absent-slot rollover
+through registration, start and replay; focused, format and Clippy pass.
+Next: remaining whole-authority phase recovery and live readiness projection.
 
 ## Turn 425 | 2026-09-21
 
