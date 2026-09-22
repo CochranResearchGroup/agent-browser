@@ -9,6 +9,23 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 422 | 2026-09-21
+
+P211 version 50 corrects a configured-adoption identity contradiction before
+provider code is written. The configured Guacamole path can create only a new
+websocket tunnel, whose protocol UUID is newly generated. The version 49 model
+required a cold successor to preserve the predecessor UUID, so no truthful
+configured adapter could satisfy it.
+
+The corrected contract keeps the digest-fenced catalog connection and complete
+XRDP ownership witness as durable route identity. A Guacamole UUID identifies
+one transport occurrence under one keeper fence. A successor occurrence may be
+published only after exact predecessor process exit, fresh catalog validation,
+and unchanged XRDP witness readback. Provider-free model and stale-event tests
+come first; configured connector and runtime-host recovery remain later gates.
+No provider, browser, Service State, installed-runtime, production, ingress, or
+release effect occurred.
+
 ## Turn 421 | 2026-09-21
 
 P211 checkpoint `536d58a9` clears the broad provider-free support-lane gate.

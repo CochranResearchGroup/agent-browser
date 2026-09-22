@@ -232,6 +232,12 @@ provider-free runner passes both lanes in 720 seconds. Configured connector
 adoption and the exact predecessor-exit evidence join are now the next bounded
 provider-free packet. Whole-authority recovery, quarantine, runtime-host
 integration, and live readiness remain open. No runtime effect occurred.
+Plan 0211 version 50 corrects the disproven assumption that a cold successor
+can preserve a Guacamole websocket tunnel UUID. The durable route identity is
+the digest-fenced configured connection plus the exact XRDP ownership witness;
+the tunnel UUID is one generation-bound transport occurrence. The next
+provider-free packet will revise adoption evidence and stale-event fencing
+before configured connector work resumes. No runtime effect is authorized.
 
 ## P216 | Service Model Extraction Landing
 

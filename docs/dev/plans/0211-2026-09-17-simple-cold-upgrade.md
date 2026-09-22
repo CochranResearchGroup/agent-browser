@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 49
+Plan version: 50
 
 State: OPEN
 
@@ -999,6 +999,20 @@ display-control lease used by handoff activation, focus, maximize, capture,
 and input, so shared-display interference is explicit and stale commands
 cannot affect a replacement generation.
 
+Version 50 corrects one disproven version 49 identity assumption. Apache
+Guacamole assigns a new UUID to each newly created websocket tunnel, and the
+configured provider exposes no operation that can reattach a successor process
+to the predecessor's exact tunnel UUID. The durable route identity is therefore
+the digest-fenced catalog binding plus the exact XRDP ownership witness. The
+Guacamole UUID identifies one transport occurrence under one keeper fence. A
+cold successor may publish a new tunnel occurrence only after exact predecessor
+process exit is proved, the same catalog binding is revalidated before the
+provider effect, and the complete XRDP witness is reobserved unchanged. Same
+process replay reuses the one retained task; a later process needs a new exact
+exit proof. Stale terminal events remain occurrence-bound and cannot degrade a
+newer tunnel. This correction does not authorize configured startup recovery,
+whole-authority recovery, provider effects, or runtime acceptance by itself.
+
 ## Frozen Interface Packet
 
 The shutdown module exposes one operation that receives one effects adapter.
@@ -1703,6 +1717,22 @@ runtime-host startup integration, and live readiness remain separate gates.
 No provider, browser, Service State, installed-runtime, production, ingress, or
 release effect occurred.
 
+Plan version 50 follows a failed configured-adoption implementation preflight.
+The current configured factory can only authenticate and open a new Guacamole
+websocket tunnel. The tunnel protocol then reports a newly generated UUID,
+while the version 49 model rejects adoption unless that UUID equals the
+predecessor's. No adapter can satisfy both contracts truthfully. Three
+independent interface studies compared strict retained-tunnel resume, a broad
+provider-capability interface, and a common-caller route-continuation seam.
+The selected design keeps the existing keeper seam and separates durable route
+identity from transport occurrence: the catalog connection and exact XRDP
+ownership witness remain invariant, while a successor tunnel UUID may change
+under the new fence. The next packet is provider-free model and recovery
+evidence only. It must retain the prior occurrence in the adoption receipt,
+reject every catalog or XRDP witness drift, and prove that a stale predecessor
+terminal event cannot affect the successor. Configured connector work follows
+only after that packet passes.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel
@@ -1744,6 +1774,18 @@ disjoint pure handoff preparation surface, and `gpt-6-astra` at high effort
 performed the closed-world transaction review. The primary integrated and
 reworked the packet, and the original reviewer verified the four exact
 findings once. No worker received Git or runtime-effect authority.
+
+For the version 50 correction, `/root/configured_adoption_impl` used
+`gpt-5.6-terra` at high effort and stopped without edits after proving the
+configured provider cannot preserve a predecessor tunnel UUID. Three
+read-only Design It Twice workers then explored strict resume, flexible
+provider capability, and common-caller continuation interfaces. The completed
+`gpt-5.6-luna`, `gpt-5.6-terra`, and replacement `gpt-5.6-luna` studies all
+identified the catalog binding and XRDP witness as the durable identity; the
+original common-caller worker was interrupted after failing to return within
+the bounded design window, and none of its unreported work was used. The
+primary selected the narrow route-continuation correction and retains all
+source, Git, validation, and runtime-effect custody.
 
 For the keeper-handoff qualification closeout, `/root/p211_quality_gates` used
 requested `gpt-5.6-luna` low effort to run formatting and strict Clippy;
