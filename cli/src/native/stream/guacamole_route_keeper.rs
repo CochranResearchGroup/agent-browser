@@ -599,8 +599,12 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
                 }
                 Ok(XrdpHelperStop::Stopped)
             }
-            "ownership_unproven"
-                if response.code.as_deref() == Some("rdp_route_session_reobservation_failed") =>
+            "ownership_unproven" | "incomplete"
+                if matches!(
+                    response.code.as_deref(),
+                    Some("rdp_route_session_reobservation_failed")
+                        | Some("rdp_route_session_scope_not_empty")
+                ) =>
             {
                 let mut verify_args = vec!["verify-rdp-route-session-absent".to_string()];
                 verify_args.extend(witness_args);
