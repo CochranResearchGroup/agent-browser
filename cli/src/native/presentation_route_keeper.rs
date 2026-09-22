@@ -588,6 +588,18 @@ pub(crate) fn try_prove_route_keeper_predecessor_exit(
     {
         return Err("route_keeper_predecessor_proof_candidate_changed".to_string());
     }
+    let binding = authority
+        .connection_catalog
+        .bindings
+        .get(&expected_ready.slot_id)
+        .ok_or_else(|| "route_keeper_predecessor_proof_route_identity_mismatch".to_string())?;
+    if expected_ready
+        .xrdp_ownership
+        .as_ref()
+        .is_none_or(|ownership| ownership.route_user != binding.route_user)
+    {
+        return Err("route_keeper_predecessor_proof_route_identity_mismatch".to_string());
+    }
     let predecessor = authority
         .host_process_claims
         .get(&predecessor_generation)
@@ -1380,7 +1392,13 @@ mod tests {
                 xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
                     schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
                     boot_id: "boot-fixture".to_string(),
-                    route_user: "agent-browser-rdp-1".to_string(),
+                    route_user: format!(
+                        "agent-browser-rdp-{}",
+                        slot_id
+                            .trim_start_matches("route-slot-")
+                            .parse::<u32>()
+                            .unwrap()
+                    ),
                     route_uid: 2001,
                     session_id: xrdp_session_id.clone(),
                     session_service: "xrdp-sesman".to_string(),
@@ -2223,98 +2241,127 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_startup_recovers_all_proven_routes_in_slot_order_and_cleans_owned_first_route_on_later_failure(
-    ) {
-        let directory = TempDirectory::new("route-keeper-configured-startup-order");
-        let repository = repository(&directory);
-        let expected = repository.load_route_keeper_authority().unwrap();
-        let mut warm = expected.clone();
-        warm.policy.warm_target = 2;
-        repository
-            .compare_and_swap_route_keeper_authority(&expected, &warm)
-            .unwrap();
-        let mut predecessor = FakeConnector::default();
-        for _ in 0..4 {
-            reconcile_once(&repository, &mut predecessor).await.unwrap();
-        }
-        let claimed = register_host_claim(&repository, 2);
-        let first = claimed.records["route-slot-01"]
-            .protocol_ready
-            .clone()
-            .unwrap();
-        let second = claimed.records["route-slot-02"]
-            .protocol_ready
-            .clone()
-            .unwrap();
-        let prepared =
-            prepare_configured_cold_process_recovery(&claimed, 2, "linux:boot:fixture", |_| {
-                ProcessObservation::Missing
-            })
-            .unwrap();
-        let mut drifted = claimed.clone();
-        drifted.policy.warm_target = 3;
-        repository
-            .compare_and_swap_route_keeper_authority(&claimed, &drifted)
-            .unwrap();
-        assert!(matches!(
-            reserve_prepared_cold_process_routes(&repository, &claimed, prepared),
-            Err(ref error) if error == "route_keeper_cold_process_candidate_changed:startup"
-        ));
-        assert_eq!(repository.load_route_keeper_authority().unwrap(), drifted);
-        let prepared =
-            prepare_configured_cold_process_recovery(&drifted, 2, "linux:boot:fixture", |_| {
-                ProcessObservation::Missing
-            })
-            .unwrap();
-        let prepared =
-            reserve_prepared_cold_process_routes(&repository, &drifted, prepared).unwrap();
-        assert_eq!(
+    async fn configured_startup_recovers_multiple_routes_and_cleans_partial_failure() {
+        for fail_second in [false, true] {
+            let directory = TempDirectory::new("route-keeper-configured-startup-order");
+            let repository = repository(&directory);
+            let expected = repository.load_route_keeper_authority().unwrap();
+            let mut warm = expected.clone();
+            warm.policy.warm_target = 2;
             repository
-                .load_route_keeper_authority()
+                .compare_and_swap_route_keeper_authority(&expected, &warm)
+                .unwrap();
+            let mut predecessor = FakeConnector::default();
+            for _ in 0..4 {
+                reconcile_once(&repository, &mut predecessor).await.unwrap();
+            }
+            let claimed = register_host_claim(&repository, 2);
+            let first = claimed.records["route-slot-01"]
+                .protocol_ready
+                .clone()
+                .unwrap();
+            let second = claimed.records["route-slot-02"]
+                .protocol_ready
+                .clone()
+                .unwrap();
+            let prepared =
+                prepare_configured_cold_process_recovery(&claimed, 2, "linux:boot:fixture", |_| {
+                    ProcessObservation::Missing
+                })
+                .unwrap();
+            let mut malformed = claimed.clone();
+            malformed
+                .records
+                .get_mut("route-slot-02")
                 .unwrap()
-                .projection()
+                .protocol_ready
+                .as_mut()
                 .unwrap()
-                .ready_count,
-            0
-        );
-        let mut successor = FakeConnector::default();
-        successor.routes.insert(first.slot_id.clone(), first);
-        successor.routes.insert(second.slot_id.clone(), second);
-        successor.adoption_errors.insert(
-            "route-slot-02".to_string(),
-            "fixture_second_adoption_failed".to_string(),
-        );
+                .xrdp_ownership
+                .as_mut()
+                .unwrap()
+                .route_user = "unconfigured-user".to_string();
+            assert!(matches!(prepare_configured_cold_process_recovery(
+            &malformed, 2, "linux:boot:fixture", |_| ProcessObservation::Missing,
+        ), Err(ref error) if error == "route_keeper_predecessor_proof_route_identity_mismatch"));
+            assert_eq!(repository.load_route_keeper_authority().unwrap(), claimed);
+            let mut drifted = claimed.clone();
+            drifted.policy.warm_target = 3;
+            repository
+                .compare_and_swap_route_keeper_authority(&claimed, &drifted)
+                .unwrap();
+            assert!(matches!(
+                reserve_prepared_cold_process_routes(&repository, &claimed, prepared),
+                Err(ref error) if error == "route_keeper_cold_process_candidate_changed:startup"
+            ));
+            assert_eq!(repository.load_route_keeper_authority().unwrap(), drifted);
+            let prepared =
+                prepare_configured_cold_process_recovery(&drifted, 2, "linux:boot:fixture", |_| {
+                    ProcessObservation::Missing
+                })
+                .unwrap();
+            let prepared =
+                reserve_prepared_cold_process_routes(&repository, &drifted, prepared).unwrap();
+            assert_eq!(
+                repository
+                    .load_route_keeper_authority()
+                    .unwrap()
+                    .projection()
+                    .unwrap()
+                    .ready_count,
+                0
+            );
+            let mut successor = FakeConnector::default();
+            successor.routes.insert(first.slot_id.clone(), first);
+            successor.routes.insert(second.slot_id.clone(), second);
+            if fail_second {
+                successor.adoption_errors.insert(
+                    "route-slot-02".to_string(),
+                    "fixture_second_adoption_failed".to_string(),
+                );
+            }
 
-        let (_shutdown_tx, mut shutdown) = watch::channel(false);
-        assert_eq!(
-            recover_prepared_cold_process_routes_until_shutdown(
+            let (_shutdown_tx, mut shutdown) = watch::channel(false);
+            let result = recover_prepared_cold_process_routes_until_shutdown(
                 &repository,
                 &mut successor,
                 &prepared,
                 &mut shutdown,
             )
-            .await,
-            Err("fixture_second_adoption_failed".to_string())
-        );
-        assert_eq!(
-            successor
-                .adoptions
-                .iter()
-                .map(|action| action_identity(action).0)
-                .collect::<Vec<_>>(),
-            ["route-slot-01", "route-slot-02"]
-        );
-        assert!(successor.stops.is_empty());
-        assert_eq!(successor.shutdowns, 1);
-        let retained = repository.load_route_keeper_authority().unwrap();
-        assert_eq!(
-            retained.records["route-slot-01"].phase,
-            RouteKeeperPhase::Ready
-        );
-        assert_eq!(
-            retained.records["route-slot-02"].phase,
-            RouteKeeperPhase::Adopting
-        );
+            .await;
+            if fail_second {
+                assert_eq!(result, Err("fixture_second_adoption_failed".to_string()));
+            } else {
+                assert_eq!(result, Ok(ConfiguredColdProcessRecoveryOutcome::Recovered));
+            }
+            assert_eq!(
+                successor
+                    .adoptions
+                    .iter()
+                    .map(|action| action_identity(action).0)
+                    .collect::<Vec<_>>(),
+                ["route-slot-01", "route-slot-02"]
+            );
+            assert!(successor.stops.is_empty());
+            assert_eq!(successor.shutdowns, usize::from(fail_second));
+            let retained = repository.load_route_keeper_authority().unwrap();
+            assert_eq!(
+                retained.records["route-slot-01"].phase,
+                RouteKeeperPhase::Ready
+            );
+            assert_eq!(
+                retained.records["route-slot-02"].phase,
+                if fail_second {
+                    RouteKeeperPhase::Adopting
+                } else {
+                    RouteKeeperPhase::Ready
+                }
+            );
+            assert_eq!(
+                retained.projection().unwrap().ready_count,
+                if fail_second { 1 } else { 2 }
+            );
+        }
     }
 
     #[tokio::test]
