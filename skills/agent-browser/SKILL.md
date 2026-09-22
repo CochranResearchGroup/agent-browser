@@ -624,6 +624,11 @@ Clock regression, renewed use or changed ownership resets idle evidence. Stop
 intent commits before provider access; failed or unproven cleanup retains a
 quarantine obligation, rather than reporting successful reclamation. Automatic
 catalog expansion and public profile/storage cleanup settings remain pending.
+The installer publication bridge can append provisioned connections without
+refencing active routes. Retained catalog digests remain valid only while every
+old binding and provider URL is unchanged. This preserves in-flight receipts;
+it does not provision new connections or raise the configured display maximum
+automatically.
 
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry

@@ -343,6 +343,9 @@ pub struct RouteKeeperAuthority {
     pub requested_ready_slots: u32,
     #[serde(default)]
     pub connection_catalog: RouteKeeperConnectionCatalog,
+    /// Immutable prior catalogs that keep active fences and receipts verifiable after growth.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub retained_connection_catalogs: BTreeMap<String, RouteKeeperConnectionCatalog>,
     #[serde(default)]
     pub host_process_claims: BTreeMap<u64, RouteKeeperHostProcessClaim>,
     pub records: BTreeMap<String, RouteKeeperRecord>,
@@ -417,6 +420,7 @@ impl RouteKeeperAuthority {
             policy,
             requested_ready_slots: 0,
             connection_catalog,
+            retained_connection_catalogs: BTreeMap::new(),
             host_process_claims: BTreeMap::new(),
             records,
         })
@@ -499,10 +503,145 @@ impl RouteKeeperAuthority {
         }
         let digest = connection_catalog.digest()?;
         self.connection_catalog = connection_catalog;
+        self.retained_connection_catalogs.clear();
         for record in self.records.values_mut() {
             set_record_catalog_digest(record, &digest);
         }
         self.validate()
+    }
+
+    /// Extends the configured slot catalog without rewriting retained lifecycle evidence.
+    pub fn extend_connection_catalog(
+        &mut self,
+        connection_catalog: RouteKeeperConnectionCatalog,
+        maximum_slots: u32,
+    ) -> Result<(), String> {
+        if maximum_slots == self.policy.maximum_slots
+            && connection_catalog == self.connection_catalog
+        {
+            return self.validate();
+        }
+        let mut next = self.clone();
+        next.extend_connection_catalog_inner(connection_catalog, maximum_slots)?;
+        next.validate()?;
+        *self = next;
+        Ok(())
+    }
+
+    fn extend_connection_catalog_inner(
+        &mut self,
+        connection_catalog: RouteKeeperConnectionCatalog,
+        maximum_slots: u32,
+    ) -> Result<(), String> {
+        self.validate()?;
+        connection_catalog.validate()?;
+        let initializing = self.connection_catalog.bindings.is_empty()
+            && self.records.values().all(|record| {
+                record.phase == RouteKeeperPhase::Absent
+                    && record.protocol_ready.is_none()
+                    && record.adoption.is_none()
+                    && record.last_stop.is_none()
+                    && record.cleanup_obligation.is_none()
+            });
+        if maximum_slots <= self.policy.maximum_slots
+            || (!initializing
+                && (connection_catalog.provider_base != self.connection_catalog.provider_base
+                    || connection_catalog.public_operator_url
+                        != self.connection_catalog.public_operator_url))
+            || self
+                .connection_catalog
+                .bindings
+                .iter()
+                .any(|(slot_id, binding)| connection_catalog.bindings.get(slot_id) != Some(binding))
+        {
+            return Err("route_keeper_connection_catalog_extension_invalid".to_string());
+        }
+        for sequence in 1..=maximum_slots {
+            let slot_id = format!("route-slot-{sequence:02}");
+            if !connection_catalog.bindings.contains_key(&slot_id) {
+                return Err("route_keeper_connection_catalog_extension_incomplete".to_string());
+            }
+        }
+        if connection_catalog.bindings.len() != maximum_slots as usize {
+            return Err("route_keeper_connection_catalog_extension_invalid".to_string());
+        }
+        let host_generation = self
+            .host_process_claims
+            .keys()
+            .next_back()
+            .copied()
+            .or_else(|| {
+                self.records
+                    .values()
+                    .map(|record| record.fence.host_generation)
+                    .max()
+            })
+            .ok_or_else(|| "route_keeper_host_generation_invalid".to_string())?;
+        let previous_digest = self.connection_catalog.digest()?;
+        let new_digest = connection_catalog.digest()?;
+        if initializing {
+            for record in self.records.values_mut() {
+                record.fence.connection_catalog_digest = new_digest.clone();
+            }
+        } else {
+            self.retained_connection_catalogs
+                .insert(previous_digest, self.connection_catalog.clone());
+        }
+        for sequence in (self.policy.maximum_slots + 1)..=maximum_slots {
+            let slot_id = format!("route-slot-{sequence:02}");
+            let keeper_id = format!("route-keeper-{sequence:02}");
+            self.records.insert(
+                slot_id.clone(),
+                RouteKeeperRecord {
+                    slot_id,
+                    keeper_id,
+                    phase: RouteKeeperPhase::Absent,
+                    fence: RouteKeeperFence {
+                        host_generation,
+                        operation_id: String::new(),
+                        operation_generation: 0,
+                        connection_catalog_digest: new_digest.clone(),
+                    },
+                    protocol_ready: None,
+                    adoption: None,
+                    last_stop: None,
+                    cleanup_obligation: None,
+                },
+            );
+        }
+        self.connection_catalog = connection_catalog;
+        self.policy.maximum_slots = maximum_slots;
+        Ok(())
+    }
+
+    /// Resolves a fence through its exact catalog snapshot after proving the historical binding
+    /// remains byte-for-byte identical in the current catalog.
+    pub fn connection_binding_for_fence(
+        &self,
+        slot_id: &str,
+        fence: &RouteKeeperFence,
+    ) -> Result<&RouteKeeperConnectionBinding, String> {
+        self.validate()?;
+        self.connection_binding_for_fence_unchecked(slot_id, fence)
+    }
+
+    fn connection_binding_for_fence_unchecked(
+        &self,
+        slot_id: &str,
+        fence: &RouteKeeperFence,
+    ) -> Result<&RouteKeeperConnectionBinding, String> {
+        let current_digest = self.connection_catalog.digest()?;
+        let catalog = if fence.connection_catalog_digest == current_digest {
+            &self.connection_catalog
+        } else {
+            self.retained_connection_catalogs
+                .get(&fence.connection_catalog_digest)
+                .ok_or_else(|| "route_keeper_connection_catalog_fence_unknown".to_string())?
+        };
+        catalog
+            .bindings
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_connection_catalog_fence_slot_unconfigured".to_string())
     }
 
     pub fn upgrade_from_v1(mut self) -> Result<Self, String> {
@@ -747,7 +886,9 @@ impl RouteKeeperAuthority {
                     "route-keeper:{}:{slot_id}:{}",
                     expected_fence.host_generation, expected_fence.operation_generation
                 )
-            || !self.connection_catalog.bindings.contains_key(slot_id)
+            || self
+                .connection_binding_for_fence_unchecked(slot_id, expected_fence)
+                .is_err()
         {
             return Err("route_keeper_cold_operation_candidate_changed".to_string());
         }
@@ -958,7 +1099,6 @@ impl RouteKeeperAuthority {
             "route-keeper:{}:{}:{}",
             record.fence.host_generation, record.slot_id, record.fence.operation_generation
         );
-        record.fence.connection_catalog_digest = self.connection_catalog.digest()?;
         record.phase = RouteKeeperPhase::Starting;
         record.adoption = None;
         record.cleanup_obligation = None;
@@ -1090,12 +1230,18 @@ impl RouteKeeperAuthority {
 
     pub fn adopt(&mut self, receipt: RouteKeeperAdoptionReceipt) -> Result<(), String> {
         validate_ready_receipt(&receipt.ready)?;
-        let expected_catalog_digest = self.connection_catalog.digest()?;
+        let current_catalog_digest = self.connection_catalog.digest()?;
+        if receipt.ready.fence.connection_catalog_digest != current_catalog_digest
+            && !self
+                .retained_connection_catalogs
+                .contains_key(&receipt.ready.fence.connection_catalog_digest)
+        {
+            return Err("route_keeper_adoption_generation_mismatch".to_string());
+        }
         let binding = self
-            .connection_catalog
-            .bindings
-            .get(&receipt.ready.slot_id)
-            .ok_or_else(|| "route_keeper_adoption_connection_unconfigured".to_string())?;
+            .connection_binding_for_fence(&receipt.ready.slot_id, &receipt.ready.fence)
+            .map_err(|_| "route_keeper_adoption_connection_unconfigured".to_string())?
+            .clone();
         let record = self
             .records
             .get_mut(&receipt.ready.slot_id)
@@ -1107,7 +1253,6 @@ impl RouteKeeperAuthority {
             || record.fence != receipt.ready.fence
             || receipt.ready.fence.host_generation <= receipt.previous_host_generation
             || receipt.adopted_at.is_empty()
-            || receipt.ready.fence.connection_catalog_digest != expected_catalog_digest
         {
             return Err("route_keeper_adoption_generation_mismatch".to_string());
         }
@@ -1269,6 +1414,20 @@ impl RouteKeeperAuthority {
         }
         self.connection_catalog.validate()?;
         let connection_catalog_digest = self.connection_catalog.digest()?;
+        for (digest, catalog) in &self.retained_connection_catalogs {
+            catalog.validate()?;
+            if catalog.digest()? != *digest {
+                return Err("route_keeper_retained_connection_catalog_digest_mismatch".to_string());
+            }
+            if catalog.provider_base != self.connection_catalog.provider_base
+                || catalog.public_operator_url != self.connection_catalog.public_operator_url
+                || catalog.bindings.iter().any(|(slot_id, binding)| {
+                    self.connection_catalog.bindings.get(slot_id) != Some(binding)
+                })
+            {
+                return Err("route_keeper_retained_connection_catalog_rebound".to_string());
+            }
+        }
         for slot_id in self.connection_catalog.bindings.keys() {
             if !self.records.contains_key(slot_id) {
                 return Err("route_keeper_connection_catalog_slot_unknown".to_string());
@@ -1284,7 +1443,37 @@ impl RouteKeeperAuthority {
                 .records
                 .get(&slot_id)
                 .ok_or_else(|| "route_keeper_slot_identity_invalid".to_string())?;
-            validate_record(record, &slot_id, &keeper_id, &connection_catalog_digest)?;
+            validate_record(record, &slot_id, &keeper_id)?;
+            let fence_catalog_known = record.fence.connection_catalog_digest
+                == connection_catalog_digest
+                || self
+                    .retained_connection_catalogs
+                    .contains_key(&record.fence.connection_catalog_digest);
+            if !fence_catalog_known {
+                return Err("route_keeper_connection_catalog_fence_unknown".to_string());
+            }
+            if record.phase != RouteKeeperPhase::Absent
+                && record.fence.connection_catalog_digest != connection_catalog_digest
+            {
+                self.connection_binding_for_fence_unchecked(&slot_id, &record.fence)?;
+            }
+            for fence in record
+                .protocol_ready
+                .iter()
+                .map(|receipt| &receipt.fence)
+                .chain(record.adoption.iter().map(|receipt| &receipt.ready.fence))
+                .chain(record.last_stop.iter().map(|receipt| &receipt.fence))
+                .chain(
+                    record
+                        .cleanup_obligation
+                        .iter()
+                        .map(|receipt| &receipt.fence),
+                )
+            {
+                if fence.connection_catalog_digest != connection_catalog_digest {
+                    self.connection_binding_for_fence_unchecked(&slot_id, fence)?;
+                }
+            }
             if self.schema_version == ROUTE_KEEPER_AUTHORITY_SCHEMA_V4
                 && record
                     .adoption
@@ -1402,12 +1591,11 @@ fn validate_record(
     record: &RouteKeeperRecord,
     expected_slot_id: &str,
     expected_keeper_id: &str,
-    expected_connection_catalog_digest: &str,
 ) -> Result<(), String> {
     if record.slot_id != expected_slot_id
         || record.keeper_id != expected_keeper_id
         || record.fence.host_generation == 0
-        || record.fence.connection_catalog_digest != expected_connection_catalog_digest
+        || !is_sha256_hex(&record.fence.connection_catalog_digest)
         || (record.fence.operation_generation == 0 && !record.fence.operation_id.is_empty())
         || (record.fence.operation_generation > 0 && record.fence.operation_id.is_empty())
     {
@@ -1415,10 +1603,7 @@ fn validate_record(
     }
     if let Some(ready) = &record.protocol_ready {
         validate_ready_receipt(ready)?;
-        if ready.slot_id != record.slot_id
-            || ready.keeper_id != record.keeper_id
-            || ready.fence.connection_catalog_digest != record.fence.connection_catalog_digest
-        {
+        if ready.slot_id != record.slot_id || ready.keeper_id != record.keeper_id {
             return Err("route_keeper_record_receipt_identity_mismatch".to_string());
         }
     }
@@ -1579,6 +1764,191 @@ mod tests {
             }),
             observed_at: "2026-09-21T12:00:00Z".to_string(),
         }
+    }
+
+    fn complete_catalog(maximum_slots: u32) -> RouteKeeperConnectionCatalog {
+        RouteKeeperConnectionCatalog::with_provider_urls(
+            "https://provider.example",
+            "https://operator.example",
+            (1..=maximum_slots).map(|sequence| RouteKeeperConnectionBinding {
+                slot_id: format!("route-slot-{sequence:02}"),
+                connection_key: format!("route-{sequence:02}"),
+                connection_name: format!("Route {sequence:02}"),
+                route_user: format!("agent-browser-rdp-{sequence}"),
+                guacamole_connection_id: u64::from(sequence),
+            }),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn catalog_extension_preserves_ready_evidence_and_supports_lifecycle() {
+        let mut authority = RouteKeeperAuthority::with_policy(
+            1,
+            RouteKeeperPolicy {
+                minimum_ready: 1,
+                warm_target: 1,
+                maximum_slots: 2,
+            },
+        )
+        .unwrap();
+        authority
+            .register_host_process_claim(host_claim(1))
+            .unwrap();
+        authority
+            .replace_connection_catalog(complete_catalog(2))
+            .unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                ..
+            } => (slot_id, keeper_id, fence),
+            action => panic!("unexpected action: {action:?}"),
+        };
+        let original = ready_receipt(&slot_id, &keeper_id, fence.clone(), "occurrence-1");
+        authority.record_protocol_ready(original.clone()).unwrap();
+        let preserved = authority.records[&slot_id].clone();
+        let old_digest = fence.connection_catalog_digest.clone();
+
+        authority
+            .extend_connection_catalog(complete_catalog(3), 3)
+            .unwrap();
+        assert_eq!(authority.records[&slot_id], preserved);
+        assert_eq!(
+            authority.connection_binding_for_fence(&slot_id, &fence),
+            Ok(&complete_catalog(3).bindings[&slot_id])
+        );
+        assert_eq!(
+            authority.retained_connection_catalogs[&old_digest],
+            complete_catalog(2)
+        );
+
+        authority.request_ready_slots(2).unwrap();
+        let (second_slot, second_keeper, second_fence) =
+            match authority.next_reconcile_action().unwrap() {
+                RouteKeeperReconcileAction::Start {
+                    slot_id,
+                    keeper_id,
+                    fence,
+                    ..
+                } => (slot_id, keeper_id, fence),
+                action => panic!("unexpected action: {action:?}"),
+            };
+        assert_eq!(second_fence.connection_catalog_digest, old_digest);
+        authority
+            .record_protocol_ready(ready_receipt(
+                &second_slot,
+                &second_keeper,
+                second_fence.clone(),
+                "occurrence-2",
+            ))
+            .unwrap();
+        authority.begin_stop(&second_slot, &second_fence).unwrap();
+        assert_eq!(
+            authority
+                .record_stopped(RouteKeeperStopReceipt {
+                    slot_id: second_slot,
+                    keeper_id: second_keeper,
+                    fence: second_fence,
+                    guacamole_connection_uuid: Some("occurrence-2".to_string()),
+                    xrdp_session_id: Some("xrdp-fixture".to_string()),
+                    stopped_at: "2026-09-22T12:05:00Z".to_string(),
+                })
+                .unwrap(),
+            RouteKeeperStopDisposition::Stopped
+        );
+
+        authority
+            .record_disconnect(&slot_id, &fence, "occurrence-1")
+            .unwrap();
+        authority
+            .register_host_process_claim(host_claim(2))
+            .unwrap();
+        let adoption_fence = match authority.begin_adoption(&slot_id, 2).unwrap() {
+            RouteKeeperReconcileAction::Adopt { fence, .. } => fence,
+            action => panic!("unexpected action: {action:?}"),
+        };
+        let successor = ready_receipt(&slot_id, &keeper_id, adoption_fence, "occurrence-successor");
+        authority
+            .adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid,
+                ready: successor,
+                adopted_at: "2026-09-22T12:06:00Z".to_string(),
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn catalog_extension_rejects_rebinding_removal_and_digest_forgery_atomically() {
+        let mut authority = RouteKeeperAuthority::with_policy(
+            1,
+            RouteKeeperPolicy {
+                minimum_ready: 1,
+                warm_target: 1,
+                maximum_slots: 2,
+            },
+        )
+        .unwrap();
+        authority
+            .register_host_process_claim(host_claim(1))
+            .unwrap();
+        authority
+            .replace_connection_catalog(complete_catalog(2))
+            .unwrap();
+        let original = authority.clone();
+
+        let mut rebound = complete_catalog(3);
+        rebound
+            .bindings
+            .get_mut("route-slot-01")
+            .unwrap()
+            .connection_name = "Rebound Route".to_string();
+        assert!(authority.extend_connection_catalog(rebound, 3).is_err());
+        assert_eq!(authority, original);
+
+        let mut removed = complete_catalog(3);
+        removed.bindings.remove("route-slot-02");
+        assert!(authority.extend_connection_catalog(removed, 3).is_err());
+        assert_eq!(authority, original);
+
+        authority
+            .extend_connection_catalog(complete_catalog(3), 3)
+            .unwrap();
+        let fence = authority.records["route-slot-01"].fence.clone();
+        let retained = authority
+            .retained_connection_catalogs
+            .remove(&fence.connection_catalog_digest)
+            .unwrap();
+        authority
+            .retained_connection_catalogs
+            .insert("f".repeat(64), retained);
+        assert_eq!(
+            authority.connection_binding_for_fence("route-slot-01", &fence),
+            Err("route_keeper_retained_connection_catalog_digest_mismatch".to_string())
+        );
+    }
+
+    #[test]
+    fn initial_unconfigured_growth_without_host_claim_is_startable() {
+        let mut authority = RouteKeeperAuthority::new(1).unwrap();
+        authority
+            .extend_connection_catalog(complete_catalog(7), 7)
+            .unwrap();
+        assert!(authority.retained_connection_catalogs.is_empty());
+        authority
+            .register_host_process_claim(host_claim(1))
+            .unwrap();
+        let action = authority.next_reconcile_action().unwrap();
+        let RouteKeeperReconcileAction::Start { fence, .. } = action else {
+            panic!("unexpected action: {action:?}");
+        };
+        assert_eq!(
+            fence.connection_catalog_digest,
+            authority.connection_catalog.digest().unwrap()
+        );
     }
 
     #[test]

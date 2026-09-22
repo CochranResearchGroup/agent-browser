@@ -571,12 +571,21 @@ impl BrowserRuntimeSqliteStore {
         load_route_keeper_authority_document(&self.connection)
     }
 
+    /// Publish a complete installed catalog, preserving active evidence for
+    /// append-only growth. Logical capacity settings remain independently owned.
     pub(crate) fn publish_route_keeper_connection_catalog(
         &mut self,
         catalog: RouteKeeperConnectionCatalog,
     ) -> Result<RouteKeeperConnectionCatalogPublication, String> {
         let current = self.load_route_keeper_authority()?;
-        if current.records.keys().collect::<Vec<_>>() != catalog.bindings.keys().collect::<Vec<_>>()
+        let maximum_slots = u32::try_from(catalog.bindings.len())
+            .map_err(|_| "route_keeper_connection_catalog_slots_incomplete".to_string())?;
+        if maximum_slots < current.policy.maximum_slots
+            || (1..=maximum_slots).any(|sequence| {
+                !catalog
+                    .bindings
+                    .contains_key(&format!("route-slot-{sequence:02}"))
+            })
         {
             return Err("route_keeper_connection_catalog_slots_incomplete".to_string());
         }
@@ -584,7 +593,11 @@ impl BrowserRuntimeSqliteStore {
             return Ok(RouteKeeperConnectionCatalogPublication::Unchanged);
         }
         let mut next = current.clone();
-        next.replace_connection_catalog(catalog)?;
+        if maximum_slots > current.policy.maximum_slots {
+            next.extend_connection_catalog(catalog, maximum_slots)?;
+        } else {
+            next.replace_connection_catalog(catalog)?;
+        }
         self.compare_and_swap_route_keeper_authority(&current, &next)?;
         Ok(RouteKeeperConnectionCatalogPublication::Published)
     }
@@ -611,26 +624,106 @@ impl BrowserRuntimeSqliteStore {
         if effect_transition_preserves_policy {
             current_normalized.policy = expected.policy.clone();
         }
-        if current_normalized != *expected {
+        let mut persisted = next.clone();
+        if current.connection_catalog != expected.connection_catalog
+            && next.connection_catalog == expected.connection_catalog
+            && next.retained_connection_catalogs == expected.retained_connection_catalogs
+            && next.host_process_claims == expected.host_process_claims
+            && next.policy.maximum_slots == expected.policy.maximum_slots
+            && next.records.keys().eq(expected.records.keys())
+        {
+            // An independently published append must not discard an in-flight
+            // old-route receipt or force supervisor shutdown. Prove the exact
+            // extension, including every unchanged retained record, first.
+            current_normalized.policy.maximum_slots = current.policy.maximum_slots;
+            let mut extended_expected = expected.clone();
+            extended_expected
+                .extend_connection_catalog(
+                    current.connection_catalog.clone(),
+                    current.policy.maximum_slots,
+                )
+                .map_err(|_| "route_keeper_authority_compare_and_swap_conflict".to_string())?;
+            // More than one independently validated append may have completed.
+            // Preserve those intermediate snapshots without losing any catalog
+            // already required by the expected state.
+            if extended_expected
+                .retained_connection_catalogs
+                .iter()
+                .any(|(digest, catalog)| {
+                    current.retained_connection_catalogs.get(digest) != Some(catalog)
+                })
+            {
+                return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
+            }
+            extended_expected.retained_connection_catalogs =
+                current.retained_connection_catalogs.clone();
+            for (slot_id, record) in &current.records {
+                if !expected.records.contains_key(slot_id) {
+                    current
+                        .connection_binding_for_fence(slot_id, &record.fence)
+                        .map_err(|_| {
+                            "route_keeper_authority_compare_and_swap_conflict".to_string()
+                        })?;
+                    let expected_record =
+                        extended_expected.records.get(slot_id).ok_or_else(|| {
+                            "route_keeper_authority_compare_and_swap_conflict".to_string()
+                        })?;
+                    let mut normalized_record = record.clone();
+                    // A slot appended in an intermediate catalog retains that
+                    // validated digest. Every other pristine-slot field must
+                    // still match the deterministic extension exactly.
+                    normalized_record.fence.connection_catalog_digest =
+                        expected_record.fence.connection_catalog_digest.clone();
+                    if normalized_record != *expected_record {
+                        return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
+                    }
+                    extended_expected
+                        .records
+                        .insert(slot_id.clone(), record.clone());
+                }
+            }
+            if current_normalized != extended_expected {
+                return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
+            }
+            persisted.connection_catalog = current.connection_catalog.clone();
+            persisted.retained_connection_catalogs = current.retained_connection_catalogs.clone();
+            persisted.policy.maximum_slots = current.policy.maximum_slots;
+            for (slot_id, record) in &current.records {
+                if !expected.records.contains_key(slot_id) {
+                    persisted.records.insert(slot_id.clone(), record.clone());
+                }
+            }
+        } else if current_normalized != *expected {
             return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
         }
-        if current.connection_catalog != next.connection_catalog
+        if current.connection_catalog != persisted.connection_catalog
             && current
                 .records
                 .values()
                 .any(|record| record.phase != agent_browser_service_model::RouteKeeperPhase::Absent)
         {
-            return Err("route_keeper_connection_catalog_active".to_string());
+            // Active publication is only an exact additive transition. It must
+            // not smuggle changes to retained records or policy intent.
+            let mut extension = current.clone();
+            extension
+                .extend_connection_catalog(
+                    persisted.connection_catalog.clone(),
+                    persisted.policy.maximum_slots,
+                )
+                .map_err(|_| "route_keeper_connection_catalog_active".to_string())?;
+            if extension != persisted {
+                return Err("route_keeper_connection_catalog_active".to_string());
+            }
         }
         for (generation, claim) in &current.host_process_claims {
-            if next.host_process_claims.get(generation) != Some(claim) {
+            if persisted.host_process_claims.get(generation) != Some(claim) {
                 return Err(format!(
                     "route_keeper_host_process_claim_changed:{generation}"
                 ));
             }
         }
         for (slot_id, current_record) in &current.records {
-            let next_record = next
+            let next_record = persisted
                 .records
                 .get(slot_id)
                 .ok_or_else(|| "route_keeper_authority_generation_regression".to_string())?;
@@ -642,7 +735,6 @@ impl BrowserRuntimeSqliteStore {
                 return Err("route_keeper_authority_generation_regression".to_string());
             }
         }
-        let mut persisted = next.clone();
         if effect_transition_preserves_demand {
             persisted.requested_ready_slots = current.requested_ready_slots;
         }
@@ -2560,6 +2652,125 @@ mod tests {
             .records
             .values()
             .all(|record| record.fence.connection_catalog_digest == digest));
+    }
+
+    #[test]
+    fn additive_catalog_publication_preserves_active_routes_and_enables_new_capacity() {
+        let (_directory, mut store) = sqlite_store("browser-runtime-catalog-growth");
+        let before = publish_ready_route_authority(&mut store, 6, 6);
+        let mut catalog = before.connection_catalog.clone();
+        catalog.bindings.insert(
+            "route-slot-07".to_string(),
+            agent_browser_service_model::RouteKeeperConnectionBinding {
+                slot_id: "route-slot-07".to_string(),
+                connection_key: "route-07".to_string(),
+                connection_name: "Agent Browser Route 07".to_string(),
+                route_user: "agent-browser-rdp-7".to_string(),
+                guacamole_connection_id: 7,
+            },
+        );
+        assert_eq!(
+            store
+                .publish_route_keeper_connection_catalog(catalog.clone())
+                .unwrap(),
+            RouteKeeperConnectionCatalogPublication::Published
+        );
+        let expanded = store.load_route_keeper_authority().unwrap();
+        for (slot, record) in &before.records {
+            assert_eq!(&expanded.records[slot], record);
+        }
+        assert_eq!(expanded.policy.maximum_slots, 7);
+        assert_eq!(store.load_runtime_config().unwrap().maximum_displays, 6);
+        assert_eq!(
+            store
+                .publish_route_keeper_connection_catalog(catalog)
+                .unwrap(),
+            RouteKeeperConnectionCatalogPublication::Unchanged
+        );
+        // A receipt that began before the append merges the new catalog.
+        store
+            .compare_and_swap_route_keeper_authority(&before, &before)
+            .unwrap();
+        assert_eq!(store.load_route_keeper_authority().unwrap(), expanded);
+        store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                maximum_displays: Some(7),
+                warm_target: Some(7),
+                ..Default::default()
+            })
+            .unwrap();
+        let current = store.load_route_keeper_authority().unwrap();
+        let mut starting = current.clone();
+        let action = starting.next_reconcile_action().unwrap();
+        let RouteKeeperReconcileAction::Start { slot_id, fence, .. } = action else {
+            panic!("expected the newly provisioned slot to start");
+        };
+        assert_eq!(slot_id, "route-slot-07");
+        assert_eq!(
+            fence.connection_catalog_digest,
+            starting.connection_catalog.digest().unwrap()
+        );
+        store
+            .compare_and_swap_route_keeper_authority(&current, &starting)
+            .unwrap();
+        let mut rebound = starting.connection_catalog.clone();
+        rebound
+            .bindings
+            .get_mut("route-slot-01")
+            .unwrap()
+            .route_user = "other-user".to_string();
+        assert!(store
+            .publish_route_keeper_connection_catalog(rebound)
+            .is_err());
+        assert_eq!(store.load_route_keeper_authority().unwrap(), starting);
+    }
+
+    #[test]
+    fn catalog_growth_merges_in_flight_stop_but_rejects_changed_route_evidence() {
+        let (_directory, mut store) = sqlite_store("browser-runtime-catalog-receipt-race");
+        let before = publish_ready_route_authority(&mut store, 6, 6);
+        let mut stopping = before.clone();
+        stopping
+            .begin_stop("route-slot-01", &before.records["route-slot-01"].fence)
+            .unwrap();
+        let mut catalog = before.connection_catalog.clone();
+        for sequence in 7..=8 {
+            let mut binding = catalog.bindings["route-slot-06"].clone();
+            binding.slot_id = format!("route-slot-{sequence:02}");
+            binding.connection_key = format!("route-{sequence:02}");
+            binding.connection_name = format!("Agent Browser Route {sequence:02}");
+            binding.route_user = format!("agent-browser-rdp-{sequence}");
+            binding.guacamole_connection_id = sequence;
+            catalog.bindings.insert(binding.slot_id.clone(), binding);
+            store
+                .publish_route_keeper_connection_catalog(catalog.clone())
+                .unwrap();
+        }
+        let expanded = store.load_route_keeper_authority().unwrap();
+        let mut new_host = before.clone();
+        new_host
+            .register_host_process_claim(route_keeper_host_claim(2))
+            .unwrap();
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&before, &new_host),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), expanded);
+        store
+            .compare_and_swap_route_keeper_authority(&before, &stopping)
+            .unwrap();
+        let merged = store.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            merged.records["route-slot-01"],
+            stopping.records["route-slot-01"]
+        );
+        assert_eq!(merged.connection_catalog, catalog);
+        assert_eq!(merged.records.len(), 8);
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&before, &before),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string())
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), merged);
     }
 
     #[test]

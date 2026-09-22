@@ -360,7 +360,9 @@ pub(super) trait RouteKeeperPrimaryFactory: Send {
 /// SQLite-resolved provider factory for browser-independent route keepers.
 ///
 /// The connection catalog is read from the same durable authority as the
-/// action fence. Provider access begins only after the exact catalog digest,
+/// action fence. Append-only catalog history preserves prior fences only when
+/// their binding and provider URLs remain unchanged. Provider access begins
+/// only after the exact current or retained catalog digest,
 /// slot binding, keeper identity, and operation fence all agree.
 pub(super) struct ConfiguredRouteKeeperPrimaryFactory {
     database_path: PathBuf,
@@ -383,10 +385,9 @@ impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
         let authority =
             BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
         authority.projection()?;
-        let digest = authority.connection_catalog.digest()?;
-        if fence.connection_catalog_digest != digest {
-            return Err("route_keeper_primary_catalog_fence_stale".to_string());
-        }
+        authority
+            .connection_binding_for_fence(slot_id, fence)
+            .map_err(|_| "route_keeper_primary_catalog_fence_stale".to_string())?;
         let record = authority
             .records
             .get(slot_id)
@@ -686,7 +687,9 @@ impl<T> ConfiguredXrdpRouteKeeperObserver<T> {
         if record.keeper_id != *keeper_id
             || record.fence != *fence
             || record.phase != expected_phase
-            || authority.connection_catalog.digest()? != fence.connection_catalog_digest
+            || authority
+                .connection_binding_for_fence(slot_id, fence)
+                .is_err()
         {
             return Err("route_keeper_xrdp_fence_stale".to_string());
         }
@@ -855,9 +858,9 @@ impl<F, O> GuacamoleRouteKeeperConnector<F, O> {
         let authority =
             BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
         authority.projection()?;
-        if authority.connection_catalog.digest()? != fence.connection_catalog_digest {
-            return Err("route_keeper_primary_catalog_fence_stale".to_string());
-        }
+        authority
+            .connection_binding_for_fence(slot_id, fence)
+            .map_err(|_| "route_keeper_primary_catalog_fence_stale".to_string())?;
         let record = authority
             .records
             .get(slot_id)
@@ -1560,6 +1563,32 @@ mod tests {
         (directory, path)
     }
 
+    fn append_fixture_catalog(path: &Path) -> RouteKeeperAuthority {
+        let mut store = BrowserRuntimeSqliteStore::open(path).unwrap();
+        let before = store.load_route_keeper_authority().unwrap();
+        let sequence = before.policy.maximum_slots + 1;
+        let slot_id = format!("route-slot-{sequence:02}");
+        let mut catalog = before.connection_catalog.clone();
+        catalog.bindings.insert(
+            slot_id.clone(),
+            RouteKeeperConnectionBinding {
+                slot_id,
+                connection_key: format!("route-{sequence:02}"),
+                connection_name: format!("Agent Browser Route {sequence:02}"),
+                route_user: format!("agent-browser-rdp-{sequence}"),
+                guacamole_connection_id: u64::from(sequence),
+            },
+        );
+        store
+            .publish_route_keeper_connection_catalog(catalog)
+            .unwrap();
+        let after = store.load_route_keeper_authority().unwrap();
+        for (slot_id, record) in &before.records {
+            assert_eq!(&after.records[slot_id], record);
+        }
+        after
+    }
+
     #[test]
     fn configured_startup_refuses_ambiguous_retained_route_before_provider_validation() {
         let (_directory, path) = database();
@@ -1890,6 +1919,7 @@ mod tests {
     async fn configured_xrdp_observer_observes_successor_witness_while_adopting() {
         let (_directory, database_path) = database();
         let (action, predecessor) = adoption_action(&database_path);
+        append_fixture_catalog(&database_path);
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         let helper = FakeXrdpHelperTransport {
             calls: calls.clone(),
@@ -1937,6 +1967,7 @@ mod tests {
             .compare_and_swap_route_keeper_authority(&starting, &observing)
             .unwrap();
         let observe_action = observing.next_reconcile_action().unwrap();
+        let observing = append_fixture_catalog(&database_path);
         let pending_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         let helper = FakeXrdpHelperTransport {
             calls: pending_calls.clone(),
@@ -1977,6 +2008,8 @@ mod tests {
         store
             .compare_and_swap_route_keeper_authority(&ready_authority, &stopping)
             .unwrap();
+
+        append_fixture_catalog(&database_path);
 
         let stop_calls = Arc::new(std::sync::Mutex::new(Vec::new()));
         let helper = FakeXrdpHelperTransport {
