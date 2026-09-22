@@ -29,6 +29,12 @@ field evidence and acceptance records into the same model.
 
 State: OPEN
 
+Version 65 M1 and M2 are complete at frozen candidate `8bc9a19b`. Atomic
+desktop-control activation and broad provider-free qualification are green.
+The next gate is one isolated installed development-runtime cold workflow;
+expanded historical architecture remains deferred unless that journey proves
+an exact blocker.
+
 Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
 owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user
 remote-view journey for issues #181, #183, and #195. Source checkpoint

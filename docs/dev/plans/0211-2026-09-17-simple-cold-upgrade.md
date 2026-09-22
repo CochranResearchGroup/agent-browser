@@ -164,6 +164,39 @@ retained first failures, and a requirement-to-evidence table identifying the
 installed-only gates. Any source repair invalidates only causally affected
 evidence and returns this same milestone to qualification.
 
+M2 completed at frozen source candidate `8bc9a19b`. The comprehensive Rust
+runner passed every compartment except `cli-native-service` on its first run.
+That compartment exposed one missing valid fixture for the already-supported
+`service_runtime_config_update` action. The failure is retained; the fixture
+was added without changing runtime behavior, its exact test passed, and the
+complete affected compartment then passed 599 tests. All unaffected
+comprehensive compartment evidence remains valid because the repair changed
+only that test fixture. Final formatting and strict workspace Clippy pass.
+
+The service client, API/MCP parity, dashboard workspace and inspector suites,
+dashboard and documentation builds, documentation links, remote-view handoff
+documentation, durable remote-view handoff, policy wiring and route-handoff
+audit all pass. Two bounded read-only workers used `gpt-5.6-luna`: low effort
+for non-Rust gates and medium effort for the requirement audit. Goal readback
+after candidate qualification was 595,176 cumulative tokens, below the
+850,000 M2 ceiling. Progress classification: `outcome_progress`.
+
+The following table is the authoritative version 65 completion boundary. The
+larger historical `Evidence And Exit` table below records earlier design and
+qualification work; its deferred architecture rows are not Plan 0211 version
+65 completion gates unless the installed journey proves one is an exact
+blocker.
+
+| Version 65 requirement | Current evidence | Remaining boundary |
+| --- | --- | --- |
+| Recoverable atomic candidate | `cf75aac1` and M1 qualification | complete |
+| Frozen provider-free qualification | candidate `8bc9a19b`; comprehensive Rust evidence with repaired 599-test service compartment; client, contract, dashboard, docs, policy and handoff gates green | complete |
+| One-command owned shutdown and cold replacement | provider-free shutdown, installer and workstation compartments green | installed development execution in M3 |
+| Named-profile ordinary client path | provider-free manager, session, handoff and durable-handoff coverage green | installed development execution in M3 |
+| Authenticated ready opaque handoff | contract and provider-free handoff coverage green | actual authenticated `operatorVisible.state=ready` `/remote-view/<handoff-id>` in M3 |
+| Close and residue | provider-free ownership and foreign-process preservation coverage green | fresh installed process and residue readback in M3 |
+| Protected integration handoff | branch and candidate are attributable | M4 review, ledger reconciliation, draft pull request and parity |
+
 ### M3 | Isolated Installed Operator Journey
 
 Budget reservation: at most 800,000 additional tokens; cumulative campaign

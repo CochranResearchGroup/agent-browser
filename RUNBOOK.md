@@ -9,22 +9,21 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
-## Turn 428 | 2026-09-22
+## Turn 429 | 2026-09-22
 
-P211 version 65 uses one cumulative 2,000,000-token `/goal` completion campaign.
-M1 is complete at source `cf75aac1`: durable v63 custody is verified and desktop
-control transfer, guarded focus and resulting session-state persistence now
-share one SQLite commit. Failed effects preserve the prior controller and state.
+P211 version 65 M1 and M2 are complete. Source `cf75aac1` makes desktop-control
+activation atomic. Frozen candidate `8bc9a19b` passes every comprehensive Rust
+compartment after the first run found one missing runtime-config normalizer
+fixture; the repaired service compartment passes all 599 tests. Strict Clippy,
+formatting, client, API/MCP, dashboard, documentation, policy and handoff gates
+also pass. The first failure is retained and unaffected comprehensive evidence
+is reused by impact.
 
-Qualification passes 14 focused control tests, three host regressions, 786
-native-other tests with 57 ignored, strict Clippy, final formatting, client,
-documentation, policy, handoff and diff gates. The first compile exposed a
-wrong re-export and cache-wrapper failure; final gates used the documented
-cache opt-out. Three bounded workers returned implementation, closed-world
-review and validation mapping; primary integrated and qualified the patch.
-Goal readback was 326,747 cumulative tokens, within M1's 350,000 reservation.
-Progress is `outcome_progress`. M2 freezes and runs provider-free qualification;
-installed and integration effects retain their exact gates. P211 remains OPEN.
+Goal usage is 595,176 cumulative tokens, below M2's 850,000 ceiling. The plan
+now distinguishes the version 65 completion boundary from its historical
+expanded architecture table. M3 is next and requires fresh development-runtime
+effect custody before one isolated installed cold workflow. Production,
+release and integration effects remain excluded. P211 remains OPEN.
 
 ## Turn 427 | 2026-09-22
 

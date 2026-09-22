@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: cf75aac1
+    checkpoint: 8bc9a19b
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: M1 source cf75aac1 atomically commits desktop control, guarded focus and resulting session state; 14 focused control, three host and 786 native-other tests with 57 ignored plus strict Clippy, format, client, docs, policy and handoff gates pass; M2 broad provider-free and M3 installed acceptance remain
-    validation_ref: cf75aac1
+    validation_status: M1 atomic activation and M2 frozen provider-free qualification complete; comprehensive Rust evidence is green after repairing one missing test fixture and rerunning all 599 affected service tests; client, API/MCP, dashboard, docs, policy and handoff gates pass; M3 installed acceptance remains
+    validation_ref: 8bc9a19b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 65 M1 is qualified at cf75aac1; M2 must freeze and complete broad provider-free qualification before M3 isolated installed acceptance; architecture expansion is deferred unless the ordinary installed journey proves an exact blocker; production, ingress, release and integration remain excluded without their separate gates
+    blocker: version 65 M1 and M2 are complete at frozen candidate 8bc9a19b; M3 requires fresh development-runtime effect custody and one isolated installed ordinary-client journey; architecture expansion is deferred unless that journey proves an exact blocker; production, ingress, release and integration remain excluded without their separate gates
     updated_at: 2026-09-22
