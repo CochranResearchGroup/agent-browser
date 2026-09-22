@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 59
+Plan version: 60
 
 State: OPEN
 
@@ -74,6 +74,113 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Durable Automatic Provisioning Amendment
+
+Version 60 starts from source `d25321dd` and ledger `8cef9eae`. Existing
+route-user setup can reset any same-named account, and full Guacamole sync
+updates retained connections. Automatic growth must use operation-owned user
+creation and insert-only connection provisioning with exact idempotent replay.
+Provider coordinates and deterministic naming prefixes are imported by the
+installer into SQLite; runtime reconciliation must not rediscover them from
+environment or JSON inventories. Public maximum-display changes record desired
+capacity, with the supervisor owning bounded one-route provisioning effects.
+
+Primary owns the SQLite intent/configuration import, configured supervisor
+adapter, public status/docs and integration. Existing terra/high worker owns
+operation-owned user creation and mocked helper fixtures; existing sol/medium
+worker owns the one-route SQL renderer. Effective settings are unknown. No
+worker may install the helper, call sudo, Docker or a live provider. Runtime
+commands are implemented but tested through injected effects and temporary
+stores. The existing catalog publication receipt digest must also include
+provider URLs, matching the Rust authority rather than hashing bindings alone.
+
+One durable operation ID and secret survive interruption and retry. Provisioning
+must refuse foreign account or connection collisions and never rewrite retained
+routes. A failure preserves the pending operation and a redacted diagnostic;
+it must not shut down working routes. Retries remain bounded and publication
+joins exact operation identity to an additive catalog transaction. Logical
+settings, physical capacity and readiness are distinct status boundaries.
+
+Budget 35 implementation, 15 qualification and 5 custody minutes within the
+inherited 360-minute ceiling, preserving 206 elapsed minutes and unknown older
+effort. This packet targets the configured growth journey, not full P211
+acceptance; roughly 99 minutes would remain in the measured allowance after a
+full packet. Remaining recovery, persistence, Desktop Services and isolated
+acceptance still require evidence and are not declared achievable from that
+estimate. No local packet or reviewer allowance resets.
+
+Acceptance: strict same-operation helper replay and collision refusal; SQL
+new-only behavior; runtime-config to durable intent to injected provisioning to
+catalog publication with retained records unchanged; interruption/failure
+readback and bounded retry; installer/Rust digest parity; relevant Rust, client,
+helper and documentation gates. No installed/provider execution in this packet.
+
+Prerequisite verification found that the ordinary privilege installer and Rust
+helper doctor still accepted a helper without owned provisioning and could exit
+before replacement. The same batch updates those exact compatibility checks and
+mocked fixtures, so normal installation supplies the new capability. This is a
+required join for automatic growth, not a separate hardening packet. The existing
+worker owns that narrow fix; primary retains integration and acceptance.
+A cold-install replay after growth must also retain the expanded catalog when
+the exact same provisioning coordinates and unchanged contiguous original seed
+are imported again. The batch covers that joined replay without allowing ordinary
+catalog shrinking or changed bindings. Otherwise the original smaller installer
+descriptor would fail publication after successful automatic growth.
+
+### Version 60 qualification
+
+Source `214dfc77` joins public desired capacity to durable one-route provisioning,
+additive publication and configured supervisor reconciliation. The imported
+coordinates remain in SQLite. Operation-owned helper accounts, insert-only SQL
+and exact replay preserve retained routes. Status separates desired settings,
+physical slots and live readiness. Normal helper installation now refreshes a
+helper missing the owned-provisioning capability. An unchanged original installer
+seed can replay after growth without shrinking the retained catalog.
+
+| Requirement | Evidence and scope | Remaining gate |
+| --- | --- | --- |
+| Configured growth and interrupted replay | Final nine provisioning tests exercise real SQLite plus injected effects, same operation/password after reopen, redacted failure, three-attempt bound, namespace rejection and seed replay | Actual PostgreSQL/helper execution and route visibility are not exercised |
+| Durable publication and identity | Final 31 store tests and three catalog tests pass, including a fixed serialization digest oracle matching URL fields and bindings | Installed importer readback remains in the frozen matrix |
+| Current readiness and public config | 16 host and six runtime-config tests pass; full client and API/MCP parity pass | Real operator journey remains unverified |
+| Helper and normal installer compatibility | 18 helper-focused tests pass; direct helper, clean privilege-install and workstation-host mocked fixtures pass | No installed helper replacement or root effect occurred |
+| Broader regression and quality | 784 native-other with 57 ignored, 253 stream, final 1102 core with one ignored; final strict workspace Clippy, formatting, docs build, links, handoff docs and active planning audit pass | Not the comprehensive runner on final HEAD |
+| Full P211 outcome | Still OPEN: interrupted handoff recovery, active-view control priority, causal discovery, quarantine reconciliation, remaining persistence/retention and Desktop Services joins, isolated cold-install/upgrade/remote-view matrix | No merge, production, ingress or release acceptance |
+
+The initial core run had 1086 passes, 16 failures and one ignored: old current-helper
+samples omitted the newly required capability. Worker fixture-only corrections
+updated the common positive samples and preserved each negative test's original
+missing field. The final core rerun passes; the failed log remains at
+`/tmp/p211-v60-core.log`. A format check encountered the late seed-replay edit;
+final formatting and quality checks pass. Final growth/store/quality logs use
+`/tmp/p211-v60-*-frozen.log`; core uses `core-final.log`. All other focused logs
+use the same v60 prefix. These are ephemeral local receipts; commands in the
+repository runner reproduce them from this source checkpoint.
+
+Broader native-other and stream gates precede the narrow final seed-import join
+and helper-compatibility fixture correction. Their keeper and browser behavior
+is unchanged; final growth/store tests cover the seed join, and final core plus
+helper tests cover compatibility. Retain that scoped evidence without claiming
+a comprehensive final-head run. The source-free workstation install fixture also
+passed using its pre-existing debug binary; it is supporting fixture evidence,
+not qualification of the new embedded helper or an installed candidate. The
+shared production skill and installed runtimes were intentionally not changed.
+
+Workers `/root/capacity_selection` (requested sol/medium) and
+`/root/startup_recovery` (requested terra/high) are terminal. Effective settings
+remain unknown. Primary inspected their consequential diffs, integrated the
+runtime and status joins, and independently ran the decisive tests. No worker
+or primary performed provider, browser, installed-helper, Service State, ingress
+or production mutation. P215's separate dirty worktree remains untouched.
+
+Progress is `outcome_progress` for the provider-free configured capacity-growth
+criterion; it is not the leading installed operator outcome. About 241 elapsed
+minutes since 02:46 UTC are preserved, with older cumulative effort unknown and
+the inherited 360-minute ceiling unchanged. This v60 packet began about 06:13 UTC
+and stays within its 55-minute bound. The next bounded delivery work is exact
+interrupted handoff/navigation recovery through existing journals, followed by
+remaining persistence/Desktop Services integration and the complete isolated
+acceptance matrix. The full goal remains active; no allowance is reset.
 
 ## September 22 Additive Catalog Publication Amendment
 

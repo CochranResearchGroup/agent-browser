@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d25321dd
+    checkpoint: 214dfc77
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: d25321dd passes 318 model, final 31 store, 253 stream, 775 native-other with 57 ignored, 16 host and final quality/docs gates; plan records retained scope after narrow store correction; no full-suite or installed acceptance
-    validation_ref: d25321dd
+    validation_status: 214dfc77 passes final growth/store/helper/host/config gates, 784 native-other with 57 ignored, 253 stream, final 1102 core with one ignored and final quality/client/docs gates; plan records scoped retained evidence and repaired stale fixtures; no comprehensive or installed acceptance
+    validation_ref: 214dfc77
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 59 adds active-safe catalog publication; automatic new-route provisioning and runtime-config growth intent, interrupted handoff recovery, active-view control priority, causal discovery, quarantine, remaining SQLite and Desktop Services joins remain before isolated acceptance; production and ingress excluded
-    updated_at: 2026-09-21
+    blocker: version 60 joins durable automatic provisioning and installer replay; interrupted handoff recovery, active-view control priority, causal discovery, quarantine, remaining SQLite and Desktop Services joins remain before isolated acceptance; production and ingress excluded
+    updated_at: 2026-09-22
