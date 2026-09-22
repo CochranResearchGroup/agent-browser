@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 53
+Plan version: 54
 
 State: OPEN
 
@@ -74,6 +74,77 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 21 Capacity Admission Amendment
+
+Version 54 resumes the unfinished capacity changes above source `02ee03a2`
+and ledger `1e58ae9f`. Current Git confirms those commits and the uncommitted
+worker changes. This packet connects ordinary browser admission to bounded
+placement and durable keeper demand: grow before sharing, enforce density,
+preserve occupied browsers when limits are lowered, and reuse existing browsers
+without consuming another capacity unit. SQLite demand changes must not discard
+a concurrent provider receipt or weaken phase and fence conflict checks.
+
+The primary owns integration and qualification. `/root/capacity_selection`
+returned the selector using requested `gpt-5.6-sol` medium and now owns narrow
+help, documentation, output, and type-fixture synchronization.
+`/root/startup_recovery` returned durable demand, exact-field SQLite CAS merge,
+and a real repository/reconcile fixture using requested `gpt-5.6-terra` high.
+Effective model settings are unknown. No new review pass or worktree is created.
+
+Reserve 20 minutes for integration, 15 for changed-surface qualification, and
+10 for custody within the inherited 360-active-minute ceiling. Earlier recorded
+94 minutes and unmeasured older effort remain historical, not reset. The current
+goal readback reports 2,220,504 tokens and 6,868 seconds with no tool budget;
+its thread differs from the historical manually capped second-window thread.
+Those counters cannot establish that older window's remaining allowance.
+This packet introduces no installed, browser, provider, production, or ingress
+effect. Freeze source before compiling; run the Service Model tests, affected
+CLI tests, format, strict Clippy, client parity, and documentation checks.
+
+Acceptance requires real model admission and SQLite reconciliation fixtures:
+a second browser waits for a second display, demand makes that display Ready,
+sharing starts only at the display maximum, and lowering capacity preserves
+existing browsers. Status distinguishes unavailable ownership from allocation
+pressure. Queue depth, priority, coalescing, durable restart, public configuration,
+live keeper resizing, and cooldown scale-in remain part of the full objective.
+Passing this packet does not establish those requirements or installed acceptance.
+
+Source checkpoint `a9595ee2` qualifies this intermediate outcome. The model
+selects unused healthy displays before sharing, caps density, and refuses new
+allocation over lowered targets without moving retained browsers. Ordinary
+remote admission publishes bounded additional demand into SQLite and waits
+within the request deadline. The supervisor consumes that demand using its
+existing reconciliation loop. Concurrent demand-only updates merge into effect
+receipt commits; phase, fence, catalog, claims, and competing demand changes
+still conflict. The primary additionally validates the merged authority before
+persistence. Existing schema-v4 records default missing demand to zero.
+
+Primary qualification passes: Service Model package 299 tests across its unit
+and integration binaries; native-other 770 tests with 57 ignored (56.54 seconds);
+native-stream 253 (53.10 seconds); 16 browser-host, 25 store, and two output tests;
+formatting, strict workspace Clippy, full service-client plus final type fixture,
+API/MCP parity, final docs build, links, handoff docs, and repo-local active
+planning audit. Logs are `/tmp/p211-v54-{model,native-other,stream,host,store,output}.log`
+and `/tmp/p211-v54-{clippy,client,types,parity,docs-build-final,links-final,handoff-docs-final}.log`.
+The first planning command used the shared auditor and reported legacy archival
+findings; the repository-owned active auditor passes, with both receipts retained.
+No Rust test failure or provider retry occurred. The docs build was repeated
+because the worker clarified count provenance after the first build started.
+
+This is outcome progress at the provider-free allocation boundary. It is not a
+full suite, live-process census, queue implementation, or installed acceptance.
+The broad validation selector's lease/installer matches do not indicate changes
+to those implementations; their prior scoped receipts remain historical.
+Recovery of already observed reserved launches still preserves the exact browser
+instead of treating adoption as a second allocation. A racing request is checked
+again under the host lock and may receive a typed capacity error; fair requeueing
+remains unimplemented. Timed-out demand may still finish warming a route; demand
+reduction and reference-free cooldown scale-in remain open. Approximately 116
+elapsed minutes are now recorded since 02:46 UTC, with older active effort
+unknown. No installed or live provider effect occurred. The next critical path
+is durable bounded queue admission and public configuration, then the remaining
+recovery, Desktop Services, persistence, and isolated acceptance gates.
 
 ## September 21 Supervisor Readiness Amendment
 
@@ -2177,7 +2248,7 @@ integrating any P207 implementation.
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
-| Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
+| Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | a9595ee2 qualifies bounded admission and durable demand with model and SQLite fixtures; durable queue and installed acceptance remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
 | Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
