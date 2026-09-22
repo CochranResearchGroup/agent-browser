@@ -551,6 +551,16 @@ adoption. Interrupted stops use the exact retained XRDP witness and preserve
 stop intent. Live or ambiguous ownership and quarantined records stop startup.
 A pending connection is not a ready remote view.
 
+Service status reports `presentationKeeper` by joining current SQLite route
+receipts with the live supervisor and its host generation. `supervising` means
+the reconciliation loop is running; `minimumSatisfied` establishes whether it
+has enough usable routes. A failed, stopped, or missing supervisor contributes
+no ready routes even if SQLite retains ready receipts. Ordinary remote opens
+and navigation wait within the configured request deadline while recovery is
+pending, then recheck readiness before browser effects. Manager handoff
+resolution also rechecks this evidence before focusing a browser. The older
+`presentationCapacity` projection remains a separate compatibility surface.
+
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry
 or route descriptor, bind launch to that route display, open the requested tab,

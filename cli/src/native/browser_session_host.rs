@@ -936,6 +936,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if operation.state != BrowserRuntimeOperationState::Committed {
             if let ManagerHandoffAuthority::Keeper(authority) = handoff_authority {
                 preflight_keeper_handoff_intent(&operation.request, authority)?;
+                require_current_desktop_route(
+                    &self.manager_config.remote_desktop_routes,
+                    operation.request["intent"]["slot"]["routeId"]
+                        .as_str()
+                        .unwrap_or_default(),
+                    operation.request["intent"]["slot"]["displayName"]
+                        .as_str()
+                        .unwrap_or_default(),
+                )?;
             }
         }
         let mut launch_authorized = existing_operation
@@ -1589,6 +1598,11 @@ where
             preflight_id,
         )
         .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+        require_current_desktop_route(
+            &self.manager_config.remote_desktop_routes,
+            &desktop.route_id,
+            &desktop.display_name,
+        )?;
         Ok(())
     }
 
@@ -1686,6 +1700,21 @@ fn deterministic_manager_browser_id(operation_id: &str, profile_id: &str) -> Str
         .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
     format!("browser:{profile_id}:operation:{suffix}")
+}
+
+fn require_current_desktop_route(
+    routes: &[BrowserDesktopRoute],
+    route_id: &str,
+    display_name: &str,
+) -> Result<(), String> {
+    if routes
+        .iter()
+        .any(|route| route.healthy && route.id == route_id && route.display_name == display_name)
+    {
+        Ok(())
+    } else {
+        Err("presentation_keeper_route_unavailable".to_string())
+    }
 }
 
 fn preflight_keeper_handoff_intent(
@@ -1930,6 +1959,69 @@ mod tests {
 
     fn ready_keeper_authority_for_handoff() -> RouteKeeperAuthority {
         keeper_authority_for_handoff("https://dashboard.example/operator")
+    }
+
+    #[test]
+    fn presentation_readiness_requires_live_supervisor_and_current_generation() {
+        use crate::native::presentation_runtime_status::keeper_status;
+        use crate::native::stream::RouteKeeperSupervisorHealth as Health;
+
+        let authority = ready_keeper_authority_for_handoff();
+        let persisted = authority.clone();
+        for health in [
+            Health::Recovering,
+            Health::Failed {
+                code: "provider_failed".to_string(),
+            },
+            Health::Unavailable {
+                code: "owner_missing".to_string(),
+            },
+            Health::Stopping,
+            Health::Stopped,
+        ] {
+            let status = keeper_status(&authority, health, Some(7)).unwrap();
+            assert_eq!(status.ready_route_count, 0);
+            assert!(!status.minimum_satisfied);
+            assert!(status.usable_routes(&authority).is_err());
+        }
+        for generation in [None, Some(8)] {
+            let status = keeper_status(&authority, Health::Supervising, generation).unwrap();
+            assert_eq!(status.ready_route_count, 0);
+            assert!(status.require_ready().is_err());
+        }
+        let ready = keeper_status(&authority, Health::Supervising, Some(7)).unwrap();
+        assert_eq!(ready.state, "ready");
+        assert_eq!(ready.ready_route_count, 1);
+        assert!(ready.minimum_satisfied);
+        assert!(!ready.warm_target_satisfied);
+        assert_eq!(ready.usable_routes(&authority).unwrap().len(), 1);
+        assert_eq!(
+            authority, persisted,
+            "readiness must preserve retained evidence"
+        );
+        assert!(keeper_status(
+            &keeper_authority_for_handoff("not a public URL"),
+            Health::Supervising,
+            Some(7),
+        )
+        .is_err());
+
+        let mut quarantined = authority.clone();
+        let record = quarantined.records["route-slot-01"].clone();
+        quarantined
+            .begin_stop(&record.slot_id, &record.fence)
+            .unwrap();
+        quarantined
+            .quarantine_unproven_stop(
+                &record.slot_id,
+                &record.fence,
+                "conflicting-owner".to_string(),
+            )
+            .unwrap();
+        let status = keeper_status(&quarantined, Health::Supervising, Some(7)).unwrap();
+        assert_eq!(status.state, "quarantined");
+        assert_eq!(status.ready_route_count, 0);
+        assert!(status.require_ready().is_err());
     }
 
     #[derive(Default)]
@@ -2774,6 +2866,17 @@ mod tests {
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
         let keeper_authority = ready_keeper_authority_for_handoff();
+        restarted.replace_remote_desktop_routes(Vec::new());
+        let unavailable =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
+        assert_eq!(unavailable["success"], false);
+        assert_eq!(
+            unavailable["error"],
+            "presentation_keeper_route_unavailable"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        restarted
+            .replace_remote_desktop_routes(route_keeper_desktop_routes(&keeper_authority).unwrap());
         let ready =
             restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
 
@@ -3507,6 +3610,19 @@ mod tests {
             .contains_key(&handoff_id));
 
         let activity_before = host.state().sessions[&opened.session_id].last_activity_at_ms;
+        let navigation = serde_json::json!({
+            "sessionId": opened.session_id, "activityAtMs": 2_000,
+        });
+        host.replace_remote_desktop_routes(Vec::new());
+        assert_eq!(
+            host.preflight_keeper_navigation_command(&navigation, &authority),
+            Err("presentation_keeper_route_unavailable".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+        host.replace_remote_desktop_routes(route_keeper_desktop_routes(&authority).unwrap());
         let mut pending_handoff = handoff.clone();
         pending_handoff.state = "pending".to_string();
         assert_eq!(

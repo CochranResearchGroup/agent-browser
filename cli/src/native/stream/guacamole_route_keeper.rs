@@ -18,7 +18,7 @@ use agent_browser_service_model::{
     RouteKeeperPhase, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
     RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -29,9 +29,45 @@ use tokio::sync::watch;
 
 type PrimaryTerminalSink = Box<dyn FnOnce(&str, &'static str, u64) + Send>;
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub(crate) enum RouteKeeperSupervisorHealth {
+    Unavailable { code: String },
+    Recovering,
+    Supervising,
+    Failed { code: String },
+    Stopping,
+    Stopped,
+}
+
+#[derive(Clone)]
+pub(crate) struct RouteKeeperSupervisorProbe {
+    health_rx: watch::Receiver<RouteKeeperSupervisorHealth>,
+    task: tokio::task::AbortHandle,
+    host_generation: u64,
+}
+
+impl RouteKeeperSupervisorProbe {
+    pub(crate) fn health(&self) -> RouteKeeperSupervisorHealth {
+        let health = self.health_rx.borrow().clone();
+        if self.task.is_finished() && !route_keeper_health_terminal(&health) {
+            return RouteKeeperSupervisorHealth::Failed {
+                code: "route_keeper_supervisor_terminated".to_string(),
+            };
+        }
+        health
+    }
+
+    pub(crate) fn host_generation(&self) -> u64 {
+        self.host_generation
+    }
+}
+
 pub(crate) struct ConfiguredRouteKeeperSupervisorHandle {
     shutdown_tx: watch::Sender<bool>,
     join: Option<tokio::task::JoinHandle<Result<(), String>>>,
+    health_tx: watch::Sender<RouteKeeperSupervisorHealth>,
+    probe: RouteKeeperSupervisorProbe,
 }
 
 impl ConfiguredRouteKeeperSupervisorHandle {
@@ -69,6 +105,7 @@ impl ConfiguredRouteKeeperSupervisorHandle {
         let mut connector = GuacamoleRouteKeeperConnector::new(database_path, factory, observer);
         let (tick_tx, mut ticks) = mpsc::channel(1);
         let (shutdown_tx, mut shutdown) = watch::channel(false);
+        let (health_tx, health_rx) = watch::channel(RouteKeeperSupervisorHealth::Recovering);
         let mut ticker_shutdown = shutdown.clone();
         let ticker = tokio::spawn(async move {
             let mut interval = tokio::time::interval(Duration::from_secs(1));
@@ -82,11 +119,15 @@ impl ConfiguredRouteKeeperSupervisorHandle {
                         }
                     }
                     _ = interval.tick() => {
+                        if tick_tx.is_closed() {
+                            break;
+                        }
                         let _ = tick_tx.try_send(());
                     }
                 }
             }
         });
+        let task_health = health_tx.clone();
         let join = tokio::spawn(async move {
             let result = match recover_prepared_cold_process_routes_until_shutdown(
                 &repository,
@@ -100,6 +141,7 @@ impl ConfiguredRouteKeeperSupervisorHandle {
                     // The configured supervisor owns all subsequent reconciliation
                     // only after every retained candidate was started under the
                     // pre-provider proof packet above.
+                    let _ = task_health.send(RouteKeeperSupervisorHealth::Supervising);
                     run_configured_route_keeper_supervisor(
                         &repository,
                         &mut connector,
@@ -113,21 +155,81 @@ impl ConfiguredRouteKeeperSupervisorHandle {
             };
             ticker.abort();
             let _ = ticker.await;
+            match &result {
+                Ok(()) => {
+                    let _ = task_health.send(RouteKeeperSupervisorHealth::Stopped);
+                }
+                Err(error) => {
+                    let _ = task_health.send(RouteKeeperSupervisorHealth::Failed {
+                        code: stable_route_keeper_health_code(error),
+                    });
+                }
+            }
             result
         });
+        let probe = RouteKeeperSupervisorProbe {
+            health_rx: health_rx.clone(),
+            task: join.abort_handle(),
+            host_generation: successor_host_generation,
+        };
         Ok(Self {
             shutdown_tx,
             join: Some(join),
+            health_tx,
+            probe,
         })
     }
 
+    pub(crate) fn probe(&self) -> RouteKeeperSupervisorProbe {
+        self.probe.clone()
+    }
+
     pub(crate) async fn shutdown(&mut self) -> Result<(), String> {
-        let _ = self.shutdown_tx.send(true);
         let Some(join) = self.join.take() else {
             return Ok(());
         };
-        join.await
-            .map_err(|error| format!("route_keeper_supervisor_join_failed:{error}"))?
+        let _ = self.health_tx.send(RouteKeeperSupervisorHealth::Stopping);
+        let _ = self.shutdown_tx.send(true);
+        match join.await {
+            Ok(Ok(())) => {
+                let _ = self.health_tx.send(RouteKeeperSupervisorHealth::Stopped);
+                Ok(())
+            }
+            Ok(Err(error)) => {
+                let _ = self.health_tx.send(RouteKeeperSupervisorHealth::Failed {
+                    code: stable_route_keeper_health_code(&error),
+                });
+                Err(error)
+            }
+            Err(error) => {
+                let _ = self.health_tx.send(RouteKeeperSupervisorHealth::Failed {
+                    code: "route_keeper_supervisor_terminated".to_string(),
+                });
+                Err(format!("route_keeper_supervisor_join_failed:{error}"))
+            }
+        }
+    }
+}
+
+fn route_keeper_health_terminal(health: &RouteKeeperSupervisorHealth) -> bool {
+    matches!(
+        health,
+        RouteKeeperSupervisorHealth::Unavailable { .. }
+            | RouteKeeperSupervisorHealth::Failed { .. }
+            | RouteKeeperSupervisorHealth::Stopped
+    )
+}
+
+fn stable_route_keeper_health_code(error: &str) -> String {
+    let prefix = error.split(':').next().unwrap_or_default();
+    if !prefix.is_empty()
+        && prefix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_')
+    {
+        prefix.to_string()
+    } else {
+        "route_keeper_supervisor_failed".to_string()
     }
 }
 
@@ -169,22 +271,73 @@ pub(crate) fn configured_route_keeper_supervisor_fixture() -> (
     ConfiguredRouteKeeperSupervisorHandle,
     Arc<std::sync::atomic::AtomicUsize>,
 ) {
+    configured_route_keeper_supervisor_fixture_with_behavior(
+        RouteKeeperSupervisorFixtureBehavior::Shutdown,
+    )
+}
+
+#[cfg(test)]
+#[derive(Clone, Copy)]
+pub(crate) enum RouteKeeperSupervisorFixtureBehavior {
+    Shutdown,
+    Failed,
+    Completed,
+    Panic,
+}
+
+#[cfg(test)]
+pub(crate) fn configured_route_keeper_supervisor_fixture_with_behavior(
+    behavior: RouteKeeperSupervisorFixtureBehavior,
+) -> (
+    ConfiguredRouteKeeperSupervisorHandle,
+    Arc<std::sync::atomic::AtomicUsize>,
+) {
     let shutdowns = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed = shutdowns.clone();
     let (shutdown_tx, mut shutdown) = watch::channel(false);
+    let (health_tx, health_rx) = watch::channel(RouteKeeperSupervisorHealth::Supervising);
+    let task_health = health_tx.clone();
     let join = tokio::spawn(async move {
-        while shutdown.changed().await.is_ok() {
-            if *shutdown.borrow() {
-                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                return Ok(());
+        match behavior {
+            RouteKeeperSupervisorFixtureBehavior::Shutdown => {
+                while shutdown.changed().await.is_ok() {
+                    if *shutdown.borrow() {
+                        observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                        let _ = task_health.send(RouteKeeperSupervisorHealth::Stopped);
+                        return Ok(());
+                    }
+                }
+                let error = "route_keeper_supervisor_fixture_shutdown_closed".to_string();
+                let _ = task_health.send(RouteKeeperSupervisorHealth::Failed {
+                    code: stable_route_keeper_health_code(&error),
+                });
+                Err(error)
             }
+            RouteKeeperSupervisorFixtureBehavior::Failed => {
+                let error = "fixture_health_failure:provider detail".to_string();
+                let _ = task_health.send(RouteKeeperSupervisorHealth::Failed {
+                    code: stable_route_keeper_health_code(&error),
+                });
+                Err(error)
+            }
+            RouteKeeperSupervisorFixtureBehavior::Completed => {
+                let _ = task_health.send(RouteKeeperSupervisorHealth::Stopped);
+                Ok(())
+            }
+            RouteKeeperSupervisorFixtureBehavior::Panic => panic!("fixture route keeper panic"),
         }
-        Err("route_keeper_supervisor_fixture_shutdown_closed".to_string())
     });
+    let probe = RouteKeeperSupervisorProbe {
+        health_rx: health_rx.clone(),
+        task: join.abort_handle(),
+        host_generation: 1,
+    };
     (
         ConfiguredRouteKeeperSupervisorHandle {
             shutdown_tx,
             join: Some(join),
+            health_tx,
+            probe,
         },
         shutdowns,
     )
@@ -1246,6 +1399,96 @@ mod tests {
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use tokio_tungstenite::{tungstenite::Message, WebSocketStream};
+
+    async fn wait_for_fixture_completion(handle: &ConfiguredRouteKeeperSupervisorHandle) {
+        tokio::time::timeout(Duration::from_secs(1), async {
+            while !handle.probe.task.is_finished() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("fixture task did not finish");
+    }
+
+    #[tokio::test]
+    async fn configured_supervisor_health_tracks_terminal_fixture_outcomes_without_join_consumption(
+    ) {
+        let (mut running, shutdowns) = configured_route_keeper_supervisor_fixture();
+        let probe = running.probe();
+        assert_eq!(
+            running.probe().health(),
+            RouteKeeperSupervisorHealth::Supervising
+        );
+        assert_eq!(probe.health(), RouteKeeperSupervisorHealth::Supervising);
+        assert_eq!(running.probe().host_generation(), 1);
+        assert_eq!(probe.host_generation(), 1);
+        running.shutdown().await.unwrap();
+        assert_eq!(shutdowns.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            running.probe().health(),
+            RouteKeeperSupervisorHealth::Stopped
+        );
+        assert_eq!(probe.health(), RouteKeeperSupervisorHealth::Stopped);
+        running.shutdown().await.unwrap();
+        assert_eq!(probe.health(), RouteKeeperSupervisorHealth::Stopped);
+
+        let (mut failed, _) = configured_route_keeper_supervisor_fixture_with_behavior(
+            RouteKeeperSupervisorFixtureBehavior::Failed,
+        );
+        wait_for_fixture_completion(&failed).await;
+        assert_eq!(
+            failed.probe().health(),
+            RouteKeeperSupervisorHealth::Failed {
+                code: "fixture_health_failure".to_string()
+            }
+        );
+        assert_eq!(
+            failed.shutdown().await,
+            Err("fixture_health_failure:provider detail".to_string())
+        );
+
+        let (completed, _) = configured_route_keeper_supervisor_fixture_with_behavior(
+            RouteKeeperSupervisorFixtureBehavior::Completed,
+        );
+        wait_for_fixture_completion(&completed).await;
+        assert_eq!(
+            completed.probe().health(),
+            RouteKeeperSupervisorHealth::Stopped
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_supervisor_health_synthesizes_terminated_failure_after_panic() {
+        let (mut handle, _) = configured_route_keeper_supervisor_fixture_with_behavior(
+            RouteKeeperSupervisorFixtureBehavior::Panic,
+        );
+        wait_for_fixture_completion(&handle).await;
+        assert_eq!(
+            handle.probe().health(),
+            RouteKeeperSupervisorHealth::Failed {
+                code: "route_keeper_supervisor_terminated".to_string()
+            }
+        );
+        assert!(handle.shutdown().await.is_err());
+        assert_eq!(
+            handle.probe().health(),
+            RouteKeeperSupervisorHealth::Failed {
+                code: "route_keeper_supervisor_terminated".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn configured_supervisor_health_codes_exclude_raw_provider_text() {
+        assert_eq!(
+            stable_route_keeper_health_code("route_keeper_provider_failed:private detail"),
+            "route_keeper_provider_failed"
+        );
+        assert_eq!(
+            stable_route_keeper_health_code("provider detail:private"),
+            "route_keeper_supervisor_failed"
+        );
+    }
 
     struct TempDirectory(PathBuf);
 

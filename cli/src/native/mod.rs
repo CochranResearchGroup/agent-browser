@@ -111,6 +111,7 @@ pub(crate) mod presentation_inventory;
 pub(crate) mod presentation_lifecycle;
 #[allow(dead_code)]
 pub(crate) mod presentation_route_keeper;
+pub(crate) mod presentation_runtime_status;
 #[allow(dead_code)]
 pub mod providers;
 #[allow(dead_code)]

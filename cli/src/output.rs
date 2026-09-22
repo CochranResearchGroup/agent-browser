@@ -2937,6 +2937,35 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         ));
     }
 
+    if let Some(keeper) = data.get("presentationKeeper") {
+        lines.push(format!(
+            "Presentation keeper: state={} supervisor={} ready={} minimum={} warm_target={}",
+            value_str(keeper, "state", "unavailable"),
+            keeper
+                .pointer("/supervisor/state")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("unavailable"),
+            keeper
+                .get("readyRouteCount")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            keeper
+                .get("minimumReady")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+            keeper
+                .get("warmTarget")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or(0),
+        ));
+        if let Some(reason) = keeper
+            .get("unavailableReason")
+            .and_then(serde_json::Value::as_str)
+        {
+            lines.push(format!("  {reason}"));
+        }
+    }
+
     if let Some(capacity) = data.get("presentationCapacity") {
         let total = capacity
             .get("totalSlots")
@@ -7056,6 +7085,7 @@ Notes:
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks. Contracts include no-launch remote-view allocation collections for display allocations, remote-view routes, route pool entries, and viewer leases.
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
   - Service status includes manualBrowsers for live detached headed runtime launches, including PID, profile path, target URL, display, browser family/build, CDP availability, remote-view route, and the next safe operator action.
+  - Service status presentationKeeper joins current SQLite receipts with live supervisor health and host generation. Supervising alone is not readiness; minimumSatisfied requires usable routes. Remote opens and navigation wait within the configured request deadline during recovery and recheck before browser effects. Failed or stopped supervisors cannot supply ready routes. Manager handoff resolution rechecks before focus.
   - Service status includes presentationCapacity when durable slot authority is configured. It reports warm and active slots, admitted and hard limits, protected reserves, queued demand, and redacted binding warnings without launching a browser or opening a route.
   - Service status includes desktopEvidencePolicy. Use CDP for page evidence. Reserve desktop presentation only for browser chrome, extension UI, password-manager or passkey prompts, native dialogs, OS windows, or stacking evidence that CDP cannot observe. A generic CDP failure is diagnostic and does not authorize desktop fallback.
   - Current service status includes additive statusProjection provenance and freshness for host-local observations. service_state remains authority; unavailable means unknown. Derive staleness from validUntil. Legacy v1 fields remain supported.
@@ -8590,6 +8620,14 @@ mod tests {
                 "explanation": "Retained display allocations are historical service-state records.",
                 "cleanupCommand": "agent-browser service prune-retained --display-allocations --dry-run"
             },
+            "presentationKeeper": {
+                "state": "unavailable",
+                "supervisor": { "state": "failed" },
+                "readyRouteCount": 0,
+                "minimumReady": 1,
+                "warmTarget": 4,
+                "unavailableReason": "route_keeper_supervisor_terminated"
+            },
             "presentationCapacity": {
                 "totalSlots": 4,
                 "configuredHardMaximum": 6,
@@ -8624,6 +8662,10 @@ mod tests {
         assert!(rendered.contains(
             "Retained display allocations: total=3 apply_safe=2 retained=1 classes=diagnostic-retained=1,safe-orphan-display=1,stale-route-reference=1"
         ));
+        assert!(rendered.contains(
+            "Presentation keeper: state=unavailable supervisor=failed ready=0 minimum=1 warm_target=4"
+        ));
+        assert!(rendered.contains("route_keeper_supervisor_terminated"));
         assert!(rendered.contains(
             "Presentation capacity: warm=2/4 admitted=4 hard_max=6 human_reserved=1 recovery_reserved=1 queued=2 binding_warnings=0"
         ));

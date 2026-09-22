@@ -1063,6 +1063,7 @@ export interface ServiceStatusResponse {
   manualBrowsers?: ServiceManualRuntimeBrowser[];
   retainedDisplayAllocations?: ServiceRetainedDisplayAllocationSummary;
   presentationCapacity?: ServicePresentationCapacityProjection;
+  presentationKeeper?: ServicePresentationKeeperStatus;
   desktopEvidencePolicy?: ServiceDesktopEvidencePolicyProjection;
   browserSessionAuthority?: ServiceBrowserSessionAuthoritySnapshot;
   statusProjection?: ServiceStatusProjection;
@@ -1122,6 +1123,23 @@ export interface ServicePresentationCapacityProjection {
   queuedByPriority: Record<string, number>;
   oldestWaitTicks?: number | null;
   bindingWarnings: string[];
+}
+
+export interface ServicePresentationKeeperStatus {
+  schemaVersion: 'agent-browser.presentation-keeper-status.v1';
+  supervisor: {
+    state: 'recovering' | 'supervising' | 'failed' | 'stopping' | 'stopped' | 'unavailable';
+    code?: string;
+  };
+  hostGeneration: number | null;
+  state: 'ready' | 'recovering' | 'unavailable' | 'quarantined' | 'degraded';
+  readyRouteCount: number;
+  configuredSlotCount: number;
+  minimumReady: number;
+  warmTarget: number;
+  minimumSatisfied: boolean;
+  warmTargetSatisfied: boolean;
+  unavailableReason: string | null;
 }
 
 export interface ServiceDesktopEvidencePolicyProjection {

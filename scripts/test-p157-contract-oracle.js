@@ -86,7 +86,7 @@ const controlRequestSource = controlPlaneSource.slice(
 assert(controlRequestSource.includes('provenance'), 'ControlRequest lost immutable provenance');
 assert(
   controlPlaneSource.includes('runtime_lane_id: String') &&
-    controlPlaneSource.includes('ServiceRequestProvenance::capture') &&
+    controlPlaneSource.includes('let provenance = capture_service_request_provenance(') &&
     controlPlaneSource.includes('provenance: request.provenance.clone()') &&
     daemonSource.includes('submit_from_connection(cmd, &connection_instance_id)'),
   'runtime-lane provenance capture or job persistence drifted',
@@ -103,7 +103,10 @@ assert(
   'scheduler rejection bypasses the unified terminal outcome path',
 );
 
-const failureSource = readFileSync(join(root, 'cli/src/native/service_failure.rs'), 'utf8');
+const failureAdapterSource = readFileSync(join(root, 'cli/src/native/service_failure.rs'), 'utf8');
+assert(failureAdapterSource.includes('let mut recourse = classify_service_failure(&error)'),
+  'CLI response no longer applies the shared failure classifier');
+const failureSource = readFileSync(join(root, 'crates/agent-browser-service-model/src/failure_recourse.rs'), 'utf8');
 const identityFailureStart = failureSource.indexOf('"existing_session_profile_identity_unproven"');
 const identityFailureEnd = failureSource.indexOf('ServiceFailureRecourse::default()', identityFailureStart);
 assert(

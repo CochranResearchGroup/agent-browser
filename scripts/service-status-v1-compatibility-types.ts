@@ -32,6 +32,19 @@ export const oldV1ServiceStatusResponse = {
 export const currentV1ServiceStatusResponse = {
   service_state: {},
   profileAllocations: [],
+  presentationKeeper: {
+    schemaVersion: 'agent-browser.presentation-keeper-status.v1',
+    supervisor: { state: 'failed', code: 'route_keeper_supervisor_terminated' },
+    hostGeneration: 3,
+    state: 'unavailable',
+    readyRouteCount: 0,
+    configuredSlotCount: 6,
+    minimumReady: 1,
+    warmTarget: 4,
+    minimumSatisfied: false,
+    warmTargetSatisfied: false,
+    unavailableReason: 'route_keeper_supervisor_terminated',
+  },
   browserSessionAuthority: {
     schemaVersion: 1,
     availability: 'unknown',

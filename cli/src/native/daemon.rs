@@ -48,6 +48,103 @@ fn require_keeper_handoff_resolution(
     Ok(())
 }
 
+fn presentation_keeper_status(
+    authority: &agent_browser_service_model::RouteKeeperAuthority,
+    probe: &super::stream::RouteKeeperSupervisorProbe,
+) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
+    super::presentation_runtime_status::keeper_status(
+        authority,
+        probe.health(),
+        Some(probe.host_generation()),
+    )
+}
+
+fn current_presentation_keeper_status(
+    probe: Option<&super::stream::RouteKeeperSupervisorProbe>,
+) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
+    let authority = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+        .load_route_keeper_authority()?;
+    match probe {
+        Some(probe) => presentation_keeper_status(&authority, probe),
+        None => super::presentation_runtime_status::keeper_status(
+            &authority,
+            super::stream::RouteKeeperSupervisorHealth::Unavailable {
+                code: "presentation_keeper_unavailable".to_string(),
+            },
+            None,
+        ),
+    }
+}
+
+enum PresentationKeeperObservation<T> {
+    Ready(T),
+    Pending,
+    Terminal(String),
+}
+
+/// Polls a read-only readiness observation without allowing one blocked
+/// observation to outlive the request deadline. A cancelled `spawn_blocking`
+/// read may complete afterward, but it has no provider or browser effect.
+async fn wait_for_presentation_keeper_observation<T, F, Fut>(
+    deadline: Instant,
+    mut observe: F,
+) -> Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<PresentationKeeperObservation<T>, String>>,
+{
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("presentation_keeper_deadline_exceeded".to_string());
+        }
+        let observation = tokio::time::timeout(remaining, observe())
+            .await
+            .map_err(|_| "presentation_keeper_deadline_exceeded".to_string())??;
+        match observation {
+            PresentationKeeperObservation::Ready(value) => return Ok(value),
+            PresentationKeeperObservation::Terminal(error) => return Err(error),
+            PresentationKeeperObservation::Pending => {
+                tokio::time::sleep(
+                    Duration::from_millis(25)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                )
+                .await;
+            }
+        }
+    }
+}
+
+async fn observe_presentation_keeper(
+    route_keeper: Arc<Mutex<Option<super::stream::ConfiguredRouteKeeperSupervisorHandle>>>,
+) -> Result<PresentationKeeperObservation<super::stream::RouteKeeperSupervisorProbe>, String> {
+    let probe = route_keeper
+        .lock()
+        .await
+        .as_ref()
+        .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
+        .ok_or_else(|| "presentation_keeper_unavailable".to_string())?;
+    let probe_for_status = probe.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        current_presentation_keeper_status(Some(&probe_for_status))
+    })
+    .await
+    .map_err(|error| format!("presentation_keeper_status_join_failed:{error}"))??;
+    match status.require_ready() {
+        Ok(()) => Ok(PresentationKeeperObservation::Ready(probe)),
+        Err(_)
+            if matches!(
+                probe.health(),
+                super::stream::RouteKeeperSupervisorHealth::Recovering
+                    | super::stream::RouteKeeperSupervisorHealth::Supervising
+            ) && matches!(status.state, "recovering" | "degraded") =>
+        {
+            Ok(PresentationKeeperObservation::Pending)
+        }
+        Err(error) => Ok(PresentationKeeperObservation::Terminal(error)),
+    }
+}
+
 /// Build the runtime host on the same bounded stack used for Service State
 /// serialization. Commands may own large parsed snapshots until dispatch
 /// finishes, so both decoding and value destruction need this stack budget.
@@ -707,48 +804,86 @@ impl RuntimeHostRouter {
         keeper_result
     }
 
+    async fn route_keeper_probe(&self) -> Option<super::stream::RouteKeeperSupervisorProbe> {
+        self.route_keeper
+            .lock()
+            .await
+            .as_ref()
+            .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
+    }
+
+    async fn wait_for_presentation_keeper(
+        &self,
+    ) -> Result<super::stream::RouteKeeperSupervisorProbe, String> {
+        let deadline_ms = tokio::task::spawn_blocking(|| {
+            super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                .load_runtime_config()
+                .map(|config| config.request_deadline_ms)
+        })
+        .await
+        .map_err(|error| format!("presentation_keeper_deadline_join_failed:{error}"))??;
+        let deadline = Instant::now() + Duration::from_millis(deadline_ms);
+        let route_keeper = self.route_keeper.clone();
+        wait_for_presentation_keeper_observation(deadline, || {
+            observe_presentation_keeper(route_keeper.clone())
+        })
+        .await
+    }
+
     async fn handle_browser_session_command(&self, command: Value) -> Value {
+        let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
+        let publish_manager_handoff =
+            match super::browser_session_host::browser_session_navigation_requires_handoff(
+                &command,
+                runtime_environment.as_deref(),
+            ) {
+                Ok(required) => required,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            };
+        let action = command.get("action").and_then(Value::as_str);
+        let action_is_open = action == Some("browser_session_open");
+        let has_named_profile = command
+            .get("profileId")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("profileId"))
+            })
+            .and_then(Value::as_str)
+            .is_some();
+        let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
+        let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
+        let keeper_handoff_required = publish_manager_handoff;
+        let keeper_required = keeper_handoff_required || remote_open_candidate;
+        let probe = if keeper_required {
+            match self.wait_for_presentation_keeper().await {
+                Ok(probe) => Some(probe),
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            }
+        } else {
+            None
+        };
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Value, String> {
-            let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
-            let publish_manager_handoff =
-                super::browser_session_host::browser_session_navigation_requires_handoff(
-                    &command,
-                    runtime_environment.as_deref(),
-                )?;
             let action = command.get("action").and_then(Value::as_str);
-            let action_is_open = action == Some("browser_session_open");
-            let has_named_profile = command
-                .get("profileId")
-                .or_else(|| {
-                    command
-                        .get("params")
-                        .and_then(|params| params.get("profileId"))
-                })
-                .and_then(Value::as_str)
-                .is_some();
-            let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
-            let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
-            let keeper_authority = if publish_manager_handoff || remote_open_candidate {
-                let store =
-                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-                Some(store.load_route_keeper_authority()?)
-            } else {
-                None
-            };
-            let routes = keeper_authority
-                .as_ref()
-                .map(super::browser_session_host::route_keeper_desktop_routes)
-                .transpose()?
-                .unwrap_or_default();
-            require_keeper_handoff_resolution(
-                publish_manager_handoff || remote_open_candidate,
-                &routes,
-            )
-            .map_err(str::to_string)?;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            // This is deliberately after taking the host lock. A queued command must
+            // revalidate the live supervisor and durable route state immediately before
+            // it can create a browser or publish a manager handoff.
+            let (keeper_authority, routes) = if let Some(probe) = probe.as_ref() {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                let authority = store.load_route_keeper_authority()?;
+                let status = presentation_keeper_status(&authority, probe)?;
+                status.require_ready()?;
+                let routes = status.usable_routes(&authority)?;
+                (Some(authority), routes)
+            } else {
+                (None, Vec::new())
+            };
+            require_keeper_handoff_resolution(keeper_required, &routes).map_err(str::to_string)?;
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
@@ -771,7 +906,7 @@ impl RuntimeHostRouter {
             if action == Some("browser_session_navigate") || journaled_open {
                 host.replace_remote_desktop_routes(routes);
             }
-            if publish_manager_handoff {
+            if keeper_handoff_required {
                 let authority = keeper_authority.as_ref().ok_or_else(|| {
                     "browser_session_keeper_handoff_authority_missing".to_string()
                 })?;
@@ -806,7 +941,7 @@ impl RuntimeHostRouter {
             } else {
                 host.handle_command(&command)
             };
-            if publish_manager_handoff {
+            if keeper_handoff_required {
                 let authority = keeper_authority.as_ref().ok_or_else(|| {
                     "browser_session_keeper_handoff_authority_missing".to_string()
                 })?;
@@ -912,9 +1047,54 @@ impl RuntimeHostRouter {
     }
 
     /// Resolves a manager handoff only after loading its SQLite registry row and
-    /// the current Ready route-keeper binding, before host join or browser focus.
+    /// the current Ready route-keeper binding immediately before browser focus.
     /// Returns `None` only when the identifier is absent or is not manager-owned.
     async fn try_resolve_manager_handoff(&self, command: Value) -> Option<Value> {
+        let handoff_id = match command
+            .get("handoffId")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("handoffId"))
+            })
+            .or_else(|| command.get("remoteViewHandoffId"))
+            .and_then(Value::as_str)
+        {
+            Some(handoff_id) => handoff_id.to_string(),
+            None => {
+                return Some(serde_json::json!({
+                    "success": false,
+                    "error": "service_remote_view_handoff_resolve requires handoffId",
+                }))
+            }
+        };
+        let lookup_id = handoff_id.clone();
+        let manager_owned = match tokio::task::spawn_blocking(move || -> Result<bool, String> {
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            let registry = store.load_handoff_registry()?;
+            Ok(registry
+                .handoffs
+                .get(&lookup_id)
+                .is_some_and(super::browser_session_handoff::is_manager_handoff))
+        })
+        .await
+        {
+            Ok(Ok(manager_owned)) => manager_owned,
+            Ok(Err(error)) => return Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => {
+                return Some(serde_json::json!({
+                    "success": false,
+                    "error": format!("browser_session_host_join_failed:{error}"),
+                }))
+            }
+        };
+        if !manager_owned {
+            return None;
+        }
+        let probe = match self.wait_for_presentation_keeper().await {
+            Ok(probe) => probe,
+            Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
+        };
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
             let handoff_id = command
@@ -937,10 +1117,29 @@ impl RuntimeHostRouter {
             if !super::browser_session_handoff::is_manager_handoff(&handoff) {
                 return Ok(None);
             }
-            let authority = store.load_route_keeper_authority()?;
             let mut host = browser_sessions
                 .lock()
                 .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            // The handoff may have waited behind an earlier browser operation, so
+            // validate the durable authority and live probe after acquiring the lock.
+            let authority = store.load_route_keeper_authority()?;
+            let status = presentation_keeper_status(&authority, &probe)?;
+            status.require_ready()?;
+            let routes = status.usable_routes(&authority)?;
+            let route_id = handoff
+                .last_route_id
+                .as_deref()
+                .ok_or_else(|| "presentation_keeper_route_unavailable".to_string())?;
+            let route = authority
+                .records
+                .get(route_id)
+                .ok_or_else(|| "presentation_keeper_route_unavailable".to_string())?;
+            if route.fence.host_generation != probe.host_generation() {
+                return Err("presentation_keeper_route_stale".to_string());
+            }
+            if !routes.iter().any(|route| route.id == route_id) {
+                return Err("presentation_keeper_route_unavailable".to_string());
+            }
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
@@ -973,6 +1172,20 @@ impl RuntimeHostRouter {
 
     async fn attach_browser_session_state(&self, response: Value) -> Value {
         let browser_sessions = self.browser_sessions.clone();
+        let keeper_probe = self.route_keeper_probe().await;
+        let keeper_status = tokio::task::spawn_blocking(move || {
+            current_presentation_keeper_status(keeper_probe.as_ref()).unwrap_or_else(|_| {
+                super::presentation_runtime_status::unavailable_status(
+                    "presentation_keeper_status_unavailable",
+                )
+            })
+        })
+        .await
+        .unwrap_or_else(|_| {
+            super::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_status_unavailable",
+            )
+        });
         let snapshot = tokio::task::spawn_blocking(move || {
             let mut host = browser_sessions
                 .lock()
@@ -990,7 +1203,10 @@ impl RuntimeHostRouter {
         .await
         .map_err(|error| format!("browser_session_status_join_failed:{error}"))
         .and_then(|snapshot| snapshot);
-        attach_browser_session_state_to_status(response, snapshot)
+        attach_presentation_keeper_status(
+            attach_browser_session_state_to_status(response, snapshot),
+            keeper_status,
+        )
     }
 
     async fn reap_browser_sessions_if_loaded(&self) -> Result<(), String> {
@@ -1064,6 +1280,25 @@ fn attach_browser_session_state_to_status(
             data.insert("browserSessionStateError".to_string(), Value::String(error));
         }
     }
+    response
+}
+
+fn attach_presentation_keeper_status(
+    mut response: Value,
+    status: super::presentation_runtime_status::PresentationKeeperStatus,
+) -> Value {
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return response;
+    };
+    data.insert(
+        "presentationKeeper".to_string(),
+        serde_json::to_value(status).unwrap_or_else(|_| {
+            serde_json::to_value(super::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_status_unavailable",
+            ))
+            .expect("presentation keeper unavailable status must serialize")
+        }),
+    );
     response
 }
 
@@ -1731,6 +1966,83 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn presentation_keeper_wait_retries_recovery_until_ready() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_secs(1),
+            move || {
+                let index = observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async move {
+                    Ok(if index == 0 {
+                        PresentationKeeperObservation::Pending
+                    } else {
+                        PresentationKeeperObservation::Ready("ready")
+                    })
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result, Ok("ready"));
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn presentation_keeper_wait_returns_terminal_failure_without_retry() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_secs(1),
+            move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async {
+                    Ok(PresentationKeeperObservation::Terminal(
+                        "presentation_keeper_failed".to_string(),
+                    ))
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result, Err("presentation_keeper_failed".to_string()));
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn presentation_keeper_wait_deadline_starts_no_observation() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() - Duration::from_millis(1),
+            move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async { Ok(PresentationKeeperObservation::Ready(())) }
+            },
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Err("presentation_keeper_deadline_exceeded".to_string())
+        );
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let stalled: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_millis(10),
+            || std::future::pending(),
+        )
+        .await;
+        assert_eq!(
+            stalled,
+            Err("presentation_keeper_deadline_exceeded".to_string())
+        );
+    }
+
+    #[tokio::test]
     async fn manager_handoff_resolution_loads_sqlite_keeper_authority_before_focus() {
         let guard =
             crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
@@ -1860,7 +2172,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(response["success"], false);
-        assert_eq!(response["error"], "route_keeper_handoff_not_ready");
+        assert_eq!(response["error"], "presentation_keeper_unavailable");
         assert_eq!(
             BrowserRuntimeSqliteStore::open(&database_path)
                 .unwrap()
@@ -2401,6 +2713,24 @@ mod tests {
         assert_eq!(
             joined["data"]["browserSessionStateError"],
             "browser-session-state unreadable"
+        );
+    }
+
+    #[test]
+    fn service_status_adds_presentation_keeper_diagnostics() {
+        let response = serde_json::json!({ "success": true, "data": {} });
+        let joined = attach_presentation_keeper_status(
+            response,
+            crate::native::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_unavailable",
+            ),
+        );
+
+        assert_eq!(joined["success"], true);
+        assert_eq!(joined["data"]["presentationKeeper"]["state"], "unavailable");
+        assert_eq!(
+            joined["data"]["presentationKeeper"]["supervisor"]["code"],
+            "presentation_keeper_unavailable"
         );
     }
 
