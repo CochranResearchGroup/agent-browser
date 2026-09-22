@@ -9,6 +9,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 425 | 2026-09-21
+
+P211 checkpoint `45124f99` completes the provider-free recovery proof and
+adoption-terminal packet. Exact predecessor-exit proof now reconstructs only
+from retained `Ready`, `Degraded`, or deterministic interrupted `Adopting`
+state. A current adoption terminal event persists `RecoveryFailed` while
+retaining predecessor evidence; stale fences and predecessor occurrences do
+not mutate the successor.
+
+The combined 50-test route-keeper lane, formatting, strict workspace Clippy,
+and diff check pass. Configured startup recovery and multi-route orchestration
+remain the next bounded packet. No provider, browser, Service State,
+installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 424 | 2026-09-21
 
 P211 checkpoint `8f60434f` implements configured Guacamole adoption while

@@ -249,6 +249,11 @@ catalog preflight, one retained task per action, fresh tunnel occurrence, and
 XRDP witness observation. Its 18 focused tests and quality gates pass. Startup
 remains fail-closed until predecessor-exit proof reconstruction and durable
 adoption-terminal handling are implemented; no runtime effect is authorized.
+Checkpoint `45124f99` adds exact proof reconstruction for retained `Ready`,
+`Degraded`, and interrupted `Adopting` state plus a durable
+`RecoveryFailed` transition for current adoption terminal events. The combined
+50-test route-keeper lane and quality gates pass. Configured startup recovery
+and multi-route orchestration remain next; runtime effects stay unauthorized.
 
 ## P216 | Service Model Extraction Landing
 

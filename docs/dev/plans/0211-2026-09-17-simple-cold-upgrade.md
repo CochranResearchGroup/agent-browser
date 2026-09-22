@@ -1758,6 +1758,16 @@ next packet must reconstruct predecessor-exit proof for exact `Ready`,
 terminal event a durable failure transition before startup recovery is enabled.
 No runtime effect occurred.
 
+Checkpoint `45124f99` closes the provider-free proof and terminal-state gaps
+identified after configured adoption. Exact predecessor-exit proof can now be
+reconstructed from retained `Ready`, `Degraded`, or deterministic interrupted
+`Adopting` state. A current adoption task terminal event moves durably to
+`RecoveryFailed`, retains the predecessor ready receipt, and rejects stale
+fences or predecessor occurrences. The combined 50-test route-keeper lane,
+format check, and strict workspace Clippy pass. Configured startup recovery and
+multi-route orchestration remain the next bounded packet; no runtime effect
+occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel
