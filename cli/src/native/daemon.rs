@@ -1076,6 +1076,11 @@ impl RuntimeHostRouter {
                         }
                     }
                     response
+                } else if action == Some("browser_session_navigate") && keeper_handoff_required {
+                    let authority = keeper_authority.as_ref().ok_or_else(|| {
+                        "browser_session_keeper_handoff_authority_missing".to_string()
+                    })?;
+                    host.handle_journaled_navigation_with_keeper(&command, authority)
                 } else if action == Some("browser_session_navigate")
                     && command.get("headers").is_some()
                 {
@@ -1083,7 +1088,7 @@ impl RuntimeHostRouter {
                 } else {
                     host.handle_command(&command)
                 };
-                if keeper_handoff_required {
+                if keeper_handoff_required && action != Some("browser_session_navigate") {
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()
                     })?;
@@ -1314,7 +1319,7 @@ impl RuntimeHostRouter {
                 .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
                 .unwrap_or_default();
             let resolved =
-                host.resolve_manager_handoff_with_keeper(&handoff, &authority, activity_at_ms)?;
+                host.resolve_journaled_manager_handoff_with_keeper(&command, &handoff, &authority, activity_at_ms)?;
             let id = command.get("id").cloned().unwrap_or(Value::Null);
             Ok(Some(serde_json::json!({
                 "id": id,

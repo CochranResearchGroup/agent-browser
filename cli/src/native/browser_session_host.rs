@@ -24,6 +24,9 @@ use super::browser_session_store::{
 };
 use super::presentation_inventory::StaticRouteInventory;
 
+mod handoff_recovery;
+pub(crate) mod navigation_recovery;
+
 const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
 
 pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
@@ -151,10 +154,30 @@ pub(crate) trait BrowserSessionPersistence {
         Ok(None)
     }
 
+    fn commit_operation(
+        &mut self,
+        _operation_id: &str,
+        _generation: u64,
+        _result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
     fn commit_browser_open(
         &mut self,
         _operation_id: &str,
         _generation: u64,
+        _expected_base_state: &BrowserSessionState,
+        _state: &BrowserSessionState,
+        _handoff: &RemoteViewHandoff,
+        _result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn commit_browser_navigation(
+        &mut self,
+        _operation: &BrowserRuntimeOperation,
         _expected_base_state: &BrowserSessionState,
         _state: &BrowserSessionState,
         _handoff: &RemoteViewHandoff,
@@ -250,6 +273,16 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
         .map(Some)
     }
 
+    fn commit_operation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::commit_operation(self, operation_id, generation, result)
+            .map(Some)
+    }
+
     fn commit_browser_open(
         &mut self,
         operation_id: &str,
@@ -263,6 +296,25 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
             self,
             operation_id,
             generation,
+            expected_base_state,
+            state,
+            handoff,
+            result,
+        )
+        .map(Some)
+    }
+
+    fn commit_browser_navigation(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        expected_base_state: &BrowserSessionState,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+        result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::commit_browser_navigation(
+            self,
+            operation,
             expected_base_state,
             state,
             handoff,
@@ -1989,7 +2041,7 @@ mod tests {
         authority
     }
 
-    fn ready_keeper_authority_for_handoff() -> RouteKeeperAuthority {
+    pub(super) fn ready_keeper_authority_for_handoff() -> RouteKeeperAuthority {
         keeper_authority_for_handoff("https://dashboard.example/operator")
     }
 
@@ -2069,10 +2121,11 @@ mod tests {
     }
 
     #[derive(Default)]
-    struct FixtureRuntime {
-        launches: usize,
-        live: bool,
-        next_tab: usize,
+    pub(super) struct FixtureRuntime {
+        pub(super) launches: usize,
+        pub(super) live: bool,
+        pub(super) next_tab: usize,
+        pub(super) focuses: Option<Arc<AtomicUsize>>,
     }
 
     impl BrowserRuntimeDriver for FixtureRuntime {
@@ -2146,6 +2199,9 @@ mod tests {
             _browser: &ManagedBrowserInstance,
             _tab: Option<&ManagedBrowserTab>,
         ) -> Result<(), String> {
+            if let Some(focuses) = &self.focuses {
+                focuses.fetch_add(1, Ordering::SeqCst);
+            }
             Ok(())
         }
 
@@ -2485,10 +2541,10 @@ mod tests {
         assert!(host.state().navigation_history.is_empty());
     }
 
-    struct TempDirectory(PathBuf);
+    pub(super) struct TempDirectory(pub(super) PathBuf);
 
     impl TempDirectory {
-        fn new() -> Self {
+        pub(super) fn new() -> Self {
             let path = std::env::temp_dir().join(format!(
                 "agent-browser-session-host-{}-{}",
                 std::process::id(),
@@ -2544,6 +2600,7 @@ mod tests {
             launches: 0,
             live: true,
             next_tab: 0,
+            focuses: None,
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
         let resumed = restarted

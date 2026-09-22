@@ -136,6 +136,15 @@ pub(crate) struct BrowserRuntimeOperation {
     pub(crate) result: Option<serde_json::Value>,
 }
 
+struct BrowserPublication<'a> {
+    expected_owner_key: Option<&'static str>,
+    expected_observation: Option<&'a serde_json::Value>,
+    expected_base_state: &'a BrowserSessionState,
+    session_state: &'a BrowserSessionState,
+    handoff: &'a RemoteViewHandoff,
+    result: serde_json::Value,
+}
+
 pub(crate) struct LegacyBrowserRuntimeSources<'a> {
     pub(crate) session_state_path: &'a Path,
     pub(crate) profile_catalog_path: &'a Path,
@@ -1259,12 +1268,40 @@ impl BrowserRuntimeSqliteStore {
         handoff: &RemoteViewHandoff,
         result: serde_json::Value,
     ) -> Result<BrowserRuntimeOperation, String> {
+        self.commit_browser_publication(
+            operation_id,
+            generation,
+            BrowserPublication {
+                expected_owner_key: None,
+                expected_observation: None,
+                expected_base_state,
+                session_state,
+                handoff,
+                result,
+            },
+        )
+    }
+
+    fn commit_browser_publication(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        publication: BrowserPublication<'_>,
+    ) -> Result<BrowserRuntimeOperation, String> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
         let mut operation = load_optional_operation(&transaction, operation_id)?
             .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if publication
+            .expected_owner_key
+            .is_some_and(|owner_key| operation.owner_key != owner_key)
+        {
+            return Err(format!(
+                "browser_runtime_operation_owner_mismatch:{operation_id}"
+            ));
+        }
         if operation.generation != generation {
             return Err(format!(
                 "browser_runtime_operation_generation_mismatch:{operation_id}:{generation}:{}",
@@ -1272,15 +1309,25 @@ impl BrowserRuntimeSqliteStore {
             ));
         }
         if operation.state == BrowserRuntimeOperationState::Committed {
-            if operation.result.as_ref() == Some(&result) {
+            if operation.result.as_ref() == Some(&publication.result) {
                 return Ok(operation);
             }
             return Err(format!(
                 "browser_runtime_operation_replay_mismatch:{operation_id}"
             ));
         }
+        if publication.expected_observation.is_some()
+            && operation.state != BrowserRuntimeOperationState::Observed
+        {
+            return Err(format!(
+                "browser_runtime_operation_observation_missing:{operation_id}"
+            ));
+        }
         if operation.state == BrowserRuntimeOperationState::Observed
-            && operation.result.as_ref() != Some(&result)
+            && operation.result.as_ref()
+                != publication
+                    .expected_observation
+                    .or(Some(&publication.result))
         {
             return Err(format!(
                 "browser_runtime_operation_replay_mismatch:{operation_id}"
@@ -1292,13 +1339,13 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
             ));
         }
-        if session_state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+        if publication.session_state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
             return Err(format!(
                 "browser_session_state_schema_unsupported:{}",
-                session_state.schema_version
+                publication.session_state.schema_version
             ));
         }
-        if handoff.id.is_empty() {
+        if publication.handoff.id.is_empty() {
             return Err("browser_runtime_handoff_identity_invalid".to_string());
         }
         let current_session_state: BrowserSessionState = load_optional_document(
@@ -1306,7 +1353,7 @@ impl BrowserRuntimeSqliteStore {
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
-        if current_session_state != *expected_base_state {
+        if current_session_state != *publication.expected_base_state {
             return Err("browser_runtime_operation_base_state_conflict".to_string());
         }
         let mut registry: BrowserManagerHandoffRegistry = load_optional_document(
@@ -1316,14 +1363,14 @@ impl BrowserRuntimeSqliteStore {
         )?;
         registry
             .handoffs
-            .insert(handoff.id.clone(), handoff.clone());
-        let result_json = serde_json::to_string(&result)
+            .insert(publication.handoff.id.clone(), publication.handoff.clone());
+        let result_json = serde_json::to_string(&publication.result)
             .map_err(|error| format!("browser_runtime_operation_serialize_failed:{error}"))?;
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
-            session_state,
+            publication.session_state,
         )?;
         save_document(
             &transaction,
@@ -1345,8 +1392,38 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
         operation.state = BrowserRuntimeOperationState::Committed;
-        operation.result = Some(result);
+        operation.result = Some(publication.result);
         Ok(operation)
+    }
+
+    /// Atomically publishes navigation state, its refreshed handoff, and the journal result.
+    /// Navigation has the same compare-and-swap publication contract as browser open.
+    pub(crate) fn commit_browser_navigation(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        expected_base_state: &BrowserSessionState,
+        session_state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+        result: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let expected_observation = operation.result.as_ref().ok_or_else(|| {
+            format!(
+                "browser_runtime_operation_observation_missing:{}",
+                operation.operation_id
+            )
+        })?;
+        self.commit_browser_publication(
+            &operation.operation_id,
+            operation.generation,
+            BrowserPublication {
+                expected_owner_key: Some("browser-runtime-navigation"),
+                expected_observation: Some(expected_observation),
+                expected_base_state,
+                session_state,
+                handoff,
+                result,
+            },
+        )
     }
 
     pub(crate) fn load_operation(

@@ -806,12 +806,17 @@ promotes queued work every 30 seconds by rank, with original FIFO order for
 ties. Queue serialization prevents duplicate effects, and completed duplicates
 replay the prior response without asserting current visibility or fresh readiness
 evidence; resolve the durable handoff again for current readiness.
-Queued work is retryable after restart. An interrupted admitted
-`browser_session_open` may requeue at Recovery priority only with the exact
-original payload and a matching browser-runtime-open SQLite journal; that
-journal controls recovery and prevents a blind relaunch. An interruption with
-no journal or a payload mismatch, and any interrupted navigation or handoff,
-retains `recovery_required`. Cancelling one duplicate
+Queued work is retryable after restart. Interrupted admitted opens,
+`browser_session_navigate`, and manager handoff resolution can requeue only
+with the exact original payload and their matching SQLite operation journal.
+The journal controls recovery. An issued navigation inspects the exact live
+target URL instead of repeating navigation or header effects. A matching URL
+establishes current location, not proof that a particular request or its headers
+reached the server. An unavailable target or different URL retains the recovery
+obligation. Navigation history, its handoff, and the result commit atomically.
+Handoff recovery rechecks current keeper readiness and exact browser/tab identity
+before idempotent focus; it preserves the opaque URL. Missing or mismatched
+journals retain `recovery_required`. Cancelling one duplicate
 waiter leaves other waiters active. Abandoned queued entries expire, while an
 admitted but unstarted permit releases when dropped. Retained results are
 bounded to 128. When present, the queue reports `hostGeneration`,

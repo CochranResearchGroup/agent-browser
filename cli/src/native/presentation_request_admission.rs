@@ -119,18 +119,27 @@ impl PresentationAdmissionRequest {
         let config = store.load_runtime_config()?;
         let operation = store.find_operation(id)?;
         // The journal remains the effect authority. Queue recovery only permits
-        // the exact original open to enter that journal's existing state machine.
-        let journal_recoverable = !existing_handoff
-            && command.get("action").and_then(Value::as_str) == Some("browser_session_open")
-            && operation.as_ref().is_some_and(|operation| {
-                operation.owner_key == "browser-runtime-open"
+        // an exact command to re-enter its journal owner's existing state machine.
+        let journal_owner = match (
+            existing_handoff,
+            command.get("action").and_then(Value::as_str),
+        ) {
+            (false, Some("browser_session_open")) => Some("browser-runtime-open"),
+            (false, Some("browser_session_navigate")) => Some("browser-runtime-navigation"),
+            (true, Some("service_remote_view_handoff_resolve")) => Some("browser-runtime-handoff"),
+            _ => None,
+        };
+        let journal_recoverable = journal_owner.is_some_and(|owner_key| {
+            operation.as_ref().is_some_and(|operation| {
+                operation.owner_key == owner_key
                     && operation.request.get("command") == Some(command)
+            })
+        });
+        let journal_requires_recovery = journal_recoverable
+            && operation.as_ref().is_some_and(|operation| {
+                operation.state != BrowserRuntimeOperationState::Committed
             });
-        let priority = if journal_recoverable
-            && operation
-                .as_ref()
-                .is_some_and(|operation| operation.state != BrowserRuntimeOperationState::Committed)
-        {
+        let priority = if journal_requires_recovery {
             PresentationRequestPriority::Recovery
         } else if existing_handoff
             || super::presentation_runtime_capacity::command_reuses_browser(
@@ -154,13 +163,18 @@ impl PresentationAdmissionRequest {
                         }
                     )
                 {
-                    return queue.resume_reconciled(
+                    let mut resumed = queue.resume_reconciled(
                         &expected,
                         generation,
                         now,
                         now.saturating_add(config.request_deadline_ms),
                         config.maximum_queue_depth as usize,
-                    );
+                    )?;
+                    if !journal_requires_recovery {
+                        resumed.priority = priority;
+                        queue.entries.insert(key.clone(), resumed.clone());
+                    }
+                    return Ok(resumed);
                 }
             }
             queue.enqueue(
@@ -385,6 +399,54 @@ mod tests {
         }
     }
 
+    fn interrupt_with_journal(
+        fixture: &Fixture,
+        command: &Value,
+        existing_handoff: bool,
+        owner_key: Option<&str>,
+        journal_command: Value,
+        committed: bool,
+    ) -> PathBuf {
+        let path = fixture.0.join("runtime.sqlite3");
+        let request = PresentationAdmissionRequest::enqueue_at(
+            path.clone(),
+            command,
+            1,
+            existing_handoff,
+            now_ms(),
+        )
+        .unwrap();
+        let Some(PresentationAdmission::Execute(mut permit)) = request.poll(Some(true)).unwrap()
+        else {
+            panic!("expected initial admission")
+        };
+        permit.require_current().unwrap();
+        drop(permit);
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        if let Some(owner_key) = owner_key {
+            let operation = store
+                .reserve_operation(
+                    command["id"].as_str().unwrap(),
+                    owner_key,
+                    serde_json::json!({"command": journal_command}),
+                )
+                .unwrap();
+            if committed {
+                store
+                    .commit_operation(
+                        &operation.operation_id,
+                        operation.generation,
+                        serde_json::json!({"success":true}),
+                    )
+                    .unwrap();
+            }
+        }
+        store
+            .mutate_presentation_queue(|queue| queue.advance_generation(2))
+            .unwrap();
+        path
+    }
+
     #[test]
     fn sqlite_admission_coalesces_and_releases_only_unstarted_attempts() {
         let fixture = Fixture::new();
@@ -482,6 +544,134 @@ mod tests {
                 path, &command, 2, false, now_ms(),
             ), Err(error) if error == "presentation_queue_recovery_required:browser:interrupted"));
             assert_eq!(store.load_presentation_queue().unwrap(), before, "{case}");
+        }
+    }
+
+    #[test]
+    fn interrupted_navigation_and_committed_handoff_resume_from_exact_journals() {
+        let cases = [
+            (
+                serde_json::json!({
+                    "id":"navigation-restart",
+                    "action":"browser_session_navigate",
+                    "browserId":"browser-1",
+                    "url":"https://example.test/next"
+                }),
+                false,
+                "browser-runtime-navigation",
+                false,
+                PresentationRequestPriority::Recovery,
+                "browser:navigation-restart",
+            ),
+            (
+                serde_json::json!({
+                    "id":"handoff-restart",
+                    "action":"service_remote_view_handoff_resolve",
+                    "handoffId":"handoff-1"
+                }),
+                true,
+                "browser-runtime-handoff",
+                true,
+                PresentationRequestPriority::ExistingHandoff,
+                "handoff:handoff-restart",
+            ),
+        ];
+        for (command, existing_handoff, owner, committed, priority, key) in cases {
+            let fixture = Fixture::new();
+            let path = interrupt_with_journal(
+                &fixture,
+                &command,
+                existing_handoff,
+                Some(owner),
+                command.clone(),
+                committed,
+            );
+            let resumed = PresentationAdmissionRequest::enqueue_at(
+                path.clone(),
+                &command,
+                2,
+                existing_handoff,
+                now_ms(),
+            )
+            .unwrap();
+            let queue = BrowserRuntimeSqliteStore::open(&path)
+                .unwrap()
+                .load_presentation_queue()
+                .unwrap();
+            assert_eq!(queue.entries[key].priority, priority);
+            assert!(matches!(
+                resumed.poll(Some(true)).unwrap(),
+                Some(PresentationAdmission::Execute(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn new_recovery_commands_require_exact_owner_and_payload() {
+        let commands = [
+            (
+                serde_json::json!({
+                    "id":"navigation-negative",
+                    "action":"browser_session_navigate",
+                    "browserId":"browser-1",
+                    "url":"https://example.test/next"
+                }),
+                false,
+                "browser-runtime-navigation",
+                "browser:navigation-negative",
+            ),
+            (
+                serde_json::json!({
+                    "id":"handoff-negative",
+                    "action":"service_remote_view_handoff_resolve",
+                    "handoffId":"handoff-1"
+                }),
+                true,
+                "browser-runtime-handoff",
+                "handoff:handoff-negative",
+            ),
+        ];
+        for (command, existing_handoff, owner, key) in commands {
+            for mismatch in ["missing", "owner", "payload"] {
+                let fixture = Fixture::new();
+                let mut journal_command = command.clone();
+                if mismatch == "payload" {
+                    journal_command["id"] = "different".into();
+                }
+                let path = interrupt_with_journal(
+                    &fixture,
+                    &command,
+                    existing_handoff,
+                    match mismatch {
+                        "missing" => None,
+                        "owner" => Some("unknown-owner"),
+                        _ => Some(owner),
+                    },
+                    journal_command,
+                    false,
+                );
+                let store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+                let before = store.load_presentation_queue().unwrap();
+                drop(store);
+                assert!(matches!(
+                    PresentationAdmissionRequest::enqueue_at(
+                        path.clone(),
+                        &command,
+                        2,
+                        existing_handoff,
+                        now_ms(),
+                    ),
+                    Err(error) if error == format!("presentation_queue_recovery_required:{key}")
+                ));
+                assert_eq!(
+                    BrowserRuntimeSqliteStore::open(&path)
+                        .unwrap()
+                        .load_presentation_queue()
+                        .unwrap(),
+                    before,
+                    "{key}:{mismatch}"
+                );
+            }
         }
     }
 

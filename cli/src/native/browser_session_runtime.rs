@@ -18,6 +18,9 @@ use crate::process_identity::{VerifiedProcessSignal, VerifiedProcessTermination}
 
 use super::action_runtime::runtime::DaemonState;
 use super::browser::{BrowserManager, WaitUntil};
+use super::browser_session_host::navigation_recovery::{
+    NavigationTargetObservation, NavigationTargetObservationEffects,
+};
 use super::cdp::chrome::LaunchOptions;
 
 const RECORDED_BROWSER_REATTACH_TIMEOUT: Duration = Duration::from_secs(5);
@@ -92,6 +95,14 @@ pub(crate) trait BrowserRuntimeDriver {
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String>;
 
+    fn observe_navigation_target(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+        _tab: &ManagedBrowserTab,
+    ) -> Result<NavigationTargetObservation, String> {
+        Err("browser_session_navigation_observation_unsupported".to_string())
+    }
+
     fn execute_command(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -151,6 +162,18 @@ pub(crate) trait ManagedBrowserCommandEffects {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String>;
+}
+
+impl<D: BrowserRuntimeDriver> NavigationTargetObservationEffects
+    for BrowserSessionEffectAdapter<D>
+{
+    fn observe_navigation_target(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+    ) -> Result<NavigationTargetObservation, String> {
+        self.runtime.observe_navigation_target(browser, tab)
+    }
 }
 
 impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEffectAdapter<D> {
@@ -344,6 +367,11 @@ enum BrowserRuntimeCommand {
         command: Value,
         reply: mpsc::Sender<Result<Value, String>>,
     },
+    ObserveNavigationTarget {
+        browser: ManagedBrowserInstance,
+        tab: ManagedBrowserTab,
+        reply: mpsc::Sender<Result<NavigationTargetObservation, String>>,
+    },
     Shutdown,
 }
 
@@ -531,6 +559,22 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             BrowserRuntimeCommand::Focus {
                 browser: browser.clone(),
                 tab: tab.cloned(),
+                reply,
+            },
+        )
+    }
+
+    fn observe_navigation_target(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+    ) -> Result<NavigationTargetObservation, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::ObserveNavigationTarget {
+                browser: browser.clone(),
+                tab: tab.clone(),
                 reply,
             },
         )
@@ -806,6 +850,46 @@ fn run_browser_worker(
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
                 };
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::ObserveNavigationTarget {
+                browser,
+                tab,
+                reply,
+            } => {
+                let result = runtime.block_on(async {
+                    if !recorded_browser_is_live(&mut browsers, &browser).await? {
+                        return Err("browser_session_recorded_process_missing".to_string());
+                    }
+                    let manager = browsers
+                        .get(&browser.id)
+                        .and_then(|state| state.lifecycle.browser.as_ref())
+                        .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                    // Read the exact live target without switching tabs, executing
+                    // renderer JavaScript, or repeating a navigation request.
+                    let result = manager
+                        .client
+                        .send_command(
+                            "Target.getTargetInfo",
+                            Some(serde_json::json!({ "targetId": tab.target_id })),
+                            None,
+                        )
+                        .await?;
+                    let info = &result["targetInfo"];
+                    let target_id = info["targetId"]
+                        .as_str()
+                        .ok_or_else(|| "browser_session_navigation_target_missing".to_string())?;
+                    let url = info["url"]
+                        .as_str()
+                        .ok_or_else(|| "browser_session_navigation_url_missing".to_string())?;
+                    if target_id != tab.target_id || tab.browser_id != browser.id {
+                        return Err("browser_session_navigation_target_mismatch".to_string());
+                    }
+                    Ok(NavigationTargetObservation {
+                        target_id: target_id.to_string(),
+                        url: url.to_string(),
+                    })
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Shutdown => break,
