@@ -12,8 +12,9 @@ use crate::native::presentation_route_keeper::{
     SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
-    RouteKeeperFence, RouteKeeperPhase, RouteKeeperProtocolReadyReceipt,
-    RouteKeeperReconcileAction, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
+    RouteKeeperAdoptionReceipt, RouteKeeperFence, RouteKeeperPhase,
+    RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStopReceipt,
+    RouteKeeperXrdpOwnershipWitness,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -179,7 +180,7 @@ impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
         guard: PrimaryGuard,
         on_closed: PrimaryTerminalSink,
     ) -> Result<PrimaryTask, String> {
-        let (slot_id, keeper_id, fence) = start_identity(action)?;
+        let (slot_id, keeper_id, fence, expected_phase) = primary_start_identity(action)?;
         let authority =
             BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
         authority.projection()?;
@@ -191,9 +192,7 @@ impl RouteKeeperPrimaryFactory for ConfiguredRouteKeeperPrimaryFactory {
             .records
             .get(slot_id)
             .ok_or_else(|| "route_keeper_primary_fence_stale".to_string())?;
-        if record.keeper_id != keeper_id
-            || record.fence != *fence
-            || record.phase != RouteKeeperPhase::Starting
+        if record.keeper_id != keeper_id || record.fence != *fence || record.phase != expected_phase
         {
             return Err("route_keeper_primary_fence_stale".to_string());
         }
@@ -465,6 +464,12 @@ impl<T> ConfiguredXrdpRouteKeeperObserver<T> {
                 keeper_id,
                 fence,
             }
+            | RouteKeeperReconcileAction::Adopt {
+                slot_id,
+                keeper_id,
+                fence,
+                ..
+            }
             | RouteKeeperReconcileAction::Stop {
                 slot_id,
                 keeper_id,
@@ -506,7 +511,12 @@ where
         action: &RouteKeeperReconcileAction,
         guacamole_connection_uuid: &str,
     ) -> Result<Option<RouteKeeperProtocolReadyReceipt>, String> {
-        let (binding, _) = self.binding_for_action(action, RouteKeeperPhase::Observing)?;
+        let expected_phase = match action {
+            RouteKeeperReconcileAction::Observe { .. } => RouteKeeperPhase::Observing,
+            RouteKeeperReconcileAction::Adopt { .. } => RouteKeeperPhase::Adopting,
+            _ => return Err("route_keeper_xrdp_action_invalid".to_string()),
+        };
+        let (binding, _) = self.binding_for_action(action, expected_phase)?;
         let (slot_id, keeper_id, fence) = observe_identity(action)?;
         match self.helper.observe(&binding.route_user).await? {
             XrdpHelperObservation::Pending => Ok(None),
@@ -637,6 +647,39 @@ impl<F, O> GuacamoleRouteKeeperConnector<F, O> {
         }
         events
     }
+
+    fn adoption_predecessor(
+        &self,
+        action: &RouteKeeperReconcileAction,
+    ) -> Result<RouteKeeperProtocolReadyReceipt, String> {
+        let (slot_id, keeper_id, fence, previous_host_generation) = adoption_identity(action)?;
+        let authority =
+            BrowserRuntimeSqliteStore::open(&self.database_path)?.load_route_keeper_authority()?;
+        authority.projection()?;
+        if authority.connection_catalog.digest()? != fence.connection_catalog_digest {
+            return Err("route_keeper_primary_catalog_fence_stale".to_string());
+        }
+        let record = authority
+            .records
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_primary_fence_stale".to_string())?;
+        if record.keeper_id != keeper_id
+            || record.fence != *fence
+            || record.phase != RouteKeeperPhase::Adopting
+        {
+            return Err("route_keeper_primary_fence_stale".to_string());
+        }
+        let predecessor = record
+            .protocol_ready
+            .clone()
+            .ok_or_else(|| "route_keeper_primary_adoption_source_missing".to_string())?;
+        if predecessor.fence.host_generation != previous_host_generation
+            || predecessor.guacamole_connection_uuid.is_empty()
+        {
+            return Err("route_keeper_primary_adoption_source_stale".to_string());
+        }
+        Ok(predecessor)
+    }
 }
 
 #[async_trait::async_trait]
@@ -749,9 +792,117 @@ where
 
     async fn adopt(
         &mut self,
-        _action: &RouteKeeperReconcileAction,
+        action: &RouteKeeperReconcileAction,
     ) -> Result<RouteKeeperAdoptionObservation, String> {
-        Err("route_keeper_primary_adoption_not_supported".to_string())
+        self.shutting_down = false;
+        let (slot_id, keeper_id, fence, previous_host_generation) = adoption_identity(action)?;
+        let predecessor = self.adoption_predecessor(action)?;
+        if predecessor.fence.host_generation != previous_host_generation {
+            return Err("route_keeper_primary_adoption_source_stale".to_string());
+        }
+
+        if let Some(existing) = self.tasks.get(slot_id) {
+            if existing.keeper_id != keeper_id || existing.fence != *fence {
+                return Err("route_keeper_primary_slot_owned_by_other_fence".to_string());
+            }
+        } else {
+            self.completed_stops.remove(slot_id);
+            let guard = sqlite_route_keeper_guard(
+                self.database_path.clone(),
+                slot_id.to_string(),
+                keeper_id.to_string(),
+                fence.clone(),
+            );
+            let terminal_tx = self.terminal_tx.clone();
+            let event_slot_id = slot_id.to_string();
+            let event_keeper_id = keeper_id.to_string();
+            let event_fence = fence.clone();
+            let task = self.factory.start(
+                action,
+                guard,
+                Box::new(move |occurrence_id, code, elapsed_ms| {
+                    let _ = terminal_tx.send(RouteKeeperTerminalEvent {
+                        slot_id: event_slot_id,
+                        keeper_id: event_keeper_id,
+                        fence: event_fence,
+                        occurrence_id: occurrence_id.to_string(),
+                        guacamole_connection_uuid: None,
+                        code,
+                        elapsed_ms,
+                    });
+                }),
+            )?;
+            let occurrence_id = task.occurrence_id.clone();
+            self.tasks.insert(
+                slot_id.to_string(),
+                OwnedPrimary {
+                    keeper_id: keeper_id.to_string(),
+                    fence: fence.clone(),
+                    occurrence_id,
+                    task,
+                    task_closed: false,
+                    ready: None,
+                },
+            );
+        }
+
+        let owned = self
+            .tasks
+            .get_mut(slot_id)
+            .ok_or_else(|| "route_keeper_primary_task_missing".to_string())?;
+        require_owned_primary(owned, keeper_id, fence)?;
+        let ready = match owned.task.status() {
+            PrimaryStatus::Starting | PrimaryStatus::Closed(_) => {
+                return Ok(RouteKeeperAdoptionObservation::Pending);
+            }
+            PrimaryStatus::Ready(guacamole_connection_uuid) => {
+                if let Some(ready) = &owned.ready {
+                    if ready.guacamole_connection_uuid != guacamole_connection_uuid {
+                        return Err("route_keeper_primary_connection_identity_changed".to_string());
+                    }
+                    ready.clone()
+                } else {
+                    let Some(ready) = self
+                        .observer
+                        .observe_xrdp(action, &guacamole_connection_uuid)
+                        .await?
+                    else {
+                        return Ok(RouteKeeperAdoptionObservation::Pending);
+                    };
+                    match owned.task.status() {
+                        PrimaryStatus::Ready(current) if current == guacamole_connection_uuid => {}
+                        PrimaryStatus::Closed(_) => {
+                            return Ok(RouteKeeperAdoptionObservation::Pending)
+                        }
+                        _ => {
+                            return Err(
+                                "route_keeper_primary_connection_identity_changed".to_string()
+                            );
+                        }
+                    }
+                    if ready.slot_id != slot_id
+                        || ready.keeper_id != keeper_id
+                        || ready.fence != *fence
+                        || ready.guacamole_connection_uuid != guacamole_connection_uuid
+                    {
+                        return Err("route_keeper_primary_observation_mismatch".to_string());
+                    }
+                    owned.ready = Some(ready.clone());
+                    ready
+                }
+            }
+        };
+        if ready.guacamole_connection_uuid == predecessor.guacamole_connection_uuid {
+            return Err("route_keeper_primary_adoption_transport_not_fresh".to_string());
+        }
+        Ok(RouteKeeperAdoptionObservation::Adopted(Box::new(
+            RouteKeeperAdoptionReceipt {
+                previous_host_generation,
+                previous_guacamole_connection_uuid: predecessor.guacamole_connection_uuid,
+                ready,
+                adopted_at: chrono::Utc::now().to_rfc3339(),
+            },
+        )))
     }
 
     async fn stop(
@@ -879,8 +1030,48 @@ fn observe_identity(
             slot_id,
             keeper_id,
             fence,
+        }
+        | RouteKeeperReconcileAction::Adopt {
+            slot_id,
+            keeper_id,
+            fence,
+            ..
         } => Ok((slot_id, keeper_id, fence)),
         _ => Err("route_keeper_primary_observe_action_required".to_string()),
+    }
+}
+
+fn primary_start_identity(
+    action: &RouteKeeperReconcileAction,
+) -> Result<(&str, &str, &RouteKeeperFence, RouteKeeperPhase), String> {
+    match action {
+        RouteKeeperReconcileAction::Start {
+            slot_id,
+            keeper_id,
+            fence,
+            ..
+        } => Ok((slot_id, keeper_id, fence, RouteKeeperPhase::Starting)),
+        RouteKeeperReconcileAction::Adopt {
+            slot_id,
+            keeper_id,
+            fence,
+            ..
+        } => Ok((slot_id, keeper_id, fence, RouteKeeperPhase::Adopting)),
+        _ => Err("route_keeper_primary_start_action_required".to_string()),
+    }
+}
+
+fn adoption_identity(
+    action: &RouteKeeperReconcileAction,
+) -> Result<(&str, &str, &RouteKeeperFence, u64), String> {
+    match action {
+        RouteKeeperReconcileAction::Adopt {
+            slot_id,
+            keeper_id,
+            fence,
+            previous_host_generation,
+        } => Ok((slot_id, keeper_id, fence, *previous_host_generation)),
+        _ => Err("route_keeper_primary_adoption_action_required".to_string()),
     }
 }
 
@@ -933,7 +1124,10 @@ pub(super) fn sqlite_route_keeper_guard(
             || record.fence != fence
             || !matches!(
                 record.phase,
-                RouteKeeperPhase::Starting | RouteKeeperPhase::Observing | RouteKeeperPhase::Ready
+                RouteKeeperPhase::Starting
+                    | RouteKeeperPhase::Observing
+                    | RouteKeeperPhase::Adopting
+                    | RouteKeeperPhase::Ready
             )
         {
             return Err("guacamole_route_keeper_fence_stale");
@@ -983,6 +1177,7 @@ mod tests {
         RouteKeeperHostProcessClaim, RouteKeeperXrdpOwnershipWitness,
     };
     use futures_util::{SinkExt, StreamExt};
+    use std::collections::VecDeque;
     use std::fs;
     use std::path::Path;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1068,6 +1263,31 @@ mod tests {
             let socket = self
                 .socket
                 .take()
+                .ok_or_else(|| "fixture_primary_socket_missing".to_string())?;
+            self.starts.fetch_add(1, Ordering::SeqCst);
+            Ok(PrimaryTask::connect_observed(
+                async move { Ok::<_, &'static str>(socket) },
+                guard,
+                on_closed,
+            ))
+        }
+    }
+
+    struct SequencedDuplexPrimaryFactory {
+        sockets: VecDeque<WebSocketStream<tokio::io::DuplexStream>>,
+        starts: Arc<AtomicUsize>,
+    }
+
+    impl RouteKeeperPrimaryFactory for SequencedDuplexPrimaryFactory {
+        fn start(
+            &mut self,
+            _action: &RouteKeeperReconcileAction,
+            guard: PrimaryGuard,
+            on_closed: PrimaryTerminalSink,
+        ) -> Result<PrimaryTask, String> {
+            let socket = self
+                .sockets
+                .pop_front()
                 .ok_or_else(|| "fixture_primary_socket_missing".to_string())?;
             self.starts.fetch_add(1, Ordering::SeqCst);
             Ok(PrimaryTask::connect_observed(
@@ -1297,6 +1517,38 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn configured_xrdp_observer_observes_successor_witness_while_adopting() {
+        let (_directory, database_path) = database();
+        let (action, predecessor) = adoption_action(&database_path);
+        let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let helper = FakeXrdpHelperTransport {
+            calls: calls.clone(),
+            observation: XrdpHelperObservation::Ready(Box::new(
+                predecessor.xrdp_ownership.clone().unwrap(),
+            )),
+            stop: XrdpHelperStop::Stopped,
+        };
+        let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path, helper);
+
+        let ready = observer
+            .observe_xrdp(&action, "00000000-0000-4000-8000-000000000220")
+            .await
+            .unwrap()
+            .unwrap();
+        let (_, _, fence, _) = adoption_identity(&action).unwrap();
+        assert_eq!(ready.fence, *fence);
+        assert_ne!(
+            ready.guacamole_connection_uuid,
+            predecessor.guacamole_connection_uuid
+        );
+        assert_eq!(ready.xrdp_ownership, predecessor.xrdp_ownership);
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            ["observe:agent-browser-rdp-1"]
+        );
+    }
+
+    #[tokio::test]
     async fn configured_xrdp_observer_preserves_pending_and_unproven_stop() {
         let (_directory, database_path) = database();
         let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
@@ -1519,6 +1771,162 @@ mod tests {
         })
         .await
         .unwrap();
+    }
+
+    fn protocol_ready(
+        slot_id: &str,
+        keeper_id: &str,
+        fence: RouteKeeperFence,
+        guacamole_connection_uuid: &str,
+    ) -> RouteKeeperProtocolReadyReceipt {
+        let xrdp_session_id = format!("xrdp-{slot_id}");
+        RouteKeeperProtocolReadyReceipt {
+            slot_id: slot_id.to_string(),
+            keeper_id: keeper_id.to_string(),
+            fence,
+            guacamole_connection_uuid: guacamole_connection_uuid.to_string(),
+            xrdp_session_id: xrdp_session_id.clone(),
+            display_name: ":10".to_string(),
+            xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+                schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                boot_id: "boot-fixture".to_string(),
+                route_user: "agent-browser-rdp-1".to_string(),
+                route_uid: 2001,
+                session_id: xrdp_session_id.clone(),
+                session_service: "xrdp-sesman".to_string(),
+                session_scope: format!("session-{xrdp_session_id}.scope"),
+                scope_invocation_id: "invocation-fixture".to_string(),
+                cgroup_path: format!("/user.slice/user-2001.slice/session-{xrdp_session_id}.scope"),
+                cgroup_device: 28,
+                cgroup_inode: 1001,
+                leader_pid: 4101,
+                leader_start_ticks: 5101,
+                x_server_pid: 4102,
+                x_server_start_ticks: 5102,
+                display_name: ":10".to_string(),
+                x11_socket_inode: 6101,
+            }),
+            observed_at: "2026-09-21T12:00:00Z".to_string(),
+        }
+    }
+
+    fn adoption_action(
+        database_path: &Path,
+    ) -> (RouteKeeperReconcileAction, RouteKeeperProtocolReadyReceipt) {
+        let mut store = BrowserRuntimeSqliteStore::open(database_path).unwrap();
+        let original = store.load_route_keeper_authority().unwrap();
+        let mut starting = original.clone();
+        let start = starting.next_reconcile_action().unwrap();
+        let (slot_id, keeper_id, start_fence) = start_identity(&start).unwrap();
+        let slot_id = slot_id.to_string();
+        let keeper_id = keeper_id.to_string();
+        let start_fence = start_fence.clone();
+        starting.record_observing(&slot_id, &start_fence).unwrap();
+        let predecessor = protocol_ready(
+            &slot_id,
+            &keeper_id,
+            start_fence.clone(),
+            "00000000-0000-4000-8000-000000000218",
+        );
+        starting.record_protocol_ready(predecessor.clone()).unwrap();
+        starting
+            .record_disconnect(
+                &slot_id,
+                &start_fence,
+                &predecessor.guacamole_connection_uuid,
+            )
+            .unwrap();
+        let mut successor_claim = host_process_claim();
+        successor_claim.host_generation = 2;
+        successor_claim.process_identity.pid = 4_002;
+        starting
+            .register_host_process_claim(successor_claim)
+            .unwrap();
+        let action = starting.begin_adoption(&slot_id, 2).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&original, &starting)
+            .unwrap();
+        (action, predecessor)
+    }
+
+    #[tokio::test]
+    async fn adoption_reuses_one_task_and_returns_fresh_transport_occurrence() {
+        let (_directory, path) = database();
+        let (action, predecessor) = adoption_action(&path);
+        let (client, mut server) = duplex_pair().await;
+        let starts = Arc::new(AtomicUsize::new(0));
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path.clone(),
+            SequencedDuplexPrimaryFactory {
+                sockets: VecDeque::from([client]),
+                starts: starts.clone(),
+            },
+            ExactProtocolObserver::default(),
+        );
+
+        assert_eq!(
+            connector.adopt(&action).await.unwrap(),
+            RouteKeeperAdoptionObservation::Pending
+        );
+        connector.adopt(&action).await.unwrap();
+        assert_eq!(starts.load(Ordering::SeqCst), 1);
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000219;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        wait_for_primary_ready(&connector, "route-slot-01").await;
+        let receipt = match connector.adopt(&action).await.unwrap() {
+            RouteKeeperAdoptionObservation::Adopted(receipt) => *receipt,
+            RouteKeeperAdoptionObservation::Pending => panic!("expected adopted receipt"),
+        };
+        assert_eq!(starts.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            receipt.previous_guacamole_connection_uuid,
+            predecessor.guacamole_connection_uuid
+        );
+        assert_ne!(
+            receipt.ready.guacamole_connection_uuid,
+            receipt.previous_guacamole_connection_uuid
+        );
+        assert_eq!(
+            receipt.ready.xrdp_ownership, predecessor.xrdp_ownership,
+            "the service model receives the exact successor witness for continuity validation"
+        );
+
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        let adopting = store.load_route_keeper_authority().unwrap();
+        let mut adopted = adopting.clone();
+        adopted.adopt(receipt).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&adopting, &adopted)
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn stale_adoption_action_cannot_start_provider_transport() {
+        let (_directory, path) = database();
+        let (mut action, _) = adoption_action(&path);
+        if let RouteKeeperReconcileAction::Adopt { fence, .. } = &mut action {
+            fence.connection_catalog_digest = "0".repeat(64);
+        }
+        let starts = Arc::new(AtomicUsize::new(0));
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path,
+            DuplexPrimaryFactory {
+                socket: None,
+                starts: starts.clone(),
+            },
+            ExactProtocolObserver::default(),
+        );
+
+        assert_eq!(
+            connector.adopt(&action).await,
+            Err("route_keeper_primary_catalog_fence_stale".to_string())
+        );
+        assert_eq!(starts.load(Ordering::SeqCst), 0);
+        assert!(connector.tasks.is_empty());
     }
 
     #[tokio::test]
