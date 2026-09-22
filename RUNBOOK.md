@@ -11,25 +11,23 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 60 source `214dfc77` joins runtime-config growth intent to durable
-one-route provisioning, exact replay and additive catalog publication. Desired
-settings, physical capacity and live readiness remain separate. Normal helper
-installation refreshes missing capabilities; an unchanged installer seed replay
-preserves automatically added routes.
+P211 version 61 source `89432d9b` joins interrupted navigation and manager
+handoff journals to queue restart admission. Navigation never blindly repeats
+issued effects; exact live target observation precedes recovery, and history,
+handoff and result publish atomically. Handoff replay requires current readiness.
 
-Final focused growth/store, helper compatibility, host and config gates pass.
-Broader evidence includes 784 native-other (57 ignored), 253 stream and final
-1102 core (one ignored), plus final quality/client/docs gates. The
-[plan qualification](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#version-60-qualification)
-records the initial 16 stale-fixture failures, final corrections and selective
-retention. Both workers are terminal. No installed/provider mutation occurred;
-this is not comprehensive or installed acceptance.
+Primary gates pass: 22 host, 31 store, six runtime (two ignored), six admission,
+786 native-other (57 ignored), 253 stream, final format/strict Clippy and docs.
+The [plan qualification](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#version-61-qualification)
+records the initial Clippy failure, corrected publication seam and readiness gap,
+fixture scope and retained evidence. Both workers are terminal. No installed or
+provider mutation occurred; this is not comprehensive or installed acceptance.
 
-P211 remains OPEN. About 241 elapsed minutes since 02:46 UTC, older effort
-unknown, inherited ceiling unchanged. Next: interrupted handoff/navigation
-recovery, then remaining persistence/Desktop Services joins and frozen isolated
-acceptance. Active-view control priority, causal discovery and quarantine
-reconciliation also remain open. Production, ingress and release stay excluded.
+P211 remains OPEN. About 265 elapsed minutes since 02:46 UTC, older effort
+unknown, inherited 360-minute ceiling unchanged. Next: causal reserved-browser
+discovery, then remaining persistence/Desktop Services joins and frozen isolated
+acceptance. Active-view control priority and quarantine reconciliation also
+remain open. Production, ingress and release stay excluded.
 
 ## Turn 425 | 2026-09-21
 

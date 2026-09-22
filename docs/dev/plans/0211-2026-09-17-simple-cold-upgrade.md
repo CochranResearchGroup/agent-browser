@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 60
+Plan version: 61
 
 State: OPEN
 
@@ -74,6 +74,101 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Navigation And Handoff Recovery Amendment
+
+Version 61 starts from source `214dfc77` and ledger `ddb847a9`. Verification
+corrects the prior next-step assumption: only browser opens currently have the
+operation journal integration. Navigation and handoff focus need their own
+intent before queue restart can admit them safely. This batch adds that missing
+join rather than treating queue re-admission alone as completed recovery.
+
+Navigation records the exact original command, selected session/browser/tab and
+issued transition. Interrupted issued navigation must inspect the exact retained
+target and desired URL instead of blindly repeating navigation or header effects.
+Initial browser creation reuses the existing deterministic open journal. Handoff
+resolution retains exact logical handoff identity and requalifies the current
+keeper and browser target before repeating idempotent focus. Historical response
+replay remains distinct from fresh operator visibility. Missing or mismatched
+journals preserve the unresolved obligation.
+
+Primary owns host persistence seams, handoff journaling, daemon routing, docs,
+integration and acceptance. Existing terra/high worker `/root/startup_recovery`
+owns the new child navigation module; existing sol/medium worker
+`/root/capacity_selection` owns the admission matcher, atomic SQLite publication
+seam, queue restart fixtures and handoff recovery fixtures. Primary identified
+that the open commit contract requires the observed result to equal the final
+response; navigation instead uses an exact expected-observation guard in the
+shared transaction, preserving both state CAS and generation fencing. Navigation
+history must never persist before this transaction. Effective settings are unknown. Worktrees and runtime custody do not change.
+
+Budget 25 implementation, 12 qualification and five custody minutes within the
+inherited 360-minute ceiling. Preserve the recorded 241 elapsed minutes and
+unknown older effort; this packet begins about 06:49 UTC. Roughly 70 measured
+minutes would remain after this packet. Remaining full-plan persistence,
+Desktop Services, recovery and installed acceptance are not claimed achievable
+from that estimate. No retry, review or milestone allowance resets.
+
+Acceptance is the actual host journal and SQLite queue restart journey under
+injected browser effects: exact same request/target, no duplicate navigation,
+current keeper readiness, stable handoff URL, and mismatch refusal. Run focused
+host/admission and affected Rust gates, strict quality and required docs checks.
+No browser, installed runtime, provider, production, ingress or release effect
+is included. The full install/upgrade/ready-remote-view goal remains OPEN.
+
+### Version 61 Qualification
+
+Source `89432d9b` joins exact navigation and manager handoff journals to durable
+queue restart admission. The navigation fixture crosses queue generation 1 to 2
+with one command execution, one history entry, one stable opaque handoff and a
+completed queue entry. Issued target mismatch retains the obligation. Executed
+recovery requalifies the live target before atomic publication; a successful
+redirect need not match the originally requested URL. Handoff replay rechecks
+current keeper readiness and exact logical identity before idempotent focus.
+A completed queue response remains historical evidence, not fresh visibility.
+
+Primary qualification on frozen source:
+
+| Gate | Result | Evidence scope |
+| --- | --- | --- |
+| Browser Session Host | 22 passed | new navigation/queue crash join, atomic history, executed-target disappearance, handoff freshness and identity refusal, prior host regressions |
+| Browser Runtime SQLite store | 31 passed | shared atomic publication, retained open behavior, generations and base-state CAS |
+| Browser Session Runtime | 6 passed, 2 ignored | provider-free adapter/process contracts; real-browser cases not run |
+| Presentation admission | 6 passed | exact owner/action/payload joins, missing/mismatched journals, interrupted and committed recovery |
+| CLI native-other | 786 passed, 57 ignored | daemon and admission regression compartment |
+| CLI native-stream | 253 passed | stream/HTTP consumer regression compartment |
+| Format and strict workspace Clippy | passed | final code including publication-input refactor |
+| Docs build, links, handoff docs and active planning audit | passed | all five required user guidance surfaces aligned |
+
+Initial strict Clippy failed three argument-count checks. The correction groups
+publication inputs and takes the retained operation directly; it preserves exact
+observed-result, owner, generation and state guards. The failed log remains
+`/tmp/p211-v61-clippy.log`. A 21-test host pass preceded the additional executed
+target readiness fix; the final 22-test pass supersedes it. Final focused/quality
+logs use `/tmp/p211-v61-*-frozen.log`; broader logs are `other.log` and `stream.log`.
+These temporary logs are reproducible through the commands above; the source,
+fixture assertions and counts are retained here rather than copying raw logs.
+Frozen input hashes are `/tmp/p211-v61-frozen-inputs.json` and were rechecked
+without drift before source custody.
+
+Both workers are terminal. Primary accepted their code after diff inspection,
+identified the initial publication-result mismatch and executed-target freshness
+gap, and ran every reported Cargo gate itself. No installed runtime, browser,
+provider, production, ingress or release effect occurred. No shared installed
+skill was overwritten. Validation selection overmatches workstation fixtures
+through the daemon path; no installer/helper/provisioning input changed, so v60
+coverage for those surfaces is retained. Client/schema and model inputs also
+remain unchanged. This is not comprehensive final-head or installed acceptance.
+
+State transition: recovery join active to provider-free qualified.
+Progress classification: `outcome_progress` for interrupted request recovery,
+not full installed operator acceptance. About 265 elapsed minutes since 02:46 UTC
+are recorded, with older effort unknown and the inherited 360-minute ceiling
+unchanged. About 95 measured minutes remain; this does not establish that all
+remaining criteria can fit. Next is causal reserved-browser discovery at the
+existing recovery seam. Active-view control priority, quarantine reconciliation,
+remaining persistence/retention, Desktop Services and the frozen isolated
+cold-install/upgrade/ready-remote-view matrix remain OPEN.
 
 ## September 22 Durable Automatic Provisioning Amendment
 
@@ -895,8 +990,8 @@ orphaned route and display ownership, and profile-identity proof rejected the
 ordinary request. The supported browser-reattach path then terminated the
 runtime host and timed out. This is the open #195 acceptance boundary.
 
-Current `origin/main` defaults workstation installation to the preserve-mode
-hot transaction. Its full-shutdown alternative still requires a dry-run plan,
+At P211 admission, `origin/main@fb616aee` defaulted workstation installation
+to the preserve-mode hot transaction. Its full-shutdown alternative required a dry-run plan,
 a caller-supplied SHA-256 digest, supervisor-takeover census, exact selected
 process identity, and the absence of active drains and transactions. Those
 preconditions make the terminal operator action subordinate to stale
@@ -2719,12 +2814,12 @@ integrating any P207 implementation.
 | Current liveness | active requires a fresh heartbeat, existing recorded PID, and responsive CDP; bounded recovery ends dead sessions without replaying the interrupted command | heartbeat, bounded-recovery model, recorded-PID plus CDP checks, Service hosting, five-second manager-specific reattach timeout, concrete restart reattachment, full daemon-process command routing, and bounded exact-process recovery for a verified external unresponsive-CDP browser are green; unverified processes remain untouched |
 | Legacy containment | ordinary session, browser, profile, tab, and display decisions remain unchanged when legacy lease, principal, owner, generation, and recovery records are contradictory | catalog import ignores unrelated malformed legacy state, the manager has no legacy-authority input, and hosted persistence plus multi-display selection remain independent of contradictory legacy session, owner, and display records |
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
-| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
+| SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation and provisioning coordinates/operation credentials are now SQLite-owned through `214dfc77`; remaining credential domains, bounded history, cleanup integration, integrity, backup, and cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
-| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `b2a3ff39` exposes six atomic CLI/HTTP/MCP settings and live keeper policy synchronization, preserving existing records and fencing stale demand; checkpoint `2f138944` adds provider-free qualified cooldown retirement and its public setting. Checkpoint `d25321dd` qualifies additive publication preserving active evidence; automatic provisioning and installed capacity acceptance remain pending |
+| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `b2a3ff39` exposes six atomic CLI/HTTP/MCP settings and live keeper policy synchronization, preserving existing records and fencing stale demand; checkpoint `2f138944` adds provider-free qualified cooldown retirement and its public setting. Checkpoint `d25321dd` qualifies additive publication preserving active evidence; `214dfc77` qualifies durable automatic one-route provisioning through injected effects. Installed capacity acceptance remains pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | `a9595ee2` qualifies bounded admission and durable demand; `f3d0a758` adds durable queue admission; `8ab466e8` joins exact journal recovery. Installed overflow and complete recovery acceptance remain open |
-| Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; interrupted-effect journal reconciliation and active-view control priority remain open |
+| Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; `8ab466e8` qualifies exact interrupted-open journal reconciliation. `89432d9b` qualifies navigation and handoff journal recovery with exact payload/target evidence. Active-view control priority and installed recovery acceptance remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
 | Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |

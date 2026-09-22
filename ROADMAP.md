@@ -265,13 +265,12 @@ two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
 qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
-Version 60 checkpoint `214dfc77` adds durable automatic one-route provisioning
-from runtime-config growth intent, preserving retained routes and exact restart
-replay. Installer compatibility and original-seed replay are joined. Interrupted
-handoff recovery, remaining persistence/Desktop Services integration and the full
-installed journey remain open. See the
-[current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and remaining
-gates.
+Version 61 checkpoint `89432d9b` adds exact interrupted navigation and handoff
+journal recovery, atomic history publication and fresh target/readiness checks.
+Automatic provisioning remains qualified at `214dfc77`. Causal browser discovery,
+remaining persistence/Desktop Services integration and the full installed journey
+remain open. See the [current runbook](RUNBOOK.md#turn-426--2026-09-21) for
+qualification and remaining gates.
 
 ## P216 | Service Model Extraction Landing
 
