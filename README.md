@@ -806,6 +806,13 @@ promotes queued work every 30 seconds by rank, with original FIFO order for
 ties. Queue serialization prevents duplicate effects, and completed duplicates
 replay the prior response without asserting current visibility or fresh readiness
 evidence; resolve the durable handoff again for current readiness.
+Interrupted reserved launches probe only the selected profile's local DevTools
+endpoint, with a five-second deadline. Chrome's reported browser PID must match
+stable process observations, the exact reservation marker, profile path and
+Chrome executable identity. Endpoint or process drift retains the cleanup
+obligation without another launch or process termination. This recovery does
+not scan unrelated processes or substitute another profile.
+
 Queued work is retryable after restart. Interrupted admitted opens,
 `browser_session_navigate`, and manager handoff resolution can requeue only
 with the exact original payload and their matching SQLite operation journal.

@@ -23,6 +23,9 @@ use super::browser_session_host::navigation_recovery::{
 };
 use super::cdp::chrome::LaunchOptions;
 
+mod reserved_browser_proof;
+mod reserved_browser_recovery;
+
 const RECORDED_BROWSER_REATTACH_TIMEOUT: Duration = Duration::from_secs(5);
 
 fn reserved_browser_launch_args(browser_id: Option<&str>) -> Vec<String> {
@@ -320,6 +323,12 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
 }
 
 enum BrowserRuntimeCommand {
+    RecoverReserved {
+        profile: BrowserProfileCatalogEntry,
+        desktop: BrowserDesktopAssignment,
+        browser_id: String,
+        reply: mpsc::Sender<Result<ReservedBrowserRecovery, String>>,
+    },
     IsLive {
         browser: ManagedBrowserInstance,
         reply: mpsc::Sender<Result<bool, String>>,
@@ -473,6 +482,24 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         )
     }
 
+    fn recover_browser_reserved(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        desktop: &BrowserDesktopAssignment,
+        browser_id: &str,
+    ) -> Result<ReservedBrowserRecovery, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::RecoverReserved {
+                profile: profile.clone(),
+                desktop: desktop.clone(),
+                browser_id: browser_id.to_string(),
+                reply,
+            },
+        )
+    }
+
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -621,6 +648,20 @@ fn run_browser_worker(
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
+            BrowserRuntimeCommand::RecoverReserved {
+                profile,
+                desktop,
+                browser_id,
+                reply,
+            } => {
+                let result = runtime.block_on(reserved_browser_recovery::recover_reserved_browser(
+                    &profile,
+                    &desktop,
+                    &browser_id,
+                    RECORDED_BROWSER_REATTACH_TIMEOUT,
+                ));
+                let _ = reply.send(Ok(result));
+            }
             BrowserRuntimeCommand::IsLive { browser, reply } => {
                 let result = runtime.block_on(recorded_browser_is_live(&mut browsers, &browser));
                 let _ = reply.send(result);
