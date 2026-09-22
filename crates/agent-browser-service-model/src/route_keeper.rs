@@ -9,6 +9,7 @@ use crate::RecordedProcessIdentity;
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V1: &str = "agent-browser.route-keeper-authority.v1";
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V2: &str = "agent-browser.route-keeper-authority.v2";
 pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V3: &str = "agent-browser.route-keeper-authority.v3";
+pub const ROUTE_KEEPER_AUTHORITY_SCHEMA_V4: &str = "agent-browser.route-keeper-authority.v4";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -239,6 +240,14 @@ pub struct RouteKeeperHandoffBinding {
 #[serde(rename_all = "camelCase")]
 pub struct RouteKeeperAdoptionReceipt {
     pub previous_host_generation: u64,
+    /// The predecessor's provider-created transport occurrence.
+    ///
+    /// Guacamole issues a fresh tunnel UUID when a keeper reconnects. The
+    /// route's durable identity is instead fenced by the catalog and exact
+    /// XRDP ownership witness, while this value preserves the predecessor
+    /// occurrence for audit and stale-event fencing.
+    #[serde(default)]
+    pub previous_guacamole_connection_uuid: String,
     pub ready: RouteKeeperProtocolReadyReceipt,
     pub adopted_at: String,
 }
@@ -399,7 +408,7 @@ impl RouteKeeperAuthority {
             })
             .collect();
         Ok(Self {
-            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V3.to_string(),
+            schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V4.to_string(),
             policy,
             connection_catalog,
             host_process_claims: BTreeMap::new(),
@@ -523,6 +532,30 @@ impl RouteKeeperAuthority {
         }
         self.schema_version = ROUTE_KEEPER_AUTHORITY_SCHEMA_V3.to_string();
         self.host_process_claims.clear();
+        self.validate()?;
+        self.upgrade_from_v3()
+    }
+
+    /// Upgrade v3 records whose adoption receipt did not retain a separate
+    /// predecessor transport occurrence. v3 required the ready receipt to
+    /// carry the same Guacamole UUID as its predecessor, so the current ready
+    /// value is the only deterministic migration source.
+    pub fn upgrade_from_v3(mut self) -> Result<Self, String> {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3 {
+            return Err("route_keeper_schema_upgrade_source_invalid".to_string());
+        }
+        for record in self.records.values_mut() {
+            let Some(adoption) = record.adoption.as_mut() else {
+                continue;
+            };
+            let ready = record
+                .protocol_ready
+                .as_ref()
+                .filter(|ready| *ready == &adoption.ready)
+                .ok_or_else(|| "route_keeper_v3_adoption_migration_unproven".to_string())?;
+            adoption.previous_guacamole_connection_uuid = ready.guacamole_connection_uuid.clone();
+        }
+        self.schema_version = ROUTE_KEEPER_AUTHORITY_SCHEMA_V4.to_string();
         self.validate()?;
         Ok(self)
     }
@@ -871,6 +904,12 @@ impl RouteKeeperAuthority {
 
     pub fn adopt(&mut self, receipt: RouteKeeperAdoptionReceipt) -> Result<(), String> {
         validate_ready_receipt(&receipt.ready)?;
+        let expected_catalog_digest = self.connection_catalog.digest()?;
+        let binding = self
+            .connection_catalog
+            .bindings
+            .get(&receipt.ready.slot_id)
+            .ok_or_else(|| "route_keeper_adoption_connection_unconfigured".to_string())?;
         let record = self
             .records
             .get_mut(&receipt.ready.slot_id)
@@ -882,6 +921,7 @@ impl RouteKeeperAuthority {
             || record.fence != receipt.ready.fence
             || receipt.ready.fence.host_generation <= receipt.previous_host_generation
             || receipt.adopted_at.is_empty()
+            || receipt.ready.fence.connection_catalog_digest != expected_catalog_digest
         {
             return Err("route_keeper_adoption_generation_mismatch".to_string());
         }
@@ -890,9 +930,15 @@ impl RouteKeeperAuthority {
             .as_ref()
             .ok_or_else(|| "route_keeper_adoption_source_missing".to_string())?;
         if previous.fence.host_generation != receipt.previous_host_generation
-            || previous.guacamole_connection_uuid != receipt.ready.guacamole_connection_uuid
+            || receipt.previous_guacamole_connection_uuid != previous.guacamole_connection_uuid
+            || receipt.previous_guacamole_connection_uuid.is_empty()
             || previous.xrdp_session_id != receipt.ready.xrdp_session_id
             || previous.display_name != receipt.ready.display_name
+            || previous.xrdp_ownership != receipt.ready.xrdp_ownership
+            || previous
+                .xrdp_ownership
+                .as_ref()
+                .is_none_or(|ownership| ownership.route_user != binding.route_user)
         {
             return Err("route_keeper_adoption_observation_mismatch".to_string());
         }
@@ -1020,7 +1066,9 @@ impl RouteKeeperAuthority {
     }
 
     fn validate(&self) -> Result<(), String> {
-        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3 {
+        if self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3
+            && self.schema_version != ROUTE_KEEPER_AUTHORITY_SCHEMA_V4
+        {
             return Err("route_keeper_schema_unsupported".to_string());
         }
         validate_policy(&self.policy)?;
@@ -1048,6 +1096,14 @@ impl RouteKeeperAuthority {
                 .get(&slot_id)
                 .ok_or_else(|| "route_keeper_slot_identity_invalid".to_string())?;
             validate_record(record, &slot_id, &keeper_id, &connection_catalog_digest)?;
+            if self.schema_version == ROUTE_KEEPER_AUTHORITY_SCHEMA_V4
+                && record
+                    .adoption
+                    .as_ref()
+                    .is_some_and(|adoption| adoption.previous_guacamole_connection_uuid.is_empty())
+            {
+                return Err("route_keeper_adoption_receipt_invalid".to_string());
+            }
             if record.phase != RouteKeeperPhase::Absent
                 && !self
                     .host_process_claims
@@ -1279,4 +1335,210 @@ fn set_record_catalog_digest(record: &mut RouteKeeperRecord, digest: &str) {
 
 fn is_sha256_hex(value: &str) -> bool {
     value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn host_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
+        RouteKeeperHostProcessClaim {
+            host_generation,
+            boot_epoch: format!("boot:{host_generation}"),
+            process_identity: RecordedProcessIdentity {
+                pid: u32::try_from(4_000 + host_generation).unwrap(),
+                start_token: format!("start:{host_generation}"),
+                executable_path: Some("/opt/agent-browser".to_string()),
+                browser_family: None,
+            },
+        }
+    }
+
+    fn ready_receipt(
+        slot_id: &str,
+        keeper_id: &str,
+        fence: RouteKeeperFence,
+        guacamole_connection_uuid: &str,
+    ) -> RouteKeeperProtocolReadyReceipt {
+        let session_id = "xrdp-fixture".to_string();
+        let display_name = ":42".to_string();
+        RouteKeeperProtocolReadyReceipt {
+            slot_id: slot_id.to_string(),
+            keeper_id: keeper_id.to_string(),
+            fence,
+            guacamole_connection_uuid: guacamole_connection_uuid.to_string(),
+            xrdp_session_id: session_id.clone(),
+            display_name: display_name.clone(),
+            xrdp_ownership: Some(RouteKeeperXrdpOwnershipWitness {
+                schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                boot_id: "boot-fixture".to_string(),
+                route_user: "agent-browser-rdp-1".to_string(),
+                route_uid: 2_001,
+                session_id: session_id.clone(),
+                session_service: "xrdp-sesman".to_string(),
+                session_scope: format!("session-{session_id}.scope"),
+                scope_invocation_id: "invocation-fixture".to_string(),
+                cgroup_path: format!("/user.slice/user-2001.slice/session-{session_id}.scope"),
+                cgroup_device: 28,
+                cgroup_inode: 1_001,
+                leader_pid: 4_101,
+                leader_start_ticks: 5_101,
+                x_server_pid: 4_102,
+                x_server_start_ticks: 5_102,
+                display_name,
+                x11_socket_inode: 6_101,
+            }),
+            observed_at: "2026-09-21T12:00:00Z".to_string(),
+        }
+    }
+
+    #[test]
+    fn adoption_fences_transport_occurrences_and_requires_exact_xrdp_witness() {
+        let mut authority = RouteKeeperAuthority::new(1).unwrap();
+        assert_eq!(authority.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4);
+        authority
+            .register_host_process_claim(host_claim(1))
+            .unwrap();
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::new([RouteKeeperConnectionBinding {
+                    slot_id: "route-slot-01".to_string(),
+                    connection_key: "route-01".to_string(),
+                    connection_name: "Route 01".to_string(),
+                    route_user: "agent-browser-rdp-1".to_string(),
+                    guacamole_connection_id: 1,
+                }])
+                .unwrap(),
+            )
+            .unwrap();
+        let (slot_id, keeper_id, original_fence) = match authority.next_reconcile_action().unwrap()
+        {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                ..
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected start action, got {other:?}"),
+        };
+        let original = ready_receipt(
+            &slot_id,
+            &keeper_id,
+            original_fence.clone(),
+            "predecessor-occurrence",
+        );
+        authority.record_protocol_ready(original.clone()).unwrap();
+        authority
+            .record_disconnect(
+                &slot_id,
+                &original_fence,
+                &original.guacamole_connection_uuid,
+            )
+            .unwrap();
+        authority
+            .register_host_process_claim(host_claim(2))
+            .unwrap();
+        let adoption_fence = match authority.begin_adoption(&slot_id, 2).unwrap() {
+            RouteKeeperReconcileAction::Adopt { fence, .. } => fence,
+            other => panic!("expected adoption action, got {other:?}"),
+        };
+        let successor = RouteKeeperProtocolReadyReceipt {
+            fence: adoption_fence,
+            guacamole_connection_uuid: "successor-occurrence".to_string(),
+            observed_at: "2026-09-21T12:01:00Z".to_string(),
+            ..original.clone()
+        };
+        let mut witness_drift = successor.clone();
+        witness_drift.xrdp_ownership.as_mut().unwrap().cgroup_inode += 1;
+        let mut drift_authority = authority.clone();
+        assert_eq!(
+            drift_authority.adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+                ready: witness_drift,
+                adopted_at: "2026-09-21T12:01:01Z".to_string(),
+            }),
+            Err("route_keeper_adoption_observation_mismatch".to_string())
+        );
+        let mut catalog_drift = successor.clone();
+        catalog_drift.fence.connection_catalog_digest = "f".repeat(64);
+        let mut catalog_drift_authority = authority.clone();
+        assert_eq!(
+            catalog_drift_authority.adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+                ready: catalog_drift,
+                adopted_at: "2026-09-21T12:01:01Z".to_string(),
+            }),
+            Err("route_keeper_adoption_generation_mismatch".to_string())
+        );
+        let mut missing_predecessor_authority = authority.clone();
+        assert_eq!(
+            missing_predecessor_authority.adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: String::new(),
+                ready: successor.clone(),
+                adopted_at: "2026-09-21T12:01:01Z".to_string(),
+            }),
+            Err("route_keeper_adoption_observation_mismatch".to_string())
+        );
+
+        authority
+            .adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+                ready: successor.clone(),
+                adopted_at: "2026-09-21T12:01:01Z".to_string(),
+            })
+            .unwrap();
+        let record = &authority.records[&slot_id];
+        let adoption = record.adoption.as_ref().unwrap();
+        assert_eq!(
+            adoption.previous_guacamole_connection_uuid,
+            "predecessor-occurrence"
+        );
+        assert_eq!(
+            adoption.ready.guacamole_connection_uuid,
+            "successor-occurrence"
+        );
+        assert_eq!(
+            authority.record_disconnect(
+                &slot_id,
+                &original_fence,
+                &original.guacamole_connection_uuid,
+            ),
+            Err("route_keeper_generation_stale:1:2".to_string())
+        );
+        assert_eq!(authority.records[&slot_id].phase, RouteKeeperPhase::Ready);
+        assert_eq!(
+            authority.record_disconnect(
+                &slot_id,
+                &successor.fence,
+                &original.guacamole_connection_uuid,
+            ),
+            Err("route_keeper_connection_identity_mismatch".to_string())
+        );
+        assert_eq!(authority.records[&slot_id].phase, RouteKeeperPhase::Ready);
+
+        let mut v3 = authority.clone();
+        v3.schema_version = ROUTE_KEEPER_AUTHORITY_SCHEMA_V3.to_string();
+        v3.records
+            .get_mut(&slot_id)
+            .unwrap()
+            .adoption
+            .as_mut()
+            .unwrap()
+            .previous_guacamole_connection_uuid
+            .clear();
+        let migrated = v3.upgrade_from_v3().unwrap();
+        assert_eq!(migrated.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4);
+        assert_eq!(
+            migrated.records[&slot_id]
+                .adoption
+                .as_ref()
+                .unwrap()
+                .previous_guacamole_connection_uuid,
+            "successor-occurrence"
+        );
+    }
 }

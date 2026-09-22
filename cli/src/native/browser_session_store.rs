@@ -10,6 +10,7 @@ use agent_browser_service_model::{
     RouteKeeperAuthority, RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
     BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -323,7 +324,7 @@ impl BrowserRuntimeSqliteStore {
             save_document(
                 &transaction,
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT,
-                ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
                 &RouteKeeperAuthority::default(),
             )?;
             save_runtime_config_row(&transaction, &BrowserRuntimeConfig::default())?;
@@ -579,7 +580,7 @@ impl BrowserRuntimeSqliteStore {
         save_document(
             &transaction,
             ROUTE_KEEPER_AUTHORITY_DOCUMENT,
-            ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
             next,
         )?;
         transaction
@@ -1277,12 +1278,16 @@ fn load_route_keeper_authority_document(
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT
             )
         })?;
-        if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 || schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V2
+        if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1
+            || schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V2
+            || schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V3
         {
             authority = if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V1 {
                 authority.upgrade_from_v1()?
-            } else {
+            } else if schema == ROUTE_KEEPER_AUTHORITY_SCHEMA_V2 {
                 authority.upgrade_from_v2()?
+            } else {
+                authority.upgrade_from_v3()?
             };
             if compare_and_swap_route_keeper_schema_upgrade(connection, &schema, &json, &authority)?
             {
@@ -1291,7 +1296,7 @@ fn load_route_keeper_authority_document(
             }
             continue;
         }
-        if schema != ROUTE_KEEPER_AUTHORITY_SCHEMA_V3 {
+        if schema != ROUTE_KEEPER_AUTHORITY_SCHEMA_V4 {
             return Err(format!(
                 "browser_runtime_document_schema_unsupported:{}:{schema}",
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT
@@ -1321,7 +1326,7 @@ fn compare_and_swap_route_keeper_schema_upgrade(
              SET schema_version = ?1, json = ?2
              WHERE kind = ?3 AND schema_version = ?4 AND json = ?5",
             params![
-                ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
                 upgraded_json,
                 ROUTE_KEEPER_AUTHORITY_DOCUMENT,
                 source_schema,
@@ -2248,7 +2253,7 @@ mod tests {
     }
 
     #[test]
-    fn route_keeper_v1_document_migrates_in_place_to_v3_without_process_claim() {
+    fn route_keeper_v1_document_migrates_in_place_to_v4_without_process_claim() {
         let directory = TempDirectory::new("browser-runtime-route-keeper-v1-migration");
         let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
         BrowserRuntimeSqliteStore::migrate_from_legacy(
@@ -2286,7 +2291,7 @@ mod tests {
         let migrated = store.load_route_keeper_authority().unwrap();
         assert_eq!(
             migrated.schema_version,
-            agent_browser_service_model::ROUTE_KEEPER_AUTHORITY_SCHEMA_V3
+            agent_browser_service_model::ROUTE_KEEPER_AUTHORITY_SCHEMA_V4
         );
         assert!(migrated.host_process_claims.is_empty());
         assert!(migrated.connection_catalog.bindings.is_empty());
@@ -2303,7 +2308,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(persisted_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3);
+        assert_eq!(persisted_schema, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4);
 
         let mut newer = migrated.clone();
         newer

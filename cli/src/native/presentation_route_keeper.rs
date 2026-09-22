@@ -1078,11 +1078,13 @@ mod tests {
                 .cloned()
                 .ok_or_else(|| "fixture_route_missing".to_string())?;
             let previous_host_generation = ready.fence.host_generation;
+            let previous_guacamole_connection_uuid = ready.guacamole_connection_uuid.clone();
             ready.fence = fence.clone();
             ready.observed_at = "2026-09-19T18:01:00Z".to_string();
             Ok(RouteKeeperAdoptionObservation::Adopted(Box::new(
                 RouteKeeperAdoptionReceipt {
                     previous_host_generation,
+                    previous_guacamole_connection_uuid,
                     ready,
                     adopted_at: "2026-09-19T18:01:01Z".to_string(),
                 },
@@ -1577,6 +1579,7 @@ mod tests {
         replacement
             .adopt(RouteKeeperAdoptionReceipt {
                 previous_host_generation: 1,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
                 ready: rebound_ready,
                 adopted_at: "2026-09-19T18:01:31Z".to_string(),
             })
@@ -1847,6 +1850,9 @@ mod tests {
                 &action,
                 &RouteKeeperAdoptionReceipt {
                     previous_host_generation: 1,
+                    previous_guacamole_connection_uuid: foreign_ready
+                        .guacamole_connection_uuid
+                        .clone(),
                     ready: foreign_ready.clone(),
                     adopted_at: "2026-09-19T18:03:01Z".to_string(),
                 },

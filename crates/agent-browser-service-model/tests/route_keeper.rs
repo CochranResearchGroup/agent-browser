@@ -4,7 +4,7 @@ use agent_browser_service_model::{
     RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy,
     RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
     RouteKeeperStartPriority, RouteKeeperStopDisposition, RouteKeeperStopReceipt,
-    RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+    RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 
 fn host_process_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
@@ -47,7 +47,7 @@ fn authority(host_generation: u64) -> RouteKeeperAuthority {
 #[test]
 fn host_process_claims_are_append_only_and_fence_active_records() {
     let mut authority = RouteKeeperAuthority::new(1).unwrap();
-    assert_eq!(authority.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3);
+    assert_eq!(authority.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4);
     assert!(authority.host_process_claims.is_empty());
 
     let first = host_process_claim(1);
@@ -468,6 +468,7 @@ fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
     authority
         .adopt(RouteKeeperAdoptionReceipt {
             previous_host_generation: 1,
+            previous_guacamole_connection_uuid: original_ready.guacamole_connection_uuid.clone(),
             ready: adopted_ready.clone(),
             adopted_at: "2026-09-19T12:01:01Z".to_string(),
         })
