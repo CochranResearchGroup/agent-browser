@@ -30,7 +30,10 @@ import {
   doctorDevelopmentPresentationProvider,
   synchronizeDevelopmentAgentSkill,
 } from './development-presentation-provider.js';
-import { probeDevelopmentPresentationProvider } from './development-presentation-provider-deployment.js';
+import {
+  probeDevelopmentPresentationProvider,
+  resolveDevelopmentRouteKeeperConnectionCatalog,
+} from './development-presentation-provider-deployment.js';
 
 export const DEVELOPMENT_RUNTIME_SCHEMA = 'agent-browser.development-runtime.v1';
 const PROTECTED_LEASE_AUTHORITY_SOCKET_UNIT = 'agent-browser-lease-authority.socket';
@@ -299,6 +302,48 @@ export function installDevelopmentRuntime({
     },
     installedAt: new Date().toISOString(),
   });
+  execFileSync(
+    generationBinary,
+    ['install', 'development-runtime-migrate', '--json'],
+    {
+      env: {
+        ...env,
+        HOME: descriptor.pseudoHome,
+        AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
+    },
+  );
+  if (existsSync(descriptor.presentationProvider.manifest) &&
+      existsSync(descriptor.presentationProvider.inventoryPath)) {
+    const providerManifest = JSON.parse(
+      readFileSync(descriptor.presentationProvider.manifest, 'utf8'),
+    );
+    const providerInventory = JSON.parse(
+      readFileSync(descriptor.presentationProvider.inventoryPath, 'utf8'),
+    );
+    const catalogPublication = resolveDevelopmentRouteKeeperConnectionCatalog(
+      {
+        ...descriptor.presentationProvider,
+        publicOperatorUrl: providerManifest.publicOperatorUrl,
+      },
+      providerInventory.routes,
+    );
+    execFileSync(
+      generationBinary,
+      ['--internal-route-keeper-connection-catalog-publish'],
+      {
+        env: {
+          ...env,
+          HOME: descriptor.pseudoHome,
+          AGENT_BROWSER_HOME: descriptor.stateDir,
+          AGENT_BROWSER_RUNTIME_ENVIRONMENT: 'development',
+        },
+        input: JSON.stringify(catalogPublication),
+        stdio: ['pipe', 'pipe', 'pipe'],
+      },
+    );
+  }
   mkdirSync(dirname(descriptor.laneManifest), { recursive: true, mode: 0o700 });
   writeJsonAtomic(descriptor.laneManifest, {
     schemaVersion: 'agent-browser.session-supervisor.v1',
@@ -635,6 +680,10 @@ export function doctorDevelopmentRuntime({ env = process.env } = {}) {
 }
 
 export function renderDevelopmentLauncher(descriptor, generationBinary) {
+  const shutdownUserUnits = Object.values(descriptor.unitNames).join(',');
+  const shutdownPresentationContainers = Object.values(
+    descriptor.presentationProvider.services,
+  ).join(',');
   return `#!/usr/bin/env sh
 set -eu
 export HOME=${shellQuote(descriptor.pseudoHome)}
@@ -644,6 +693,8 @@ export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
 export AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${shellQuote(descriptor.runtimeHostIngressState)}
 export AGENT_BROWSER_DASHBOARD_AUTH_DIR=${shellQuote(descriptor.authDir)}
+export AGENT_BROWSER_SHUTDOWN_USER_UNITS=${shellQuote(shutdownUserUnits)}
+export AGENT_BROWSER_SHUTDOWN_PRESENTATION_CONTAINERS=${shellQuote(shutdownPresentationContainers)}
 export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
 export AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}
 export AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}

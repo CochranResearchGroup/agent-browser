@@ -2123,6 +2123,20 @@ fn main() {
 
     // Handle install separately
     if clean.first().map(|s| s.as_str()) == Some("install") {
+        if clean.get(1).map(|s| s.as_str()) == Some("development-runtime-migrate") {
+            if env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() != Ok("development") {
+                print_json_error("development_runtime_migration_requires_development_environment");
+                exit(1);
+            }
+            match native::browser_session_store::BrowserRuntimeSqliteStore::migrate_default_from_legacy() {
+                Ok(receipt) => print_json_value(json!({"success": true, "migration": receipt})),
+                Err(error) => {
+                    print_json_error(error);
+                    exit(1);
+                }
+            }
+            return;
+        }
         if clean.get(1).map(|s| s.as_str()) == Some("doctor") {
             run_install_doctor(&flags);
             return;

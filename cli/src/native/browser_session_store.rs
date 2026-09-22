@@ -153,7 +153,8 @@ pub(crate) struct LegacyBrowserRuntimeSources<'a> {
     pub(crate) service_state_path: &'a Path,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserRuntimeMigrationReceipt {
     pub(crate) imported_source_count: usize,
     pub(crate) rejected_record_count: usize,
@@ -219,6 +220,21 @@ impl BrowserRuntimeSqliteStore {
 
     pub(crate) fn default_sqlite() -> Result<Self, String> {
         Self::open(&Self::default_sqlite_path()?)
+    }
+
+    pub(crate) fn migrate_default_from_legacy() -> Result<BrowserRuntimeMigrationReceipt, String> {
+        let service_state_path = default_service_state_path()?;
+        let service_directory = service_state_path
+            .parent()
+            .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
+        Self::migrate_from_legacy(
+            &service_directory.join(BROWSER_RUNTIME_DATABASE_FILENAME),
+            LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &service_directory.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &service_state_path,
+            },
+        )
     }
 
     pub(crate) fn open(path: &Path) -> Result<Self, String> {

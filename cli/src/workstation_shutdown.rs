@@ -21,7 +21,8 @@ use crate::process_identity::{
     ProcessObservation, RecordedProcessIdentity, VerifiedProcessSignal, VerifiedProcessTermination,
 };
 
-const WORKSTATION_USER_UNITS: [&str; 6] = [
+const WORKSTATION_USER_UNITS: [&str; 7] = [
+    "agent-browser-runtime-host.service",
     "agent-browser-dashboard-backend.service",
     "agent-browser-dashboard.service",
     "agent-browser-runtime-interlock.service",
@@ -34,6 +35,8 @@ const PRESENTATION_CONTAINERS: [&str; 3] = [
     "agent-browser-guacd",
     "agent-browser-guacamole-postgres",
 ];
+const SHUTDOWN_USER_UNITS_ENV: &str = "AGENT_BROWSER_SHUTDOWN_USER_UNITS";
+const SHUTDOWN_PRESENTATION_CONTAINERS_ENV: &str = "AGENT_BROWSER_SHUTDOWN_PRESENTATION_CONTAINERS";
 
 pub(crate) const SHUTDOWN_SCHEMA_VERSION: &str = "agent-browser.workstation-shutdown.v1";
 
@@ -236,13 +239,33 @@ impl LiveShutdownPlatform {
         })
     }
 
-    fn installed_unit_names(&self) -> Result<Vec<&'static str>, String> {
+    fn installed_unit_names(&self) -> Result<Vec<String>, String> {
+        if let Ok(configured) = std::env::var(SHUTDOWN_USER_UNITS_ENV) {
+            return parse_owned_names(&configured, "shutdown_user_unit", |name| {
+                (name.ends_with(".service") || name.ends_with(".timer")) && valid_owned_name(name)
+            });
+        }
         let root = crate::workstation_install::workstation_root()?;
         let unit_dir = root.join(".config/systemd/user");
         Ok(WORKSTATION_USER_UNITS
             .into_iter()
             .filter(|unit| unit_dir.join(unit).is_file())
+            .map(str::to_string)
             .collect())
+    }
+
+    fn presentation_container_names(&self) -> Result<Vec<String>, String> {
+        match std::env::var(SHUTDOWN_PRESENTATION_CONTAINERS_ENV) {
+            Ok(configured) => parse_owned_names(
+                &configured,
+                "shutdown_presentation_container",
+                valid_owned_name,
+            ),
+            Err(_) => Ok(PRESENTATION_CONTAINERS
+                .into_iter()
+                .map(str::to_string)
+                .collect()),
+        }
     }
 
     fn stop_daemon_endpoint(
@@ -387,7 +410,11 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             .iter()
             .map(|session| crate::runtime_host::endpoint_key(session).to_string())
             .collect::<BTreeSet<_>>();
-        if crate::runtime_host::admission_enabled() {
+        let supervised_runtime_host = self
+            .installed_unit_names()?
+            .iter()
+            .any(|unit| unit.ends_with("runtime-host.service"));
+        if crate::runtime_host::admission_enabled() && !supervised_runtime_host {
             daemon_endpoints.insert(crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY.to_string());
         }
 
@@ -484,7 +511,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
         for unit in units {
             let status = run_bounded(
                 "systemctl",
-                &["--user", "is-active", "--quiet", unit],
+                &["--user", "is-active", "--quiet", &unit],
                 deadline.saturating_sub(started.elapsed()),
             )?;
             if status.success() {
@@ -495,7 +522,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             return Ok(false);
         }
         let mut args = vec!["--user", "stop"];
-        args.extend(active.iter().copied());
+        args.extend(active.iter().map(String::as_str));
         let status = run_bounded(
             "systemctl",
             &args,
@@ -510,12 +537,12 @@ impl ShutdownPlatform for LiveShutdownPlatform {
     fn stop_owned_containers(&mut self, deadline: Duration) -> Result<bool, String> {
         let started = Instant::now();
         let mut present = Vec::new();
-        for container in PRESENTATION_CONTAINERS {
+        for container in self.presentation_container_names()? {
             let remaining = deadline.saturating_sub(started.elapsed());
             if remaining.is_zero() {
                 return Err("presentation_container_inspection_deadline_exceeded".to_string());
             }
-            match run_bounded("docker", &["top", container], remaining) {
+            match run_bounded("docker", &["top", &container], remaining) {
                 Ok(status) if status.success() => present.push(container),
                 Ok(_) => {}
                 Err(error) if error.contains("No such file or directory") => return Ok(false),
@@ -527,7 +554,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
         }
         let remaining = deadline.saturating_sub(started.elapsed());
         let mut args = vec!["stop", "--time", "2"];
-        args.extend(present.iter().copied());
+        args.extend(present.iter().map(String::as_str));
         let status = run_bounded("docker", &args, remaining)?;
         status
             .success()
@@ -602,12 +629,13 @@ impl ShutdownPlatform for LiveShutdownPlatform {
         for unit in self.installed_unit_names()? {
             let status = run_bounded(
                 "systemctl",
-                &["--user", "is-active", "--quiet", unit],
+                &["--user", "is-active", "--quiet", &unit],
                 deadline.saturating_sub(started.elapsed()),
             )?;
             owned_user_units += usize::from(status.success());
         }
-        let owned_containers = PRESENTATION_CONTAINERS
+        let owned_containers = self
+            .presentation_container_names()?
             .into_iter()
             .filter(|container| {
                 run_bounded(
@@ -629,6 +657,33 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             foreign_processes: 0,
         })
     }
+}
+
+fn valid_owned_name(name: &str) -> bool {
+    !name.is_empty()
+        && name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'.' | b'@' | b'-'))
+}
+
+fn parse_owned_names(
+    configured: &str,
+    kind: &str,
+    valid: impl Fn(&str) -> bool,
+) -> Result<Vec<String>, String> {
+    let mut names = BTreeSet::new();
+    for name in configured.split(',') {
+        if !valid(name) {
+            return Err(format!("{kind}_invalid:{name}"));
+        }
+        if !names.insert(name.to_string()) {
+            return Err(format!("{kind}_duplicate:{name}"));
+        }
+    }
+    if names.is_empty() {
+        return Err(format!("{kind}_empty"));
+    }
+    Ok(names.into_iter().collect())
 }
 
 fn run_bounded(command: &str, args: &[&str], deadline: Duration) -> Result<ExitStatus, String> {
@@ -939,6 +994,25 @@ mod tests {
                 ShutdownPhase::TransientMetadata,
                 ShutdownPhase::Verify,
             ]
+        );
+    }
+
+    #[test]
+    fn configured_shutdown_targets_are_sorted_unique_and_fail_closed() {
+        assert_eq!(
+            parse_owned_names("z.service,a.service", "unit", |name| {
+                name.ends_with(".service") && valid_owned_name(name)
+            })
+            .unwrap(),
+            vec!["a.service".to_string(), "z.service".to_string()]
+        );
+        assert_eq!(
+            parse_owned_names("a.service,a.service", "unit", valid_owned_name).unwrap_err(),
+            "unit_duplicate:a.service"
+        );
+        assert_eq!(
+            parse_owned_names("../a.service", "unit", valid_owned_name).unwrap_err(),
+            "unit_invalid:../a.service"
         );
     }
 
