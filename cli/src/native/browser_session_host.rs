@@ -1,6 +1,6 @@
 //! Durable host for the ordinary Browser Session Manager path.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -45,16 +45,34 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         .ok_or_else(|| "browser_session_service_directory_missing".to_string())?
         .join("disposable-profiles");
     let display = std::env::var("AGENT_BROWSER_SESSION_DISPLAY").ok();
+    let authority = store.load_route_keeper_authority()?;
     let remote_desktop_routes = if display.is_some() {
         Vec::new()
     } else {
-        route_keeper_desktop_routes(&store.load_route_keeper_authority()?)?
+        route_keeper_desktop_routes(&authority)?
+    };
+    let route_users_by_display = if display.is_some() {
+        HashMap::new()
+    } else {
+        authority
+            .records
+            .values()
+            .filter(|record| record.phase == RouteKeeperPhase::Ready)
+            .filter_map(|record| {
+                let ready = record.protocol_ready.as_ref()?;
+                let binding = authority
+                    .ready_handoff_binding(&record.slot_id, &ready.display_name)
+                    .ok()?;
+                Some((binding.display_name, binding.route_user))
+            })
+            .collect()
     };
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
         executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
         display,
         remote_headed: false,
+        route_users_by_display,
     })?;
     BrowserSessionHost::load(
         store,

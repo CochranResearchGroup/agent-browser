@@ -40,6 +40,7 @@ pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) executable_path: Option<String>,
     pub(crate) display: Option<String>,
     pub(crate) remote_headed: bool,
+    pub(crate) route_users_by_display: HashMap<String, String>,
 }
 
 pub(crate) trait BrowserRuntimeDriver {
@@ -673,6 +674,17 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = runtime.block_on(async {
+                    if let Some(desktop) = desktop.as_ref() {
+                        if let Some(route_user) =
+                            config.route_users_by_display.get(&desktop.display_name)
+                        {
+                            super::remote_view::open::ensure_route_display_access(
+                                &desktop.route_id,
+                                &desktop.display_name,
+                                route_user,
+                            )?;
+                        }
+                    }
                     let display = desktop
                         .as_ref()
                         .map(|desktop| desktop.display_name.clone())
