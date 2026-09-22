@@ -265,11 +265,13 @@ two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
 qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
-Version 52 checkpoint `f651384f` qualifies that recovery path for pending
-starts, failed recovery and retained stops while preserving exact process and
-XRDP evidence. See the
+Version 53 checkpoint `02ee03a2` adds live-supervisor health and current-generation
+readiness to the whole-phase recovery qualified at `f651384f`. Ordinary remote
+requests wait through pending recovery and recheck before browser effects;
+status reports effective keeper readiness. Full capacity allocation and the
+installed outcome remain open. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and remaining
-installed-outcome gates.
+gates.
 
 ## P216 | Service Model Extraction Landing
 

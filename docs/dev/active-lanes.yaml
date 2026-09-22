@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: f651384f
+    checkpoint: 02ee03a2
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: f651384f passes full Service Model package with 18 keeper integration cases, 765 native-other tests (57 ignored), 250 native-stream tests, formatting, strict Clippy, docs build, link/planning checks and six fixture checks; comprehensive ef43de73 baseline retained for unchanged surfaces; no live acceptance
-    validation_ref: f651384f
+    validation_status: 02ee03a2 passes 769 native-other tests (57 ignored), 253 stream tests, 16 browser-host tests, two output tests, formatting, strict Clippy, full client suite, API/MCP parity and docs gates; comprehensive ef43de73 baseline retained only for unchanged surfaces; no live acceptance
+    validation_ref: 02ee03a2
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 52 non-quarantined phase recovery is provider-free qualified; cross-platform causal browser-process discovery, quarantine handling, supervisor health projection, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts remain before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    blocker: version 53 qualifies live-supervisor readiness and bounded remote admission; full keeper-backed capacity allocation, public live configuration, cross-platform causal browser discovery, quarantine reconciliation, complete handoff recovery, remaining SQLite domains and Desktop Services joins remain before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
     updated_at: 2026-09-21

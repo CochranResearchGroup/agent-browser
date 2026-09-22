@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 52
+Plan version: 53
 
 State: OPEN
 
@@ -74,6 +74,84 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 21 Supervisor Readiness Amendment
+
+Version 53 continues from source `f651384f` and ledger `c1d7c08f`. Fresh fetch
+confirms exact remote parity and open draft PR #191. The handoff matches those
+locators; historical test results remain scoped receipts. Two unfinished
+worker patches provide a live supervisor probe and the optional status contract.
+The current implementation gap is verified: the daemon consumes persisted Ready
+records without observing supervisor termination until shutdown.
+
+This consolidated packet joins live supervisor health, host generation, and
+fresh SQLite route receipts in ordinary remote admission, manager handoff
+resolution, and `service_status.presentationKeeper`. Recovering opens wait
+within the existing configured request deadline; failed ownership cannot
+advertise ready capacity. Keep legacy `presentationCapacity` semantics explicit
+rather than presenting that compatibility projection as keeper readiness.
+Full allocation/queue capacity replacement and the broader installed journey
+remain open. No runtime, provider, ingress, or release effect is included.
+
+The primary owns the shared projection, fixtures, documentation, validation,
+and integration. `/root/startup_recovery` owns only daemon integration after
+returning its stream health API; its existing requested route is
+`gpt-5.6-terra` high, with effective configuration unknown.
+`/root/keeper_contract` returned the schema and generated client patch using
+requested `gpt-5.6-luna` medium; effective configuration is unknown. No new
+worktree or review discovery pass is introduced. Budget up to 20 minutes for
+integration, 15 for affected tests and strict quality, and 10 for custody,
+within the inherited 360-active-minute ceiling. The prior approximately 70
+elapsed minutes and unknown older cumulative effort are not reset.
+
+Acceptance must show that failed, stopped, missing, or wrong-generation owners
+cannot reuse retained readiness; pending recovery can become admissible without
+launching before readiness; and service status preserves diagnostics when the
+keeper is unavailable. Run changed native compartments, client contract checks,
+formatting, strict Clippy, and relevant docs checks. This is an intermediate
+source milestone, not complete P211 acceptance or a frozen installed candidate.
+
+Source checkpoint `02ee03a2` qualifies this packet. The supervisor probe detects
+failed, stopped, and panicked tasks without consuming their shutdown join;
+repeated shutdown preserves terminal health. The daemon joins the probe to a
+fresh SQLite snapshot after taking the browser-host lock. Retained navigation
+and interrupted-open intents must also select a route from the refreshed usable
+set. No stale ready receipt can independently authorize those effects. The
+bounded read-only waiter covers recovery-to-ready, immediate terminal failure,
+expired deadlines, and an observation that never completes. Ordinary status
+adds the redacted typed projection and the CLI prints its effective readiness.
+
+Primary qualification on the final source: native-other 769 passed with 57
+ignored (56.25 seconds), native-stream 253 passed (53.06 seconds), all 16
+browser-host tests, both status-format tests, formatting, and strict workspace
+Clippy pass. Full service-client, API/MCP parity, docs build, documentation links,
+handoff docs, and active planning audit pass. Logs are
+`/tmp/p211-v53-final-native-{other,stream}.log`,
+`/tmp/p211-v53-browser-host.log`, `/tmp/p211-v53-output.log`,
+`/tmp/p211-v53-clippy.log`, and `/tmp/p211-v53-service-client-final.log`.
+The first compile exposed a fixture import error, corrected before final
+qualification. An intermediate stream run failed a self-spawn fixture while a
+concurrent rebuild replaced its executable; the final frozen run passed without
+concurrent recompilation. Both failed receipts remain in `/tmp/p211-v53-*`.
+Two P157 oracle locators still pointed to pre-extraction source. The check now
+follows the actual provenance helper call and the shared failure classifier,
+including its CLI adapter; the original assertions remain in force and the
+full aggregate client gate passes.
+
+The final source milestone is outcome progress, not full plan acceptance.
+Unchanged model, workstation, browser transport, and installer behavior retain
+prior scoped evidence; no comprehensive or installed result is attributed to
+this checkpoint. The broad selector also names installer, lease, and live
+streaming checks through module-path matches: those implementation surfaces
+were not changed, and this packet introduces no live acceptance or skill
+publication. Full capacity allocation/queueing, public live configuration,
+cross-platform process discovery, quarantine reconciliation, complete handoff
+recovery, remaining SQLite domains, Desktop Services joins, and the frozen
+isolated-development matrix remain open. Approximately 94 elapsed minutes have
+accumulated since the recorded 02:46 UTC continuation start; older cumulative
+active effort remains unknown. The 360-active-minute ceiling and inherited
+review/retry history remain unchanged. No installed, provider, browser,
+production, ingress, or release effect occurred.
 
 ## September 21 Whole-Phase Startup Recovery Amendment
 
@@ -2097,7 +2175,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. Quarantine handling, public health/readiness and live acceptance remain open |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

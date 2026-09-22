@@ -11,28 +11,29 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 52 source `f651384f` qualifies configured startup for pending
-starts, failed recovery, and retained stop intent. Qualified baseline `d0fb7abe` / ledger `50db55d6`
-includes comprehensive source `ef43de73` (both lanes, 842 seconds), final
-`7634325d` keeper/native-other checks, and the rollover proof. Those receipts
-remain baseline evidence, not qualification of the current implementation.
+P211 version 53 source `02ee03a2` qualifies live-supervisor readiness. A failed,
+stopped, missing, or wrong-generation keeper cannot supply usable routes from
+retained Ready receipts. Pending recovery waits within the configured deadline;
+remote commands recheck SQLite and health after acquiring the browser-host
+lock. Navigation and interrupted opens also require the selected route in the
+refreshed usable set. Service status exposes `presentationKeeper` separately
+from compatibility `presentationCapacity`.
 
-The primary owns pure model transitions, docs and validation; the existing
-startup worker owns the two CLI keeper modules and fixtures. The model now
-preserves retained witnesses through repeated adoption, advances pending-start
-fences, and rejects stale events. All 18 model integration tests and the full
-Service Model package pass. Final native-other passes 765 tests (57 ignored),
-native-stream passes 250, and format/strict Clippy pass. Exact-record preflight
-rejects changed predecessor evidence; stop-negative cases preserve intent or
-quarantine. Docs/link/planning and six fixture checks pass. About 70 elapsed
-minutes are recorded; older cumulative active effort remains unknown.
-The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-whole-phase-startup-recovery-amendment)
-records the exact phase contract, inherited bounds and remaining outcome gates.
+Primary qualification: 769 native-other tests (57 ignored), 253 stream tests,
+16 browser-host tests, two output tests, formatting, strict Clippy, full client
+suite, API/MCP parity, docs build and links pass. The initial fixture import
+failure and self-spawn failure during concurrent recompilation are retained;
+final frozen checks pass. Two stale P157 oracle locators now follow the extracted
+implementations. The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-supervisor-readiness-amendment)
+records source identity, evidence scope, worker reconciliation and remaining gates.
 
-No installed runtime or provider effect occurred. Conditional development
-acceptance remains behind candidate freeze and fresh production readback;
-production, ingress and release remain excluded. Next: supervisor health,
-readiness and capacity projection, then the remaining installed-outcome gates.
+This is outcome progress; Plan 0211 remains OPEN. About 94 elapsed minutes are
+recorded since the current continuation start, with older active effort unknown.
+No installed runtime or provider effect occurred. Next: full keeper-backed
+capacity allocation and public configuration, followed by the remaining
+cold-start and installed acceptance gates. Production, ingress and release
+remain excluded. The existing comprehensive baseline is retained only for
+unchanged surfaces; it is not a full-run-on-final-head or live acceptance claim.
 
 ## Turn 425 | 2026-09-21
 
