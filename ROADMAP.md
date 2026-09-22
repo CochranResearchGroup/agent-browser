@@ -259,8 +259,9 @@ Version 51 corrects the interrupted-adoption claim: previous evidence proves
 same-generation replay, while a new host must also prove the interrupted
 adopter exited. Checkpoint `ef43de73` joins that exact refence to
 provider-free multi-route classification, atomic pending-state publication, and
-owned-task cleanup. Focused and quality gates pass; comprehensive validation
-remains pending. See the
+owned-task cleanup. Both comprehensive lanes pass in 842 seconds. Final
+source `7634325d` adds pre-provider route-user validation and successful
+two-route coverage; focused and quality gates pass again. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
 ## P216 | Service Model Extraction Landing

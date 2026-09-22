@@ -11,7 +11,7 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 51 source checkpoint `ef43de73` implements configured multi-route
+P211 version 51 source checkpoints `ef43de73` and `7634325d` implement multi-route
 startup recovery. The prior handoff proved same-generation interrupted replay
 only. A truly restarted host now proves both the original ready host and
 interrupted adopter exited, then atomically reserves all pending transitions
@@ -22,17 +22,18 @@ Primary validation passes all 55 focused keeper tests, the Service Model
 package including 16 route-keeper integration cases, formatting, strict
 workspace Clippy, documentation links, handoff docs, planning audit, docs
 build, and six selector-recommended source-free installer/provider fixtures.
-The comprehensive provider-free runner is active against the frozen source;
-merge readiness remains unclaimed. Repository skill guidance differs from the
-installed shared skill by design; no runtime guidance was published.
+Both comprehensive lanes pass on `ef43de73` in 842 seconds. Final `7634325d`
+adds pre-provider route-user validation and successful two-route coverage;
+55 keeper tests and quality gates pass again; native-other passes 761 with 57 ignored.
+Unchanged baseline evidence is retained; no runtime guidance was published.
 
 The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-handoff-verification-and-startup-recovery-amendment)
 records four closed-world review dispositions, worker ownership, inherited
 bounds and unavailable historical effort counters. No installed runtime or
 provider effect occurred. Conditional isolated-development authority remains
 behind candidate freeze and fresh production readback; production, ingress
-and release remain excluded. Next: finish the full runner, publish its exact
-result, then address the remaining whole-authority recovery boundary.
+and release remain excluded. Next: prove the existing Absent-slot rollover
+through registration and start, then address whole-authority phase recovery.
 
 ## Turn 425 | 2026-09-21
 

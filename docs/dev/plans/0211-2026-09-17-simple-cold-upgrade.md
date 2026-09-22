@@ -128,7 +128,9 @@ check, requested `gpt-5.6-sol` medium effort. Effective model identities are
 not reported by the runtime. These workers share the admitted P211 lane and
 have no independent Git, runtime, or delegation authority.
 
-Source checkpoint `ef43de73` implements the version 51 startup packet.
+Source checkpoint `ef43de73` implements the version 51 startup packet;
+`7634325d` completes retained route-user validation before provider access and
+adds the successful two-route case alongside partial-failure coverage.
 
 Both workers completed. The primary accepted the closed-world documentation
 review and its two residual corrections, then integrated the startup worker's
@@ -137,9 +139,28 @@ separate opaque packet, removed the duplicate asynchronous refence path,
 required one whole-snapshot compare-and-swap before handle exposure, and tested
 shutdown between route attempts. The primary independently reran all 55
 route-keeper tests successfully on the final source; workspace formatting and
-strict Clippy also pass. Comprehensive provider-free validation started against
-this frozen checkpoint and remains pending. These checks establish
+strict Clippy also pass. The comprehensive provider-free runner passed both
+lanes in 842 seconds on source `ef43de73` with ledger `37dc032e`. The final
+`7634325d` delta changes only predecessor-proof validation and its keeper
+fixtures. All 55 focused keeper tests, formatting, and strict workspace Clippy
+pass again; CLI native-other also passes 761 tests with 57 ignored in 52.16 seconds. Unchanged
+Service Model, workstation, integration, and source-free fixture evidence is
+retained because that delta does not modify their code or dependencies. This
+is combined comprehensive-baseline and focused-final evidence, not a claim
+that the entire comprehensive runner ran on `7634325d`. Logs are intentionally
+local under `/tmp/p211-full-rust-v51.log` and
+`/tmp/p211-route-identity-{tests,clippy,native-other}.log`; the commands and
+commit identities here make the checks reproducible. These checks establish
 provider-free configured startup recovery, not live provider acceptance.
+
+The startup worker's bounded read-only follow-up found Absent-slot generation
+rollover already implemented in host registration. The primary verified the
+model transition and CLI CAS loop. Its next missing proof is a provider-free
+registration-to-start fixture with exact-host replay after the active
+transition; whole-authority phase recovery remains a separate open criterion.
+This continuation has used approximately 46 elapsed minutes through this
+checkpoint, including the comprehensive run, with no installed candidate
+build or provider attempt. Historical cumulative active effort remains unknown.
 
 Execution inherits the existing 360-active-minute ceiling, three-attempt and
 one-review limits, and prior evidence; this revision does not reset them.
@@ -1999,7 +2020,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup; the 55 focused keeper tests, Service Model package, format and strict Clippy pass, while comprehensive validation is pending. Whole-authority recovery, public health/readiness and live acceptance remain open |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. Whole-authority recovery, public health/readiness and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
