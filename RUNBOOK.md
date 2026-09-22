@@ -11,28 +11,24 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 55 source `f3d0a758` qualifies durable admission for ordinary remote
-opens and manager handoff access. SQLite owns bounded depth, deadlines, priority
-with aging, duplicate results, and generation/sequence/attempt fencing. Startup
-makes queued work retryable and preserves interrupted admitted effects as
-recovery-required. Unstarted cancellation releases only the exact permit.
-Status exposes redacted queue counts; prior replay is not current visibility.
+P211 version 56 source `8ab466e8` joins interrupted admission to the exact
+original browser-open journal. Recovery requeues a fresh fenced attempt; the
+journal still controls effects. The SQLite fixture reaches the original ready
+handoff with one total browser launch. Missing or mismatched journals and
+interrupted navigation or handoff requests retain recovery obligations.
 
-Primary qualification: 308 Service Model tests, final native-other 773 with 57
-ignored, 253 stream, 16 host, 26 store, two output, format, strict Clippy, client,
-parity, docs build, links, handoff docs and active planning audit pass. Two
-integration gaps, retry retention and old-waiter request replacement, were fixed
-and covered before qualification. The
-[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-durable-admission-queue-amendment)
-records exact evidence and worker reconciliation.
+Primary qualification passes 12 queue model, four SQLite admission, one journal
+fixture and 774 native-other tests (57 ignored), formatting, strict Clippy,
+docs build, links, handoff docs and active planning audit. The
+[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-journal-recovery-admission-amendment)
+records retained evidence and worker integration. No installed/provider effect
+occurred; this is not whole-suite or installed acceptance.
 
-This is outcome progress; P211 remains OPEN. About 138 elapsed minutes are
-recorded since 02:46 UTC, with older effort unknown. No installed/provider effect
-occurred. Next: interrupted queue admission joined to exact operation recovery,
-then public configuration and live keeper resizing. Scale-in, remaining recovery,
-Desktop Services, persistence and frozen isolated acceptance remain open.
-Production, external ingress and release remain excluded. This is provider-free
-qualification, not a comprehensive or installed acceptance claim.
+P211 remains OPEN. About 150 elapsed minutes since 02:46 UTC are recorded;
+older effort is unknown and the inherited ceiling is unchanged. Next: public
+configuration and live keeper resizing. Interrupted handoff recovery, scale-in,
+causal discovery, quarantine, remaining persistence, Desktop Services and frozen
+isolated acceptance remain open. Production, ingress and release stay excluded.
 
 ## Turn 425 | 2026-09-21
 

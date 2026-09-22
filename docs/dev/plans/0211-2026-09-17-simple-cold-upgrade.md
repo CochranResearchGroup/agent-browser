@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 55
+Plan version: 56
 
 State: OPEN
 
@@ -74,6 +74,62 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Journal Recovery Admission Amendment
+
+Version 56 continues from source `f3d0a758` and ledger `c48610d8`.
+The current checkpoint has the two attributed worker edits for pure queue
+reconciliation and the SQLite host fixture. The primary now joins admission to
+an exact original open command and `browser-runtime-open` journal owner.
+The existing journal, not the queue, determines whether to recover or launch.
+Missing or mismatched journals and interrupted navigation or handoff requests
+retain their recovery obligation. Full automatic handoff recovery remains open.
+
+The inherited 360-active-minute ceiling, historical unknown effort and last
+recorded 138 elapsed minutes are preserved. This packet budgets 15 minutes
+implementation, 15 qualification and 5 custody without resetting retries.
+The pure model worker supplied exact-entry reconciliation and three negative
+or success tests; the host fixture worker supplied the interrupted SQLite case.
+Their prior requested routes remain sol/medium and terra/high; effective
+settings are unknown. The primary integrates the adapter and changes the host
+fixture to exercise queue re-admission, journal recovery and queue completion.
+The existing documentation worker handles three public prose surfaces while
+primary owns CLI help. No new worktree or installed/provider effect is included.
+
+Acceptance requires a fresh fenced queue attempt after restart, exact journal
+recovery to the original ready handoff, one total browser launch, retained
+obligations when proof is absent, focused model/adapter/host tests and strict
+Rust quality gates. Public configuration, live resizing, scale-in and the
+remaining complete isolated acceptance matrix remain part of the full goal.
+
+### Version 56 qualification
+
+Source `8ab466e8` integrates exact journal-backed recovery admission. Primary
+qualification passes 12 queue model tests, four SQLite admission tests, the
+real interrupted-open journal fixture, and 774 native-other tests with 57
+ignored. Formatting, strict workspace Clippy, docs build, documentation links,
+remote-view handoff docs and active planning audit pass. Logs are
+`/tmp/p211-v56-{model,admission,journal,other,fmt,clippy,docs-build,docs,handoff-docs}.log`
+and `/tmp/p211-v56-planning.json`. No failed test or runtime effect occurred.
+
+The host worker's initial fixture retained the queue obligation while invoking
+the journal directly. Primary integration changed it to re-admit through the
+adapter and complete the new fenced attempt, proving the actual join rather
+than claiming the earlier fixture exercised it. One browser launch yields the
+original ready handoff. Negative adapter cases retain the full queue unchanged
+for missing journal, wrong owner, changed payload and navigation. Pure model
+cases cover stale proof, fresh sequence and full-depth immutability.
+
+Unchanged stream, client, schema and store behavior retains v55 evidence;
+queue selection and adapter integration were requalified here. The path-based
+selector also recommends unrelated workstation fixtures through broad source
+rules; no workstation assets, installer or provisioning behavior changed.
+The shared installed skill remains untouched under the development boundary.
+This is an intermediate provider-free checkpoint, not whole-suite, merge-ready,
+or installed acceptance. About 150 elapsed minutes since 02:46 UTC are recorded;
+older active effort remains unknown and the 360-minute ceiling is unchanged.
+Next is public runtime configuration and keeper policy/catalog resizing, with
+interrupted handoff recovery and the full acceptance matrix still open.
 
 ## September 21 Durable Admission Queue Amendment
 
