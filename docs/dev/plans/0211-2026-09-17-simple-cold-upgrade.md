@@ -1746,6 +1746,18 @@ joined to exact predecessor-exit proof is the next bounded source packet.
 Whole-authority recovery and runtime acceptance remain later gates. No runtime
 effect occurred.
 
+Checkpoint `8f60434f` implements the configured Guacamole adoption adapter
+without enabling startup recovery. An exact `Adopting` action revalidates the
+SQLite catalog and fence before provider access, opens one fresh tunnel task,
+reuses that task for same-process replay, observes XRDP under the configured
+route user, and returns the schema-v4 predecessor/current occurrence receipt.
+The 18-test focused Guacamole keeper lane, format check, strict workspace
+Clippy, and diff check pass. Startup still fails closed on retained state. The
+next packet must reconstruct predecessor-exit proof for exact `Ready`,
+`Degraded`, and interrupted `Adopting` records and give an adoption task's
+terminal event a durable failure transition before startup recovery is enabled.
+No runtime effect occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel

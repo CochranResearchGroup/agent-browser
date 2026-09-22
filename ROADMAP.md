@@ -244,6 +244,11 @@ separate predecessor and successor tunnel occurrences. Focused model, store,
 CLI route-keeper, format, and strict Clippy gates pass. Configured connector
 adoption joined to exact predecessor-exit proof is next; runtime effects remain
 unauthorized.
+Checkpoint `8f60434f` adds the configured Guacamole adoption adapter with exact
+catalog preflight, one retained task per action, fresh tunnel occurrence, and
+XRDP witness observation. Its 18 focused tests and quality gates pass. Startup
+remains fail-closed until predecessor-exit proof reconstruction and durable
+adoption-terminal handling are implemented; no runtime effect is authorized.
 
 ## P216 | Service Model Extraction Landing
 

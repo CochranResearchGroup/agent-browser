@@ -9,6 +9,21 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 424 | 2026-09-21
+
+P211 checkpoint `8f60434f` implements configured Guacamole adoption while
+leaving runtime startup fail-closed. The adapter validates the exact durable
+catalog and `Adopting` fence before provider access, retains one fresh tunnel
+task for same-process replay, reobserves XRDP under the configured route user,
+and emits the schema-v4 predecessor/current occurrence receipt.
+
+The 18-test focused Guacamole keeper lane, formatting, strict workspace Clippy,
+and diff check pass. The next bounded packet must reconstruct exact
+predecessor-exit proof for retained `Ready`, `Degraded`, and interrupted
+`Adopting` records and persist a failed-adoption terminal transition before
+configured startup recovery is enabled. No provider, browser, Service State,
+installed-runtime, production, ingress, or release effect occurred.
+
 ## Turn 423 | 2026-09-21
 
 P211 checkpoint `11f606a4` completes the version 50 provider-free route
