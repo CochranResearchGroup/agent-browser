@@ -447,12 +447,6 @@ struct XrdpHelperResponse {
     witness_digest: Option<String>,
     #[serde(default)]
     verification: Option<XrdpStopVerification>,
-    #[serde(default)]
-    session_instance_absent: Option<bool>,
-    #[serde(default)]
-    x_server_instance_absent: Option<bool>,
-    #[serde(default)]
-    owned_scope_empty_or_absent: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -612,12 +606,15 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
                 verify_args.extend(witness_args);
                 let absent = self.run(&verify_args).await?;
                 let expected_witness_digest = xrdp_witness_digest(witness);
+                let verification = absent.verification.as_ref();
                 if absent.schema_version == 1
                     && absent.state == "absent"
                     && absent.witness_digest.as_deref() == Some(expected_witness_digest.as_str())
-                    && absent.session_instance_absent == Some(true)
-                    && absent.x_server_instance_absent == Some(true)
-                    && absent.owned_scope_empty_or_absent == Some(true)
+                    && verification.is_some_and(|proof| {
+                        proof.session_instance_absent
+                            && proof.x_server_instance_absent
+                            && proof.owned_scope_empty_or_absent
+                    })
                 {
                     Ok(XrdpHelperStop::Stopped)
                 } else {
@@ -1878,6 +1875,25 @@ mod tests {
             parse_xrdp_helper_response(missing_schema.to_string().as_bytes()).unwrap_err(),
             "route_keeper_xrdp_helper_response_invalid"
         );
+    }
+
+    #[test]
+    fn installed_xrdp_helper_absence_wire_uses_nested_verification() {
+        let absent = serde_json::json!({
+            "schemaVersion": 1,
+            "state": "absent",
+            "witnessDigest": xrdp_witness_digest(&exact_xrdp_witness()),
+            "verification": {
+                "sessionInstanceAbsent": true,
+                "xServerInstanceAbsent": true,
+                "ownedScopeEmptyOrAbsent": true
+            }
+        });
+        let parsed = parse_xrdp_helper_response(absent.to_string().as_bytes()).unwrap();
+        let proof = parsed.verification.unwrap();
+        assert!(proof.session_instance_absent);
+        assert!(proof.x_server_instance_absent);
+        assert!(proof.owned_scope_empty_or_absent);
     }
 
     #[tokio::test]
