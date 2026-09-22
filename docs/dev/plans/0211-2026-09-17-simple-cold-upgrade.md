@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 57
+Plan version: 58
 
 State: OPEN
 
@@ -74,6 +74,87 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Reference-Free Cooldown Scale-In Amendment
+
+Version 58 starts from source `b2a3ff39` and ledger `e51c150b`. Current source
+shows catalog replacement requires every slot Absent and fences bind the full
+catalog digest. Automatic additive growth therefore needs an explicit retained
+identity design and provider provisioning join; it remains open. The next
+integrated capacity lifecycle outcome is reference-free cooldown scale-in using
+the existing exact XRDP stop adapter, rather than changing identity opportunistically.
+
+Primary owns supervisor integration, effect-error handling, public cooldown
+configuration and qualification. Existing sol/medium worker owns only a pure
+idle-state selector and exports; terra/high worker owns SQLite reference joins,
+transactional stop reservation and fixtures. Effective settings are unknown.
+No provider, installed runtime or shared state effect is authorized by this
+provider-free packet. Budget 20 implementation, 15 qualification and 5 custody
+minutes within the inherited 360-minute ceiling, preserving 165 elapsed minutes
+and unknown older effort. No review/retry bound resets.
+
+One immediate SQLite transaction checks retained browser/handoff references,
+queued/admitted/recovery-required work and pending operation journals, persists
+idle evidence, and reserves at most one exact stop after cooldown above the
+warm/minimum floor. Generation, fence, clock regression or renewed use resets
+idle evidence. Ordinary queue insertion serializes with this reservation; an
+admitted browser operation prevents scale-in until its journal/state is durable.
+Unknown references and pending route recovery block automatic scale-in.
+The supervisor executes only the reserved stop. Unproven or failed cleanup
+retains a quarantine obligation without declaring reclamation or broad cleanup.
+Public `scaleInCooldownMs` joins the supported atomic configuration patch.
+
+Acceptance: pure cooldown/reset invariants, SQLite obligation/refusal and stop
+reservation, supervisor exact stop and failure containment, existing startup
+and contract tests, strict quality and public documentation parity. Catalog
+expansion, remaining recovery/retention/Desktop Services work and the complete
+isolated cold-start matrix remain part of the unchanged objective.
+
+### Version 58 qualification
+
+Source `2f138944` integrates the pure idle selector, durable SQLite evidence and
+atomic stop reservation, supervised exact stop, and public `scaleInCooldownMs`.
+One route above the warm/minimum floor can retire only after reference-free
+cooldown. Pending journals, queue admission/recovery, unknown references and
+unresolved route phases clear idle evidence. Failed provider stop is contained
+as an exact quarantine obligation; it does not trigger broad supervisor cleanup.
+
+Primary verification:
+
+| Evidence | Result and scope |
+| --- | --- |
+| Service Model `presentation_scale_in` | Four focused cases pass: cooldown, references/admission, fence/generation/clock reset and target/phase boundaries |
+| CLI `browser_session_store` | 29 pass, including real SQLite pending-journal cooldown reset, exact stop reservation and browser/handoff reference refusal |
+| CLI native-other | 775 pass, zero failures, 57 ignored; includes successful exact retirement, failed-stop quarantine and no broad shutdown or immediate rewarming |
+| CLI `runtime_config` and MCP service-request | Six and five pass; seventh public setting preserves strict schema and atomic patch behavior |
+| CLI native-stream | 253 pass, including configured startup/recovery and provider adapter contracts |
+| Quality and contracts | Final formatting and strict workspace Clippy pass; full client, API/MCP parity (120 actions), docs build, links, handoff docs and active planning audit pass |
+
+The native-other run precedes only an equivalent iterator flattening in the
+store and a fixture assertion correction; final store/config/MCP qualification
+and Clippy cover those changes. Unchanged model/client/docs evidence is retained.
+This is not a comprehensive all-compartment or installed acceptance claim.
+Reproduce with the named focused filters and compartment runner; ephemeral logs
+use `/tmp/p211-v58-*`, while source and commands are durable here. The initial
+compile rejected a SQLite `u64` count read; primary corrected it to `i64`.
+Initial Clippy rejected a manual flatten; the final check passes. Primary also
+corrected two fixture expectations before the store run: cooldown starts at the
+first post-obligation observation, and an unstarted provisioned slot remains
+Absent. Initial failed logs remain, without representing them as test passes.
+
+Workers returned bounded model and store changes, with effective model/effort
+unknown. Primary reviewed the joins, required last-observation clock regression
+reset, repaired the integration issues above and ran qualification. Both workers
+are terminal. No installed/provider/shared runtime mutation occurred. The shared
+user skill and P215 work are untouched.
+
+This is `outcome_progress` for the capacity lifecycle criterion, not completion
+of P211. About 185 elapsed minutes since 02:46 UTC are recorded; older active
+effort remains unknown and the inherited 360-minute ceiling is unchanged.
+Automatic catalog expansion still requires retained catalog identity and the
+provider provisioning join. Interrupted handoff recovery, causal discovery,
+quarantine reconciliation, remaining SQLite/retention and Desktop Services work,
+and the complete frozen isolated cold-start matrix remain OPEN.
 
 ## September 22 Public Runtime Configuration Amendment
 
@@ -1620,7 +1701,7 @@ settings in SQLite provide `presentation.warm-target` (default 4),
 `presentation.maximum-displays` (default 6),
 `presentation.maximum-browsers-per-display` (default 4), queue size (default
 32), request deadline (provisionally 90 seconds), and scale-in cooldown
-(provisionally 10 minutes). `agent-browser config get/set` and the Service API
+(provisionally 10 minutes). `agent-browser service runtime-config get/set` and the Service API
 change them transactionally and trigger live reconciliation without
 recompilation, reinstallation, or normally a restart. Lowering a limit below
 current usage is non-destructive: status becomes `over-target`, new allocation
@@ -2444,8 +2525,8 @@ integrating any P207 implementation.
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
 | Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup, with both comprehensive lanes passing in 842 seconds. Final source `7634325d` adds pre-provider route-user validation and successful two-route coverage; 55 focused keeper tests, format and strict Clippy pass again, and CLI native-other passes 761 tests with 57 ignored. Unchanged Service Model and other comprehensive evidence is retained. `f651384f` extends recovery to pending starts, failed recovery and retained stops with 765 native-other and 250 native-stream tests plus model/quality gates passing. `02ee03a2` qualifies live-supervisor health projection and current-generation remote admission with bounded pending-readiness waits; 769 native-other, 253 stream, 16 browser-host and two output tests plus strict quality/client/docs gates pass. Quarantine reconciliation, full capacity allocation and live acceptance remain open |
-| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
-| Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | a9595ee2 qualifies bounded admission and durable demand with model and SQLite fixtures; durable queue and installed acceptance remain open |
+| Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `b2a3ff39` exposes six atomic CLI/HTTP/MCP settings and live keeper policy synchronization, preserving existing records and fencing stale demand; checkpoint `2f138944` adds provider-free qualified cooldown retirement and its public setting. Automatic catalog expansion and installed capacity acceptance remain pending |
+| Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | `a9595ee2` qualifies bounded admission and durable demand; `f3d0a758` adds durable queue admission; `8ab466e8` joins exact journal recovery. Installed overflow and complete recovery acceptance remain open |
 | Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; interrupted-effect journal reconciliation and active-view control priority remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
 | Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |

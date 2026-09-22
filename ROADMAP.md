@@ -265,11 +265,11 @@ two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
 qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
-Version 57 checkpoint `b2a3ff39` exposes partial runtime configuration through
-CLI and HTTP/MCP, atomically synchronized with keeper policy. Updates preserve
-concurrent effect receipts and existing routes; stale demand is capped at commit.
-Automatic catalog expansion, scale-in, interrupted handoff recovery and the full
-installed journey remain open. See the
+Version 58 checkpoint `2f138944` adds reference-free cooldown scale-in and its
+public setting to atomic runtime configuration. SQLite reserves one exact stop
+only after retained references and pending operations/admission clear; failed
+cleanup retains quarantine. Automatic catalog expansion, interrupted handoff
+recovery and the full installed journey remain open. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and remaining
 gates.
 

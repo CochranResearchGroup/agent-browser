@@ -11,25 +11,25 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 57 source `b2a3ff39` exposes `service runtime-config get` and
-`set <json-object>` plus HTTP/MCP service-request actions. Six typed settings
-update atomically with keeper policy, without client revision tokens. Live
-receipt commits preserve concurrent policy; stale waiters cannot restore excess
-demand. Lowered limits retain existing routes and browser assignments.
+P211 version 58 source `2f138944` adds reference-free cooldown scale-in and
+public `scaleInCooldownMs`. SQLite checks browser/handoff references, pending
+operations and admission/recovery before reserving one exact stop. Failed cleanup
+retains quarantine without broad shutdown. Retained demand falls to the current
+warm/reference floor after idle cooldown, preventing immediate rewarming.
 
-Six runtime-config and five MCP tests, full client, API/MCP parity (120 actions),
-final format/strict Clippy and docs gates pass. Native-other recorded 773 passes,
-57 ignored and one old policy-drift fixture failure. The corrected retained-route
-drift fixture passes focused revalidation; unchanged passes are retained.
-The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-public-runtime-configuration-amendment)
-records first-failure evidence and worker integration. No installed/provider
-mutation occurred; this is not full-suite or installed acceptance.
+Primary gates pass: four model, 29 store, six runtime-config, five MCP, 775
+native-other (57 ignored) and 253 stream tests; final format/strict Clippy,
+client, API/MCP parity and documentation checks. The
+[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-reference-free-cooldown-scale-in-amendment)
+records compile/lint repairs, corrected fixture expectations and retained gate
+scope. No installed/provider mutation occurred; this is not comprehensive or
+installed acceptance. Both workers are terminal.
 
-P211 remains OPEN. About 165 elapsed minutes since 02:46 UTC, older effort
-unknown, inherited ceiling unchanged. Next: automatic catalog expansion and
-capacity lifecycle. Scale-in, interrupted handoff recovery, causal discovery,
-quarantine, remaining persistence, Desktop Services and frozen isolated acceptance
-remain open. Production, ingress and release stay excluded.
+P211 remains OPEN. About 185 elapsed minutes since 02:46 UTC, older effort
+unknown, inherited ceiling unchanged. Next: automatic catalog expansion with
+retained identity and provider provisioning. Interrupted handoff recovery,
+causal discovery, quarantine, remaining persistence, Desktop Services and frozen
+isolated acceptance remain open. Production, ingress and release stay excluded.
 
 ## Turn 425 | 2026-09-21
 
