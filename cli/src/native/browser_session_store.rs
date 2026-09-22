@@ -6,8 +6,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState, RemoteViewHandoff,
-    RouteKeeperAuthority, RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
+    PresentationRequestQueue, RemoteViewHandoff, RouteKeeperAuthority,
+    RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
     BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
@@ -25,8 +26,10 @@ const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
+const PRESENTATION_REQUEST_QUEUE_DOCUMENT: &str = "presentation_request_queue";
 const ROUTE_KEEPER_AUTHORITY_DOCUMENT: &str = "route_keeper_authority";
 const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
+const PRESENTATION_REQUEST_QUEUE_SCHEMA_V1: &str = "agent-browser.presentation-request-queue.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
 
@@ -480,6 +483,44 @@ impl BrowserRuntimeSqliteStore {
             MANAGER_HANDOFF_REGISTRY_DOCUMENT,
             MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
         )
+    }
+
+    pub(crate) fn load_presentation_queue(&self) -> Result<PresentationRequestQueue, String> {
+        let queue: PresentationRequestQueue = load_optional_document(
+            &self.connection,
+            PRESENTATION_REQUEST_QUEUE_DOCUMENT,
+            PRESENTATION_REQUEST_QUEUE_SCHEMA_V1,
+        )?;
+        queue.validate()?;
+        Ok(queue)
+    }
+
+    pub(crate) fn mutate_presentation_queue<T>(
+        &mut self,
+        mutate: impl FnOnce(&mut PresentationRequestQueue) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("presentation_request_queue_begin_failed:{error}"))?;
+        let mut queue: PresentationRequestQueue = load_optional_document(
+            &transaction,
+            PRESENTATION_REQUEST_QUEUE_DOCUMENT,
+            PRESENTATION_REQUEST_QUEUE_SCHEMA_V1,
+        )?;
+        queue.validate()?;
+        let result = mutate(&mut queue)?;
+        queue.validate()?;
+        save_document(
+            &transaction,
+            PRESENTATION_REQUEST_QUEUE_DOCUMENT,
+            PRESENTATION_REQUEST_QUEUE_SCHEMA_V1,
+            &queue,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("presentation_request_queue_commit_failed:{error}"))?;
+        Ok(result)
     }
 
     pub(crate) fn save_manager_handoff(
@@ -1768,8 +1809,8 @@ fn atomic_replace(source: &Path, destination: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use agent_browser_service_model::{
-        BrowserProfileKind, RecordedProcessIdentity, RouteKeeperConnectionBinding,
-        RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
+        BrowserProfileKind, PresentationRequestPriority, RecordedProcessIdentity,
+        RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
     };
 
     fn route_keeper_host_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
@@ -1934,6 +1975,65 @@ mod tests {
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_session_state().unwrap(), state);
         assert_eq!(reopened.load_profile_catalog().unwrap(), catalog);
+    }
+
+    #[test]
+    fn sqlite_presentation_queue_persists_mutations_and_rolls_back_errors() {
+        let directory = TempDirectory::new("browser-runtime-presentation-queue");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store.load_presentation_queue().unwrap().entries.is_empty());
+
+        let entry = store
+            .mutate_presentation_queue(|queue| {
+                queue.enqueue(
+                    "request-a".to_string(),
+                    "fingerprint-a".to_string(),
+                    PresentationRequestPriority::NewOpen,
+                    10,
+                    100,
+                    2,
+                )
+            })
+            .unwrap();
+        assert_eq!(entry.key, "request-a");
+        let persisted = store.load_presentation_queue().unwrap();
+        assert_eq!(persisted.entries.len(), 1);
+        assert!(persisted.entries.contains_key("request-a"));
+
+        assert_eq!(
+            store.mutate_presentation_queue(|queue| -> Result<(), String> {
+                queue.enqueue(
+                    "request-rollback".to_string(),
+                    "fingerprint-rollback".to_string(),
+                    PresentationRequestPriority::NewOpen,
+                    20,
+                    100,
+                    2,
+                )?;
+                Err("presentation_queue_fixture_failure".to_string())
+            }),
+            Err("presentation_queue_fixture_failure".to_string())
+        );
+        let after_error = store.load_presentation_queue().unwrap();
+        assert_eq!(after_error.entries.len(), 1);
+        assert_eq!(after_error.entries["request-a"].key, "request-a");
+        assert!(!after_error.entries.contains_key("request-rollback"));
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let reopened = reopened.load_presentation_queue().unwrap();
+        assert_eq!(reopened.entries.len(), 1);
+        assert_eq!(reopened.entries["request-a"].key, "request-a");
     }
 
     #[test]

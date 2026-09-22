@@ -797,9 +797,23 @@ healthy destination is admissible under the current limits; `unavailable` means
 current route evidence cannot supply an allocation.
 Lowering either maximum does not migrate or close existing browsers. It reports
 `over_target` and refuses a new allocation until occupancy returns within the
-limits. The request path polls within its configured deadline, but this
-projection does not implement queue fairness, a durable queue, public runtime
-configuration, or scale-in.
+limits. Ordinary remote opens and manager handoff resolution use durable SQLite
+queue admission with a default depth of 32 and a 90-second deadline. Exact
+request IDs coalesce only when the complete payload fingerprint matches;
+anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
+first, followed by existing browser or handoff requests, then new opens. Aging
+promotes queued work every 30 seconds by rank, with original FIFO order for
+ties. Queue serialization prevents duplicate effects, and completed duplicates
+replay the prior response without asserting fresh readiness evidence; resolve
+the durable handoff again for current readiness.
+Queued work is retryable after restart; an interrupted admitted effect retains
+`recovery_required` and is never blindly replayed. Cancelling one duplicate
+waiter leaves other waiters active. Abandoned queued entries expire, while an
+admitted but unstarted permit releases when dropped. Retained results are
+bounded to 128. When present, the queue reports `hostGeneration`,
+`maximumDepth`, `queued`, `admitted`, `completed`, `retryable`, and
+`recoveryRequired`; expired queued entries count as retryable. Public runtime
+configuration and scale-in remain pending.
 
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same

@@ -2964,6 +2964,22 @@ fn format_service_status_text(data: &serde_json::Value) -> Option<String> {
         {
             lines.push(format!("  {reason}"));
         }
+        if let Some(queue) = keeper.get("queue") {
+            let count = |key| {
+                queue
+                    .get(key)
+                    .and_then(serde_json::Value::as_u64)
+                    .unwrap_or(0)
+            };
+            lines.push(format!(
+                "  Queue: queued={} admitted={} retryable={} recovery_required={} maximum_depth={}",
+                count("queued"),
+                count("admitted"),
+                count("retryable"),
+                count("recoveryRequired"),
+                count("maximumDepth")
+            ));
+        }
         if let Some(allocation) = keeper.get("allocation") {
             lines.push(format!(
                 "  Allocation: state={} browsers={} occupied_displays={} maximum_displays={} maximum_browsers_per_display={}",
@@ -7107,7 +7123,7 @@ Notes:
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks. Contracts include no-launch remote-view allocation collections for display allocations, remote-view routes, route pool entries, and viewer leases.
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
   - Service status includes manualBrowsers for live detached headed runtime launches, including PID, profile path, target URL, display, browser family/build, CDP availability, remote-view route, and the next safe operator action.
-  - Service status presentationKeeper joins current SQLite receipts with live supervisor health and host generation. Supervising alone is not readiness; minimumSatisfied requires usable routes. Its optional allocation status reports state, browserCount, occupiedDisplayCount, maximumDisplays, and maximumBrowsersPerDisplay. Counts are retained Browser Session Manager assignments, not an independent live OS census. Existing healthy browser reuse consumes no new allocation. New browsers grow onto unused healthy displays before sharing the least-loaded healthy occupied display up to the density cap. Lowered limits preserve existing browsers and report over_target for new allocation. Requests poll within the configured deadline; this status does not implement queue fairness, a durable queue, public runtime configuration, or scale-in. Remote opens and navigation wait within the configured request deadline during recovery and recheck before browser effects. Failed or stopped supervisors cannot supply ready routes. Manager handoff resolution rechecks before focus.
+  - Service status presentationKeeper joins current SQLite receipts with live supervisor health and host generation. Supervising alone is not readiness; minimumSatisfied requires usable routes. Its optional allocation status reports state, browserCount, occupiedDisplayCount, maximumDisplays, and maximumBrowsersPerDisplay. Counts are retained Browser Session Manager assignments, not an independent live OS census. Existing healthy browser reuse consumes no new allocation. New browsers grow onto unused healthy displays before sharing the least-loaded healthy occupied display up to the density cap. Lowered limits preserve existing browsers and report over_target for new allocation. Ordinary remote opens and manager handoff resolution use durable SQLite queue admission with default depth 32 and a 90-second deadline. Exact request IDs coalesce only when the complete payload fingerprint matches; anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs first, followed by existing browser or handoff requests, then new opens; aging promotes queued work every 30 seconds by rank, with original FIFO order for ties. Queue serialization prevents duplicate effects, and completed duplicates replay the prior response without asserting fresh readiness evidence; resolve the durable handoff again for current readiness. Queued work is retryable after restart; interrupted admitted effects retain recovery_required and are never blindly replayed. Cancelling one duplicate waiter leaves other waiters active. Abandoned queued entries expire, an admitted but unstarted permit releases when dropped, and retained results are bounded to 128. When present, queue reports hostGeneration, maximumDepth, queued, admitted, completed, retryable, and recoveryRequired; expired queued entries count as retryable. Public runtime configuration and scale-in remain pending. Remote opens and navigation wait within the configured request deadline during recovery and recheck before browser effects. Failed or stopped supervisors cannot supply ready routes. Manager handoff resolution rechecks before focus.
   - Service status includes presentationCapacity when durable slot authority is configured. It reports warm and active slots, admitted and hard limits, protected reserves, queued demand, and redacted binding warnings without launching a browser or opening a route.
   - Service status includes desktopEvidencePolicy. Use CDP for page evidence. Reserve desktop presentation only for browser chrome, extension UI, password-manager or passkey prompts, native dialogs, OS windows, or stacking evidence that CDP cannot observe. A generic CDP failure is diagnostic and does not authorize desktop fallback.
   - Current service status includes additive statusProjection provenance and freshness for host-local observations. service_state remains authority; unavailable means unknown. Derive staleness from validUntil. Legacy v1 fields remain supported.
@@ -8649,6 +8665,7 @@ mod tests {
                 "minimumReady": 1,
                 "warmTarget": 4,
                 "unavailableReason": "route_keeper_supervisor_terminated",
+                "queue": {"queued":2,"admitted":1,"retryable":0,"recoveryRequired":1,"maximumDepth":32},
                 "allocation": {
                     "state": "over_target",
                     "browserCount": 7,
@@ -8695,6 +8712,9 @@ mod tests {
             "Presentation keeper: state=unavailable supervisor=failed ready=0 minimum=1 warm_target=4"
         ));
         assert!(rendered.contains("route_keeper_supervisor_terminated"));
+        assert!(rendered.contains(
+            "Queue: queued=2 admitted=1 retryable=0 recovery_required=1 maximum_depth=32"
+        ));
         assert!(rendered.contains(
             "Allocation: state=over_target browsers=7 occupied_displays=3 maximum_displays=2 maximum_browsers_per_display=4"
         ));

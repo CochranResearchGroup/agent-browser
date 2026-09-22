@@ -1141,6 +1141,17 @@ export interface ServicePresentationKeeperStatus {
   warmTargetSatisfied: boolean;
   unavailableReason: string | null;
   allocation?: ServicePresentationAllocationStatus;
+  queue?: ServicePresentationQueueStatus;
+}
+
+export interface ServicePresentationQueueStatus {
+  hostGeneration: number;
+  maximumDepth: number;
+  queued: number;
+  admitted: number;
+  completed: number;
+  retryable: number;
+  recoveryRequired: number;
 }
 
 export interface ServicePresentationAllocationStatus {

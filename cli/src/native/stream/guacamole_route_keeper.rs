@@ -96,6 +96,11 @@ impl ConfiguredRouteKeeperSupervisorHandle {
             validate_configured_provider_catalog,
         )?;
         let prepared = reserve_prepared_cold_process_routes(&repository, &authority, prepared)?;
+        // The proven successor makes old queued work retryable without replaying
+        // requests whose admitted attempt may already have performed effects.
+        BrowserRuntimeSqliteStore::open(&database_path)?.mutate_presentation_queue(|queue| {
+            queue.advance_generation(successor_host_generation)
+        })?;
 
         let factory = ConfiguredRouteKeeperPrimaryFactory::new(database_path.clone());
         let observer = ConfiguredXrdpRouteKeeperObserver::new(

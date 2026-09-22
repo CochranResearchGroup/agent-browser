@@ -44,6 +44,7 @@ export const currentV1ServiceStatusResponse = {
     minimumSatisfied: false,
     warmTargetSatisfied: false,
     unavailableReason: 'route_keeper_supervisor_terminated',
+    queue: { hostGeneration: 3, maximumDepth: 32, queued: 1, admitted: 0, completed: 0, retryable: 1, recoveryRequired: 0 },
     allocation: {
       state: 'over_target',
       browserCount: 7,

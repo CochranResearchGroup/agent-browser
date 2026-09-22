@@ -205,6 +205,20 @@
         "minimumSatisfied": { "type": "boolean" },
         "warmTargetSatisfied": { "type": "boolean" },
         "unavailableReason": { "type": ["string", "null"] },
+        "queue": {
+          "type": "object",
+          "required": ["hostGeneration", "maximumDepth", "queued", "admitted", "completed", "retryable", "recoveryRequired"],
+          "properties": {
+            "hostGeneration": { "type": "integer", "minimum": 0 },
+            "maximumDepth": { "type": "integer", "minimum": 0 },
+            "queued": { "type": "integer", "minimum": 0 },
+            "admitted": { "type": "integer", "minimum": 0 },
+            "completed": { "type": "integer", "minimum": 0 },
+            "retryable": { "type": "integer", "minimum": 0 },
+            "recoveryRequired": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
         "allocation": {
           "type": "object",
           "required": ["state", "browserCount", "occupiedDisplayCount", "maximumDisplays", "maximumBrowsersPerDisplay"],

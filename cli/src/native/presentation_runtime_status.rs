@@ -23,6 +23,8 @@ pub(crate) struct PresentationKeeperStatus {
     pub unavailable_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub allocation: Option<super::presentation_runtime_capacity::PresentationAllocationStatus>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub queue: Option<super::presentation_request_admission::PresentationQueueStatus>,
 }
 
 impl PresentationKeeperStatus {
@@ -127,6 +129,7 @@ pub(crate) fn keeper_status(
         warm_target_satisfied: ready_route_count >= authority.policy.warm_target,
         unavailable_reason: reason,
         allocation: None,
+        queue: None,
     })
 }
 
@@ -146,5 +149,6 @@ pub(crate) fn unavailable_status(code: &str) -> PresentationKeeperStatus {
         warm_target_satisfied: false,
         unavailable_reason: Some(code.to_string()),
         allocation: None,
+        queue: None,
     }
 }

@@ -20,6 +20,7 @@ mod monitor;
 mod operational_snapshot;
 mod presentation;
 mod presentation_capacity;
+mod presentation_request_queue;
 mod principal_continuity;
 mod profile_access;
 mod profile_lease;
@@ -248,4 +249,9 @@ pub use site_policy::{
 pub use terminal_outcome::{
     ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
     SERVICE_TERMINAL_OUTCOME_SCHEMA_VERSION,
+};
+
+pub use presentation_request_queue::{
+    PresentationRequestEntry, PresentationRequestPriority, PresentationRequestQueue,
+    PresentationRequestState,
 };
