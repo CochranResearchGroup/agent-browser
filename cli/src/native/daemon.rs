@@ -35,6 +35,18 @@ fn should_journal_browser_open(
         || (action_is_open && has_named_profile && !explicit_display && has_remote_desktop_routes)
 }
 
+fn command_has_named_profile(command: &Value) -> bool {
+    command
+        .get("profileId")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("profileId"))
+        })
+        .and_then(Value::as_str)
+        .is_some_and(|profile_id| !profile_id.trim().is_empty())
+}
+
 fn require_keeper_handoff_resolution(
     required: bool,
     routes: &[agent_browser_service_model::BrowserDesktopRoute],
@@ -951,15 +963,7 @@ impl RuntimeHostRouter {
             };
         let action = command.get("action").and_then(Value::as_str);
         let action_is_open = action == Some("browser_session_open");
-        let has_named_profile = command
-            .get("profileId")
-            .or_else(|| {
-                command
-                    .get("params")
-                    .and_then(|params| params.get("profileId"))
-            })
-            .and_then(Value::as_str)
-            .is_some();
+        let has_named_profile = command_has_named_profile(&command);
         let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
         let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
         let keeper_handoff_required = publish_manager_handoff;
@@ -2113,6 +2117,19 @@ mod tests {
             true, true, false, false, false
         ));
         assert!(should_journal_browser_open(true, true, true, false, true));
+    }
+
+    #[test]
+    fn named_profile_routing_rejects_empty_wire_values() {
+        assert!(!command_has_named_profile(
+            &serde_json::json!({"profileId": ""})
+        ));
+        assert!(!command_has_named_profile(
+            &serde_json::json!({"params": {"profileId": "  "}})
+        ));
+        assert!(command_has_named_profile(
+            &serde_json::json!({"profileId": "review-profile"})
+        ));
     }
 
     #[test]

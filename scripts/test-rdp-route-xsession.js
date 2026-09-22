@@ -265,15 +265,15 @@ fi
         '#!/bin/sh\nprintf "0123456789abcdef0123456789abcdef\\n"\n',
         { mode: 0o755 },
       );
-      writeFileSync(join(proc, '41002', 'status'), 'Name:\txrdp-chansrv\nUid:\t2001\t2001\t2001\t2001\n');
+      writeFileSync(join(proc, '41002', 'status'), 'Name:\txrdp-sesman\nUid:\t0\t0\t0\t0\n');
       writeFileSync(join(proc, '41003', 'status'), 'Name:\tXorg\nUid:\t2001\t2001\t2001\t2001\n');
       const statTail = 'S 1 1 1 0 0 0 0 0 0 0 0 0 0 20 0 1 0 0';
-      writeFileSync(join(proc, '41002', 'stat'), `41002 (xrdp-chansrv) ${statTail} 5101\n`);
+      writeFileSync(join(proc, '41002', 'stat'), `41002 (xrdp-sesman) ${statTail} 5101\n`);
       writeFileSync(join(proc, '41003', 'stat'), `41003 (Xorg) ${statTail} 5102\n`);
       const cgroupPath = '0::/user.slice/user-2001.slice/session-c42.scope\n';
       writeFileSync(join(proc, '41002', 'cgroup'), cgroupPath);
       writeFileSync(join(proc, '41003', 'cgroup'), cgroupPath);
-      writeFileSync(join(proc, '41002', 'cmdline'), Buffer.from('/usr/bin/xrdp-chansrv\0'));
+      writeFileSync(join(proc, '41002', 'cmdline'), Buffer.from('/usr/sbin/xrdp-sesman\0'));
       writeFileSync(join(proc, '41003', 'cmdline'), Buffer.from('/usr/lib/xorg/Xorg\0:21\0-auth\0.Xauthority\0'));
       symlinkSync('socket:[6101]', join(proc, '41003', 'fd', '8'));
       writeFileSync(join(proc, 'net-unix'), 'Num RefCount Protocol Flags Type St Inode Path\n000: 2 0 10000 1 01 6101 /tmp/.X11-unix/X21\n');

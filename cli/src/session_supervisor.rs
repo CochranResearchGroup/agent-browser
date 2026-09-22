@@ -168,11 +168,13 @@ pub(crate) fn validate_manifest(manifest: &SessionSupervisorManifest) -> Result<
 /// Keep retained child processes alive across host retirement as well; their
 /// lifetime is governed by explicit ownership-scoped cleanup instead of the
 /// service cgroup's stop operation.
+/// The host also invokes the root-owned, sudoers-restricted remote-view helper,
+/// so systemd must permit that reviewed setuid transition.
 pub(crate) fn render_unit(executable_path: &str) -> Result<String, String> {
     validate_absolute_text_path(executable_path, "executable path")?;
     let executable = systemd_quote(executable_path);
     Ok(format!(
-        "[Unit]\nDescription=Agent Browser user runtime host\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run-host\nRestart=on-failure\nRestartSec=2\nKillMode=process\nNoNewPrivileges=true\nPrivateTmp=false\nStateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp\nStateDirectoryMode=0700\nBindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp\n\n[Install]\nWantedBy=default.target\n"
+        "[Unit]\nDescription=Agent Browser user runtime host\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run-host\nRestart=on-failure\nRestartSec=2\nKillMode=process\nNoNewPrivileges=false\nPrivateTmp=false\nStateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp\nStateDirectoryMode=0700\nBindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp\n\n[Install]\nWantedBy=default.target\n"
     ))
 }
 
@@ -1678,6 +1680,7 @@ mod tests {
         let unit = render_unit("/home/test/Agent Browser/bin/agent-browser").expect("unit");
         assert!(unit.contains("Restart=on-failure"));
         assert!(unit.contains("KillMode=process"));
+        assert!(unit.contains("NoNewPrivileges=false"));
         assert!(unit.contains("PrivateTmp=false"));
         assert!(unit.contains("StateDirectoryMode=0700"));
         assert!(unit.contains(

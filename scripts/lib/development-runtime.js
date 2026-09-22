@@ -197,8 +197,9 @@ ${common}
 ExecStart=${generationBinary} session supervisor run-host
 Restart=on-failure
 RestartSec=2
-NoNewPrivileges=true
-PrivateTmp=true
+# The runtime host calls the root-owned helper through its narrow sudoers rule.
+NoNewPrivileges=false
+PrivateTmp=false
 
 [Install]
 WantedBy=default.target

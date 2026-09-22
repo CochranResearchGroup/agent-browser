@@ -263,6 +263,8 @@ try {
     assert.match(source, /AGENT_BROWSER_GUACAMOLE_HEADER_USER=fixture-provider-operator/);
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
+  assert.match(units[descriptor.unitNames.runtimeHost], /^NoNewPrivileges=false$/m);
+  assert.match(units[descriptor.unitNames.runtimeHost], /^PrivateTmp=false$/m);
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 

@@ -453,7 +453,13 @@ collect_rdp_route_session() {
   [[ "$W_LEADER_PID" =~ ^[1-9][0-9]*$ ]] || return 1
   [[ "$W_SESSION_SCOPE" == "session-$W_SESSION_ID.scope" ]] || return 1
   W_CGROUP_PATH="/user.slice/user-$W_ROUTE_UID.slice/$W_SESSION_SCOPE"
-  [[ "$(process_uid "$W_LEADER_PID")" == "$W_ROUTE_UID" ]] || return 1
+  # logind records the root-owned xrdp-sesman process as the XRDP session
+  # leader. Bind that exact daemon and cgroup before locating the route-user
+  # X server below.
+  [[ "$(process_uid "$W_LEADER_PID")" == "0" ]] || return 1
+  local leader_cmdline
+  leader_cmdline="$(tr '\0' ' ' <"$PROC_ROOT/$W_LEADER_PID/cmdline" 2>/dev/null || true)"
+  [[ "${leader_cmdline%% *}" == */xrdp-sesman ]] || return 1
   [[ "$(process_cgroup_path "$W_LEADER_PID")" == "$W_CGROUP_PATH" ]] || return 1
   W_LEADER_START_TICKS="$(process_start_ticks "$W_LEADER_PID")" || return 1
 
