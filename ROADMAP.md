@@ -224,6 +224,14 @@ and still refuses retained-task recovery because connector adoption is absent.
 Diff hygiene, formatting, strict Clippy, and all 44 focused route-keeper tests
 pass. The 815-second broad provider-free run ended nonzero in its support lane,
 so that lane remains an explicit validation gate. No runtime effect occurred.
+Checkpoint `536d58a9` repairs the six stale v3 browser handoff and host fixtures
+that omitted their generation's exact host-process claim. The isolated
+workstation compartment passes all 215 tests, the repaired browser compartment
+passes 140 active tests, strict workspace Clippy passes, and the complete
+provider-free runner passes both lanes in 720 seconds. Configured connector
+adoption and the exact predecessor-exit evidence join are now the next bounded
+provider-free packet. Whole-authority recovery, quarantine, runtime-host
+integration, and live readiness remain open. No runtime effect occurred.
 
 ## P216 | Service Model Extraction Landing
 

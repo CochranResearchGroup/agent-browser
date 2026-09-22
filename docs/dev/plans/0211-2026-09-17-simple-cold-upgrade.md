@@ -1687,6 +1687,22 @@ browser, Service State, installed-runtime, production, ingress, or release
 effect. The next bounded packet must first reproduce or clear that support-lane
 failure before joining configured connector adoption or broader runtime proof.
 
+Checkpoint `536d58a9` clears that validation gate. The broad support-lane
+failure reproduced as six browser handoff and host fixtures that constructed a
+v3 route-keeper authority without registering the exact host-process claim for
+their active generation. Production validation correctly rejected those
+fixtures with `route_keeper_host_process_claim_missing`. The fixtures now bind
+their generation to a complete recorded process identity before starting a
+keeper. The isolated workstation compartment passes all 215 tests, the
+repaired browser compartment passes 140 active tests with two browser-launch
+tests ignored, strict workspace Clippy passes, and the complete provider-free
+runner passes both lanes in 720 seconds. The next bounded provider-free packet
+may join configured connector adoption with the already constructed exact
+predecessor-exit evidence. Whole-authority phase recovery, quarantine handling,
+runtime-host startup integration, and live readiness remain separate gates.
+No provider, browser, Service State, installed-runtime, production, ingress, or
+release effect occurred.
+
 ## Worker Assignments
 
 For the exact XRDP source packet, the operator authorized bounded parallel

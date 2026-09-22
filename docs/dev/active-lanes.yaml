@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 1ebfa757
+    checkpoint: 536d58a9
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: checkpoint 1ebfa757 advances the authority to v3 with append-only boot-epoch and exact process-identity claims per host generation; all 44 focused route-keeper tests, formatting, strict Clippy, and diff hygiene pass, configured startup still refuses retained-task recovery, and the 815-second broad provider-free run is nonzero in its support lane and remains an explicit gate
-    validation_ref: 1ebfa757
+    validation_status: checkpoint 536d58a9 binds all browser handoff and host v3 fixtures to exact host-process claims; the isolated workstation compartment passes 215 tests, the browser compartment passes 140 active tests, strict workspace Clippy passes, and the 720-second complete provider-free runner passes both lanes
+    validation_ref: 536d58a9
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 49 still requires a reproducible or cleared broad support-lane validation result, cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, configured connector adoption, whole-authority phase recovery and absent-slot generation rollover for non-Absent keeper state, supervisor health projection, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
-    updated_at: 2026-09-20
+    blocker: version 49 still requires cross-platform causal process discovery for automatic ambiguous-launch adoption or cleanup, configured connector adoption joined to exact predecessor-exit evidence, whole-authority phase recovery and absent-slot generation rollover for non-Absent keeper state, quarantine handling, supervisor health projection, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    updated_at: 2026-09-21
