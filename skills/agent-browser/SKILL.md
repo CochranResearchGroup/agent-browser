@@ -582,10 +582,14 @@ anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
 first, followed by existing browser or handoff requests, then new opens. Aging
 promotes queued work every 30 seconds by rank, with original FIFO order for
 ties. Queue serialization prevents duplicate effects, and completed duplicates
-replay the prior response without asserting fresh readiness evidence; resolve
-the durable handoff again for current readiness.
-Queued work is retryable after restart; an interrupted admitted effect retains
-`recovery_required` and is never blindly replayed. Cancelling one duplicate
+replay the prior response without asserting current visibility or fresh readiness
+evidence; resolve the durable handoff again for current readiness.
+Queued work is retryable after restart. An interrupted admitted
+`browser_session_open` may requeue at Recovery priority only with the exact
+original payload and a matching browser-runtime-open SQLite journal; that
+journal controls recovery and prevents a blind relaunch. An interruption with
+no journal or a payload mismatch, and any interrupted navigation or handoff,
+retains `recovery_required`. Cancelling one duplicate
 waiter leaves other waiters active. Abandoned queued entries expire, while an
 admitted but unstarted permit releases when dropped. Retained results are
 bounded to 128. When present, the queue reports `hostGeneration`,

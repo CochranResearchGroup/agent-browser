@@ -314,6 +314,70 @@ impl PresentationRequestQueue {
             .ok_or_else(|| format!("presentation_queue_entry_missing:{key}"))
     }
 
+    pub fn resume_reconciled(
+        &mut self,
+        expected: &PresentationRequestEntry,
+        host_generation: u64,
+        now_ms: u64,
+        deadline_ms: u64,
+        max_depth: usize,
+    ) -> Result<PresentationRequestEntry, String> {
+        self.require_generation(host_generation)?;
+        if deadline_ms <= now_ms {
+            return Err(format!(
+                "presentation_queue_deadline_invalid:{}",
+                expected.key
+            ));
+        }
+        if max_depth == 0 {
+            return Err("presentation_queue_max_depth_invalid".to_string());
+        }
+        let stored = self
+            .entries
+            .get(&expected.key)
+            .ok_or_else(|| format!("presentation_queue_entry_missing:{}", expected.key))?;
+        if stored != expected {
+            return Err(format!(
+                "presentation_queue_reconciled_entry_mismatch:{}",
+                expected.key
+            ));
+        }
+        if !matches!(
+            stored.state,
+            PresentationRequestState::Retryable {
+                recovery_required: true
+            }
+        ) {
+            return Err(format!(
+                "presentation_queue_recovery_not_required:{}",
+                expected.key
+            ));
+        }
+        if self.recovery_required_count() > MAX_RECOVERY_REQUIRED_ENTRIES {
+            return Err("presentation_queue_recovery_retention_full".to_string());
+        }
+        if self.active_depth(now_ms) >= max_depth {
+            return Err("presentation_queue_full".to_string());
+        }
+
+        let next_sequence = self
+            .next_sequence
+            .checked_add(1)
+            .ok_or_else(|| "presentation_queue_sequence_exhausted".to_string())?;
+        let resumed = PresentationRequestEntry {
+            key: expected.key.clone(),
+            fingerprint: expected.fingerprint.clone(),
+            priority: PresentationRequestPriority::Recovery,
+            enqueued_at_ms: now_ms,
+            deadline_ms,
+            sequence: self.next_sequence,
+            state: PresentationRequestState::Queued,
+        };
+        self.next_sequence = next_sequence;
+        self.entries.insert(expected.key.clone(), resumed.clone());
+        Ok(resumed)
+    }
+
     pub fn advance_generation(&mut self, new_host_generation: u64) -> Result<(), String> {
         if new_host_generation < self.host_generation {
             return Err(format!(
@@ -452,6 +516,23 @@ mod tests {
                 32,
             )
             .unwrap()
+    }
+
+    fn recovery_required_queue() -> (PresentationRequestQueue, PresentationRequestEntry) {
+        let mut queue = PresentationRequestQueue::default();
+        queue.advance_generation(1).unwrap();
+        enqueue(
+            &mut queue,
+            "recover",
+            PresentationRequestPriority::Recovery,
+            10,
+        );
+        queue
+            .try_admit("recover", 1, "attempt".to_string(), 20, true)
+            .unwrap();
+        queue.advance_generation(2).unwrap();
+        let expected = queue.entries["recover"].clone();
+        (queue, expected)
     }
 
     #[test]
@@ -775,6 +856,68 @@ mod tests {
             MAX_RECOVERY_REQUIRED_ENTRIES
         );
         queue.validate().unwrap();
+    }
+
+    #[test]
+    fn reconciled_resume_rejects_stale_proof_without_mutation() {
+        let (mut queue, expected) = recovery_required_queue();
+        let before = queue.clone();
+        assert_eq!(
+            queue.resume_reconciled(&expected, 1, 30, 130_000, 32),
+            Err("presentation_queue_generation_mismatch:1:2".to_string())
+        );
+        assert_eq!(queue, before);
+
+        let mut stale_sequence = expected.clone();
+        stale_sequence.sequence += 1;
+        assert_eq!(
+            queue.resume_reconciled(&stale_sequence, 2, 30, 130_000, 32),
+            Err("presentation_queue_reconciled_entry_mismatch:recover".to_string())
+        );
+        assert_eq!(queue, before);
+
+        let mut wrong_payload = expected.clone();
+        wrong_payload.fingerprint = "other".to_string();
+        assert_eq!(
+            queue.resume_reconciled(&wrong_payload, 2, 30, 130_000, 32),
+            Err("presentation_queue_reconciled_entry_mismatch:recover".to_string())
+        );
+        assert_eq!(queue, before);
+    }
+
+    #[test]
+    fn reconciled_resume_requeues_with_fresh_recovery_sequence() {
+        let (mut queue, expected) = recovery_required_queue();
+        let resumed = queue
+            .resume_reconciled(&expected, 2, 30, 130_000, 32)
+            .unwrap();
+
+        assert_eq!(resumed.key, expected.key);
+        assert_eq!(resumed.fingerprint, expected.fingerprint);
+        assert!(resumed.sequence > expected.sequence);
+        assert_eq!(resumed.priority, PresentationRequestPriority::Recovery);
+        assert_eq!(resumed.enqueued_at_ms, 30);
+        assert_eq!(resumed.deadline_ms, 130_000);
+        assert_eq!(resumed.state, PresentationRequestState::Queued);
+        assert_eq!(queue.entries["recover"], resumed);
+    }
+
+    #[test]
+    fn reconciled_resume_respects_depth_without_mutation() {
+        let (mut queue, expected) = recovery_required_queue();
+        enqueue(
+            &mut queue,
+            "active",
+            PresentationRequestPriority::NewOpen,
+            30,
+        );
+        let before = queue.clone();
+
+        assert_eq!(
+            queue.resume_reconciled(&expected, 2, 40, 140_000, 1),
+            Err("presentation_queue_full".to_string())
+        );
+        assert_eq!(queue, before);
     }
 
     #[test]

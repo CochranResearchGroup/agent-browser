@@ -90,7 +90,7 @@ impl PresentationAdmissionRequest {
         Self::enqueue_at(path, command, generation, existing_handoff, now_ms())
     }
 
-    fn enqueue_at(
+    pub(super) fn enqueue_at(
         path: PathBuf,
         command: &Value,
         generation: u64,
@@ -117,9 +117,19 @@ impl PresentationAdmissionRequest {
         );
         let mut store = BrowserRuntimeSqliteStore::open(&path)?;
         let config = store.load_runtime_config()?;
-        let priority = if store
-            .find_operation(id)?
-            .is_some_and(|operation| operation.state != BrowserRuntimeOperationState::Committed)
+        let operation = store.find_operation(id)?;
+        // The journal remains the effect authority. Queue recovery only permits
+        // the exact original open to enter that journal's existing state machine.
+        let journal_recoverable = !existing_handoff
+            && command.get("action").and_then(Value::as_str) == Some("browser_session_open")
+            && operation.as_ref().is_some_and(|operation| {
+                operation.owner_key == "browser-runtime-open"
+                    && operation.request.get("command") == Some(command)
+            });
+        let priority = if journal_recoverable
+            && operation
+                .as_ref()
+                .is_some_and(|operation| operation.state != BrowserRuntimeOperationState::Committed)
         {
             PresentationRequestPriority::Recovery
         } else if existing_handoff
@@ -134,6 +144,25 @@ impl PresentationAdmissionRequest {
         };
         let entry = store.mutate_presentation_queue(|queue| {
             queue.advance_generation(generation)?;
+            if let Some(expected) = queue.entries.get(&key).cloned() {
+                if journal_recoverable
+                    && expected.fingerprint == fingerprint
+                    && matches!(
+                        expected.state,
+                        PresentationRequestState::Retryable {
+                            recovery_required: true
+                        }
+                    )
+                {
+                    return queue.resume_reconciled(
+                        &expected,
+                        generation,
+                        now,
+                        now.saturating_add(config.request_deadline_ms),
+                        config.maximum_queue_depth as usize,
+                    );
+                }
+            }
             queue.enqueue(
                 key.clone(),
                 fingerprint,
@@ -400,6 +429,60 @@ mod tests {
                 .is_none(),
             "an interrupted started effect must not silently release authority"
         );
+    }
+
+    #[test]
+    fn interrupted_admission_requires_exact_open_journal() {
+        for case in ["missing", "owner", "payload", "navigation"] {
+            let fixture = Fixture::new();
+            let path = fixture.0.join("runtime.sqlite3");
+            let command = serde_json::json!({
+                "id": "interrupted",
+                "action": if case == "navigation" { "navigate" } else { "browser_session_open" },
+                "profileId": "fixture"
+            });
+            let request = PresentationAdmissionRequest::enqueue_at(
+                path.clone(),
+                &command,
+                1,
+                false,
+                now_ms(),
+            )
+            .unwrap();
+            let Some(PresentationAdmission::Execute(mut permit)) =
+                request.poll(Some(true)).unwrap()
+            else {
+                panic!("expected admission")
+            };
+            permit.require_current().unwrap();
+            drop(permit);
+            let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+            if case != "missing" {
+                let mut journal_command = command.clone();
+                if case == "payload" {
+                    journal_command["profileId"] = "different".into();
+                }
+                store
+                    .reserve_operation(
+                        "interrupted",
+                        if case == "owner" {
+                            "wrong-owner"
+                        } else {
+                            "browser-runtime-open"
+                        },
+                        serde_json::json!({"command": journal_command}),
+                    )
+                    .unwrap();
+            }
+            store
+                .mutate_presentation_queue(|queue| queue.advance_generation(2))
+                .unwrap();
+            let before = store.load_presentation_queue().unwrap();
+            assert!(matches!(PresentationAdmissionRequest::enqueue_at(
+                path, &command, 2, false, now_ms(),
+            ), Err(error) if error == "presentation_queue_recovery_required:browser:interrupted"));
+            assert_eq!(store.load_presentation_queue().unwrap(), before, "{case}");
+        }
     }
 
     #[test]

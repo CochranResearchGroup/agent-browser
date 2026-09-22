@@ -1791,10 +1791,13 @@ mod tests {
     use crate::native::browser_session_store::{
         BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
     };
+    use crate::native::presentation_request_admission::{
+        now_ms, PresentationAdmission, PresentationAdmissionRequest,
+    };
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
-        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RecordedProcessIdentity,
-        RemoteViewHandoff, RemoteViewRoute, RouteKeeperConnectionBinding,
+        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, PresentationRequestState,
+        RecordedProcessIdentity, RemoteViewHandoff, RemoteViewRoute, RouteKeeperConnectionBinding,
         RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim, RouteKeeperReconcileAction,
         RouteKeeperStartPriority, RoutePoolEntry, ServiceState,
     };
@@ -2809,6 +2812,21 @@ mod tests {
             BrowserRuntimeOperationState::Prepared
         );
 
+        let queue_now = now_ms();
+        let admitted_request = PresentationAdmissionRequest::enqueue_at(
+            database_path.clone(),
+            &command,
+            1,
+            false,
+            queue_now,
+        )
+        .unwrap();
+        let mut permit = match admitted_request.poll(Some(true)).unwrap() {
+            Some(PresentationAdmission::Execute(permit)) => permit,
+            _ => panic!("expected admitted presentation request"),
+        };
+        permit.require_current().unwrap();
+
         let first = {
             let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
             let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
@@ -2838,6 +2856,34 @@ mod tests {
         assert_eq!(pending.state, BrowserRuntimeOperationState::Observed);
         assert_eq!(pending.result.as_ref().unwrap()["phase"], "browser_opened");
         drop(interrupted);
+
+        BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .mutate_presentation_queue(|queue| queue.advance_generation(2))
+            .unwrap();
+        let interrupted_queue = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_presentation_queue()
+            .unwrap();
+        assert!(matches!(
+            interrupted_queue.entries["browser:journal-open-1"].state,
+            PresentationRequestState::Retryable {
+                recovery_required: true
+            }
+        ));
+        let recovered_request = PresentationAdmissionRequest::enqueue_at(
+            database_path.clone(),
+            &command,
+            2,
+            false,
+            now_ms(),
+        )
+        .unwrap();
+        let mut recovered_permit = match recovered_request.poll(Some(true)).unwrap() {
+            Some(PresentationAdmission::Execute(permit)) => permit,
+            _ => panic!("expected journal recovery admission"),
+        };
+        recovered_permit.require_current().unwrap();
 
         let intervening_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         let mut intervening_state = persisted_base_state.clone();
@@ -2917,6 +2963,7 @@ mod tests {
         );
         assert_eq!(ready["data"]["tabId"], "tab-1");
         assert_eq!(launches.load(Ordering::SeqCst), 1);
+        recovered_permit.finish(Ok(ready.clone())).unwrap();
         let handoff_id = ready["data"]["handoffId"].as_str().unwrap();
         assert!(restarted.manager_handoff(handoff_id).is_some());
 
@@ -2934,6 +2981,7 @@ mod tests {
         let state = published.load_session_state().unwrap();
         assert_eq!(state.sessions.len(), 1);
         assert_eq!(state.tabs.len(), 1);
+        assert_eq!(state.sessions["session:alice:work:1"].name, "alice");
         assert_eq!(
             published
                 .load_handoff_registry()
@@ -2943,6 +2991,10 @@ mod tests {
                 .map(|handoff| handoff.state.as_str()),
             Some("ready")
         );
+        assert!(matches!(
+            published.load_presentation_queue().unwrap().entries["browser:journal-open-1"].state,
+            PresentationRequestState::Completed { .. }
+        ));
     }
 
     #[test]
