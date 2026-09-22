@@ -121,6 +121,32 @@ Exit evidence: durable source identity, clean or explicitly preserved custody,
 focused green tests and no unresolved accepted review finding. Stop if the
 atomic contract cannot be achieved without redesigning unrelated authority.
 
+M1 completed at source checkpoint `cf75aac1`. The original unqualified v63
+bundle is durably preserved under the user-scoped P211 campaign directory with
+all three bundle hashes verified. The repaired SQLite activation stages the
+successor lease, runs guarded focus, saves the resulting Browser Session State,
+publishes desktop control and commits them under one IMMEDIATE transaction.
+Failed effects roll back control and state; the host restores its cached state.
+
+Qualification passed 14 focused desktop-control tests, three exact host
+regressions, the complete `cli-native-other` compartment with 786 passed and 57
+ignored, strict workspace Clippy, final formatting, service-client generation
+and helpers, documentation links, remote-view docs, policy wiring, the route
+handoff audit fixture and diff hygiene. The first compile attempt exposed a
+wrong model re-export plus a cache-wrapper compiler-probe failure; the re-export
+was repaired and final Rust gates ran with the documented cache opt-out. The
+failed attempt remains diagnostic evidence rather than being erased by retry.
+
+Delegation receipt: `/root/atomic_activation_fix` used `gpt-5.6-sol` at medium
+effort, produced the single-transaction patch and was interrupted after it
+stalled before validation; primary completed integration and qualification.
+`/root/m1_closed_review` used `gpt-5.6-luna` at medium effort for closed-world
+finding verification. `/root/m1_validation_map` used `gpt-5.6-luna` at low
+effort for deterministic gate selection. Both read-only workers completed and
+their accepted evidence shaped the final regression set. Goal readback at the
+M1 source checkpoint was 326,747 cumulative tokens, within the 350,000 M1
+reservation. Progress classification: `outcome_progress`. M2 is next.
+
 ### M2 | Frozen Provider-Free Qualification
 
 Budget reservation: at most 500,000 additional tokens; cumulative campaign

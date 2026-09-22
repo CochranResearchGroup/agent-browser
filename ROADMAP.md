@@ -277,7 +277,8 @@ gain durable custody before it is trusted for resumption.
 Version 65 freezes revision churn and routes completion through one cumulative
 2,000,000-token `/goal` campaign with four evidence-bearing sub-milestones.
 Architecture expansion is deferred unless the installed journey proves an exact
-blocker. See the [current runbook](RUNBOOK.md#turn-428--2026-09-22) for the repair order,
+blocker. M1 is qualified at `cf75aac1`; M2 provider-free candidate freeze is
+next. See the [current runbook](RUNBOOK.md#turn-428--2026-09-22) for the repair order,
 qualification and native-platform/installed evidence limits.
 
 ## P216 | Service Model Extraction Landing

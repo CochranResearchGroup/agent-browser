@@ -11,20 +11,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 428 | 2026-09-22
 
-P211 version 65 freezes further revision churn and defines one `/goal`
-completion campaign with a cumulative 2,000,000-token ceiling. Its four
-sub-milestones are recoverable atomic candidate, frozen provider-free
-qualification, isolated installed operator journey, and integration/closeout.
-Sub-milestones, successor packets, sessions and model changes do not reset the
-ceiling. Routine source commits no longer receive paired plan checkpoints.
+P211 version 65 uses one cumulative 2,000,000-token `/goal` completion campaign.
+M1 is complete at source `cf75aac1`: durable v63 custody is verified and desktop
+control transfer, guarded focus and resulting session-state persistence now
+share one SQLite commit. Failed effects preserve the prior controller and state.
 
-Architecture expansion is stopped unless a failing acceptance check proves an
-exact blocker. The campaign's primary verdict is one ordinary installed cold
-workflow ending in an authenticated ready opaque remote-view handoff. M1 starts
-only after durable custody and repairs the accepted activation atomicity defect.
-Installed and integration effects retain their existing exact gates. P211
-remains OPEN; no build, runtime effect, commit, push or PR mutation occurred in
-this planning amendment.
+Qualification passes 14 focused control tests, three host regressions, 786
+native-other tests with 57 ignored, strict Clippy, final formatting, client,
+documentation, policy, handoff and diff gates. The first compile exposed a
+wrong re-export and cache-wrapper failure; final gates used the documented
+cache opt-out. Three bounded workers returned implementation, closed-world
+review and validation mapping; primary integrated and qualified the patch.
+Goal readback was 326,747 cumulative tokens, within M1's 350,000 reservation.
+Progress is `outcome_progress`. M2 freezes and runs provider-free qualification;
+installed and integration effects retain their exact gates. P211 remains OPEN.
 
 ## Turn 427 | 2026-09-22
 
