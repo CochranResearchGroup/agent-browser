@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 61
+Plan version: 62
 
 State: OPEN
 
@@ -74,6 +74,83 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Reserved Browser Discovery Amendment
+
+Version 62 starts from source `89432d9b` and ledger `5da931dc`. The production
+runtime still inherits the default unproven reserved-launch recovery. Replace
+that missing adapter using the selected profile's local DevTools endpoint,
+Chrome's reported browser PID and exact cross-platform process observations.
+There is no need for an unbounded system-wide process scan. The reservation
+marker, selected profile, browser family, executable and process start identity
+must all agree, and the endpoint and identity must remain stable across proof.
+Missing, malformed, conflicting or ambiguous evidence retains the existing
+cleanup obligation without launching or terminating a process.
+
+Primary owns the asynchronous CDP proof, runtime actor integration, plan/docs,
+qualification and custody. Existing sol/medium worker `/root/capacity_selection`
+owns a pure process-proof child and representative platform argv fixtures.
+Effective model settings are unknown. No new worktree or runtime is admitted.
+Provider-free local mock CDP and injected process observations exercise the real
+adapter; they do not establish native macOS/Windows or installed acceptance.
+
+This independently useful recovery prerequisite budgets 18 implementation,
+12 qualification and five custody minutes. At about 07:14 UTC, 268 minutes have
+elapsed since 02:46 UTC; older effort is unknown and the inherited ceiling stays
+360 minutes. Roughly 92 measured minutes remain. Full persistence, shared-control,
+quarantine and installed-matrix acceptance is not claimed achievable within
+that estimate. No allowance or retry counter resets; the complete objective
+remains unchanged. No installed/provider/production/ingress effect is included.
+
+Acceptance requires an exact reserved browser to recover without a second launch,
+wrong or stale PID/profile/marker/endpoint evidence to remain unresolved, bounded
+read-only probing, preserved prior open recovery, required Rust quality and docs.
+
+### Version 62 Qualification
+
+Source `6526ccef` replaces the production reserved-browser recovery stub with a
+selected-profile DevTools probe. Two read-only Chrome process queries bracket
+exact OS observations. The profile endpoint is read again before returning the
+proven launch. The existing host journal adopts that observed launch and retains
+its no-second-launch rule. Missing or conflicting evidence remains unresolved;
+this implementation does not guess a process or terminate one.
+
+Primary qualification:
+
+| Gate | Result | Evidence scope |
+| --- | --- | --- |
+| Initial Browser Session Runtime focus | 13 passed, 2 ignored | pure Linux/macOS/Windows argv fixtures, mock CDP success/drift/deadline, existing runtime contracts |
+| Final CLI native-browser compartment | 163 passed, 2 ignored | includes the added real actor-dispatch fixture, prior host interrupted-open adoption, navigation/handoff recovery, browser and SQLite contracts |
+| Strict workspace Clippy | passed | production source unchanged after this gate; the later addition is a test-only actor fixture |
+| Final formatting | passed | complete frozen source and tests |
+| Docs build, links, handoff docs and active planning audit | passed | all five required user guidance surfaces aligned |
+
+Logs use `/tmp/p211-v62-*`; final browser evidence is `browser-frozen.log`.
+Frozen input hashes in `frozen-inputs.json` were rechecked without drift before
+source custody. Fixtures and counts are retained here; raw temporary logs remain
+reproducible. No failed test or repair retry occurred. The earlier v61 daemon,
+stream, model, client and installer evidence remains scoped to unchanged inputs;
+this packet changes the reserved-recovery adapter and its focused dependencies,
+not those contracts. No comprehensive final-head acceptance is claimed.
+
+Worker `/root/capacity_selection` is terminal. Primary reviewed its pure proof,
+added the asynchronous read-only probe and actor join, and ran all Cargo gates.
+No native macOS/Windows process test or real Chrome recovery was executed: the
+cross-platform claim is implementation plus representative argv fixtures only.
+No installed runtime, provider, production, ingress or release effect occurred.
+No shared installed skill was overwritten or CI run monitored.
+
+State transition: reserved discovery missing to provider-free qualified.
+Progress classification: `outcome_progress` for interrupted launch recovery.
+About 280 elapsed minutes since 02:46 UTC are recorded, older effort unknown,
+with the inherited 360-minute ceiling unchanged. Roughly 80 measured minutes
+remain; full remaining acceptance is not claimed achievable in that estimate.
+Next is shared desktop control at the SQLite/keeper and Desktop Services boundary.
+The current Desktop Services coordinator is process-local and its CLI adapter
+reads legacy Service State; a focus lock alone cannot satisfy the required
+single generation-fenced controller and observer-only transfer behavior.
+Quarantine reconciliation, bounded persistence/retention, remaining domain joins,
+and frozen isolated cold-install/upgrade/ready-remote-view acceptance stay OPEN.
 
 ## September 22 Navigation And Handoff Recovery Amendment
 
@@ -2821,7 +2898,7 @@ integrating any P207 implementation.
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | `a9595ee2` qualifies bounded admission and durable demand; `f3d0a758` adds durable queue admission; `8ab466e8` joins exact journal recovery. Installed overflow and complete recovery acceptance remain open |
 | Durable admission queue | bounded depth and deadline, priority with aging, duplicate coalescing, restart distinguishes queued from effects already started | f3d0a758 qualifies SQLite admission, bounded retention, generation/sequence/attempt fencing and duplicate results; `8ab466e8` qualifies exact interrupted-open journal reconciliation. `89432d9b` qualifies navigation and handoff journal recovery with exact payload/target evidence. Active-view control priority and installed recovery acceptance remain open |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |
-| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; cross-platform causal process discovery remains pending |
+| Crash-consistent open | one operation durably reserves session, browser, slot, and handoff intent before effects and publishes the observed browser, tab, display, and handoff atomically afterward; stale-generation effects cannot commit | checkpoints `759f12e9`, `56a0558e`, `e1a3edcd`, and `da9438a7` prove durable exact intent, per-owner fencing, browser and tab observations, keeper-bound slot and opaque-URL preflight, atomic session-plus-handoff publication, exact multi-route replay, durable `Prepared` recovery, exact observed-launch adoption without relaunch, base-state conflict rejection, and a replay-stable cleanup obligation for unproven launch recovery; `6526ccef` implements selected-profile causal discovery with exact CDP PID and process identity proof; native-platform and installed recovery acceptance remain pending |
 | Durable cold-start reconstruction | from zero provider, Guacamole, XRDP/Xorg, route-keeper, and browser processes, one verified route makes service usable, remaining warm routes reconcile in background, and an ordinary request receives a ready opaque handoff without operator repair | not yet implemented; version 45/46 evidence proves the hidden-viewer and split-inventory architecture is insufficient |
 | Bounded persistence and history | live SQLite stays within 96 MiB, exact URL history within 64 MiB, routine database/WAL/backup within 128 MiB, summaries retain long-term lifecycle evidence, and verified backup recovery is automatic | version 49 contract frozen; development size and corruption tests pending |
 | Disposable retention | default 24-hour inactivity, 20 profiles, and 10 GiB are live settings; oldest inactive sessions expire first and active or named profiles are never evicted | version 49 contract frozen; implementation and quota tests pending |
