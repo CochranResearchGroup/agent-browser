@@ -57,7 +57,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: M1 atomic activation and M2 frozen provider-free qualification complete; comprehensive Rust evidence is green after repairing one missing test fixture and rerunning all 599 affected service tests; client, API/MCP, dashboard, docs, policy and handoff gates pass; M3 installed acceptance remains
+    validation_status: M1 and M2 complete; M3 installed execution repaired development shutdown targets, cold SQLite and catalog initialization, runtime-host helper access, XRDP leader identity, and empty profile classification; exact shutdown then quarantined route-slot-01 after its verified session disappeared just beyond the helper window; M3.1 quarantine reconciliation is the current product gate
     validation_ref: 8bc9a19b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 65 M1 and M2 are complete at frozen candidate 8bc9a19b; M3 requires fresh development-runtime effect custody and one isolated installed ordinary-client journey; architecture expansion is deferred unless that journey proves an exact blocker; production, ingress, release and integration remain excluded without their separate gates
+    blocker: route-slot-01 retains an exact rdp_route_session_scope_not_empty cleanup obligation although fresh OS evidence proves session c5 and session-c5.scope absent; cold successors fail closed because proof-bound quarantine reconciliation is unimplemented; M3.1 must add that exact transition before one installed replay; manual SQLite repair, broad process cleanup, production, ingress, release and integration remain excluded
     updated_at: 2026-09-22

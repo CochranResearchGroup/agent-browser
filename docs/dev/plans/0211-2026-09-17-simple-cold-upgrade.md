@@ -216,6 +216,46 @@ Exit evidence: one reproducible pass proving the operator journey, or one typed
 blocking failure with exact candidate, stage, logs, cleanup and next repair.
 One repair and one repeat are the maximum within the remaining campaign budget.
 
+M3 reached a typed product blocker during the installed journey. The candidate
+now installs into the development namespace without changing production and
+uses the reviewed `/opt/google/chrome/chrome` executable. The journey exposed
+and repaired four prerequisites: development shutdown targeted production unit
+names, the cold development installer omitted SQLite migration and route
+catalog publication, the runtime-host unit prevented the narrow privileged
+helper transition, and XRDP ownership expected the route user rather than the
+root-owned `xrdp-sesman` session leader. The helper now produces an exact
+witness for session `c5` and display `:13`.
+
+The first exact shutdown then removed session `c5`, but its three-second helper
+verification window ended before systemd removed the scope. The route keeper
+correctly persisted `route-slot-01` as quarantined with cleanup reason
+`rdp_route_session_scope_not_empty`. Fresh OS evidence now proves that session
+`c5` and `session-c5.scope` are absent, while every cold successor refuses the
+quarantined durable record. Plan 0211 therefore cannot complete by repeating
+the installed journey: exact quarantine reconciliation is an acceptance
+blocker, not deferred hardening.
+
+Continue M3 through these fixed sub-milestones without another plan version:
+
+1. **M3.1 | Exact quarantine reconciliation.** Add a proof-bound transition
+   that re-observes the retained XRDP witness, accepts only exact session and
+   scope absence after the recorded predecessor host exited, clears only the
+   matching cleanup obligation transactionally, and rejects changed,
+   ambiguous, or live identities. Cover stopped-after-timeout, changed-session,
+   replay, stale-fence, and concurrent-successor cases provider-free.
+2. **M3.2 | Installed journey replay.** Build and install one immutable
+   development candidate, prove production unchanged, run the three-cycle
+   disposable smoke, then open one ordinary named profile and obtain one ready
+   authenticated opaque handoff. Close it and capture fresh process, claim,
+   session, scope, unit, and residue evidence.
+3. **M3.3 | M3 qualification checkpoint.** Run validation selected from the
+   complete M3 repair diff, commit one coherent source checkpoint, and record
+   the installed receipts once. If M3.1 cannot recover the retained obligation
+   without weakening exact identity, stop with the quarantine evidence rather
+   than mutating SQLite manually.
+
+The campaign proceeds to M4 only after all three sub-milestones pass.
+
 ### M4 | Integration And Closeout Packet
 
 Budget reservation: at most 350,000 additional tokens; total campaign usage

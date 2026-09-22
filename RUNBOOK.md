@@ -11,6 +11,19 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 429 | 2026-09-22
 
+P211 M3 has a proved product blocker. Installed execution repaired development
+shutdown targeting, cold SQLite and catalog initialization, runtime-host access
+to the narrow privileged helper, XRDP session-leader identity, and empty
+profile classification. Exact shutdown killed witnessed session `c5`, but the
+helper timed out before the scope disappeared and durably quarantined
+`route-slot-01`. Fresh `loginctl`, systemd, and cgroup readback proves both the
+session and scope are now absent. Cold startup still fails closed because no
+proof-bound transition can clear that exact cleanup obligation. Plan 0211 now
+routes M3 through exact quarantine reconciliation, one installed journey
+replay, and one qualification checkpoint. Manual SQLite repair is prohibited.
+
+## Turn 428 | 2026-09-22
+
 P211 version 65 M1 and M2 are complete. Source `cf75aac1` makes desktop-control
 activation atomic. Frozen candidate `8bc9a19b` passes every comprehensive Rust
 compartment after the first run found one missing runtime-config normalizer

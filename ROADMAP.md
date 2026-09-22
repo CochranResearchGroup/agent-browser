@@ -31,9 +31,12 @@ State: OPEN
 
 Version 65 M1 and M2 are complete at frozen candidate `8bc9a19b`. Atomic
 desktop-control activation and broad provider-free qualification are green.
-The next gate is one isolated installed development-runtime cold workflow;
-expanded historical architecture remains deferred unless that journey proves
-an exact blocker.
+The installed development journey proved exact quarantine reconciliation is a
+completion blocker: witnessed XRDP session `c5` was removed, but the durable
+`route-slot-01` cleanup obligation remained quarantined after the bounded stop
+window and now prevents every cold successor. M3 is split into proof-bound
+quarantine reconciliation, one installed replay, and one qualification
+checkpoint. Manual SQLite repair is excluded.
 
 Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
 owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user
