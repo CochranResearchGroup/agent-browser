@@ -902,6 +902,40 @@ impl RouteKeeperAuthority {
         Ok(())
     }
 
+    /// Record termination of the exact successor task while adopting a route.
+    ///
+    /// The predecessor ready receipt remains the recovery source. A transport
+    /// UUID, when the connector had already published one, must not identify
+    /// that predecessor occurrence; the connector supplies the separate task
+    /// occurrence fence before calling this durable transition.
+    pub fn record_adoption_terminated(
+        &mut self,
+        slot_id: &str,
+        fence: &RouteKeeperFence,
+        guacamole_connection_uuid: Option<&str>,
+    ) -> Result<(), String> {
+        let record = self.record_for_fence_mut(slot_id, fence)?;
+        if record.phase != RouteKeeperPhase::Adopting {
+            return Err("route_keeper_phase_not_adopting".to_string());
+        }
+        let predecessor = record
+            .protocol_ready
+            .as_ref()
+            .ok_or_else(|| "route_keeper_adoption_source_missing".to_string())?;
+        if guacamole_connection_uuid.is_some_and(str::is_empty) {
+            return Err("route_keeper_adoption_connection_identity_invalid".to_string());
+        }
+        if guacamole_connection_uuid
+            .is_some_and(|uuid| uuid == predecessor.guacamole_connection_uuid)
+        {
+            return Err("route_keeper_connection_identity_mismatch".to_string());
+        }
+        record.phase = RouteKeeperPhase::RecoveryFailed;
+        record.adoption = None;
+        record.cleanup_obligation = None;
+        Ok(())
+    }
+
     pub fn adopt(&mut self, receipt: RouteKeeperAdoptionReceipt) -> Result<(), String> {
         validate_ready_receipt(&receipt.ready)?;
         let expected_catalog_digest = self.connection_catalog.digest()?;
@@ -1255,7 +1289,7 @@ fn validate_record(
                 return Err("route_keeper_active_cleanup_invalid".to_string());
             }
             if let Some(ready) = &record.protocol_ready {
-                if ready.fence.host_generation != record.fence.host_generation
+                if ready.fence.host_generation > record.fence.host_generation
                     || ready.fence.operation_generation >= record.fence.operation_generation
                 {
                     return Err("route_keeper_recovery_source_invalid".to_string());
@@ -1267,7 +1301,7 @@ fn validate_record(
                 .protocol_ready
                 .as_ref()
                 .ok_or_else(|| "route_keeper_recovery_source_missing".to_string())?;
-            if ready.fence.host_generation != record.fence.host_generation
+            if ready.fence.host_generation > record.fence.host_generation
                 || ready.fence.operation_generation >= record.fence.operation_generation
                 || record.cleanup_obligation.is_some()
             {

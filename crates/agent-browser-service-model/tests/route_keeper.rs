@@ -546,6 +546,97 @@ fn failed_recovery_retains_prior_protocol_evidence_for_next_fenced_attempt() {
 }
 
 #[test]
+fn adoption_terminal_preserves_predecessor_and_rejects_stale_occurrences() {
+    let (mut authority, predecessor) = make_one_ready();
+    authority
+        .record_disconnect(
+            &predecessor.slot_id,
+            &predecessor.fence,
+            &predecessor.guacamole_connection_uuid,
+        )
+        .unwrap();
+    authority
+        .register_host_process_claim(host_process_claim(2))
+        .unwrap();
+    let adoption_fence = match authority.begin_adoption(&predecessor.slot_id, 2).unwrap() {
+        RouteKeeperReconcileAction::Adopt { fence, .. } => fence,
+        other => panic!("expected adoption action, got {other:?}"),
+    };
+
+    authority
+        .record_adoption_terminated(
+            &predecessor.slot_id,
+            &adoption_fence,
+            Some("successor-occurrence"),
+        )
+        .unwrap();
+    let failed = &authority.records[&predecessor.slot_id];
+    assert_eq!(failed.phase, RouteKeeperPhase::RecoveryFailed);
+    assert_eq!(failed.protocol_ready, Some(predecessor.clone()));
+    assert!(failed.adoption.is_none());
+    assert_eq!(authority.projection().unwrap().ready_count, 0);
+    assert_eq!(
+        authority.projection().unwrap().state,
+        RouteKeeperProviderState::Degraded
+    );
+
+    let before_stale = authority.clone();
+    assert_eq!(
+        authority.record_adoption_terminated(
+            &predecessor.slot_id,
+            &predecessor.fence,
+            Some(&predecessor.guacamole_connection_uuid),
+        ),
+        Err("route_keeper_generation_stale:1:2".to_string())
+    );
+    assert_eq!(authority, before_stale);
+
+    let mut adopting = before_stale;
+    let next_adoption_fence = match adopting.next_reconcile_action().unwrap() {
+        RouteKeeperReconcileAction::Start { fence, .. } => fence,
+        other => panic!("expected recovery start action, got {other:?}"),
+    };
+    assert_eq!(
+        adopting.records[&predecessor.slot_id].phase,
+        RouteKeeperPhase::Starting
+    );
+    assert_eq!(
+        adopting.records[&predecessor.slot_id].protocol_ready,
+        Some(predecessor)
+    );
+    assert!(next_adoption_fence.operation_generation > adoption_fence.operation_generation);
+}
+
+#[test]
+fn adoption_terminal_rejects_predecessor_uuid_without_mutating_adopting_state() {
+    let (mut authority, predecessor) = make_one_ready();
+    authority
+        .record_disconnect(
+            &predecessor.slot_id,
+            &predecessor.fence,
+            &predecessor.guacamole_connection_uuid,
+        )
+        .unwrap();
+    authority
+        .register_host_process_claim(host_process_claim(2))
+        .unwrap();
+    let adoption_fence = match authority.begin_adoption(&predecessor.slot_id, 2).unwrap() {
+        RouteKeeperReconcileAction::Adopt { fence, .. } => fence,
+        other => panic!("expected adoption action, got {other:?}"),
+    };
+    let before = authority.clone();
+    assert_eq!(
+        authority.record_adoption_terminated(
+            &predecessor.slot_id,
+            &adoption_fence,
+            Some(&predecessor.guacamole_connection_uuid),
+        ),
+        Err("route_keeper_connection_identity_mismatch".to_string())
+    );
+    assert_eq!(authority, before);
+}
+
+#[test]
 fn stop_requires_exact_receipt_and_unproven_ownership_is_quarantined() {
     let (mut exact_authority, exact_ready) = make_one_ready();
     let stop_action = exact_authority
