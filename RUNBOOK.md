@@ -9,6 +9,31 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 426 | 2026-09-21
+
+P211 version 51 source checkpoint `ef43de73` implements configured multi-route
+startup recovery. The prior handoff proved same-generation interrupted replay
+only. A truly restarted host now proves both the original ready host and
+interrupted adopter exited, then atomically reserves all pending transitions
+before exposing its supervisor. Cancellation skips ordinary supervision and
+closes only owned tunnel tasks, preserving retained XRDP routes.
+
+Primary validation passes all 55 focused keeper tests, the Service Model
+package including 16 route-keeper integration cases, formatting, strict
+workspace Clippy, documentation links, handoff docs, planning audit, docs
+build, and six selector-recommended source-free installer/provider fixtures.
+The comprehensive provider-free runner is active against the frozen source;
+merge readiness remains unclaimed. Repository skill guidance differs from the
+installed shared skill by design; no runtime guidance was published.
+
+The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-21-handoff-verification-and-startup-recovery-amendment)
+records four closed-world review dispositions, worker ownership, inherited
+bounds and unavailable historical effort counters. No installed runtime or
+provider effect occurred. Conditional isolated-development authority remains
+behind candidate freeze and fresh production readback; production, ingress
+and release remain excluded. Next: finish the full runner, publish its exact
+result, then address the remaining whole-authority recovery boundary.
+
 ## Turn 425 | 2026-09-21
 
 P211 checkpoint `45124f99` completes the provider-free recovery proof and

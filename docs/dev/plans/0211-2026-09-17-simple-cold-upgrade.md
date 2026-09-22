@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 50
+Plan version: 51
 
 State: OPEN
 
@@ -74,6 +74,91 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 21 Handoff Verification And Startup Recovery Amendment
+
+Version 51 preserves the complete install, upgrade, and remote-view objective.
+The startup packet is an intermediate provider-free milestone, not plan
+completion or installed acceptance. Fresh fetch and readback establish clean
+P211 custody at `8b7366017cc360752e29571368e150aa45f75efe`, exact remote parity,
+and open draft PR #191 with that head. Issues #181, #183, and #195 remain open.
+Five checkouts exist; P215 has unrelated dirty Desktop Services work, which
+this packet preserves. No new checkout is admitted. P207 remains at its known
+head with draft PR #184, so no new overlapping interface publication was found.
+Graphiti returned four unrelated historical facts and supplies no current
+P211 evidence. The handoff's focused and comprehensive test counts remain
+historical receipts until fresh checks run against the changed candidate.
+
+The handoff overstates interrupted cold-start recovery. Checkpoint `45124f99`
+reconstructs an `Adopting` proof only when the requested successor generation
+already equals the interrupted fence. Its fixture replays that generation;
+a genuinely new process registers a newer generation and is refused. The
+startup packet must therefore prove exit of both the original ready host and
+the interrupted adopter before refencing the same logical adoption to the new
+registered host. It must preserve original route evidence and reject stale
+adopter terminal events. A same-generation replay alone cannot close this row.
+
+The exact packet performs complete provider-free route classification before
+provider access, prepares all required exit proofs, recovers candidates in
+stable slot order, and only then enters ordinary supervisor reconciliation.
+Unsupported phases, malformed records, live or ambiguous predecessors, and
+quarantine remain explicit refusals. Partial initialization must shut down only
+its owned primary tasks and persist their terminal evidence without attempting
+to stop an unadopted predecessor route. Pending observation is not readiness.
+The pure refence transition retains the logical operation number and original
+ready receipt while changing the host-bound operation ID; the CLI owns process
+proof construction and compare-and-swap publication.
+
+Closed-world review dispositions: `P211-H51-1` is blocking for true interrupted
+startup acceptance and is addressed by the two-host exit proof and refence
+packet. `P211-H51-2` is blocking for current-state claims; reconcile the
+acceptance row and catalog now, and replace them with final candidate evidence
+at custody. `P211-H51-3` corrects the handoff effect boundary without expanding
+current effects. `P211-H51-4` records unavailable historical effort counters and
+observable local bounds; no reset or new broad review is authorized. The
+reviewer's proposed documentation-first ordering is not an additional gate:
+these amendments proceed alongside disjoint provider-free implementation.
+
+Current work ownership: the primary owns model transitions, model fixtures,
+plan/docs reconciliation, Git transitions, and final acceptance.
+`/root/startup_recovery` owns only the two CLI keeper modules and their focused
+provider-free fixtures, requested `gpt-5.6-terra` high effort.
+`/root/plan_review` performs a read-only, closed-world handoff/plan consistency
+check, requested `gpt-5.6-sol` medium effort. Effective model identities are
+not reported by the runtime. These workers share the admitted P211 lane and
+have no independent Git, runtime, or delegation authority.
+
+Source checkpoint `ef43de73` implements the version 51 startup packet.
+
+Both workers completed. The primary accepted the closed-world documentation
+review and its two residual corrections, then integrated the startup worker's
+55-test intermediate result. Primary integration made reserved startup state a
+separate opaque packet, removed the duplicate asynchronous refence path,
+required one whole-snapshot compare-and-swap before handle exposure, and tested
+shutdown between route attempts. The primary independently reran all 55
+route-keeper tests successfully on the final source; workspace formatting and
+strict Clippy also pass. Comprehensive provider-free validation started against
+this frozen checkpoint and remains pending. These checks establish
+provider-free configured startup recovery, not live provider acceptance.
+
+Execution inherits the existing 360-active-minute ceiling, three-attempt and
+one-review limits, and prior evidence; this revision does not reset them.
+This continuation began at approximately 2026-09-22 02:46 UTC. Historical
+active-time consumption is not reconstructible from commit timestamps, so
+remaining cumulative allowance is unverified. Bound the current startup
+implementation to 35 minutes, reserve up to 30 minutes for comprehensive
+validation and 15 minutes for integration/documentation, and reconcile effort
+before another substantive packet or expensive acceptance cycle. These are
+local caps within the existing ceiling, not additional allowance. No optimized
+candidate build or installed/provider acceptance occurs in this packet.
+
+The handoff's blanket runtime exclusion describes this source packet. The
+canonical Stop Condition separately retains conditional isolated-development
+authority after the provider-free candidate freeze and fresh production
+readback; it does not authorize production, ingress publication, or release.
+The stale active-lane `536d58a9` checkpoint and validation fields must be
+reconciled at source custody, preserving that comprehensive result as
+historical evidence rather than attributing it to later source.
 
 ## Current State
 
@@ -1914,7 +1999,7 @@ integrating any P207 implementation.
 | Trusted single-user profile | `--session` alone supplies attribution; a named profile reuses one healthy matching browser and requires no principal, hash, capability, sealed plan, or repair token | selector collision regressions, independent manager proof, named-session lifecycle routing, persistent generic command state, real-Chrome title and snapshot calls, and the full daemon-process command journey are green |
 | SQLite runtime authority | one user-private transactional database owns configuration, profiles, sessions, browsers, tabs, handoffs, presentation intent, operations, generations, credentials, history, and cleanup; JSON is migration input or diagnostic export only | checkpoints `726563fb`, `c0ff2768`, `6390a48a`, and `d402f55b` make Browser Session State and Browser Profile Catalog reads and writes SQLite-only, add validated configuration, persist the compare-and-swap route-keeper authority plus connection catalog, and migrate absent v1 keeper state with exact-document fencing; public config mutation, credentials, history, cleanup integration, integrity, backup, and remaining cross-domain joins are pending |
 | Forward-only legacy cutover | cold upgrade imports valid fields, archives typed rejections and source hashes, removes old units, variables, readers, processes, and owned Guacamole state, and never restores or falls back to the old architecture | checkpoints `726563fb`, `c0ff2768`, and `18c790bd` add the explicit migration phase, source hashes and read-only archive, typed non-vetoing rejection records, exact missing-source history, atomic database publication, no JSON fallback after database creation, no old-generation rollback, and removal of the hidden-viewer bootstrap variable and launcher; exact legacy provider cleanup remains pending |
-| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints `6390a48a`, `89c05d7e`, `ab05e2d3`, `a481d7e1`, `1d17f471`, `e9593b5b`, `18c790bd`, `d402f55b`, `f494f273`, `d0aa34de`, `9b96e44f`, `d79a387d`, `da9438a7`, and `b0a82574` prove the lifecycle, exact receipts, generation fencing, quarantine, capacity projection, durable authority, intent-before-effect recovery, a real receive-only `PrimaryTask` fenced directly by SQLite, exact task retention, two-layer readiness, fresh destructive-stop fencing, stop replay, minimum-before-warm supervision, shutdown-interruptible reconciliation, durable terminal-event handling, SQLite-catalog-backed provider selection with a digest-bound provider base and public operator origin, SQLite-only ready-route projection, mandatory provider-side stable-name-to-numeric-ID catalog publication, source-qualified exact XRDP ownership observation and cgroup-v2 stop, one host-owned configured supervisor, exact-stop shutdown ordering, partial-initialization rollback, keeper-backed manager handoffs, and a private proof-bound single-route cold-adoption kernel; exact predecessor proof construction, configured connector adoption, whole-authority cold recovery, live health projection, and live readiness remain pending |
+| Protocol-level route keeper | the existing runtime host establishes warm XRDP sessions through supervised in-process Guacamole tunnels with no Chrome, profile, tab, manager session, or handoff | checkpoints through `536d58a9` establish the provider-free lifecycle, durable authority, exact XRDP proof, host claims, and complete runner baseline; `11f606a4` adds v4 route/transport identity, `8f60434f` adds configured connector adoption, and `45124f99` reconstructs exact predecessor-exit proof plus same-generation interrupted replay and durable adoption termination. Checkpoint `ef43de73` joins true interrupted-host restart and deterministic configured startup; the 55 focused keeper tests, Service Model package, format and strict Clippy pass, while comprehensive validation is pending. Whole-authority recovery, public health/readiness and live acceptance remain open |
 | Configurable capacity | `minimumReady=1`, warm target 4, maximum displays 6, density 4, queue 32, 90-second request deadline, and 10-minute scale-in cooldown are live user settings; lowering limits is non-destructive | checkpoint `c0ff2768` persists and validates the frozen defaults with revisioned compare-and-swap and projects host timeouts from SQLite; Service API and CLI mutation, live refresh, provider consumption, and non-destructive lowering proof remain pending |
 | Display allocation and overflow | one browser per display while capacity can grow; after maximum displays, new browsers use the least-loaded display up to density; occupied browsers are never routinely migrated | version 49 contract frozen; implementation pending |
 | Shared desktop control | handoff activation, focus, maximize, capture, pointer, and keyboard share one generation-fenced Desktop Services control lease; observers remain connected and prior controllers become view-only on transfer | version 49 contract frozen; implementation pending |

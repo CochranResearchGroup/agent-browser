@@ -255,6 +255,14 @@ Checkpoint `45124f99` adds exact proof reconstruction for retained `Ready`,
 50-test route-keeper lane and quality gates pass. Configured startup recovery
 and multi-route orchestration remain next; runtime effects stay unauthorized.
 
+Version 51 corrects the interrupted-adoption claim: previous evidence proves
+same-generation replay, while a new host must also prove the interrupted
+adopter exited. Checkpoint `ef43de73` joins that exact refence to
+provider-free multi-route classification, atomic pending-state publication, and
+owned-task cleanup. Focused and quality gates pass; comprehensive validation
+remains pending. See the
+[current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

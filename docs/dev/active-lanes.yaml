@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 536d58a9
+    checkpoint: ef43de73
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: checkpoint 536d58a9 binds all browser handoff and host v3 fixtures to exact host-process claims; the isolated workstation compartment passes 215 tests, the browser compartment passes 140 active tests, strict workspace Clippy passes, and the 720-second complete provider-free runner passes both lanes
-    validation_ref: 536d58a9
+    validation_status: source ef43de73 passes 55 focused keeper tests, Service Model package, formatting, strict workspace Clippy, docs and planning checks, docs build and six source-free fixtures; comprehensive provider-free runner is active against the frozen source, with the last completed broad result still 536d58a9
+    validation_ref: ef43de73
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 50 next requires configured startup recovery and multi-route orchestration using the exact predecessor-exit capability; cross-platform causal browser-process discovery, whole-authority phase recovery and absent-slot generation rollover, quarantine handling, supervisor health projection, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts then remain before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
+    blocker: version 51 configured startup recovery is implemented and focused-qualified; comprehensive validation is pending; whole-authority phase recovery, cross-platform causal browser-process discovery, absent-slot generation rollover, quarantine handling, supervisor health projection, public live configuration, capacity use, full handoff recovery, remaining SQLite domains, and Desktop Services control contracts remain before the frozen development candidate and isolated cold-start matrix; production and external ingress remain excluded
     updated_at: 2026-09-21
