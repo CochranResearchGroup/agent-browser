@@ -49,8 +49,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())?;
         // Focus is idempotent. The resolver checks current session expiry,
         // exact target attribution, live browser and current keeper binding.
+        let activation = super::handoff_control::HandoffControlActivation {
+            operation_id,
+            client_connection_id: operation_id,
+        };
         let result =
-            self.resolve_manager_handoff_with_keeper(handoff, authority, activity_at_ms)?;
+            self.resolve_keeper_handoff(handoff, authority, activity_at_ms, Some(&activation))?;
         if operation.state != BrowserRuntimeOperationState::Committed {
             self.persistence
                 .commit_operation(operation_id, operation.generation, result.clone())?
@@ -115,6 +119,12 @@ mod tests {
             )
             .unwrap();
             let authority = ready_keeper_authority_for_handoff();
+            let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let previous = store.load_route_keeper_authority().unwrap();
+            store
+                .compare_and_swap_route_keeper_authority(&previous, &authority)
+                .unwrap();
+            drop(store);
             let focuses = Arc::new(AtomicUsize::new(0));
             let mut host = load_host(&database_path, &legacy_path, &authority, focuses.clone());
             let opened = host
@@ -278,5 +288,44 @@ mod tests {
             ));
             assert_eq!(fixture.focuses.load(Ordering::SeqCst), 0);
         }
+    }
+    #[test]
+    fn successor_activation_fences_old_focus_replay() {
+        let fixture = Fixture::new();
+        let mut host = fixture.host();
+        let first = host
+            .resolve_journaled_manager_handoff_with_keeper(
+                &fixture.command,
+                &fixture.handoff,
+                &fixture.authority,
+                2_000,
+            )
+            .unwrap();
+        let mut next = fixture.command.clone();
+        next["id"] = "second-viewer-activation".into();
+        let second = host
+            .resolve_journaled_manager_handoff_with_keeper(
+                &next,
+                &fixture.handoff,
+                &fixture.authority,
+                2_100,
+            )
+            .unwrap();
+        assert!(
+            second["desktopControl"]["epoch"].as_u64().unwrap()
+                > first["desktopControl"]["epoch"].as_u64().unwrap()
+        );
+        let focuses = fixture.focuses.load(Ordering::SeqCst);
+        assert!(host
+            .resolve_journaled_manager_handoff_with_keeper(
+                &fixture.command,
+                &fixture.handoff,
+                &fixture.authority,
+                2_200,
+            )
+            .is_err());
+        assert_eq!(fixture.focuses.load(Ordering::SeqCst), focuses);
+        assert_eq!(second["desktopControl"]["state"], "focus_authorized");
+        assert_eq!(second["handoffUrl"], first["handoffUrl"]);
     }
 }

@@ -21,9 +21,11 @@ use super::browser_session_runtime::{
 use super::browser_session_store::{
     BrowserManagerHandoffRegistry, BrowserProfileCatalogLoad, BrowserRuntimeOperation,
     BrowserRuntimeOperationState, BrowserRuntimeSqliteStore, BrowserSessionJsonStore,
+    DesktopControlLease, DesktopControlTransferRequest,
 };
 use super::presentation_inventory::StaticRouteInventory;
 
+mod handoff_control;
 mod handoff_recovery;
 pub(crate) mod navigation_recovery;
 
@@ -127,6 +129,31 @@ pub(crate) trait BrowserSessionPersistence {
 
     fn save_manager_handoff(&mut self, _handoff: &RemoteViewHandoff) -> Result<(), String> {
         Err("browser_session_handoff_persistence_unsupported".to_string())
+    }
+
+    fn transfer_desktop_control(
+        &mut self,
+        _request: &DesktopControlTransferRequest,
+    ) -> Result<DesktopControlLease, String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
+    }
+
+    fn activate_desktop_control<T>(
+        &mut self,
+        _request: &DesktopControlTransferRequest,
+        _expected_state: &BrowserSessionState,
+        _effect: impl FnOnce(&DesktopControlLease) -> Result<(T, BrowserSessionState), String>,
+    ) -> Result<(T, DesktopControlLease), String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
+    }
+
+    fn with_current_desktop_control<T>(
+        &mut self,
+        _lease: &DesktopControlLease,
+        _expected_state: &BrowserSessionState,
+        _effect: impl FnOnce(&DesktopControlLease) -> Result<T, String>,
+    ) -> Result<T, String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
     }
 
     fn reserve_operation(
@@ -239,6 +266,38 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
 
     fn save_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
         BrowserRuntimeSqliteStore::save_manager_handoff(self, handoff)
+    }
+
+    fn transfer_desktop_control(
+        &mut self,
+        request: &DesktopControlTransferRequest,
+    ) -> Result<DesktopControlLease, String> {
+        BrowserRuntimeSqliteStore::transfer_desktop_control(self, request)
+    }
+
+    fn activate_desktop_control<T>(
+        &mut self,
+        request: &DesktopControlTransferRequest,
+        expected_state: &BrowserSessionState,
+        effect: impl FnOnce(&DesktopControlLease) -> Result<(T, BrowserSessionState), String>,
+    ) -> Result<(T, DesktopControlLease), String> {
+        BrowserRuntimeSqliteStore::activate_desktop_control(self, request, expected_state, effect)
+    }
+
+    fn with_current_desktop_control<T>(
+        &mut self,
+        lease: &DesktopControlLease,
+        expected_state: &BrowserSessionState,
+        effect: impl FnOnce(&DesktopControlLease) -> Result<T, String>,
+    ) -> Result<T, String> {
+        BrowserRuntimeSqliteStore::with_current_desktop_control(
+            self,
+            &lease.handoff_id,
+            &lease.controller_client_connection_id,
+            lease.epoch,
+            expected_state,
+            effect,
+        )
     }
 
     fn reserve_operation(
@@ -606,11 +665,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }))
     }
 
+    #[cfg(test)]
     pub(crate) fn resolve_manager_handoff_with_keeper(
         &mut self,
         handoff: &RemoteViewHandoff,
         authority: &RouteKeeperAuthority,
         activity_at_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        self.resolve_keeper_handoff(handoff, authority, activity_at_ms, None)
+    }
+
+    fn resolve_keeper_handoff(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        authority: &RouteKeeperAuthority,
+        activity_at_ms: u64,
+        activation: Option<&handoff_control::HandoffControlActivation<'_>>,
     ) -> Result<serde_json::Value, String> {
         if !super::browser_session_handoff::is_manager_handoff(handoff) {
             return Err("browser_session_handoff_not_manager_owned".to_string());
@@ -683,7 +753,27 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             return Err("browser_session_handoff_opaque_url_changed".to_string());
         }
 
-        let focused = self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?;
+        let (focused, control) = if let Some(activation) = activation {
+            let (focused, lease) =
+                self.focus_controlled_handoff(handoff, &binding, activation, activity_at_ms)?;
+            (
+                focused,
+                Some(serde_json::json!({
+                    "epoch": lease.epoch,
+                    "hostGeneration": lease.host_generation,
+                    "operationId": lease.operation_id,
+                    "clientConnectionId": lease.controller_client_connection_id,
+                    "presentationSlotId": lease.route_binding.slot_id,
+                    "state": "focus_authorized",
+                })),
+            )
+        } else {
+            (
+                self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?,
+                None,
+            )
+        };
+
         if focused.tab_id.as_deref() != Some(tab.id.as_str())
             || focused.target_id.as_deref() != Some(tab.target_id.as_str())
         {
@@ -720,6 +810,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             "operatorVisible": { "state": "ready" },
             "presentationGeneration": presentation_generation,
             "presentationReceipt": presentation_receipt,
+            "desktopControl": control,
         }))
     }
 

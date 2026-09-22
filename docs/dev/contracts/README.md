@@ -778,6 +778,13 @@ and optional `params.allowReopenClosed`. It replays durable intent without stale
 route, display, or Guacamole connection selectors, prefers the recorded target,
 and preserves the original view stream and control-input posture. Deliberately
 closed tabs require the explicit reopen option.
+For ordinary manager handoffs, journaled activation also returns `desktopControl`
+with `epoch`, `hostGeneration`, `operationId`, `clientConnectionId`,
+`presentationSlotId` and `state: "focus_authorized"`. Its request ID identifies
+the activation; callers do not supply route or generation tokens. The receipt
+fences focus/maximize only. It is not a live viewer connection or completed
+shared-input control claim. Replaying a superseded activation cannot refocus;
+a fresh activation has a new request ID.
 
 `service-browser-capability-registry-upsert-response.v1.schema.json` describes
 the response envelope returned by HTTP `POST

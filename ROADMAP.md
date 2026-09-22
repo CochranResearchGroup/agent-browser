@@ -269,8 +269,16 @@ Version 62 checkpoint `6526ccef` implements exact reserved-browser discovery
 through the selected profile endpoint and stable process proof. Version 61
 recovery remains qualified at `89432d9b`. Shared desktop control, remaining
 persistence/quarantine integration and the full installed journey remain open.
-See the [current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and
-native-platform/installed evidence limits.
+Version 63 is an uncommitted operator checkpoint with control/focus edits awaiting
+Rust qualification; its elapsed allowance is exhausted, not renewed. Version 64
+records blocking review findings: focus activation must publish controller
+transfer atomically with its guarded effect, and the `/tmp` recovery packet must
+gain durable custody before it is trusted for resumption.
+Version 65 freezes revision churn and routes completion through one cumulative
+2,000,000-token `/goal` campaign with four evidence-bearing sub-milestones.
+Architecture expansion is deferred unless the installed journey proves an exact
+blocker. See the [current runbook](RUNBOOK.md#turn-428--2026-09-22) for the repair order,
+qualification and native-platform/installed evidence limits.
 
 ## P216 | Service Model Extraction Landing
 

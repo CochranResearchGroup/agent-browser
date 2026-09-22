@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 62 implements causal reserved-browser discovery; shared desktop control and active-view priority, quarantine, bounded persistence/retention and remaining SQLite joins precede isolated acceptance; production and ingress excluded
+    blocker: version 65 freezes revision churn and defines one cumulative 2,000,000-token completion campaign; M1 must establish durable custody and repair the uncommitted v63 activation atomicity defect before frozen provider-free qualification; M3 installed effects require exact custody; architecture expansion is deferred unless the ordinary installed journey proves an exact blocker; production, ingress, release and integration remain excluded without their separate gates
     updated_at: 2026-09-22

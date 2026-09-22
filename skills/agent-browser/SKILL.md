@@ -608,6 +608,16 @@ bounded to 128. When present, the queue reports `hostGeneration`,
 `maximumDepth`, `queued`, `admitted`, `completed`, `retryable`, and
 `recoveryRequired`; expired queued entries count as retryable.
 
+Journaled handoff activation reserves a per-display SQLite controller epoch
+bound to the current keeper, host generation and exact retained handoff.
+Replaying the current activation can focus again; a superseded activation cannot
+reclaim control or refocus. Focus and maximize run under Desktop Services
+coordination and a SQLite effect guard. The returned
+`desktopControl.state=focus_authorized` describes that focus authorization only.
+The live viewer transport and agent capture, pointer and keyboard still require
+the shared control join; connected-viewer and observer-only transfer acceptance
+remain pending.
+
 Read or update presentation settings through the ordinary service interface:
 
 ```bash

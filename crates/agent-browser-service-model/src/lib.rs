@@ -185,12 +185,12 @@ pub use request_provenance::{
 pub use route_keeper::{
     RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperCleanupObligation,
     RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperFence,
-    RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy, RouteKeeperProjection,
-    RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
-    RouteKeeperRecord, RouteKeeperStartPriority, RouteKeeperStopDisposition,
-    RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    RouteKeeperHandoffBinding, RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy,
+    RouteKeeperProjection, RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState,
+    RouteKeeperReconcileAction, RouteKeeperRecord, RouteKeeperStartPriority,
+    RouteKeeperStopDisposition, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 pub use runtime_owner_projection::{
     ProfileRuntimeAuthority, RuntimeControlPlaneAuthority, RuntimeLaneAuthority,

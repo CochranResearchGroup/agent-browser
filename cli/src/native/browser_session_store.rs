@@ -19,7 +19,9 @@ use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
+mod desktop_control;
 mod provisioning;
+pub(crate) use desktop_control::{DesktopControlLease, DesktopControlTransferRequest};
 pub(crate) use provisioning::{PresentationProvisioningConfig, PresentationProvisioningOperation};
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";

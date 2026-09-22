@@ -9,25 +9,57 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 428 | 2026-09-22
+
+P211 version 65 freezes further revision churn and defines one `/goal`
+completion campaign with a cumulative 2,000,000-token ceiling. Its four
+sub-milestones are recoverable atomic candidate, frozen provider-free
+qualification, isolated installed operator journey, and integration/closeout.
+Sub-milestones, successor packets, sessions and model changes do not reset the
+ceiling. Routine source commits no longer receive paired plan checkpoints.
+
+Architecture expansion is stopped unless a failing acceptance check proves an
+exact blocker. The campaign's primary verdict is one ordinary installed cold
+workflow ending in an authenticated ready opaque remote-view handoff. M1 starts
+only after durable custody and repairs the accepted activation atomicity defect.
+Installed and integration effects retain their existing exact gates. P211
+remains OPEN; no build, runtime effect, commit, push or PR mutation occurred in
+this planning amendment.
+
+## Turn 427 | 2026-09-22
+
+P211 version 64 accepts two blocking review findings against the uncommitted
+version 63 checkpoint. Desktop-control activation currently publishes the
+successor lease before its separately transacted focus effect, so a failed
+focus can fence the prior controller without completing activation. Repair must
+give lease publication and focus one commit outcome or use an exact rollback
+that cannot overwrite an intervening transfer. Failure, success and concurrent
+transfer regressions are required before qualification.
+
+The 16-file recovery manifest matches the dirty P211 tree and the bundle hashes
+verify, but `/tmp` is temporary evidence rather than durable custody. Preserve
+the exact unqualified checkpoint in durable storage or an explicitly
+unqualified custody commit before depending on it for resumption. The execution
+allowance remains exhausted; this documentation-only review ran no Rust build,
+runtime or provider effect. P211 remains OPEN. The next sequence is durable
+custody, atomic activation repair, focused qualification, complete
+changed-surface gates, then viewer and agent input enforcement.
+
 ## Turn 426 | 2026-09-21
 
-P211 version 62 source `6526ccef` implements causal reserved-browser discovery
-through the selected profile endpoint, Chrome-reported PID, exact launch marker
-and stable OS process identity. Missing or changed evidence retains cleanup
-without guessing, relaunching or terminating a browser.
+P211 version 63 is an operator-requested, uncommitted checkpoint on HEAD
+`9d3bd816`. SQLite per-display control and journaled handoff focus integration
+are written; Rust compilation, tests and strict Clippy remain pending. The
+[checkpoint](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#version-63-operator-checkpoint)
+records scope, verification and the saved patch/archive. Client and narrow docs
+checks pass. All workers are terminal; no installed/provider mutation occurred.
 
-Primary gates pass: 163 browser-compartment tests (two ignored), strict Clippy,
-final formatting and docs/planning checks. The
-[plan qualification](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#version-62-qualification)
-records mock CDP, real actor-dispatch, platform-fixture and retained-evidence
-scope. The worker is terminal. No installed/provider mutation occurred. Native
-macOS/Windows and installed Chrome recovery remain unverified.
-
-P211 remains OPEN. About 280 elapsed minutes since 02:46 UTC, older effort
-unknown, inherited 360-minute ceiling unchanged. Next: shared desktop control
-through SQLite/keeper authority and Desktop Services, then remaining persistence,
-quarantine and frozen isolated acceptance. Production, ingress and release stay
-excluded. This is not full installed operator acceptance.
+The previous qualified source remains `6526ccef`; it does not qualify v63 edits.
+P211 stays OPEN. Fresh 10:30 UTC readback is 464 elapsed minutes since 02:46,
+104 beyond the inherited 360-minute ceiling on prior elapsed accounting; active
+versus idle attribution is unknown. No new build starts at this checkpoint.
+Reconcile the allowance before resumed qualification. Actual viewer/agent input
+fencing, persistence, quarantine and full isolated acceptance remain open.
 
 ## Turn 425 | 2026-09-21
 

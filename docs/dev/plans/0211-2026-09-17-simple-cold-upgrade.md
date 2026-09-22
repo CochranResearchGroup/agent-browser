@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 62
+Plan version: 65
 
 State: OPEN
 
@@ -74,6 +74,230 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## Version 65 Completion Campaign
+
+Version 65 freezes the objective and replaces revision-driven continuation with
+one moderate-length `/goal` completion campaign. Historical versions remain
+evidence, but they do not create more work. No further Plan 0211 version is
+needed unless the operator changes the objective, scope, or effect authority.
+Ordinary implementation discoveries belong in the current milestone record.
+
+Campaign objective: qualify one frozen candidate that completes the simple
+cold workflow from owned shutdown through a ready opaque remote-view handoff
+for one named profile, then present that candidate for protected integration.
+Queueing, capacity optimization, multi-user hardening, retention polish,
+quarantine automation, alternative transports, and architectural extraction
+are deferred unless a failing campaign acceptance check proves one is an exact
+blocker.
+
+The campaign has one cumulative 2,000,000-token ceiling across orchestration,
+workers, review, retries, validation, and closeout. The ceiling does not renew
+at a sub-milestone, new session, successor packet, model change, or plan edit.
+Record actual goal usage at each material checkpoint. Stop before starting a
+unit whose estimated completion would exceed the remaining campaign balance.
+The historical windows and their overruns remain historical accounting; this
+operator-directed completion campaign is a new bounded allocation, not a claim
+that the earlier work was efficient or complete.
+
+Use one `/goal` campaign with these sub-milestones:
+
+```text
+/goal execute P211 completion campaign: freeze and qualify one simple cold-upgrade candidate through durable custody, atomic desktop-control activation, provider-free final qualification, one isolated installed operator journey, and protected-integration handoff; use at most 2,000,000 cumulative tokens and do not expand architecture unless a failing acceptance check proves an exact blocker
+```
+
+### M1 | Recoverable Atomic Candidate
+
+Budget reservation: at most 350,000 cumulative campaign tokens.
+
+Preserve the complete dirty checkpoint in durable custody, repair the accepted
+desktop-control atomicity defect, and prove failure, success, replay, stale
+generation, and concurrent-transfer behavior at the narrowest useful layer.
+Lease publication and guarded focus must have one commit outcome, or an exact
+rollback must be unable to overwrite an intervening controller. Compile the
+changed Rust boundary and run focused tests, formatting and strict Clippy.
+
+Exit evidence: durable source identity, clean or explicitly preserved custody,
+focused green tests and no unresolved accepted review finding. Stop if the
+atomic contract cannot be achieved without redesigning unrelated authority.
+
+### M2 | Frozen Provider-Free Qualification
+
+Budget reservation: at most 500,000 additional tokens; cumulative campaign
+usage must remain at or below 850,000.
+
+Freeze one candidate and run the validation selected from the complete P211
+batch, including the comprehensive provider-free Rust lane and required client,
+contract, dashboard, documentation and planning gates. Repair only failures
+causally introduced by P211 or required by its frozen acceptance contract.
+Do not add another capability, abstraction, queue, recovery domain or plan
+revision to improve the result.
+
+Exit evidence: one immutable candidate identity, exact commands and results,
+retained first failures, and a requirement-to-evidence table identifying the
+installed-only gates. Any source repair invalidates only causally affected
+evidence and returns this same milestone to qualification.
+
+### M3 | Isolated Installed Operator Journey
+
+Budget reservation: at most 800,000 additional tokens; cumulative campaign
+usage must remain at or below 1,650,000. This milestone starts only with the
+applicable installed-runtime effect custody and a frozen M2 candidate.
+
+Run one isolated development cold-install or replacement-upgrade journey using
+the documented development runtime: shutdown owned machinery, install the
+candidate, start one runtime generation, open one named profile through the
+ordinary client path, and obtain one authenticated ready opaque
+`/remote-view/<handoff-id>`. Verify residue and process ownership after close.
+Use the same journey for the primary product verdict. A provider, fixture or
+environment failure is classified separately and does not authorize more
+architecture or an automatic retry.
+
+Exit evidence: one reproducible pass proving the operator journey, or one typed
+blocking failure with exact candidate, stage, logs, cleanup and next repair.
+One repair and one repeat are the maximum within the remaining campaign budget.
+
+### M4 | Integration And Closeout Packet
+
+Budget reservation: at most 350,000 additional tokens; total campaign usage
+must not exceed 2,000,000.
+
+Run one closed-world review limited to accepted blocking findings and critical
+regressions introduced by their fixes. Reconcile the plan evidence table,
+RUNBOOK, ROADMAP, active-lane catalog, draft pull request and branch parity.
+Present the exact protected-integration decision without merging, installing
+production, releasing, deleting the branch, or removing the worktree unless
+separately authorized.
+
+Exit evidence: either an integration-ready candidate with every Plan 0211
+criterion supported at its stated boundary, or a truthful bounded closeout
+naming the exact unmet criterion. Deferred hardening becomes separately
+triaged follow-up work and cannot keep Plan 0211 open through more revisions.
+
+### Campaign Controls
+
+- The primary owns the critical path, scope, candidate freeze and acceptance.
+- Use workers only for disjoint bounded implementation or deterministic
+  validation that returns to the primary without separate Git or runtime
+  custody.
+- Checkpoint only at M1 through M4 exit, a material blocker, an authority gate,
+  or the 30-minute cadence backstop. Routine commits do not receive paired plan
+  revisions.
+- At each checkpoint record state transition, acceptance state, progress class,
+  evidence, cumulative tokens, material blockers and next action or stop.
+- Two consecutive checkpoints without outcome progress stop the current tactic.
+- One broad review has already occurred. M4 is closed-world verification only.
+- Documentation work updates the owning facts once per milestone. Documentation
+  volume, test count and checkpoint count are not progress.
+- The only completion verdict is the ordinary installed operator journey plus
+  current source qualification. Provider-free components alone cannot close
+  Plan 0211.
+
+## September 22 Version 64 Checkpoint Review Amendment
+
+Version 64 accepts two blocking findings from the read-only review of the
+uncommitted version 63 checkpoint. It changes the next packet and custody
+requirements without qualifying, compiling, committing, or otherwise advancing
+the implementation.
+
+The current focus activation is not atomic. It commits a successor desktop
+control lease before entering the separately transacted guarded focus effect.
+If cached-session validation or focus fails, the successor remains current and
+the prior controller remains fenced even though activation did not complete.
+This violates the version 63 atomic-transfer acceptance criterion. Repair the
+boundary so lease publication and the guarded effect have one commit outcome,
+or use an exact compare-and-swap rollback that cannot revoke an intervening
+controller. Tests must prove focus failure preserves the prior controller,
+successful activation fences it, and an intervening transfer cannot be rolled
+back or overwritten.
+
+The recovery packet is internally consistent but not durable custody. The
+manifest covers all 16 changed files, their hashes match the dirty P211 tree,
+and the bundle-level `SHA256SUMS` verifies from inside its checkpoint directory.
+Both the handoff and recovery packet live under `/tmp`, however, so host cleanup
+or reboot can remove the only backup outside the dirty worktree. Before relying
+on this checkpoint for another session, preserve the exact unqualified state in
+durable non-temporary storage or an explicitly unqualified intermediate custody
+commit, then verify its base HEAD, complete file set, hashes and recovery
+procedure. Retain the current `/tmp` packet until that readback succeeds.
+
+The next authorized technical sequence, after reconciling the exhausted
+allowance, is therefore: establish durable custody; repair atomic activation;
+run focused SQLite and journaled-handoff failure/success/concurrency tests; run
+the complete changed-surface qualification selected from the v62 ledger base;
+then join authenticated viewer and agent input to the same authority. No Rust
+build, runtime, browser, provider, ingress, installation, commit, push or PR
+mutation occurred during this review amendment. Version 63 remains unqualified,
+and the complete Plan 0211 goal remains OPEN.
+
+## September 22 Shared Control Boundary Amendment
+
+Version 63 starts from source `6526ccef` and ledger `9d3bd816`. Fresh local
+readback confirms a clean P211 checkout and tracked upstream parity. The previous
+read-only handoff turn made no implementation progress. The existing coordinator
+serializes process-local effects, while the ordinary viewer resolves into the
+workspace and obtains a direct Guacamole sharing iframe. That transport does
+not pass viewer input through the CLI coordinator. A SQLite lease or focus lock
+alone therefore cannot qualify observer-only control transfer.
+
+The intended outcome remains one controller across handoff activation, focus,
+maximize, capture, pointer and keyboard, with connected observers preserved.
+Implement the durable SQLite control and exact handoff-effect boundary first;
+then route the authenticated live viewer transport through that same authority.
+Do not label the first boundary as complete shared control or active-view proof.
+The direct-provider viewer path must be replaced for ordinary manager handoffs,
+not covered by a UI-only read-only flag.
+
+Primary owns host integration, transport decisions, qualification and plan/docs.
+Worker `/root/control_persistence`, requested sol/medium with effective settings
+unknown, owns the new SQLite control child and narrowly required parent exports.
+It has no runtime, Git or acceptance custody. P215 candidate-event contracts are
+outside this write set. No new checkout or runtime is admitted.
+
+At 07:33 UTC, approximately 287 minutes have elapsed since 02:46 UTC, with older
+active effort unknown. The inherited 360-minute ceiling, review allowance and
+retry accounting remain unchanged. Budget this intermediate boundary at 20
+implementation, 15 qualification and five custody minutes, preserving the
+remaining allowance for the transport join. Full remaining P211 acceptance is
+not claimed achievable in this allowance; installed, quarantine and retention
+gates remain open. No provider or installed effect belongs to this packet.
+
+Acceptance for this boundary requires atomic transfer, exact operation replay,
+old-controller and stale-generation rejection, and no focus effect outside the
+current retained handoff binding. The complete shared-control row stays pending
+until authenticated viewer and agent input exercise the same authority.
+
+### Version 63 Operator Checkpoint
+
+The operator requested `checkpoint` before Rust qualification. The working tree
+contains the SQLite control domain, journaled handoff focus integration, a
+superseded-activation regression, and synchronized user guidance/client typing.
+Worker `/root/control_persistence` is terminal. Primary reviewed and corrected
+per-display scope, required an exact expected keeper binding before transfer,
+and added a cached-session-state comparison inside the effect transaction.
+These changes are not yet compiled or Rust-tested and are not merge-ready.
+
+Primary verification completed: service-client suite, documentation links,
+remote-view handoff docs, formatting application and `git diff --check` pass.
+Rust focused tests, strict Clippy, final formatting check, docs build and planning
+audit remain pending. No runtime, browser, provider, ingress or installed effect
+occurred. The previous v62 Rust qualification does not cover this dirty source.
+
+At the operator checkpoint, fresh UTC readback is 10:30 on September 22:
+464 wall-clock minutes since 02:46, exceeding the inherited 360-minute ceiling
+by 104 minutes on the elapsed accounting used in prior checkpoints. Exact active
+versus idle attribution is unavailable. This overrun does not renew the ceiling;
+no further investigation or build starts at this checkpoint. The goal remains
+OPEN, with the complete scope unchanged. Progress is unqualified implementation,
+not completed shared-control or installed acceptance.
+
+Retain the dirty P211 checkout for resumption. HEAD and verified remote remain
+`9d3bd81685afcfa2e4be0bb05fc0467bc1be4e73`; no v63 source commit or push is
+claimed. A patch, complete changed-file archive and manifest are preserved in
+`/tmp/agent-browser-p211-v63-checkpoint-2026-09-22/`. The next technical gate is
+focused SQLite and handoff recovery qualification, followed by actual viewer and
+agent input enforcement. Reconcile the exhausted allowance before starting that
+work; do not treat this checkpoint as an allowance reset.
 
 ## September 22 Reserved Browser Discovery Amendment
 

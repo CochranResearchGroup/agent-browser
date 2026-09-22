@@ -1055,6 +1055,15 @@ export interface ServiceViewTakeoverData {
 
 export interface ServiceRemoteViewRouteMutationData {
   status: string;
+  desktopControl?: {
+    epoch: number;
+    hostGeneration: number;
+    operationId: string;
+    clientConnectionId: string;
+    presentationSlotId: string;
+    /** Focus authorization only; not proof of a connected viewer or full input fencing. */
+    state: "focus_authorized";
+  } | null;
   routeId?: string;
   remoteViewRouteId?: string;
   displayAllocationId?: string;
