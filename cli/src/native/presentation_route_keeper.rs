@@ -21,6 +21,14 @@ use crate::process_identity::{
 pub(crate) trait RouteKeeperRepository {
     fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String>;
 
+    /// Reserve one reference-free idle route under the store's admission lock.
+    fn reserve_idle_route_stop(
+        &self,
+        _now_ms: u64,
+    ) -> Result<Option<(RouteKeeperAuthority, RouteKeeperReconcileAction)>, String> {
+        Ok(None)
+    }
+
     fn compare_and_swap_route_keeper_authority(
         &self,
         expected: &RouteKeeperAuthority,
@@ -41,6 +49,13 @@ impl SqliteRouteKeeperRepository {
 }
 
 impl RouteKeeperRepository for SqliteRouteKeeperRepository {
+    fn reserve_idle_route_stop(
+        &self,
+        now_ms: u64,
+    ) -> Result<Option<(RouteKeeperAuthority, RouteKeeperReconcileAction)>, String> {
+        BrowserRuntimeSqliteStore::open(&self.path)?.reserve_idle_route_stop(now_ms)
+    }
+
     fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String> {
         BrowserRuntimeSqliteStore::open(&self.path)?.load_route_keeper_authority()
     }
@@ -387,7 +402,33 @@ pub(crate) async fn supervise_once(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
 ) -> Result<RouteKeeperProjection, String> {
+    supervise_once_at(
+        repository,
+        connector,
+        super::presentation_request_admission::now_ms(),
+    )
+    .await
+}
+
+async fn supervise_once_at(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    now_ms: u64,
+) -> Result<RouteKeeperProjection, String> {
     process_terminal_events(repository, connector)?;
+    if let Some((stopping, action)) = repository.reserve_idle_route_stop(now_ms)? {
+        let observation = match connector.stop(&action).await {
+            Ok(observation) => observation,
+            Err(_) => RouteKeeperStopObservation::OwnershipUnproven {
+                // Preserve exact durable identity, not possibly secret provider text.
+                preserved_observed_keeper_id: format!(
+                    "{}:scale_in_stop_failed",
+                    reconcile_action_identity(&action)?.1
+                ),
+            },
+        };
+        return apply_stop_observation(repository, stopping, &action, observation);
+    }
     reconcile_once(repository, connector).await
 }
 
@@ -1998,6 +2039,73 @@ mod tests {
 
         async fn shutdown_primaries(&mut self) {
             self.shutdowns += 1;
+        }
+    }
+
+    #[tokio::test]
+    async fn cooldown_scale_in_stops_one_idle_route_and_contains_failure() {
+        for stop_fails in [false, true] {
+            let directory = TempDirectory::new("cooldown-scale-in");
+            let repository = repository_with_policy(
+                &directory,
+                RouteKeeperPolicy {
+                    minimum_ready: 1,
+                    warm_target: 2,
+                    maximum_slots: 2,
+                },
+            );
+            let mut connector = FakeConnector::default();
+            for _ in 0..4 {
+                reconcile_once(&repository, &mut connector).await.unwrap();
+            }
+            let before = repository.load_route_keeper_authority().unwrap();
+            assert_eq!(before.projection().unwrap().ready_count, 2);
+            let mut store = BrowserRuntimeSqliteStore::open(&repository.path).unwrap();
+            store
+                .update_runtime_config(
+                    super::super::browser_session_store::BrowserRuntimeConfigPatch {
+                        warm_target: Some(1),
+                        maximum_displays: Some(2),
+                        scale_in_cooldown_ms: Some(100),
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+            supervise_once_at(&repository, &mut connector, 1000)
+                .await
+                .unwrap();
+            supervise_once_at(&repository, &mut connector, 1099)
+                .await
+                .unwrap();
+            assert!(connector.stops.is_empty());
+            if stop_fails {
+                connector.routes.remove("route-slot-02");
+            }
+            supervise_once_at(&repository, &mut connector, 1100)
+                .await
+                .unwrap();
+            let after = repository.load_route_keeper_authority().unwrap();
+            assert_eq!(connector.stops.len(), 1);
+            assert_eq!(
+                after.records["route-slot-01"],
+                before.records["route-slot-01"]
+            );
+            let retired = &after.records["route-slot-02"];
+            assert_eq!(
+                retired.phase,
+                if stop_fails {
+                    RouteKeeperPhase::Quarantined
+                } else {
+                    RouteKeeperPhase::Absent
+                }
+            );
+            assert_eq!(retired.cleanup_obligation.is_some(), stop_fails);
+            supervise_once_at(&repository, &mut connector, 1200)
+                .await
+                .unwrap();
+            assert_eq!(connector.stops.len(), 1);
+            assert_eq!(connector.shutdowns, 0);
+            assert_eq!(connector.starts.len(), 2);
         }
     }
 

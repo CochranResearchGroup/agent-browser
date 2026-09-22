@@ -604,7 +604,8 @@ agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
 ```
 
 Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
-`maximumBrowsersPerDisplay`, `maximumQueueDepth`, and `requestDeadlineMs`.
+`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`, and
+`scaleInCooldownMs` (default 600000, ten minutes).
 All values must be positive integers, with minimum ready no greater than warm
 target and warm target no greater than maximum displays. Updates atomically
 persist settings and keeper policy in SQLite; clients need no revision token.
@@ -616,8 +617,13 @@ Readback returns `config`, including its revision; it is not readiness evidence.
 Maximum displays cannot yet exceed the provisioned physical slot count
 (default six). Lowering limits preserves existing routes and browsers, caps
 new allocation and clamps retained demand. New queue deadlines apply to newly
-enqueued requests. Catalog expansion, scale-in and public cleanup settings
-remain pending.
+enqueued requests. The keeper retires at most one reference-free ready route
+above the warm target after cooldown. Browser and handoff references, pending
+operations, admission work, and unresolved route recovery prevent retirement.
+Clock regression, renewed use or changed ownership resets idle evidence. Stop
+intent commits before provider access; failed or unproven cleanup retains a
+quarantine obligation, rather than reporting successful reclamation. Automatic
+catalog expansion and public profile/storage cleanup settings remain pending.
 
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry

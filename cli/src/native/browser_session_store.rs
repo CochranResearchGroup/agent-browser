@@ -1,17 +1,17 @@
 //! Independent durable storage for the ordinary Browser Session Manager path.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
-    PresentationRequestQueue, RemoteViewHandoff, RouteKeeperAuthority,
-    RouteKeeperConnectionCatalog, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
-    BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    PresentationRequestQueue, PresentationRequestState, PresentationScaleInState,
+    RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperConnectionCatalog,
+    RouteKeeperReconcileAction, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -27,9 +27,11 @@ const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
 const PRESENTATION_REQUEST_QUEUE_DOCUMENT: &str = "presentation_request_queue";
+const PRESENTATION_SCALE_IN_STATE_DOCUMENT: &str = "presentation_scale_in_state";
 const ROUTE_KEEPER_AUTHORITY_DOCUMENT: &str = "route_keeper_authority";
 const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
 const PRESENTATION_REQUEST_QUEUE_SCHEMA_V1: &str = "agent-browser.presentation-request-queue.v1";
+const PRESENTATION_SCALE_IN_STATE_SCHEMA_V1: &str = "agent-browser.presentation-scale-in-state.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
 
@@ -63,6 +65,7 @@ pub(crate) struct BrowserRuntimeConfigPatch {
     pub(crate) maximum_browsers_per_display: Option<u32>,
     pub(crate) maximum_queue_depth: Option<u32>,
     pub(crate) request_deadline_ms: Option<u64>,
+    pub(crate) scale_in_cooldown_ms: Option<u64>,
 }
 
 impl Default for BrowserRuntimeConfig {
@@ -732,6 +735,9 @@ impl BrowserRuntimeSqliteStore {
         if let Some(value) = patch.request_deadline_ms {
             next.request_deadline_ms = value;
         }
+        if let Some(value) = patch.scale_in_cooldown_ms {
+            next.scale_in_cooldown_ms = value;
+        }
         if next.maximum_displays > authority.policy.maximum_slots {
             return Err(format!(
                 "browser_runtime_config_provisioned_capacity_exceeded:{}:{}",
@@ -769,6 +775,160 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
         Ok(next)
+    }
+
+    pub(crate) fn reserve_idle_route_stop(
+        &mut self,
+        now_ms: u64,
+    ) -> Result<Option<(RouteKeeperAuthority, RouteKeeperReconcileAction)>, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("presentation_scale_in_begin_failed:{error}"))?;
+        let config = load_runtime_config_row(&transaction)?;
+        let authority = load_route_keeper_authority_document(&transaction)?;
+        let session_state: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let handoffs: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        let queue: PresentationRequestQueue = load_optional_document(
+            &transaction,
+            PRESENTATION_REQUEST_QUEUE_DOCUMENT,
+            PRESENTATION_REQUEST_QUEUE_SCHEMA_V1,
+        )?;
+        queue.validate()?;
+        let pending_operations: i64 = transaction
+            .query_row(
+                "SELECT COUNT(*) FROM operation_records WHERE state != 'committed'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
+
+        let mut referenced_slots = BTreeSet::new();
+        let mut admission_pending = pending_operations != 0;
+        for browser in session_state.browsers.values() {
+            let Some(desktop) = &browser.desktop else {
+                admission_pending = true;
+                continue;
+            };
+            if desktop.route_id.is_empty() {
+                admission_pending = true;
+            } else {
+                referenced_slots.insert(desktop.route_id.clone());
+            }
+        }
+        if session_state
+            .sessions
+            .values()
+            .any(|session| !session_state.browsers.contains_key(&session.browser_id))
+            || session_state
+                .tabs
+                .values()
+                .any(|tab| !session_state.browsers.contains_key(&tab.browser_id))
+        {
+            admission_pending = true;
+        }
+        for handoff in handoffs.handoffs.values() {
+            let mut has_route_reference = false;
+            for route_id in [&handoff.last_route_id, &handoff.last_route_pool_entry_id]
+                .into_iter()
+                .flatten()
+            {
+                if route_id.is_empty() {
+                    admission_pending = true;
+                } else {
+                    referenced_slots.insert(route_id.clone());
+                    has_route_reference = true;
+                }
+            }
+            if !has_route_reference {
+                admission_pending = true;
+            }
+        }
+        if referenced_slots
+            .iter()
+            .any(|slot_id| !authority.records.contains_key(slot_id))
+        {
+            admission_pending = true;
+        }
+        if authority.records.values().any(|record| {
+            !matches!(
+                record.phase,
+                agent_browser_service_model::RouteKeeperPhase::Absent
+                    | agent_browser_service_model::RouteKeeperPhase::Ready
+            )
+        }) {
+            admission_pending = true;
+        }
+        if queue.entries.values().any(|entry| {
+            matches!(&entry.state, PresentationRequestState::Admitted { .. })
+                || matches!(
+                    &entry.state,
+                    PresentationRequestState::Queued if entry.deadline_ms > now_ms
+                )
+                || matches!(
+                    &entry.state,
+                    PresentationRequestState::Retryable {
+                        recovery_required: true
+                    }
+                )
+        }) {
+            admission_pending = true;
+        }
+
+        let mut scale_in: PresentationScaleInState = load_optional_document(
+            &transaction,
+            PRESENTATION_SCALE_IN_STATE_DOCUMENT,
+            PRESENTATION_SCALE_IN_STATE_SCHEMA_V1,
+        )?;
+        let selected = scale_in.observe_and_select(
+            &authority,
+            &referenced_slots,
+            admission_pending,
+            now_ms,
+            config.scale_in_cooldown_ms,
+        )?;
+        save_document(
+            &transaction,
+            PRESENTATION_SCALE_IN_STATE_DOCUMENT,
+            PRESENTATION_SCALE_IN_STATE_SCHEMA_V1,
+            &scale_in,
+        )?;
+        let result = if let Some(slot_id) = selected {
+            let fence = authority
+                .records
+                .get(&slot_id)
+                .ok_or_else(|| "presentation_scale_in_slot_missing".to_string())?
+                .fence
+                .clone();
+            let mut stopping = authority.clone();
+            let reference_target = u32::try_from(referenced_slots.len())
+                .unwrap_or(u32::MAX)
+                .max(stopping.policy.warm_target);
+            stopping.requested_ready_slots = stopping.requested_ready_slots.min(reference_target);
+            let action = stopping.begin_stop(&slot_id, &fence)?;
+            stopping.projection()?;
+            save_document(
+                &transaction,
+                ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+                ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+                &stopping,
+            )?;
+            Some((stopping, action))
+        } else {
+            None
+        };
+        transaction
+            .commit()
+            .map_err(|error| format!("presentation_scale_in_commit_failed:{error}"))?;
+        Ok(result)
     }
 
     pub(crate) fn reserve_operation(
@@ -1932,6 +2092,86 @@ mod tests {
         .unwrap()
     }
 
+    fn route_keeper_ready_receipt(
+        slot_id: String,
+        keeper_id: String,
+        fence: agent_browser_service_model::RouteKeeperFence,
+    ) -> agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+        let sequence = slot_id.rsplit('-').next().unwrap().parse::<u32>().unwrap();
+        let session_id = format!("xrdp-{sequence}");
+        let display_name = format!(":{sequence}");
+        agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+            slot_id,
+            keeper_id,
+            fence,
+            guacamole_connection_uuid: format!("guacamole-{sequence}"),
+            xrdp_session_id: session_id.clone(),
+            display_name: display_name.clone(),
+            xrdp_ownership: Some(
+                agent_browser_service_model::RouteKeeperXrdpOwnershipWitness {
+                    schema_version: "agent-browser.route-keeper-xrdp-ownership.v1".to_string(),
+                    boot_id: "boot-fixture".to_string(),
+                    route_user: format!("agent-browser-rdp-{sequence}"),
+                    route_uid: 2_000 + sequence,
+                    session_id: session_id.clone(),
+                    session_service: "xrdp-sesman".to_string(),
+                    session_scope: format!("session-{session_id}.scope"),
+                    scope_invocation_id: format!("invocation-{sequence}"),
+                    cgroup_path: format!(
+                        "/user.slice/user-{}.slice/session-{session_id}.scope",
+                        2_000 + sequence
+                    ),
+                    cgroup_device: 28,
+                    cgroup_inode: 1_000 + u64::from(sequence),
+                    leader_pid: 4_100 + sequence,
+                    leader_start_ticks: 5_100 + u64::from(sequence),
+                    x_server_pid: 4_200 + sequence,
+                    x_server_start_ticks: 5_200 + u64::from(sequence),
+                    display_name,
+                    x11_socket_inode: 6_100 + u64::from(sequence),
+                },
+            ),
+            observed_at: "2026-09-22T12:00:00Z".to_string(),
+        }
+    }
+
+    fn publish_ready_route_authority(
+        store: &mut BrowserRuntimeSqliteStore,
+        ready_slots: u32,
+        requested_ready_slots: u32,
+    ) -> RouteKeeperAuthority {
+        let expected = store.load_route_keeper_authority().unwrap();
+        let mut authority = expected.clone();
+        authority
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
+        authority
+            .replace_connection_catalog(route_keeper_catalog())
+            .unwrap();
+        authority
+            .request_ready_slots(requested_ready_slots)
+            .unwrap();
+        for _ in 0..ready_slots {
+            let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+                agent_browser_service_model::RouteKeeperReconcileAction::Start {
+                    slot_id,
+                    keeper_id,
+                    fence,
+                    ..
+                } => (slot_id, keeper_id, fence),
+                other => panic!("expected start action, got {other:?}"),
+            };
+            authority.record_observing(&slot_id, &fence).unwrap();
+            authority
+                .record_protocol_ready(route_keeper_ready_receipt(slot_id, keeper_id, fence))
+                .unwrap();
+        }
+        store
+            .compare_and_swap_route_keeper_authority(&expected, &authority)
+            .unwrap();
+        authority
+    }
+
     struct TempDirectory(PathBuf);
 
     impl TempDirectory {
@@ -1950,6 +2190,24 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    fn sqlite_store(label: &str) -> (TempDirectory, BrowserRuntimeSqliteStore) {
+        let directory = TempDirectory::new(label);
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        (
+            directory,
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+        )
     }
 
     #[test]
@@ -2127,6 +2385,100 @@ mod tests {
         let reopened = reopened.load_presentation_queue().unwrap();
         assert_eq!(reopened.entries.len(), 1);
         assert_eq!(reopened.entries["request-a"].key, "request-a");
+    }
+
+    #[test]
+    fn reserve_idle_route_stop_waits_for_cooldown_resets_on_pending_work_and_reserves_exact_stop() {
+        let (_directory, mut store) = sqlite_store("browser-runtime-scale-in-cooldown");
+        let authority = publish_ready_route_authority(&mut store, 5, 6);
+        store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                scale_in_cooldown_ms: Some(100),
+                ..BrowserRuntimeConfigPatch::default()
+            })
+            .unwrap();
+
+        assert_eq!(store.reserve_idle_route_stop(1_000).unwrap(), None);
+
+        let pending = store
+            .reserve_operation("pending-scale-in", "browser:fixture", serde_json::json!({}))
+            .unwrap();
+        assert_eq!(store.reserve_idle_route_stop(1_100).unwrap(), None);
+        store
+            .commit_operation(
+                &pending.operation_id,
+                pending.generation,
+                serde_json::json!({"committed": true}),
+            )
+            .unwrap();
+
+        assert_eq!(
+            store.reserve_idle_route_stop(1_199).unwrap(),
+            None,
+            "the pending obligation clears prior idle evidence"
+        );
+        assert_eq!(store.reserve_idle_route_stop(1_298).unwrap(), None);
+        let (stopping, action) = store.reserve_idle_route_stop(1_299).unwrap().unwrap();
+        let (slot_id, fence) = match action {
+            RouteKeeperReconcileAction::Stop { slot_id, fence, .. } => (slot_id, fence),
+            other => panic!("expected stop action, got {other:?}"),
+        };
+        assert_eq!(slot_id, "route-slot-05");
+        assert_eq!(fence, authority.records[&slot_id].fence);
+        assert_eq!(
+            stopping.records[&slot_id].phase,
+            agent_browser_service_model::RouteKeeperPhase::Stopping
+        );
+        assert_eq!(stopping.requested_ready_slots, 4);
+        assert_eq!(store.load_route_keeper_authority().unwrap(), stopping);
+    }
+
+    #[test]
+    fn reserve_idle_route_stop_keeps_browser_and_handoff_references_out_of_selection() {
+        let (_directory, mut store) = sqlite_store("browser-runtime-scale-in-references");
+        let authority = publish_ready_route_authority(&mut store, 5, 5);
+        store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                scale_in_cooldown_ms: Some(100),
+                ..BrowserRuntimeConfigPatch::default()
+            })
+            .unwrap();
+
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser-01".to_string(),
+            agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser-01".to_string(),
+                profile_id: "profile-01".to_string(),
+                pid: 4_001,
+                cdp_endpoint: "http://127.0.0.1:9222".to_string(),
+                process_identity: None,
+                desktop: Some(agent_browser_service_model::BrowserDesktopAssignment {
+                    route_id: "route-slot-01".to_string(),
+                    display_name: ":1".to_string(),
+                    live_browser_count: 1,
+                }),
+                active_session_ids: Vec::new(),
+            },
+        );
+        store.save_session_state(&state).unwrap();
+        for sequence in 2..=5 {
+            store
+                .save_manager_handoff(&RemoteViewHandoff {
+                    id: format!("handoff-{sequence}"),
+                    last_route_id: Some(format!("route-slot-{sequence:02}")),
+                    ..RemoteViewHandoff::default()
+                })
+                .unwrap();
+        }
+
+        assert_eq!(store.reserve_idle_route_stop(1_000).unwrap(), None);
+        assert_eq!(
+            store.reserve_idle_route_stop(1_100).unwrap(),
+            None,
+            "every ready route has a durable browser or handoff reference"
+        );
+        assert_eq!(store.load_route_keeper_authority().unwrap(), authority);
     }
 
     #[test]
@@ -3021,6 +3373,7 @@ mod tests {
             maximum_browsers_per_display: Some(2),
             maximum_queue_depth: Some(12),
             request_deadline_ms: Some(45_000),
+            scale_in_cooldown_ms: Some(120_000),
         };
 
         let updated = store.update_runtime_config(patch.clone()).unwrap();
@@ -3031,10 +3384,7 @@ mod tests {
         assert_eq!(updated.maximum_browsers_per_display, 2);
         assert_eq!(updated.maximum_queue_depth, 12);
         assert_eq!(updated.request_deadline_ms, 45_000);
-        assert_eq!(
-            updated.scale_in_cooldown_ms, original_config.scale_in_cooldown_ms,
-            "unsupported cleanup controls remain untouched"
-        );
+        assert_eq!(updated.scale_in_cooldown_ms, 120_000);
         let synchronized = store.load_route_keeper_authority().unwrap();
         assert_eq!(synchronized.policy.minimum_ready, 2);
         assert_eq!(synchronized.policy.warm_target, 3);

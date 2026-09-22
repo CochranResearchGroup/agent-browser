@@ -1193,7 +1193,8 @@ fn service_mcp_tools() -> Vec<Value> {
                             "maximumDisplays": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
                             "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
                             "maximumQueueDepth": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
-                            "requestDeadlineMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
+                            "requestDeadlineMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
                         },
                         "description": "Strict partial SQLite runtime configuration for service_runtime_config_update."
                     },
