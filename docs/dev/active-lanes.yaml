@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 8ab466e8
+    checkpoint: b2a3ff39
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: 8ab466e8 passes 12 queue model, four admission, one journal and 774 native-other tests (57 ignored); format, strict Clippy and docs gates pass; unchanged v55 evidence retained; no full-suite or installed acceptance
-    validation_ref: 8ab466e8
+    validation_status: b2a3ff39 passes six runtime-config and five MCP tests, client, parity and final quality/docs gates; native-other 773 passed plus one corrected fixture passing focused rerun, 57 ignored; no full-suite or installed acceptance
+    validation_ref: b2a3ff39
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P211:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: version 56 qualifies exact open-journal recovery admission; interrupted handoff recovery, active-view control priority, public live configuration, scale-in, causal discovery, quarantine reconciliation, remaining SQLite domains and Desktop Services joins remain before isolated cold-start acceptance; production and external ingress remain excluded
+    blocker: version 57 exposes six atomic runtime settings within provisioned slots; automatic catalog expansion, scale-in, interrupted handoff recovery, active-view control priority, causal discovery, quarantine, remaining SQLite and Desktop Services joins remain before isolated acceptance; production and ingress excluded
     updated_at: 2026-09-21

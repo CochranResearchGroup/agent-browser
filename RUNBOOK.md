@@ -11,24 +11,25 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Turn 426 | 2026-09-21
 
-P211 version 56 source `8ab466e8` joins interrupted admission to the exact
-original browser-open journal. Recovery requeues a fresh fenced attempt; the
-journal still controls effects. The SQLite fixture reaches the original ready
-handoff with one total browser launch. Missing or mismatched journals and
-interrupted navigation or handoff requests retain recovery obligations.
+P211 version 57 source `b2a3ff39` exposes `service runtime-config get` and
+`set <json-object>` plus HTTP/MCP service-request actions. Six typed settings
+update atomically with keeper policy, without client revision tokens. Live
+receipt commits preserve concurrent policy; stale waiters cannot restore excess
+demand. Lowered limits retain existing routes and browser assignments.
 
-Primary qualification passes 12 queue model, four SQLite admission, one journal
-fixture and 774 native-other tests (57 ignored), formatting, strict Clippy,
-docs build, links, handoff docs and active planning audit. The
-[plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-journal-recovery-admission-amendment)
-records retained evidence and worker integration. No installed/provider effect
-occurred; this is not whole-suite or installed acceptance.
+Six runtime-config and five MCP tests, full client, API/MCP parity (120 actions),
+final format/strict Clippy and docs gates pass. Native-other recorded 773 passes,
+57 ignored and one old policy-drift fixture failure. The corrected retained-route
+drift fixture passes focused revalidation; unchanged passes are retained.
+The [plan amendment](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md#september-22-public-runtime-configuration-amendment)
+records first-failure evidence and worker integration. No installed/provider
+mutation occurred; this is not full-suite or installed acceptance.
 
-P211 remains OPEN. About 150 elapsed minutes since 02:46 UTC are recorded;
-older effort is unknown and the inherited ceiling is unchanged. Next: public
-configuration and live keeper resizing. Interrupted handoff recovery, scale-in,
-causal discovery, quarantine, remaining persistence, Desktop Services and frozen
-isolated acceptance remain open. Production, ingress and release stay excluded.
+P211 remains OPEN. About 165 elapsed minutes since 02:46 UTC, older effort
+unknown, inherited ceiling unchanged. Next: automatic catalog expansion and
+capacity lifecycle. Scale-in, interrupted handoff recovery, causal discovery,
+quarantine, remaining persistence, Desktop Services and frozen isolated acceptance
+remain open. Production, ingress and release stay excluded.
 
 ## Turn 425 | 2026-09-21
 

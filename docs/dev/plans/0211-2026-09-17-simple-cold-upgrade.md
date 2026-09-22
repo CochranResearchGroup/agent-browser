@@ -2,7 +2,7 @@
 
 Date: 2026-09-17
 
-Plan version: 56
+Plan version: 57
 
 State: OPEN
 
@@ -74,6 +74,66 @@ service-owned SQLite database. Treat XRDP/Xorg processes, display numbers,
 Guacamole connections, and other live process observations as ephemeral
 evidence that the provider reconciles against that durable state after every
 cold start.
+
+## September 22 Public Runtime Configuration Amendment
+
+Version 57 continues from qualified source `8ab466e8` and ledger `f2b8677f`.
+Expose ordinary `service runtime-config get` and `set <json-object>` plus the
+matching generic service-request actions. Partial typed updates need no client
+revision, preserve unrelated settings, and commit configuration and keeper
+minimum/warm policy together. Existing ready routes survive lowered limits;
+allocation observes the lowered cap and stale demand is clamped. The current
+physical catalog bounds display growth; automatic catalog expansion and
+reference-free scale-in remain required follow-up, not claimed complete.
+
+Primary owns CLI, handlers, integration and acceptance. Existing startup worker
+owns only the SQLite patch/transaction/tests (requested terra/high); capacity
+worker owns service request schema, action metadata and generated client
+(requested sol/medium); documentation worker will own public prose. Effective
+models are unknown. No extra worktree, runtime or provider mutation is included.
+Budget 20 minutes implementation, 15 qualification and 5 custody inside the
+unchanged 360-minute ceiling, preserving about 150 elapsed minutes and unknown
+older effort. Acceptance: ordinary no-launch command read/update roundtrip,
+atomic rollback, idempotent replay, live keeper policy readback and generated
+contract parity. This advances public configuration without reducing the full
+cold-install, restart and remote-view acceptance contract.
+
+### Version 57 qualification
+
+Source `b2a3ff39` exposes the six supported runtime settings through CLI and
+generic HTTP/MCP service requests. Readback includes revision; partial updates
+need no revision token. Configuration and keeper policy commit together.
+Concurrent provider receipts preserve live policy changes, and demand writes
+clamp against the current SQLite cap even when a waiter read stale settings.
+Existing routes and browser assignments remain intact when limits decrease.
+
+Primary qualification passes six focused runtime-config tests, five MCP
+service-request tests, full service-client checks, API/MCP parity (120 actions),
+final formatting and strict Clippy, docs build, links, handoff docs and active
+planning audit. Native-other recorded 773 passes, 57 ignored and one fixture
+failure: the old startup test treated warm-target drift as authority drift.
+That premise conflicts with the new independent-policy merge. The corrected
+fixture changes a retained route phase instead and passes its focused rerun,
+preserving exact recovery-evidence rejection. No production source changed
+following the broad run; passed cases are retained rather than claiming a full
+rerun. The first failure remains in `/tmp/p211-v57-other.log`; the correction
+is `/tmp/p211-v57-startup-final.log`. Other logs use `/tmp/p211-v57-*`.
+
+The store and contract workers completed their scoped changes on the requested
+terra/high and sol/medium routes, effective settings unknown. Primary added
+stale-cap demand fencing and integrated the CLI/no-launch fixture. The prose
+worker could not resume because the tool reported its thread limit; primary
+completed all mandatory prose surfaces. No replacement worker or extra review
+was opened. Draft PR #191 remains OPEN; P215 dirty work was preserved.
+
+This is outcome progress for ordinary public configuration within the existing
+physical catalog. Automatic catalog expansion, reference-free scale-in,
+interrupted handoff recovery, causal process discovery, quarantine, remaining
+persistence and Desktop Services joins, and the complete frozen isolated
+acceptance remain OPEN. No installed/provider effect occurred. About 165 elapsed
+minutes since 02:46 UTC are recorded, older active effort unknown; inherited
+360-minute ceiling and retry/review accounting are unchanged. Next consolidate
+catalog expansion and capacity lifecycle with the existing configured keeper.
 
 ## September 22 Journal Recovery Admission Amendment
 

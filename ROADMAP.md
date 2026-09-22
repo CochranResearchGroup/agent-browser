@@ -265,11 +265,11 @@ two-route coverage; focused and quality gates pass again. Test-only `d0fb7abe`
 qualifies the existing Absent-slot rollover through start and replay. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for validation status.
 
-Version 56 checkpoint `8ab466e8` joins interrupted queue admission to the exact
-browser-open journal, recovering the original ready handoff without duplicate
-launch. Missing or mismatched proof retains the obligation. Public configuration,
-live resizing, interrupted handoff recovery, scale-in and full installed
-acceptance remain open. See the
+Version 57 checkpoint `b2a3ff39` exposes partial runtime configuration through
+CLI and HTTP/MCP, atomically synchronized with keeper policy. Updates preserve
+concurrent effect receipts and existing routes; stale demand is capped at commit.
+Automatic catalog expansion, scale-in, interrupted handoff recovery and the full
+installed journey remain open. See the
 [current runbook](RUNBOOK.md#turn-426--2026-09-21) for qualification and remaining
 gates.
 
