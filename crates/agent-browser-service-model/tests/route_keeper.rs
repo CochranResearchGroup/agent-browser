@@ -732,3 +732,85 @@ fn legacy_ready_receipt_without_exact_xrdp_ownership_fails_closed() {
         Err("route_keeper_ready_xrdp_ownership_missing".to_string())
     );
 }
+
+#[test]
+fn interrupted_adoption_refences_only_exact_operation_and_retains_source() {
+    let (mut authority, original) = make_one_ready();
+    authority
+        .record_disconnect(
+            &original.slot_id,
+            &original.fence,
+            &original.guacamole_connection_uuid,
+        )
+        .unwrap();
+    authority
+        .register_host_process_claim(host_process_claim(2))
+        .unwrap();
+    authority.begin_adoption(&original.slot_id, 2).unwrap();
+    let interrupted = authority.records[&original.slot_id].fence.clone();
+    authority
+        .register_host_process_claim(host_process_claim(3))
+        .unwrap();
+    let before = authority.clone();
+    let mut changed = interrupted.clone();
+    changed.operation_id = "unrelated-operation".to_string();
+    assert!(authority
+        .refence_interrupted_adoption(&original.slot_id, &changed, 3)
+        .is_err());
+    assert!(authority
+        .refence_interrupted_adoption(&original.slot_id, &interrupted, 2)
+        .is_err());
+    assert_eq!(authority, before);
+    let action = authority
+        .refence_interrupted_adoption(&original.slot_id, &interrupted, 3)
+        .unwrap();
+    assert_eq!(authority.next_reconcile_action().unwrap(), action);
+    let current = authority.records[&original.slot_id].fence.clone();
+    assert_eq!(current.host_generation, 3);
+    assert_eq!(
+        current.operation_generation,
+        interrupted.operation_generation
+    );
+    assert_eq!(
+        authority.records[&original.slot_id].protocol_ready.as_ref(),
+        Some(&original)
+    );
+    let refenced = authority.clone();
+    assert!(authority
+        .record_adoption_terminated(&original.slot_id, &interrupted, None)
+        .is_err());
+    assert_eq!(authority, refenced);
+    assert!(authority
+        .adopt(RouteKeeperAdoptionReceipt {
+            previous_host_generation: original.fence.host_generation,
+            previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+            ready: RouteKeeperProtocolReadyReceipt {
+                fence: interrupted.clone(),
+                guacamole_connection_uuid: "stale-second-host-transport".to_string(),
+                ..original.clone()
+            },
+            adopted_at: "2026-09-21T21:59:00Z".to_string(),
+        })
+        .is_err());
+    assert_eq!(authority, refenced);
+    assert!(authority
+        .refence_interrupted_adoption(&original.slot_id, &interrupted, 3)
+        .is_err());
+    authority
+        .adopt(RouteKeeperAdoptionReceipt {
+            previous_host_generation: original.fence.host_generation,
+            previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+            ready: RouteKeeperProtocolReadyReceipt {
+                fence: current,
+                guacamole_connection_uuid: "third-host-transport".to_string(),
+                ..original.clone()
+            },
+            adopted_at: "2026-09-21T22:00:00Z".to_string(),
+        })
+        .unwrap();
+    assert_eq!(
+        authority.records[&original.slot_id].phase,
+        RouteKeeperPhase::Ready
+    );
+    assert_eq!(authority.host_process_claims.len(), 3);
+}

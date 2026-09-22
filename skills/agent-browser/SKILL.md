@@ -542,6 +542,13 @@ a current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, capability, or
 recovery-token input.
 
+On host restart, configured route keepers recover retained routes only after
+proving their earlier host processes exited. Interrupted adoption also requires
+proof that the interrupted adopter exited. Recovery verifies every retained
+route before opening provider connections; live or ambiguous ownership and
+unsupported retained states stop startup. A pending connection is not a ready
+remote view.
+
 Use the route-bound `remote-view open` command only when a service client needs
 its advanced compatibility surface. It can select a concrete route-pool entry
 or route descriptor, bind launch to that route display, open the requested tab,

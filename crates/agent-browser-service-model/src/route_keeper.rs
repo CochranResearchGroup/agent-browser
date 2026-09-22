@@ -693,6 +693,67 @@ impl RouteKeeperAuthority {
         })
     }
 
+    /// Transfer an interrupted logical adoption to a newer registered host.
+    ///
+    /// The caller must prove that both the retained ready host and the host of
+    /// `expected_fence` have exited before publishing this transition. This pure
+    /// model method verifies the exact pending operation; it does not observe
+    /// processes or confer process-exit authority. The logical operation number
+    /// and original ready evidence survive, while the host fence changes.
+    pub fn refence_interrupted_adoption(
+        &mut self,
+        slot_id: &str,
+        expected_fence: &RouteKeeperFence,
+        new_host_generation: u64,
+    ) -> Result<RouteKeeperReconcileAction, String> {
+        self.validate()?;
+        if !self.host_process_claims.contains_key(&new_host_generation) {
+            return Err(format!(
+                "route_keeper_host_process_claim_missing:{new_host_generation}"
+            ));
+        }
+        let record = self
+            .records
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_slot_missing".to_string())?;
+        let ready = record
+            .protocol_ready
+            .as_ref()
+            .ok_or_else(|| "route_keeper_adoption_source_missing".to_string())?;
+        let operation_generation = ready
+            .fence
+            .operation_generation
+            .checked_add(1)
+            .ok_or_else(|| "route_keeper_operation_generation_exhausted".to_string())?;
+        if record.phase != RouteKeeperPhase::Adopting
+            || record.fence != *expected_fence
+            || record.adoption.is_some()
+            || new_host_generation <= expected_fence.host_generation
+            || expected_fence.operation_generation != operation_generation
+            || expected_fence.operation_id
+                != format!(
+                    "route-keeper:{}:{slot_id}:{operation_generation}",
+                    expected_fence.host_generation
+                )
+        {
+            return Err("route_keeper_interrupted_adoption_candidate_changed".to_string());
+        }
+        let previous_host_generation = ready.fence.host_generation;
+        let record = self
+            .records
+            .get_mut(slot_id)
+            .expect("validated route exists");
+        record.fence.host_generation = new_host_generation;
+        record.fence.operation_id =
+            format!("route-keeper:{new_host_generation}:{slot_id}:{operation_generation}");
+        Ok(RouteKeeperReconcileAction::Adopt {
+            slot_id: record.slot_id.clone(),
+            keeper_id: record.keeper_id.clone(),
+            fence: record.fence.clone(),
+            previous_host_generation,
+        })
+    }
+
     pub fn next_reconcile_action(&mut self) -> Result<RouteKeeperReconcileAction, String> {
         self.validate()?;
         if let Some(record) = self

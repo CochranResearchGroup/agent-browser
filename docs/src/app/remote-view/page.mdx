@@ -35,8 +35,8 @@ and heartbeat. If you omit <code>--runtime-profile</code>, Agent Browser creates
 a session-scoped disposable profile and reaps it only after exact ownership and
 cleanup checks pass.
 
-The ordinary path selects a healthy configured virtual desktop and its static
-viewer. You do not choose a route, display, lease, transaction revision, census
+The ordinary path selects a current SQLite <code>Ready</code> route-keeper
+binding and its verified desktop. You do not choose a route, display, lease, transaction revision, census
 digest, hash, capability, or recovery token. A successful response includes a
 durable opaque <code>handoffUrl</code> and
 <code>operatorVisible.state=ready</code>.
@@ -45,6 +45,13 @@ The selected route must provide `publicOperatorUrl` for the authenticated
 dashboard origin. If it is absent, the open has no durable handoff URL. Agent
 Browser does not rewrite a provider or Guacamole origin into the dashboard-only
 `/remote-view/<handoff-id>` route.
+
+On host restart, configured route keepers recover retained routes only after
+proving their earlier host processes exited. Interrupted adoption also requires
+proof that the interrupted adopter exited. Recovery verifies every retained
+route before opening provider connections; live or ambiguous ownership and
+unsupported retained states stop startup. A pending connection is not a ready
+remote view.
 
 ## Before you begin
 

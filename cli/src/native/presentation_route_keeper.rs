@@ -536,6 +536,30 @@ pub(crate) struct VerifiedRouteKeeperPredecessorExit {
     successor_host_generation: u64,
 }
 
+/// Provider-free, all-candidates-first preparation for configured cold
+/// startup. A re-fence retains both process-exit proofs in this opaque value;
+/// callers cannot construct it from persisted route state alone.
+#[derive(Clone)]
+pub(crate) struct PreparedRouteKeeperColdRecovery {
+    kind: PreparedRouteKeeperColdRecoveryKind,
+}
+
+/// A complete startup packet whose pending states were atomically published.
+/// Only reservation can construct this value, so asynchronous provider effects
+/// cannot bypass invalidation of predecessor readiness.
+pub(crate) struct ReservedRouteKeeperColdRecovery {
+    proofs: Vec<VerifiedRouteKeeperPredecessorExit>,
+}
+
+#[derive(Clone)]
+enum PreparedRouteKeeperColdRecoveryKind {
+    Direct(VerifiedRouteKeeperPredecessorExit),
+    RefenceInterruptedAdoption {
+        predecessor_exit: VerifiedRouteKeeperPredecessorExit,
+        interrupted_adopter_fence: RouteKeeperFence,
+    },
+}
+
 /// Build the opaque predecessor-exit capability from one validated authority
 /// snapshot and one caller-supplied process observation.
 ///
@@ -580,25 +604,235 @@ pub(crate) fn try_prove_route_keeper_predecessor_exit(
         return Err("route_keeper_predecessor_proof_successor_boot_epoch_mismatch".to_string());
     }
 
-    let predecessor_exited = if predecessor.boot_epoch != current_boot_epoch {
-        true
-    } else {
-        matches!(
-            assess_process_ownership(
-                Some(&predecessor.process_identity),
-                observation,
-                LegacyProfileProof::Unproven,
-            )
-            .ownership,
-            RuntimeProcessOwnership::Missing | RuntimeProcessOwnership::ReusedUnrelated
-        )
-    };
+    let predecessor_exited =
+        host_process_claim_exited(predecessor, current_boot_epoch, observation);
     Ok(
         predecessor_exited.then_some(VerifiedRouteKeeperPredecessorExit {
             expected_ready,
             successor_host_generation,
         }),
     )
+}
+
+fn host_process_claim_exited(
+    claim: &RouteKeeperHostProcessClaim,
+    current_boot_epoch: &str,
+    observation: ProcessObservation,
+) -> bool {
+    if claim.boot_epoch != current_boot_epoch {
+        return true;
+    }
+    matches!(
+        assess_process_ownership(
+            Some(&claim.process_identity),
+            observation,
+            LegacyProfileProof::Unproven,
+        )
+        .ownership,
+        RuntimeProcessOwnership::Missing | RuntimeProcessOwnership::ReusedUnrelated
+    )
+}
+
+/// Classify every retained route before a configured startup opens a provider
+/// connection or publishes a re-fence. The callback is deliberately
+/// provider-free and receives only a durable host process claim.
+///
+/// `Adopting` may replay on its recorded generation. A newer host may take an
+/// interrupted adoption only when this classifier has proven both the original
+/// ready host and the interrupted adopter absent. All other retained phases are
+/// refused instead of being repaired by ordinary supervision.
+pub(crate) fn prepare_configured_cold_process_recovery<F>(
+    authority: &RouteKeeperAuthority,
+    successor_host_generation: u64,
+    current_boot_epoch: &str,
+    mut observe: F,
+) -> Result<Vec<PreparedRouteKeeperColdRecovery>, String>
+where
+    F: FnMut(&RecordedProcessIdentity) -> ProcessObservation,
+{
+    authority.projection()?;
+    if current_boot_epoch.trim().is_empty() {
+        return Err("route_keeper_cold_process_boot_epoch_invalid".to_string());
+    }
+    let mut prepared = Vec::new();
+    let mut first_error = None;
+    for record in authority.records.values() {
+        if record.phase == RouteKeeperPhase::Absent {
+            continue;
+        }
+        let result = match record.phase {
+            RouteKeeperPhase::Ready | RouteKeeperPhase::Degraded => {
+                match record.protocol_ready.clone() {
+                    None => Err(format!(
+                        "route_keeper_cold_process_ready_receipt_missing:{}",
+                        record.slot_id
+                    )),
+                    Some(ready) => {
+                        let predecessor = authority
+                            .host_process_claims
+                            .get(&ready.fence.host_generation)
+                            .ok_or_else(|| {
+                                format!(
+                                    "route_keeper_host_process_claim_missing:{}",
+                                    ready.fence.host_generation
+                                )
+                            });
+                        match predecessor {
+                            Ok(predecessor) => try_prove_route_keeper_predecessor_exit(
+                                authority,
+                                ready,
+                                successor_host_generation,
+                                current_boot_epoch,
+                                observe(&predecessor.process_identity),
+                            )
+                            .and_then(|proof| {
+                                proof
+                                    .map(|proof| PreparedRouteKeeperColdRecovery {
+                                        kind: PreparedRouteKeeperColdRecoveryKind::Direct(proof),
+                                    })
+                                    .ok_or_else(|| {
+                                        format!(
+                                            "route_keeper_cold_process_predecessor_exit_unproven:{}",
+                                            record.slot_id
+                                        )
+                                    })
+                            }),
+                            Err(error) => Err(error),
+                        }
+                    }
+                }
+            }
+            RouteKeeperPhase::Adopting => match record.protocol_ready.clone() {
+                None => Err(format!(
+                    "route_keeper_cold_process_ready_receipt_missing:{}",
+                    record.slot_id
+                )),
+                Some(ready) if record.fence.host_generation == successor_host_generation => {
+                    let predecessor = authority
+                        .host_process_claims
+                        .get(&ready.fence.host_generation)
+                        .ok_or_else(|| {
+                            format!(
+                                "route_keeper_host_process_claim_missing:{}",
+                                ready.fence.host_generation
+                            )
+                        });
+                    match predecessor {
+                        Ok(predecessor) => try_prove_route_keeper_predecessor_exit(
+                            authority,
+                            ready,
+                            successor_host_generation,
+                            current_boot_epoch,
+                            observe(&predecessor.process_identity),
+                        )
+                        .and_then(|proof| {
+                            proof
+                                .map(|proof| PreparedRouteKeeperColdRecovery {
+                                    kind: PreparedRouteKeeperColdRecoveryKind::Direct(proof),
+                                })
+                                .ok_or_else(|| {
+                                    format!(
+                                        "route_keeper_cold_process_predecessor_exit_unproven:{}",
+                                        record.slot_id
+                                    )
+                                })
+                        }),
+                        Err(error) => Err(error),
+                    }
+                }
+                Some(ready) if successor_host_generation > record.fence.host_generation => {
+                    let predecessor = authority
+                        .host_process_claims
+                        .get(&ready.fence.host_generation)
+                        .ok_or_else(|| {
+                            format!(
+                                "route_keeper_host_process_claim_missing:{}",
+                                ready.fence.host_generation
+                            )
+                        });
+                    let adopter = authority
+                        .host_process_claims
+                        .get(&record.fence.host_generation)
+                        .ok_or_else(|| {
+                            format!(
+                                "route_keeper_host_process_claim_missing:{}",
+                                record.fence.host_generation
+                            )
+                        });
+                    match (predecessor, adopter) {
+                        (Ok(predecessor), Ok(adopter)) => {
+                            let mut refenced = authority.clone();
+                            refenced
+                                .refence_interrupted_adoption(
+                                    &record.slot_id,
+                                    &record.fence,
+                                    successor_host_generation,
+                                )
+                                .map_err(|_| {
+                                    format!(
+                                        "route_keeper_cold_process_candidate_changed:{}",
+                                        record.slot_id
+                                    )
+                                })?;
+                            if !host_process_claim_exited(
+                                adopter,
+                                current_boot_epoch,
+                                observe(&adopter.process_identity),
+                            ) {
+                                Err(format!(
+                                        "route_keeper_cold_process_interrupted_adopter_exit_unproven:{}",
+                                        record.slot_id
+                                    ))
+                            } else {
+                                try_prove_route_keeper_predecessor_exit(
+                                        &refenced,
+                                        ready,
+                                        successor_host_generation,
+                                        current_boot_epoch,
+                                        observe(&predecessor.process_identity),
+                                    )
+                                    .and_then(|proof| {
+                                        proof
+                                            .map(|predecessor_exit| {
+                                                PreparedRouteKeeperColdRecovery {
+                                                    kind: PreparedRouteKeeperColdRecoveryKind::RefenceInterruptedAdoption {
+                                                        predecessor_exit,
+                                                        interrupted_adopter_fence: record.fence.clone(),
+                                                    },
+                                                }
+                                            })
+                                            .ok_or_else(|| {
+                                                format!(
+                                                    "route_keeper_cold_process_predecessor_exit_unproven:{}",
+                                                    record.slot_id
+                                                )
+                                            })
+                                    })
+                            }
+                        }
+                        (Err(error), _) | (_, Err(error)) => Err(error),
+                    }
+                }
+                Some(_) => Err(format!(
+                    "route_keeper_cold_process_adopting_rebase_unproven:{}",
+                    record.slot_id
+                )),
+            },
+            _ => Err(format!(
+                "route_keeper_cold_process_recovery_unsupported:{}:{:?}",
+                record.slot_id, record.phase
+            )),
+        };
+        match result {
+            Ok(candidate) => prepared.push(candidate),
+            Err(error) if first_error.is_none() => first_error = Some(error),
+            Err(_) => {}
+        }
+    }
+    match first_error {
+        Some(error) => Err(error),
+        None => Ok(prepared),
+    }
 }
 
 /// A cold successor may reconstruct one proof only from the exact retained
@@ -699,6 +933,120 @@ pub(crate) async fn recover_proven_cold_process_route(
     } else {
         RouteKeeperColdRecoveryProgress::Ready(projection)
     })
+}
+
+/// Publish the complete provider-free startup packet before exposing a
+/// configured supervisor handle. Ready predecessors become `Degraded`, and a
+/// proven interrupted adoption is re-fenced, so no stale predecessor remains
+/// visible as ready while the asynchronous connector is starting.
+pub(crate) fn reserve_prepared_cold_process_routes(
+    repository: &impl RouteKeeperRepository,
+    expected: &RouteKeeperAuthority,
+    prepared: Vec<PreparedRouteKeeperColdRecovery>,
+) -> Result<ReservedRouteKeeperColdRecovery, String> {
+    let mut next = expected.clone();
+    let mut proofs = Vec::with_capacity(prepared.len());
+    for candidate in prepared {
+        let proof = match candidate.kind {
+            PreparedRouteKeeperColdRecoveryKind::Direct(proof) => {
+                require_cold_process_candidate(&next, &proof)?;
+                if next.records[&proof.expected_ready.slot_id].phase == RouteKeeperPhase::Ready {
+                    next.record_disconnect(
+                        &proof.expected_ready.slot_id,
+                        &proof.expected_ready.fence,
+                        &proof.expected_ready.guacamole_connection_uuid,
+                    )?;
+                }
+                proof
+            }
+            PreparedRouteKeeperColdRecoveryKind::RefenceInterruptedAdoption {
+                predecessor_exit,
+                interrupted_adopter_fence,
+            } => {
+                let slot_id = predecessor_exit.expected_ready.slot_id.as_str();
+                let record = next
+                    .records
+                    .get(slot_id)
+                    .ok_or_else(|| "route_keeper_slot_missing".to_string())?;
+                if record.phase != RouteKeeperPhase::Adopting
+                    || record.protocol_ready.as_ref() != Some(&predecessor_exit.expected_ready)
+                    || record.fence != interrupted_adopter_fence
+                {
+                    return Err(format!(
+                        "route_keeper_cold_process_candidate_changed:{slot_id}"
+                    ));
+                }
+                next.refence_interrupted_adoption(
+                    slot_id,
+                    &interrupted_adopter_fence,
+                    predecessor_exit.successor_host_generation,
+                )
+                .map_err(|_| format!("route_keeper_cold_process_candidate_changed:{slot_id}"))?;
+                predecessor_exit
+            }
+        };
+        proofs.push(proof);
+    }
+    compare_and_swap_cold_process_candidate(repository, expected, &next, "startup")?;
+    Ok(ReservedRouteKeeperColdRecovery { proofs })
+}
+
+/// The configured startup variant observes its shutdown channel while each
+/// proof-bound adoption is pending. Cleanup closes connector-owned primaries
+/// and persists their terminal events, preserving retained XRDP routes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ConfiguredColdProcessRecoveryOutcome {
+    Recovered,
+    Cancelled,
+}
+
+pub(crate) async fn recover_prepared_cold_process_routes_until_shutdown(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    reserved: &ReservedRouteKeeperColdRecovery,
+    shutdown: &mut watch::Receiver<bool>,
+) -> Result<ConfiguredColdProcessRecoveryOutcome, String> {
+    if *shutdown.borrow() {
+        shutdown_cold_process_recovery(connector, repository).await?;
+        return Ok(ConfiguredColdProcessRecoveryOutcome::Cancelled);
+    }
+    for proof in &reserved.proofs {
+        loop {
+            if *shutdown.borrow() {
+                shutdown_cold_process_recovery(connector, repository).await?;
+                return Ok(ConfiguredColdProcessRecoveryOutcome::Cancelled);
+            }
+            let result = tokio::select! {
+                biased;
+                changed = shutdown.changed() => {
+                    if changed.is_err() || *shutdown.borrow() { None } else { continue }
+                }
+                result = recover_proven_cold_process_route(repository, connector, proof) => Some(result),
+            };
+            let Some(result) = result else {
+                shutdown_cold_process_recovery(connector, repository).await?;
+                return Ok(ConfiguredColdProcessRecoveryOutcome::Cancelled);
+            };
+            if let Err(error) = result {
+                return match shutdown_cold_process_recovery(connector, repository).await {
+                    Ok(()) => Err(error),
+                    Err(cleanup) => Err(format!(
+                        "route_keeper_cold_process_recovery_cleanup_failed:{error}:{cleanup}"
+                    )),
+                };
+            }
+            break;
+        }
+    }
+    Ok(ConfiguredColdProcessRecoveryOutcome::Recovered)
+}
+
+async fn shutdown_cold_process_recovery(
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    repository: &impl RouteKeeperRepository,
+) -> Result<(), String> {
+    connector.shutdown_primaries().await;
+    process_terminal_events(repository, connector)
 }
 
 fn require_cold_process_candidate(
@@ -1002,7 +1350,9 @@ mod tests {
         observes: Vec<RouteKeeperReconcileAction>,
         adoptions: Vec<RouteKeeperReconcileAction>,
         adoption_error: Option<String>,
+        adoption_errors: BTreeMap<String, String>,
         adoption_pending_once: bool,
+        shutdown_after_adoption: Option<watch::Sender<bool>>,
         stops: Vec<RouteKeeperReconcileAction>,
         routes: BTreeMap<String, RouteKeeperProtocolReadyReceipt>,
         unproven_stop: Option<String>,
@@ -1082,14 +1432,20 @@ mod tests {
             action: &RouteKeeperReconcileAction,
         ) -> Result<RouteKeeperAdoptionObservation, String> {
             self.adoptions.push(action.clone());
+            let (slot_id, _, fence) = action_identity(action);
+            if let Some(error) = self.adoption_errors.remove(slot_id) {
+                return Err(error);
+            }
             if let Some(error) = self.adoption_error.take() {
                 return Err(error);
             }
             if self.adoption_pending_once {
                 self.adoption_pending_once = false;
+                if let Some(shutdown) = self.shutdown_after_adoption.take() {
+                    let _ = shutdown.send(true);
+                }
                 return Ok(RouteKeeperAdoptionObservation::Pending);
             }
-            let (slot_id, _, fence) = action_identity(action);
             let mut ready = self
                 .routes
                 .get(slot_id)
@@ -1863,6 +2219,271 @@ mod tests {
                 .await
                 .unwrap(),
             RouteKeeperColdRecoveryProgress::Ready(_)
+        ));
+    }
+
+    #[tokio::test]
+    async fn configured_startup_recovers_all_proven_routes_in_slot_order_and_cleans_owned_first_route_on_later_failure(
+    ) {
+        let directory = TempDirectory::new("route-keeper-configured-startup-order");
+        let repository = repository(&directory);
+        let expected = repository.load_route_keeper_authority().unwrap();
+        let mut warm = expected.clone();
+        warm.policy.warm_target = 2;
+        repository
+            .compare_and_swap_route_keeper_authority(&expected, &warm)
+            .unwrap();
+        let mut predecessor = FakeConnector::default();
+        for _ in 0..4 {
+            reconcile_once(&repository, &mut predecessor).await.unwrap();
+        }
+        let claimed = register_host_claim(&repository, 2);
+        let first = claimed.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let second = claimed.records["route-slot-02"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let prepared =
+            prepare_configured_cold_process_recovery(&claimed, 2, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        let mut drifted = claimed.clone();
+        drifted.policy.warm_target = 3;
+        repository
+            .compare_and_swap_route_keeper_authority(&claimed, &drifted)
+            .unwrap();
+        assert!(matches!(
+            reserve_prepared_cold_process_routes(&repository, &claimed, prepared),
+            Err(ref error) if error == "route_keeper_cold_process_candidate_changed:startup"
+        ));
+        assert_eq!(repository.load_route_keeper_authority().unwrap(), drifted);
+        let prepared =
+            prepare_configured_cold_process_recovery(&drifted, 2, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        let prepared =
+            reserve_prepared_cold_process_routes(&repository, &drifted, prepared).unwrap();
+        assert_eq!(
+            repository
+                .load_route_keeper_authority()
+                .unwrap()
+                .projection()
+                .unwrap()
+                .ready_count,
+            0
+        );
+        let mut successor = FakeConnector::default();
+        successor.routes.insert(first.slot_id.clone(), first);
+        successor.routes.insert(second.slot_id.clone(), second);
+        successor.adoption_errors.insert(
+            "route-slot-02".to_string(),
+            "fixture_second_adoption_failed".to_string(),
+        );
+
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+        assert_eq!(
+            recover_prepared_cold_process_routes_until_shutdown(
+                &repository,
+                &mut successor,
+                &prepared,
+                &mut shutdown,
+            )
+            .await,
+            Err("fixture_second_adoption_failed".to_string())
+        );
+        assert_eq!(
+            successor
+                .adoptions
+                .iter()
+                .map(|action| action_identity(action).0)
+                .collect::<Vec<_>>(),
+            ["route-slot-01", "route-slot-02"]
+        );
+        assert!(successor.stops.is_empty());
+        assert_eq!(successor.shutdowns, 1);
+        let retained = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            retained.records["route-slot-01"].phase,
+            RouteKeeperPhase::Ready
+        );
+        assert_eq!(
+            retained.records["route-slot-02"].phase,
+            RouteKeeperPhase::Adopting
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_startup_refences_interrupted_adoption_only_after_both_exits_are_proven() {
+        let directory = TempDirectory::new("route-keeper-configured-startup-refence");
+        let repository = repository(&directory);
+        let mut predecessor = FakeConnector::default();
+        let ready = make_minimum_ready(&repository, &mut predecessor).await;
+        let original = ready.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let claimed = register_host_claim(&repository, 2);
+        let mut interrupted = claimed.clone();
+        interrupted
+            .record_disconnect(
+                &original.slot_id,
+                &original.fence,
+                &original.guacamole_connection_uuid,
+            )
+            .unwrap();
+        interrupted.begin_adoption(&original.slot_id, 2).unwrap();
+        interrupted
+            .register_host_process_claim(host_process_claim(3))
+            .unwrap();
+        repository
+            .compare_and_swap_route_keeper_authority(&claimed, &interrupted)
+            .unwrap();
+
+        let prepared =
+            prepare_configured_cold_process_recovery(&interrupted, 3, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        let prepared =
+            reserve_prepared_cold_process_routes(&repository, &interrupted, prepared).unwrap();
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"]
+                .fence
+                .host_generation,
+            3
+        );
+        let mut successor = FakeConnector::default();
+        successor.routes.insert(original.slot_id.clone(), original);
+        let (_shutdown_tx, mut shutdown) = watch::channel(false);
+        assert_eq!(
+            recover_prepared_cold_process_routes_until_shutdown(
+                &repository,
+                &mut successor,
+                &prepared,
+                &mut shutdown,
+            )
+            .await
+            .unwrap(),
+            ConfiguredColdProcessRecoveryOutcome::Recovered
+        );
+        let recovered = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            recovered.records["route-slot-01"].phase,
+            RouteKeeperPhase::Ready
+        );
+        assert_eq!(recovered.records["route-slot-01"].fence.host_generation, 3);
+    }
+
+    #[tokio::test]
+    async fn configured_startup_cancellation_preserves_unadopted_route() {
+        let directory = TempDirectory::new("route-keeper-configured-startup-cancel");
+        let repository = repository(&directory);
+        let expected = repository.load_route_keeper_authority().unwrap();
+        let mut warm = expected.clone();
+        warm.policy.warm_target = 2;
+        repository
+            .compare_and_swap_route_keeper_authority(&expected, &warm)
+            .unwrap();
+        let mut predecessor = FakeConnector::default();
+        for _ in 0..4 {
+            reconcile_once(&repository, &mut predecessor).await.unwrap();
+        }
+        let claimed = register_host_claim(&repository, 2);
+        let first = claimed.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let second = claimed.records["route-slot-02"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let prepared =
+            prepare_configured_cold_process_recovery(&claimed, 2, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        let prepared =
+            reserve_prepared_cold_process_routes(&repository, &claimed, prepared).unwrap();
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        let mut successor = FakeConnector {
+            adoption_pending_once: true,
+            shutdown_after_adoption: Some(shutdown_tx),
+            ..FakeConnector::default()
+        };
+        successor.routes.insert(first.slot_id.clone(), first);
+        successor.routes.insert(second.slot_id.clone(), second);
+
+        assert_eq!(
+            recover_prepared_cold_process_routes_until_shutdown(
+                &repository,
+                &mut successor,
+                &prepared,
+                &mut shutdown,
+            )
+            .await
+            .unwrap(),
+            ConfiguredColdProcessRecoveryOutcome::Cancelled
+        );
+        assert_eq!(successor.adoptions.len(), 1);
+        assert!(successor.stops.is_empty());
+        assert_eq!(successor.shutdowns, 1);
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-02"].phase,
+            RouteKeeperPhase::Degraded
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_startup_refuses_live_interrupted_adopter_before_refence() {
+        let directory = TempDirectory::new("route-keeper-configured-startup-live-adopter");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        let ready = make_minimum_ready(&repository, &mut connector).await;
+        let original = ready.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let claimed = register_host_claim(&repository, 2);
+        let mut interrupted = claimed.clone();
+        interrupted
+            .record_disconnect(
+                &original.slot_id,
+                &original.fence,
+                &original.guacamole_connection_uuid,
+            )
+            .unwrap();
+        interrupted.begin_adoption(&original.slot_id, 2).unwrap();
+        interrupted
+            .register_host_process_claim(host_process_claim(3))
+            .unwrap();
+        let adopter = interrupted.host_process_claims[&2].process_identity.clone();
+        let result = prepare_configured_cold_process_recovery(
+            &interrupted,
+            3,
+            "linux:boot:fixture",
+            |identity| {
+                if identity == &adopter {
+                    ProcessObservation::Observed(ObservedProcessIdentity {
+                        pid: adopter.pid,
+                        start_token: Some(adopter.start_token.clone()),
+                        executable_path: adopter.executable_path.clone(),
+                        browser_family: None,
+                        command_line: None,
+                    })
+                } else {
+                    ProcessObservation::Missing
+                }
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(ref error)
+                if error == "route_keeper_cold_process_interrupted_adopter_exit_unproven:route-slot-01"
         ));
     }
 

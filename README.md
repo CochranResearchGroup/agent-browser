@@ -764,6 +764,13 @@ Browser can reap after the session ends. The ordinary path selects a healthy
 current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, or recovery-token input.
 
+On host restart, configured route keepers recover retained routes only after
+proving their earlier host processes exited. Interrupted adoption also requires
+proof that the interrupted adopter exited. Recovery verifies every retained
+route before opening provider connections; live or ambiguous ownership and
+unsupported retained states stop startup. A pending connection is not a ready
+remote view.
+
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
 URL after route, display, or viewer changes so agent-browser can reacquire the

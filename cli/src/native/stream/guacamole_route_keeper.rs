@@ -6,15 +6,17 @@ use super::guacamole_primary_transport::{
 };
 use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::presentation_route_keeper::{
-    register_route_keeper_host_process, run_configured_route_keeper_supervisor,
+    prepare_configured_cold_process_recovery, recover_prepared_cold_process_routes_until_shutdown,
+    register_route_keeper_host_process, reserve_prepared_cold_process_routes,
+    run_configured_route_keeper_supervisor, ConfiguredColdProcessRecoveryOutcome,
     PresentationRouteConnector, RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation,
     RouteKeeperStopObservation, RouteKeeperTerminalEvent, SqliteRouteKeeperRepository,
     SupervisedPresentationRouteConnector,
 };
 use agent_browser_service_model::{
-    RouteKeeperAdoptionReceipt, RouteKeeperFence, RouteKeeperPhase,
-    RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStopReceipt,
-    RouteKeeperXrdpOwnershipWitness,
+    RecordedProcessIdentity, RouteKeeperAdoptionReceipt, RouteKeeperAuthority, RouteKeeperFence,
+    RouteKeeperPhase, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
+    RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
 };
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -48,26 +50,16 @@ impl ConfiguredRouteKeeperSupervisorHandle {
         .ok_or_else(|| "route_keeper_host_process_identity_unavailable".to_string())?;
         let boot_epoch = crate::process_identity::current_boot_epoch()
             .ok_or_else(|| "route_keeper_host_boot_epoch_unavailable".to_string())?;
-        let (authority, _) =
+        let (authority, successor_host_generation) =
             register_route_keeper_host_process(&repository, &boot_epoch, process_identity)?;
-        authority.projection()?;
-        let provider_base = authority
-            .connection_catalog
-            .provider_base
-            .as_deref()
-            .ok_or_else(|| "route_keeper_primary_provider_unconfigured".to_string())?;
-        GuacamolePrimaryConnectSpec::from_local_embed(provider_base, "catalog-validation")
-            .map_err(str::to_string)?;
-        if let Some(record) = authority
-            .records
-            .values()
-            .find(|record| record.phase != RouteKeeperPhase::Absent)
-        {
-            return Err(format!(
-                "route_keeper_runtime_recovery_required:{}:{:?}",
-                record.slot_id, record.phase
-            ));
-        }
+        let prepared = prepare_configured_route_keeper_startup(
+            &authority,
+            successor_host_generation,
+            &boot_epoch,
+            |process_identity| crate::process_identity::observe_process(process_identity.pid),
+            validate_configured_provider_catalog,
+        )?;
+        let prepared = reserve_prepared_cold_process_routes(&repository, &authority, prepared)?;
 
         let factory = ConfiguredRouteKeeperPrimaryFactory::new(database_path.clone());
         let observer = ConfiguredXrdpRouteKeeperObserver::new(
@@ -96,13 +88,29 @@ impl ConfiguredRouteKeeperSupervisorHandle {
             }
         });
         let join = tokio::spawn(async move {
-            let result = run_configured_route_keeper_supervisor(
+            let result = match recover_prepared_cold_process_routes_until_shutdown(
                 &repository,
                 &mut connector,
-                &mut ticks,
+                &prepared,
                 &mut shutdown,
             )
-            .await;
+            .await
+            {
+                Ok(ConfiguredColdProcessRecoveryOutcome::Recovered) => {
+                    // The configured supervisor owns all subsequent reconciliation
+                    // only after every retained candidate was started under the
+                    // pre-provider proof packet above.
+                    run_configured_route_keeper_supervisor(
+                        &repository,
+                        &mut connector,
+                        &mut ticks,
+                        &mut shutdown,
+                    )
+                    .await
+                }
+                Ok(ConfiguredColdProcessRecoveryOutcome::Cancelled) => Ok(()),
+                Err(error) => Err(error),
+            };
             ticker.abort();
             let _ = ticker.await;
             result
@@ -121,6 +129,39 @@ impl ConfiguredRouteKeeperSupervisorHandle {
         join.await
             .map_err(|error| format!("route_keeper_supervisor_join_failed:{error}"))?
     }
+}
+
+fn prepare_configured_route_keeper_startup<F, V>(
+    authority: &RouteKeeperAuthority,
+    successor_host_generation: u64,
+    boot_epoch: &str,
+    observe_process: F,
+    validate_provider: V,
+) -> Result<Vec<crate::native::presentation_route_keeper::PreparedRouteKeeperColdRecovery>, String>
+where
+    F: FnMut(&RecordedProcessIdentity) -> crate::process_identity::ProcessObservation,
+    V: FnOnce(&RouteKeeperAuthority) -> Result<(), String>,
+{
+    let prepared = prepare_configured_cold_process_recovery(
+        authority,
+        successor_host_generation,
+        boot_epoch,
+        observe_process,
+    )?;
+    validate_provider(authority)?;
+    Ok(prepared)
+}
+
+fn validate_configured_provider_catalog(authority: &RouteKeeperAuthority) -> Result<(), String> {
+    authority.projection()?;
+    let provider_base = authority
+        .connection_catalog
+        .provider_base
+        .as_deref()
+        .ok_or_else(|| "route_keeper_primary_provider_unconfigured".to_string())?;
+    GuacamolePrimaryConnectSpec::from_local_embed(provider_base, "catalog-validation")
+        .map_err(str::to_string)?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1172,6 +1213,7 @@ mod tests {
         reconcile_once, run_route_keeper_supervisor, stop_once, RouteKeeperRepository,
         SqliteRouteKeeperRepository,
     };
+    use crate::process_identity::ProcessObservation;
     use agent_browser_service_model::{
         RecordedProcessIdentity, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
         RouteKeeperHostProcessClaim, RouteKeeperXrdpOwnershipWitness,
@@ -1246,6 +1288,53 @@ mod tests {
             .compare_and_swap_route_keeper_authority(&original, &configured)
             .unwrap();
         (directory, path)
+    }
+
+    #[test]
+    fn configured_startup_refuses_ambiguous_retained_route_before_provider_validation() {
+        let (_directory, path) = database();
+        let (_action, _predecessor) = adoption_action(&path);
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        let authority = store.load_route_keeper_authority().unwrap();
+        let mut with_successor = authority.clone();
+        let mut successor = host_process_claim();
+        successor.host_generation = 3;
+        successor.process_identity.pid = 4_003;
+        with_successor
+            .register_host_process_claim(successor)
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&authority, &with_successor)
+            .unwrap();
+        let provider_calls = AtomicUsize::new(0);
+
+        let result = prepare_configured_route_keeper_startup(
+            &with_successor,
+            3,
+            "linux:boot:fixture",
+            |_| ProcessObservation::Failed {
+                reason: "fixture process census ambiguous".to_string(),
+            },
+            |_| {
+                provider_calls.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            },
+        );
+        assert!(matches!(
+            result,
+            Err(ref error)
+                if error == "route_keeper_cold_process_interrupted_adopter_exit_unproven:route-slot-01"
+        ));
+        assert_eq!(provider_calls.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&path)
+                .unwrap()
+                .load_route_keeper_authority()
+                .unwrap()
+                .records["route-slot-01"]
+                .fence,
+            with_successor.records["route-slot-01"].fence
+        );
     }
 
     struct DuplexPrimaryFactory {
