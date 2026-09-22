@@ -469,9 +469,10 @@ mod tests {
     use crate::native::service_store::JsonServiceStateStore;
     use agent_browser_service_model::{
         BrowserDesktopAssignment, ControlInputProvider, DisplayAllocation, ManagedBrowserInstance,
-        ManagedBrowserSession, ManagedBrowserTab, RemoteViewRoute, RouteKeeperConnectionBinding,
-        RouteKeeperConnectionCatalog, RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction,
-        RouteKeeperStartPriority, RouteKeeperXrdpOwnershipWitness, RoutePoolEntry,
+        ManagedBrowserSession, ManagedBrowserTab, RecordedProcessIdentity, RemoteViewRoute,
+        RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
+        RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStartPriority,
+        RouteKeeperXrdpOwnershipWitness, RoutePoolEntry,
     };
     use std::collections::BTreeMap;
 
@@ -577,6 +578,18 @@ mod tests {
 
     fn ready_keeper_authority() -> RouteKeeperAuthority {
         let mut authority = RouteKeeperAuthority::new(7).unwrap();
+        authority
+            .register_host_process_claim(RouteKeeperHostProcessClaim {
+                host_generation: 7,
+                boot_epoch: "linux:boot:7".to_string(),
+                process_identity: RecordedProcessIdentity {
+                    pid: 4_007,
+                    start_token: "linux:start:7".to_string(),
+                    executable_path: Some("/opt/agent-browser".to_string()),
+                    browser_family: None,
+                },
+            })
+            .unwrap();
         authority
             .replace_connection_catalog(
                 RouteKeeperConnectionCatalog::with_provider_urls(

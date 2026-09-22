@@ -1735,14 +1735,30 @@ mod tests {
     };
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
-        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RemoteViewHandoff,
-        RemoteViewRoute, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
-        RouteKeeperReconcileAction, RouteKeeperStartPriority, RoutePoolEntry, ServiceState,
+        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, RecordedProcessIdentity,
+        RemoteViewHandoff, RemoteViewRoute, RouteKeeperConnectionBinding,
+        RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim, RouteKeeperReconcileAction,
+        RouteKeeperStartPriority, RoutePoolEntry, ServiceState,
     };
     use std::fs;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
+
+    fn register_fixture_host_process(authority: &mut RouteKeeperAuthority, host_generation: u64) {
+        authority
+            .register_host_process_claim(RouteKeeperHostProcessClaim {
+                host_generation,
+                boot_epoch: format!("linux:boot:{host_generation}"),
+                process_identity: RecordedProcessIdentity {
+                    pid: u32::try_from(4_000 + host_generation).unwrap(),
+                    start_token: format!("linux:start:{host_generation}"),
+                    executable_path: Some("/opt/agent-browser".to_string()),
+                    browser_family: None,
+                },
+            })
+            .unwrap();
+    }
 
     #[test]
     fn legacy_internal_presentation_bootstrap_is_removed() {
@@ -1768,6 +1784,7 @@ mod tests {
     #[test]
     fn desktop_route_projection_uses_only_ready_sqlite_keeper_receipts() {
         let mut authority = RouteKeeperAuthority::new(4).unwrap();
+        register_fixture_host_process(&mut authority, 4);
         authority
             .replace_connection_catalog(
                 RouteKeeperConnectionCatalog::with_provider_urls(
@@ -1846,6 +1863,7 @@ mod tests {
 
     fn keeper_authority_for_handoff(public_operator_url: &str) -> RouteKeeperAuthority {
         let mut authority = RouteKeeperAuthority::new(7).unwrap();
+        register_fixture_host_process(&mut authority, 7);
         authority
             .replace_connection_catalog(
                 RouteKeeperConnectionCatalog::with_provider_urls(
