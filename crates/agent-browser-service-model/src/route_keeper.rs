@@ -693,6 +693,81 @@ impl RouteKeeperAuthority {
         })
     }
 
+    /// Resume a pending start or failed recovery under a newer registered host.
+    ///
+    /// The caller must prove exit of the interrupted operation's host and, when
+    /// present, the retained ready host before publishing this pure transition.
+    /// A retained witness is recovered through adoption; it is never discarded
+    /// or treated as current readiness. Without a witness, only transport start
+    /// intent is recreated. The operation number always advances.
+    pub fn resume_cold_process_operation(
+        &mut self,
+        slot_id: &str,
+        expected_fence: &RouteKeeperFence,
+        new_host_generation: u64,
+    ) -> Result<RouteKeeperReconcileAction, String> {
+        self.validate()?;
+        if !self.host_process_claims.contains_key(&new_host_generation) {
+            return Err(format!(
+                "route_keeper_host_process_claim_missing:{new_host_generation}"
+            ));
+        }
+        let record = self
+            .records
+            .get(slot_id)
+            .ok_or_else(|| "route_keeper_slot_missing".to_string())?;
+        if !matches!(
+            record.phase,
+            RouteKeeperPhase::Starting
+                | RouteKeeperPhase::Observing
+                | RouteKeeperPhase::RecoveryFailed
+        ) || record.fence != *expected_fence
+            || new_host_generation <= expected_fence.host_generation
+            || expected_fence.operation_id
+                != format!(
+                    "route-keeper:{}:{slot_id}:{}",
+                    expected_fence.host_generation, expected_fence.operation_generation
+                )
+            || !self.connection_catalog.bindings.contains_key(slot_id)
+        {
+            return Err("route_keeper_cold_operation_candidate_changed".to_string());
+        }
+        let operation_generation = expected_fence
+            .operation_generation
+            .checked_add(1)
+            .ok_or_else(|| "route_keeper_operation_generation_exhausted".to_string())?;
+        let previous_host_generation = record
+            .protocol_ready
+            .as_ref()
+            .map(|ready| ready.fence.host_generation);
+        let record = self
+            .records
+            .get_mut(slot_id)
+            .expect("validated route exists");
+        record.fence.host_generation = new_host_generation;
+        record.fence.operation_generation = operation_generation;
+        record.fence.operation_id =
+            format!("route-keeper:{new_host_generation}:{slot_id}:{operation_generation}");
+        record.adoption = None;
+        if let Some(previous_host_generation) = previous_host_generation {
+            record.phase = RouteKeeperPhase::Adopting;
+            Ok(RouteKeeperReconcileAction::Adopt {
+                slot_id: record.slot_id.clone(),
+                keeper_id: record.keeper_id.clone(),
+                fence: record.fence.clone(),
+                previous_host_generation,
+            })
+        } else {
+            record.phase = RouteKeeperPhase::Starting;
+            Ok(RouteKeeperReconcileAction::Start {
+                slot_id: record.slot_id.clone(),
+                keeper_id: record.keeper_id.clone(),
+                fence: record.fence.clone(),
+                priority: RouteKeeperStartPriority::Recovery,
+            })
+        }
+    }
+
     /// Transfer an interrupted logical adoption to a newer registered host.
     ///
     /// The caller must prove that both the retained ready host and the host of
@@ -720,16 +795,12 @@ impl RouteKeeperAuthority {
             .protocol_ready
             .as_ref()
             .ok_or_else(|| "route_keeper_adoption_source_missing".to_string())?;
-        let operation_generation = ready
-            .fence
-            .operation_generation
-            .checked_add(1)
-            .ok_or_else(|| "route_keeper_operation_generation_exhausted".to_string())?;
+        let operation_generation = expected_fence.operation_generation;
         if record.phase != RouteKeeperPhase::Adopting
             || record.fence != *expected_fence
             || record.adoption.is_some()
             || new_host_generation <= expected_fence.host_generation
-            || expected_fence.operation_generation != operation_generation
+            || operation_generation <= ready.fence.operation_generation
             || expected_fence.operation_id
                 != format!(
                     "route-keeper:{}:{slot_id}:{operation_generation}",

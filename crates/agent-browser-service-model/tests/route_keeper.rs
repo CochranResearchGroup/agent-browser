@@ -814,3 +814,139 @@ fn interrupted_adoption_refences_only_exact_operation_and_retains_source() {
     );
     assert_eq!(authority.host_process_claims.len(), 3);
 }
+
+#[test]
+fn cold_pending_start_refences_exact_intent_without_fabricating_readiness() {
+    for observing in [false, true] {
+        let mut authority = authority(1);
+        let (slot, keeper, original) =
+            expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+        if observing {
+            authority.record_observing(&slot, &original).unwrap();
+        }
+        authority
+            .register_host_process_claim(host_process_claim(2))
+            .unwrap();
+        let before = authority.clone();
+        let mut wrong = original.clone();
+        wrong.operation_id.push_str("-stale");
+        assert!(authority
+            .resume_cold_process_operation(&slot, &wrong, 2)
+            .is_err());
+        assert_eq!(authority, before);
+        assert!(authority
+            .resume_cold_process_operation(&slot, &original, 1)
+            .is_err());
+        assert_eq!(authority, before);
+        let action = authority
+            .resume_cold_process_operation(&slot, &original, 2)
+            .unwrap();
+        let RouteKeeperReconcileAction::Start {
+            fence, priority, ..
+        } = action
+        else {
+            panic!("pending initial connection must restart its transport");
+        };
+        assert_eq!(priority, RouteKeeperStartPriority::Recovery);
+        assert_eq!(fence.host_generation, 2);
+        assert_eq!(
+            fence.operation_generation,
+            original.operation_generation + 1
+        );
+        assert_eq!(authority.projection().unwrap().ready_count, 0);
+        let refenced = authority.clone();
+        assert!(authority.record_start_terminated(&slot, &original).is_err());
+        assert!(authority
+            .record_protocol_ready(ready_receipt(&slot, &keeper, original))
+            .is_err());
+        assert_eq!(authority, refenced);
+        authority
+            .record_protocol_ready(ready_receipt(&slot, &keeper, fence))
+            .unwrap();
+        assert_eq!(authority.projection().unwrap().ready_count, 1);
+    }
+}
+
+#[test]
+fn cold_failed_and_pending_recovery_preserves_source_through_later_adoption() {
+    for phase in [
+        RouteKeeperPhase::Starting,
+        RouteKeeperPhase::Observing,
+        RouteKeeperPhase::RecoveryFailed,
+    ] {
+        let (mut authority, original) = make_one_ready();
+        authority
+            .record_disconnect(
+                &original.slot_id,
+                &original.fence,
+                &original.guacamole_connection_uuid,
+            )
+            .unwrap();
+        let (slot, _, interrupted) =
+            expect_start(&mut authority, RouteKeeperStartPriority::Recovery);
+        match phase {
+            RouteKeeperPhase::Observing => authority.record_observing(&slot, &interrupted).unwrap(),
+            RouteKeeperPhase::RecoveryFailed => authority
+                .record_start_terminated(&slot, &interrupted)
+                .unwrap(),
+            _ => {}
+        }
+        authority
+            .register_host_process_claim(host_process_claim(2))
+            .unwrap();
+        let action = authority
+            .resume_cold_process_operation(&slot, &interrupted, 2)
+            .unwrap();
+        let RouteKeeperReconcileAction::Adopt {
+            fence,
+            previous_host_generation,
+            ..
+        } = action
+        else {
+            panic!("retained witness must use adoption");
+        };
+        assert_eq!(previous_host_generation, 1);
+        assert_eq!(
+            fence.operation_generation,
+            interrupted.operation_generation + 1
+        );
+        assert_eq!(
+            authority.records[&slot].protocol_ready.as_ref(),
+            Some(&original)
+        );
+        let before_stale = authority.clone();
+        assert!(authority
+            .record_start_terminated(&slot, &interrupted)
+            .is_err());
+        assert_eq!(authority, before_stale);
+        authority
+            .register_host_process_claim(host_process_claim(3))
+            .unwrap();
+        authority
+            .refence_interrupted_adoption(&slot, &fence, 3)
+            .unwrap();
+        let final_fence = authority.records[&slot].fence.clone();
+        assert_eq!(final_fence.operation_generation, fence.operation_generation);
+        authority
+            .adopt(RouteKeeperAdoptionReceipt {
+                previous_host_generation,
+                previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
+                ready: RouteKeeperProtocolReadyReceipt {
+                    fence: final_fence,
+                    guacamole_connection_uuid: "fresh-third-host".to_string(),
+                    ..original.clone()
+                },
+                adopted_at: "2026-09-22T03:40:00Z".to_string(),
+            })
+            .unwrap();
+        assert_eq!(authority.projection().unwrap().ready_count, 1);
+        assert_eq!(
+            authority.records[&slot]
+                .protocol_ready
+                .as_ref()
+                .unwrap()
+                .xrdp_ownership,
+            original.xrdp_ownership
+        );
+    }
+}

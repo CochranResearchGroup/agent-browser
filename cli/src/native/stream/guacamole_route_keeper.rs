@@ -1006,6 +1006,28 @@ where
         self.tasks.remove(slot_id);
         Ok(observation)
     }
+
+    async fn resume_stop(
+        &mut self,
+        action: &RouteKeeperReconcileAction,
+        ready: &RouteKeeperProtocolReadyReceipt,
+    ) -> Result<RouteKeeperStopObservation, String> {
+        // A cold successor cannot establish ownership of a predecessor's
+        // Guacamole primary.  The durable Stopping fence and retained XRDP
+        // witness are therefore the only authority for this exact cleanup.
+        // Do not create a transport or touch `tasks` here.
+        let (slot_id, keeper_id, fence) = stop_identity(action)?;
+        let stop_guard = sqlite_route_keeper_stop_guard(
+            self.database_path.clone(),
+            slot_id.to_string(),
+            keeper_id.to_string(),
+            fence.clone(),
+        );
+        check_primary_authority(&stop_guard)
+            .await
+            .map_err(str::to_string)?;
+        self.observer.stop_exact(action, ready).await
+    }
 }
 
 #[async_trait::async_trait]
@@ -1594,8 +1616,19 @@ mod tests {
         store
             .compare_and_swap_route_keeper_authority(&ready_authority, &stopping)
             .unwrap();
-        let stopped = observer.stop_exact(&stop_action, &ready).await.unwrap();
+        let starts = Arc::new(AtomicUsize::new(0));
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            database_path,
+            DuplexPrimaryFactory {
+                socket: None,
+                starts: starts.clone(),
+            },
+            observer,
+        );
+        let stopped = connector.resume_stop(&stop_action, &ready).await.unwrap();
         assert!(matches!(stopped, RouteKeeperStopObservation::Stopped(_)));
+        assert_eq!(starts.load(Ordering::SeqCst), 0);
+        assert!(connector.tasks.is_empty());
         assert_eq!(
             calls.lock().unwrap().as_slice(),
             [

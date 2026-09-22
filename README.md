@@ -767,9 +767,11 @@ provider route, without route, display, lease, hash, or recovery-token input.
 On host restart, configured route keepers recover retained routes only after
 proving their earlier host processes exited. Interrupted adoption also requires
 proof that the interrupted adopter exited. Recovery verifies every retained
-route before opening provider connections; live or ambiguous ownership and
-unsupported retained states stop startup. A pending connection is not a ready
-remote view.
+route before opening provider connections. Interrupted starts recreate their
+transport under a newer fence; retained ready evidence is recovered through
+adoption. Interrupted stops use the exact retained XRDP witness and preserve
+stop intent. Live or ambiguous ownership and quarantined records stop startup.
+A pending connection is not a ready remote view.
 
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
