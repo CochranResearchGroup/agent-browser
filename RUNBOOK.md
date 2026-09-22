@@ -9,6 +9,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 430 | 2026-09-22
+
+The P211 integration-ready verdict is withdrawn after comparison with the
+pre-plan design interview. Removing denial-first lease behavior and delivering
+simple, reliable Guacamole/XRDP viewing are mandatory acceptance requirements.
+Current evidence proves protocol readiness and one installed opaque handoff,
+but not repeated external desktop/mobile rendering, clean desktop state,
+correct z-order, responsive input and resize, or recovery from blank, stale,
+partial, terminal-only, hidden-browser, and unresponsive-window failures.
+Uncertain ownership may preserve an exact resource from destructive cleanup;
+it may not deny creation or selection of another working route. Draft PR #191
+remains a review vehicle. Plan 0211 is OPEN for one consolidated correction and
+visual-operational acceptance campaign.
+
 ## Turn 429 | 2026-09-22
 
 P211 M3 and M4 are complete at source `9e7c5719` and installed development

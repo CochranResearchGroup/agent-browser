@@ -4,7 +4,7 @@ Date: 2026-09-17
 
 Plan version: 65
 
-State: READY FOR PROTECTED INTEGRATION
+State: OPEN
 
 Consolidation: required
 
@@ -76,6 +76,34 @@ evidence that the provider reconciles against that durable state after every
 cold start.
 
 ## Version 65 Completion Campaign
+
+### Operator acceptance correction
+
+The September 22 integration-ready verdict is withdrawn. The pre-plan design
+interview established two non-negotiable product requirements that the version
+65 installed packet did not prove:
+
+1. The overwrought lease system must be out of the ordinary runtime path. It is
+   insufficient to hide its inputs while retaining an equivalent denial-first
+   authority under new route, generation, quarantine, or cleanup-obligation
+   names. Uncertain historical ownership may block destructive cleanup of that
+   exact resource, but it must not block selection or creation of a working
+   route in the trusted single-user runtime.
+2. Guacamole/XRDP must be simple and operationally reliable. Acceptance
+   requires repeated authenticated external viewing on desktop and mobile,
+   current pixel rendering, correct browser visibility and z-order, responsive
+   focus, pointer, keyboard, scrolling and resize, and recovery after browser,
+   runtime and route restart. Protocol-ready sessions, URLs, process witnesses,
+   and provider doctor checks are necessary evidence but cannot substitute for
+   visible output. Terminal-only desktops, blank or mostly white frames, stale
+   frames, partial rectangle damage, hidden or unresponsive browser windows,
+   and routes withheld solely by stale ownership metadata all fail acceptance.
+
+Plan 0211 remains open until one consolidated implementation removes or bypasses
+the denial-first ordinary-path machinery and one bounded visual-operational
+campaign proves the required experience across every warm route. Do not add
+another plan version or broaden unrelated architecture. The existing draft PR
+remains a review vehicle and is not integration-ready.
 
 Version 65 freezes the objective and replaces revision-driven continuation with
 one moderate-length `/goal` completion campaign. Historical versions remain
@@ -195,7 +223,7 @@ blocker.
 | Named-profile ordinary client path | installed `default` profile opened through the ordinary client at source `9e7c5719` | complete |
 | Authenticated ready opaque handoff | installed response returned `operatorVisible.state=ready` and authenticated `/remote-view/manager-7805bbb24ed7a02530b4b842b505bbe1` | complete |
 | Close and residue | PID 26240, active browser and session absent after close; explicit-close history and four obligation-free warm routes retained | complete |
-| Protected integration handoff | draft PR #191 targets `main`; branch pushed at `9e7c5719` with zero divergence; ledgers reconciled | ready for maintainer merge |
+| Protected integration handoff | draft PR #191 targets `main`; branch pushed at `9e7c5719`; ledgers reconciled | blocked pending availability-first lease correction and visual-operational acceptance |
 
 ### M3 | Isolated Installed Operator Journey
 
@@ -299,15 +327,15 @@ criterion supported at its stated boundary, or a truthful bounded closeout
 naming the exact unmet criterion. Deferred hardening becomes separately
 triaged follow-up work and cannot keep Plan 0211 open through more revisions.
 
-M4 completed as a protected-integration packet. Draft pull request #191 targets
-`main`, its head is the P211 branch, and the source branch is pushed with zero
-local or remote divergence. The version 65 requirement table, RUNBOOK, ROADMAP,
-and active-lane catalog now identify `9e7c5719` as the qualified source and
-`0.28.0-1d808efe0797` as the installed development generation. The last goal
-service readback available before closeout reported 1,644,153 cumulative
-tokens, below the 2,000,000 campaign ceiling. Protected merge remains a
-separate maintainer action; production installation, release, branch deletion,
-and worktree removal remain unauthorized.
+M4 produced a protected-integration packet, but its integration-ready verdict
+is withdrawn by the operator acceptance correction above. Draft pull request
+#191 remains a review vehicle. Source `9e7c5719` and installed development
+generation `0.28.0-1d808efe0797` retain their narrower source, protocol, and
+installed-journey evidence. They do not establish the mandatory availability-
+first ownership behavior or desktop/mobile visual reliability. The last goal
+service readback available before that closeout reported 1,644,153 cumulative
+tokens, below the 2,000,000 campaign ceiling. Merge, production installation,
+release, branch deletion, and worktree removal remain unauthorized.
 
 ### Campaign Controls
 

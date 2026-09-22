@@ -27,16 +27,16 @@ field evidence and acceptance records into the same model.
 
 ## P211 | Simple Install, Upgrade, And Remote View
 
-State: READY FOR PROTECTED INTEGRATION
+State: OPEN
 
-Version 65 M1 through M4 are complete. Source `9e7c5719` and installed
-development generation `0.28.0-1d808efe0797` pass the provider-free gates and
-the isolated operator journey. Exact quarantine reconciliation cleared the
-retained obligation without manual SQLite mutation. Development doctor, three
-disposable cycles, one ordinary named-profile ready opaque handoff, exact close,
-and fresh residue evidence pass with `/opt/google/chrome/chrome`. Draft PR #191
-is current with zero branch divergence. Protected merge is the remaining
-maintainer action; production install and release remain excluded.
+Version 65's source and installed checks pass, but the integration-ready verdict
+is withdrawn. The original design interview made removal of denial-first lease
+authority and simple, reliable Guacamole/XRDP rendering mandatory. Current
+evidence proves protocol readiness and one opaque named-profile handoff; it does
+not prove repeated external desktop/mobile rendering, input responsiveness,
+correct z-order, clean desktops, or recovery from blank, stale, partial, or
+terminal-only presentation. P211 remains open for one consolidated
+availability-first correction and visual-operational acceptance campaign.
 
 Current state: [Plan 0211](docs/dev/plans/0211-2026-09-17-simple-cold-upgrade.md)
 owns the `PL-PLATFORM` cold-shutdown, cold-install, and trusted single-user
