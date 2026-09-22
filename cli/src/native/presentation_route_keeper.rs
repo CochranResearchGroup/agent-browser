@@ -645,6 +645,7 @@ enum PreparedRouteKeeperColdRecoveryKind {
     ResumeStop {
         operation_exit: VerifiedRouteKeeperOperationExit,
         ready: RouteKeeperProtocolReadyReceipt,
+        cleanup_obligation: Option<agent_browser_service_model::RouteKeeperCleanupObligation>,
     },
 }
 
@@ -1070,7 +1071,7 @@ where
                     },
                 })
             })(),
-            RouteKeeperPhase::Stopping => (|| {
+            RouteKeeperPhase::Stopping | RouteKeeperPhase::Quarantined => (|| {
                 let ready = record.protocol_ready.clone().ok_or_else(|| {
                     format!(
                         "route_keeper_cold_process_ready_receipt_missing:{}",
@@ -1099,6 +1100,7 @@ where
                     kind: PreparedRouteKeeperColdRecoveryKind::ResumeStop {
                         operation_exit,
                         ready,
+                        cleanup_obligation: record.cleanup_obligation.clone(),
                     },
                 })
                 .ok_or_else(|| {
@@ -1313,28 +1315,45 @@ pub(crate) fn reserve_prepared_cold_process_routes(
             PreparedRouteKeeperColdRecoveryKind::ResumeStop {
                 operation_exit,
                 ready,
+                cleanup_obligation,
             } => {
                 require_cold_process_operation_candidate(&next, &operation_exit)?;
-                let record = next.records.get(&operation_exit.slot_id).ok_or_else(|| {
-                    format!(
-                        "route_keeper_cold_process_candidate_changed:{}",
-                        operation_exit.slot_id
-                    )
-                })?;
-                if record.phase != RouteKeeperPhase::Stopping
-                    || record.protocol_ready.as_ref() != Some(&ready)
+                let record = next
+                    .records
+                    .get(&operation_exit.slot_id)
+                    .cloned()
+                    .ok_or_else(|| {
+                        format!(
+                            "route_keeper_cold_process_candidate_changed:{}",
+                            operation_exit.slot_id
+                        )
+                    })?;
+                if !matches!(
+                    record.phase,
+                    RouteKeeperPhase::Stopping | RouteKeeperPhase::Quarantined
+                ) || record.protocol_ready.as_ref() != Some(&ready)
+                    || record.cleanup_obligation != cleanup_obligation
                 {
                     return Err(format!(
                         "route_keeper_cold_process_candidate_changed:{}",
                         operation_exit.slot_id
                     ));
                 }
-                candidates.push(ReservedRouteKeeperColdRecoveryKind::Stop {
-                    action: RouteKeeperReconcileAction::Stop {
+                let action = if let Some(obligation) = cleanup_obligation.as_ref() {
+                    next.resume_quarantined_stop(
+                        &operation_exit.slot_id,
+                        &operation_exit.expected_fence,
+                        obligation,
+                    )?
+                } else {
+                    RouteKeeperReconcileAction::Stop {
                         slot_id: record.slot_id.clone(),
                         keeper_id: record.keeper_id.clone(),
                         fence: record.fence.clone(),
-                    },
+                    }
+                };
+                candidates.push(ReservedRouteKeeperColdRecoveryKind::Stop {
+                    action,
                     ready,
                     successor_host_generation: operation_exit.successor_host_generation,
                 });
@@ -1554,6 +1573,7 @@ fn require_cold_process_operation_candidate(
                 | RouteKeeperPhase::Observing
                 | RouteKeeperPhase::RecoveryFailed
                 | RouteKeeperPhase::Stopping
+                | RouteKeeperPhase::Quarantined
         )
     {
         return Err(format!(
@@ -3446,6 +3466,82 @@ mod tests {
             assert!(successor.adoptions.is_empty());
             assert_eq!(successor.shutdowns, 1);
         }
+    }
+
+    #[tokio::test]
+    async fn cold_successor_reconciles_exact_quarantined_stop_once() {
+        let directory = TempDirectory::new("route-keeper-cold-quarantine-reconcile");
+        let repository = repository(&directory);
+        let mut predecessor = FakeConnector::default();
+        reconcile_once(&repository, &mut predecessor).await.unwrap();
+        reconcile_once(&repository, &mut predecessor).await.unwrap();
+        let claimed = register_host_claim(&repository, 2);
+        let ready = claimed.records["route-slot-01"]
+            .protocol_ready
+            .clone()
+            .unwrap();
+        let mut quarantined = claimed.clone();
+        quarantined
+            .begin_stop(&ready.slot_id, &ready.fence)
+            .unwrap();
+        quarantined
+            .quarantine_unproven_stop(
+                &ready.slot_id,
+                &ready.fence,
+                "rdp_route_session_scope_not_empty".to_string(),
+            )
+            .unwrap();
+        repository
+            .compare_and_swap_route_keeper_authority(&claimed, &quarantined)
+            .unwrap();
+
+        let prepared =
+            prepare_configured_cold_process_recovery(&quarantined, 2, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        let reserved =
+            reserve_prepared_cold_process_routes(&repository, &quarantined, prepared).unwrap();
+        let reserved_state = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            reserved_state.records[&ready.slot_id].phase,
+            RouteKeeperPhase::Stopping
+        );
+        assert!(reserved_state.records[&ready.slot_id]
+            .cleanup_obligation
+            .is_none());
+
+        let mut successor = FakeConnector::default();
+        successor
+            .routes
+            .insert(ready.slot_id.clone(), ready.clone());
+        let (_tx, mut shutdown) = watch::channel(false);
+        assert_eq!(
+            recover_prepared_cold_process_routes_until_shutdown(
+                &repository,
+                &mut successor,
+                &reserved,
+                &mut shutdown,
+            )
+            .await,
+            Ok(ConfiguredColdProcessRecoveryOutcome::Recovered)
+        );
+        let recovered = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(
+            recovered.records[&ready.slot_id].phase,
+            RouteKeeperPhase::Absent
+        );
+        assert!(recovered.records[&ready.slot_id]
+            .cleanup_obligation
+            .is_none());
+        assert_eq!(successor.stops.len(), 1);
+
+        let replay =
+            prepare_configured_cold_process_recovery(&recovered, 2, "linux:boot:fixture", |_| {
+                ProcessObservation::Missing
+            })
+            .unwrap();
+        assert!(replay.is_empty());
     }
 
     #[tokio::test]

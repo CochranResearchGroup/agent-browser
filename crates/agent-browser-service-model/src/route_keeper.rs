@@ -1375,6 +1375,35 @@ impl RouteKeeperAuthority {
         Ok(obligation)
     }
 
+    /// Resume only the exact stop operation retained by a quarantine cleanup
+    /// obligation. The caller must still re-prove the retained XRDP witness;
+    /// this transition merely publishes that one proof-bound retry atomically.
+    pub fn resume_quarantined_stop(
+        &mut self,
+        slot_id: &str,
+        fence: &RouteKeeperFence,
+        expected_obligation: &RouteKeeperCleanupObligation,
+    ) -> Result<RouteKeeperReconcileAction, String> {
+        let record = self.record_for_fence_mut(slot_id, fence)?;
+        if record.phase != RouteKeeperPhase::Quarantined {
+            return Err("route_keeper_phase_not_quarantined".to_string());
+        }
+        if record.cleanup_obligation.as_ref() != Some(expected_obligation)
+            || expected_obligation.slot_id != record.slot_id
+            || expected_obligation.keeper_id != record.keeper_id
+            || expected_obligation.fence != record.fence
+        {
+            return Err("route_keeper_cleanup_obligation_changed".to_string());
+        }
+        record.phase = RouteKeeperPhase::Stopping;
+        record.cleanup_obligation = None;
+        Ok(RouteKeeperReconcileAction::Stop {
+            slot_id: record.slot_id.clone(),
+            keeper_id: record.keeper_id.clone(),
+            fence: record.fence.clone(),
+        })
+    }
+
     fn record_for_fence_mut(
         &mut self,
         slot_id: &str,

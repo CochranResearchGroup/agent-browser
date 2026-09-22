@@ -10,13 +10,14 @@ use std::path::Path;
 
 pub(crate) const FIXED_HELPER_PATH: &str =
     "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
-const REQUIRED_COMMANDS: [&str; 8] = [
+const REQUIRED_COMMANDS: [&str; 9] = [
     "check",
     "status-json",
     "ensure-rdp-route-user",
     "ensure-rdp-route-user-owned",
     "observe-rdp-route-session",
     "terminate-rdp-route-session-exact",
+    "verify-rdp-route-session-absent",
     "restart-xrdp",
     "grant-display-access",
 ];
@@ -288,7 +289,7 @@ mod tests {
 
     #[test]
     fn compatible_helper_without_optional_verify_install_remains_ready() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], true);
@@ -300,7 +301,7 @@ mod tests {
 
     #[test]
     fn missing_required_helper_capability_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], false);
@@ -312,7 +313,7 @@ mod tests {
 
     #[test]
     fn legacy_pam_password_update_contract_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  restart-xrdp)\n  grant-display-access)\n";
         let mut status = compatible_status();
         status["parsed"]
             .as_object_mut()
@@ -328,7 +329,7 @@ mod tests {
 
     #[test]
     fn helper_without_owned_provisioning_contract_is_stale() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  restart-xrdp)\n  grant-display-access)\n";
         let mut status = compatible_status();
         status["parsed"]
             .as_object_mut()

@@ -242,7 +242,13 @@ mkdir -p "$target"
         `#!/bin/sh
 printf '%s\\n' "$*" >>${JSON.stringify(commandLog)}
 if [ "$1" = "list-sessions" ]; then
-  printf 'c42 2001 agent-browser-rdp-dev-6 seat0 -\\n'
+  if [ "\${FIXTURE_LOGINCTL_MODE:-}" = "absent" ]; then
+    exit 0
+  elif [ "\${FIXTURE_LOGINCTL_MODE:-}" = "different" ]; then
+    printf 'c43 2001 agent-browser-rdp-dev-6 seat0 -\\n'
+  else
+    printf 'c42 2001 agent-browser-rdp-dev-6 seat0 -\\n'
+  fi
   if [ "\${FIXTURE_LOGINCTL_MODE:-}" = "multiple" ]; then
     printf 'c43 2001 agent-browser-rdp-dev-6 seat0 -\\n'
   fi
@@ -281,6 +287,7 @@ fi
       writeFileSync(join(cgroup, 'cgroup.controllers'), 'cpu memory pids\n');
       writeFileSync(join(scope, 'cgroup.kill'), '');
       writeFileSync(join(scope, 'cgroup.events'), 'populated 1\nfrozen 0\n');
+      writeFileSync(join(scope, 'cgroup.procs'), '41002\n41003\n');
       const postOpenRetainedScope = `${scope}-post-open-retained`;
       writeFileSync(
         join(bin, 'stat'),
@@ -309,6 +316,7 @@ elif [ -s ${JSON.stringify(join(scope, 'cgroup.kill'))} ] && [ "\${FIXTURE_MALFO
 elif [ -s ${JSON.stringify(join(scope, 'cgroup.kill'))} ]; then
   rm -rf ${JSON.stringify(join(proc, '41002'))} ${JSON.stringify(join(proc, '41003'))}
   printf 'populated 0\\nfrozen 0\\n' >${JSON.stringify(join(scope, 'cgroup.events'))}
+  : >${JSON.stringify(join(scope, 'cgroup.procs'))}
 fi
 `,
         { mode: 0o755 },
@@ -466,6 +474,35 @@ fi
         '--display', witness.displayName,
         '--x11-socket-inode', String(witness.x11SocketInode),
       ];
+      const absentArgs = exactArgs.map((value, index) =>
+        index === 1 ? 'verify-rdp-route-session-absent' : value);
+      const liveAbsence = spawnSync('bash', absentArgs, { encoding: 'utf8', env: helperEnv });
+      assert.equal(liveAbsence.status, 0, liveAbsence.stderr);
+      assert.deepEqual(JSON.parse(liveAbsence.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_session_live',
+      });
+      const ambiguousAbsence = spawnSync('bash', absentArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'multiple' },
+      });
+      assert.equal(ambiguousAbsence.status, 0, ambiguousAbsence.stderr);
+      assert.deepEqual(JSON.parse(ambiguousAbsence.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_session_ambiguous',
+      });
+      const changedAbsence = spawnSync('bash', absentArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'different' },
+      });
+      assert.equal(changedAbsence.status, 0, changedAbsence.stderr);
+      assert.deepEqual(JSON.parse(changedAbsence.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_session_identity_changed',
+      });
       const mismatched = spawnSync('bash', exactArgs.map((value) =>
         value === String(witness.cgroupInode) ? String(witness.cgroupInode + 1) : value), {
         encoding: 'utf8', env: helperEnv,
@@ -541,6 +578,20 @@ fi
       );
       assert.equal(readFileSync(join(scope, 'cgroup.kill'), 'utf8'), '1\n');
       assert.doesNotMatch(readFileSync(commandLog, 'utf8'), /terminate-user/);
+
+      const absent = spawnSync('bash', absentArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(absent.status, 0, absent.stderr);
+      const absentResult = JSON.parse(absent.stdout);
+      assert.equal(absentResult.state, 'absent', `${absent.stdout}\n${absent.stderr}`);
+      assert.equal(absentResult.witnessDigest, stopped.witnessDigest);
+      assert.deepEqual(absentResult.verification, {
+        sessionInstanceAbsent: true,
+        xServerInstanceAbsent: true,
+        ownedScopeEmptyOrAbsent: true,
+      });
 
       const rejected = spawnSync('bash', [file, 'observe-rdp-route-session', '--user', 'ecochran76'], {
         encoding: 'utf8',

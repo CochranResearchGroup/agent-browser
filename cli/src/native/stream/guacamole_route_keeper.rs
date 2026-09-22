@@ -447,6 +447,12 @@ struct XrdpHelperResponse {
     witness_digest: Option<String>,
     #[serde(default)]
     verification: Option<XrdpStopVerification>,
+    #[serde(default)]
+    session_instance_absent: Option<bool>,
+    #[serde(default)]
+    x_server_instance_absent: Option<bool>,
+    #[serde(default)]
+    owned_scope_empty_or_absent: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -552,8 +558,7 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
         &mut self,
         witness: &RouteKeeperXrdpOwnershipWitness,
     ) -> Result<XrdpHelperStop, String> {
-        let args = vec![
-            "terminate-rdp-route-session-exact".to_string(),
+        let witness_args = vec![
             "--user".to_string(),
             witness.route_user.clone(),
             "--session-id".to_string(),
@@ -579,6 +584,8 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
             "--x11-socket-inode".to_string(),
             witness.x11_socket_inode.to_string(),
         ];
+        let mut args = vec!["terminate-rdp-route-session-exact".to_string()];
+        args.extend(witness_args.clone());
         let response = self.run(&args).await?;
         if response.schema_version != 1 {
             return Err("route_keeper_xrdp_helper_schema_invalid".to_string());
@@ -597,6 +604,29 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
                     return Err("route_keeper_xrdp_stop_verification_invalid".to_string());
                 }
                 Ok(XrdpHelperStop::Stopped)
+            }
+            "ownership_unproven"
+                if response.code.as_deref() == Some("rdp_route_session_reobservation_failed") =>
+            {
+                let mut verify_args = vec!["verify-rdp-route-session-absent".to_string()];
+                verify_args.extend(witness_args);
+                let absent = self.run(&verify_args).await?;
+                let expected_witness_digest = xrdp_witness_digest(witness);
+                if absent.schema_version == 1
+                    && absent.state == "absent"
+                    && absent.witness_digest.as_deref() == Some(expected_witness_digest.as_str())
+                    && absent.session_instance_absent == Some(true)
+                    && absent.x_server_instance_absent == Some(true)
+                    && absent.owned_scope_empty_or_absent == Some(true)
+                {
+                    Ok(XrdpHelperStop::Stopped)
+                } else {
+                    Ok(XrdpHelperStop::OwnershipUnproven(
+                        absent
+                            .code
+                            .unwrap_or_else(|| "route_keeper_xrdp_absence_unproven".to_string()),
+                    ))
+                }
             }
             "ownership_unproven" | "incomplete" | "unsupported" => {
                 Ok(XrdpHelperStop::OwnershipUnproven(

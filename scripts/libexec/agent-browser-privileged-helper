@@ -17,6 +17,7 @@ Commands:
   ensure-rdp-route-user-owned --user <user> --operation-id <UUID>
   observe-rdp-route-session --user <user>
   terminate-rdp-route-session-exact [exact observed identity]
+  verify-rdp-route-session-absent [exact retained observed identity]
   restart-xrdp
   grant-display-access --operator-user <user> --route-user <user> --display <display>
 
@@ -650,6 +651,119 @@ terminate_rdp_route_session_exact() {
   printf '{"schemaVersion":1,"state":"stopped","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
 }
 
+verify_rdp_route_session_absent() {
+  require_root
+  local user_name="" session_id="" boot_id="" scope_invocation_id=""
+  local cgroup_device="" cgroup_inode="" leader_pid="" leader_start_ticks=""
+  local x_server_pid="" x_server_start_ticks="" display_name="" x11_socket_inode=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user) user_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --session-id) session_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --boot-id) boot_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --scope-invocation-id) scope_invocation_id="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --cgroup-device) cgroup_device="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --cgroup-inode) cgroup_inode="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --leader-pid) leader_pid="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --leader-start-ticks) leader_start_ticks="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x-server-pid) x_server_pid="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x-server-start-ticks) x_server_start_ticks="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --display) display_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x11-socket-inode) x11_socket_inode="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      *) echo "Unknown verify-rdp-route-session-absent argument: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [[ -z "$user_name" || -z "$session_id" || -z "$boot_id" \
+    || -z "$scope_invocation_id" || -z "$cgroup_device" || -z "$cgroup_inode" \
+    || -z "$leader_pid" || -z "$leader_start_ticks" || -z "$x_server_pid" \
+    || -z "$x_server_start_ticks" || -z "$display_name" || -z "$x11_socket_inode" ]]; then
+    echo "verify-rdp-route-session-absent requires the complete retained observed identity" >&2
+    exit 2
+  fi
+
+  helper_observation_roots
+  require_route_user "$user_name"
+  W_ROUTE_USER="$user_name"
+  W_ROUTE_UID="$(managed_route_uid "$user_name")"
+  W_BOOT_ID="$(<"$BOOT_ID_PATH")" || return 1
+  if [[ "$W_BOOT_ID" != "$boot_id" ]]; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_boot_identity_changed"
+    return 0
+  fi
+
+  local session_output
+  session_output="$(timeout --signal=KILL 2s loginctl list-sessions --no-legend --no-pager)" || {
+    emit_route_session_state "ownership_unproven" "rdp_route_session_reobservation_failed"
+    return 0
+  }
+  local candidates=()
+  local listed_session listed_uid listed_user _rest
+  while read -r listed_session listed_uid listed_user _rest; do
+    [[ -n "${listed_session:-}" ]] || continue
+    if [[ "$listed_uid" == "$W_ROUTE_UID" && "$listed_user" == "$user_name" ]]; then
+      candidates+=("$listed_session")
+    fi
+  done <<<"$session_output"
+  if [[ "${#candidates[@]}" -gt 1 ]]; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_ambiguous"
+    return 0
+  fi
+  if [[ "${#candidates[@]}" == "1" ]]; then
+    if [[ "${candidates[0]}" == "$session_id" ]]; then
+      emit_route_session_state "ownership_unproven" "rdp_route_session_live"
+    else
+      emit_route_session_state "ownership_unproven" "rdp_route_session_identity_changed"
+    fi
+    return 0
+  fi
+
+  if ! process_instance_gone_or_replaced "$leader_pid" "$leader_start_ticks" \
+    || ! process_instance_gone_or_replaced "$x_server_pid" "$x_server_start_ticks"; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_process_live_or_changed"
+    return 0
+  fi
+
+  local cgroup_path="/user.slice/user-$W_ROUTE_UID.slice/session-$session_id.scope"
+  local cgroup_target="$CGROUP_ROOT$cgroup_path"
+  local scope_empty_or_absent="true"
+  if [[ -e "$cgroup_target" ]]; then
+    local retained_device retained_inode populated cgroup_processes
+    IFS=: read -r retained_device retained_inode < <(stat -Lc '%d:%i' "$cgroup_target" 2>/dev/null || true)
+    if [[ "$retained_device" != "$cgroup_device" || "$retained_inode" != "$cgroup_inode" ]]; then
+      emit_route_session_state "ownership_unproven" "rdp_route_session_cgroup_identity_changed"
+      return 0
+    fi
+    populated="$(awk '$1 == "populated" { print $2; exit }' "$cgroup_target/cgroup.events" 2>/dev/null || true)"
+    cgroup_processes="unreadable"
+    if [[ -r "$cgroup_target/cgroup.procs" ]]; then
+      cgroup_processes="$(tr -d '[:space:]' <"$cgroup_target/cgroup.procs" 2>/dev/null || true)"
+    fi
+    if [[ "$populated" != "0" || "$cgroup_processes" == "unreadable" || -n "$cgroup_processes" ]]; then
+      scope_empty_or_absent="false"
+    fi
+  fi
+  if [[ "$scope_empty_or_absent" != "true" ]]; then
+    emit_route_session_state "incomplete" "rdp_route_session_scope_not_empty"
+    return 0
+  fi
+
+  W_SESSION_ID="$session_id"
+  W_SESSION_SCOPE="session-$session_id.scope"
+  W_SCOPE_INVOCATION_ID="$scope_invocation_id"
+  W_CGROUP_PATH="$cgroup_path"
+  W_CGROUP_DEVICE="$cgroup_device"
+  W_CGROUP_INODE="$cgroup_inode"
+  W_LEADER_PID="$leader_pid"
+  W_LEADER_START_TICKS="$leader_start_ticks"
+  W_X_SERVER_PID="$x_server_pid"
+  W_X_SERVER_START_TICKS="$x_server_start_ticks"
+  W_DISPLAY_NAME="$display_name"
+  W_X11_SOCKET_INODE="$x11_socket_inode"
+  local witness_digest
+  witness_digest="$(route_session_witness_digest)"
+  printf '{"schemaVersion":1,"state":"absent","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
+}
+
 process_instance_gone_or_replaced() {
   local pid="$1"
   local expected_start_ticks="$2"
@@ -753,6 +867,10 @@ case "${1:-}" in
   terminate-rdp-route-session-exact)
     shift
     terminate_rdp_route_session_exact "$@"
+    ;;
+  verify-rdp-route-session-absent)
+    shift
+    verify_rdp_route_session_absent "$@"
     ;;
   restart-xrdp)
     shift

@@ -788,6 +788,36 @@ fn stop_requires_exact_receipt_and_unproven_ownership_is_quarantined() {
 }
 
 #[test]
+fn quarantined_stop_resume_requires_the_exact_cleanup_obligation() {
+    let (mut authority, ready) = make_one_ready();
+    authority.begin_stop(&ready.slot_id, &ready.fence).unwrap();
+    let obligation = authority
+        .quarantine_unproven_stop(
+            &ready.slot_id,
+            &ready.fence,
+            "rdp_route_session_scope_not_empty".to_string(),
+        )
+        .unwrap();
+    let before = authority.clone();
+    let mut changed = obligation.clone();
+    changed.preserved_observed_keeper_id = "changed-session".to_string();
+    assert_eq!(
+        authority.resume_quarantined_stop(&ready.slot_id, &ready.fence, &changed),
+        Err("route_keeper_cleanup_obligation_changed".to_string())
+    );
+    assert_eq!(authority, before);
+
+    let action = authority
+        .resume_quarantined_stop(&ready.slot_id, &ready.fence, &obligation)
+        .unwrap();
+    assert!(matches!(action, RouteKeeperReconcileAction::Stop { .. }));
+    let record = &authority.records[&ready.slot_id];
+    assert_eq!(record.phase, RouteKeeperPhase::Stopping);
+    assert!(record.cleanup_obligation.is_none());
+    assert_eq!(record.protocol_ready.as_ref(), Some(&ready));
+}
+
+#[test]
 fn invalid_ready_record_cannot_project_or_persist_false_capacity() {
     let mut authority = authority(1);
     let record = authority.records.get_mut("route-slot-01").unwrap();
