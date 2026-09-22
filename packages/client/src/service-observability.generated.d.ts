@@ -1079,6 +1079,15 @@ export interface ServicePresentationKeeperStatus {
   minimumSatisfied: boolean;
   warmTargetSatisfied: boolean;
   unavailableReason: string | null;
+  allocation?: ServicePresentationAllocationStatus;
+}
+
+export interface ServicePresentationAllocationStatus {
+  state: 'available' | 'pending' | 'full' | 'over_target' | 'unavailable';
+  browserCount: number;
+  occupiedDisplayCount: number;
+  maximumDisplays: number;
+  maximumBrowsersPerDisplay: number;
 }
 
 export interface ServiceDesktopEvidencePolicyProjection {

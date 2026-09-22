@@ -44,6 +44,13 @@ export const currentV1ServiceStatusResponse = {
     minimumSatisfied: false,
     warmTargetSatisfied: false,
     unavailableReason: 'route_keeper_supervisor_terminated',
+    allocation: {
+      state: 'over_target',
+      browserCount: 7,
+      occupiedDisplayCount: 3,
+      maximumDisplays: 2,
+      maximumBrowsersPerDisplay: 4,
+    },
   },
   browserSessionAuthority: {
     schemaVersion: 1,

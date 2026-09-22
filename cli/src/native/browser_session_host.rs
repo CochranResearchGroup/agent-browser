@@ -295,6 +295,7 @@ pub(crate) struct BrowserSessionHost<P, E> {
     state: BrowserSessionState,
     handoffs: BTreeMap<String, RemoteViewHandoff>,
     manager_config: BrowserSessionManagerConfig,
+    desktop_capacity: Option<(u32, u32)>,
 }
 
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
@@ -331,6 +332,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             catalog: catalog_load.catalog,
             state,
             handoffs,
+            desktop_capacity: None,
             manager_config: BrowserSessionManagerConfig {
                 session_idle_timeout_ms: config.session_idle_timeout_ms,
                 remote_desktop_routes: config.remote_desktop_routes,
@@ -342,6 +344,35 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     /// persisted browser desktop assignment or existing session custody.
     pub(crate) fn replace_remote_desktop_routes(&mut self, routes: Vec<BrowserDesktopRoute>) {
         self.manager_config.remote_desktop_routes = routes;
+    }
+
+    /// Refresh new-allocation limits without changing existing browser bindings.
+    pub(crate) fn set_desktop_capacity(
+        &mut self,
+        maximum_displays: u32,
+        maximum_browsers_per_display: u32,
+    ) {
+        self.desktop_capacity = Some((maximum_displays, maximum_browsers_per_display));
+    }
+
+    fn select_desktop(
+        &self,
+        live_display_names: &[String],
+    ) -> Result<agent_browser_service_model::BrowserDesktopAssignment, String> {
+        match self.desktop_capacity {
+            Some((maximum, density)) => {
+                agent_browser_service_model::select_browser_desktop_with_capacity(
+                    &self.manager_config.remote_desktop_routes,
+                    live_display_names,
+                    maximum,
+                    density,
+                )
+            }
+            None => agent_browser_service_model::select_least_crowded_browser_desktop(
+                &self.manager_config.remote_desktop_routes,
+                live_display_names,
+            ),
+        }
     }
 
     pub(crate) fn open(
@@ -878,10 +909,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     .clone()
                     .ok_or_else(|| "browser_session_open_desktop_missing".to_string())?
             } else {
-                agent_browser_service_model::select_least_crowded_browser_desktop(
-                    &self.manager_config.remote_desktop_routes,
-                    &live_display_names,
-                )?
+                self.select_desktop(&live_display_names)?
             };
             let session_id = matching_session
                 .map(|session| session.id.clone())
@@ -1378,12 +1406,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn manager(&mut self) -> BrowserSessionManager<'_, E> {
-        BrowserSessionManager::new(
+        let manager = BrowserSessionManager::new(
             &mut self.state,
             &self.catalog,
             &mut self.effects,
             self.manager_config.clone(),
-        )
+        );
+        match self.desktop_capacity {
+            Some((maximum, density)) => manager.with_desktop_capacity(maximum, density),
+            None => manager,
+        }
     }
 
     fn commit_state(&self) -> Result<(), String> {
@@ -1582,10 +1614,7 @@ where
                 .clone()
                 .ok_or_else(|| "browser_session_open_desktop_missing".to_string())?
         } else {
-            agent_browser_service_model::select_least_crowded_browser_desktop(
-                &self.manager_config.remote_desktop_routes,
-                &live_display_names,
-            )?
+            self.select_desktop(&live_display_names)?
         };
         let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
         let preflight_id = command

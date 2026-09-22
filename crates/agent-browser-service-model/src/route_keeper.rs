@@ -336,6 +336,11 @@ pub enum RouteKeeperReconcileAction {
 pub struct RouteKeeperAuthority {
     pub schema_version: String,
     pub policy: RouteKeeperPolicy,
+    /// Persisted just-in-time capacity demand. This augments reconciliation
+    /// only; it neither changes the configured warm projection nor stops an
+    /// already retained route when demand falls.
+    #[serde(default)]
+    pub requested_ready_slots: u32,
     #[serde(default)]
     pub connection_catalog: RouteKeeperConnectionCatalog,
     #[serde(default)]
@@ -410,6 +415,7 @@ impl RouteKeeperAuthority {
         Ok(Self {
             schema_version: ROUTE_KEEPER_AUTHORITY_SCHEMA_V4.to_string(),
             policy,
+            requested_ready_slots: 0,
             connection_catalog,
             host_process_claims: BTreeMap::new(),
             records,
@@ -601,6 +607,19 @@ impl RouteKeeperAuthority {
             minimum_satisfied: ready_count >= self.policy.minimum_ready,
             warm_target_satisfied: ready_count >= self.policy.warm_target,
         })
+    }
+
+    /// Sets the current additive ready-route demand for reconciliation.
+    ///
+    /// Lowering demand is intentionally non-destructive. Reconciliation never
+    /// emits a stop because capacity demand fell.
+    pub fn request_ready_slots(&mut self, count: u32) -> Result<(), String> {
+        self.validate()?;
+        if count > self.policy.maximum_slots {
+            return Err("route_keeper_requested_ready_slots_invalid".to_string());
+        }
+        self.requested_ready_slots = count;
+        Ok(())
     }
 
     pub fn ready_handoff_binding(
@@ -873,7 +892,8 @@ impl RouteKeeperAuthority {
             .values()
             .filter(|record| record.phase == RouteKeeperPhase::Ready)
             .count() as u32;
-        if ready_count >= self.policy.warm_target {
+        let ready_target = self.policy.warm_target.max(self.requested_ready_slots);
+        if ready_count >= ready_target {
             return Ok(RouteKeeperReconcileAction::Noop);
         }
         if self.connection_catalog.bindings.is_empty() {
@@ -1238,6 +1258,9 @@ impl RouteKeeperAuthority {
             return Err("route_keeper_schema_unsupported".to_string());
         }
         validate_policy(&self.policy)?;
+        if self.requested_ready_slots > self.policy.maximum_slots {
+            return Err("route_keeper_requested_ready_slots_invalid".to_string());
+        }
         for (generation, claim) in &self.host_process_claims {
             validate_host_process_claim(claim)?;
             if *generation != claim.host_generation {

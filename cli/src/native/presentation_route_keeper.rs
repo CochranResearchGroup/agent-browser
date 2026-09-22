@@ -1678,8 +1678,8 @@ mod tests {
     use super::*;
     use agent_browser_service_model::{
         RecordedProcessIdentity, RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog,
-        RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperStartPriority,
-        RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
+        RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy, RouteKeeperStartPriority,
+        RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
     };
     use std::collections::BTreeMap;
     use std::fs;
@@ -1723,6 +1723,13 @@ mod tests {
     }
 
     fn repository(directory: &TempDirectory) -> SqliteRouteKeeperRepository {
+        repository_with_policy(directory, RouteKeeperPolicy::default())
+    }
+
+    fn repository_with_policy(
+        directory: &TempDirectory,
+        policy: RouteKeeperPolicy,
+    ) -> SqliteRouteKeeperRepository {
         let database_path = directory.0.join("runtime.sqlite3");
         BrowserRuntimeSqliteStore::migrate_from_legacy(
             &database_path,
@@ -1733,15 +1740,13 @@ mod tests {
             },
         )
         .unwrap();
-        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
-        let original = store.load_route_keeper_authority().unwrap();
-        let mut configured = original.clone();
+        let mut configured = RouteKeeperAuthority::with_policy(1, policy.clone()).unwrap();
         configured
             .register_host_process_claim(host_process_claim(1))
             .unwrap();
         configured
             .replace_connection_catalog(
-                RouteKeeperConnectionCatalog::new((1_u32..=6).map(|sequence| {
+                RouteKeeperConnectionCatalog::new((1..=policy.maximum_slots).map(|sequence| {
                     RouteKeeperConnectionBinding {
                         slot_id: format!("route-slot-{sequence:02}"),
                         connection_key: format!("route-{sequence:02}"),
@@ -1753,8 +1758,19 @@ mod tests {
                 .unwrap(),
             )
             .unwrap();
-        store
-            .compare_and_swap_route_keeper_authority(&original, &configured)
+        // A fresh runtime database is born with the production six-slot policy.
+        // Seed this provider-free fixture directly so its smaller valid authority
+        // can exercise the real SQLite repository without relaxing production CAS.
+        rusqlite::Connection::open(&database_path)
+            .unwrap()
+            .execute(
+                "UPDATE state_documents SET schema_version = ?1, json = ?2 WHERE kind = ?3",
+                rusqlite::params![
+                    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+                    serde_json::to_string(&configured).unwrap(),
+                    "route_keeper_authority",
+                ],
+            )
             .unwrap();
         SqliteRouteKeeperRepository::new(&database_path)
     }
@@ -2065,6 +2081,51 @@ mod tests {
         assert_eq!(final_projection.ready_count, 4);
         assert!(final_projection.warm_target_satisfied);
         assert_eq!(connector.starts.len(), 4);
+    }
+
+    #[tokio::test]
+    async fn durable_jit_demand_starts_a_second_route_after_configured_warm_is_ready() {
+        let directory = TempDirectory::new("route-keeper-jit-demand");
+        let repository = repository_with_policy(
+            &directory,
+            RouteKeeperPolicy {
+                minimum_ready: 1,
+                warm_target: 1,
+                maximum_slots: 2,
+            },
+        );
+        let mut connector = FakeConnector::default();
+
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        let first_ready = reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(first_ready.ready_count, 1);
+        assert!(first_ready.warm_target_satisfied);
+
+        let database_path = directory.0.join("runtime.sqlite3");
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        crate::native::presentation_runtime_capacity::request_additional_route(&mut store, 1, 2)
+            .unwrap();
+        let requested = repository.load_route_keeper_authority().unwrap();
+        assert_eq!(requested.policy.warm_target, 1);
+        assert_eq!(requested.policy.maximum_slots, 2);
+        assert_eq!(requested.connection_catalog.bindings.len(), 2);
+        assert_eq!(requested.requested_ready_slots, 2);
+        crate::native::presentation_runtime_capacity::request_additional_route(&mut store, 1, 2)
+            .unwrap();
+        assert_eq!(repository.load_route_keeper_authority().unwrap(), requested);
+
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        let second_ready = reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(second_ready.ready_count, 2);
+        assert_eq!(second_ready.desired_warm, 1);
+        let authority = repository.load_route_keeper_authority().unwrap();
+        let second = &authority.records["route-slot-02"];
+        assert_eq!(second.phase, RouteKeeperPhase::Ready);
+        assert_eq!(second.fence.host_generation, 1);
+        assert_eq!(second.fence.operation_generation, 1);
+        assert_eq!(connector.starts.len(), 2);
+        assert!(connector.adoptions.is_empty());
+        assert!(connector.stops.is_empty());
     }
 
     struct ConflictRepository {

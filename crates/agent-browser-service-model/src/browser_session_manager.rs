@@ -402,6 +402,7 @@ pub struct BrowserSessionManager<'a, E> {
     catalog: &'a BrowserProfileCatalog,
     effects: &'a mut E,
     config: BrowserSessionManagerConfig,
+    desktop_capacity: Option<(u32, u32)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -423,7 +424,18 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             catalog,
             effects,
             config,
+            desktop_capacity: None,
         }
+    }
+
+    /// Apply current allocation limits without moving or closing existing browsers.
+    pub fn with_desktop_capacity(
+        mut self,
+        maximum_displays: u32,
+        maximum_browsers_per_display: u32,
+    ) -> Self {
+        self.desktop_capacity = Some((maximum_displays, maximum_browsers_per_display));
+        self
     }
 
     pub fn open(
@@ -677,25 +689,34 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         profile: &BrowserProfileCatalogEntry,
         reservation: Option<&BrowserOpenReservation>,
     ) -> Result<BrowserLaunch, String> {
-        let selected_desktop = if self.config.remote_desktop_routes.is_empty() {
-            None
-        } else {
-            let live_display_names = self
-                .state
-                .browsers
-                .values()
-                .filter_map(|browser| {
-                    browser
-                        .desktop
-                        .as_ref()
-                        .map(|desktop| desktop.display_name.clone())
+        let selected_desktop =
+            if self.config.remote_desktop_routes.is_empty() && self.desktop_capacity.is_none() {
+                None
+            } else {
+                let live_display_names = self
+                    .state
+                    .browsers
+                    .values()
+                    .filter_map(|browser| {
+                        browser
+                            .desktop
+                            .as_ref()
+                            .map(|desktop| desktop.display_name.clone())
+                    })
+                    .collect::<Vec<_>>();
+                Some(match self.desktop_capacity {
+                    Some((maximum, density)) => crate::select_browser_desktop_with_capacity(
+                        &self.config.remote_desktop_routes,
+                        &live_display_names,
+                        maximum,
+                        density,
+                    )?,
+                    None => select_least_crowded_browser_desktop(
+                        &self.config.remote_desktop_routes,
+                        &live_display_names,
+                    )?,
                 })
-                .collect::<Vec<_>>();
-            Some(select_least_crowded_browser_desktop(
-                &self.config.remote_desktop_routes,
-                &live_display_names,
-            )?)
-        };
+            };
         let desktop = reservation
             .map(|reservation| Some(reservation.desktop.clone()))
             .unwrap_or_else(|| selected_desktop.clone());

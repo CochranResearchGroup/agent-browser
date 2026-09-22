@@ -408,6 +408,89 @@ fn reconcile_satisfies_minimum_then_warm_target_and_becomes_idempotent() {
 }
 
 #[test]
+fn requested_ready_slots_grows_capacity_without_changing_warm_or_stopping_routes() {
+    let policy = RouteKeeperPolicy {
+        minimum_ready: 1,
+        warm_target: 1,
+        maximum_slots: 3,
+    };
+    let mut authority = RouteKeeperAuthority::with_policy(7, policy.clone()).unwrap();
+    authority
+        .register_host_process_claim(host_process_claim(7))
+        .unwrap();
+    authority
+        .replace_connection_catalog(connection_catalog(policy.maximum_slots))
+        .unwrap();
+
+    let (first_slot, first_keeper, first_fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    authority
+        .record_protocol_ready(ready_receipt(&first_slot, &first_keeper, first_fence))
+        .unwrap();
+    assert_eq!(authority.projection().unwrap().desired_warm, 1);
+    assert_eq!(
+        authority.next_reconcile_action().unwrap(),
+        RouteKeeperReconcileAction::Noop
+    );
+
+    authority.request_ready_slots(2).unwrap();
+    assert_eq!(authority.requested_ready_slots, 2);
+    authority.request_ready_slots(2).unwrap();
+    assert_eq!(
+        authority.requested_ready_slots, 2,
+        "same request is idempotent"
+    );
+    let (second_slot, second_keeper, second_fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Warm);
+    authority
+        .record_protocol_ready(ready_receipt(&second_slot, &second_keeper, second_fence))
+        .unwrap();
+    assert_eq!(authority.projection().unwrap().desired_warm, 1);
+
+    authority.request_ready_slots(1).unwrap();
+    assert_eq!(authority.requested_ready_slots, 1);
+    assert_eq!(
+        authority.next_reconcile_action().unwrap(),
+        RouteKeeperReconcileAction::Noop,
+        "lowered demand must not emit a stop"
+    );
+    assert_eq!(
+        authority
+            .records
+            .values()
+            .filter(|record| record.phase == RouteKeeperPhase::Ready)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn requested_ready_slots_rejects_invalid_demand_without_mutating_authority() {
+    let mut authority = authority(7);
+    authority.request_ready_slots(2).unwrap();
+    let before = authority.clone();
+
+    assert_eq!(
+        authority.request_ready_slots(authority.policy.maximum_slots + 1),
+        Err("route_keeper_requested_ready_slots_invalid".to_string())
+    );
+    assert_eq!(authority, before);
+}
+
+#[test]
+fn authority_without_requested_ready_slots_decodes_to_zero() {
+    let authority = authority(7);
+    let mut encoded = serde_json::to_value(authority).unwrap();
+    encoded
+        .as_object_mut()
+        .unwrap()
+        .remove("requestedReadySlots");
+
+    let decoded: RouteKeeperAuthority = serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded.requested_ready_slots, 0);
+}
+
+#[test]
 fn disconnect_restarts_and_exact_adoption_fences_stale_generation() {
     let (mut authority, original_ready) = make_one_ready();
     authority

@@ -783,6 +783,24 @@ pending, then recheck readiness before browser effects. Manager handoff
 resolution also rechecks this evidence before focusing a browser. The older
 `presentationCapacity` projection remains a separate compatibility surface.
 
+When available, `presentationKeeper.allocation` reports `state`, `browserCount`,
+`occupiedDisplayCount`, `maximumDisplays`, and
+`maximumBrowsersPerDisplay`. The two counts come from retained Browser Session
+Manager assignments; they are not an independent live OS census. Existing
+healthy browser reuse does not request a new allocation. New browsers use an
+unused healthy display while the occupied display count is below the configured
+maximum. Once that maximum is reached, they share the least-loaded healthy
+occupied display only up to the configured per-display density. `available`
+means a healthy destination can be selected now; `pending` means the provider
+must make another display ready before allocation can continue; `full` means no
+healthy destination is admissible under the current limits; `unavailable` means
+current route evidence cannot supply an allocation.
+Lowering either maximum does not migrate or close existing browsers. It reports
+`over_target` and refuses a new allocation until occupancy returns within the
+limits. The request path polls within its configured deadline, but this
+projection does not implement queue fairness, a durable queue, public runtime
+configuration, or scale-in.
+
 Require `operatorVisible.state` to be `ready`. Give the operator only the
 returned `handoffUrl`, shaped as `/remote-view/<handoff-id>`. Reopen that same
 URL after route, display, or viewer changes so agent-browser can reacquire the

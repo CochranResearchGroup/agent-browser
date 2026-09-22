@@ -65,6 +65,23 @@ pending, then recheck readiness before browser effects. Manager handoff
 resolution also rechecks this evidence before focusing a browser. The older
 `presentationCapacity` projection remains a separate compatibility surface.
 
+When present, `presentationKeeper.allocation` reports `state`, `browserCount`,
+`occupiedDisplayCount`, `maximumDisplays`, and
+`maximumBrowsersPerDisplay`. The counts come from retained Browser Session
+Manager assignments, not an independent live OS census. Reusing an existing
+healthy browser requires no new allocation. A new browser uses an unused healthy
+display while the occupied display count is below the configured maximum. At
+that maximum, it shares the least-loaded healthy occupied display only while
+the configured per-display density has room. `available` means a healthy
+destination can be selected now; `pending` asks the provider to make another
+display ready; `full` means no healthy destination is admissible under the
+current limits; `unavailable` means current route evidence cannot supply an
+allocation. Lowering a maximum does not migrate or close an existing browser.
+It reports `over_target` and refuses new allocation until occupancy is within
+the limits. The request path polls within its configured deadline, but this
+status does not implement queue fairness, a durable queue, public runtime
+configuration, or scale-in.
+
 ## Before you begin
 
 When a selected tab is temporarily absent from a dashboard inventory refresh,

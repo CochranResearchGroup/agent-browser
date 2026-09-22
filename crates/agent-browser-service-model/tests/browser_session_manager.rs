@@ -73,6 +73,74 @@ fn repeated_command_reuses_and_refreshes_named_session() {
 }
 
 #[test]
+fn bounded_desktop_admission_grows_before_sharing_and_preserves_existing_browsers() {
+    use agent_browser_service_model::BrowserDesktopRoute;
+    let mut catalog = catalog_with_named_profile();
+    for id in ["profile-b", "profile-c", "profile-d"] {
+        let mut profile = catalog.profiles["profile-a"].clone();
+        profile.id = id.to_string();
+        profile.user_data_dir = format!("/managed/profiles/{id}");
+        catalog.profiles.insert(id.to_string(), profile);
+    }
+    let routes: Vec<_> = [":10", ":11"]
+        .iter()
+        .map(|display| BrowserDesktopRoute {
+            id: format!("route{display}"),
+            display_name: display.to_string(),
+            healthy: true,
+        })
+        .collect();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let mut open = |state: &mut BrowserSessionState,
+                    available: Vec<BrowserDesktopRoute>,
+                    profile: &str,
+                    density| {
+        BrowserSessionManager::new(
+            state,
+            &catalog,
+            &mut effects,
+            BrowserSessionManagerConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: available,
+            },
+        )
+        .with_desktop_capacity(2, density)
+        .open(OpenBrowserSession::exact_profile(profile, profile, 1_000))
+    };
+    open(&mut state, routes[..1].to_vec(), "profile-a", 2).unwrap();
+    assert_eq!(
+        open(&mut state, routes[..1].to_vec(), "profile-b", 2),
+        Err("presentation_capacity_pending".to_string())
+    );
+    assert_eq!(state.browsers.len(), 1);
+    open(&mut state, routes.clone(), "profile-b", 2).unwrap();
+    assert!(state
+        .browsers
+        .values()
+        .any(|browser| browser.profile_id == "profile-b"
+            && browser.desktop.as_ref().unwrap().display_name == ":11"));
+    open(&mut state, routes.clone(), "profile-c", 2).unwrap();
+    assert!(state
+        .browsers
+        .values()
+        .any(|browser| browser.profile_id == "profile-c"
+            && browser.desktop.as_ref().unwrap().display_name == ":10"));
+    let assignments = state.browsers.clone();
+    open(&mut state, routes.clone(), "profile-a", 1).unwrap();
+    assert_eq!(
+        open(&mut state, routes, "profile-d", 1),
+        Err("presentation_capacity_over_target".to_string())
+    );
+    assert_eq!(state.browsers, assignments);
+    assert_eq!(effects.launches.len(), 3);
+    assert!(effects.closes.is_empty());
+}
+
+#[test]
 fn open_after_expiry_ends_old_session_before_new_epoch() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();

@@ -62,9 +62,9 @@ fn presentation_keeper_status(
 fn current_presentation_keeper_status(
     probe: Option<&super::stream::RouteKeeperSupervisorProbe>,
 ) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
-    let authority = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
-        .load_route_keeper_authority()?;
-    match probe {
+    let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    let authority = store.load_route_keeper_authority()?;
+    let mut status = match probe {
         Some(probe) => presentation_keeper_status(&authority, probe),
         None => super::presentation_runtime_status::keeper_status(
             &authority,
@@ -73,7 +73,22 @@ fn current_presentation_keeper_status(
             },
             None,
         ),
+    }?;
+    let routes = if status.require_ready().is_ok() {
+        status.usable_routes(&authority)?
+    } else {
+        Vec::new()
+    };
+    let mut allocation = super::presentation_runtime_capacity::allocation_status(
+        &store.load_session_state()?,
+        &store.load_runtime_config()?,
+        &routes,
+    )?;
+    if status.require_ready().is_err() {
+        allocation.state = "unavailable";
     }
+    status.allocation = Some(allocation);
+    Ok(status)
 }
 
 enum PresentationKeeperObservation<T> {
@@ -82,9 +97,9 @@ enum PresentationKeeperObservation<T> {
     Terminal(String),
 }
 
-/// Polls a read-only readiness observation without allowing one blocked
-/// observation to outlive the request deadline. A cancelled `spawn_blocking`
-/// read may complete afterward, but it has no provider or browser effect.
+/// Bounds readiness and capacity waiting. A cancelled blocking observation may
+/// finish publishing route demand afterward; browser effects happen only after
+/// this wait succeeds and the host revalidates admission.
 async fn wait_for_presentation_keeper_observation<T, F, Fut>(
     deadline: Instant,
     mut observe: F,
@@ -117,6 +132,7 @@ where
 
 async fn observe_presentation_keeper(
     route_keeper: Arc<Mutex<Option<super::stream::ConfiguredRouteKeeperSupervisorHandle>>>,
+    command: Option<Value>,
 ) -> Result<PresentationKeeperObservation<super::stream::RouteKeeperSupervisorProbe>, String> {
     let probe = route_keeper
         .lock()
@@ -131,7 +147,42 @@ async fn observe_presentation_keeper(
     .await
     .map_err(|error| format!("presentation_keeper_status_join_failed:{error}"))??;
     match status.require_ready() {
-        Ok(()) => Ok(PresentationKeeperObservation::Ready(probe)),
+        Ok(()) => {
+            if let Some(command) = command {
+                let capacity_probe = probe.clone();
+                let available = tokio::task::spawn_blocking(move || -> Result<bool, String> {
+                    let mut store =
+                        super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                    let authority = store.load_route_keeper_authority()?;
+                    let status = presentation_keeper_status(&authority, &capacity_probe)?;
+                    let routes = status.usable_routes(&authority)?;
+                    let state = store.load_session_state()?;
+                    if super::presentation_runtime_capacity::command_reuses_browser(
+                        &command, &state,
+                    ) {
+                        return Ok(true);
+                    }
+                    let config = store.load_runtime_config()?;
+                    let allocation = super::presentation_runtime_capacity::allocation_status(
+                        &state, &config, &routes,
+                    )?;
+                    if allocation.state == "pending" {
+                        super::presentation_runtime_capacity::request_additional_route(
+                            &mut store,
+                            allocation.occupied_display_count,
+                            config.maximum_displays,
+                        )?;
+                    }
+                    Ok(allocation.state == "available")
+                })
+                .await
+                .map_err(|_| "presentation_capacity_observation_failed".to_string())??;
+                if !available {
+                    return Ok(PresentationKeeperObservation::Pending);
+                }
+            }
+            Ok(PresentationKeeperObservation::Ready(probe))
+        }
         Err(_)
             if matches!(
                 probe.health(),
@@ -814,6 +865,7 @@ impl RuntimeHostRouter {
 
     async fn wait_for_presentation_keeper(
         &self,
+        command: Option<Value>,
     ) -> Result<super::stream::RouteKeeperSupervisorProbe, String> {
         let deadline_ms = tokio::task::spawn_blocking(|| {
             super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
@@ -825,7 +877,7 @@ impl RuntimeHostRouter {
         let deadline = Instant::now() + Duration::from_millis(deadline_ms);
         let route_keeper = self.route_keeper.clone();
         wait_for_presentation_keeper_observation(deadline, || {
-            observe_presentation_keeper(route_keeper.clone())
+            observe_presentation_keeper(route_keeper.clone(), command.clone())
         })
         .await
     }
@@ -856,7 +908,10 @@ impl RuntimeHostRouter {
         let keeper_handoff_required = publish_manager_handoff;
         let keeper_required = keeper_handoff_required || remote_open_candidate;
         let probe = if keeper_required {
-            match self.wait_for_presentation_keeper().await {
+            match self
+                .wait_for_presentation_keeper(Some(command.clone()))
+                .await
+            {
                 Ok(probe) => Some(probe),
                 Err(error) => return serde_json::json!({ "success": false, "error": error }),
             }
@@ -890,6 +945,15 @@ impl RuntimeHostRouter {
             let host = host
                 .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())?;
+            if keeper_required {
+                let config =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                        .load_runtime_config()?;
+                host.set_desktop_capacity(
+                    config.maximum_displays,
+                    config.maximum_browsers_per_display,
+                );
+            }
             let operation_id = command.get("id").and_then(Value::as_str);
             let existing_open_operation = operation_id
                 .map(|operation_id| host.has_operation(operation_id))
@@ -1091,7 +1155,7 @@ impl RuntimeHostRouter {
         if !manager_owned {
             return None;
         }
-        let probe = match self.wait_for_presentation_keeper().await {
+        let probe = match self.wait_for_presentation_keeper(None).await {
             Ok(probe) => probe,
             Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
         };

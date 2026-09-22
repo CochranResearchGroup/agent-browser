@@ -204,7 +204,19 @@
         "warmTarget": { "type": "number", "minimum": 0 },
         "minimumSatisfied": { "type": "boolean" },
         "warmTargetSatisfied": { "type": "boolean" },
-        "unavailableReason": { "type": ["string", "null"] }
+        "unavailableReason": { "type": ["string", "null"] },
+        "allocation": {
+          "type": "object",
+          "required": ["state", "browserCount", "occupiedDisplayCount", "maximumDisplays", "maximumBrowsersPerDisplay"],
+          "properties": {
+            "state": { "enum": ["available", "pending", "full", "over_target", "unavailable"] },
+            "browserCount": { "type": "integer", "minimum": 0 },
+            "occupiedDisplayCount": { "type": "integer", "minimum": 0 },
+            "maximumDisplays": { "type": "integer", "minimum": 0 },
+            "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },

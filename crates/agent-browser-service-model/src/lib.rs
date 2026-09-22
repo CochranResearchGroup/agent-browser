@@ -49,7 +49,8 @@ pub use browser_capability_registry::{
     browser_profile_compatibility_matches, BrowserCapabilityRegistry,
 };
 pub use browser_desktop_selector::{
-    select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
+    select_browser_desktop_with_capacity, select_least_crowded_browser_desktop,
+    BrowserDesktopAssignment, BrowserDesktopRoute,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,

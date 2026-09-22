@@ -546,7 +546,13 @@ impl BrowserRuntimeSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("route_keeper_authority_begin_failed:{error}"))?;
         let current = load_route_keeper_authority_document(&transaction)?;
-        if current != *expected {
+        let effect_transition_preserves_demand =
+            next.requested_ready_slots == expected.requested_ready_slots;
+        let mut current_normalized = current.clone();
+        if effect_transition_preserves_demand {
+            current_normalized.requested_ready_slots = expected.requested_ready_slots;
+        }
+        if current_normalized != *expected {
             return Err("route_keeper_authority_compare_and_swap_conflict".to_string());
         }
         if current.connection_catalog != next.connection_catalog
@@ -577,11 +583,17 @@ impl BrowserRuntimeSqliteStore {
                 return Err("route_keeper_authority_generation_regression".to_string());
             }
         }
+        let mut persisted = next.clone();
+        if effect_transition_preserves_demand {
+            persisted.requested_ready_slots = current.requested_ready_slots;
+        }
+        // Revalidate the merged intent against any policy change in this transition.
+        persisted.projection()?;
         save_document(
             &transaction,
             ROUTE_KEEPER_AUTHORITY_DOCUMENT,
             ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
-            next,
+            &persisted,
         )?;
         transaction
             .commit()
@@ -2222,6 +2234,140 @@ mod tests {
             Err("route_keeper_authority_generation_regression".to_string())
         );
         assert_eq!(store.load_route_keeper_authority().unwrap(), current);
+    }
+
+    #[test]
+    fn route_keeper_effect_cas_preserves_concurrent_demand_but_not_other_conflicts() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-demand-cas");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let sessions_before = store.load_session_state().unwrap();
+        let handoffs_before = store.load_handoff_registry().unwrap();
+
+        let empty = store.load_route_keeper_authority().unwrap();
+        let mut base = empty.clone();
+        base.replace_connection_catalog(route_keeper_catalog())
+            .unwrap();
+        base.register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&empty, &base)
+            .unwrap();
+
+        let mut effect_next = base.clone();
+        let (slot_id, start_fence) = match effect_next.next_reconcile_action().unwrap() {
+            agent_browser_service_model::RouteKeeperReconcileAction::Start {
+                slot_id,
+                fence,
+                ..
+            } => (slot_id, fence),
+            other => panic!("expected start action, got {other:?}"),
+        };
+        let mut demand_writer = base.clone();
+        demand_writer.request_ready_slots(2).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&base, &demand_writer)
+            .unwrap();
+
+        store
+            .compare_and_swap_route_keeper_authority(&base, &effect_next)
+            .unwrap();
+        let after_effect = store.load_route_keeper_authority().unwrap();
+        assert_eq!(after_effect.requested_ready_slots, 2);
+        assert_eq!(
+            after_effect.records[&slot_id].phase,
+            agent_browser_service_model::RouteKeeperPhase::Starting
+        );
+        assert_eq!(store.load_session_state().unwrap(), sessions_before);
+        assert_eq!(store.load_handoff_registry().unwrap(), handoffs_before);
+
+        let mut phase_writer = after_effect.clone();
+        phase_writer
+            .record_observing(&slot_id, &start_fence)
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&after_effect, &phase_writer)
+            .unwrap();
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(&after_effect, &phase_writer),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string()),
+            "a stale phase is not an independent intent merge"
+        );
+
+        let demand_snapshot = store.load_route_keeper_authority().unwrap();
+        let mut first_demand_writer = demand_snapshot.clone();
+        first_demand_writer.request_ready_slots(3).unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&demand_snapshot, &first_demand_writer)
+            .unwrap();
+        let mut competing_demand_writer = demand_snapshot.clone();
+        competing_demand_writer.request_ready_slots(1).unwrap();
+        assert_eq!(
+            store.compare_and_swap_route_keeper_authority(
+                &demand_snapshot,
+                &competing_demand_writer
+            ),
+            Err("route_keeper_authority_compare_and_swap_conflict".to_string()),
+            "demand writers must retry from a fresh authority"
+        );
+        assert_eq!(
+            store
+                .load_route_keeper_authority()
+                .unwrap()
+                .requested_ready_slots,
+            3
+        );
+    }
+
+    #[test]
+    fn historical_v4_authority_without_demand_loads_and_cas_replays_zero() {
+        let directory = TempDirectory::new("browser-runtime-route-keeper-demand-v4");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut historical =
+            serde_json::to_value(store.load_route_keeper_authority().unwrap()).unwrap();
+        historical
+            .as_object_mut()
+            .unwrap()
+            .remove("requestedReadySlots");
+        store
+            .connection
+            .execute(
+                "UPDATE state_documents SET json = ?1 WHERE kind = ?2",
+                params![historical.to_string(), ROUTE_KEEPER_AUTHORITY_DOCUMENT],
+            )
+            .unwrap();
+
+        let loaded = store.load_route_keeper_authority().unwrap();
+        assert_eq!(loaded.requested_ready_slots, 0);
+        store
+            .compare_and_swap_route_keeper_authority(&loaded, &loaded)
+            .unwrap();
+        assert_eq!(
+            store
+                .load_route_keeper_authority()
+                .unwrap()
+                .requested_ready_slots,
+            0
+        );
     }
 
     #[test]
