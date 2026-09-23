@@ -18,7 +18,7 @@ Follow the user's requirements, branch-local `AGENTS.md` and policies, [Plan 021
 
 - Worktree: `/home/ecochran76/workspace.local/agent-browser-p211`
 - Branch: `platform/p211-simple-cold-upgrade`
-- Handoff head: `3f458600`
+- Handoff head: `9a03297b`
 - Pull request: draft PR #191
 - Product lane: `PL-PLATFORM`
 - Active plan: P217
@@ -53,3 +53,22 @@ End M0 in `RUNBOOK.md` or a routed evidence note with exact symbols and files, t
 P211 source `9e7c5719` and installed generation `0.28.0-1d808efe0797` proved provider-free qualification, doctor, three disposable cycles, one ready named-profile response, one authenticated opaque handoff, exact close, and obligation-free residue. Commit `131fc5a2` withdrew the integration verdict. Reuse those results only within their stated scope.
 
 Do not add a lease, scheduler, allocator, reconciliation, quarantine, or general desktop framework. Do not build or install a candidate before M1 and M2 are consolidated and focused validation passes. Do not mutate production. Do not integrate PR #191 until every Plan 0217 evidence row is complete.
+
+## Current Stop State
+
+Plan 0217 consumed its one implementation attempt and one repair. Installed
+replacement generation `0.28.0-cd33a6aa46d9`, binary SHA-256
+`cd33a6aa46d90f93b8d7788840a38db781edffd50e8351ffec05917ffe0bf47b`,
+still returns `existing_session_profile_identity_unproven` for the exact
+ordinary no-effect reproducer. Generic profile-lease admission precedes the
+remote-view coordinator's later launch and attribution flow; the passing unit
+fixture did not model that request shape.
+
+Development doctor independently fails because durable inventory retains four
+ready warm displays on `:13` through `:16`, while fresh provider observation
+finds only route 1 on `:24`. Provider preflight refuses mutation at the
+deliberate `route-keeper-runtime` interlock. No provider apply or browser open
+occurred. Resume only with explicit authority either to revise Plan 0217's
+attempt limit for the generic lease-admission seam or to complete the broader
+Plan 0211 route-keeper provider-control dependency. Integration remains
+prohibited.

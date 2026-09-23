@@ -29,6 +29,22 @@ not widened into Plan 0217. One replacement candidate remains authorized for
 the local-attribution repair; external visual acceptance remains gated by the
 provider authority split.
 
+## Turn 435 | 2026-09-22
+
+Replacement checkpoint `9a03297b` installed as development generation
+`0.28.0-cd33a6aa46d9`, binary SHA-256
+`cd33a6aa46d90f93b8d7788840a38db781edffd50e8351ffec05917ffe0bf47b`,
+with production unchanged. The exact ordinary no-effect reproducer still fails
+`existing_session_profile_identity_unproven`. The passing unit seam did not
+model the request shape at generic profile-lease admission, which precedes the
+remote-view coordinator's later launch and attribution flow.
+
+Plan 0217's one implementation plus one repair are consumed. A third repair or
+candidate is not authorized. M1 remains incomplete, and M3 is independently
+gated by the durable-inventory versus fresh-display split plus the deliberate
+`route-keeper-runtime` provider interlock. No browser open or provider apply
+occurred. Integration remains prohibited.
+
 ## Turn 432 | 2026-09-22
 
 P217 M0 isolated the ordinary-path denial before browser or provider effects.
