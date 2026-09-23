@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -15,6 +15,10 @@ Lane: P218
 Predecessor: [Plan 0217](0217-2026-09-22-availability-first-remote-view-reliability.md), superseded because it covered only availability and visual reliability rather than the complete accepted grilling contract
 
 Original design authority: Codex thread `01a0b65d-47f9-7b51-a17b-791ee87769b3`, grilling exchange on 2026-09-19
+
+Audit basis: accepted user and assistant design turns 207 through 349 in the
+original design authority, reconciled against branch head `c627fd4b` on
+2026-09-23
 
 Work items: `CochranResearchGroup/agent-browser#181`, `CochranResearchGroup/agent-browser#183`, and `CochranResearchGroup/agent-browser#195`
 
@@ -66,6 +70,35 @@ acceptance has not passed. Explicit administrative and adversarial Lease
 Authority contracts remain supported, but they are not ordinary runtime
 authority.
 
+The 2026-09-23 source audit found that the branch already contains useful
+provider-free implementations for SQLite defaults, forward-only migration,
+operation and host-generation fencing, route-keeper supervision, capacity
+growth, least-loaded placement, durable admission queueing, cooldown scale-in,
+navigation and handoff recovery, and atomic Desktop Services control
+publication. Those are implementation foundations, not whole-contract
+acceptance.
+
+The same audit found four classes of remaining conformance work:
+
+1. ordinary browser, handoff, lifecycle, monitor, and desktop paths still read
+   JSON Service State, so the SQLite authority boundary is incomplete;
+2. the development provider still represents route-keeper runtime readiness as
+   false, and provider-backed joined startup has not qualified the source
+   foundations;
+3. history compaction, integrity checking, verified online backup and restore,
+   provider-credential access, and full disposable-profile quota mutation are
+   schema or configuration foundations without the accepted operational
+   behavior;
+4. no one frozen installed candidate has passed the joined cold-upgrade,
+   cold-start, failure-injection, external visual, responsive-input, and fresh
+   process-residue matrix.
+
+CodeGraph was not initialized in this worktree during the audit. The findings
+above therefore come from the exact branch diff, known implementation seams,
+tests, and literal contract searches. M0 must produce the authoritative
+machine-readable dependency closure before behavior work begins; this audit is
+not a substitute for that gate.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
@@ -76,13 +109,13 @@ of this plan.
 | --- | --- | --- |
 | G01 | Existing runtime host owns presentation authority | Browser Session Manager calls one typed in-process provider interface. No second daemon or provider database becomes authority. |
 | G02 | No operator-maintained route inventory | The installer stores policy only. The provider deterministically owns route slots, users, credentials, Guacamole connections, and live display observations. |
-| G03 | Legacy route JSON is migration-only | One idempotent installer migration imports valid state, records hashes and typed rejects, archives sources read-only, removes legacy variables, and never dual-writes or falls back. |
-| G04 | One user-private SQLite authority | Browser, profile, session, tab, handoff, operation, presentation intent, configuration, history, and cleanup obligations have one transactional authority. JSON is limited to exports and diagnostic receipts. |
+| G03 | Legacy policy and runtime JSON are migration-only | One idempotent forward-only cold-upgrade migration imports valid user configuration, profile, session, handoff, and history state, records hashes and typed rejects, archives sources read-only, removes old runtime and unit authority plus exact Agent Browser-owned old processes, removes legacy variables, and never dual-writes, restores the old binary, or falls back. Provider route rows, route IDs, display numbers, leases, and connection rows are rebuilt rather than imported as authority. |
+| G04 | One user-private SQLite authority | Ordinary browser, profile, session, tab, handoff, operation, presentation intent, configuration, history, cleanup-obligation, and provider-credential state have one transactional authority. JSON is limited to exports, diagnostic receipts, and migration archives outside the ordinary runtime dependency closure. |
 | G05 | Stale history cannot veto work | Malformed, contradictory, ambiguous, or stale history is preserved diagnostically but cannot prevent a fresh valid browser request. |
 | G06 | Presentation warms before browser launch | Startup reconstructs provider capacity. `minimumReady=1` unlocks service and `warmTarget=4` continues in the background. Readiness is false until one complete Guacamole, XRDP, and display path is usable. |
 | G07 | Ordinary open waits for real capacity | A request waits up to the configured deadline, provisionally 90 seconds. Timeout or real exhaustion returns a typed failure before Chrome launches. |
 | G08 | No hidden infrastructure browser | In-process protocol-level route keepers traverse Guacamole and retain XRDP sessions without Chrome, profiles, tabs, handoffs, or Browser Session Manager records. |
-| G09 | Displays and browsers have deterministic placement | Prefer one browser per display while capacity can grow. At maximum displays, overflow browsers may share the least-loaded healthy display up to configured density. |
+| G09 | Displays and browsers have deterministic placement | Prefer one browser per display while capacity can grow. At the provisional default maximum of six displays, overflow browsers may share the least-loaded healthy display up to the provisional density of four. Both limits are live configuration and remain subject to G33. |
 | G10 | Capacity has bounded queuing | After display and density limits, a configurable bounded queue, provisionally 32, prioritizes active recovery, durable handoff access, then aged FIFO new opens. Duplicate browser/profile requests coalesce. |
 | G11 | Desktop Services owns control | One fenced per-display Desktop Services lease governs handoff activation, focus, maximize, capture, pointer, keyboard, and future desktop automation. Opening another browser transfers control visibly; prior viewers become view-only. |
 | G12 | Handoff identity is durable | One opaque authenticated `/remote-view/<handoff-id>` survives runtime, provider, Guacamole, display, browser, and tab recovery for the same logical session. It ends only by explicit close, configured retention, or a typed unrecoverable condition. |
@@ -94,10 +127,26 @@ of this plan.
 | G18 | SQLite is recoverable | Use durable WAL transactions, integrity checks, one rotating verified online backup, a 96 MiB live database target, and a 128 MiB routine database, WAL, and backup budget. Preserve corrupt databases and record restoration gaps. |
 | G19 | Operations are crash-consistent | Session admission, browser identity, presentation reservation, and handoff identity share one durable operation. Waiting operations do not surprise-launch after restart; begun effects reconcile or compensate; idempotent clients resume by operation ID. |
 | G20 | Privilege is installed once and used only as needed | Initial install may establish one narrowly scoped noninteractive helper. Healthy cold starts make zero privileged calls. Each exact repair records resource, prior observation, action, and postcondition. Shared XRDP is never broadly restarted. |
-| G21 | Disposable retention is bounded | Defaults are 24 inactive hours, 20 retained profiles, and 10 GiB, all live user settings. Oldest inactive disposable sessions expire first; active, controlled, pending, named, and explicitly durable sessions are not evicted. |
-| G22 | Configuration is typed and inspectable | Typed Service configuration and `agent-browser config get/set` own settings. Dashboard configuration remains read-only in this plan. Mutable environment policy is not runtime authority. |
+| G21 | Disposable retention is bounded | Defaults are 24 inactive hours, 20 retained profiles, and 10 GiB, all live user settings. Oldest inactive disposable sessions expire first. Active-viewer, controlled, pending-operation, and named-profile sessions are not evicted. A disposable session has no separate pin state. |
+| G22 | Configuration is typed and inspectable | Typed Service configuration and `agent-browser config get/set` own every accepted capacity, deadline, cooldown, retention, quota, history, and database-budget setting. Dashboard configuration remains read-only in this plan. Mutable environment policy is not runtime authority; environment variables are limited to immutable process bootstrap such as runtime identity and database location. |
 | G23 | Valid user instructions are availability-first | Ordinary named-profile open cannot consult or be denied by legacy lease admission, historical owner proof, quarantine, cleanup obligations, or equivalent denial-first metadata. Only current concrete failures may deny it. |
 | G24 | Development acceptance precedes production | Implement and validate in the isolated development runtime. Production, external ingress publication, formal release, and merge require separate authority after accepted development evidence. |
+| G25 | Provider credentials follow the SQLite authority | Generated provider credentials are stored only in the user-private SQLite authority and are projected transiently into the user runtime directory or container secret mount. Transient secret files are removed on shutdown; rebuilt route-user credentials may rotate without changing handoff identity. |
+| G26 | Runtime generations fence every effect | Each runtime-host start claims a monotonically increasing generation. Provider effects, browser effects, callbacks, operation completion, and recovery commits require the current generation plus operation ID; stale generations cannot commit. |
+| G27 | Browser placement is stable | Prefer unused healthy displays before sharing the least-loaded healthy display. A browser keeps its display binding during ordinary operation and is not routinely migrated for load balancing; only bounded failure recovery may rebind it. |
+| G28 | Extra capacity scales in safely | Only an empty, exact-reference-free display above `warmTarget` may retire after the configurable cooldown, provisionally 10 minutes. A final browser, handoff, viewer, operation, and keeper reference check precedes the effect. |
+| G29 | Limit changes converge without eviction | Valid configuration updates commit transactionally, enter history, and take effect without reinstall or restart. Lowering a limit below current usage reports a visible over-target state, admits no worsening work, and converges through ordinary release without killing browsers or viewers. |
+| G30 | Status and doctor expose reconciliation | Report configured versus observed capacity, keeper health, display generations, browser counts per display, pending operations, queue depth, Desktop Services control ownership, handoff recovery, migration receipt, database integrity and size, resource pressure, and privileged repair receipts. Credentials and raw provider URLs remain redacted. |
+| G31 | Repeated opens are idempotent | Repeated or concurrent `remote_view_open` for the same logical session and tab returns and activates one existing handoff and coalesces under one operation ID. A genuinely new logical tab gets a distinct handoff; explicit session closure makes prior handoffs terminal. |
+| G32 | Recovery URL means committed top-level navigation | Persist a URL only after Chrome reports committed top-level navigation, including operator-driven navigation. Ignore provisional redirects, subframes, and bootstrap pages; retain bounded redirect history and recover the final committed top-level URL. |
+| G33 | Launch obeys live resource pressure | Even below display and density limits, each browser launch passes current memory, process, and disk admission. Pressure rejection is typed and does not disturb existing browsers, displays, or viewers. Development stress evidence must validate or lower the provisional density of four. |
+| G34 | Provider route state is derived | Agent Browser-owned Guacamole database rows, users, connections, sharing profiles, route IDs, display numbers, and leases are disposable derived infrastructure. Cold upgrade rebuilds the owned namespace from SQLite policy and retained operator inputs rather than migrating provider rows. |
+| G35 | Live viewer authority is observational | An authenticated remote-view client connection and its live Guacamole tunnel, with bounded heartbeat and disconnect detection, are the only authority that a viewer is active. Stored URLs, tabs, database flags, and previously opened pages are not active-viewer proof. |
+| G36 | Named and disposable handoffs differ | Named-profile handoffs have no default time expiry. Disposable-profile handoffs expire after the configured inactivity period, provisionally 24 hours; expiry closes the logical session, makes its handoffs terminal, reference-checks and deletes its disposable profile, and retains compact history. Browser reclamation alone preserves either kind of recoverable handoff and profile. |
+| G37 | Disposable quotas fail cleanly | Count and byte limits are enforced with oldest-inactive-first cleanup. If protected sessions prevent sufficient cleanup, reject the new disposable request with a typed quota or low-disk result. Never delete named profiles or protected disposable sessions to admit new work. |
+| G38 | Disposable promotion is deferred | There is no disposable-session pinning or profile-promotion implementation in this plan. Until a future explicit promotion feature exists, every disposable profile remains subject to G36 and G37. |
+| G39 | Doctor is read-only | `doctor` observes and recommends but never repairs. Startup and requests may invoke the same narrowly typed automatic reconciler, and an explicit `repair` command may request it, but neither path gains arbitrary commands or broad restart authority. |
+| G40 | Waiting work does not surprise-launch | Queued operation identity and outcome persist for idempotency, but work that was only waiting becomes retryable after restart and launches nothing until the client resumes it. Effects already begun reconcile or compensate under G19 and G26. |
 
 ## Architectural Prohibitions
 
@@ -118,6 +167,19 @@ The following are compile-time or deterministic source-contract failures:
 7. Browser launch can precede capacity reservation and readiness proof.
 8. Safety, custody, reconciliation, or ownership terminology is renamed while
    preserving an ordinary-path veto.
+9. Provider credentials become authoritative in environment variables,
+   editable JSON, generated units, or persistent secret files outside SQLite.
+10. `doctor` performs mutation, or any repair path can execute arbitrary
+    privileged commands or broadly restart shared XRDP.
+11. Routine balancing moves a healthy browser between displays, lowering a
+    configured limit kills existing work, or scale-in skips the final exact
+    reference check.
+12. A stored page, tab, URL, or database flag substitutes for a live
+    authenticated viewer connection.
+13. A merely queued pre-restart request launches a browser without client
+    resumption.
+14. A disposable handoff survives its configured expiry or quota cleanup by
+    acquiring an undeclared pin or promotion state.
 
 Keep the extracted Lease Authority crate and explicit administrative,
 adversarial, and future multi-tenant contracts buildable in their own scope.
@@ -129,7 +191,7 @@ ordinary runtime and have an owner, reason, and deletion or archival decision.
 
 - Freeze the executable ordinary-open, provider, persistence, handoff,
   recovery, and desktop-control dependency closures and install architecture
-  guards for G01 through G24 before further behavior patches.
+  guards for G01 through G40 before further behavior patches.
 - Remove runtime JSON and environment authority through one forward-only
   migration, then join Browser Session Manager and presentation provider to one
   SQLite-backed runtime-host interface.
@@ -146,7 +208,7 @@ ordinary runtime and have an owner, reason, and deletion or archival decision.
 
 Included:
 
-- every G01 through G24 invariant;
+- every G01 through G40 invariant;
 - removal or compile-time quarantine of conflicting ordinary-path code;
 - typed runtime, provider, persistence, configuration, handoff, capacity,
   recovery, desktop-control, history, and migration interfaces;
@@ -170,9 +232,9 @@ Excluded:
 ### M0 | Closed-world conformance map and red architecture gates | 200,000 tokens
 
 Reconcile inherited P217 usage, branch and installed identities, then map every
-G-row to current symbols, state stores, tests, and evidence. Add failing
-architecture checks for every currently violated prohibition and a
-machine-readable G01 through G24 coverage manifest. Freeze one dependency graph
+G01 through G40 row to current symbols, state stores, tests, and evidence. Add
+failing architecture checks for every currently violated prohibition and a
+machine-readable G01 through G40 coverage manifest. Freeze one dependency graph
 for ordinary open through handoff recovery. Exit only when omissions and
 violations are mechanically visible; do not repair behavior in this milestone.
 
@@ -181,16 +243,20 @@ violations are mechanically visible; do not repair behavior in this milestone.
 Remove legacy denial and JSON or environment authority from the compiled
 ordinary dependency closure. Complete one SQLite-backed runtime-host interface,
 one forward-only migration, typed configuration, operation journaling,
-integrity and backup handling, history budgets, and compaction. Preserve exact
-cleanup protection outside admission. Exit when architectural guards and
-provider-free authority, migration, corruption, and compaction fixtures pass.
+provider-credential custody, integrity and backup handling, restore-gap
+reporting, history budgets, and compaction. Expose every accepted mutable
+setting, not only presentation capacity fields. Preserve exact cleanup
+protection outside admission. Exit when architectural guards and provider-free
+authority, migration, corruption, backup, restore, configuration, quota, and
+compaction fixtures pass.
 
 ### M2 | Provider, capacity, and launch integration | 400,000 tokens
 
 Remove the development route-keeper interlock and join the in-process
 Guacamole keeper to readiness, minimum and warm capacity, bounded queueing,
-placement, density, privilege receipts, and browser launch. Prove no Chrome
-launch on capacity timeout and no hidden infrastructure browser. Exit when
+placement, stable bindings, density, live resource-pressure admission,
+over-target convergence, safe scale-in, privilege receipts, and browser launch.
+Prove no Chrome launch on capacity timeout and no hidden infrastructure browser. Exit when
 three isolated zero-process cold starts each produce one ready route within the
 measured provisional deadline and the injected timeout launches no Chrome.
 
@@ -198,10 +264,12 @@ measured provisional deadline and the injected timeout launches no Chrome.
 
 Complete stable handoff resolution, last-committed-URL recovery, eager active
 and lazy dormant recovery, single replacement fencing, and the shared Desktop
-Services control lease. Prove runtime, provider, Guacamole, route, display,
-browser, and tab failure cases preserve the required identity and never replay
-page effects. Exit with provider-free failure injection plus one installed
-joined recovery pass.
+Services control lease. Add repeated-open coalescing, authenticated live-viewer
+authority, named versus disposable expiry, quota cleanup, and restart-safe
+waiting-operation behavior. Prove runtime, provider, Guacamole, route, display,
+browser, tab, viewer-disconnect, quota, and restart failure cases preserve the
+required identity and never replay page effects. Exit with provider-free
+failure injection plus one installed joined recovery pass.
 
 ### M4 | Frozen visual-operational acceptance | 400,000 tokens
 
@@ -210,13 +278,15 @@ route IDs, displays, configuration, and acceptance denominator. Test every
 frozen route from authenticated external desktop and mobile viewports using
 synthetic content. Require current complete pixels, clean desktop, correct
 browser and z-order, focus, pointer, keyboard, scroll, resize, control transfer,
-reconnect, and every M3 restart case. Preserve first failures. Permit one
-consolidated repair and one bounded repeat of affected cases.
+reconnect, one real forward-only cold upgrade, and every M3 restart case.
+Measure the provisional 90-second readiness deadline and density of four under
+development pressure. Preserve first failures. Permit one consolidated repair
+and one bounded repeat of affected cases.
 
 ### M5 | Qualification and integration handoff | 200,000 tokens
 
-Run validation selected from the complete P218 diff, verify every G-row and
-prohibition against the frozen candidate, update all public and governing
+Run validation selected from the complete P218 diff, verify every G01 through
+G40 row and prohibition against the frozen candidate, update all public and governing
 documentation, and perform one closed-world review limited to the contract and
 repair regressions. Publish a remote checkpoint and update draft PR #191. Do
 not merge, install production, release, or remove the worktree.
@@ -227,7 +297,7 @@ The primary agent owns the critical path, contract ledger, branch, candidate,
 runtime custody, evidence adjudication, and verdict. No worker is required.
 If delegation becomes useful, admit at most one provider-free source worker
 and one read-only acceptance-evidence reviewer with disjoint files and explicit
-stop conditions. Workers cannot revise G01 through G24, mutate shared runtime,
+stop conditions. Workers cannot revise G01 through G40, mutate shared runtime,
 or declare acceptance.
 
 ## Controls And Stop Rules
@@ -254,7 +324,7 @@ or declare acceptance.
 
 ## Evidence And Exit
 
-Maintain one evidence table keyed by G01 through G24. Each row records source
+Maintain one evidence table keyed by G01 through G40. Each row records source
 commit, test or artifact, installed generation when applicable, result,
 failure preservation, and reviewer disposition. Evidence from different
 candidates cannot be combined for final acceptance.
