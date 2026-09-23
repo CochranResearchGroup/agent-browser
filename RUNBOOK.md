@@ -9,6 +9,22 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P217](docs/dev/plans/0217-2026-09-22-availability-first-remote-view-reliability.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 432 | 2026-09-22
+
+P217 M0 isolated the ordinary-path denial before browser or provider effects.
+Installed generation `0.28.0-1d808efe0797` has four ready warm provider routes
+and three projected warm-idle Service slots, but an exact named-profile dry run
+fails `existing_session_profile_identity_unproven` because released historical
+session metadata overrides the active shared-local `default` profile. The
+[M0 cut line](docs/dev/notes/0217-2-2026-09-22-m0-cut-line.md) binds source,
+binary, provider and inventory identities, records the red/green focused
+reproducer, freezes the restart recovery contract, and identifies the M1 source
+cut. The source repair now lets explicit shared-local remote-view selection
+ignore unproved historical custody only when no current profile process is
+proved; exact uncertain cleanup remains untouched. The visual baseline is still
+incomplete because the installed generation returns no handoff and direct X
+capture was correctly refused. No runtime or provider mutation occurred.
+
 ## Turn 431 | 2026-09-22
 
 Plan 0217 supersedes Plan 0211 and inherits its branch, draft PR #191, evidence,
@@ -180,6 +196,25 @@ both lanes in 720 seconds. No provider, browser, Service State,
 installed-runtime, production, ingress, or release effect occurred. Next:
 implement the provider-free configured Guacamole connector adoption join while
 preserving the exact predecessor-exit proof and retained route identity.
+
+## Turn 433 | 2026-09-22
+
+Plan 0217 M0 and M1 establish the ordinary named-profile failure at source
+baseline `8995ee0d` and move availability-first admission to the narrow shared
+local `remote_view_open` seam. Historical session and owner records no longer
+reserve an explicitly selected shared-local profile when no current process is
+proved for that profile. Proved current processes, exact uncertain resources,
+and cleanup-owned state remain protected. The regression failed before the
+repair with `existing_session_profile_identity_unproven` and now passes.
+
+Focused profile and remote-view groups, formatting, strict workspace Clippy,
+documentation contracts, links, policy wiring, and the docs build pass. The
+729-second comprehensive Rust run retained one non-green support result in an
+untouched Lease Authority process-observation test. The exact test passed on
+rerun, and the entire Lease Authority compartment then passed 118 tests. The
+M0 cut-line note preserves the original result and the bounded reruns. This is
+source qualification only. No browser, route, provider, Service State,
+installed-runtime, production, ingress, or release effect occurred.
 
 ## Turn 420 | 2026-09-20
 

@@ -542,6 +542,13 @@ a current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, capability, or
 recovery-token input.
 
+Historical session, owner-generation, and cleanup-obligation records do not
+reserve an explicitly selected shared-local profile when no current process is
+proved for it. The ordinary path attempts a fresh lane and reports a concrete
+process, profile-lock, or capacity failure if the physical resource is actually
+unavailable. Preserve exact uncertain resources from cleanup; do not run lease
+repair merely to make this ordinary open admissible.
+
 On host restart, configured route keepers recover retained routes only after
 proving their earlier host processes exited. Interrupted adoption also requires
 proof that the interrupted adopter exited. Recovery verifies every retained

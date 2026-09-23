@@ -6428,6 +6428,11 @@ healthy browser for that profile, gives Alice an independent tab, and returns a
 durable opaque `handoffUrl`. If no durable profile is selected, Agent Browser
 uses a session-scoped disposable profile. No route ID, display ID, transaction
 revision, census digest, capability, or recovery token is required.
+Historical session, owner-generation, or cleanup-obligation metadata cannot
+reserve an explicitly selected shared-local profile when no current process is
+proved for that profile. Agent Browser attempts a fresh lane and reports a
+concrete process, profile-lock, or capacity failure if the physical resource is
+actually unavailable. Exact uncertain resources remain protected from cleanup.
 
 `remote-view open` selects a service-owned remote-view route, launches or
 reuses a remote-headed browser on the bound display, opens the requested tab,

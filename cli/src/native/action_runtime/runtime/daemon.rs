@@ -759,9 +759,17 @@ pub(crate) fn apply_existing_session_profile_selection(
     let Some(session_id) = session_id else {
         return Ok(None);
     };
-    let binding = state
-        .runtime_owner_binding_for_session(&session_id)
-        .map_err(|_| "existing_session_profile_identity_ambiguous".to_string())?;
+    let binding = match state.runtime_owner_binding_for_session(&session_id) {
+        Ok(binding) => binding,
+        Err(_) => {
+            if let Some(selection) =
+                apply_availability_first_remote_view_profile_selection(options, command, state)?
+            {
+                return Ok(Some(selection));
+            }
+            return Err("existing_session_profile_identity_ambiguous".to_string());
+        }
+    };
     let retained_observation = state
         .sessions
         .get(&session_id)
@@ -810,6 +818,11 @@ pub(crate) fn apply_existing_session_profile_selection(
     if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
     {
         return Ok(Some(ProfileSelectionReason::ExistingOwner));
+    }
+    if let Some(selection) =
+        apply_availability_first_remote_view_profile_selection(options, command, state)?
+    {
+        return Ok(Some(selection));
     }
     if let Some(ProfileSelectionReason::ExplicitProfile) =
         apply_shared_local_session_profile_continuity(options, command, &session_id, state)?
@@ -939,6 +952,76 @@ pub(crate) fn apply_existing_session_profile_selection(
         options.executable_path = None;
     }
     Ok(Some(ProfileSelectionReason::ExistingOwner))
+}
+
+/// Select an explicitly requested shared-local profile for an ordinary remote
+/// view before historical runtime-owner records are consulted. Current process
+/// evidence still routes through the retained-browser path. Stale or ambiguous
+/// metadata therefore cannot reserve the named profile, while an actual live
+/// browser is never duplicated merely to bypass its lifecycle protection.
+fn apply_availability_first_remote_view_profile_selection(
+    options: &mut LaunchOptions,
+    command: &Value,
+    state: &ServiceState,
+) -> Result<Option<ProfileSelectionReason>, String> {
+    if command.get("action").and_then(Value::as_str) != Some("remote_view_open") {
+        return Ok(None);
+    }
+    let Some(profile_id) = optional_command_or_params_string(command, "runtimeProfile")
+        .or_else(|| optional_command_or_params_string(command, "profileId"))
+    else {
+        return Ok(None);
+    };
+    let Some(profile) = state.profiles.get(&profile_id) else {
+        return Ok(None);
+    };
+    if !shared_local_profile_use_allowed(profile, &profile_id, command) {
+        return Ok(None);
+    }
+    let current_profile_process_exists = state.browsers.values().any(|browser| {
+        browser.profile_id.as_deref() == Some(profile_id.as_str())
+            && browser.pid.is_some_and(|pid| {
+                crate::runtime_profile::runtime_process_assessment(Some(&profile_id), pid)
+                    .preserves_evidence()
+            })
+    });
+    if current_profile_process_exists {
+        return Ok(None);
+    }
+    if options
+        .runtime_profile
+        .as_deref()
+        .is_some_and(|requested| requested != profile_id)
+    {
+        return Err("explicit_profile_conflicts_with_availability_first_remote_view".to_string());
+    }
+    let user_data_dir = profile
+        .user_data_dir
+        .as_deref()
+        .map(std::path::PathBuf::from)
+        .unwrap_or(crate::runtime_profile::runtime_profile_user_data_dir(
+            &profile_id,
+        )?);
+    if let Some(requested_path) = options.profile.as_deref() {
+        let requested_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
+            std::path::Path::new(requested_path),
+        )?;
+        let profile_digest =
+            agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)?;
+        if requested_digest != profile_digest {
+            return Err(
+                "explicit_profile_conflicts_with_availability_first_remote_view".to_string(),
+            );
+        }
+    }
+    (options.runtime_profile, options.profile) =
+        retained_profile_launch_identity(&profile_id, profile);
+    if profile.browser_build == Some(BrowserBuild::StockChrome)
+        && command.get("executablePath").is_none()
+    {
+        options.executable_path = None;
+    }
+    Ok(Some(ProfileSelectionReason::ExplicitProfile))
 }
 
 /// Admit the exact prelaunch session created for an authenticated principal's

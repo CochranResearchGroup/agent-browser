@@ -764,6 +764,13 @@ Browser can reap after the session ends. The ordinary path selects a healthy
 current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, or recovery-token input.
 
+Historical session, owner-generation, and cleanup-obligation records do not
+reserve an explicitly selected shared-local profile when no current process is
+proved for it. The ordinary path attempts a fresh lane and reports a concrete
+process, profile-lock, or capacity failure if the physical resource is actually
+unavailable. It does not delete or reclaim an exact uncertain resource to make
+that attempt succeed.
+
 On host restart, configured route keepers recover retained routes only after
 proving their earlier host processes exited. Interrupted adoption also requires
 proof that the interrupted adopter exited. Recovery verifies every retained

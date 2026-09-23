@@ -98,6 +98,7 @@ reuse after those contracts are frozen.
 - [Shared runtime effect custody policy feedback](2026-09-14-runtime-effect-custody-policy-feedback.md)
 - [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 - [Plan 0217 execution handoff](0217-1-2026-09-22-execution-handoff.md)
+- [Plan 0217 M0 executable cut line](0217-2-2026-09-22-m0-cut-line.md)
 
 [Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset

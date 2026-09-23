@@ -5158,6 +5158,18 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         bind_native_service_tab_command(&command, &daemon).is_err(),
         "unsettled cleanup still blocks reopen"
     );
+    let mut remote_view_open = command.clone();
+    remote_view_open["action"] = json!("remote_view_open");
+    let mut remote_view_options = LaunchOptions::default();
+    let remote_view_admission = apply_service_profile_selection(
+        &mut remote_view_options,
+        &remote_view_open,
+        Some(&daemon.session_id),
+    );
+    assert!(
+        remote_view_admission.is_ok(),
+        "availability-first remote view must admit a fresh working lane without treating historical cleanup custody as service authority: {remote_view_admission:?}"
+    );
     let _ = fs::remove_dir_all(home);
 }
 

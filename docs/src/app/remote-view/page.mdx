@@ -41,6 +41,13 @@ digest, hash, capability, or recovery token. A successful response includes a
 durable opaque <code>handoffUrl</code> and
 <code>operatorVisible.state=ready</code>.
 
+Historical session, owner-generation, and cleanup-obligation records do not
+reserve an explicitly selected shared-local profile when no current process is
+proved for it. The ordinary path attempts a fresh lane and reports a concrete
+process, profile-lock, or capacity failure if the physical resource is actually
+unavailable. It preserves exact uncertain resources instead of reclaiming them
+to make the request succeed.
+
 The selected route must provide `publicOperatorUrl` for the authenticated
 dashboard origin. If it is absent, the open has no durable handoff URL. Agent
 Browser does not rewrite a provider or Guacamole origin into the dashboard-only
