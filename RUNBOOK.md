@@ -9,6 +9,26 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P217](docs/dev/plans/0217-2026-09-22-availability-first-remote-view-reliability.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 434 | 2026-09-22
+
+The first Plan 0217 candidate installed as development generation
+`0.28.0-2bd55895e03c` with production unchanged, current isolated skill, and
+three passing disposable browser cycles. Its ordinary no-effect remote-view
+reproducer retained the original profile denial because the first regression
+carried identity fields absent from the real CLI request. The one allowed M1
+repair now derives the daemon-session local principal and evaluates it through
+the existing shared-local policy; the corrected field-free regression, all
+nine shared-local tests, formatting, strict Clippy, and diff hygiene pass.
+
+Doctor separately fails because fresh observation sees only route 1 on `:24`
+while durable inventory retains four ready routes on `:13` through `:16`.
+Provider plan and staging completed, but preflight correctly refuses mutation
+at the hard-coded `route-keeper-runtime` interlock. No provider apply occurred.
+That provider-control join belongs to unfinished Plan 0211 architecture and is
+not widened into Plan 0217. One replacement candidate remains authorized for
+the local-attribution repair; external visual acceptance remains gated by the
+provider authority split.
+
 ## Turn 432 | 2026-09-22
 
 P217 M0 isolated the ordinary-path denial before browser or provider effects.

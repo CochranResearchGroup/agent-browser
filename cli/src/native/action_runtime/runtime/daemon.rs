@@ -762,9 +762,12 @@ pub(crate) fn apply_existing_session_profile_selection(
     let binding = match state.runtime_owner_binding_for_session(&session_id) {
         Ok(binding) => binding,
         Err(_) => {
-            if let Some(selection) =
-                apply_availability_first_remote_view_profile_selection(options, command, state)?
-            {
+            if let Some(selection) = apply_availability_first_remote_view_profile_selection(
+                options,
+                command,
+                state,
+                &session_id,
+            )? {
                 return Ok(Some(selection));
             }
             return Err("existing_session_profile_identity_ambiguous".to_string());
@@ -819,9 +822,12 @@ pub(crate) fn apply_existing_session_profile_selection(
     {
         return Ok(Some(ProfileSelectionReason::ExistingOwner));
     }
-    if let Some(selection) =
-        apply_availability_first_remote_view_profile_selection(options, command, state)?
-    {
+    if let Some(selection) = apply_availability_first_remote_view_profile_selection(
+        options,
+        command,
+        state,
+        &session_id,
+    )? {
         return Ok(Some(selection));
     }
     if let Some(ProfileSelectionReason::ExplicitProfile) =
@@ -963,6 +969,7 @@ fn apply_availability_first_remote_view_profile_selection(
     options: &mut LaunchOptions,
     command: &Value,
     state: &ServiceState,
+    session_id: &str,
 ) -> Result<Option<ProfileSelectionReason>, String> {
     if command.get("action").and_then(Value::as_str) != Some("remote_view_open") {
         return Ok(None);
@@ -975,7 +982,20 @@ fn apply_availability_first_remote_view_profile_selection(
     let Some(profile) = state.profiles.get(&profile_id) else {
         return Ok(None);
     };
-    if !shared_local_profile_use_allowed(profile, &profile_id, command) {
+    let attributed_command;
+    let policy_command =
+        if command.get("clientSubjectId").is_none() && command.get("identityAssurance").is_none() {
+            attributed_command = {
+                let mut value = command.clone();
+                value["clientSubjectId"] = Value::String(format!("cli-session:{session_id}"));
+                value["identityAssurance"] = Value::String("self-declared".to_string());
+                value
+            };
+            &attributed_command
+        } else {
+            command
+        };
+    if !shared_local_profile_use_allowed(profile, &profile_id, policy_command) {
         return Ok(None);
     }
     let current_profile_process_exists = state.browsers.values().any(|browser| {

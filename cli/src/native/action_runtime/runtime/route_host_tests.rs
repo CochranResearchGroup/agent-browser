@@ -5160,6 +5160,14 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
     );
     let mut remote_view_open = command.clone();
     remote_view_open["action"] = json!("remote_view_open");
+    remote_view_open
+        .as_object_mut()
+        .unwrap()
+        .remove("clientSubjectId");
+    remote_view_open
+        .as_object_mut()
+        .unwrap()
+        .remove("identityAssurance");
     let mut remote_view_options = LaunchOptions::default();
     let remote_view_admission = apply_service_profile_selection(
         &mut remote_view_options,
