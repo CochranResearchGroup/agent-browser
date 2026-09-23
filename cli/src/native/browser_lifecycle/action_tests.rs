@@ -208,7 +208,7 @@ fn navigation_observation_resolves_exact_current_owner_browser_alias() {
         browser_family: Some("chrome".to_string()),
     };
     let profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
     let process_digest = crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
     let owner = ProfileOwner {
         owner_id: "owner-current".to_string(),

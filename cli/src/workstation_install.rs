@@ -22,7 +22,6 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{exit, Child, Command, Output, Stdio};
 
-mod current_selection;
 mod retention_hold;
 
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";

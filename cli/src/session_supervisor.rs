@@ -112,18 +112,6 @@ pub(crate) struct RuntimeHostSupervisorObservation {
     pub(crate) reachable_stream_ports: Vec<u16>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum RecoverHostRequest {
-    DryRun,
-    Apply {
-        expected_plan_digest: String,
-    },
-    Resume {
-        transaction_id: String,
-        expected_revision: u64,
-    },
-}
-
 pub(crate) fn validate_manifest(manifest: &SessionSupervisorManifest) -> Result<(), String> {
     if manifest.schema_version != SUPERVISOR_SCHEMA_VERSION {
         return Err(format!(
@@ -282,28 +270,6 @@ fn run_session_supervisor_inner(args: &[String]) -> Result<Value, String> {
     if operation == "run-host" {
         return run_supervised_host(&paths);
     }
-    if operation == "recover-host" {
-        return match parse_recover_host_request(args, base)? {
-            RecoverHostRequest::DryRun => {
-                crate::runtime_host_supervisor_takeover::plan_supervisor_takeover()
-                    .and_then(|plan| serde_json::to_value(plan).map_err(|error| error.to_string()))
-            }
-            RecoverHostRequest::Apply {
-                expected_plan_digest,
-            } => crate::runtime_host_supervisor_takeover::apply_supervisor_takeover(
-                &expected_plan_digest,
-            )
-            .and_then(|outcome| serde_json::to_value(outcome).map_err(|error| error.to_string())),
-            RecoverHostRequest::Resume {
-                transaction_id,
-                expected_revision,
-            } => crate::runtime_host_supervisor_takeover::resume_supervisor_takeover(
-                &transaction_id,
-                expected_revision,
-            )
-            .and_then(|outcome| serde_json::to_value(outcome).map_err(|error| error.to_string())),
-        };
-    }
     let session = args
         .get(base + 3)
         .map(String::as_str)
@@ -372,97 +338,6 @@ fn parse_install_request(
     };
     validate_install_request(&request)?;
     Ok(request)
-}
-
-fn parse_recover_host_request(args: &[String], base: usize) -> Result<RecoverHostRequest, String> {
-    let mut dry_run = false;
-    let mut apply = false;
-    let mut resume = false;
-    let mut expected_plan_digest = None;
-    let mut transaction_id = None;
-    let mut expected_revision = None;
-    let mut index = base + 3;
-    while index < args.len() {
-        match args[index].as_str() {
-            "--dry-run" => dry_run = true,
-            "--apply" => apply = true,
-            "--resume" => resume = true,
-            "--expected-plan-digest" => {
-                index += 1;
-                expected_plan_digest = Some(
-                    args.get(index)
-                        .filter(|value| !value.starts_with("--"))
-                        .cloned()
-                        .ok_or_else(|| {
-                            "--expected-plan-digest requires a SHA-256 value".to_string()
-                        })?,
-                );
-            }
-            "--transaction-id" => {
-                index += 1;
-                transaction_id = Some(
-                    args.get(index)
-                        .filter(|value| !value.starts_with("--"))
-                        .cloned()
-                        .ok_or_else(|| "--transaction-id requires a value".to_string())?,
-                );
-            }
-            "--expected-revision" => {
-                index += 1;
-                expected_revision = Some(
-                    args.get(index)
-                        .filter(|value| !value.starts_with("--"))
-                        .ok_or_else(|| "--expected-revision requires a value".to_string())?
-                        .parse::<u64>()
-                        .map_err(|_| "--expected-revision must be an integer".to_string())?,
-                );
-            }
-            "--json" => {}
-            unknown => return Err(format!("unknown session supervisor option: {unknown}")),
-        }
-        index += 1;
-    }
-    if usize::from(dry_run) + usize::from(apply) + usize::from(resume) != 1 {
-        return Err(
-            "recover-host requires exactly one of --dry-run, --apply, or --resume".to_string(),
-        );
-    }
-    if resume {
-        if expected_plan_digest.is_some() {
-            return Err("--expected-plan-digest is not valid with --resume".to_string());
-        }
-        return Ok(RecoverHostRequest::Resume {
-            transaction_id: transaction_id
-                .filter(|value| !value.trim().is_empty())
-                .ok_or_else(|| "recover-host --resume requires --transaction-id".to_string())?,
-            expected_revision: expected_revision
-                .ok_or_else(|| "recover-host --resume requires --expected-revision".to_string())?,
-        });
-    }
-    if transaction_id.is_some() || expected_revision.is_some() {
-        return Err(
-            "--transaction-id and --expected-revision are valid only with --resume".to_string(),
-        );
-    }
-    if dry_run {
-        if expected_plan_digest.is_some() {
-            return Err("--expected-plan-digest is valid only with --apply".to_string());
-        }
-        return Ok(RecoverHostRequest::DryRun);
-    }
-    let expected_plan_digest = expected_plan_digest.ok_or_else(|| {
-        "recover-host --apply requires --expected-plan-digest <sha256>".to_string()
-    })?;
-    if expected_plan_digest.len() != 64
-        || !expected_plan_digest
-            .bytes()
-            .all(|byte| byte.is_ascii_hexdigit())
-    {
-        return Err("recover-host expected plan digest is not a SHA-256 value".to_string());
-    }
-    Ok(RecoverHostRequest::Apply {
-        expected_plan_digest: expected_plan_digest.to_ascii_lowercase(),
-    })
 }
 
 fn validate_install_request(request: &InstallRequest) -> Result<(), String> {
@@ -722,80 +597,7 @@ pub(crate) fn rebind_supervisors_after_accepted_upgrade(
 /// selected generation only while its authenticated ingress receipt is still
 /// current. Every other pre-acceptance state fails closed.
 fn accepted_workstation_selected_executable() -> Option<PathBuf> {
-    let Ok(status) = crate::workstation_install::workstation_upgrade_status_json() else {
-        return None;
-    };
-    let root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT")
-        .map(PathBuf::from)
-        .or_else(dirs::home_dir);
-    let root = root?;
-    let selected = status.get("selectedGenerationId").and_then(Value::as_str)?;
-    let selected_executable = root
-        .join(".local/lib/agent-browser/generations")
-        .join(selected)
-        .join("bin/agent-browser");
-    let Ok(selected_executable) = selected_executable.canonicalize() else {
-        return None;
-    };
-    workstation_status_authorizes_supervisor_rebind(&status).then_some(selected_executable)
-}
-
-fn workstation_status_authorizes_supervisor_rebind(status: &Value) -> bool {
-    if status.get("admissionDraining").and_then(Value::as_bool) == Some(true) {
-        return false;
-    }
-    let accepted = status.get("ready").and_then(Value::as_bool) == Some(true)
-        && status
-            .pointer("/readiness/runtimeConvergenceReady")
-            .and_then(Value::as_bool)
-            == Some(true);
-    if accepted {
-        return true;
-    }
-
-    let Some(selected) = status.get("selectedGenerationId").and_then(Value::as_str) else {
-        return false;
-    };
-    status
-        .pointer("/latestTransaction/state")
-        .and_then(Value::as_str)
-        == Some("failed_preserved_old_generation")
-        && status
-            .pointer("/latestTransaction/terminalResult")
-            .and_then(Value::as_str)
-            == Some("old_generation_preserved")
-        && status
-            .pointer("/latestTransaction/oldGenerationId")
-            .and_then(Value::as_str)
-            == Some(selected)
-        && status
-            .pointer("/readiness/payloadReady")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && status
-            .pointer("/readiness/selectedGenerationReady")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && status
-            .pointer("/dashboardIngress/dashboardIngressReady")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && status
-            .pointer("/dashboardIngress/operatorJourneyReady")
-            .and_then(Value::as_bool)
-            == Some(true)
-        && status
-            .pointer("/dashboardIngress/selectedBackend/generationId")
-            .and_then(Value::as_str)
-            == Some(selected)
-        && status
-            .pointer("/dashboardIngress/presentationReceipt/state")
-            .and_then(Value::as_str)
-            == Some("ready")
-        && status
-            .pointer("/dashboardIngress/presentationReceipt/coordinatorGeneration")
-            .and_then(Value::as_str)
-            == Some(selected)
+    None
 }
 
 fn legacy_supervisor_is_active(

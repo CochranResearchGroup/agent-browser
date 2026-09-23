@@ -636,7 +636,7 @@ fn test_existing_session_inherits_exact_current_owner_profile_before_default() {
             .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo-fedex".to_string(),
         profile_identity_digest: profile_digest,
@@ -896,7 +896,7 @@ fn test_existing_session_rejects_explicit_profile_conflict() {
     fs::create_dir_all(&owned_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-books".to_string(),
-        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
             &owned_path,
         )
         .unwrap(),
@@ -1065,7 +1065,7 @@ fn authenticated_principal_recovers_exact_orphaned_owner_without_foreign_bypass(
     fs::create_dir_all(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "orphaned-owner-odollo-fedex".to_string(),
-        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
             &user_data_dir,
         )
         .unwrap(),
@@ -1313,7 +1313,7 @@ fn authenticated_principal_recovers_exact_released_terminal_projection() {
     fs::create_dir_all(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "released-owner-odollo-fedex".to_string(),
-        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
             &user_data_dir,
         )
         .unwrap(),
@@ -1418,7 +1418,7 @@ fn exact_terminal_custom_profile_can_reopen_after_proven_close() {
     let user_data_dir = home.join("custom-profile");
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-provider-owner".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),
@@ -1506,7 +1506,7 @@ fn exact_terminal_owner_without_live_projection_allows_explicit_profile_relaunch
         .user_data_dir;
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-provider-owner".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),
@@ -1866,8 +1866,7 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
         .user_data_dir;
     fs::create_dir_all(&current_user_data_dir).unwrap();
     let legacy_profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&legacy_user_data_dir)
-            .unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&legacy_user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-legacy-route-owner".to_string(),
         profile_identity_digest: legacy_profile_digest.clone(),
@@ -2002,8 +2001,7 @@ fn terminal_legacy_route_owner_allows_stable_runtime_profile_relaunch() {
 
     let mut partially_migrated = state.clone();
     let current_profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&current_user_data_dir)
-            .unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&current_user_data_dir).unwrap();
     let mut current_owner = crate::runtime_owner_transfer::edit_registry_fixture(
         &mut partially_migrated.runtime_owner_registry,
     )
@@ -2078,7 +2076,7 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
     let user_data_dir = home.join("bill-profile");
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_identity_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner_generation = 17;
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "terminal-bill-owner".to_string(),
@@ -2120,7 +2118,7 @@ fn exact_terminal_owner_allows_shared_local_relaunch_with_historical_principal_b
             principal_id: "principal:registered-old-owner".to_string(),
             profile_id: profile_id.to_string(),
             profile_identity_digest:
-                agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir)
+                crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir)
                     .unwrap(),
             capability_id: "profile-capability-v1:historical".to_string(),
             provenance:
@@ -2186,7 +2184,7 @@ fn test_registered_work_lease_preserves_profile_selection_after_owner_exit() {
     let user_data_dir = home.join(profile_id);
     fs::create_dir_all(&user_data_dir).unwrap();
     let profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo-fedex".to_string(),
         profile_identity_digest: profile_digest.clone(),
@@ -2310,7 +2308,7 @@ fn test_existing_session_rejects_contradictory_browser_profile() {
     fs::create_dir_all(&owned_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-odollo".to_string(),
-        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(
             &owned_path,
         )
         .unwrap(),
@@ -3842,7 +3840,7 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
             .unwrap_err();
     assert_eq!(error, "lease_authority_unsupported_schema");
 
-    let profile_identity_digest = agent_browser_lease_authority::canonical_profile_identity_digest(
+    let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
         &crate::runtime_profile::resolve_profile(
             Some(profile_path.to_str().unwrap()),
             Some("acs-profile"),
@@ -5062,8 +5060,7 @@ fn cold_native_navigation_acquires_child_permission_before_target_binding() {
         RuntimeLifecycleRecord, RuntimeOwnerRegistry,
     };
     let digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&home.join("profile"))
-            .unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&home.join("profile")).unwrap();
     snapshot.runtime_owner_registry = RuntimeOwnerRegistry::from_owner(ProfileOwner {
         owner_id: "closed-owner".into(),
         profile_identity_digest: digest.clone(),
@@ -5194,10 +5191,8 @@ fn configured_runtime_alias_preserves_exact_owner_selection() {
         .user_data_dir;
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "p160-alias-owner".into(),
-        profile_identity_digest: agent_browser_lease_authority::canonical_profile_identity_digest(
-            &path,
-        )
-        .unwrap(),
+        profile_identity_digest: crate::runtime_profile::canonical_profile_identity_digest(&path)
+            .unwrap(),
         state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
         owner_generation: 4,
         browser_id: "session:carrier-evidence".into(),
@@ -5295,7 +5290,7 @@ fn existing_session_selection_recovers_stable_browser_from_legacy_owner_alias() 
     };
     let process_digest = crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
     let profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-legacy-alias".to_string(),
         profile_identity_digest: profile_digest.clone(),
@@ -5480,7 +5475,7 @@ fn shared_local_live_collision_selects_the_valid_profile_for_fresh_connection() 
     let profile_path = unique_socket_dir("shared-local-live-collision-profile");
     fs::create_dir_all(&profile_path).unwrap();
     let profile_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
     let owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "historical-valid-profile-owner".to_string(),
         profile_identity_digest: profile_digest.clone(),
@@ -5809,7 +5804,7 @@ fn authenticated_cold_access_plan_route_without_preexisting_session_passes_profi
     assert!(matches!(decision, ServiceProfileLeaseGate::Ready));
 
     let profile_identity_digest =
-        agent_browser_lease_authority::canonical_profile_identity_digest(&user_data_dir).unwrap();
+        crate::runtime_profile::canonical_profile_identity_digest(&user_data_dir).unwrap();
     let retained_owner = crate::runtime_owner_transfer::ProfileOwner {
         owner_id: "owner-stale-transfer-generation-57".to_string(),
         profile_identity_digest: profile_identity_digest.clone(),

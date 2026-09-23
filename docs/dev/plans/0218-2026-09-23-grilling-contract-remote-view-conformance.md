@@ -285,6 +285,45 @@ declared UTF-8-bytes-divided-by-four proxy, one verified reuse avoided an
 estimated 15,977 ingestion tokens. No canonical fallback or capsule ambiguity
 occurred. These are ingestion estimates, not exact context or billing data.
 
+The second capsule-pilot admission also passed `pnpm test:policy-capsule` and
+reused the capsule without a canonical fallback, re-read trigger, or observed
+behavioral defect. Across two verified loads, the pilot loaded an estimated
+1,146 capsule tokens instead of 33,100 canonical-policy tokens, for estimated
+gross ingestion savings of 31,954 tokens. This remains a byte-based estimate,
+not exact model-context or billing measurement.
+
+The downstream CLI closure continued through custody checkpoint `c1a99cf8`,
+which removed the hot workstation upgrade authority and deleted 21,775 lines.
+The following uncommitted closure packet removed the protected authority
+process entry points, runtime-admission command injection, authority-selected
+profile routing, reviewed legacy process-tree shutdown, retained-owner launch
+repair, runtime-owner Service State sidecar loading and writes, and more stale
+command and daemon integration. It also restored owner-free close and snapshot
+behavior and replaced the retained resource tree with a diagnostic-only
+surface.
+
+Compiler waves 8 through 14 remain retained under
+`/tmp/agent-browser-p218-m1-wave-<n>`. Wave 13 exited 101 with 58 groups and 85
+occurrences after the entry-point cut; its raw JSON SHA-256 is
+`52ba5ea3500f8367be22ff31c17f30b5fe01f36a526a61d2dd0ad662718988ca`.
+Wave 14 exited 101 with 80 groups and 114 occurrences after the process-tree,
+retained-launch, and Service State sidecar cut. It resolved 15 wave-13 groups,
+surfaced 37 downstream groups, repeated 43, and regressed none. Its raw JSON
+SHA-256 is
+`3c4095db4381800f548c65e0e77f4461618a4fb8868e5e6288d41084d9c2f9bb`.
+The 80 groups classify as 43 mechanical removals, 8 neutral type extractions,
+and 29 primary architecture decisions. The CLI therefore remains
+intentionally uncompilable, and the M1 downstream closure milestone is not
+accepted.
+
+The goal-level runtime reported 507,008 tokens before closeout, exceeding the
+450,000-token M1 allocation and consuming the requested 15 percent closeout
+reserve. Work stopped at that explicit budget boundary. The next bounded
+packet must start from the wave-14 worklist, remove the remaining launch,
+remote-headed, health, HTTP, MCP, and dashboard authority surfaces, and avoid
+restoring placeholder lease or runtime-owner APIs merely to make the compiler
+green.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease

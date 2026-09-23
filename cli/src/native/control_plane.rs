@@ -8,9 +8,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, oneshot};
 
 use super::action_runtime::runtime::{handle_close, handle_recovery_close, CloseBehavior};
-use super::action_runtime::{
-    service_profile_lease_admission, DaemonState, ServiceProfileLeaseGate,
-};
+use super::action_runtime::DaemonState;
 use super::actions::execute_command;
 use super::cancellation::CancellationToken as RunningJobCancel;
 use super::desktop_evidence_action::redact_desktop_evidence_stream_result;
@@ -862,152 +860,14 @@ enum SchedulerLeaseDecision {
 }
 
 fn scheduler_profile_lease_gate(
-    request: &mut ControlRequest,
-    session_id: &str,
+    _request: &mut ControlRequest,
+    _session_id: &str,
 ) -> SchedulerLeaseDecision {
-    let waited_ms = request
-        .profile_lease_wait_started_at
-        .map(|started_at| started_at.elapsed().as_millis() as u64);
-    match service_profile_lease_admission(&mut request.command, session_id, waited_ms) {
-        Ok(ServiceProfileLeaseGate::Ready) => SchedulerLeaseDecision::Ready,
-        Ok(ServiceProfileLeaseGate::Reject { error, .. }) => SchedulerLeaseDecision::Reject(error),
-        Ok(ServiceProfileLeaseGate::Wait {
-            retry_after_ms,
-            profile_id,
-            conflict_session_ids,
-        }) => {
-            let first_wait = request.profile_lease_wait_started_at.is_none();
-            if first_wait {
-                request.profile_lease_wait_started_at = Some(Instant::now());
-            }
-            request.profile_lease_wait_profile_id = Some(profile_id.clone());
-            request.profile_lease_wait_conflict_session_ids = conflict_session_ids.clone();
-            request.profile_lease_wait_retry_after_ms = Some(retry_after_ms);
-            SchedulerLeaseDecision::Wait {
-                retry_after_ms,
-                profile_id,
-                conflict_session_ids,
-                first_wait,
-            }
-        }
-        Err(error) => SchedulerLeaseDecision::Reject(error),
-    }
+    SchedulerLeaseDecision::Ready
 }
 
 fn service_browser_id(session_id: &str) -> String {
     format!("session:{}", session_id)
-}
-
-fn persist_process_exited_browser_health(
-    state: &DaemonState,
-) -> Option<crate::runtime_owner_transfer::ProfileOwner> {
-    if let Ok(repository) = LockedServiceStateRepository::default_json() {
-        return persist_process_exited_browser_health_in_repository(&repository, state)
-            .unwrap_or(None);
-    }
-    None
-}
-
-fn persist_process_exited_browser_health_in_repository(
-    repository: &impl ServiceStateRepository,
-    state: &DaemonState,
-) -> Result<Option<crate::runtime_owner_transfer::ProfileOwner>, String> {
-    let observed_at = current_timestamp();
-    let boot_epoch = crate::process_identity::current_boot_epoch();
-    repository.mutate(|service_state| {
-        let id = service_browser_id(&state.session_id);
-        let previous = service_state.browsers.get(&id).cloned();
-        let host = previous
-            .as_ref()
-            .map(|browser| browser.host)
-            .unwrap_or(ServiceBrowserHost::LocalHeaded);
-        let (pid, cdp_endpoint) = state
-            .browser
-            .as_ref()
-            .map(|mgr| (mgr.browser_pid(), Some(mgr.get_cdp_url().to_string())))
-            .unwrap_or((None, None));
-        let last_error = pid.map(|pid| format!("Browser process {} exited", pid));
-
-        let mut browser = BrowserProcess {
-            id: id.clone(),
-            boot_epoch: boot_epoch.clone(),
-            profile_id: previous
-                .as_ref()
-                .and_then(|browser| browser.profile_id.clone()),
-            host,
-            health: ServiceBrowserHealth::ProcessExited,
-            display_isolation: previous
-                .as_ref()
-                .and_then(|browser| browser.display_isolation.clone()),
-            display_name: previous
-                .as_ref()
-                .and_then(|browser| browser.display_name.clone()),
-            display_allocation_id: previous
-                .as_ref()
-                .and_then(|browser| browser.display_allocation_id.clone()),
-            pid,
-            cdp_endpoint,
-            view_streams: previous
-                .as_ref()
-                .map(|browser| browser.view_streams.clone())
-                .unwrap_or_default(),
-            active_session_ids: vec![state.session_id.clone()],
-            tab_handles: previous
-                .as_ref()
-                .map(|browser| browser.tab_handles.clone())
-                .unwrap_or_default(),
-            last_error,
-            last_health_observation: None,
-            attachability: None,
-            record_provenance: previous
-                .as_ref()
-                .and_then(|browser| browser.record_provenance.clone()),
-        };
-        let observation_details = browser_health_observation_details(&browser, None);
-        apply_browser_health_observation(&mut browser, Some(&observation_details));
-        record_browser_health_changed_event(service_state, &id, previous.as_ref(), &browser);
-        let revoked_owner_and_session =
-            crate::native::service_principal::authenticated_session_work_authority(
-                service_state,
-                &state.session_id,
-                &observed_at,
-            )
-            .and_then(|_| {
-                let revoked_owner =
-                    service_state.revoke_process_exited_session_owner(&state.session_id)?;
-                let session = service_state.sessions.get(&state.session_id).cloned()?;
-                Some((revoked_owner, session))
-            });
-        if let Some(display_allocation_id) = browser.display_allocation_id.as_ref() {
-            if let Some(allocation) = service_state
-                .display_allocations
-                .get_mut(display_allocation_id)
-            {
-                allocation.state = "orphaned".to_string();
-                allocation.owner_browser_id = Some(id.clone());
-                allocation.owner_session_id = Some(state.session_id.clone());
-                allocation.updated_at = Some(observed_at.clone());
-                allocation.readiness = Some(json!({
-                    "state": "orphaned",
-                    "reason": "browser_process_exited"
-                }));
-            }
-        }
-        remove_browser_operational_record(service_state, &id, Some(&state.session_id));
-        // A dead process and its tabs are terminal, but a current registered
-        // work lease remains the service's authority to relaunch this profile.
-        let mut revoked_owner = None;
-        if let Some((owner, mut session)) = revoked_owner_and_session {
-            session.browser_ids.clear();
-            session.tab_ids.clear();
-            service_state
-                .sessions
-                .insert(state.session_id.clone(), session);
-            service_state.refresh_derived_views();
-            revoked_owner = Some(owner);
-        }
-        Ok(revoked_owner)
-    })
 }
 
 fn service_state_waiting_profile_lease_job_count(service_state: &ServiceState) -> usize {
@@ -2205,7 +2065,7 @@ async fn run_worker(
 
 async fn close_browser(state: &mut DaemonState) {
     if state.browser.is_some() {
-        let close_behavior = shutdown_close_behavior(state.runtime_owner_binding.as_ref());
+        let close_behavior = shutdown_close_behavior();
         if close_behavior == CloseBehavior::Detach {
             if let Some(manager) = state.browser.as_mut() {
                 manager.relinquish_browser_for_handoff();
@@ -2218,35 +2078,11 @@ async fn close_browser(state: &mut DaemonState) {
     }
 }
 
-fn shutdown_close_behavior(
-    _binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
-) -> CloseBehavior {
-    // An explicit daemon stop is terminal. Stale or missing ownership metadata
-    // may be reported during reconciliation, but it cannot turn shutdown into
-    // browser preservation. Cold upgrade relies on this invariant before the
-    // old runtime is replaced.
+fn shutdown_close_behavior() -> CloseBehavior {
     CloseBehavior::CloseBrowser
 }
 
 async fn cleanup_exited_browser(state: &mut DaemonState) {
-    let revoked_owner = if state.browser.is_some() {
-        persist_process_exited_browser_health(state)
-    } else {
-        None
-    };
-    if let Some(revoked_owner) = revoked_owner {
-        // The persisted compare-and-swap already revoked this dead owner.
-        // Approve cleanup of its local process handle, then retain only an
-        // observation claim for the explicit recovery-close transition.
-        if let Some(manager) = state.browser.as_mut() {
-            manager.approve_lifecycle_close();
-        }
-        state.runtime_owner_binding = Some(
-            crate::runtime_owner_transfer::RuntimeOwnerBinding::observation_only(
-                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(&revoked_owner),
-            ),
-        );
-    }
     if state.browser.is_some() {
         state.close_behavior = CloseBehavior::CloseBrowser;
         let _ = handle_recovery_close(state).await;
@@ -3921,8 +3757,7 @@ mod tests {
         let profile_path = home.join(&profile_id);
         std::fs::create_dir_all(&profile_path).unwrap();
         let profile_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
-                .unwrap();
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
         let mut service_state = ServiceState {
             browsers: std::collections::BTreeMap::from([(
                 browser_id.clone(),

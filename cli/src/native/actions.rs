@@ -33,13 +33,10 @@ mod service_trace_tests;
 #[cfg(test)]
 mod state_tests;
 use super::action_runtime::runtime::{
-    active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
-    handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
-    handle_launch, handle_navigate, handle_recovery_close, handle_runtime_handoff_abort,
-    handle_runtime_handoff_finalize, handle_runtime_handoff_prepare, handle_runtime_handoff_resume,
-    handle_runtime_handoff_rollback, handle_snapshot, navigation_challenge_admission,
-    persist_browser_recovery_started_from_persisted_state, persist_current_browser_stale_health,
-    BackendType, CloseBehavior, DaemonState, PendingConfirmation,
+    auto_launch, handle_cdp_attach, handle_cdp_detach, handle_cdp_free_launch, handle_close,
+    handle_external_byop_adopt, handle_launch, handle_navigate, handle_recovery_close,
+    handle_snapshot, navigation_challenge_admission, BackendType, CloseBehavior, DaemonState,
+    PendingConfirmation,
 };
 use super::auth::{
     handle_auth_show, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
@@ -136,7 +133,6 @@ use super::service_access::{
 };
 use super::service_activity::{handle_service_events, handle_service_incident_activity};
 use super::service_authentication_run::handle_service_authentication_run;
-use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_challenge_task::handle_service_challenge_task;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
@@ -175,7 +171,7 @@ use super::service_profile_lifecycle::handle_service_profile_tab_evict;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
-use super::service_resources::{
+use super::service_resources::service_commands::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
 };
@@ -194,7 +190,6 @@ use super::tracing::{
 use super::webdriver::mobile_gestures::{handle_device_list, handle_swipe};
 use crate::native::action_runtime::cancellation::cancellation_error;
 use crate::native::policy::PolicyResult;
-use crate::native::service_health::BrowserRecoveryPersistence;
 use crate::native::state;
 use crate::native::webdriver::backend::WEBDRIVER_UNSUPPORTED_ACTIONS;
 use serde_json::{json, Value};
@@ -212,11 +207,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
     matches!(
         action,
         "" | "launch"
-            | "runtime_handoff_prepare"
-            | "runtime_handoff_resume"
-            | "runtime_handoff_abort"
-            | "runtime_handoff_rollback"
-            | "runtime_handoff_finalize"
             | "cdp_free_launch"
             | "external_byop_adopt"
             | "cdp_attach"
@@ -274,9 +264,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_reconcile"
             | "service_browser_close"
             | "service_browser_repair"
-            | "service_browser_contamination_report"
-            | "service_browser_retirement_plan"
-            | "service_browser_retirement_apply"
             | "service_resources"
             | "service_resources_monitor_summary"
             | "service_resources_write_monitor_summary"
@@ -743,8 +730,7 @@ async fn execute_command_after_navigation_admission(
     }
     let mut cold_owned_launch = false;
     if !skip_launch {
-        let stale_state = detect_browser_stale_state(state).await;
-        let mut needs_launch = stale_state.needs_launch;
+        let mut needs_launch = state.browser.is_none();
         if needs_launch
             && state.browser.is_some()
             && state
@@ -758,34 +744,11 @@ async fn execute_command_after_navigation_admission(
             if state.browser_session_manager_owned {
                 return error_response(&id, "browser_session_managed_browser_unavailable");
             }
-            let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
             if state.browser.is_some() {
-                if let (Some(health), Some(reason_kind), Some(message)) = (
-                    stale_state.health,
-                    stale_state.recovery_reason_kind,
-                    stale_state.message,
-                ) {
-                    recovery_persistence = persist_current_browser_stale_health(
-                        state,
-                        health,
-                        reason_kind,
-                        message,
-                        stale_state.event_details,
-                    );
-                }
                 state.close_behavior = CloseBehavior::CloseBrowser;
                 if let Err(error) = handle_recovery_close(state).await {
                     return error_response(&id, &error);
                 }
-            }
-            if !recovery_persistence.recorded() {
-                recovery_persistence = persist_browser_recovery_started_from_persisted_state(
-                    state,
-                    "Browser relaunch requested from persisted unhealthy state",
-                );
-            }
-            if let BrowserRecoveryPersistence::Blocked(reason) = recovery_persistence {
-                return error_response(&id, &reason);
             }
             if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
@@ -798,11 +761,6 @@ async fn execute_command_after_navigation_admission(
         if let Some(ref mut mgr) = state.browser {
             if mgr.page_count() == 0 {
                 let _ = mgr.ensure_page().await;
-            }
-        }
-        if !state.browser_session_manager_owned {
-            if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
-                return error_response(&id, &mismatch);
             }
         }
     }
@@ -847,11 +805,6 @@ async fn execute_command_after_navigation_admission(
             "title" => handle_title(state).await,
             "content" => handle_content(state).await,
             "evaluate" => handle_evaluate(cmd, state, explicit_service_handle).await,
-            "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
-            "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
-            "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,
-            "runtime_handoff_rollback" => handle_runtime_handoff_rollback(cmd, state).await,
-            "runtime_handoff_finalize" => handle_runtime_handoff_finalize(state).await,
             "close" => handle_close(state).await,
             "snapshot" => handle_snapshot(cmd, state).await,
             "screenshot" => handle_screenshot(cmd, state).await,
@@ -992,10 +945,6 @@ async fn execute_command_after_navigation_admission(
             "service_reconcile" => handle_service_reconcile(cmd).await,
             "service_browser_close" => handle_service_browser_close(cmd, state).await,
             "service_browser_repair" => handle_service_browser_repair(cmd).await,
-            "service_browser_contamination_report" =>
-                handle_service_browser_retirement_command(cmd),
-            "service_browser_retirement_plan" => handle_service_browser_retirement_command(cmd),
-            "service_browser_retirement_apply" => handle_service_browser_retirement_command(cmd),
             "service_resources" => handle_service_resources(cmd).await,
             "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
             "service_resources_write_monitor_summary" => {

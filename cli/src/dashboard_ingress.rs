@@ -77,13 +77,41 @@ pub(crate) struct PresentationEvidence {
     pub(crate) operator_surface_load_result: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum PresentationState {
+    Ready,
+    Converging,
+    Blocked,
+    WrongProvider,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct PresentationReceipt {
+    pub(crate) schema_version: String,
+    pub(crate) receipt_id: String,
+    pub(crate) dashboard_deployment_generation: String,
+    pub(crate) coordinator_generation: String,
+    pub(crate) daemon_generation: String,
+    pub(crate) logical_browser_id: String,
+    pub(crate) process_instance_digest: String,
+    pub(crate) selected_target_generation: u64,
+    pub(crate) selected_target_identity_digest: String,
+    pub(crate) required_stream_provider: String,
+    pub(crate) display_allocation_id: String,
+    pub(crate) geometry_epoch: String,
+    pub(crate) route_generation: u64,
+    pub(crate) guacamole_connection_generation: Option<u64>,
+    pub(crate) authenticated_ingress_probe_at: String,
+    pub(crate) operator_surface_load_result: String,
+    pub(crate) state: PresentationState,
+    pub(crate) reason_codes: Vec<String>,
+}
+
 impl PresentationEvidence {
-    pub(crate) fn from_ready_receipt(
-        receipt: &crate::runtime_adoption::PresentationReceipt,
-    ) -> Result<Self, String> {
-        if receipt.state != crate::runtime_adoption::PresentationState::Ready
-            || !receipt.reason_codes.is_empty()
-        {
+    pub(crate) fn from_ready_receipt(receipt: &PresentationReceipt) -> Result<Self, String> {
+        if receipt.state != PresentationState::Ready || !receipt.reason_codes.is_empty() {
             return Err("dashboard presentation receipt is not ready".to_string());
         }
         Ok(Self {
@@ -119,10 +147,7 @@ impl CandidateOperatorJourney {
         }
     }
 
-    fn into_receipt(
-        self,
-        generation_id: &str,
-    ) -> Result<crate::runtime_adoption::PresentationReceipt, String> {
+    fn into_receipt(self, generation_id: &str) -> Result<PresentationReceipt, String> {
         let journey = self;
         if journey.generation_id != generation_id
             || !journey.authenticated
@@ -173,8 +198,8 @@ impl CandidateOperatorJourney {
                 return Err(format!("dashboard candidate {label} is missing"));
             }
         }
-        Ok(crate::runtime_adoption::PresentationReceipt {
-            schema_version: crate::runtime_adoption::RUNTIME_ADOPTION_SCHEMA_VERSION.to_string(),
+        Ok(PresentationReceipt {
+            schema_version: "agent-browser.presentation-receipt.v1".to_string(),
             receipt_id: evidence.receipt_id,
             dashboard_deployment_generation: evidence.dashboard_deployment_generation,
             coordinator_generation: evidence.coordinator_generation,
@@ -190,7 +215,7 @@ impl CandidateOperatorJourney {
             guacamole_connection_generation: evidence.guacamole_connection_generation,
             authenticated_ingress_probe_at: evidence.authenticated_ingress_probe_at,
             operator_surface_load_result: evidence.operator_surface_load_result,
-            state: crate::runtime_adoption::PresentationState::Ready,
+            state: PresentationState::Ready,
             reason_codes: Vec::new(),
         })
     }
@@ -218,11 +243,11 @@ pub(crate) struct DashboardIngressRegistry {
     #[serde(default)]
     rollback_backend: Option<DashboardBackend>,
     #[serde(default)]
-    last_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
+    last_presentation_receipt: Option<PresentationReceipt>,
     #[serde(default)]
-    fallback_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
+    fallback_presentation_receipt: Option<PresentationReceipt>,
     #[serde(default)]
-    rollback_presentation_receipt: Option<crate::runtime_adoption::PresentationReceipt>,
+    rollback_presentation_receipt: Option<PresentationReceipt>,
 }
 
 impl DashboardIngressRegistry {
@@ -252,9 +277,7 @@ impl DashboardIngressRegistry {
         self.fallback_backend.as_ref()
     }
 
-    pub(crate) fn last_presentation_receipt(
-        &self,
-    ) -> Option<&crate::runtime_adoption::PresentationReceipt> {
+    pub(crate) fn last_presentation_receipt(&self) -> Option<&PresentationReceipt> {
         self.last_presentation_receipt.as_ref()
     }
 
@@ -279,7 +302,7 @@ impl DashboardIngressRegistry {
     pub(crate) fn commit_candidate(
         &mut self,
         journey: CandidateOperatorJourney,
-    ) -> Result<crate::runtime_adoption::PresentationReceipt, String> {
+    ) -> Result<PresentationReceipt, String> {
         let candidate = self
             .candidate_backend
             .as_ref()
@@ -398,7 +421,7 @@ impl DashboardIngressRepository {
         &self,
         expected_revision: u64,
         journey: CandidateOperatorJourney,
-    ) -> Result<crate::runtime_adoption::PresentationReceipt, String> {
+    ) -> Result<PresentationReceipt, String> {
         let _lock = acquire_ingress_lock(&self.path)?;
         let mut registry = load_registry(&self.path)?;
         require_revision(&registry, expected_revision)?;
@@ -674,7 +697,7 @@ pub(crate) fn dashboard_ingress_status_for_path(path: &Path) -> serde_json::Valu
     match repository.load() {
         Ok(registry) => {
             let receipt_ready = registry.last_presentation_receipt().is_some_and(|receipt| {
-                receipt.state == crate::runtime_adoption::PresentationState::Ready
+                receipt.state == PresentationState::Ready
                     && receipt.dashboard_deployment_generation
                         == registry.selected_backend().generation_id
             });
@@ -1936,10 +1959,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(registry.selected_backend(), &candidate);
-        assert_eq!(
-            receipt.state,
-            crate::runtime_adoption::PresentationState::Ready
-        );
+        assert_eq!(receipt.state, PresentationState::Ready);
         assert_eq!(receipt.dashboard_deployment_generation, "generation-new");
         assert_eq!(receipt.required_stream_provider, "rdp_gateway");
         assert!(receipt.reason_codes.is_empty());
@@ -2569,7 +2589,7 @@ mod tests {
         let owner = registry_fixture.owner_records.values_mut().next().unwrap();
         owner.browser_id = "session:historical-source-session".to_string();
         owner.profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_dir).unwrap();
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_dir).unwrap();
         drop(registry_fixture);
 
         let prerequisite = candidate_presentation_bootstrap_prerequisite(&state);

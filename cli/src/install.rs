@@ -1153,26 +1153,10 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     );
     live_dashboard_runtime["dashboardIngress"] =
         crate::dashboard_ingress::dashboard_ingress_status_json();
-    live_dashboard_runtime["workstationUpgrade"] =
-        crate::workstation_install::workstation_upgrade_status_json().unwrap_or_else(|error| {
-            json!({
-                "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
-                "success": false,
-                "state": "unavailable",
-                "error": error,
-            })
-        });
     install_doctor_trace("service_status");
     let service = service_status_probe();
     install_doctor_trace("service_resources");
     let service_resources = service_resources_probe();
-    install_doctor_trace("profile_lease_doctor");
-    let profile_lease_doctor = crate::native::service_profile_lease::doctor_profile_leases(
-        &flags.service_state,
-        &time::OffsetDateTime::now_utc()
-            .format(&time::format_description::well_known::Rfc3339)
-            .unwrap_or_else(|_| "timestamp-unavailable".to_string()),
-    );
     install_doctor_trace("runtime_inventory");
     let runtime_inventory = active_runtime_inventory(
         current_executable
@@ -1216,17 +1200,6 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         runtime_inventory: &runtime_inventory,
         daemon_listener_inventory: &daemon_listener_inventory,
     });
-    issues.extend(profile_lease_doctor.findings.iter().map(|finding| {
-        json!({
-            "code": format!("profile_lease_{}", finding.code),
-            "severity": finding.severity,
-            "message": finding.message,
-            "leaseId": finding.lease_id,
-            "profileId": finding.profile_id,
-            "safeActions": finding.safe_actions,
-            "nextAction": "inspect_profile_lease_doctor",
-        })
-    }));
     issues.extend(workstation_payload_issues(&workstation_payload));
     issues.extend(
         session_supervisors
@@ -1288,7 +1261,6 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "launchConfig": launch_config,
             "service": service,
             "serviceResources": service_resources,
-            "profileLeaseDoctor": profile_lease_doctor,
             "desktopEvidencePolicy": crate::native::desktop_evidence::DesktopEvidenceCoordinator::policy_projection(),
             "remoteViewPrivileges": remote_view_privileges,
             "dashboardRuntime": dashboard_runtime,
@@ -2273,30 +2245,8 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
         crate::session_supervisor::session_supervisor_health_json(),
     );
     health["dashboardIngress"] = crate::dashboard_ingress::dashboard_ingress_status_json();
-    health["profilePolicyMigration"] = crate::native::service_store::default_service_state_path()
-        .and_then(|path| {
-            std::fs::read_to_string(path)
-                .map_err(|error| format!("Could not read Service State for access health: {error}"))
-        })
-        .and_then(|raw| {
-            crate::native::service_state_migration::read_service_state(&raw).map_err(|error| {
-                format!("Could not decode Service State for access health: {error}")
-            })
-        })
-        .ok()
-        .and_then(|state| serde_json::to_value(state.profile_policy_migration()).ok())
-        .unwrap_or(Value::Null);
     #[cfg(not(test))]
     {
-        let workstation_upgrade = crate::workstation_install::workstation_upgrade_status_json()
-            .unwrap_or_else(|error| {
-                json!({
-                    "schemaVersion": "agent-browser.workstation-upgrade-status.v1",
-                    "success": false,
-                    "state": "unavailable",
-                    "error": error,
-                })
-            });
         let daemon_listeners = daemon_listener_inventory(
             current_executable
                 .get("canonicalPath")
@@ -2306,8 +2256,8 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             crate::runtime_multiplicity::runtime_multiplicity_report_from_doctor_inputs(
                 &daemon_listeners,
                 &runtime_inventory,
-                &json!({ "workstationUpgrade": workstation_upgrade.clone() }),
-                &workstation_upgrade,
+                &Value::Null,
+                &Value::Null,
             );
         let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
             .unwrap_or_else(|_| "production".to_string());
@@ -2315,7 +2265,6 @@ pub(crate) fn runtime_health_json() -> serde_json::Value {
             &runtime_environment,
             &health["runtimeMultiplicity"],
         );
-        health["workstationUpgrade"] = workstation_upgrade;
     }
     #[cfg(test)]
     {

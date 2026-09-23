@@ -1,7 +1,6 @@
 #![allow(unused_imports)]
 use super::action_runtime::runtime::{
-    service_browser_id, validate_service_tab_handle_for_daemon, DaemonState,
-    RuntimeHandoffDescriptor, TrackedRequest,
+    service_browser_id, validate_service_tab_handle_for_daemon, DaemonState, TrackedRequest,
 };
 use super::browser_navigation::handle_reload;
 use super::interaction::{

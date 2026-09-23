@@ -7,9 +7,7 @@ use super::proof::remote_view_open_visible_window_proof;
 use super::route_lifecycle::handle_service_remote_view_route_checkout;
 pub(crate) use super::runtime_model::*;
 use super::shared::*;
-use crate::native::action_runtime::runtime::{
-    handle_cdp_free_launch, handle_runtime_handoff_resume, terminate_runtime_browser,
-};
+use crate::native::action_runtime::runtime::{handle_cdp_free_launch, terminate_runtime_browser};
 use crate::native::service_store::JsonServiceStateStore;
 
 const X11_SCENE_READY_ATTEMPTS: usize = 30;
@@ -384,18 +382,12 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
                     return observe_daemon_browser(self.state).await;
                 }
             }
-            handle_runtime_handoff_resume(
-                &json!({
-                    "sourceSession": request.source_session,
-                    "logicalBrowserId": request.logical_browser_id,
-                }),
-                self.state,
-            )
-            .await
-            .map_err(|message| {
-                route_bound_runtime_issue("adopt_retained_browser", message, None)
-            })?;
-            observe_daemon_browser(self.state).await
+            Err(route_bound_runtime_issue(
+                "adopt_retained_browser",
+                "retained browser is not available through the current Browser Session Host"
+                    .to_string(),
+                None,
+            ))
         })
     }
     fn launch_browser(

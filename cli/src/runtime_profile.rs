@@ -2,11 +2,9 @@ use crate::process_identity::{
     assess_process_ownership, observe_process, LegacyProfileProof, ProcessObservation,
     RecordedProcessIdentity, RuntimeProcessAssessment, RuntimeProcessOwnership,
 };
-use agent_browser_lease_authority::{
-    canonical_profile_identity_digest, validate_runtime_profile_name,
-};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::{Read, Write};
@@ -19,6 +17,66 @@ const LEGACY_PROFILE_DIR: &str = "profile";
 const RUNTIME_PROFILES_DIR: &str = "runtime-profiles";
 const USER_DATA_DIR: &str = "user-data";
 const RUNTIME_STATE_FILENAME: &str = "runtime-state.json";
+
+pub(crate) fn validate_runtime_profile_name(name: &str) -> Result<(), String> {
+    if name.is_empty()
+        || !name
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+    {
+        return Err(format!(
+            "Invalid runtime profile '{name}'. Must match /^[a-zA-Z0-9_-]+$/"
+        ));
+    }
+    Ok(())
+}
+
+pub(crate) fn canonical_profile_identity_digest(path: &Path) -> Result<String, String> {
+    if path.as_os_str().is_empty() {
+        return Err("profile identity path is empty".to_string());
+    }
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| format!("Could not resolve profile identity base: {error}"))?
+            .join(path)
+    };
+    let mut existing = absolute.as_path();
+    let mut missing = Vec::new();
+    let canonical_base = loop {
+        match fs::canonicalize(existing) {
+            Ok(canonical) => break canonical,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(
+                    existing
+                        .file_name()
+                        .ok_or_else(|| {
+                            "profile identity has no canonical existing ancestor".to_string()
+                        })?
+                        .to_os_string(),
+                );
+                existing = existing.parent().ok_or_else(|| {
+                    "profile identity has no canonical existing ancestor".to_string()
+                })?;
+            }
+            Err(error) => {
+                return Err(format!("Could not canonicalize profile identity: {error}"));
+            }
+        }
+    };
+    let mut canonical = canonical_base;
+    for component in missing.iter().rev() {
+        canonical.push(component);
+    }
+    let identity = canonical.to_string_lossy().to_string();
+    #[cfg(windows)]
+    let identity = identity.to_lowercase();
+    Ok(format!(
+        "{:x}",
+        Sha256::digest(format!("agent-browser.profile-identity.v1\n{identity}").as_bytes())
+    ))
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ResolvedProfile {

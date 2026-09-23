@@ -66,8 +66,7 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
             let coordination =
                 crate::candidate_coordination::CandidateCoordinationStore::production(&root)
                     .read()?;
-            crate::workstation_install::workstation_upgrade_status_json()
-                .and_then(|workstation| candidate_status_from_sources(workstation, coordination))
+            candidate_status_from_sources(coordination)
         })(),
         "status" => Err(format!(
             "Unknown candidate status argument: {}",
@@ -107,7 +106,6 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
                 }
             }
         }),
-        "recover" => run_candidate_recovery(args, json_output),
         "coordinate" => parse_coordination_arguments(args).and_then(|parsed| {
             let root = crate::workstation_install::workstation_root()?;
             apply_coordination_transition(&root, parsed)
@@ -255,46 +253,6 @@ fn apply_coordination_transition(
     }))
 }
 
-fn run_candidate_recovery(args: &[String], json_output: bool) -> ! {
-    let forwarded = candidate_recovery_args(args, json_output).unwrap_or_else(|error| {
-        if json_output {
-            println!(
-                "{}",
-                serde_json::to_string(&json!({"success": false, "error": error})).unwrap_or_else(
-                    |_| r#"{"success":false,"error":"serialization failed"}"#.into()
-                )
-            );
-        } else {
-            eprintln!("Candidate recovery failed: {error}");
-        }
-        std::process::exit(1);
-    });
-    crate::workstation_install::run_install_transactions_command(&forwarded);
-    std::process::exit(0);
-}
-
-fn candidate_recovery_args(args: &[String], json_output: bool) -> Result<Vec<String>, String> {
-    let action = args
-        .get(2)
-        .map(String::as_str)
-        .ok_or_else(|| "candidate recover requires resume, rollback, or close".to_string())?;
-    if !matches!(action, "resume" | "rollback" | "close") {
-        return Err(format!(
-            "Unknown candidate recovery action: {action}; expected resume, rollback, or close"
-        ));
-    }
-    let mut forwarded = vec![
-        "install".to_string(),
-        "transactions".to_string(),
-        action.to_string(),
-    ];
-    forwarded.extend(args.iter().skip(3).cloned());
-    if json_output && !forwarded.iter().any(|argument| argument == "--json") {
-        forwarded.push("--json".to_string());
-    }
-    Ok(forwarded)
-}
-
 fn print_human_report(report: &Value) {
     println!(
         "Candidate state: {}",
@@ -424,73 +382,17 @@ fn set_install_mode(
     Ok(())
 }
 
-#[cfg(test)]
-fn candidate_status_from_workstation(workstation: Value) -> Result<Value, String> {
-    candidate_status_from_sources(workstation, CoordinationLedger::new("production"))
-}
-
-fn candidate_status_from_sources(
-    workstation: Value,
-    coordination: CoordinationLedger,
-) -> Result<Value, String> {
-    if workstation.get("success").and_then(Value::as_bool) != Some(true) {
-        return Err("workstation status did not return a successful projection".to_string());
-    }
-    let transaction = workstation
-        .get("latestTransaction")
-        .filter(|value| !value.is_null());
-    let classification = transaction
-        .and_then(|value| value.get("classification"))
-        .and_then(Value::as_str);
-    let (observed_state, recommendation, reason_codes) = match classification {
-        Some("active_convergence") => (
-            "install_active",
-            "observe",
-            vec!["active_install_transaction"],
-        ),
-        Some("accepted" | "rollback_window_reviewed") => {
-            ("accepted", "inspect", vec!["candidate_already_accepted"])
-        }
-        Some("failed_operator_required" | "terminal_blocked_open") => (
-            "recovery_required",
-            "recover",
-            vec!["install_transaction_requires_recovery"],
-        ),
-        Some("terminal_rolled_back_history" | "terminal_zero_effect_history") | None => {
-            ("idle", "build", vec!["no_active_candidate"])
-        }
-        Some(_) => (
-            "recovery_required",
-            "inspect",
-            vec!["unknown_install_state"],
-        ),
-    };
-    let alternatives = transaction
-        .and_then(|value| value.get("safeActions"))
-        .cloned()
-        .unwrap_or_else(|| json!(["inspect"]));
-    let active_operation = transaction.and_then(|value| {
-        (observed_state == "install_active" || observed_state == "recovery_required").then(|| {
-            json!({
-                "kind": "install_transaction",
-                "operationId": value.get("transactionId").cloned().unwrap_or(Value::Null),
-                "candidateId": value.get("candidateGenerationId").cloned().unwrap_or(Value::Null),
-                "revision": value.get("revision").cloned().unwrap_or(Value::Null),
-                "fencingGeneration": Value::Null,
-            })
-        })
-    });
-
+fn candidate_status_from_sources(coordination: CoordinationLedger) -> Result<Value, String> {
     Ok(json!({
         "schemaVersion": ADVISORY_SCHEMA_VERSION,
         "success": true,
-        "observedState": observed_state,
-        "recommendation": recommendation,
-        "alternatives": alternatives,
+        "observedState": "idle",
+        "recommendation": "build",
+        "alternatives": ["inspect"],
         "consequences": ["no_effect_performed"],
         "integrityPreconditions": [],
-        "reasonCodes": reason_codes,
-        "activeOperation": active_operation,
+        "reasonCodes": ["no_active_candidate"],
+        "activeOperation": coordination.active(),
         "artifactReuseEligibility": {
             "eligible": false,
             "reason": "no_candidate_manifest_supplied"
@@ -498,7 +400,6 @@ fn candidate_status_from_sources(
         "rebuildReasons": [],
         "receiptLocators": [],
         "buildProvenance": build_provenance(),
-        "workstationUpgrade": workstation,
         "coordinationLedger": coordination,
     }))
 }

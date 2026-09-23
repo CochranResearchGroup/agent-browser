@@ -911,11 +911,8 @@ fn require_runtime_host_admission_for_launch() -> Result<(), String> {
 }
 
 fn unsafe_claim_any_allows_daemon_reuse(auth_token_available: bool) -> bool {
-    auth_token_available
-        && matches!(
-            crate::native::service_lease_mode::profile_lease_mode_from_env(),
-            Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
-        )
+    let _ = auth_token_available;
+    false
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {

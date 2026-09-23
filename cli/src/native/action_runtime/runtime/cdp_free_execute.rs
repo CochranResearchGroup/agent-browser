@@ -372,13 +372,7 @@ pub(crate) fn validate_service_tab_handle_route_for_current_session(
     validate_service_tab_handle_route(handle, session_id, None)
 }
 pub(crate) fn service_tab_handle_browser_id(state: &DaemonState) -> String {
-    state
-        .runtime_owner_binding
-        .as_ref()
-        .map(|binding| binding.claim.logical_browser_id.trim())
-        .filter(|browser_id| !browser_id.is_empty())
-        .map(str::to_string)
-        .unwrap_or_else(|| service_browser_id(&state.session_id))
+    service_browser_id(&state.session_id)
 }
 
 fn retained_service_tab_browser_id<'a>(

@@ -4265,11 +4265,10 @@ mod tests {
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-transferred-owner";
-        let profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
-                profile_path,
-            ))
-            .unwrap();
+        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(profile_path),
+        )
+        .unwrap();
         let browser_id = "session:last30days-facebook--last30days-facebook";
         let session_name = "handoff-17959ea3e226ee61";
         let owner = ProfileOwner {
@@ -4399,11 +4398,10 @@ mod tests {
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-incompatible-ready-owner";
-        let profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
-                profile_path,
-            ))
-            .unwrap();
+        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(profile_path),
+        )
+        .unwrap();
         let browser_id = "session:retained-owner";
         let owner = ProfileOwner {
             owner_id: "owner-ready".to_string(),
@@ -5864,11 +5862,10 @@ mod tests {
         };
 
         let profile_path = "/tmp/agent-browser-access-plan-terminal-profile";
-        let profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
-                profile_path,
-            ))
-            .unwrap();
+        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(profile_path),
+        )
+        .unwrap();
         let owner = ProfileOwner {
             owner_id: "owner-terminal".to_string(),
             profile_identity_digest: profile_identity_digest.clone(),

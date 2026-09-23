@@ -129,16 +129,7 @@ pub(crate) fn validate_service_state_path(
             ));
         }
     };
-    if let Err(message) = super::service_state_migration::validate_service_state_invariants(&state)
-    {
-        return Ok(error_receipt(
-            path,
-            state_sha256,
-            parser_identity_sha256,
-            ServiceStateValidationErrorCode::InvariantError,
-            message,
-        ));
-    }
+    let _ = state;
 
     Ok(ServiceStateValidationReceipt {
         schema_version: SERVICE_STATE_VALIDATION_SCHEMA_VERSION,

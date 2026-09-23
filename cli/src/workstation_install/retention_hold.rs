@@ -124,7 +124,9 @@ fn change(
     } else if release {
         return Err("generation_retention_hold_missing".into());
     }
-    let now = super::runtime_adoption_timestamp();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|error| format!("generation_retention_timestamp_failed: {error}"))?;
     let hold = Hold {
         schema_version: "agent-browser.generation-retention.v1".into(),
         generation_id: id.into(),

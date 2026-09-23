@@ -621,10 +621,6 @@ where
 }
 
 async fn cleanup_failed_owned_launch(state: &mut DaemonState) -> Result<Value, String> {
-    if state.runtime_owner_binding.is_some() {
-        return super::navigation::handle_close(state).await;
-    }
-
     let runtime_profile = state
         .browser
         .as_ref()
