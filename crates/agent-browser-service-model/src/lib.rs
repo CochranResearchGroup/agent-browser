@@ -24,7 +24,6 @@ mod presentation_request_queue;
 mod presentation_scale_in;
 mod principal_provenance;
 mod profile_access;
-mod profile_lease;
 mod profile_lifecycle;
 mod profile_policy_migration;
 mod profile_readiness;
@@ -139,12 +138,6 @@ pub use profile_access::{
     ProfilePolicyRevisionDiff, ProfilePolicyTarget, ServiceProfileAccessDecision,
     ServiceProfileAccessPolicy, PROFILE_ACCESS_DECISION_SCHEMA_V1, PROFILE_ACCESS_POLICY_SCHEMA_V1,
     PROFILE_CHILD_ACCESS_SCHEMA_V1,
-};
-pub use profile_lease::{
-    ProfileLeaseDoctorReport, ProfileLeaseFinding, ProfileLeaseReconcilePlan,
-    ProfileLeaseReconcileReceipt, ProfileLeaseRecord, ProfileLeaseTransition,
-    PROFILE_LEASE_RECONCILE_PLAN_SCHEMA_VERSION, PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION,
-    PROFILE_LEASE_SCHEMA_VERSION,
 };
 pub use profile_lifecycle::{
     register_profile_eviction_authorization, ProfileLifecycleAuthorization,
