@@ -34,7 +34,6 @@ mod profile_reset_receipt;
 mod profile_seeding;
 mod request_provenance;
 mod route_keeper;
-mod runtime_owner_projection;
 mod service_authentication_run;
 mod service_challenge_task;
 mod service_state;
@@ -192,10 +191,6 @@ pub use route_keeper::{
     RouteKeeperStopDisposition, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
-};
-pub use runtime_owner_projection::{
-    ProfileRuntimeAuthority, RuntimeControlPlaneAuthority, RuntimeLaneAuthority,
-    RuntimeLifecycleAuthoritySummary, RuntimeLifecycleBootEpochObservation, RuntimeResourceLane,
 };
 pub use service_authentication_run::{
     authentication_run_map_is_empty, cancel_authentication_run,
