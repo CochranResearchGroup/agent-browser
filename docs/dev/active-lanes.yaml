@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: e9ea799c
+    checkpoint: 819cf4c1
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
     validation_status: P218 M1 cut 1 is in progress; the Service model Cargo edge is removed, the frozen replacement contract and cut-specific guard pass their self-test, compiler wave 1 retains 7 groups and 76 occurrences, and five authority-coupled groups remain before the package can compile
-    validation_ref: e9ea799c
+    validation_ref: 819cf4c1
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
