@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -490,6 +490,46 @@ batch of accepted leaf edits. A second causal error group in the same surface
 triggers reclassification from mechanical removal to primary-owned design; it
 does not start an unbounded edit and compile loop.
 
+#### M1 Execution Efficiency Controls
+
+- Treat the remaining `ServiceState` excision as one primary-owned packet with
+  one outcome: remove its Lease Authority and runtime-owner state and
+  operations, run one compact compiler wave, and leave one clean custody
+  checkpoint. Do not fragment that packet into per-method commits or
+  documentation-only continuations.
+- Admit the packet only when the live cumulative allowance can cover the
+  implementation, one compiler wave, reconciliation, and a 20 percent reserve
+  for focused validation, documentation, and clean checkpointing. A successor
+  session, worker, renamed packet, or revised prompt does not reset usage.
+- Read the full required policy set once at packet start. Carry a short
+  source-linked checklist in subsequent handoffs and re-read full policy only
+  when scope, effect class, authority, or validation obligations change.
+- Use CodeGraph for the initial structural cut and sync it immediately after a
+  deletion checkpoint. Do not repeat structural discovery with grep or broad
+  file reads; reserve literal search for forbidden names, configuration, and
+  guard evidence.
+- Between compiler waves, use the cut-specific architecture guard, formatting,
+  and literal no-reference checks. Run Cargo only after one substantial
+  coherent batch, not after each leaf deletion. Preserve the complete raw JSON
+  outside model context and review only the compact manifest plus, when
+  necessary, one exact retained diagnostic.
+- Preserve compact manifests, worklists, hashes, exit status, and reproduction
+  commands in the plan or another tracked evidence index. Raw compiler JSON
+  may remain in an untracked artifact directory, but a temporary locator alone
+  is not durable evidence and must not be the only continuation record.
+- Extend `p218-compiler-diagnostics.mjs` when a known deleted-product-surface
+  consequence is misclassified as a mechanical import. Do not spend primary
+  reasoning repeatedly correcting a deterministic classification gap.
+- Spawn workers only after the primary freezes exact disjoint diagnostic
+  groups and write scopes. Give economical workers the compact manifest,
+  replacement contract, exact files, focused verifier, and stop rule. Do not
+  delegate another broad inventory, `ServiceState`, Cargo manifests, migration
+  boundaries, or acceptance judgment.
+- Complete the default-product Lease Authority closure before starting SQLite
+  configuration, backup, compaction, provider, or session-lifecycle behavior
+  batches. Those remain in M1 but are separate causal packets with their own
+  acceptance evidence.
+
 ### M2 | Provider, capacity, and launch integration | 400,000 tokens
 
 Remove the development route-keeper interlock and join the in-process
@@ -562,6 +602,10 @@ reconciliation decision.
 
 - Start execution only after current cumulative P217 usage is reconciled
   against the inherited ceiling.
+- At every packet start and material checkpoint, read the live cumulative goal
+  counter and reserve 20 percent of the packet allowance for validation and
+  closeout. Do not start an indivisible critical-path packet when it cannot fit
+  with that reserve.
 - One implementation attempt and one consolidated repair are allowed per
   milestone. A filename, exception, renamed authority, or passing narrow test
   does not reset an attempt.
