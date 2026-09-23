@@ -61,8 +61,13 @@ replacement generation `0.28.0-cd33a6aa46d9`, binary SHA-256
 `cd33a6aa46d90f93b8d7788840a38db781edffd50e8351ffec05917ffe0bf47b`,
 still returns `existing_session_profile_identity_unproven` for the exact
 ordinary no-effect reproducer. Generic profile-lease admission precedes the
-remote-view coordinator's later launch and attribution flow; the passing unit
-fixture did not model that request shape.
+remote-view coordinator's later launch flow, but request rewriting is not the
+root cause. The exact missed branch is
+`runtime_owner_binding_for_session("default") == Ok(None)`: the new helper is
+called for binding errors and present bindings, but not absent bindings. The
+absent-binding branch converts retained historical session metadata into the
+denial. The passing fixture constructed an owner binding and exercised the
+wrong branch.
 
 Development doctor independently fails because durable inventory retains four
 ready warm displays on `:13` through `:16`, while fresh provider observation

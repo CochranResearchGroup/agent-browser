@@ -45,6 +45,23 @@ gated by the durable-inventory versus fresh-display split plus the deliberate
 `route-keeper-runtime` provider interlock. No browser open or provider apply
 occurred. Integration remains prohibited.
 
+## Turn 436 | 2026-09-22
+
+Read-only diagnosis identified the exact M1 miss. Installed failure provenance
+preserves action `remote_view_open`, lane `default`, and profile `default`; the
+active shared-local policy grants profile use. Development Service State has no
+`default` browser or PID. Its historical `default` session resolves runtime
+owner binding as `Ok(None)`. The availability-first helper was wired only for
+binding-error and binding-present paths, so the absent-binding path reaches
+`existing_session_profile_identity_unproven` without consulting it. The green
+fixture constructed an owner binding and covered the wrong branch.
+
+This materially narrows the next repair to the binding-absent branch and its
+true regression shape. No source, runtime, browser, provider, or ingress effect
+was performed because Plan 0217's implementation and repair allowance remains
+consumed. The provider route-keeper interlock remains the second independent
+acceptance gate.
+
 ## Turn 432 | 2026-09-22
 
 P217 M0 isolated the ordinary-path denial before browser or provider effects.
