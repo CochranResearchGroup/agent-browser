@@ -233,6 +233,20 @@ The cut-specific guard still names only `service_state.rs`. No compiler wave
 followed this deletion; `ServiceState` is the sole remaining direct source
 group and owns the next packet's architectural decision.
 
+The next primary-owned source cut removes the remaining typed Lease Authority,
+principal-registry, and runtime-owner state, methods, persistence wrappers, and
+authority-only tests from `service_state.rs`. The cut removes 2,193 lines and
+adds no replacement authority surface. The cut-specific architecture gate now
+passes with no findings. Compiler wave 4 at
+`/tmp/agent-browser-p218-m1-wave-4` exited 101 with 4 groups: one mechanical
+stale export of `RuntimeOwnerPersistenceParts` and three primary architecture
+groups for deleted profile-lease schema and receipt surfaces. Compared with
+wave 3, 2 groups resolved, 4 are new, none repeated, and none regressed. Its
+raw JSON SHA-256 is
+`9cd2d9d7e5c5b3d82f941bae1822291e0b28466c48e3e02db3b125f100f5178a`.
+The packet stops at the second causal group as required; the Service model does
+not yet compile and M1 is not accepted.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease

@@ -57,8 +57,8 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: P218 plan v9 narrows the remaining Service State excision to one budget-admitted primary packet with one compiler wave and a 20 percent closeout reserve; checkpoint 2ce55e07 leaves Service State as the sole cut-specific source finding
-    validation_ref: 2ce55e07
+    validation_status: The primary Service State authority family is removed and the cut-specific architecture gate passes; compiler wave 4 stops at four downstream groups, so the Service model remains noncompiling and M1 remains open
+    validation_ref: WORKTREE
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
