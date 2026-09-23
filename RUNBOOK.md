@@ -9,6 +9,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 441 | 2026-09-23
+
+Plan 0218 M1 source checkpoint `c326a161` deletes the Service-model
+runtime-owner projection module and all associated `ServiceState` projection
+methods. The default Service model no longer exports owner, attestation,
+lifecycle, resource-lane, or session-binding projections. This removed 703
+lines and reduced the cut-specific guard from three source files to two.
+
+Principal continuity and Service State remain the final Service-model source
+groups. CLI callers are intentionally unresolved until their legacy product
+surfaces are deleted, so the package and CLI are not compilation-qualified and
+no third Cargo wave ran. No installed runtime, provider, browser, ingress,
+production, release, push, or merge effect occurred.
+
 ## Turn 440 | 2026-09-23
 
 Plan 0218 M1 source checkpoint `aca80104` removes abandoned-retirement's

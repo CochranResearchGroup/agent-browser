@@ -201,6 +201,14 @@ The cut-specific guard now names only `principal_continuity.rs`,
 intentionally uncompilable; the next packet must remove one of those coherent
 authority surfaces rather than translate it into a renamed product type.
 
+Source checkpoint `c326a161` deletes the complete Service-model
+`runtime_owner_projection` module and its `ServiceState` projection methods.
+This removes 703 lines that exposed owner, attestation, lifecycle, resource-lane,
+and session-binding authority to default-product consumers. The cut-specific
+guard now names only `principal_continuity.rs` and `service_state.rs`. CLI
+callers are intentionally unresolved until their corresponding legacy product
+surfaces are deleted; no third compiler wave was started in this packet.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
