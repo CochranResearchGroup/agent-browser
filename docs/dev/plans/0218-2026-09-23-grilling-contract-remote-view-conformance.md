@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -17,7 +17,8 @@ Predecessor: [Plan 0217](0217-2026-09-22-availability-first-remote-view-reliabil
 Original design authority: Codex thread `01a0b65d-47f9-7b51-a17b-791ee87769b3`, grilling exchange on 2026-09-19
 
 Audit basis: accepted user and assistant design turns 207 through 349 in the
-original design authority, reconciled against branch head `c627fd4b` on
+original design authority, first reconciled against branch head `c627fd4b`,
+then structurally audited with an up-to-date CodeGraph index at `6800163f` on
 2026-09-23
 
 Work items: `CochranResearchGroup/agent-browser#181`, `CochranResearchGroup/agent-browser#183`, and `CochranResearchGroup/agent-browser#195`
@@ -60,10 +61,13 @@ capacity, handoff, desktop-control, and migration foundations. P217 commit
 resolved an explicit ordinary profile before legacy owner evidence, and added
 an architecture guard against restoring that coupling.
 
-The complete grilling contract is not implemented or accepted. Browser and
-handoff paths still consume JSON Service State, runtime route and provider
-inventory environment variables remain live, the development provider keeps
-the route-keeper readiness interlock hard-coded false, history budgets are
+The complete grilling contract is not implemented or accepted.
+`BrowserSessionHost` commits its manager state through
+`BrowserRuntimeSqliteStore`, but adjacent ordinary remote-view and dashboard
+handoff resolution, browser lifecycle, monitor, desktop, and Service request
+paths still consume JSON Service State. Runtime route and provider inventory
+environment variables remain live, the development provider keeps the
+route-keeper readiness interlock hard-coded false, history budgets are
 configuration without enforced compaction, verified database backup and
 restore are absent, and joined cold-start plus external visual recovery
 acceptance has not passed. Explicit administrative and adversarial Lease
@@ -80,24 +84,32 @@ acceptance.
 
 The same audit found four classes of remaining conformance work:
 
-1. ordinary browser, handoff, lifecycle, monitor, and desktop paths still read
-   JSON Service State, so the SQLite authority boundary is incomplete;
+1. adjacent ordinary remote-view, dashboard handoff, lifecycle, monitor,
+   desktop, and Service request paths still read JSON Service State even though
+   Browser Session Manager state is SQLite-backed, so the authority boundary
+   is incomplete;
 2. the development provider still represents route-keeper runtime readiness as
    false, and provider-backed joined startup has not qualified the source
    foundations;
 3. history compaction, integrity checking, verified online backup and restore,
    provider-credential access, and full disposable-profile quota mutation are
    schema or configuration foundations without the accepted operational
-   behavior;
+   behavior; `BrowserRuntimeConfigPatch` currently mutates only the seven
+   presentation capacity, queue, deadline, and cooldown fields rather than all
+   accepted live settings;
 4. no one frozen installed candidate has passed the joined cold-upgrade,
    cold-start, failure-injection, external visual, responsive-input, and fresh
    process-residue matrix.
 
-CodeGraph was not initialized in this worktree during the audit. The findings
-above therefore come from the exact branch diff, known implementation seams,
-tests, and literal contract searches. M0 must produce the authoritative
-machine-readable dependency closure before behavior work begins; this audit is
-not a substitute for that gate.
+The 2026-09-23 CodeGraph initialization indexed 961 files into 36,717 symbols
+and 139,589 edges and reported the index up to date. Structural exploration
+confirmed the SQLite-backed Browser Session Manager seam, the remaining
+Service State consumers, route-keeper cold recovery and host-generation
+fencing, stable capacity selection, and the partial configuration mutation
+surface. M0 must still freeze these findings into the repository-owned
+machine-readable G01 through G40 closure and red architecture gates before
+behavior work begins; a local derived index is not the durable acceptance
+artifact.
 
 ## Grilling Contract Ledger
 
