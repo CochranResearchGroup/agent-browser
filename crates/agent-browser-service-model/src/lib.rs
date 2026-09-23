@@ -212,7 +212,6 @@ pub use service_state::{
     prepare_service_state_for_persistence, service_profile_sources, service_site_policy_sources,
     validate_service_state_invariants, ColdShutdownStateReceipt, ConfiguredServiceStateInput,
     ProfileReceiptReplayError, ProfileRecoveryReceiptIdentity, ProfileResetReceiptIdentity,
-    RuntimeOwnerPersistenceParts, RuntimeOwnerPersistenceRestore, RuntimeOwnerPersistenceSnapshot,
     ServiceState, ServiceStateCodecError, LEGACY_SERVICE_STATE_SCHEMA_VERSION,
     SERVICE_STATE_SCHEMA_VERSION,
 };

@@ -24,7 +24,6 @@ pub const LEGACY_SERVICE_STATE_SCHEMA_VERSION: &str = "agent-browser.service-sta
 pub enum ServiceStateCodecError {
     Json(String),
     UnsupportedStateSchema { found: String },
-    UnsupportedProfileLeaseSchema { found: String },
     Invariant(String),
     RevisionExhausted,
 }
@@ -35,9 +34,6 @@ impl std::fmt::Display for ServiceStateCodecError {
             Self::Json(message) | Self::Invariant(message) => formatter.write_str(message),
             Self::UnsupportedStateSchema { found } => {
                 write!(formatter, "service_state_schema_unsupported:{found}")
-            }
-            Self::UnsupportedProfileLeaseSchema { found } => {
-                write!(formatter, "profile_lease_schema_unsupported:{found}")
             }
             Self::RevisionExhausted => formatter.write_str("service_state_revision_exhausted"),
         }
@@ -71,7 +67,6 @@ pub struct ProfileResetReceiptIdentity<'a> {
 /// Receipt matching failures; adapters retain their contextual error formatting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProfileReceiptReplayError {
-    LeaseAuthorityMismatch,
     RecoveryReceiptConflict,
     ResetReceiptConflict,
 }
@@ -118,11 +113,6 @@ pub struct ServiceState {
     #[serde(default)]
     #[doc(hidden)]
     pub state_revision: u64,
-    /// Version of the first-class profile lease projection understood by the
-    /// writer. This is compatibility metadata, not an authority source.
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    #[doc(hidden)]
-    pub profile_lease_schema_version: String,
     pub control_plane: Option<ControlPlaneSnapshot>,
     pub reconciliation: Option<ServiceReconciliationSnapshot>,
     pub events: Vec<ServiceEvent>,
@@ -144,10 +134,6 @@ pub struct ServiceState {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[doc(hidden)]
     pub profile_policy_migration: Option<crate::ProfilePolicyMigrationReport>,
-    /// Idempotent receipts for applied profile-lease reconciliation plans.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[doc(hidden)]
-    pub profile_lease_reconcile_receipts: BTreeMap<String, crate::ProfileLeaseReconcileReceipt>,
     /// Idempotent terminal receipts for sealed profile acquisition recoveries.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     #[doc(hidden)]
@@ -249,16 +235,6 @@ fn decode_persisted_service_state_value(
             });
         }
     }
-    if let Some(schema) = value
-        .get("profileLeaseSchemaVersion")
-        .and_then(Value::as_str)
-    {
-        if schema != PROFILE_LEASE_SCHEMA_VERSION {
-            return Err(ServiceStateCodecError::UnsupportedProfileLeaseSchema {
-                found: schema.to_string(),
-            });
-        }
-    }
     let mut state = serde_json::from_value(value)
         .map_err(|error| ServiceStateCodecError::Json(error.to_string()))?;
     prepare_service_state_for_persistence(&mut state)?;
@@ -271,7 +247,6 @@ pub fn prepare_service_state_for_persistence(
 ) -> Result<(), ServiceStateCodecError> {
     materialize_legacy_profile_access_policies(state);
     state.schema_version = SERVICE_STATE_SCHEMA_VERSION.to_string();
-    state.profile_lease_schema_version = PROFILE_LEASE_SCHEMA_VERSION.to_string();
     Ok(())
 }
 
@@ -331,33 +306,6 @@ fn overlay_persisted_profile_freshness(
 }
 
 impl ServiceState {
-    /// Replay by idempotency key and principal only. The adapter checks current
-    /// authority before this lookup; seal, expiry, and CAS checks follow a miss.
-    /// Only the returned clone receives the replay marker.
-    pub fn replay_profile_lease_reconciliation(
-        &self,
-        idempotency_key: &str,
-        principal_id: &str,
-    ) -> Result<Option<ProfileLeaseReconcileReceipt>, ProfileReceiptReplayError> {
-        let Some(receipt) = self.profile_lease_reconcile_receipts.get(idempotency_key) else {
-            return Ok(None);
-        };
-        if receipt.principal_id != principal_id {
-            return Err(ProfileReceiptReplayError::LeaseAuthorityMismatch);
-        }
-        let mut replay = receipt.clone();
-        replay.replayed = true;
-        Ok(Some(replay))
-    }
-
-    /// Record after the adapter's guarded transitions, deriving the map key
-    /// from the receipt and preserving replacement semantics. This does not
-    /// advance a revision or perform replay, authority, or persistence checks.
-    pub fn record_profile_lease_reconciliation(&mut self, receipt: ProfileLeaseReconcileReceipt) {
-        self.profile_lease_reconcile_receipts
-            .insert(receipt.idempotency_key.clone(), receipt);
-    }
-
     /// Inspect one recovery receipt; status authentication remains in the adapter.
     pub fn profile_recovery_receipt(&self, recovery_id: &str) -> Option<&RecoveryReceipt> {
         self.profile_recovery_receipts.get(recovery_id)
@@ -3021,20 +2969,6 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn reconcile_receipt_fixture() -> ProfileLeaseReconcileReceipt {
-        ProfileLeaseReconcileReceipt {
-            schema_version: PROFILE_LEASE_RECONCILE_RECEIPT_SCHEMA_VERSION.to_string(),
-            idempotency_key: "reconcile-key".to_string(),
-            plan_id: "plan".to_string(),
-            lease_id: "lease".to_string(),
-            principal_id: "principal".to_string(),
-            applied_at: "2026-09-17T12:00:00Z".to_string(),
-            replayed: false,
-            transition_count: 2,
-            resulting_lease_revision: "lease-revision".to_string(),
-        }
-    }
-
     fn recovery_receipt_fixture() -> RecoveryReceipt {
         RecoveryReceipt {
             schema_version: PROFILE_RECOVERY_RECEIPT_SCHEMA_V1.to_string(),
@@ -3098,10 +3032,6 @@ mod tests {
     fn profile_receipt_lookup_misses_do_not_change_state() {
         let state = ServiceState::default();
         let original = state.clone();
-        assert_eq!(
-            state.replay_profile_lease_reconciliation("missing", "principal"),
-            Ok(None)
-        );
         assert_eq!(state.profile_recovery_receipt("missing"), None);
         assert_eq!(
             state.replay_profile_recovery(recovery_receipt_identity(&recovery_receipt_fixture())),
@@ -3112,46 +3042,6 @@ mod tests {
             Ok(None)
         );
         assert_eq!(state, original);
-    }
-
-    #[test]
-    fn profile_reconciliation_replay_matches_only_principal_and_marks_only_clone() {
-        let mut state = ServiceState::default();
-        let receipt = reconcile_receipt_fixture();
-        state.record_profile_lease_reconciliation(receipt.clone());
-        let original = state.clone();
-        assert_eq!(
-            state.replay_profile_lease_reconciliation(&receipt.idempotency_key, "foreign"),
-            Err(ProfileReceiptReplayError::LeaseAuthorityMismatch)
-        );
-        let mut expected = receipt.clone();
-        expected.replayed = true;
-        assert_eq!(
-            state.replay_profile_lease_reconciliation(
-                &receipt.idempotency_key,
-                &receipt.principal_id
-            ),
-            Ok(Some(expected))
-        );
-        assert_eq!(state, original);
-        assert!(!state.profile_lease_reconcile_receipts[&receipt.idempotency_key].replayed);
-
-        // A persisted map key, rather than receipt metadata, selects replay.
-        let mut legacy = receipt.clone();
-        legacy.idempotency_key = "different-embedded-key".to_string();
-        legacy.plan_id.clear();
-        legacy.lease_id.clear();
-        state
-            .profile_lease_reconcile_receipts
-            .insert(receipt.idempotency_key.clone(), legacy.clone());
-        legacy.replayed = true;
-        assert_eq!(
-            state.replay_profile_lease_reconciliation(
-                &receipt.idempotency_key,
-                &receipt.principal_id
-            ),
-            Ok(Some(legacy))
-        );
     }
 
     #[test]
@@ -3250,26 +3140,18 @@ mod tests {
     }
 
     #[test]
-    fn profile_receipt_recording_derives_keys_and_replaces_without_revision_changes() {
+    fn recovery_and_reset_receipt_recording_derives_keys_and_replaces_without_revision_changes() {
         let mut state = ServiceState::default();
         let revision = state.state_revision();
-        let mut lease = reconcile_receipt_fixture();
         let mut recovery = recovery_receipt_fixture();
         let mut reset = reset_receipt_fixture();
-        state.record_profile_lease_reconciliation(lease.clone());
         state.record_profile_recovery(recovery.clone());
         state.record_profile_reset(reset.clone());
         // Changed identity still replaces: insertion does not add a conflict gate.
-        lease.principal_id = "replacement".to_string();
         recovery.principal_id = "replacement".to_string();
         reset.principal_id = "replacement".to_string();
-        state.record_profile_lease_reconciliation(lease.clone());
         state.record_profile_recovery(recovery.clone());
         state.record_profile_reset(reset.clone());
-        assert_eq!(
-            state.profile_lease_reconcile_receipts,
-            BTreeMap::from([(lease.idempotency_key.clone(), lease)])
-        );
         assert_eq!(
             state.profile_recovery_receipts,
             BTreeMap::from([(recovery.recovery_id.clone(), recovery)])
@@ -3280,10 +3162,6 @@ mod tests {
         );
         assert_eq!(state.state_revision(), revision);
     }
-
-    #[test]
-    #[test]
-    #[test]
 
     fn challenge_task_state() -> ServiceState {
         ServiceState {
@@ -3537,10 +3415,6 @@ mod tests {
         assert_eq!(state.state_revision(), 41);
         assert_eq!(state.schema_version, SERVICE_STATE_SCHEMA_VERSION);
         assert_eq!(
-            state.profile_lease_schema_version,
-            PROFILE_LEASE_SCHEMA_VERSION
-        );
-        assert_eq!(
             state.unknown_top_level_field_names(),
             vec!["futureArray", "futureNull", "futureObject", "futureScalar"]
         );
@@ -3561,23 +3435,12 @@ mod tests {
 
     #[test]
     fn persisted_codec_rejects_schema_changes_with_stable_error_identities() {
-        for (raw, expected) in [
-            (
-                r#"{"schemaVersion":"future"}"#,
-                "service_state_schema_unsupported:future",
-            ),
-            (
-                r#"{"profileLeaseSchemaVersion":"future"}"#,
-                "profile_lease_schema_unsupported:future",
-            ),
-        ] {
-            assert_eq!(
-                decode_persisted_service_state_json(raw)
-                    .unwrap_err()
-                    .to_string(),
-                expected
-            );
-        }
+        assert_eq!(
+            decode_persisted_service_state_json(r#"{"schemaVersion":"future"}"#)
+                .unwrap_err()
+                .to_string(),
+            "service_state_schema_unsupported:future"
+        );
         assert!(matches!(
             decode_persisted_service_state_json("{"),
             Err(ServiceStateCodecError::Json(_))

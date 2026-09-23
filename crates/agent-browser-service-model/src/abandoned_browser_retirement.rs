@@ -159,7 +159,7 @@ mod tests {
     use sha2::{Digest, Sha256};
 
     // Frozen in the original CLI declaration order, including explicit nulls.
-    const UNSIGNED_PLAN: &str = r#"{"schemaVersion":"agent-browser.abandoned-browser-retirement-plan.v1","planId":"","stateRevision":7,"browserId":"browser","browserRecordDigest":"browser-digest","root":{"pid":42,"startToken":"start"},"descendants":[{"pid":43,"startToken":"child","executablePath":"/browser","browserFamily":"chrome"}],"processGroupId":42,"profilePath":"/profile","profileId":null,"profileIdentityDigest":"identity","ownerGeneration":2,"ownerDigest":"owner","packageLaunchIdentityDigest":"launch","activityDigest":"activity","policy":{"inactivityMinimumSeconds":300,"perBrowserMaxRssBytes":4294967296,"perBrowserMaxDescendants":64,"perBrowserMaxTabs":128,"workstationMaxLanes":16,"workstationMaxProcesses":256,"workstationMaxRssBytes":68719476736},"createdAt":"2026-09-17T00:00:00Z","expiresAt":"2026-09-17T00:10:00Z","expectedTerminal":{"browserHealth":"process_exited","lifecycleState":"terminal","cleanupObligationState":"satisfied","detachedSessionIds":["session"],"closedTabIds":["tab"],"releasedDisplayAllocationIds":[],"releasedRouteIds":[],"releasedViewerLeaseIds":[],"releasedAcquisitionLeaseIds":[],"releasedRoutePoolEntryIds":[],"preservedProfileDigest":"profile"}}"#;
+    const UNSIGNED_PLAN: &str = r#"{"schemaVersion":"agent-browser.abandoned-browser-retirement-plan.v1","planId":"","stateRevision":7,"browserId":"browser","browserRecordDigest":"browser-digest","root":{"pid":42,"startToken":"start"},"descendants":[{"pid":43,"startToken":"child","executablePath":"/browser","browserFamily":"chrome"}],"processGroupId":42,"profilePath":"/profile","profileId":null,"profileIdentityDigest":"identity","ownerGeneration":2,"ownerDigest":"owner","packageLaunchIdentityDigest":"launch","activityDigest":"activity","policy":{"inactivityMinimumSeconds":300,"perBrowserMaxRssBytes":4294967296,"perBrowserMaxDescendants":64,"perBrowserMaxTabs":128,"workstationMaxLanes":16,"workstationMaxProcesses":256,"workstationMaxRssBytes":68719476736},"createdAt":"2026-09-17T00:00:00Z","expiresAt":"2026-09-17T00:10:00Z","expectedTerminal":{"browserHealth":"process_exited","detachedSessionIds":["session"],"closedTabIds":["tab"],"releasedDisplayAllocationIds":[],"releasedRouteIds":[],"releasedViewerLeaseIds":[],"releasedAcquisitionLeaseIds":[],"releasedRoutePoolEntryIds":[],"preservedProfileDigest":"profile"}}"#;
 
     fn plan() -> AbandonedBrowserRetirementPlan {
         serde_json::from_str(UNSIGNED_PLAN).unwrap()
@@ -198,7 +198,7 @@ mod tests {
         assert_eq!(wire, UNSIGNED_PLAN);
         assert_eq!(
             format!("{:x}", Sha256::digest(wire.as_bytes())),
-            "7623ecef1ccaa39d6a4aa2dc83e2331906f53f3f269ef8f50c4b40eb7fdb6e10"
+            "e0098cc404c819c379a00bca438da6e3195d4a93a8cdc90811b37ad7166a9292"
         );
         assert_eq!(
             plan.schema_version,

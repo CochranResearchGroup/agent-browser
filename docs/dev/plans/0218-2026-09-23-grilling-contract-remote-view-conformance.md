@@ -247,6 +247,17 @@ raw JSON SHA-256 is
 The packet stops at the second causal group as required; the Service model does
 not yet compile and M1 is not accepted.
 
+The immediate cleanup packet removes all four wave-4 groups: the stale
+runtime-owner persistence exports, the obsolete profile-lease schema marker,
+and the reconciliation receipt field, methods, and tests. Compiler wave 5 at
+`/tmp/agent-browser-p218-m1-wave-5` exits 0 with no groups; all 4 prior groups
+resolved with no new, repeated, or regressed group. Its raw JSON SHA-256 is
+`793a9d24c7b916e8dc38616e43e0ddc221d70655e81dd81bf81cec560629da1c`.
+The focused `agent-browser-service-model` library suite passes all 195 tests
+after synchronizing the abandoned-retirement fixture and frozen digest with
+the already-removed terminal owner fields. This satisfies the Service-model
+portion of M1 cut 1; downstream CLI closure remains open.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
