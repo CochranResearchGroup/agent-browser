@@ -25,21 +25,23 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
-## P217 | Availability-First Remote View Reliability
+## P218 | Grilling-Contract Remote View Conformance
 
 State: OPEN
 
-Plan 0217 supersedes Plan 0211 without resetting its evidence or retry history.
-It owns one cumulative 2,000,000-token campaign to remove denial-first lease
-authority from ordinary operation and prove simple, reliable Guacamole/XRDP
-rendering and input on desktop and mobile. Protocol readiness and one opaque
-handoff remain useful evidence but cannot establish acceptance.
+Current State: Plan 0218 supersedes Plans 0211 and 0217 without resetting evidence, retry
+history, or cumulative effort. It owns the complete September 19 grilling
+contract: one SQLite and provider authority, no legacy ordinary-path denial,
+no hidden viewer browser, cold-start capacity, durable handoff recovery, shared
+Desktop Services control, bounded history and storage, and external desktop and
+mobile visual-operational acceptance.
 
-The [current plan](docs/dev/plans/0217-2026-09-22-availability-first-remote-view-reliability.md)
+The [current plan](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
 owns the `PL-PLATFORM` outcome for issues #181, #183, and #195 on the inherited
-P211 branch and draft PR #191. The next milestone is M0: trace the executable
-ordinary path, identify the exact denial points to remove, and capture one
-visual baseline. Production installation, release, and merge remain excluded.
+P211 branch and draft PR #191. The next milestone is M0: map every normative
+G01 through G24 decision to current source and evidence, then install red
+architecture gates for every violation before further repair. Production
+installation, ingress publication, release, and merge remain excluded.
 
 ## P216 | Service Model Extraction Landing
 

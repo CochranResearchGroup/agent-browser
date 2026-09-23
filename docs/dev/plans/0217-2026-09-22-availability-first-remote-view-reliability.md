@@ -2,13 +2,15 @@
 
 Date: 2026-09-22
 
-Plan version: 2
+Plan version: 3
 
-State: OPEN
+State: CANCELLED
 
 Consolidation: required
 
 Product lane: PL-PLATFORM
+
+Successor: [Plan 0218](0218-2026-09-23-grilling-contract-remote-view-conformance.md)
 
 Lane: P217
 
@@ -125,3 +127,12 @@ The fresh primary agent owns the critical path, branch, candidate freeze, runtim
 | Integration | draft PR #191 | all rows complete and closed-world review passes | incomplete |
 
 P217 completes only when every row is supported by current evidence from one frozen source candidate and its exact installed development generation. A partial pass remains OPEN with the failed criterion and reproducible evidence.
+
+## Supersession
+
+Plan 0217 is superseded by Plan 0218 because this plan captured only the
+availability-first and visible-operation subset of the accepted September 19
+grilling contract. Plan 0218 owns the complete authority, persistence,
+provider, capacity, recovery, control, retention, migration, and acceptance
+contract without resetting P217 evidence, retry history, or cumulative effort.
+Do not resume P217 revisions or implementation packets.
