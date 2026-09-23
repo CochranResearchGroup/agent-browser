@@ -9,6 +9,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 442 | 2026-09-23
+
+Plan 0218 M1 source checkpoint `d05060ec` deletes the legacy principal
+continuity module and its `ServiceState` work-lease wrappers. This removes
+1,154 lines from the default Service model. It no longer derives runtime-owner
+principal recourse, binds subordinate work leases, or treats legacy principal
+migration as live product behavior.
+
+The cut-specific guard now names only `service_state.rs`. That final
+primary-owned authority cut remains open, downstream compilation is still
+intentionally broken, and no additional Cargo wave ran. No installed runtime,
+provider, browser, ingress, production, release, push, or merge effect
+occurred.
+
 ## Turn 441 | 2026-09-23
 
 Plan 0218 M1 source checkpoint `c326a161` deletes the Service-model

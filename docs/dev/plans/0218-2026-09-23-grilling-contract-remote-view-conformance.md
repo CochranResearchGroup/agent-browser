@@ -209,6 +209,14 @@ guard now names only `principal_continuity.rs` and `service_state.rs`. CLI
 callers are intentionally unresolved until their corresponding legacy product
 surfaces are deleted; no third compiler wave was started in this packet.
 
+Source checkpoint `d05060ec` deletes the 1,101-line principal-continuity module
+and its `ServiceState` work-lease wrappers. Default-product Service-model code
+no longer derives runtime-owner principal recourse, binds subordinate work
+leases, or projects legacy principal migration as live behavior. The
+cut-specific guard now names only `service_state.rs`, which remains the final
+primary-owned Service-model authority cut. Downstream errors remain
+unclassified until the next retained compiler wave.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
