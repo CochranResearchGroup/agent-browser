@@ -43,7 +43,7 @@ mod site_policy;
 mod terminal_outcome;
 
 pub use abandoned_browser_retirement::{
-    blocks_profile_claim, AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
+    AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
     AbandonedBrowserRetirementTransaction, ResourceRetirementPolicy, RetirementExitEvidence,
     RetirementExitFailure, RetirementRecourse, RetirementTerminalProjection,
     ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1,

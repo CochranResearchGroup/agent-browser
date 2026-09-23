@@ -1343,9 +1343,6 @@ impl ServiceState {
         agent_browser_lease_authority::ActiveLeaseClaim,
         agent_browser_lease_authority::LeaseAuthorityError,
     > {
-        if blocks_profile_claim(&self.abandoned_browser_retirements, &request.resource) {
-            return Err(agent_browser_lease_authority::LeaseAuthorityError::ClaimUnavailable);
-        }
         self.lease_authority.acquire(request)
     }
 
@@ -1356,9 +1353,6 @@ impl ServiceState {
         agent_browser_lease_authority::LeaseClaimAcquisitionOutcome,
         agent_browser_lease_authority::LeaseAuthorityError,
     > {
-        if blocks_profile_claim(&self.abandoned_browser_retirements, &request.resource) {
-            return Err(agent_browser_lease_authority::LeaseAuthorityError::ClaimUnavailable);
-        }
         self.lease_authority.acquire_with_receipt(request)
     }
 

@@ -2,11 +2,7 @@
 //! Aggregate transitions, observation, and process effects belong to CLI adapters.
 
 use crate::{BrowserHealth, RecordedProcessIdentity};
-use agent_browser_lease_authority::{
-    CleanupObligationState, LeaseResourceKey, LeaseResourceKind, RuntimeLaneLifecycleState,
-};
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
 
 pub const ABANDONED_BROWSER_RETIREMENT_PLAN_SCHEMA_V1: &str =
     "agent-browser.abandoned-browser-retirement-plan.v1";
@@ -40,8 +36,6 @@ pub struct AbandonedBrowserRetirementPlan {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RetirementTerminalProjection {
     pub browser_health: BrowserHealth,
-    pub lifecycle_state: RuntimeLaneLifecycleState,
-    pub cleanup_obligation_state: CleanupObligationState,
     pub detached_session_ids: Vec<String>,
     pub closed_tab_ids: Vec<String>,
     pub released_display_allocation_ids: Vec<String>,
@@ -59,19 +53,6 @@ pub struct AbandonedBrowserRetirementTransaction {
     pub reserved_revision: u64,
     pub reserved_browser_digest: String,
     pub receipt: Option<AbandonedBrowserRetirementReceipt>,
-}
-
-/// Return whether a pending exact-profile retirement reservation fences a new
-/// lease claim. Completed transactions and non-profile resources never block.
-pub fn blocks_profile_claim(
-    transactions: &BTreeMap<String, AbandonedBrowserRetirementTransaction>,
-    resource: &LeaseResourceKey,
-) -> bool {
-    resource.kind == LeaseResourceKind::Profile
-        && transactions.values().any(|transaction| {
-            transaction.receipt.is_none()
-                && transaction.plan.profile_id.as_deref() == Some(resource.id.as_str())
-        })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -263,49 +244,6 @@ mod tests {
             failed_conditions: vec!["process_group_empty".into(), "profile_lock_released".into()],
             evidence: evidence(),
         });
-    }
-
-    #[test]
-    fn pending_retirement_blocks_only_its_exact_profile_claim() {
-        let mut pending_plan = plan();
-        pending_plan.profile_id = Some("profile-a".into());
-        let pending = AbandonedBrowserRetirementTransaction {
-            plan: pending_plan.clone(),
-            reserved_revision: 8,
-            reserved_browser_digest: "reserved-a".into(),
-            receipt: None,
-        };
-        let completed = AbandonedBrowserRetirementTransaction {
-            plan: pending_plan,
-            reserved_revision: 8,
-            reserved_browser_digest: "reserved-b".into(),
-            receipt: Some(AbandonedBrowserRetirementReceipt {
-                plan_id: "completed-plan".into(),
-                browser_id: "browser".into(),
-                completed_at: "2026-09-17T00:01:00Z".into(),
-                terminal_revision: 9,
-                effect_evidence: evidence(),
-                terminal_projection: plan().expected_terminal,
-            }),
-        };
-        let transactions =
-            BTreeMap::from([("pending".into(), pending), ("completed".into(), completed)]);
-
-        assert!(blocks_profile_claim(
-            &transactions,
-            &LeaseResourceKey::profile("profile-a")
-        ));
-        assert!(!blocks_profile_claim(
-            &transactions,
-            &LeaseResourceKey::profile("profile-b")
-        ));
-        assert!(!blocks_profile_claim(
-            &transactions,
-            &LeaseResourceKey {
-                kind: LeaseResourceKind::Tab,
-                id: "profile-a".into(),
-            }
-        ));
     }
 
     #[test]

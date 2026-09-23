@@ -19,8 +19,6 @@ use crate::runtime_owner_transfer::{
     CleanupObligationState, OwnerAuthorityClaim, RuntimeLaneLifecycleState,
 };
 
-#[cfg(test)]
-use agent_browser_service_model::blocks_profile_claim;
 pub(crate) use agent_browser_service_model::{
     AbandonedBrowserRetirementPlan, AbandonedBrowserRetirementReceipt,
     AbandonedBrowserRetirementTransaction, RetirementExitEvidence, RetirementExitFailure,
@@ -169,8 +167,6 @@ fn terminal_projection(
         .collect::<Vec<_>>();
     Ok(RetirementTerminalProjection {
         browser_health: BrowserHealth::ProcessExited,
-        lifecycle_state: RuntimeLaneLifecycleState::Terminal,
-        cleanup_obligation_state: CleanupObligationState::Satisfied,
         detached_session_ids: state
             .sessions
             .iter()
@@ -1509,59 +1505,6 @@ mod tests {
             let serialized = serde_json::to_value(&error).unwrap();
             assert_eq!(serialized["code"], "exit_unproven", "case {case}");
         }
-    }
-
-    #[test]
-    fn retirement_reservation_fences_both_profile_claim_acquisition_paths() {
-        use agent_browser_lease_authority::{
-            AcquireLeaseClaimRequest, LeaseAuthorityError, LeaseClaimMode, LeaseResourceKey,
-        };
-        let (mut state, observed) = fixture();
-        let plan = plan(&state, &observed);
-        let key = LeaseResourceKey::profile("fixture-profile");
-        assert!(!blocks_profile_claim(
-            &state.abandoned_browser_retirements,
-            &key
-        ));
-        reserve(&mut state, &plan, &observed);
-        assert!(blocks_profile_claim(
-            &state.abandoned_browser_retirements,
-            &key
-        ));
-        assert!(!blocks_profile_claim(
-            &state.abandoned_browser_retirements,
-            &LeaseResourceKey::profile("another-profile")
-        ));
-        let request = AcquireLeaseClaimRequest {
-            resource: key,
-            parent_claim_id: None,
-            principal_id: "principal".into(),
-            capability_id: "capability".into(),
-            capability_revision: 1,
-            mode: LeaseClaimMode::Ephemeral,
-            expected_claim_revision: 0,
-            idempotency_key: "test-acquire".into(),
-            now: NOW.into(),
-            expires_at: EXPIRES.into(),
-            transition_deadline: None,
-            recovery_controller_id: None,
-            boot_epoch: None,
-            owner_generation: None,
-        };
-        assert_eq!(
-            state.acquire_lease_claim(request.clone()),
-            Err(LeaseAuthorityError::ClaimUnavailable)
-        );
-        assert_eq!(
-            state.acquire_lease_claim_with_receipt(request),
-            Err(LeaseAuthorityError::ClaimUnavailable)
-        );
-        state.state_revision += 1;
-        finalize_abandoned_browser_retirement(&mut state, &plan, &exit(&plan), NOW).unwrap();
-        assert!(!blocks_profile_claim(
-            &state.abandoned_browser_retirements,
-            &LeaseResourceKey::profile("fixture-profile")
-        ));
     }
 
     struct FakeRuntime {
