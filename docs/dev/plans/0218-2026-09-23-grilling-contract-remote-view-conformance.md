@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -112,7 +112,7 @@ confirmed the SQLite-backed Browser Session Manager seam, the remaining
 Service State consumers, route-keeper cold recovery and host-generation
 fencing, stable capacity selection, and the partial configuration mutation
 surface. M0 must still freeze these findings into the repository-owned
-machine-readable G01 through G41 closure and red architecture gates before
+machine-readable G01 through G45 closure and red architecture gates before
 behavior work begins; a local derived index is not the durable acceptance
 artifact.
 
@@ -165,6 +165,47 @@ of this plan.
 | G39 | Doctor is read-only | `doctor` observes and recommends but never repairs. Startup and requests may invoke the same narrowly typed automatic reconciler, and an explicit `repair` command may request it, but neither path gains arbitrary commands or broad restart authority. |
 | G40 | Waiting work does not surprise-launch | Queued operation identity and outcome persist for idempotency, but work that was only waiting becomes retryable after restart and launches nothing until the client resumes it. Effects already begun reconcile or compensate under G19 and G26. |
 | G41 | Legacy lease denial is physically quarantined | The trusted single-user `agent-browser` CLI, runtime binary, and `agent-browser-service-model` do not compile, link, embed, deserialize, expose, or dispatch Lease Authority, runtime-owner, lease-recovery, lease-dashboard, or lease-MCP code. The extracted `agent-browser-lease-authority` crate may remain an independently buildable workspace member with its own tests, but no default product package depends on it. Historical lease and owner data are migration diagnostics only and cannot become live runtime state. |
+| G42 | Session management is heartbeat-based | One Browser Session Manager owns the complete ordinary lifecycle. A named session contains its profile, browser, tab, last activity, expiry, and handoff identities. A successful command or handoff access refreshes only that exact session. Current heartbeat time and direct browser/process observation determine liveness; historical ownership, lease, custody, quarantine, and cleanup records do not participate. |
+| G43 | Same-profile sessions share without aliasing | Alice and Bob may reuse one healthy browser when they request the same exact profile, but each receives a distinct session, tab, target, heartbeat, expiry, and opaque handoff. Every command resolves through the named session to its exact tab. Alice's navigation, clicks, closure, or expiry cannot mutate Bob's tab or heartbeat. |
+| G44 | Cleanup follows active-session references | Closing or expiring Alice removes only Alice's session and tab while Bob keeps the shared browser alive. The browser closes only after Bob, the final active session, closes or expires. Reopening a healthy named session is idempotent and reuses its existing session, browser, tab, target, and handoff rather than creating parallel ownership state. |
+| G45 | Session and viewer heartbeats stay distinct | A session heartbeat governs logical browser-session retention. An authenticated Guacamole connection heartbeat governs whether a remote viewer is active, whether recovery is eager, and whether Desktop Services control remains held. Neither heartbeat creates a lease or admission claim, and neither may be reconstructed from a stored flag, URL, tab, or historical event. |
+
+## Simple Session State Machine
+
+The ordinary trusted single-user runtime implements this model directly:
+
+```text
+open Alice on profile work
+  -> create or reuse browser(work)
+  -> create Alice session and Alice tab
+  -> issue Alice handoff
+  -> record Alice heartbeat
+
+open Bob on profile work
+  -> reuse healthy browser(work)
+  -> create Bob session and Bob tab
+  -> issue Bob handoff
+  -> record Bob heartbeat
+
+command Alice
+  -> resolve Alice session -> Alice tab
+  -> perform command
+  -> refresh Alice heartbeat only
+
+close or expire Alice
+  -> remove Alice session and Alice tab
+  -> preserve browser(work) because Bob remains
+
+close or expire Bob
+  -> remove Bob session and Bob tab
+  -> close browser(work) because no active session remains
+```
+
+The durable ordinary model contains no lease claim, owner generation,
+quarantine state, cleanup obligation, recovery authorization, acquisition
+receipt, or equivalent renamed denial record. Operation IDs and runtime-host
+generations provide crash consistency for effects; they do not grant admission
+authority or outlive their exact operation.
 
 ## Architectural Prohibitions
 
@@ -201,6 +242,16 @@ The following are compile-time or deterministic source-contract failures:
 15. The CLI, runtime, Service model, dashboard, generated client, HTTP or MCP
     surface compiles, links, embeds, exposes, or dispatches the legacy Lease
     Authority or runtime-owner system.
+16. Ordinary session admission, command routing, heartbeat refresh, expiry, or
+    cleanup consults a lease, owner, custody, quarantine, recovery-plan, or
+    cleanup-obligation record.
+17. Two same-profile named sessions share a tab, target, heartbeat, expiry, or
+    handoff identity, or a command addressed to one session can mutate the
+    other's tab or liveness.
+18. Closing or expiring one session closes a browser that still has another
+    active session, or closing the final session leaves its browser running.
+19. A stored session heartbeat substitutes for a live viewer heartbeat, or a
+    viewer heartbeat becomes browser-session admission authority.
 
 Keep the extracted Lease Authority crate independently buildable only in its
 own package scope. It must not be a dependency of the trusted single-user CLI,
@@ -213,7 +264,7 @@ archival decision.
 
 - Freeze the executable ordinary-open, provider, persistence, handoff,
   recovery, and desktop-control dependency closures and install architecture
-  guards for G01 through G41 before further behavior patches.
+  guards for G01 through G45 before further behavior patches.
 - Remove runtime JSON and environment authority through one forward-only
   migration, then join Browser Session Manager and presentation provider to one
   SQLite-backed runtime-host interface.
@@ -230,7 +281,7 @@ archival decision.
 
 Included:
 
-- every G01 through G41 invariant;
+- every G01 through G45 invariant;
 - removal or compile-time quarantine of conflicting ordinary-path code;
 - typed runtime, provider, persistence, configuration, handoff, capacity,
   recovery, desktop-control, history, and migration interfaces;
@@ -254,9 +305,9 @@ Excluded:
 ### M0 | Closed-world conformance map and red architecture gates | 200,000 tokens
 
 Reconcile inherited P217 usage, branch and installed identities, then map every
-G01 through G41 row to current symbols, state stores, tests, and evidence. Add
+G01 through G45 row to current symbols, state stores, tests, and evidence. Add
 failing architecture checks for every currently violated prohibition and a
-machine-readable G01 through G41 coverage manifest. Freeze one dependency graph
+machine-readable G01 through G45 coverage manifest. Freeze one dependency graph
 for ordinary open through handoff recovery. Exit only when omissions and
 violations are mechanically visible; do not repair behavior in this milestone.
 
@@ -279,6 +330,13 @@ that is not linked into the default product. Exit only when a deterministic
 Cargo and source-graph guard proves the default product closure cannot reach or
 serialize the quarantined crate.
 
+Implement the G42 through G45 state machine as the only ordinary session
+lifecycle. Remove parallel owner, lease, and cleanup aggregates rather than
+adapting them behind the new API. Exit with provider-free Alice/Bob fixtures
+that prove shared-browser reuse, separate tabs and handoffs, exact heartbeat
+refresh, independent command effects, Alice-first cleanup preserving Bob, and
+final-session cleanup closing the browser.
+
 ### M2 | Provider, capacity, and launch integration | 400,000 tokens
 
 Remove the development route-keeper interlock and join the in-process
@@ -295,7 +353,8 @@ Complete stable handoff resolution, last-committed-URL recovery, eager active
 and lazy dormant recovery, single replacement fencing, and the shared Desktop
 Services control lease. Add repeated-open coalescing, authenticated live-viewer
 authority, named versus disposable expiry, quota cleanup, and restart-safe
-waiting-operation behavior. Prove runtime, provider, Guacamole, route, display,
+waiting-operation behavior. Keep session heartbeat, viewer heartbeat, and
+Desktop Services control as three explicit non-interchangeable concepts. Prove runtime, provider, Guacamole, route, display,
 browser, tab, viewer-disconnect, quota, and restart failure cases preserve the
 required identity and never replay page effects. Exit with provider-free
 failure injection plus one installed joined recovery pass.
@@ -315,7 +374,7 @@ and one bounded repeat of affected cases.
 ### M5 | Qualification and integration handoff | 200,000 tokens
 
 Run validation selected from the complete P218 diff, verify every G01 through
-G41 row and prohibition against the frozen candidate, update all public and governing
+G45 row and prohibition against the frozen candidate, update all public and governing
 documentation, and perform one closed-world review limited to the contract and
 repair regressions. Publish a remote checkpoint and update draft PR #191. Do
 not merge, install production, release, or remove the worktree.
@@ -326,7 +385,7 @@ The primary agent owns the critical path, contract ledger, branch, candidate,
 runtime custody, evidence adjudication, and verdict. No worker is required.
 If delegation becomes useful, admit at most one provider-free source worker
 and one read-only acceptance-evidence reviewer with disjoint files and explicit
-stop conditions. Workers cannot revise G01 through G41, mutate shared runtime,
+stop conditions. Workers cannot revise G01 through G45, mutate shared runtime,
 or declare acceptance.
 
 ## Controls And Stop Rules
@@ -353,7 +412,7 @@ or declare acceptance.
 
 ## Evidence And Exit
 
-Maintain one evidence table keyed by G01 through G41. Each row records source
+Maintain one evidence table keyed by G01 through G45. Each row records source
 commit, test or artifact, installed generation when applicable, result,
 failure preservation, and reviewer disposition. Evidence from different
 candidates cannot be combined for final acceptance.
