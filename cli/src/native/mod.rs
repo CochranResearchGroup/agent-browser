@@ -136,8 +136,6 @@ pub mod remote_view_lease;
 pub mod remote_view_proof;
 pub(crate) mod route_keeper_connection_catalog;
 #[allow(dead_code)]
-pub(crate) mod runtime_lifecycle;
-#[allow(dead_code)]
 pub(crate) mod runtime_reconciliation;
 #[allow(dead_code)]
 pub mod screenshot;
@@ -172,8 +170,6 @@ pub mod service_inventory;
 #[allow(dead_code)]
 pub mod service_jobs;
 #[allow(dead_code)]
-pub(crate) mod service_lease_authority_adapter;
-#[allow(dead_code)]
 pub(crate) mod service_lease_mode;
 #[allow(dead_code)]
 pub mod service_lifecycle;
@@ -184,14 +180,8 @@ pub mod service_monitors;
 #[allow(dead_code)]
 pub mod service_network_capture;
 #[allow(dead_code)]
-pub(crate) mod service_principal;
-#[allow(dead_code)]
 pub mod service_probe;
 pub(crate) mod service_profile_access_policy;
-#[allow(dead_code)]
-pub(crate) mod service_profile_acquisition;
-#[allow(dead_code)]
-pub(crate) mod service_profile_lease;
 pub(crate) mod service_profile_lifecycle;
 #[allow(dead_code)]
 pub mod service_renderer_crash;

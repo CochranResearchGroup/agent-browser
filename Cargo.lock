@@ -53,7 +53,6 @@ dependencies = [
  "agent-browser-cdp",
  "agent-browser-challenge-control",
  "agent-browser-desktop-services",
- "agent-browser-lease-authority",
  "agent-browser-service-model",
  "async-trait",
  "base64",
