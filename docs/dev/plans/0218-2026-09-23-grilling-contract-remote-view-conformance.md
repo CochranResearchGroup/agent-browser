@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -82,7 +82,7 @@ navigation and handoff recovery, and atomic Desktop Services control
 publication. Those are implementation foundations, not whole-contract
 acceptance.
 
-The same audit found four classes of remaining conformance work:
+The same audit found five classes of remaining conformance work:
 
 1. adjacent ordinary remote-view, dashboard handoff, lifecycle, monitor,
    desktop, and Service request paths still read JSON Service State even though
@@ -99,7 +99,12 @@ The same audit found four classes of remaining conformance work:
    accepted live settings;
 4. no one frozen installed candidate has passed the joined cold-upgrade,
    cold-start, failure-injection, external visual, responsive-input, and fresh
-   process-residue matrix.
+   process-residue matrix;
+5. the old Lease Authority and runtime-owner system is blocked from ordinary
+   `remote_view_open` admission by a test and source guard, but it remains a
+   direct dependency of both `agent-browser-service-model` and the CLI. Its
+   state and operations are still embedded throughout `ServiceState`, so it is
+   not yet quarantined out of the trusted single-user product build.
 
 The 2026-09-23 CodeGraph initialization indexed 961 files into 36,717 symbols
 and 139,589 edges and reported the index up to date. Structural exploration
@@ -107,7 +112,7 @@ confirmed the SQLite-backed Browser Session Manager seam, the remaining
 Service State consumers, route-keeper cold recovery and host-generation
 fencing, stable capacity selection, and the partial configuration mutation
 surface. M0 must still freeze these findings into the repository-owned
-machine-readable G01 through G40 closure and red architecture gates before
+machine-readable G01 through G41 closure and red architecture gates before
 behavior work begins; a local derived index is not the durable acceptance
 artifact.
 
@@ -159,6 +164,7 @@ of this plan.
 | G38 | Disposable promotion is deferred | There is no disposable-session pinning or profile-promotion implementation in this plan. Until a future explicit promotion feature exists, every disposable profile remains subject to G36 and G37. |
 | G39 | Doctor is read-only | `doctor` observes and recommends but never repairs. Startup and requests may invoke the same narrowly typed automatic reconciler, and an explicit `repair` command may request it, but neither path gains arbitrary commands or broad restart authority. |
 | G40 | Waiting work does not surprise-launch | Queued operation identity and outcome persist for idempotency, but work that was only waiting becomes retryable after restart and launches nothing until the client resumes it. Effects already begun reconcile or compensate under G19 and G26. |
+| G41 | Legacy lease denial is physically quarantined | The trusted single-user `agent-browser` CLI, runtime binary, and `agent-browser-service-model` do not compile, link, embed, deserialize, expose, or dispatch Lease Authority, runtime-owner, lease-recovery, lease-dashboard, or lease-MCP code. The extracted `agent-browser-lease-authority` crate may remain an independently buildable workspace member with its own tests, but no default product package depends on it. Historical lease and owner data are migration diagnostics only and cannot become live runtime state. |
 
 ## Architectural Prohibitions
 
@@ -192,18 +198,22 @@ The following are compile-time or deterministic source-contract failures:
     resumption.
 14. A disposable handoff survives its configured expiry or quota cleanup by
     acquiring an undeclared pin or promotion state.
+15. The CLI, runtime, Service model, dashboard, generated client, HTTP or MCP
+    surface compiles, links, embeds, exposes, or dispatches the legacy Lease
+    Authority or runtime-owner system.
 
-Keep the extracted Lease Authority crate and explicit administrative,
-adversarial, and future multi-tenant contracts buildable in their own scope.
-They must not be linked into the trusted single-user ordinary-open dependency
-closure. Quarantined historical implementations stay outside the compiled
-ordinary runtime and have an owner, reason, and deletion or archival decision.
+Keep the extracted Lease Authority crate independently buildable only in its
+own package scope. It must not be a dependency of the trusted single-user CLI,
+runtime, Service model, dashboard, generated client, HTTP, or MCP product
+surfaces. Quarantined historical implementations stay outside every compiled
+default-product dependency closure and have an owner, reason, and deletion or
+archival decision.
 
 ## Consolidated Batch
 
 - Freeze the executable ordinary-open, provider, persistence, handoff,
   recovery, and desktop-control dependency closures and install architecture
-  guards for G01 through G40 before further behavior patches.
+  guards for G01 through G41 before further behavior patches.
 - Remove runtime JSON and environment authority through one forward-only
   migration, then join Browser Session Manager and presentation provider to one
   SQLite-backed runtime-host interface.
@@ -220,7 +230,7 @@ ordinary runtime and have an owner, reason, and deletion or archival decision.
 
 Included:
 
-- every G01 through G40 invariant;
+- every G01 through G41 invariant;
 - removal or compile-time quarantine of conflicting ordinary-path code;
 - typed runtime, provider, persistence, configuration, handoff, capacity,
   recovery, desktop-control, history, and migration interfaces;
@@ -244,9 +254,9 @@ Excluded:
 ### M0 | Closed-world conformance map and red architecture gates | 200,000 tokens
 
 Reconcile inherited P217 usage, branch and installed identities, then map every
-G01 through G40 row to current symbols, state stores, tests, and evidence. Add
+G01 through G41 row to current symbols, state stores, tests, and evidence. Add
 failing architecture checks for every currently violated prohibition and a
-machine-readable G01 through G40 coverage manifest. Freeze one dependency graph
+machine-readable G01 through G41 coverage manifest. Freeze one dependency graph
 for ordinary open through handoff recovery. Exit only when omissions and
 violations are mechanically visible; do not repair behavior in this milestone.
 
@@ -261,6 +271,13 @@ setting, not only presentation capacity fields. Preserve exact cleanup
 protection outside admission. Exit when architectural guards and provider-free
 authority, migration, corruption, backup, restore, configuration, quota, and
 compaction fixtures pass.
+
+Remove the Lease Authority and runtime-owner dependency from
+`agent-browser-service-model`, the CLI, dashboard, generated client, HTTP, and
+MCP surfaces. Preserve only migration-time diagnostic decoding behind a tool
+that is not linked into the default product. Exit only when a deterministic
+Cargo and source-graph guard proves the default product closure cannot reach or
+serialize the quarantined crate.
 
 ### M2 | Provider, capacity, and launch integration | 400,000 tokens
 
@@ -298,7 +315,7 @@ and one bounded repeat of affected cases.
 ### M5 | Qualification and integration handoff | 200,000 tokens
 
 Run validation selected from the complete P218 diff, verify every G01 through
-G40 row and prohibition against the frozen candidate, update all public and governing
+G41 row and prohibition against the frozen candidate, update all public and governing
 documentation, and perform one closed-world review limited to the contract and
 repair regressions. Publish a remote checkpoint and update draft PR #191. Do
 not merge, install production, release, or remove the worktree.
@@ -309,7 +326,7 @@ The primary agent owns the critical path, contract ledger, branch, candidate,
 runtime custody, evidence adjudication, and verdict. No worker is required.
 If delegation becomes useful, admit at most one provider-free source worker
 and one read-only acceptance-evidence reviewer with disjoint files and explicit
-stop conditions. Workers cannot revise G01 through G40, mutate shared runtime,
+stop conditions. Workers cannot revise G01 through G41, mutate shared runtime,
 or declare acceptance.
 
 ## Controls And Stop Rules
@@ -336,7 +353,7 @@ or declare acceptance.
 
 ## Evidence And Exit
 
-Maintain one evidence table keyed by G01 through G40. Each row records source
+Maintain one evidence table keyed by G01 through G41. Each row records source
 commit, test or artifact, installed generation when applicable, result,
 failure preservation, and reviewer disposition. Evidence from different
 candidates cannot be combined for final acceptance.
