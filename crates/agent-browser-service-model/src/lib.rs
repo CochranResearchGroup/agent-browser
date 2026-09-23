@@ -23,6 +23,7 @@ mod presentation_capacity;
 mod presentation_request_queue;
 mod presentation_scale_in;
 mod principal_continuity;
+mod principal_provenance;
 mod profile_access;
 mod profile_lease;
 mod profile_lifecycle;
@@ -257,3 +258,4 @@ pub use presentation_request_queue::{
     PresentationRequestEntry, PresentationRequestPriority, PresentationRequestQueue,
     PresentationRequestState,
 };
+pub use principal_provenance::ServicePrincipalProvenance;

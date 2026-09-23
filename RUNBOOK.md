@@ -9,6 +9,25 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 439 | 2026-09-23
+
+Plan 0218 M1 cut 1 is now compiler-driven. The frozen replacement contract
+allows the SQLite Browser Session Manager authority, one data-only principal
+provenance enum, and a non-default migration diagnostic boundary; it forbids
+moving or renaming lease, runtime-owner, custody, quarantine, cleanup-admission,
+JSON fallback, or dual-write concepts into the replacement API. The Service
+model Cargo edge to Lease Authority is removed.
+
+The first retained WSL-safe Cargo JSON wave exited 101 and compacted to 7
+groups with 76 occurrences. Two leaf groups now use the Service model's local
+principal-provenance value. Five coupled groups remain in retirement,
+principal continuity, runtime-owner projection, and Service State. The
+cut-specific architecture guard remains red until all Service model source
+references are gone, while aggregate P15 correctly remains red for the wider
+CLI closure. This is outcome progress but not a compiling candidate or M1
+acceptance. No installed runtime, provider, browser, ingress, production,
+release, push, or merge effect occurred.
+
 ## Turn 438 | 2026-09-23
 
 Plan 0218 M0 is complete as a source-only checkpoint. The exact G01 through

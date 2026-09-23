@@ -32,9 +32,20 @@ try {
   );
   assert.ok(report.rows.find((row) => row.id === 'P15').findings.length >= 3);
 
-  write(root, 'cli/Cargo.toml', '[dependencies]\n');
+  assert.equal(report.cuts.serviceModelLeaseAuthority.status, 'fail');
+  assert.ok(report.cuts.serviceModelLeaseAuthority.findings.length >= 2);
+
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\n');
   write(root, 'crates/agent-browser-service-model/src/service_state.rs', 'pub struct ServiceState;\n');
+  const modelCut = evaluate(root);
+  assert.equal(modelCut.cuts.serviceModelLeaseAuthority.status, 'pass');
+  assert.equal(modelCut.rows.find((row) => row.id === 'P15').status, 'violated');
+  assert.deepEqual(
+    modelCut.rows.filter((row) => row.status === 'violated').map((row) => row.id),
+    ['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19'],
+  );
+
+  write(root, 'cli/Cargo.toml', '[dependencies]\n');
   const changed = evaluate(root);
   assert.equal(changed.rows.find((row) => row.id === 'P15').status, 'detector_gap');
   assert.equal(changed.rows.find((row) => row.id === 'P15').findings.length, 0);
@@ -55,6 +66,21 @@ try {
   );
   const edgeIds = new Set(closure.edges.map((edge) => `${edge.from}->${edge.to}`));
   for (const cut of closure.requiredM1Cuts) assert.ok(edgeIds.has(cut.edge), `missing frozen edge ${cut.edge}`);
+
+  const replacement = JSON.parse(readFileSync(new URL(
+    '../../docs/dev/contracts/p218-m1-replacement-interfaces.v1.json',
+    import.meta.url,
+  )));
+  assert.equal(replacement.schemaVersion, 'p218-m1-replacement-interfaces.v1');
+  assert.equal(replacement.milestone, 'M1');
+  assert.equal(replacement.cut, 'agent-browser-service-model->agent-browser-lease-authority');
+  assert.deepEqual(
+    replacement.allowedNeutralValueTypes.map((entry) => entry.symbol),
+    ['agent_browser_service_model::ServicePrincipalProvenance'],
+  );
+  assert.equal(replacement.migrationDiagnosticBoundary.mayLinkLeaseAuthority, true);
+  assert.equal(replacement.migrationDiagnosticBoundary.mayBeLinkedByDefaultProductPackages, false);
+  assert.ok(replacement.firstCutExit.length >= 4);
   console.log('P218 architecture detector self-test passed');
 } finally {
   rmSync(root, { recursive: true, force: true });

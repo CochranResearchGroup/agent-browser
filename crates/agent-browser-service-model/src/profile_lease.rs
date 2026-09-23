@@ -1,7 +1,7 @@
 //! Passive profile-lease records shared by service adapters.
 
 use crate::PrincipalContinuityRecourse;
-use agent_browser_lease_authority::ServicePrincipalProvenance;
+use crate::ServicePrincipalProvenance;
 use serde::{Deserialize, Serialize};
 
 pub const PROFILE_LEASE_SCHEMA_VERSION: &str = "agent-browser.profile-lease.v1";

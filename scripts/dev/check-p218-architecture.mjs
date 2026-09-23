@@ -32,6 +32,10 @@ function finding(id, path, detail) {
   return { id, path, detail };
 }
 
+function manifestDependsOnLeaseAuthority(source) {
+  return /^\s*agent-browser-lease-authority\s*=|^\s*[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bpackage\s*=\s*["']agent-browser-lease-authority["']/m.test(source);
+}
+
 export function evaluate(root = defaultRoot) {
   const cliManifest = read(root, 'cli/Cargo.toml');
   const serviceModelManifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
@@ -46,6 +50,10 @@ export function evaluate(root = defaultRoot) {
     ...filesUnder(root, 'crates/agent-browser-service-model/src', ['.rs']),
     ...filesUnder(root, 'packages/dashboard/src', ['.js', '.jsx', '.ts', '.tsx']),
     ...filesUnder(root, 'packages/client/src', ['.js', '.ts']),
+  ];
+  const serviceModelFiles = [
+    ...filesUnder(root, 'crates/agent-browser-service-model/src', ['.rs']),
+    ...filesUnder(root, 'crates/agent-browser-service-model/tests', ['.rs']),
   ];
   const productSources = productFiles.map((path) => ({
     path: relative(root, path),
@@ -79,10 +87,10 @@ export function evaluate(root = defaultRoot) {
     add('P12', finding('viewer_lease_dispatch', 'cli/src/native/actions.rs', 'the default runtime dispatches stored viewer lease lifecycle actions'));
   }
 
-  if (/agent-browser-lease-authority\s*=/.test(cliManifest)) {
+  if (manifestDependsOnLeaseAuthority(cliManifest)) {
     add('P15', finding('cli_cargo_dependency', 'cli/Cargo.toml', 'the default CLI directly depends on agent-browser-lease-authority'));
   }
-  if (/agent-browser-lease-authority\s*=/.test(serviceModelManifest)) {
+  if (manifestDependsOnLeaseAuthority(serviceModelManifest)) {
     add('P15', finding('service_model_cargo_dependency', 'crates/agent-browser-service-model/Cargo.toml', 'the Service model directly depends on agent-browser-lease-authority'));
   }
   for (const { path, source } of productSources) {
@@ -111,11 +119,35 @@ export function evaluate(root = defaultRoot) {
     if (definitelyViolated.has(id)) status = evidence.length > 0 ? 'violated' : 'detector_gap';
     return { id, status, findings: evidence };
   });
+  const serviceModelLeaseAuthorityFindings = [];
+  if (manifestDependsOnLeaseAuthority(serviceModelManifest)) {
+    serviceModelLeaseAuthorityFindings.push(finding(
+      'service_model_cargo_dependency',
+      'crates/agent-browser-service-model/Cargo.toml',
+      'the Service model manifest depends on agent-browser-lease-authority',
+    ));
+  }
+  for (const path of serviceModelFiles) {
+    const source = readFileSync(path, 'utf8');
+    if (/agent_browser_lease_authority/.test(source)) {
+      serviceModelLeaseAuthorityFindings.push(finding(
+        'service_model_compiled_product_reference',
+        relative(root, path),
+        'Service model Rust source references the Lease Authority crate',
+      ));
+    }
+  }
   return {
     schemaVersion: 'p218-architecture-conformance.v1',
     plan: 'docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md',
     milestone: 'M0',
     rows,
+    cuts: {
+      serviceModelLeaseAuthority: {
+        status: serviceModelLeaseAuthorityFindings.length === 0 ? 'pass' : 'fail',
+        findings: serviceModelLeaseAuthorityFindings,
+      },
+    },
     summary: rows.reduce((counts, row) => {
       counts[row.status] = (counts[row.status] || 0) + 1;
       return counts;

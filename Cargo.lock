@@ -164,7 +164,6 @@ version = "0.1.0"
 dependencies = [
  "agent-browser-authentication-control",
  "agent-browser-challenge-control",
- "agent-browser-lease-authority",
  "chrono",
  "serde",
  "serde_json",

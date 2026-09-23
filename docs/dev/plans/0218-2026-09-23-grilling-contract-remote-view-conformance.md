@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -160,9 +160,45 @@ red set. No product behavior or runtime state changed in M0.
   evidence depth with the frozen 26 partial, 8 fail, and 11 missing inventory.
 - Progress classification: `outcome_progress`. M0 made omissions and current
   violations mechanically visible and intentionally performed no behavior
-  repair. M1 is the next milestone; its first cut is removal of the default
-  product Cargo edge to Lease Authority using only the deterministic compiler
-  helper and the three frozen closure edges.
+repair. M1 is the next milestone; its first cut is removal of the default
+product Cargo edge to Lease Authority using only the deterministic compiler
+helper and the three frozen closure edges.
+
+M1 cut 1 began on 2026-09-23 by freezing
+`docs/dev/contracts/p218-m1-replacement-interfaces.v1.json`. The contract
+allows only the Browser Session Manager and SQLite host interfaces for
+ordinary authority, one data-only principal-provenance value type, and a
+non-default migration diagnostic boundary. It explicitly forbids moving or
+renaming lease, runtime-owner, custody, quarantine, cleanup-admission, JSON
+fallback, or dual-write concepts into a replacement API. The
+`agent-browser-service-model -> agent-browser-lease-authority` Cargo edge was
+then removed to start the compiler-driven excision wave; the package is
+expected to remain uncompilable until the classified first-cut groups are
+resolved.
+
+The first retained compiler wave is
+`/tmp/agent-browser-p218-m1-wave-1`. Cargo exited 101 as expected after the
+edge removal. The compact manifest contains 7 groups and 76 occurrences: one
+group each in `abandoned_browser_retirement.rs`, `profile_lease.rs`,
+`runtime_owner_projection.rs`, and `session_tab.rs`; two in
+`principal_continuity.rs`; and one 70-occurrence `ServiceState` group. The raw
+JSON SHA-256 is `2d9d687ec6291a8fb3593648c202762be5439e7bc6ae987921b0ae8a71dcbeda`.
+The data-only principal-provenance type now belongs to the Service model, and
+the `profile_lease.rs` and `session_tab.rs` leaf imports no longer reference
+Lease Authority. The other groups remain open because they carry operational
+lease, runtime-owner, or cleanup-admission behavior and cannot be mechanically
+renamed into the default product.
+
+Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
+medium effort; effective runtime model was unavailable. Its read-only six-file
+inventory was accepted, but its suggestion to extract authority-bearing lease
+and runtime-owner DTOs into a shared product crate was rejected as contrary to
+G41. A bounded follow-up edited only `profile_lease.rs` and `session_tab.rs`;
+file-local formatting and no-reference checks passed. Worker receipt
+`/root/m1_guard_validation_audit`: requested `gpt-6-luna` at medium effort;
+effective runtime model was unavailable. Its read-only finding was accepted by
+adding a cut-specific service-model dependency and source guard while leaving
+aggregate P15 red until the CLI closure is removed.
 
 ## Grilling Contract Ledger
 
