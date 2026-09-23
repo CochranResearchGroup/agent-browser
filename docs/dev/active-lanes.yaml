@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9bdcfbe3
+    checkpoint: c8c3008f
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: P211 and P217 evidence is inherited; 9bdcfbe3 quarantines ordinary remote-view open from legacy lease admission, while the complete G01 through G24 grilling contract remains unqualified
-    validation_ref: 9bdcfbe3
+    validation_status: P218 M0 maps exact G01 through G45 closure at 26 partial, 8 fail and 11 missing; the standalone red gate reports P02, P03, P05, P09, P12, P15, P16 and P19 violated; product behavior and runtime acceptance remain unqualified
+    validation_ref: c8c3008f
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
