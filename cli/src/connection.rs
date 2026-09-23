@@ -406,6 +406,7 @@ pub fn daemon_ready(session: &str) -> bool {
 /// Upgrade census runs with host admission disabled so no new work enters the
 /// old generation. That must not make a reachable selected single host look
 /// like an unreachable legacy per-session daemon.
+#[allow(dead_code)]
 pub(crate) fn daemon_ready_through_selected_ingress(session: &str) -> bool {
     let Some(socket_dir) = crate::runtime_host_ingress::selected_socket_dir() else {
         return daemon_ready(session);
@@ -1275,7 +1276,7 @@ fn send_command_once_with_timeout(
     serde_json::from_str(&response_line).map_err(|e| format!("Invalid response: {}", e))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;

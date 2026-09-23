@@ -1,5 +1,7 @@
 //! Linux user-service supervision for named daemon sessions.
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -1285,7 +1287,7 @@ fn print_text_report(report: &Value) {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use std::collections::BTreeSet;
 

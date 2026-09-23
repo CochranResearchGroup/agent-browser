@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -323,6 +323,62 @@ packet must start from the wave-14 worklist, remove the remaining launch,
 remote-headed, health, HTTP, MCP, and dashboard authority surfaces, and avoid
 restoring placeholder lease or runtime-owner APIs merely to make the compiler
 green.
+
+The successor goal selected the coherent downstream CLI dependency-closure
+milestone rather than claiming all of M1. Custody checkpoint `d60d7b16` and
+the following closure batch remove the remaining default-product calls into
+Lease Authority and runtime-owner behavior from launch, remote-headed,
+health, status, Service request, HTTP, MCP, dashboard, workstation, and
+handoff paths. The retained final compiler artifact is
+`/tmp/agent-browser-p218-m1-wave-20`: Cargo exits 0, the compact manifest has
+zero groups, all 42 wave-16 groups resolve, and no group is new, repeated, or
+regressed. Its raw JSON SHA-256 is
+`06b3ef88f2e692c1e7a96d312d0bf65cea2787ef8628fc5ca2dc68abc60b1567`.
+The aggregate architecture gate remains intentionally red for P02, P03, P05,
+P09, P12, and P19, but P15 now reports zero findings. This accepts only the
+default-product Lease Authority closure milestone; SQLite authority, durable
+handoff, viewer authority, and operation-closure work remain separate M1
+packets.
+
+Downstream reconciliation restores invariant-aware Service State decoding,
+updates the Lease Authority architecture test from requiring the CLI edge to
+forbidding it, removes stale profile-lease actions and collection probes, and
+makes the optional presentation provider non-blocking when it is genuinely
+unconfigured. The no-launch collection fixture now performs the required
+forward SQLite migration before daemon startup. A stale workstation fixture
+assertion against the deleted Service State migration preview was replaced by
+the current source-free workstation plan contract. Thirty-six authority-bound
+legacy test modules are excluded from the default test build and four retained
+inspection or recovery modules carry module-level dead-code allowances. This
+is explicit quarantine and reduced legacy coverage, not evidence that those
+deleted-product behaviors remain supported; subsequent packets must replace
+coverage only for retained product contracts rather than re-enable Lease
+Authority behavior.
+
+Validation for this milestone includes workspace check, workspace test
+compilation, strict workspace Clippy, formatting, the focused native action,
+service, and stream compartments, the CLI integration compartment, Service
+State validation, route-confusion gates, Service API and MCP parity, Service
+client contract and type checks, Lease Authority architecture and self-tests,
+the P218 compiler and coverage helpers, the P218 architecture report, the
+no-launch Service collection smoke, and workstation install and Guacamole
+asset fixtures. The first comprehensive Rust run exposed over-pruned fixture
+exports and invariant-blind Service State parsing; both were repaired and the
+affected compartments passed. The comprehensive runner was not replayed after
+those exact focused repairs. One `sccache` incompatibility was retried with the
+repository-supported cache opt-out and passed; one invalid compartment name
+was command rework only.
+
+The third capsule-pilot admission passed `pnpm test:policy-capsule` and reused
+the capsule without a canonical fallback, re-read trigger, material ambiguity,
+or observed policy-behavior defect. Across three admissions, the pilot loaded
+an estimated 1,719 capsule tokens instead of 49,650 canonical-policy tokens,
+for estimated gross ingestion savings of 47,931 tokens. The source measurements
+remain 2,289 bytes and 200 words for the capsule versus 66,200 bytes and 9,244
+words for the eight policies. These are byte-based ingestion estimates, not
+exact model-context or billing measurements. No canonical policy fallback
+occurred; the capsule should be retained for matching P218 M1 turns while its
+hash verification and explicit trigger contract remain current.
 
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file

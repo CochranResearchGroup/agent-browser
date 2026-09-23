@@ -17,8 +17,8 @@ use crate::native::service_failure_journal::{
     ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
 };
 use crate::native::service_model::ServiceState;
-use crate::native::service_principal::{AuthenticatedServicePrincipal, ServicePrincipalProvenance};
 use crate::native::service_profile_access_policy::ServiceProfileAccessDecision;
+use agent_browser_service_model::ServicePrincipalProvenance;
 
 const PROFILE_LEASE_POLICIES: &[&str] = &["reject", "wait"];
 const REPAIR_POLICIES: &[&str] = &[
@@ -82,6 +82,17 @@ const CHALLENGE_TASK_FIXTURE_SCENARIO_IDS: &[&str] = &[
     "pass_after_acknowledged_resolution",
     "rejected_resolution",
 ];
+
+/// Data-only principal provenance accepted from an already authenticated
+/// transport. This value grants no profile, lease, or runtime authority.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct AuthenticatedServicePrincipal {
+    pub(crate) principal_id: String,
+    pub(crate) profile_id: String,
+    pub(crate) capability_id: String,
+    pub(crate) capability_revision: u64,
+    pub(crate) provenance: ServicePrincipalProvenance,
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum RouteHintStage {
@@ -2579,7 +2590,7 @@ fn reject_nonempty_string_array(
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
 

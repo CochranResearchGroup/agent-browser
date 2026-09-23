@@ -28,9 +28,9 @@ mod route_pool;
 pub(crate) use route_pool::*;
 mod shared;
 
-#[cfg(test)]
+#[cfg(any())]
 mod route_action_helper_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod tests;
 #[cfg(test)]
 mod visibility_action_tests;

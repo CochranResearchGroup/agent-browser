@@ -36,7 +36,6 @@ use crate::native::service_config::{
 };
 use crate::native::service_model::{profile_seeding_handoff_id, ProfileSeedingHandoffState};
 use crate::native::service_store::ServiceStateRepository;
-use crate::runtime_owner_transfer::ProfileOwnerState;
 /// Transport-neutral attribution supplied after the ingress has authorized a
 /// route-bound open. Cookies, headers, and transport sessions never cross this
 /// seam.
@@ -1559,20 +1558,18 @@ pub(crate) async fn execute_durable_resolution<
     let presentation = resolved_handoff.and_then(|handoff| handoff.presentation_receipt.clone());
     let presentation_owner_matches = presentation.as_ref().is_some_and(|receipt| {
         presentation_state
-            .runtime_owner_registry
-            .owners()
-            .values()
-            .any(|owner| {
-                owner.state == ProfileOwnerState::Ready
-                    && owner.browser_id == receipt.logical_browser_id
-                    && owner.daemon_session_route
-                        == effective_handoff
-                            .session_name
-                            .as_deref()
-                            .unwrap_or_default()
-                    && Some(owner.owner_generation) == receipt.daemon_owner_generation
-                    && receipt.process_instance_digest.as_deref()
-                        == Some(owner.process_instance_digest.as_str())
+            .browsers
+            .get(&receipt.logical_browser_id)
+            .is_some_and(|browser| {
+                effective_handoff
+                    .session_name
+                    .as_ref()
+                    .is_some_and(|session| {
+                        browser
+                            .active_session_ids
+                            .iter()
+                            .any(|active| active == session)
+                    })
             })
     });
     let presentation_matches = presentation_owner_matches

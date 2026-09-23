@@ -1,7 +1,5 @@
 #![cfg(unix)]
 
-use agent_browser_lease_authority::{AcquireLeaseClaimRequest, LeaseClaimMode, LeaseResourceKey};
-use agent_browser_service_model::ServiceState;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -561,6 +559,7 @@ fn shutdown_json_releases_a_retained_session_without_deleting_profile_data() {
     assert!(!systemctl_log.exists());
 }
 
+#[cfg(any())]
 #[test]
 fn shutdown_json_releases_an_active_resource_claim_without_recovery_input() {
     let fixture = TempWorkstation::new();

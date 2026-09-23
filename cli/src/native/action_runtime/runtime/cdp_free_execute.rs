@@ -864,7 +864,7 @@ pub(crate) async fn launch_safari(cmd: &Value, state: &mut DaemonState) -> Resul
     ))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::service_model::{

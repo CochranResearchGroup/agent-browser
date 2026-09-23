@@ -104,8 +104,6 @@ use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRep
 use crate::native::service_ui_action::*;
 use crate::native::state;
 use crate::test_utils::EnvGuard;
-#[cfg(target_os = "linux")]
-use agent_browser_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
 use serde_json::{json, Map, Value};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::env;
@@ -266,8 +264,6 @@ async fn rejected_protected_launch_completion_cleans_up_and_terminalizes_uncerta
 #[cfg(target_os = "linux")]
 #[test]
 fn confirmed_protected_close_reconciles_exact_owner_and_clears_custody() {
-    use agent_browser_lease_authority::{ProtectedBrowserOwner, ProtectedBrowserOwnerLease};
-
     let mut state = DaemonState::new();
     state.session_id = "session:protected-close".to_string();
     state.protected_browser_owner = Some(ProtectedBrowserOwnerLease {

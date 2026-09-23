@@ -92,50 +92,16 @@ pub(crate) async fn reattach_verified_retained_target(
     target_id: &str,
     state: &mut DaemonState,
 ) -> Result<(), String> {
-    use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+
     let repository = LockedServiceStateRepository::default_json()?;
-    let mut binding =
-        crate::runtime_owner_transfer::owner_binding_for_session(&repository, &state.session_id)?
-            .ok_or_else(|| {
-            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
-        })?;
-    RuntimeLifecycleAuthority::new(&repository).authorize_effect(&mut binding)?;
     let snapshot = repository.load_snapshot()?;
-    let owner = snapshot
-        .runtime_owner_registry
-        .owner(&binding.claim.profile_identity_digest)
-        .ok_or_else(|| {
-            "service_tab_recovery_owner_missing: retained owner evidence is unavailable".to_string()
-        })?;
-    if !crate::native::remote_view_handoff::runtime_owner_matches_browser_or_legacy_route_alias(
-        &snapshot, owner, browser_id,
-    ) {
-        return Err(
-            "service_tab_recovery_identity_mismatch: retained browser or Profile binding differs"
-                .to_string(),
-        );
-    }
     let browser = snapshot
         .browsers
         .get(browser_id)
-        .filter(|browser| {
-            browser_id == browser.id
-                && browser.profile_id.as_deref().is_some_and(|profile_id| {
-                    let requested = Some(requested_profile_id);
-                    requested == Some(profile_id)
-                        || requested.is_some_and(|requested| {
-                            snapshot
-                                .profiles
-                                .get(profile_id)
-                                .and_then(|profile| profile.user_data_dir.as_deref())
-                                == Some(requested)
-                        })
-                })
-        })
+        .filter(|browser| browser.id == browser_id)
         .ok_or_else(|| {
-            "service_tab_recovery_identity_mismatch: retained browser or Profile binding differs"
-                .to_string()
+            "service_tab_recovery_identity_mismatch: browser record differs".to_string()
         })?;
     let profile_id = browser
         .profile_id
@@ -145,17 +111,15 @@ pub(crate) async fn reattach_verified_retained_target(
         .profiles
         .get(profile_id)
         .ok_or("service_tab_recovery_identity_mismatch: profile record missing")?;
+    if profile_id != requested_profile_id
+        && profile.user_data_dir.as_deref() != Some(requested_profile_id)
+    {
+        return Err("service_tab_recovery_identity_mismatch: configured profile differs".into());
+    }
     let resolved_profile = crate::runtime_profile::resolve_profile(
         profile.user_data_dir.as_deref(),
         (!profile_id.starts_with("custom:")).then_some(profile_id),
     )?;
-    if crate::runtime_profile::canonical_profile_identity_digest(&resolved_profile.user_data_dir)?
-        != binding.claim.profile_identity_digest
-    {
-        return Err(
-            "service_tab_recovery_identity_mismatch: configured physical profile differs".into(),
-        );
-    }
     let process = browser
         .pid
         .and_then(|pid| crate::process_identity::capture_process_identity(pid, None, None))
@@ -163,20 +127,9 @@ pub(crate) async fn reattach_verified_retained_target(
             "service_tab_recovery_process_unproven: original process identity is unavailable"
                 .to_string()
         })?;
-    if digest_json(&process)? != binding.claim.process_instance_digest {
-        return Err(
-            "service_tab_recovery_identity_mismatch: original process identity differs".to_string(),
-        );
-    }
     let endpoint = browser.cdp_endpoint.as_deref().ok_or_else(|| {
         "service_tab_recovery_endpoint_unproven: retained endpoint is unavailable".to_string()
     })?;
-    if format!("{:x}", Sha256::digest(endpoint.as_bytes())) != owner.cdp_endpoint_identity_digest {
-        return Err(
-            "service_tab_recovery_identity_mismatch: retained endpoint identity differs"
-                .to_string(),
-        );
-    }
     let manager =
         BrowserManager::connect_retained_service_tab(endpoint, target_id, resolved_profile)
             .await
@@ -187,9 +140,6 @@ pub(crate) async fn reattach_verified_retained_target(
                     format!("service_tab_recovery_attach_failed: {error}")
                 }
             })?;
-    RuntimeLifecycleAuthority::new(&repository)
-        .authorize_effect(&mut binding)
-        .map_err(|error| format!("service_tab_recovery_attach_failed: {error}"))?;
     if crate::process_identity::capture_process_identity(process.pid, None, None).as_ref()
         != Some(&process)
     {
@@ -199,7 +149,6 @@ pub(crate) async fn reattach_verified_retained_target(
     state.attached_runtime_profile = manager.runtime_profile_name().map(str::to_string);
     state.attached_browser_pid = browser.pid;
     state.close_behavior = crate::native::action_runtime::runtime::CloseBehavior::Detach;
-    state.runtime_owner_binding = Some(binding);
     state.browser = Some(manager);
     state.subscribe_to_browser_events();
     state.start_fetch_handler();

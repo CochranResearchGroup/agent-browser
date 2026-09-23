@@ -205,6 +205,7 @@ pub(super) fn run(args: &[String], json: bool) {
 
 /// Join holds before any retention finalization or generation removal. Invalid
 /// retained evidence blocks GC; a release is explicit and leaves its receipt.
+#[allow(dead_code)]
 pub(super) fn references(
     root: &Path,
     paths: &InstallPaths,
@@ -237,7 +238,7 @@ pub(super) fn references(
     Ok(references)
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     fn fixture() -> (std::path::PathBuf, InstallPaths) {

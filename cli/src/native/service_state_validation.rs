@@ -129,7 +129,15 @@ pub(crate) fn validate_service_state_path(
             ));
         }
     };
-    let _ = state;
+    if let Err(message) = agent_browser_service_model::validate_service_state_invariants(&state) {
+        return Ok(error_receipt(
+            path,
+            state_sha256,
+            parser_identity_sha256,
+            ServiceStateValidationErrorCode::InvariantError,
+            message.to_string(),
+        ));
+    }
 
     Ok(ServiceStateValidationReceipt {
         schema_version: SERVICE_STATE_VALIDATION_SCHEMA_VERSION,

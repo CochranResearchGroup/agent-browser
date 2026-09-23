@@ -13,6 +13,8 @@
 //! remain explicit inspection and recovery surfaces for preexisting records;
 //! the default apply route does not enter them.
 
+#![allow(dead_code)]
+
 use serde::Serialize;
 use serde_json::Value;
 use std::env;
@@ -20,7 +22,7 @@ use std::fs;
 use std::fs::OpenOptions;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::{exit, Child, Command, Output, Stdio};
+use std::process::{exit, Command, Output, Stdio};
 
 mod retention_hold;
 
@@ -2329,7 +2331,7 @@ fn write_private_json<T: Serialize>(path: &Path, value: &T) -> Result<(), String
 const MAX_RUNTIME_CENSUS_ROUNDS: usize = 8;
 
 fn selected_generation_id(paths: &InstallPaths) -> Option<String> {
-    fs::read_link(&paths.selected_generation)
+    fs::read_link(&paths.current_selector)
         .ok()
         .and_then(|target| {
             target

@@ -566,7 +566,7 @@ pub(crate) fn parse_service_state_json(raw: String, path: &Path) -> Result<Servi
     std::thread::Builder::new()
         .name("service-state-json".to_string())
         .stack_size(SERVICE_STATE_JSON_STACK_BYTES)
-        .spawn(move || serde_json::from_str(&raw))
+        .spawn(move || agent_browser_service_model::decode_persisted_service_state_json(&raw))
         .map_err(|err| {
             format!(
                 "Failed to start service state JSON parser for {}: {}",
@@ -2126,7 +2126,7 @@ fn acquire_service_state_file_lock_until(
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::service_model::{

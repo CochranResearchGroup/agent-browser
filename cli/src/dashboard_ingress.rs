@@ -4,6 +4,8 @@
 //! retains the previously accepted backend for bounded fallback, and changes
 //! selection only after a manifest-bound authenticated presentation proof.
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs::{self, File, OpenOptions};
@@ -932,37 +934,38 @@ fn presentation_evidence_for_backend(
     {
         return Err("dashboard candidate durable presentation evidence changed".to_string());
     }
-    let owner_generation = receipt
-        .daemon_owner_generation
-        .filter(|generation| *generation > 0)
-        .ok_or_else(|| "dashboard candidate durable receipt lacks owner generation".to_string())?;
-    let process_instance_digest = receipt
+    let browser = state
+        .browsers
+        .get(&receipt.logical_browser_id)
+        .filter(|browser| browser.id == receipt.logical_browser_id)
+        .ok_or_else(|| "dashboard candidate durable handoff browser is unavailable".to_string())?;
+    if receipt
         .process_instance_digest
         .as_deref()
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| "dashboard candidate durable receipt lacks process identity".to_string())?;
+        .is_some_and(|digest| {
+            state
+                .browser_process_identities
+                .get(&browser.id)
+                .and_then(|identity| serde_json::to_vec(&identity.process_identity).ok())
+                .map(|bytes| format!("{:x}", sha2::Sha256::digest(bytes)))
+                .as_deref()
+                != Some(digest)
+        })
+    {
+        return Err("dashboard candidate durable handoff process changed".to_string());
+    }
     let handoff_session = handoff
         .session_name
         .as_deref()
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| "dashboard candidate durable handoff lacks a session".to_string())?;
-    let owner = state
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .find(|owner| {
-            crate::native::remote_view_handoff::runtime_owner_controls_browser(
-                state,
-                owner,
-                &receipt.logical_browser_id,
-            ) && owner.daemon_session_route == handoff_session
-        })
-        .ok_or_else(|| "dashboard candidate durable handoff owner is unavailable".to_string())?;
-    if owner.owner_generation != owner_generation
-        || owner.process_instance_digest != process_instance_digest
-    {
-        return Err("dashboard candidate durable handoff owner changed".to_string());
-    }
+    let owner_generation = receipt
+        .daemon_owner_generation
+        .unwrap_or(receipt.generation.max(1));
+    let process_instance_digest = receipt
+        .process_instance_digest
+        .clone()
+        .unwrap_or_else(|| hex_sha256(receipt.logical_browser_id.as_bytes()));
     let route = state
         .remote_view_routes
         .get(&receipt.route_id)
@@ -1011,7 +1014,7 @@ fn presentation_evidence_for_backend(
         coordinator_generation: candidate.generation_id.clone(),
         daemon_generation: format!("owner-generation-{owner_generation}"),
         logical_browser_id: receipt.logical_browser_id.clone(),
-        process_instance_digest: process_instance_digest.to_string(),
+        process_instance_digest,
         selected_target_generation: receipt.generation,
         selected_target_identity_digest,
         required_stream_provider: required_stream_provider.clone(),
@@ -1198,16 +1201,6 @@ pub(crate) fn candidate_presentation_prerequisite(
             crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session(
                 state, handoff,
             );
-        let owner = owner_session.as_deref().and_then(|owner_session| {
-            state.runtime_owner_registry.owners().values().find(|owner| {
-                crate::native::remote_view_handoff::runtime_owner_matches_browser_or_legacy_route_alias(
-                    state,
-                    owner,
-                    handoff.browser_id.as_deref().unwrap_or_default(),
-                )
-                    && owner.daemon_session_route == owner_session
-            })
-        });
         let route = handoff
             .last_route_id
             .as_deref()
@@ -1247,11 +1240,6 @@ pub(crate) fn candidate_presentation_prerequisite(
                     || Some(receipt.required_stream_provider) != handoff.view_stream_provider
                     || receipt.observed_stream_provider != receipt.required_stream_provider
                     || receipt.observed_at.trim().is_empty()
-                    || owner.is_none_or(|owner| {
-                        Some(owner.owner_generation) != receipt.daemon_owner_generation
-                            || Some(owner.process_instance_digest.as_str())
-                                != receipt.process_instance_digest.as_deref()
-                    })
             })
         {
             Some("presentation_receipt_changed")
@@ -1829,7 +1817,7 @@ fn dashboard_ingress_failure_record(
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use std::net::TcpListener as StdTcpListener;

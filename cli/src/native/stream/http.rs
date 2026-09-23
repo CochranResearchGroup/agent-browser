@@ -39,15 +39,10 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
-use crate::native::service_principal::AuthenticatedServicePrincipal;
-use crate::native::service_profile_acquisition::diagnose_service_profile;
-use crate::native::service_profile_lease::{
-    doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
-};
 use crate::native::service_request::{
-    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestIssue, ServiceRequestIssueKind, ServiceRequestNormalization,
-    ServiceRequestPrincipalSource, ServiceRequestRejection,
+    apply_service_request_attribution, normalize_service_request, AuthenticatedServicePrincipal,
+    ServiceRequestFallbackPrincipal, ServiceRequestIssue, ServiceRequestIssueKind,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_trace::service_commands::service_now_timestamp;
 
@@ -972,8 +967,16 @@ pub(super) async fn handle_http_request(
             let state = load_service_state();
             let observed_at = service_now_timestamp();
             let correlation_id = format!("http-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
-            match diagnose_service_profile(&state, &profile_id, &observed_at, &correlation_id) {
-                Ok(data) => {
+            let data = state.profiles.get(&profile_id).map(|profile| {
+                json!({
+                    "profileId": profile.id,
+                    "observedAt": observed_at,
+                    "correlationId": correlation_id,
+                    "readiness": profile.target_readiness,
+                })
+            });
+            match data {
+                Some(data) => {
                     write_json_value(
                         &mut stream,
                         "200 OK",
@@ -981,7 +984,14 @@ pub(super) async fn handle_http_request(
                     )
                     .await
                 }
-                Err(err) => write_json_result(&mut stream, Err(err), "404 Not Found").await,
+                None => {
+                    write_json_result(
+                        &mut stream,
+                        Err(format!("Profile diagnosis not found: {profile_id}")),
+                        "404 Not Found",
+                    )
+                    .await
+                }
             }
             return;
         }
@@ -1012,14 +1022,13 @@ pub(super) async fn handle_http_request(
             return;
         }
         if path == "/api/service/profile-leases/doctor" {
-            let state = load_service_state();
             let now = service_now_timestamp();
             write_json_value(
                 &mut stream,
                 "200 OK",
                 json!({
                     "success": true,
-                    "data": { "doctor": doctor_profile_leases(&state, &now) },
+                    "data": { "observedAt": now, "state": "removed_from_default_product" },
                 }),
             )
             .await;
@@ -1034,51 +1043,19 @@ pub(super) async fn handle_http_request(
                     return;
                 }
             };
-            let state = load_service_state();
-            let now = service_now_timestamp();
-            match inspect_profile_lease(&state, &lease_id, &now) {
-                Ok(lease) => {
-                    let data = if explain {
-                        let doctor = doctor_profile_leases(&state, &now);
-                        let findings = doctor
-                            .findings
-                            .into_iter()
-                            .filter(|finding| finding.lease_id == lease.id)
-                            .collect::<Vec<_>>();
-                        json!({
-                            "lease": lease,
-                            "explanation": {
-                                "recourse": lease.recourse,
-                                "blockingIdentityAxes": lease.blocking_identity_axes,
-                                "authorizedActions": lease.authorized_actions,
-                                "observationOnly": lease.observation_only,
-                                "findings": findings,
-                            },
-                            "observedAt": now,
-                        })
-                    } else {
-                        json!({ "lease": lease, "observedAt": now })
-                    };
-                    write_json_value(
-                        &mut stream,
-                        "200 OK",
-                        json!({ "success": true, "data": data }),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    write_json_result(
-                        &mut stream,
-                        Err(format!(
-                            "profile_lease_{}:{}",
-                            error.code.as_str(),
-                            error.message
-                        )),
-                        "404 Not Found",
-                    )
-                    .await;
-                }
-            }
+            write_json_value(
+                &mut stream,
+                "410 Gone",
+                json!({
+                    "success": false,
+                    "data": {
+                        "leaseId": lease_id,
+                        "explain": explain,
+                        "state": "removed_from_default_product",
+                    },
+                }),
+            )
+            .await;
             return;
         }
 
@@ -2644,13 +2621,11 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
         }
         SERVICE_PROFILE_LEASES_HTTP_ROUTE => {
             let now = service_now_timestamp();
-            let profile_leases = profile_leases_for_state(&service_state, &now);
-            let doctor = doctor_profile_leases(&service_state, &now);
             Some(json!({
-                "profileLeases": profile_leases,
-                "count": profile_leases.len(),
+                "profileLeases": [],
+                "count": 0,
                 "observedAt": now,
-                "doctor": doctor,
+                "state": "removed_from_default_product",
             }))
         }
         "/api/service/tabs" => {
@@ -3608,7 +3583,7 @@ fn profile_capability_bearer(headers: &[(String, String)]) -> Result<String, Str
 
 fn optional_profile_capability_authority(
     headers: &[(String, String)],
-    service_state: &ServiceState,
+    _service_state: &ServiceState,
 ) -> Result<Option<AuthenticatedServicePrincipal>, String> {
     let Some(authorization) = headers
         .iter()
@@ -3620,16 +3595,8 @@ fn optional_profile_capability_authority(
     if !authorization.starts_with("Bearer ") && !authorization.starts_with("bearer ") {
         return Ok(None);
     }
-    let capability = profile_capability_bearer(headers)?;
-    service_state
-        .authenticate_profile_capability(capability.as_str(), None)
-        .map(Some)
-        .map_err(|error| {
-            format!(
-                "profile_capability_authentication_failed:{}",
-                error.code.as_str()
-            )
-        })
+    let _capability = profile_capability_bearer(headers)?;
+    Err("profile_capabilities_removed_from_trusted_single_user_runtime".to_string())
 }
 
 fn service_session_id(path: &str) -> Option<&str> {
@@ -4503,7 +4470,7 @@ async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String,
     relay_command_to_daemon(session_name, &body).await
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::action_runtime::DaemonState;

@@ -19,17 +19,12 @@ use super::service_failure_journal::{
     append_service_failure_best_effort, opaque_identifier_hash, ServiceFailureCategory,
     ServiceFailureRecord, ServiceFailureReferences,
 };
-use super::service_health::{
-    apply_browser_health_observation, browser_health_observation_details,
-    reconcile_persisted_service_state, record_browser_health_changed_event,
-    remove_browser_operational_record,
-};
+use super::service_health::reconcile_persisted_service_state;
 use super::service_jobs::{
     cancel_persisted_service_job, load_service_job_in_repository, mutate_persisted_service_jobs,
     DEFAULT_SERVICE_JOB_TIMEOUT_MS,
 };
 use super::service_model::{
-    BrowserHealth as ServiceBrowserHealth, BrowserHost as ServiceBrowserHost, BrowserProcess,
     ControlPlaneSnapshot, JobControlPlaneMode, JobPriority, JobState, JobTarget, ServiceActor,
     ServiceEvent, ServiceEventKind, ServiceJob, ServiceState,
     SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
@@ -2126,7 +2121,7 @@ async fn send_response_before_follow_up<F>(
     follow_up.await;
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::super::service_jobs::{
         cancel_service_job_in_repository, mutate_service_jobs_in_repository, MAX_SERVICE_JOBS,

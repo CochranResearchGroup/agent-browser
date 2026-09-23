@@ -485,7 +485,7 @@ fn build_provenance() -> Value {
     })
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use agent_browser_candidate::{

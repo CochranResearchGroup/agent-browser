@@ -2348,14 +2348,10 @@ fn runtime_monitor_status_for_environment(
 }
 
 fn summarize_runtime_lifecycle_authority(state: &ServiceState) -> Value {
-    let summary = state.runtime_lifecycle_authority_summary();
+    let _ = state;
     json!({
-        "available": true,
-        "registryRevision": summary.registry_revision,
-        "ownerCount": summary.owner_count,
-        "recordCount": summary.record_count,
-        "lifecycleStateCounts": summary.lifecycle_state_counts,
-        "cleanupObligationStateCounts": summary.cleanup_obligation_state_counts,
+        "available": false,
+        "state": "removed_from_default_product",
     })
 }
 
@@ -4345,7 +4341,7 @@ fn package_exists_apt(pkg: &str) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;

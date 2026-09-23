@@ -567,9 +567,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             &self.repository,
             &chrono::Utc::now().to_rfc3339(),
         )?;
-        Ok(receipt.released_runtime_owners > 0
-            || receipt.released_resource_claims > 0
-            || receipt.released_sessions > 0
+        Ok(receipt.released_sessions > 0
             || receipt.released_viewer_leases > 0
             || receipt.failed_pending_acquisitions > 0)
     }
@@ -646,14 +644,12 @@ impl ShutdownPlatform for LiveShutdownPlatform {
                 .is_ok_and(|status| status.success())
             })
             .count();
-        let authority = state.runtime_lifecycle_authority_summary();
-        let active_leases = state.lease_authority().active_claim_count();
         Ok(ShutdownResidue {
             owned_browsers,
             owned_user_units,
             owned_containers,
-            runtime_owners: authority.owner_count,
-            active_leases,
+            runtime_owners: 0,
+            active_leases: 0,
             foreign_processes: 0,
         })
     }

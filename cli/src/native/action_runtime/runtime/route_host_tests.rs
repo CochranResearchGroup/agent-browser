@@ -3718,9 +3718,6 @@ async fn canonical_profile_claim_fences_the_prelaunch_effect() {
     use crate::native::service_principal::{
         register_profile_capability, ServicePrincipalRegistrationRequest,
     };
-    use agent_browser_lease_authority::{
-        AcquireLeaseClaimRequest, LeaseClaimMode, LeaseEffectIntent, LeaseResourceKey,
-    };
 
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("canonical-profile-effect-fence");

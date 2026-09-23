@@ -440,17 +440,8 @@ pub(crate) async fn run_service_download_capture(
         .browser_pid()
         .or(state.attached_browser_pid)
         .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
-    let owner = crate::process_identity::capture_process_identity(pid, None, None)
+    let process = crate::process_identity::capture_process_identity(pid, None, None)
         .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
-    let binding = state
-        .runtime_owner_binding
-        .as_ref()
-        .ok_or("download_source_identity_unproven: current owner binding unavailable")?;
-    if crate::native::runtime_lifecycle::digest_json(&owner)?
-        != binding.claim.process_instance_digest
-    {
-        return Err("download_source_identity_unproven: process differs from current owner".into());
-    }
     let tree = mgr
         .client
         .send_command("Page.getFrameTree", None, Some(&session_id))
@@ -465,7 +456,7 @@ pub(crate) async fn run_service_download_capture(
     )
     .await
     .map_err(|_| "download_subscription_failed: setup deadline elapsed")??;
-    super::service_download_artifact::verify_process(&owner)?;
+    super::service_download_artifact::verify_process(&process)?;
     let mut rx = observer.subscribe();
     tokio::time::timeout(
         tokio::time::Duration::from_millis(timeout_ms.min(1000)),
@@ -508,7 +499,7 @@ pub(crate) async fn run_service_download_capture(
         .as_deref()
         .ok_or("download_completion_path_missing: no completed path")?;
     let size =
-        super::service_download_artifact::deliver(&owner, Path::new(source), &dest, max_bytes)?;
+        super::service_download_artifact::deliver(&process, Path::new(source), &dest, max_bytes)?;
     Ok(json!({
         "ok": true, "selector": selector, "localPath": dest.to_string_lossy(),
         "fileName": file_name, "size": size, "mimeType": service_guess_mime_type(&dest),

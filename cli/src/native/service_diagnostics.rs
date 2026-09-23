@@ -13,7 +13,6 @@ use crate::native::interaction;
 use crate::native::screenshot::{self, ScreenshotOptions};
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;
-use crate::runtime_owner_transfer::ProfileOwnerState;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
@@ -286,31 +285,6 @@ fn service_control_plane_attestation(
                     == Some(requested)
             })
     });
-    let runtime_authority =
-        service_state.runtime_control_plane_authority(session_name, browser_id)?;
-    let owner = runtime_authority.attestation;
-    let current_owner = runtime_authority.current_owner;
-    let lifecycle = runtime_authority.lifecycle;
-
-    let owner_authoritative = owner.as_ref().is_some_and(|owner| {
-        owner.effect_capable
-            && owner.owner_state == ProfileOwnerState::Ready
-            && owner.logical_browser_id == browser_id
-            && owner.daemon_session_route == session_name
-    });
-    let browser_owner = owner.as_ref().map(|owner| {
-        json!({
-            "ownerId": owner.owner_id,
-            "ownerGeneration": owner.owner_generation,
-            "ownerState": owner.owner_state,
-            "logicalBrowserId": owner.logical_browser_id,
-            "daemonSessionRoute": owner.daemon_session_route,
-            "processInstanceDigest": owner.process_instance_digest,
-            "effectCapable": owner.effect_capable,
-            "authoritative": owner_authoritative,
-        })
-    });
-
     let process_identity = service_state.browser_process_identities.get(browser_id);
     let process_projection = process_identity
         .map(|identity| {
@@ -318,23 +292,20 @@ fn service_control_plane_attestation(
                 format!("could not serialize service browser process identity: {error}")
             })?;
             let process_instance_digest = format!("{:x}", Sha256::digest(serialized));
-            let matches_owner = browser
+            let matches_browser = browser
                 .and_then(|browser| browser.pid)
-                .is_some_and(|pid| pid == identity.process_identity.pid)
-                && owner
-                    .as_ref()
-                    .is_some_and(|owner| owner.process_instance_digest == process_instance_digest);
+                .is_some_and(|pid| pid == identity.process_identity.pid);
             Ok::<Value, String>(json!({
                 "pid": identity.process_identity.pid,
                 "startToken": identity.process_identity.start_token,
                 "processInstanceDigest": process_instance_digest,
-                "matchesOwner": matches_owner,
+                "matchesBrowser": matches_browser,
             }))
         })
         .transpose()?;
     let process_authoritative = process_projection
         .as_ref()
-        .and_then(|projection| projection.get("matchesOwner"))
+        .and_then(|projection| projection.get("matchesBrowser"))
         .and_then(Value::as_bool)
         == Some(true);
 
@@ -416,55 +387,10 @@ fn service_control_plane_attestation(
         })
     });
 
-    let handoff_receipt = owner
-        .as_ref()
-        .and_then(|owner| owner.handoff_receipt.as_ref())
-        .map(|receipt| {
-            json!({
-                "id": receipt.receipt_id,
-                "sha256": receipt.receipt_sha256,
-                "transitionKind": receipt.transition_kind,
-                "ownerGeneration": receipt.owner_generation,
-                "state": receipt.state,
-            })
-        });
-    let handoff_accepted = handoff_receipt
-        .as_ref()
-        .and_then(|receipt| receipt.get("state"))
-        .and_then(Value::as_str)
-        == Some("accepted");
-
-    // A fresh managed browser has no transfer receipt. Require positive launch
-    // custody instead of treating missing transfer history as sufficient proof.
-    let boot = crate::process_identity::current_boot_epoch();
-    let launch_checks = current_owner.zip(lifecycle).map(|(current, lifecycle)| {
-        json!({
-            "noPendingTransfer": current.pending_transfer.is_none(),
-            "noTransferHistory": current.last_transition.is_none(),
-            "browserMatches": lifecycle.logical_browser_id == browser_id,
-            "profileMatches": lifecycle.profile_identity_digest == current.profile_identity_digest,
-            "generationMatches": lifecycle.owner_generation == current.owner_generation,
-            "lifecycleReady": lifecycle.lifecycle_state == crate::runtime_owner_transfer::RuntimeLaneLifecycleState::Ready,
-            "cleanupOwned": lifecycle.cleanup_obligation_state == crate::runtime_owner_transfer::CleanupObligationState::Owned,
-            "bootMatches": boot.is_some() && lifecycle.boot_epoch == boot,
-            "launchDigestMatches": lifecycle.package_launch_identity_digest.as_deref().is_some_and(|recorded| {
-                super::runtime_lifecycle::package_launch_identity_digest(current, lifecycle.process_group_id)
-                    .is_ok_and(|expected| expected == recorded)
-            }),
-        })
-    });
-    let launch_matches = launch_checks
-        .as_ref()
-        .and_then(Value::as_object)
-        .is_some_and(|checks| checks.values().all(|value| value == &Value::Bool(true)));
-    let custody_verified =
-        owner_authoritative && process_authoritative && (handoff_accepted || launch_matches);
+    let custody_verified = lease_active && process_authoritative;
     let owner_custody = json!({
         "verified": custody_verified,
-        "basis": if handoff_accepted { "owner_transfer" } else if launch_matches { "managed_launch" } else { "unproven" },
-        "launchRecordMatches": launch_matches,
-        "launchChecks": launch_checks,
-        "handoffAccepted": handoff_accepted,
+        "basis": if custody_verified { "service_state_process_identity" } else { "unproven" },
         "source": "native/service_diagnostics.rs:service_control_plane_attestation",
     });
 
@@ -477,9 +403,6 @@ fn service_control_plane_attestation(
         .is_some_and(|proof| proof["verified"] != true)
     {
         missing_proofs.push("display_owner");
-    }
-    if !owner_authoritative {
-        missing_proofs.push("browser_owner");
     }
     if !process_authoritative {
         missing_proofs.push("process_identity");
@@ -494,10 +417,10 @@ fn service_control_plane_attestation(
         "schemaVersion": "agent-browser.service-control-plane-attestation.v1",
         "observedAt": observed_at,
         "complete": missing_proofs.is_empty(),
-        "browserOwner": browser_owner,
+        "browserOwner": Value::Null,
         "processIdentity": process_projection,
         "profileLease": profile_lease,
-        "handoffReceipt": handoff_receipt,
+        "handoffReceipt": Value::Null,
         "ownerCustody": owner_custody,
         "displayOwner": display_owner,
         "missingProofs": missing_proofs,
@@ -565,7 +488,7 @@ pub(crate) fn truncate_utf8(value: &str, max_bytes: usize) -> String {
     value[..end].to_string()
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::service_model::{

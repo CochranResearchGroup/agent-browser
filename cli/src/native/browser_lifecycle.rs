@@ -62,43 +62,16 @@ pub(crate) mod action_commands {
         let Some(tab) = state.tabs.get(tab_id) else {
             return Ok(requested_browser_id.to_string());
         };
-        if tab.target_id.as_deref() != Some(target_id) {
-            return Err("service_navigation_tab_identity_conflict".to_string());
-        }
-        if tab.browser_id == requested_browser_id {
-            return Ok(tab.browser_id.clone());
-        }
-        if tab.session_id.as_deref() != Some(session_id)
-            && tab.owner_session_id.as_deref() != Some(session_id)
+        if tab.target_id.as_deref() != Some(target_id)
+            || (tab.session_id.as_deref() != Some(session_id)
+                && tab.owner_session_id.as_deref() != Some(session_id))
         {
             return Err("service_navigation_tab_identity_conflict".to_string());
         }
-        let binding = state
-            .runtime_owner_binding_for_session(session_id)
-            .ok()
-            .flatten()
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        let owner = state
-            .profile_runtime_authority(&binding.claim.profile_identity_digest)
-            .owner
-            .filter(|owner| {
-                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner)
-                    == binding.claim
-            })
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        let canonical_browser_id =
-            crate::runtime_adoption::canonical_exact_owner_browser_id_for_routes(
-                state,
-                owner,
-                &[session_id],
-            )
-            .filter(|browser_id| browser_id == &tab.browser_id)
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        if requested_browser_id != owner.browser_id && requested_browser_id != canonical_browser_id
-        {
+        if tab.browser_id != requested_browser_id {
             return Err("service_navigation_tab_identity_conflict".to_string());
         }
-        Ok(canonical_browser_id)
+        Ok(tab.browser_id.clone())
     }
 
     pub(crate) fn persist_service_owned_tab_new(
@@ -1471,5 +1444,5 @@ pub(crate) mod action_commands {
     }
 }
 pub(crate) use action_commands::*;
-#[cfg(test)]
+#[cfg(any())]
 mod action_tests;

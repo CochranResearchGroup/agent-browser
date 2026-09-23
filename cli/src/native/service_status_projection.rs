@@ -1155,6 +1155,7 @@ pub(crate) mod action_commands {
     use chrono::{DateTime, FixedOffset};
     use serde::{Deserialize, Serialize};
     use serde_json::{json, Map, Value};
+    use sha2::Digest;
     use std::sync::Arc;
     pub(crate) async fn handle_service_status(cmd: &Value) -> Result<Value, String> {
         let repository = LockedServiceStateRepository::default_json()?;
@@ -1257,11 +1258,7 @@ pub(crate) mod action_commands {
             .keys()
             .cloned()
             .collect::<std::collections::BTreeSet<_>>();
-        let managed = state
-            .runtime_resource_lanes()
-            .into_iter()
-            .map(|lane| lane.browser_id.to_string())
-            .collect::<std::collections::BTreeSet<_>>();
+        let managed = std::collections::BTreeSet::<String>::new();
         let session_references = state
             .sessions
             .values()
@@ -1315,8 +1312,9 @@ pub(crate) mod action_commands {
                 };
             let mut evidence_record = browser.clone();
             evidence_record.record_provenance = None;
-            let evidence_digest =
-                crate::native::runtime_lifecycle::digest_json(&evidence_record).unwrap_or_default();
+            let evidence_digest = serde_json::to_vec(&evidence_record)
+                .map(|bytes| format!("{:x}", sha2::Sha256::digest(bytes)))
+                .unwrap_or_default();
             let record_revision = browser
                 .record_provenance
                 .as_ref()

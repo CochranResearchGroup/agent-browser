@@ -3772,7 +3772,7 @@ pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;

@@ -16,11 +16,9 @@ use super::service_model::{
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceState,
     TabLifecycle, ViewStreamProvider,
 };
-use super::service_retained_state::reconcile_matching_inactive_terminal_route_quarantines;
 use super::service_store::{
     JsonServiceStateStore, LockedServiceStateRepository, ServiceStateRepository,
 };
-use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
 
 pub struct RouteBoundHandoffPlannedResponseInput<'a> {
     pub intent: &'a RemoteViewOpenIntent,
@@ -677,124 +675,33 @@ pub(crate) fn remote_view_handoff_ready_owner_session(
 ) -> Option<String> {
     let browser_id = handoff.browser_id.as_deref()?;
     let target_id = handoff.target_id.as_deref()?;
+    let session_name = handoff.session_name.as_deref()?;
     let browser = state.browsers.get(browser_id)?;
-    let process = state.browser_process_identities.get(browser_id)?;
     if browser.id != browser_id
         || browser.health != BrowserHealth::Ready
-        || browser.pid != Some(process.process_identity.pid)
+        || !browser
+            .active_session_ids
+            .iter()
+            .any(|id| id == session_name)
+        || !browser.tab_handles.iter().any(|tab| {
+            tab.valid
+                && tab.browser_id == browser_id
+                && tab.target_id.as_deref() == Some(target_id)
+                && tab.session_name.as_deref() == Some(session_name)
+        })
     {
         return None;
     }
-    let process_instance_digest = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
-    );
-
-    unique_ready_handoff_owner_session(
-        state,
-        browser_id,
-        &process_instance_digest,
-        |owner_session| {
-            browser.tab_handles.iter().any(|tab| {
-                tab.valid
-                    && tab.browser_id == browser_id
-                    && tab.target_id.as_deref() == Some(target_id)
-                    && tab.session_name.as_deref() == Some(owner_session)
-            })
-        },
-    )
+    Some(session_name.to_string())
 }
 
-/// Return whether an exact runtime owner controls the physical browser row.
-///
-/// After an adopted browser crosses a runtime handoff, the owner registry can
-/// use the handoff session as its logical browser id while Service State keeps
-/// the retained process under its physical browser id. The active owner
-/// session is the authoritative alias edge between those identities.
-pub(crate) fn runtime_owner_controls_browser(
-    state: &ServiceState,
-    owner: &ProfileOwner,
-    browser_id: &str,
-) -> bool {
-    owner.browser_id == browser_id
-        || state
-            .sessions
-            .get(&owner.daemon_session_route)
-            .is_some_and(|session| {
-                !matches!(
-                    session.lease,
-                    super::service_model::LeaseState::Released
-                        | super::service_model::LeaseState::Expired
-                ) && session.browser_ids.iter().any(|id| id == browser_id)
-            })
-}
-
-/// Resolve the still-effect-capable source owner of an exact pre-commit
-/// transfer so workstation bootstrap can stage the candidate that will first
-/// abort the descriptor-backed transfer and retry it.
 pub(crate) fn remote_view_handoff_recoverable_pending_owner_session(
     state: &ServiceState,
     handoff: &RemoteViewHandoff,
 ) -> Option<String> {
-    let browser_id = handoff.browser_id.as_deref()?;
-    let target_id = handoff.target_id.as_deref()?;
-    let browser = state.browsers.get(browser_id)?;
-    let process = state.browser_process_identities.get(browser_id)?;
-    if browser.id != browser_id
-        || browser.health != BrowserHealth::Ready
-        || browser.pid != Some(process.process_identity.pid)
-    {
-        return None;
-    }
-    let process_instance_digest = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
-    );
-    let mut owners = state
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .filter(|owner| {
-            let pending = owner.pending_transfer.as_ref();
-            owner.state == ProfileOwnerState::Ready
-                && runtime_owner_controls_browser(state, owner, browser_id)
-                && owner.process_instance_digest == process_instance_digest
-                && !owner.daemon_session_route.trim().is_empty()
-                && pending.is_some_and(|proposal| {
-                    !proposal.candidate_effect_capable
-                        && proposal.previous_owner_generation == owner.owner_generation
-                        && proposal.request.expected_owner_generation == owner.owner_generation
-                        && proposal.request.expected_owner_id.as_deref()
-                            == Some(owner.owner_id.as_str())
-                        && proposal.request.profile_identity_digest == owner.profile_identity_digest
-                        && proposal.request.logical_browser_id == owner.browser_id
-                        && proposal.request.process_instance_digest == owner.process_instance_digest
-                })
-                && browser
-                    .active_session_ids
-                    .iter()
-                    .any(|session_id| session_id == &owner.daemon_session_route)
-                && browser.tab_handles.iter().any(|tab| {
-                    tab.valid
-                        && tab.browser_id == browser_id
-                        && tab.target_id.as_deref() == Some(target_id)
-                        && tab.session_name.as_deref() == Some(owner.daemon_session_route.as_str())
-                })
-        });
-    let owner = owners.next()?;
-    if owners.next().is_some() {
-        return None;
-    }
-    Some(owner.daemon_session_route.clone())
+    remote_view_handoff_ready_owner_session(state, handoff)
 }
 
-/// Resolve a retained handoff from fresh read-only process and CDP evidence.
-///
-/// Persisted browser health and tab projections can lag a live runtime after a
-/// failed upgrade rolls ownership back. This observer keeps the exact recorded
-/// process identity and runtime-owner checks, restricts CDP probing to loopback,
-/// and requires the handoff's exact target to still be live. It never writes
-/// Service State or launches a browser.
 pub(crate) fn remote_view_handoff_live_owner_session(
     state: &ServiceState,
     handoff: &RemoteViewHandoff,
@@ -816,10 +723,9 @@ pub(crate) fn remote_view_handoff_live_owner_session(
         return None;
     }
     let endpoint = url::Url::parse(browser.cdp_endpoint.as_deref()?).ok()?;
-    let loopback = endpoint.host_str().is_some_and(|host| {
+    if !endpoint.host_str().is_some_and(|host| {
         host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
-    });
-    if !loopback {
+    }) {
         return None;
     }
     let targets = crate::runtime_profile::fetch_runtime_targets(endpoint.port()?).ok()?;
@@ -828,70 +734,11 @@ pub(crate) fn remote_view_handoff_live_owner_session(
     }) {
         return None;
     }
-    let process_instance_digest = format!(
-        "{:x}",
-        Sha256::digest(serde_json::to_vec(&process.process_identity).ok()?)
-    );
-    unique_ready_handoff_owner_session(state, browser_id, &process_instance_digest, |_| true)
-}
-
-fn unique_ready_handoff_owner_session(
-    state: &ServiceState,
-    browser_id: &str,
-    process_instance_digest: &str,
-    target_is_bound: impl Fn(&str) -> bool,
-) -> Option<String> {
-    let browser = state.browsers.get(browser_id)?;
-    let mut owners = state
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .filter(|owner| {
-            owner.state == ProfileOwnerState::Ready
-                && owner.pending_transfer.is_none()
-                && runtime_owner_matches_browser_or_legacy_route_alias(state, owner, browser_id)
-                && owner.process_instance_digest == process_instance_digest
-                && !owner.daemon_session_route.trim().is_empty()
-                && browser
-                    .active_session_ids
-                    .iter()
-                    .any(|session_id| session_id == &owner.daemon_session_route)
-                && target_is_bound(owner.daemon_session_route.as_str())
-        });
-    let owner = owners.next()?;
-    if owners.next().is_some() {
-        return None;
-    }
-    Some(owner.daemon_session_route.clone())
-}
-
-/// Accept the stable browser identity or one legacy owner record that copied
-/// its daemon route into `browserId`. The legacy form is admissible only when
-/// that synthetic browser does not exist and the stable browser is actively
-/// bound to the same daemon route. Callers must also prove process identity.
-pub(crate) fn runtime_owner_matches_browser_or_legacy_route_alias(
-    state: &ServiceState,
-    owner: &crate::runtime_owner_transfer::ProfileOwner,
-    browser_id: &str,
-) -> bool {
-    if owner.browser_id == browser_id {
-        return true;
-    }
-    if state.browsers.contains_key(&owner.browser_id) {
-        return false;
-    }
-    if owner.browser_id == format!("session:{}", owner.daemon_session_route)
-        && state.browsers.get(browser_id).is_some_and(|browser| {
-            browser
-                .active_session_ids
-                .iter()
-                .any(|session_id| session_id == &owner.daemon_session_route)
-        })
-    {
-        return true;
-    }
-    crate::runtime_adoption::canonical_exact_owner_browser_id(state, owner).as_deref()
-        == Some(browser_id)
+    handoff
+        .session_name
+        .as_ref()
+        .filter(|session| browser.active_session_ids.iter().any(|id| id == *session))
+        .cloned()
 }
 
 /// Reapply a retained remote-view route only when current service state proves
@@ -1774,16 +1621,6 @@ pub fn begin_route_bound_handoff_acquisition(
     let (lease_state, lease_phase) = lifecycle.state_phase();
     let boot_epoch = crate::process_identity::current_boot_epoch();
     repository.mutate(|state| {
-        let prior_state = state.clone();
-        reconcile_matching_inactive_terminal_route_quarantines(
-            state,
-            &prior_state,
-            input.observed_at,
-            input.browser_id,
-            input.session_id,
-            &input.acquisition_plan.selected_route_id,
-            &input.acquisition_plan.display_allocation_id,
-        );
         if let Some(quarantined) = state.remote_view_acquisition_leases.values().find(|lease| {
             lease.state == "failed"
                 && lease.phase == "rollback_incomplete"
@@ -2191,19 +2028,12 @@ fn finalize_route_bound_handoff_atomic(
                     .and_then(|existing| existing.presentation_receipt.as_ref())
                     .map(|receipt| receipt.generation.saturating_add(1))
                     .unwrap_or(1);
-                if let Some(owner) = state
-                    .runtime_owner_registry
-                    .owners()
-                    .values()
-                    .find(|owner| {
-                        runtime_owner_controls_browser(state, owner, &receipt.logical_browser_id)
-                            && owner.daemon_session_route
-                                == handoff.session_name.as_deref().unwrap_or("")
-                    })
-                {
-                    receipt.daemon_owner_generation = Some(owner.owner_generation);
-                    receipt.process_instance_digest = Some(owner.process_instance_digest.clone());
-                }
+                receipt.daemon_owner_generation = Some(receipt.generation.max(1));
+                receipt.process_instance_digest = state
+                    .browser_process_identities
+                    .get(&receipt.logical_browser_id)
+                    .and_then(|identity| serde_json::to_vec(&identity.process_identity).ok())
+                    .map(|bytes| format!("{:x}", Sha256::digest(bytes)));
                 handoff.last_resolution = Some(json!({
                     "status": "ready",
                     "browserId": handoff.browser_id,

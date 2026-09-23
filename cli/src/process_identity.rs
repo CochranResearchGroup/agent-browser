@@ -330,6 +330,7 @@ pub fn observe_process(pid: u32) -> ProcessObservation {
 
 /// Observe the current Unix process group for launch identity binding.
 /// Non-Unix platforms return no process-group evidence.
+#[allow(dead_code)]
 pub fn observe_process_group_id(pid: u32) -> Option<u32> {
     #[cfg(unix)]
     {

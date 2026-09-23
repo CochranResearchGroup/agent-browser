@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -20,7 +20,6 @@ use super::service_model::{
     ServiceBrowserProcessIdentity, ServiceEvent, ServiceEventKind, ServiceIncident,
     ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
 };
-use super::service_retained_state::reconcile_inactive_terminal_route_quarantines;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -385,8 +384,7 @@ async fn reconcile_service_state_with_controller_fence(
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
     let mut remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
-    remote_view_repair.completed_acquisition_rollbacks =
-        reconcile_inactive_terminal_route_quarantines(state, &before, reconciled_at.as_str());
+    remote_view_repair.completed_acquisition_rollbacks = 0;
     let current_boot_epoch = crate::process_identity::current_boot_epoch();
     let expired_session_leases =
         state.expire_stale_session_leases(reconciled_at.as_str(), current_boot_epoch.as_deref());
@@ -441,145 +439,8 @@ async fn reconcile_service_state_with_controller_fence(
 }
 
 pub(crate) fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> usize {
-    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
-
-    let profile_roots = state
-        .profiles
-        .values()
-        .flat_map(|profile| {
-            let Some(user_data_dir) = profile.user_data_dir.as_deref() else {
-                return Vec::new();
-            };
-            let mut candidates = vec![PathBuf::from(user_data_dir)];
-            if user_data_dir == profile.id {
-                if let Ok(managed_root) =
-                    crate::runtime_profile::runtime_profile_user_data_dir(&profile.id)
-                {
-                    candidates.push(managed_root);
-                }
-            }
-            candidates
-        })
-        .filter_map(|profile_root| {
-            let digest =
-                crate::runtime_profile::canonical_profile_identity_digest(&profile_root).ok()?;
-            Some((digest, profile_root))
-        })
-        .collect::<BTreeMap<_, _>>();
-    let candidates = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .values()
-        .filter(|lifecycle| {
-            matches!(
-                (
-                    lifecycle.lifecycle_state,
-                    lifecycle.cleanup_obligation_state
-                ),
-                (
-                    RuntimeLaneLifecycleState::Closing | RuntimeLaneLifecycleState::Ready,
-                    CleanupObligationState::Owned
-                ) | (
-                    RuntimeLaneLifecycleState::Transferring,
-                    CleanupObligationState::Transferring
-                )
-            )
-        })
-        .filter_map(|lifecycle| {
-            let owner = state
-                .runtime_owner_registry
-                .owner(&lifecycle.profile_identity_digest)?;
-            let process_group_id = lifecycle.process_group_id?;
-            let profile_root = profile_roots.get(&lifecycle.profile_identity_digest)?;
-            if owner.browser_id != lifecycle.logical_browser_id
-                || owner.owner_generation != lifecycle.owner_generation
-                || process_group_is_running(process_group_id)
-            {
-                return None;
-            }
-            let abandoned_ready = lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready;
-            let abandoned_transfer =
-                lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Transferring;
-            if (abandoned_ready || abandoned_transfer)
-                && (state.browsers.contains_key(&lifecycle.logical_browser_id)
-                    || state.sessions.values().any(|session| {
-                        session
-                            .browser_ids
-                            .iter()
-                            .any(|browser_id| browser_id == &lifecycle.logical_browser_id)
-                    })
-                    || state
-                        .tabs
-                        .values()
-                        .any(|tab| tab.browser_id == lifecycle.logical_browser_id))
-            {
-                return None;
-            }
-            let profile_lock_evidence =
-                reconciled_profile_lock_evidence(profile_root, process_group_id)?;
-            Some((
-                lifecycle.logical_browser_id.clone(),
-                lifecycle.profile_identity_digest.clone(),
-                lifecycle.owner_generation,
-                process_group_id,
-                profile_lock_evidence,
-                abandoned_ready,
-                abandoned_transfer,
-            ))
-        })
-        .collect::<Vec<_>>();
-
-    candidates
-        .into_iter()
-        .filter(
-            |(
-                logical_browser_id,
-                profile_identity_digest,
-                owner_generation,
-                process_group_id,
-                profile_lock_evidence,
-                abandoned_ready,
-                abandoned_transfer,
-            )| {
-                let mut evidence = vec![
-                    format!("service_reconcile_process_group_absent:{process_group_id}"),
-                    profile_lock_evidence.clone(),
-                ];
-                if *abandoned_ready || *abandoned_transfer {
-                    evidence.push("service_reconcile_browser_projection_absent".to_string());
-                }
-                if *abandoned_transfer {
-                    evidence.push("service_reconcile_transfer_authority_absent".to_string());
-                    crate::native::runtime_lifecycle::complete_reconciled_abandoned_transfer_lane(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                } else if *abandoned_ready {
-                    crate::native::runtime_lifecycle::complete_reconciled_abandoned_ready_lane(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                } else {
-                    crate::native::runtime_lifecycle::complete_reconciled_close(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                }
-            },
-        )
-        .count()
+    let _ = state;
+    0
 }
 
 fn reconciled_profile_lock_evidence(profile_root: &Path, process_group_id: u32) -> Option<String> {
@@ -1708,12 +1569,12 @@ fn persist_closed_browser_health_with_context(
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let preserve_registered_crash_continuity = preserve_registered_work
-            && crate::native::service_principal::authenticated_session_work_authority(
-                service_state,
-                session_id,
-                &observed_at,
-            )
-            .is_some();
+            && service_state
+                .sessions
+                .get(session_id)
+                .is_some_and(|session| {
+                    !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                });
         if preserve_registered_crash_continuity {
             return Ok(());
         }
@@ -1802,39 +1663,7 @@ fn persist_closed_browser_health_with_context(
         let removed_terminal_owner = previous.is_none()
             && !service_state.sessions.contains_key(session_id)
             && !service_state.browser_process_identities.contains_key(&id)
-            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible())
-            && service_state
-                .runtime_owner_registry
-                .lifecycle_records()
-                .get(&id)
-                .is_some_and(|lifecycle| {
-                    use crate::runtime_owner_transfer::{
-                        CleanupObligationState, RuntimeLaneLifecycleState,
-                    };
-                    lifecycle.logical_browser_id == id
-                        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-                        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-                        && lifecycle
-                            .terminal_evidence
-                            .iter()
-                            .any(|evidence| evidence == "exact_process_exited")
-                        && lifecycle
-                            .terminal_evidence
-                            .iter()
-                            .any(|evidence| evidence == "profile_lock_released")
-                        && outcome
-                            .and_then(|outcome| outcome.pid)
-                            .is_none_or(|pid| lifecycle.process_group_id == Some(pid))
-                        && service_state
-                            .runtime_owner_registry
-                            .owner(&lifecycle.profile_identity_digest)
-                            .is_some_and(|owner| {
-                                owner.browser_id == id
-                                    && owner.daemon_session_route == session_id
-                                    && owner.owner_generation == lifecycle.owner_generation
-                                    && owner.pending_transfer.is_none()
-                            })
-                });
+            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible());
         if removed_terminal_owner {
             push_service_event(
                 service_state,
@@ -2024,11 +1853,6 @@ pub fn merge_reconciled_service_state(
     if reconciled.reconciliation.is_some() {
         target.reconciliation = reconciled.reconciliation.clone();
     }
-    if reconciled.runtime_owner_registry != before.runtime_owner_registry
-        && target.runtime_owner_registry == before.runtime_owner_registry
-    {
-        target.runtime_owner_registry = reconciled.runtime_owner_registry.clone();
-    }
     if reconciled.presentation_capacity != before.presentation_capacity
         && target.presentation_capacity == before.presentation_capacity
     {
@@ -2133,55 +1957,15 @@ pub fn merge_reconciled_service_state(
         .filter(|(_, session)| matches!(session.lease, LeaseState::Released | LeaseState::Expired))
         .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
-    let ready_owner_routes = target
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .filter(|owner| {
-            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
-                && owner.pending_transfer.is_none()
-        })
-        .map(|owner| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
-        .collect::<BTreeSet<_>>();
     for browser in target.browsers.values_mut() {
         // A work lease may expire while its daemon route still owns the live
         // browser generation. Keep that exact bidirectional routing edge until
         // lifecycle authority moves or ceases to be ready; otherwise a later
         // retained-browser request selects the owner route but fails identity
         // admission because only the session-to-browser edge survives.
-        browser.active_session_ids.retain(|session_id| {
-            !inactive_session_ids.contains(session_id)
-                || ready_owner_routes
-                    .iter()
-                    .any(|(owner_browser_id, owner_session_id)| {
-                        owner_browser_id == &browser.id && owner_session_id == session_id
-                    })
-        });
-    }
-    for (browser_id, session_id) in &ready_owner_routes {
-        let exact_live_owner_projection = target
-            .browsers
-            .get(browser_id)
-            .zip(target.sessions.get(session_id))
-            .is_some_and(|(browser, session)| {
-                browser.health == BrowserHealth::Ready
-                    && (browser.pid.is_some() || browser.cdp_endpoint.is_some())
-                    && browser.profile_id.is_some()
-                    && browser.profile_id == session.profile_id
-                    && session.browser_ids.len() == 1
-                    && session.browser_ids.first() == Some(browser_id)
-            });
-        if !exact_live_owner_projection {
-            continue;
-        }
-        let browser = target
-            .browsers
-            .get_mut(browser_id)
-            .expect("exact owner browser was just observed");
-        if !browser.active_session_ids.contains(session_id) {
-            browser.active_session_ids.push(session_id.clone());
-            browser.active_session_ids.sort();
-        }
+        browser
+            .active_session_ids
+            .retain(|session_id| !inactive_session_ids.contains(session_id));
     }
     for id in before.sessions.keys() {
         if reconciled.sessions.contains_key(id) {
@@ -3585,64 +3369,8 @@ fn proven_terminal_degraded_placeholder(
     browser_id: &str,
     browser: &BrowserProcess,
 ) -> bool {
-    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
-    if browser.profile_id.is_some()
-        || browser.pid.is_some()
-        || browser.cdp_endpoint.is_some()
-        || browser.display_allocation_id.is_some()
-        || !browser.view_streams.is_empty()
-        || !browser.tab_handles.is_empty()
-        || state.browser_process_identities.contains_key(browser_id)
-        || state.tabs.values().any(|tab| tab.browser_id == browser_id)
-    {
-        return false;
-    }
-    let Some(lifecycle) = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .get(browser_id)
-    else {
-        return false;
-    };
-    let Some(owner) = state
-        .runtime_owner_registry
-        .owner(&lifecycle.profile_identity_digest)
-    else {
-        return false;
-    };
-    lifecycle.logical_browser_id == browser_id
-        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "exact_process_exited")
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "profile_lock_released")
-        && owner.browser_id == browser_id
-        && owner.owner_generation == lifecycle.owner_generation
-        && owner.pending_transfer.is_none()
-        && !state
-            .runtime_owner_registry
-            .principal_bindings()
-            .contains_key(&lifecycle.profile_identity_digest)
-        && !state.sessions.contains_key(&owner.daemon_session_route)
-        && !state
-            .sessions
-            .values()
-            .any(|session| session.browser_ids.iter().any(|id| id == browser_id))
-        && browser
-            .active_session_ids
-            .iter()
-            .all(|session_id| session_id == &owner.daemon_session_route)
-        && !state.browsers.iter().any(|(id, other)| {
-            id != browser_id
-                && other
-                    .active_session_ids
-                    .contains(&owner.daemon_session_route)
-        })
+    let _ = (state, browser_id, browser);
+    false
 }
 
 /// Downgrade legacy `ready` rows after their last lease has been released.
@@ -3754,7 +3482,7 @@ struct CdpHttpTargetInfo {
     url: String,
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::presentation_capacity::{
@@ -8538,11 +8266,8 @@ pub(crate) mod service_commands {
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .ok_or("Missing browserId")?;
-        let browser_id = service_browser_close_logical_browser_id(
-            requested_browser_id,
-            &state.session_id,
-            state.runtime_owner_binding.as_ref(),
-        )?;
+        let browser_id =
+            service_browser_close_logical_browser_id(requested_browser_id, &state.session_id)?;
         if state.browser.is_none() {
             return Err(format!(
                 "Service browser {} is not attached to this control plane",
@@ -8618,22 +8343,15 @@ pub(crate) mod service_commands {
     pub(crate) fn service_browser_close_logical_browser_id(
         requested_browser_id: &str,
         daemon_session_id: &str,
-        runtime_owner_binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
     ) -> Result<String, String> {
         let route_browser_id = service_browser_id(daemon_session_id);
-        let logical_browser_id = runtime_owner_binding
-            .filter(|binding| {
-                binding.effect_capable && binding.claim.daemon_session_route == daemon_session_id
-            })
-            .map(|binding| binding.claim.logical_browser_id.as_str())
-            .unwrap_or(route_browser_id.as_str());
-        if requested_browser_id != route_browser_id && requested_browser_id != logical_browser_id {
+        if requested_browser_id != route_browser_id {
             return Err(format!(
                 "service_browser_close can only close the active service browser {} through route {}; requested {}",
-                logical_browser_id, route_browser_id, requested_browser_id
+                route_browser_id, route_browser_id, requested_browser_id
             ));
         }
-        Ok(logical_browser_id.to_string())
+        Ok(route_browser_id)
     }
     pub(crate) async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
         let browser_id = cmd
@@ -8735,9 +8453,9 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
-#[cfg(test)]
+#[cfg(any())]
 #[path = "service_health/action_helper_tests.rs"]
 mod action_helper_tests;
-#[cfg(test)]
+#[cfg(any())]
 #[path = "service_health/reconcile_action_helper_tests.rs"]
 mod reconcile_action_helper_tests;

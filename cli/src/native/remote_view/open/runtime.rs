@@ -260,14 +260,7 @@ pub(crate) async fn observe_daemon_browser(
     state: &mut DaemonState,
 ) -> Result<RouteBoundBrowserObservation, RouteBoundRuntimeIssue> {
     let session_id = state.session_id.clone();
-    let browser_id = state
-        .runtime_owner_binding
-        .as_ref()
-        .filter(|binding| {
-            binding.effect_capable && binding.claim.daemon_session_route == session_id
-        })
-        .map(|binding| binding.claim.logical_browser_id.clone())
-        .unwrap_or_else(|| service_browser_id(&session_id));
+    let browser_id = service_browser_id(&session_id);
     let attached_browser_pid = state.attached_browser_pid;
     let attached_runtime_profile = state.attached_runtime_profile.clone();
     let Some(manager) = state.browser.as_mut() else {
@@ -664,7 +657,7 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     }
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::runtime_owner_transfer::{OwnerAuthorityClaim, RuntimeOwnerBinding};

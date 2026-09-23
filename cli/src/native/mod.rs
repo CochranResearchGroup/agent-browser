@@ -136,7 +136,6 @@ pub mod remote_view_lease;
 pub mod remote_view_proof;
 pub(crate) mod route_keeper_connection_catalog;
 #[allow(dead_code)]
-#[allow(dead_code)]
 pub mod screenshot;
 #[allow(dead_code)]
 pub mod service_access;

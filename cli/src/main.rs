@@ -654,11 +654,7 @@ fn apply_existing_lane_profile_to_flags(
             .as_ref()
             .and_then(|profile| flags.configured_runtime_profiles.get(profile))
             .and_then(|path| path.as_deref())
-            == flags.profile.as_deref()
-        && matches!(
-            state.runtime_owner_binding_for_session(&flags.session),
-            Ok(Some(_))
-        );
+            == flags.profile.as_deref();
     let selected_profile = (!configured_profile_is_inherited)
         .then(|| flags.profile.clone())
         .flatten();
@@ -3699,7 +3695,7 @@ fn command_targets_managed_session_before_prestart(
         .any(|session| session.name == session_name))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;

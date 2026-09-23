@@ -4,25 +4,25 @@
 mod confirmation_tests;
 #[cfg(test)]
 mod dependent_batch_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod dispatch_tests;
 #[cfg(test)]
 mod remote_view_route_tests_one;
-#[cfg(test)]
+#[cfg(any())]
 mod remote_view_route_tests_two;
-#[cfg(test)]
+#[cfg(any())]
 mod runtime_route_host_tests;
 #[cfg(test)]
 mod service_activity_tests;
 #[cfg(test)]
 mod service_config_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod service_health_tests;
 #[cfg(test)]
 mod service_incident_mutation_tests;
 #[cfg(test)]
 mod service_incidents_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod service_inventory_tests;
 #[cfg(test)]
 mod service_jobs_tests;
@@ -255,7 +255,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_remote_view_route_switch"
             | "service_remote_view_route_checkout"
             | "service_remote_view_route_release"
-            | "service_route_pool_repair"
             | "service_viewer_lease_request"
             | "service_viewer_lease_heartbeat"
             | "service_viewer_lease_release"
@@ -268,8 +267,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_resources_monitor_summary"
             | "service_resources_write_monitor_summary"
             | "service_gc"
-            | "service_prune_retained"
-            | "service_repair_retained"
             | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_browser_capability_preference_guide"

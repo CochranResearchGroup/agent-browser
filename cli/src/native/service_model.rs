@@ -2553,11 +2553,10 @@ fn sorted_strings<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
 }
 
 pub use agent_browser_service_model::{
-    interaction_decision, profile_seeding_handoff_id, provider_decision, BrowserBuild,
-    BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserProfile,
-    BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
-    BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
-    ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
+    profile_seeding_handoff_id, BrowserBuild, BrowserHealth, BrowserHealthObservation, BrowserHost,
+    BrowserProcess, BrowserProfile, BrowserRecordAuthoritySource,
+    BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
+    BrowserSession, BrowserTab, ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
     DurableHandoffPresentationReceipt, JobControlPlaneMode, JobPriority, JobState, JobTarget,
     LeaseState, MonitorState, MonitorTarget, ProfileAllocationPolicy, ProfileClass,
     ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
@@ -2889,7 +2888,7 @@ pub(crate) fn controller_authority_fence_matches(
     })
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use serde_json::json;

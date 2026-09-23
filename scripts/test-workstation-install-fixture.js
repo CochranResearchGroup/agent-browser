@@ -58,24 +58,9 @@ try {
   );
   const dryRunPayload = assertJsonSuccess(dryRun.stdout, 'dry-run');
   assert.equal(
-    dryRunPayload.serviceStateMigrationPreview.schemaVersion,
-    'agent-browser.service-state-migration-preview.v1',
-    'dry-run must expose the source-free Service State migration preview',
-  );
-  assert.equal(
-    dryRunPayload.serviceStateMigrationPreview.mutation,
-    false,
-    'migration preview must remain read-only',
-  );
-  assert.equal(
-    dryRunPayload.serviceStateMigrationPreview.backupCreated,
-    false,
-    'migration preview must not create a backup',
-  );
-  assert.deepEqual(
-    dryRunPayload.serviceStateMigrationPreview.summary.protectedRecordRemovals,
-    [],
-    'default migration must not remove protected records',
+    dryRunPayload.schemaVersion,
+    'agent-browser.workstation-install.v1',
+    'dry-run must expose the workstation install plan contract',
   );
   assert.deepEqual(
     treeManifest(fixtureRoot, ignoredFixturePaths()),

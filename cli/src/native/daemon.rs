@@ -694,7 +694,14 @@ impl RuntimeHostRouter {
         return Ok(());
         #[cfg(unix)]
         {
-            let keeper = super::stream::ConfiguredRouteKeeperSupervisorHandle::start_default()?;
+            let keeper = match super::stream::ConfiguredRouteKeeperSupervisorHandle::start_default()
+            {
+                Ok(keeper) => keeper,
+                Err(error) if error == "route_keeper_primary_provider_unconfigured" => {
+                    return Ok(())
+                }
+                Err(error) => return Err(error),
+            };
             self.install_route_keeper_owner(keeper).await
         }
     }
