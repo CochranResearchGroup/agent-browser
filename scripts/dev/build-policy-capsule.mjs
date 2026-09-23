@@ -13,12 +13,21 @@ function argument(name) {
 const root = resolve(argument('--root'));
 const profilePath = resolve(root, argument('--profile'));
 const outputPath = resolve(root, argument('--output'));
+const check = process.argv.includes('--check');
 const profile = JSON.parse(readFileSync(profilePath, 'utf8'));
 
 if (profile.schemaVersion !== 'agent-browser.policy-capsule-profile.v1') {
   throw new Error('unsupported policy capsule profile');
 }
-for (const field of ['scope', 'authority', 'requiredChecks', 'hardStops', 'rereadWhen']) {
+for (const field of [
+  'scope',
+  'authority',
+  'policies',
+  'operativeRules',
+  'requiredChecks',
+  'hardStops',
+  'rereadWhen',
+]) {
   if (!profile[field] || (Array.isArray(profile[field]) && profile[field].length === 0)) {
     throw new Error(`empty policy capsule field: ${field}`);
   }
@@ -56,5 +65,13 @@ const lines = [
   ...policies.map(({ path, sha256 }) => `- \`${path}\` — \`${sha256}\``),
   '',
 ];
-writeFileSync(outputPath, `${lines.join('\n')}\n`);
-console.log(`policy capsule written: ${relative(root, outputPath)} policies=${policies.length}`);
+const rendered = `${lines.join('\n')}\n`;
+if (check) {
+  if (readFileSync(outputPath, 'utf8') !== rendered) {
+    throw new Error(`policy capsule stale: ${relative(root, outputPath)}`);
+  }
+  console.log(`policy capsule current: ${relative(root, outputPath)} policies=${policies.length}`);
+} else {
+  writeFileSync(outputPath, rendered);
+  console.log(`policy capsule written: ${relative(root, outputPath)} policies=${policies.length}`);
+}

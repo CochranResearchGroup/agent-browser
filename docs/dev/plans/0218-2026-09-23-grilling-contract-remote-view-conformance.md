@@ -523,6 +523,11 @@ The policy-ingestion pilot uses
 the eight canonical policy hashes, operative rules, checks, hard stops, and
 re-read triggers. A session may reuse that capsule while its hashes and triggers
 remain unchanged; canonical policy remains authoritative when a trigger fires.
+`pnpm test:policy-capsule` now provides hermetic coverage for deterministic
+generation, current-capsule verification, policy hash drift, missing source
+files, empty required fields, and unsupported schema versions. The repo loading
+contract routes matching work through the checked capsule and falls back to
+canonical policy on drift, a trigger, or unresolved ambiguity.
 
 - Treat the remaining `ServiceState` excision as one primary-owned packet with
   one outcome: remove its Lease Authority and runtime-owner state and
