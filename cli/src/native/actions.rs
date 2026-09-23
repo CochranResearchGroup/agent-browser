@@ -171,10 +171,6 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
-use super::service_profile_acquisition::handle_service_profile_recovery_command;
-use super::service_profile_lease::{
-    handle_service_profile_lease_command, handle_service_profile_leases,
-};
 use super::service_profile_lifecycle::handle_service_profile_tab_evict;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
@@ -182,9 +178,6 @@ use super::service_renderer_crash::{
 use super::service_resources::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
-};
-use super::service_retained_state::{
-    handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
 use super::service_status_projection::handle_service_status;
 use super::service_trace::handle_service_trace;
@@ -323,29 +316,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incident_activity"
             | "service_trace"
             | "service_profiles"
-            | "service_profile_leases"
-            | "service_profile_lease_inspect"
-            | "service_profile_lease_explain"
-            | "service_profile_lease_doctor"
-            | "service_profile_capability_status"
-            | "service_profile_lease_register"
-            | "service_profile_capability_rotate"
-            | "service_profile_lease_rejoin"
-            | "service_profile_lease_renew"
-            | "service_profile_lease_release"
-            | "service_profile_lease_reconcile_plan"
-            | "service_profile_lease_reconcile_apply"
-            | "service_profile_lease_recover_plan"
-            | "service_profile_lease_recover_apply"
-            | "service_profile_diagnose"
-            | "service_profile_acquire"
-            | "service_profile_repair_plan"
-            | "service_profile_repair_apply"
-            | "service_profile_reset_plan"
-            | "service_profile_reset_apply"
-            | "service_profile_recovery_plan"
-            | "service_profile_recovery_apply"
-            | "service_profile_recovery_status"
             | "service_profile_lookup"
             | "service_profile_seeding_handoff"
             | "service_sessions"
@@ -587,30 +557,6 @@ async fn execute_command_after_navigation_admission(
                     true, "confirmation_id" : id, "action" : action, }, }
                 );
             }
-        }
-    }
-    if !state.browser_session_manager_owned
-        && crate::runtime_owner_transfer::action_requires_runtime_admission(action)
-    {
-        let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
-            Ok(path) => path,
-            Err(error) => return error_response(&id, &error),
-        };
-        if let Err(error) =
-            crate::runtime_adoption::require_runtime_admission(&admission_drain, action, cmd)
-        {
-            return error_response(&id, &error);
-        }
-    }
-    if !state.browser_session_manager_owned
-        && crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
-    {
-        if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
-            &mut state.runtime_owner_binding,
-            action,
-            &state.session_id,
-        ) {
-            return error_response(&id, &error);
         }
     }
     // Desktop evidence is service-owned and does not require a daemon-local
@@ -991,7 +937,6 @@ async fn execute_command_after_navigation_admission(
             "service_remote_view_route_release" => {
                 handle_service_remote_view_route_release(cmd, state).await
             }
-            "service_route_pool_repair" => handle_service_route_pool_repair(cmd).await,
             "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
             "service_viewer_lease_heartbeat" =>
                 handle_service_viewer_lease_heartbeat(cmd, state).await,
@@ -1057,8 +1002,6 @@ async fn execute_command_after_navigation_admission(
                 handle_service_resources_write_monitor_summary(cmd).await
             }
             "service_gc" => handle_service_gc(cmd).await,
-            "service_prune_retained" => handle_service_prune_retained(cmd).await,
-            "service_repair_retained" => handle_service_repair_retained(cmd).await,
             "service_access_plan" => handle_service_access_plan(cmd).await,
             "service_browser_capability_preflight" => {
                 handle_service_browser_capability_preflight(cmd).await
@@ -1105,55 +1048,6 @@ async fn execute_command_after_navigation_admission(
             "service_incident_activity" => handle_service_incident_activity(cmd).await,
             "service_trace" => handle_service_trace(cmd).await,
             "service_profiles" => handle_service_profiles(cmd).await,
-            "service_profile_leases" => handle_service_profile_leases(cmd).await,
-            "service_profile_lease_inspect" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_explain" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_doctor" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_capability_status" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_register" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_capability_rotate" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_rejoin" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_renew" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_release" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_reconcile_plan" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_reconcile_apply" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_recover_plan" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_recover_apply" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_diagnose" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_acquire" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_repair_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_repair_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_reset_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_reset_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_status" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
             "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
             "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
             "service_sessions" => handle_service_sessions(cmd).await,

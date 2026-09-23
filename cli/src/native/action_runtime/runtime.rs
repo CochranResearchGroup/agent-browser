@@ -15,8 +15,6 @@ mod cdp_free_plan;
 pub(crate) use cdp_free_plan::*;
 mod remote_headed;
 pub(crate) use remote_headed::*;
-mod profile_lease;
-pub(crate) use profile_lease::*;
 mod recovery;
 mod retained_launch;
 pub(crate) use recovery::*;
