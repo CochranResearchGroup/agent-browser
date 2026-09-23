@@ -22,7 +22,6 @@ mod presentation;
 mod presentation_capacity;
 mod presentation_request_queue;
 mod presentation_scale_in;
-mod principal_continuity;
 mod principal_provenance;
 mod profile_access;
 mod profile_lease;
@@ -127,10 +126,6 @@ pub use presentation_capacity::{
     PresentationSlotState, PressureAdmission, SlotTransitionReceipt,
 };
 pub use presentation_scale_in::{PresentationScaleInIdleEvidence, PresentationScaleInState};
-pub use principal_continuity::{
-    LegacyPrincipalMigrationDisposition, LegacySessionPrincipalMigrationPlan,
-    PrincipalContinuityDecision, PrincipalContinuityRecourse,
-};
 pub use profile_access::{
     effective_profile_permissions, evaluate_profile_access, evaluate_profile_child_access,
     mutate_profile_policy, profile_policy_target_for_preset, record_profile_eviction_receipt,
