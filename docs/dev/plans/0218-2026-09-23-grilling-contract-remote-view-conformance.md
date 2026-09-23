@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -337,6 +337,31 @@ that prove shared-browser reuse, separate tabs and handoffs, exact heartbeat
 refresh, independent command effects, Alice-first cleanup preserving Bob, and
 final-session cleanup closing the browser.
 
+Use a compiler-driven excision protocol rather than manually reading the full
+dependency surface. First freeze the allowed replacement interfaces and remove
+one top-level dependency edge. Then run bounded compile waves through the WSL
+Cargo wrapper with Cargo JSON messages. A deterministic repository helper must:
+
+- preserve the complete raw compiler output as an artifact while keeping it
+  out of model context by default;
+- retain first-party errors and suppress dependency build chatter;
+- normalize and deduplicate diagnostics by package, file, symbol, error code,
+  and causal root;
+- group failures into mechanical leaf removals, neutral-type extraction,
+  migration-only decoding, deleted product surfaces, and primary-owned
+  architectural decisions;
+- emit a compact machine-readable manifest plus a short ordered worklist with
+  exact files, representative diagnostics, counts, and the next compile gate;
+- compare each wave with the prior manifest so resolved, new, repeated, and
+  regressed groups are visible without replaying the raw log.
+
+The primary owns Cargo manifests, the `ServiceState` cut, replacement
+interfaces, migration boundaries, worker packet selection, integration, and
+the final closure verdict. Run at most one compile wave after each coherent
+batch of accepted leaf edits. A second causal error group in the same surface
+triggers reclassification from mechanical removal to primary-owned design; it
+does not start an unbounded edit and compile loop.
+
 ### M2 | Provider, capacity, and launch integration | 400,000 tokens
 
 Remove the development route-keeper interlock and join the in-process
@@ -382,11 +407,28 @@ not merge, install production, release, or remove the worktree.
 ## Worker Assignments
 
 The primary agent owns the critical path, contract ledger, branch, candidate,
-runtime custody, evidence adjudication, and verdict. No worker is required.
-If delegation becomes useful, admit at most one provider-free source worker
-and one read-only acceptance-evidence reviewer with disjoint files and explicit
-stop conditions. Workers cannot revise G01 through G45, mutate shared runtime,
-or declare acceptance.
+runtime custody, evidence adjudication, and verdict. No worker owns or blocks
+the critical path.
+For the lease excision, optimize for token efficiency with deterministic tools
+first and admit at most two concurrent `gpt-5.6-luna` workers at low or medium
+reasoning for mechanical, readily verified leaf batches. Give each worker only
+the compact compiler manifest, frozen replacement contract, exact disjoint
+files, required edit class, focused check, and stop condition. Suitable batches
+include deleting unreachable lease endpoints, projections, client types,
+dashboard components, tests, and imports or replacing a preclassified neutral
+value type. Workers must return a patch, diagnostic-group IDs addressed, and
+focused validation evidence; they stop on an unclassified dependency, shared
+manifest or `ServiceState` edit, architectural choice, or second causal error.
+
+The primary inspects and integrates worker diffs without repeating their full
+mechanical investigation. It may also admit one later read-only
+acceptance-evidence reviewer after the closure is frozen. Workers cannot edit
+Cargo manifests, `ServiceState`, migration authority, the G01 through G45
+ledger, or shared runtime; revise architecture or acceptance; mutate any
+runtime; or declare acceptance. Do not use full-history forks or ask workers to
+parse raw compiler output. Record each worker handle, effective model and
+effort, assigned diagnostic groups, terminal status, accepted edits, and
+reconciliation decision.
 
 ## Controls And Stop Rules
 
@@ -397,6 +439,12 @@ or declare acceptance.
   does not reset an attempt.
 - A second related defect triggers batch reconciliation before another build or
   installed candidate.
+- During lease excision, invoke the compiler only through the deterministic
+  diagnostic helper and `scripts/ci/cargo-safe.sh`; model context receives the
+  compact manifest unless the primary opens one exact retained diagnostic.
+- Bound each compiler wave to one coherent cut and each Luna worker to one
+  disjoint mechanical batch. Failed or ambiguous worker output returns the
+  diagnostic group to the primary without automatic retry or model escalation.
 - No runtime candidate is built until all known source and architecture
   violations for its milestone are repaired and cheaper checks pass.
 - Use one development candidate publication for the completed implementation
