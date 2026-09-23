@@ -136,16 +136,12 @@ pub mod remote_view_lease;
 pub mod remote_view_proof;
 pub(crate) mod route_keeper_connection_catalog;
 #[allow(dead_code)]
-pub(crate) mod runtime_reconciliation;
 #[allow(dead_code)]
 pub mod screenshot;
-pub(crate) mod service_abandoned_browser_retirement;
 #[allow(dead_code)]
 pub mod service_access;
 #[allow(dead_code)]
 pub mod service_activity;
-mod service_boot_epoch;
-pub(crate) mod service_browser_retirement;
 #[allow(dead_code)]
 pub mod service_config;
 #[allow(dead_code)]
@@ -192,8 +188,6 @@ pub(crate) mod service_request_provenance;
 #[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
-pub mod service_retained_state;
-pub(crate) mod service_state_migration;
 pub(crate) mod service_state_validation;
 #[allow(dead_code)]
 pub mod service_status_projection;
