@@ -217,6 +217,16 @@ cut-specific guard now names only `service_state.rs`, which remains the final
 primary-owned Service-model authority cut. Downstream errors remain
 unclassified until the next retained compiler wave.
 
+Compiler wave 3 at `/tmp/agent-browser-p218-m1-wave-3` exited 101 and reports
+2 groups with 62 occurrences: one new mechanical `profile_lease.rs` reference
+to the deliberately deleted principal-continuity recourse enum, and one
+repeated 61-occurrence `service_state.rs` Lease Authority group. Compared with
+wave 2, 3 groups resolved, 1 is new, 1 repeated, and 0 regressed. The raw JSON
+SHA-256 is `0c2250defab91cf770478c9d370c6ca230efb9ad12ae0f42c63f10b0250bcdef`.
+The new downstream error is a deleted-product-surface consequence that the
+generic helper classifies mechanically; it must be resolved by deleting the
+remaining profile-lease surface, not restoring or renaming the recourse enum.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease

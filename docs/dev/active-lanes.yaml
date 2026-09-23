@@ -57,7 +57,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: P218 M1 cut 1 is in progress; source checkpoint d05060ec removes principal continuity and leaves only Service State in the cut-specific guard; downstream compilation remains intentionally broken and no third compiler wave has run
+    validation_status: P218 M1 cut 1 is in progress; compiler wave 3 has 2 groups and 62 occurrences with 3 resolved, 1 expected new profile-lease consequence, 1 repeated Service State group and 0 regressed
     validation_ref: d05060ec
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
