@@ -517,6 +517,13 @@ does not start an unbounded edit and compile loop.
 
 #### M1 Execution Efficiency Controls
 
+The policy-ingestion pilot uses
+`docs/dev/policy-capsules/p218-m1.json` and the deterministic
+`scripts/dev/build-policy-capsule.mjs` generator. The generated capsule records
+the eight canonical policy hashes, operative rules, checks, hard stops, and
+re-read triggers. A session may reuse that capsule while its hashes and triggers
+remain unchanged; canonical policy remains authoritative when a trigger fires.
+
 - Treat the remaining `ServiceState` excision as one primary-owned packet with
   one outcome: remove its Lease Authority and runtime-owner state and
   operations, run one compact compiler wave, and leave one clean custody

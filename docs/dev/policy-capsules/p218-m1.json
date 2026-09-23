@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "agent-browser.policy-capsule-profile.v1",
+  "scope": "Plan 0218 M1 provider-free authority and persistence cutover",
+  "authority": "Current user instruction, AGENTS.md, Plan 0218, and the active lane catalog",
+  "policies": [
+    "docs/dev/policies/0028-goal-execution-governance.md",
+    "docs/dev/policies/0036-architecture-guardrails.md",
+    "docs/dev/policies/0042-code-testing-discipline.md",
+    "docs/dev/policies/0044-planning-discipline.md",
+    "docs/dev/policies/0045-model-selection-and-calibration.md",
+    "docs/dev/policies/0047-multi-session-development-operating-model.md",
+    "docs/dev/policies/0050-collaborative-development-workflow.md",
+    "docs/dev/policies/0052-session-and-worktree-admission.md"
+  ],
+  "operativeRules": [
+    "Keep one primary owner for Service State, Cargo manifests, architecture decisions, and acceptance.",
+    "Batch one coherent causal group before invoking Cargo and retain compact compiler evidence.",
+    "Preserve the frozen replacement contract and do not restore, rename, or relocate legacy authority.",
+    "Treat commits as custody checkpoints rather than turn boundaries."
+  ],
+  "requiredChecks": [
+    "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
+    "node scripts/dev/check-p218-architecture.mjs --json",
+    "git diff --check"
+  ],
+  "hardStops": [
+    "No push, merge, install, publication, provider, browser, ingress, or production effect without exact authority.",
+    "Stop for a scope change, an unclassified architectural decision, or exhausted cumulative budget."
+  ],
+  "rereadWhen": [
+    "The task scope, effect class, branch, worktree, owner, validation contract, or selected policy hash changes.",
+    "A failure exposes an ambiguity not resolved by this capsule."
+  ]
+}

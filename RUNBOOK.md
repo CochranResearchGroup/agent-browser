@@ -9,6 +9,16 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 448 | 2026-09-23
+
+Plan 0218 begins a policy-ingestion pilot. A deterministic profile selects the
+eight applicable canonical policies and generates a 200-word execution capsule
+with source hashes, operative rules, checks, hard stops, and re-read triggers.
+The selected canonical files total 9,444 words. Rebuilding the capsule is
+byte-identical, preserving reproducibility while avoiding unchanged full-policy
+reloads. Canonical policy remains authoritative whenever a trigger or hash
+changes.
+
 ## Turn 447 | 2026-09-23
 
 Plan 0218 M1 compiler wave 5 exits successfully with zero diagnostic groups
