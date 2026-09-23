@@ -227,6 +227,12 @@ The new downstream error is a deleted-product-surface consequence that the
 generic helper classifies mechanically; it must be resolved by deleting the
 remaining profile-lease surface, not restoring or renaming the recourse enum.
 
+Source checkpoint `2ce55e07` deletes the 296-line profile-lease record module
+and its exports rather than restoring the deleted continuity-recourse type.
+The cut-specific guard still names only `service_state.rs`. No compiler wave
+followed this deletion; `ServiceState` is the sole remaining direct source
+group and owns the next packet's architectural decision.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
