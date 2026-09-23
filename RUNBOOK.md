@@ -9,6 +9,23 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 440 | 2026-09-23
+
+Plan 0218 M1 source checkpoint `aca80104` removes abandoned-retirement's
+Lease Authority dependency. Pending historical retirement no longer denies a
+profile claim, and retirement terminal projections no longer serialize
+runtime-owner lifecycle or cleanup-obligation states. This advances G41 and
+the availability-first G23 boundary without introducing a replacement denial
+concept.
+
+Compiler wave 2 exited 101 as expected and compacted to 4 groups and 71
+occurrences, compared with 7 groups and 76 occurrences in wave 1. Three groups
+resolved, none were new or regressed, and the cut-specific guard dropped from
+four source files to three. Principal continuity, runtime-owner projection, and
+Service State remain open; the Service model does not yet compile. No installed
+runtime, provider, browser, ingress, production, release, push, or merge effect
+occurred.
+
 ## Turn 439 | 2026-09-23
 
 Plan 0218 M1 cut 1 is now compiler-driven. The frozen replacement contract

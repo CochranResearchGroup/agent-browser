@@ -189,6 +189,18 @@ Lease Authority. The other groups remain open because they carry operational
 lease, runtime-owner, or cleanup-admission behavior and cannot be mechanically
 renamed into the default product.
 
+M1 compiler wave 2 followed source checkpoint `aca80104`. Abandoned-browser
+retirement no longer imports Lease Authority, serializes runtime-owner terminal
+states, or fences profile-claim acquisition from a pending historical cleanup
+record. The compact wave at `/tmp/agent-browser-p218-m1-wave-2` reports 4
+groups and 71 occurrences, with 3 resolved, 0 new, 4 repeated, and 0 regressed
+against wave 1. Its raw JSON SHA-256 is
+`4d018828989d82bc51ff791a82e4cab51a0ab1101f7c0cb8a70831bb11f5e044`.
+The cut-specific guard now names only `principal_continuity.rs`,
+`runtime_owner_projection.rs`, and `service_state.rs`. The package remains
+intentionally uncompilable; the next packet must remove one of those coherent
+authority surfaces rather than translate it into a renamed product type.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
