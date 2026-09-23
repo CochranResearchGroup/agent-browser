@@ -759,19 +759,21 @@ pub(crate) fn apply_existing_session_profile_selection(
     let Some(session_id) = session_id else {
         return Ok(None);
     };
+    // Ordinary remote-view open belongs to the trusted single-user Browser
+    // Session Manager. Resolve its explicit profile before consulting legacy
+    // runtime-owner evidence. Historical ownership remains available to exact
+    // cleanup paths, but it is not service-admission authority.
+    if let Some(selection) = apply_availability_first_remote_view_profile_selection(
+        options,
+        command,
+        state,
+        &session_id,
+    )? {
+        return Ok(Some(selection));
+    }
     let binding = match state.runtime_owner_binding_for_session(&session_id) {
         Ok(binding) => binding,
-        Err(_) => {
-            if let Some(selection) = apply_availability_first_remote_view_profile_selection(
-                options,
-                command,
-                state,
-                &session_id,
-            )? {
-                return Ok(Some(selection));
-            }
-            return Err("existing_session_profile_identity_ambiguous".to_string());
-        }
+        Err(_) => return Err("existing_session_profile_identity_ambiguous".to_string()),
     };
     let retained_observation = state
         .sessions
@@ -821,14 +823,6 @@ pub(crate) fn apply_existing_session_profile_selection(
     if apply_authenticated_orphaned_owner_recourse(options, command, &session_id, state, &binding)?
     {
         return Ok(Some(ProfileSelectionReason::ExistingOwner));
-    }
-    if let Some(selection) = apply_availability_first_remote_view_profile_selection(
-        options,
-        command,
-        state,
-        &session_id,
-    )? {
-        return Ok(Some(selection));
     }
     if let Some(ProfileSelectionReason::ExplicitProfile) =
         apply_shared_local_session_profile_continuity(options, command, &session_id, state)?

@@ -5633,6 +5633,28 @@ fn test_service_profile_lease_gate_defers_to_attributed_tab_handle() {
 }
 
 #[test]
+fn ordinary_remote_view_open_never_enters_profile_lease_admission() {
+    let command = json!({
+        "action": "remote_view_open",
+        "runtimeProfile": "named-profile",
+        "sessionName": "ordinary-session",
+        "serviceName": "AgentBrowser"
+    });
+
+    assert!(
+        service_profile_lease_metadata_for_command(&command, Some("ordinary-session"))
+            .expect("ordinary remote-view classification must be deterministic")
+            .is_none(),
+        "ordinary remote-view open must be structurally outside legacy profile-lease admission"
+    );
+    assert!(matches!(
+        service_profile_lease_gate(&command, "ordinary-session", Some(0))
+            .expect("ordinary remote-view open must not consult lease state"),
+        ServiceProfileLeaseGate::Ready
+    ));
+}
+
+#[test]
 fn test_service_profile_lease_gate_allows_duplicate_lane_route_hints() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("profile-lane-route-hint-home");

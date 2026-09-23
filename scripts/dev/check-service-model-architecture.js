@@ -805,6 +805,19 @@ function check(root = repoRoot) {
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
   }));
 
+  requireCondition(
+    !/remote_view_open/.test(withoutCommentsAndStrings(cliProfileLeaseSource)),
+    'ordinary remote-view open must remain quarantined from legacy profile-lease admission',
+  );
+  const existingSessionProfileSelection = compactRust(withoutCommentsAndStrings(
+    rustNamedFunctionDefinition(cliDaemonSource, 'apply_existing_session_profile_selection'),
+  ));
+  requireCondition(
+    existingSessionProfileSelection.indexOf('apply_availability_first_remote_view_profile_selection')
+      < existingSessionProfileSelection.indexOf('runtime_owner_binding_for_session'),
+    'ordinary remote-view profile resolution must precede legacy runtime-owner evidence',
+  );
+
   requireCondition(existsSync(authenticationManifestPath),
     'agent-browser-authentication-control Cargo manifest must exist');
   requireCondition(existsSync(join(authenticationSourceRoot, 'lib.rs')),

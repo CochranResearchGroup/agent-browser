@@ -307,11 +307,7 @@ fn action_skips_profile_lease_admission(action: &str) -> bool {
         || (crate::native::actions::action_skips_browser_launch(action)
             && !matches!(
                 action,
-                "launch"
-                    | "cdp_free_launch"
-                    | "external_byop_adopt"
-                    | "cdp_attach"
-                    | "remote_view_open"
+                "launch" | "cdp_free_launch" | "external_byop_adopt" | "cdp_attach"
             ))
 }
 
