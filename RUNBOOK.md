@@ -9,10 +9,28 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 438 | 2026-09-23
+
+Plan 0218 M0 is complete as a source-only checkpoint. The exact G01 through
+G45 manifest reports 26 partial, 8 failed, and 11 missing rows. The frozen
+ordinary-open-through-handoff graph records split SQLite and JSON authority and
+the three required M1 cuts. The red architecture gate deterministically fails
+P02, P03, P05, P09, P12, P15, P16, and P19 while leaving the other 11
+prohibitions explicitly unverified. A deterministic Cargo JSON diagnostic
+helper and hermetic tests are ready for compiler-driven M1 lease excision.
+
+Inherited usage was 595,176 tokens. The M0 control readback before closeout was
+340,551 including worker effort, already exceeding its 200,000 allocation by
+140,551. Cumulative usage was 935,727 of 2,000,000, leaving 1,064,273 at that
+checkpoint. No product behavior, build, installed binary,
+service, provider, browser, ingress, production, or release effect occurred.
+The next action is M1's default-product Lease Authority dependency cut; no M1
+work began in this checkpoint.
+
 ## Turn 437 | 2026-09-23
 
 Plan 0218 supersedes P217 because availability-first open and visual reliability
-were only part of the accepted September 19 grilling contract. P218 freezes 24
+were only part of the accepted September 19 grilling contract. P218 freezes 45
 normative decisions covering runtime authority, SQLite migration and recovery,
 provider topology, capacity, hidden-browser removal, durable handoff recovery,
 Desktop Services control, history, retention, privilege, configuration, and
@@ -23,7 +41,7 @@ contract failures rather than review-dependent intent.
 Commit `9bdcfbe3` is inherited evidence that ordinary `remote_view_open` no
 longer participates in legacy profile-lease classification. It does not prove
 the remaining contract. M0 must reconcile cumulative P217 usage, map G01
-through G24 to source and evidence, and add red architecture gates before any
+through G45 to source and evidence, and add red architecture gates before any
 further behavior repair or runtime candidate. No runtime, provider, browser,
 ingress, production, or release effect occurred while creating the plan.
 

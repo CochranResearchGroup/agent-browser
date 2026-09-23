@@ -1,0 +1,143 @@
+{
+  "schemaVersion": "p218-ordinary-open-handoff-closure.v1",
+  "plan": "docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md",
+  "milestone": "M0",
+  "sourceCommit": "e7c27f7810b9961a9223807a83d8c40bb22260b1",
+  "capturedAt": "2026-09-23",
+  "codegraph": {
+    "indexedFiles": 961,
+    "nodes": 36717,
+    "edges": 139589,
+    "status": "up_to_date"
+  },
+  "entryPoints": [
+    "packages/client/src/service-request.js::requestServiceRemoteViewHandoff",
+    "packages/client/src/service-request.js::requestServiceRemoteViewOpen",
+    "cli/src/native/actions.rs::ActionDispatcher::dispatch",
+    "cli/src/native/remote_view/open/coordinator.rs::handle_remote_view_open"
+  ],
+  "nodes": [
+    {
+      "id": "client.handoff",
+      "symbol": "requestServiceRemoteViewHandoff",
+      "file": "packages/client/src/service-request.js",
+      "authority": "client_adapter"
+    },
+    {
+      "id": "client.open",
+      "symbol": "requestServiceRemoteViewOpen",
+      "file": "packages/client/src/service-request.js",
+      "authority": "client_adapter"
+    },
+    {
+      "id": "cli.dispatch",
+      "symbol": "ActionDispatcher::dispatch",
+      "file": "cli/src/native/actions.rs",
+      "authority": "runtime_dispatch"
+    },
+    {
+      "id": "open.coordinator",
+      "symbol": "handle_remote_view_open",
+      "file": "cli/src/native/remote_view/open/coordinator.rs",
+      "authority": "ordinary_open_coordinator"
+    },
+    {
+      "id": "open.repository",
+      "symbol": "DaemonRouteBoundOpenRepository::new",
+      "file": "cli/src/native/remote_view/open/coordinator.rs",
+      "authority": "legacy_service_state_adapter"
+    },
+    {
+      "id": "session.host.load",
+      "symbol": "load_default_browser_session_host",
+      "file": "cli/src/native/browser_session_host.rs",
+      "authority": "sqlite_session_host"
+    },
+    {
+      "id": "session.store",
+      "symbol": "BrowserRuntimeSqliteStore::default_sqlite",
+      "file": "cli/src/native/browser_session_store.rs",
+      "authority": "sqlite"
+    },
+    {
+      "id": "session.open",
+      "symbol": "BrowserSessionHost::open",
+      "file": "cli/src/native/browser_session_host.rs",
+      "authority": "sqlite_session_host"
+    },
+    {
+      "id": "handoff.complete",
+      "symbol": "complete_route_bound_handoff_open",
+      "file": "cli/src/native/remote_view_handoff.rs",
+      "authority": "legacy_handoff_adapter"
+    },
+    {
+      "id": "handoff.finalize",
+      "symbol": "finalize_route_bound_handoff_atomic",
+      "file": "cli/src/native/remote_view_handoff.rs",
+      "authority": "json_service_state"
+    },
+    {
+      "id": "handoff.recovery",
+      "symbol": "BrowserSessionHost::resolve_keeper_handoff",
+      "file": "cli/src/native/browser_session_host.rs",
+      "authority": "sqlite_session_host"
+    },
+    {
+      "id": "keeper.authority",
+      "symbol": "RouteKeeperAuthority",
+      "file": "crates/agent-browser-service-model/src/route_keeper.rs",
+      "authority": "sqlite_projection"
+    },
+    {
+      "id": "legacy.state",
+      "symbol": "ServiceState",
+      "file": "crates/agent-browser-service-model/src/service_state.rs",
+      "authority": "json_service_state"
+    },
+    {
+      "id": "lease.authority",
+      "symbol": "LeaseAuthorityState",
+      "file": "crates/agent-browser-lease-authority/src/authority.rs",
+      "authority": "forbidden_default_product_dependency"
+    }
+  ],
+  "edges": [
+    { "from": "client.handoff", "to": "client.open", "kind": "calls" },
+    { "from": "client.open", "to": "cli.dispatch", "kind": "http_or_mcp_request" },
+    { "from": "cli.dispatch", "to": "open.coordinator", "kind": "dispatches_remote_view_open" },
+    { "from": "open.coordinator", "to": "open.repository", "kind": "constructs" },
+    { "from": "open.coordinator", "to": "session.host.load", "kind": "runtime_adapter_reaches" },
+    { "from": "session.host.load", "to": "session.store", "kind": "loads" },
+    { "from": "session.host.load", "to": "legacy.state", "kind": "imports_profile_catalog_and_legacy_handoff_authority" },
+    { "from": "session.host.load", "to": "keeper.authority", "kind": "loads_route_keeper_projection" },
+    { "from": "session.host.load", "to": "session.open", "kind": "owns" },
+    { "from": "open.coordinator", "to": "handoff.complete", "kind": "completes" },
+    { "from": "handoff.complete", "to": "handoff.finalize", "kind": "calls" },
+    { "from": "handoff.finalize", "to": "legacy.state", "kind": "mutates_remote_view_acquisition_and_handoff" },
+    { "from": "handoff.recovery", "to": "keeper.authority", "kind": "observes_current_keeper" },
+    { "from": "legacy.state", "to": "lease.authority", "kind": "embeds_and_serializes" }
+  ],
+  "authoritySplits": [
+    {
+      "id": "split.session_and_handoff",
+      "sqliteSide": ["session.store", "session.open", "handoff.recovery", "keeper.authority"],
+      "legacySide": ["open.repository", "handoff.complete", "handoff.finalize", "legacy.state", "lease.authority"],
+      "result": "violates_single_sqlite_authority"
+    }
+  ],
+  "requiredM1Cuts": [
+    {
+      "edge": "session.host.load->legacy.state",
+      "reason": "legacy JSON must be migration input only"
+    },
+    {
+      "edge": "handoff.finalize->legacy.state",
+      "reason": "ordinary handoff and acquisition completion must commit through SQLite"
+    },
+    {
+      "edge": "legacy.state->lease.authority",
+      "reason": "default product packages must not compile or serialize Lease Authority"
+    }
+  ]
+}

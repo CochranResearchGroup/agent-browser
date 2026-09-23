@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -29,7 +29,12 @@ Pull request: draft PR #191
 
 Target: `main`
 
-Overall effort ceiling: inherit Plan 0217's cumulative 2,000,000-token ceiling without reset; reconcile actual prior P217 usage before execution and do not begin a packet that cannot finish inside the remaining allowance
+Overall effort ceiling: inherit Plan 0217's cumulative 2,000,000-token ceiling
+without reset. The durable pre-M0 readback was 595,176 tokens. The M0 control
+readback before closeout was 340,551 tokens including worker effort, for
+935,727 cumulative and 1,064,273 remaining at that checkpoint. M0 had already
+exceeded its 200,000-token allocation by 140,551; later milestones do not
+inherit or reset that local overrun and must fit the unchanged overall ceiling.
 
 ## Objective
 
@@ -111,10 +116,53 @@ and 139,589 edges and reported the index up to date. Structural exploration
 confirmed the SQLite-backed Browser Session Manager seam, the remaining
 Service State consumers, route-keeper cold recovery and host-generation
 fencing, stable capacity selection, and the partial configuration mutation
-surface. M0 must still freeze these findings into the repository-owned
-machine-readable G01 through G45 closure and red architecture gates before
-behavior work begins; a local derived index is not the durable acceptance
-artifact.
+surface.
+
+M0 is complete at the version 7 checkpoint. The repository-owned coverage
+manifest contains exactly G01 through G45 with 26 partial, 8 failed, and 11
+missing rows. The frozen ordinary-open-through-handoff closure records the
+three required M1 cuts from default host to legacy state, handoff finalization
+to legacy state, and legacy Service State to Lease Authority. The standalone
+architecture gate reports 8 definite violations and leaves the other 11
+prohibitions explicitly unverified rather than treating detector absence as a
+pass. Its enforcement mode intentionally exits nonzero until M1 repairs the
+red set. No product behavior or runtime state changed in M0.
+
+## M0 Checkpoint
+
+- Source baseline: `e7c27f7810b9961a9223807a83d8c40bb22260b1` on
+  `platform/p211-simple-cold-upgrade`, five commits ahead of its remote when M0
+  started. Installed `agent-browser` and `agent-browser-dev` both reported
+  `0.28.0`; no installed candidate or service was changed.
+- Coverage authority:
+  `docs/dev/contracts/p218-grilling-contract-coverage.v1.json`, validated by
+  `scripts/dev/test-p218-grilling-contract-coverage.mjs` for exact ordered
+  G01 through G45 closure, required fields, statuses, and prohibition IDs.
+- Dependency authority:
+  `docs/dev/architecture/p218-ordinary-open-handoff-closure.v1.json`, validated
+  by `scripts/dev/test-p218-architecture.mjs` for the frozen nodes, edges, and
+  three required M1 cuts.
+- Red gate: `scripts/dev/check-p218-architecture.mjs`. Report mode preserves
+  the M0 baseline; `--enforce` exits 1 for P02, P03, P05, P09, P12, P15, P16,
+  and P19. The other 11 prohibitions remain explicitly unverified rather than
+  inferred from static source or detector absence.
+- Compiler protocol: `scripts/dev/p218-compiler-diagnostics.mjs` consumes an
+  explicit retained Cargo JSON-lines artifact, filters first-party errors,
+  deterministically normalizes, deduplicates, classifies, diffs waves, and
+  emits compact JSON plus a worklist. Its hermetic test covers all five
+  classes and all four prior-wave dispositions without invoking Cargo.
+- Worker receipt `/root/m0_compiler_helper`: requested `gpt-6-luna` at medium
+  effort; runtime model report unavailable; accepted two disjoint helper files
+  after 5 focused tests passed.
+- Worker receipt `/root/m0_coverage_manifest`: requested `gpt-6-luna` at medium
+  effort; worker reported GPT-6 medium; accepted its schema and validator, then
+  primary reconciliation replaced the overly conservative 40-missing-row
+  evidence depth with the frozen 26 partial, 8 fail, and 11 missing inventory.
+- Progress classification: `outcome_progress`. M0 made omissions and current
+  violations mechanically visible and intentionally performed no behavior
+  repair. M1 is the next milestone; its first cut is removal of the default
+  product Cargo edge to Lease Authority using only the deterministic compiler
+  helper and the three frozen closure edges.
 
 ## Grilling Contract Ledger
 
