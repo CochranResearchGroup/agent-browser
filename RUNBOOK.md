@@ -9,6 +9,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Turn 450 | 2026-09-23
+
+Plan 0218 M1 removes the CLI Lease Authority Cargo edge and 28,824 lines of
+legacy authority, principal, lease, recovery, runtime-owner, adoption,
+reconciliation, retirement, retained-state, and state-migration implementation
+at checkpoints `135e3b51` and `df7eaf64`. Compiler wave 7 retains the next
+integration boundary with 157 groups; the CLI remains noncompiling and M1 is
+open.
+
+The verified P218 capsule was reused once with no canonical fallback. The
+bytes-divided-by-four proxy estimates 573 capsule tokens versus 16,550
+canonical-policy tokens, or 15,977 tokens of avoided ingestion. This is not
+exact context or billing telemetry.
+
 ## Turn 449 | 2026-09-23
 
 The Plan 0218 policy-ingestion pilot now has hermetic positive and negative

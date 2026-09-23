@@ -258,6 +258,33 @@ after synchronizing the abandoned-retirement fixture and frozen digest with
 the already-removed terminal owner fields. This satisfies the Service-model
 portion of M1 cut 1; downstream CLI closure remains open.
 
+CLI compiler wave 6 at `/tmp/agent-browser-p218-m1-wave-6` established the
+downstream baseline: 142 groups and 298 occurrences after the Service-model
+cut, with raw JSON SHA-256
+`612b366525ce188c403bdc8816719ebf378db3da842db2cdf59e57c5aeb546a4`.
+Checkpoint `135e3b51` then removes the CLI Lease Authority Cargo edge and the
+legacy authority, principal, profile-lease, recovery, and runtime-owner
+subsystem. Checkpoint `df7eaf64` removes the associated adoption,
+reconciliation, retirement, boot-epoch, retained-state, and state-migration
+operations. Together these checkpoints delete 28,824 lines without adding a
+replacement authority surface.
+
+Compiler wave 7 at `/tmp/agent-browser-p218-m1-wave-7` exits 101 with 157
+groups and 355 occurrences: 80 wave-6 groups resolved, 95 new downstream
+integration groups surfaced, 62 repeated, and none regressed. Its raw JSON
+SHA-256 is
+`6d0ea9ed2e272d4bec41383453eba4ec25313e3e249834d6667d6d25a967a6b1`.
+The remaining causal boundary is command dispatch plus action-runtime,
+health/status, workstation, HTTP, and MCP integration; the CLI does not yet
+compile and M1 remains open.
+
+The first capsule-pilot admission measured the 200-word capsule at 2,289 bytes
+and approximately 573 tokens, versus 9,244 words, 66,200 bytes, and
+approximately 16,550 tokens for the eight canonical policies. Using the
+declared UTF-8-bytes-divided-by-four proxy, one verified reuse avoided an
+estimated 15,977 ingestion tokens. No canonical fallback or capsule ambiguity
+occurred. These are ingestion estimates, not exact context or billing data.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease

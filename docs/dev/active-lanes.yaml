@@ -57,8 +57,8 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: The Service-model authority cut is compiling and its 195 focused library tests pass; the cut-specific architecture gate has no findings, while downstream CLI closure and wider M1 acceptance remain open
-    validation_ref: WORKTREE
+    validation_status: The Service-model authority cut compiles and passes 195 tests; CLI checkpoints 135e3b51 and df7eaf64 remove 28,824 legacy-authority lines, while compiler wave 7 retains 157 downstream integration groups and M1 remains open
+    validation_ref: df7eaf64
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
