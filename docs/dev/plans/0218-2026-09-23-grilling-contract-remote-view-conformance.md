@@ -380,6 +380,20 @@ exact model-context or billing measurements. No canonical policy fallback
 occurred; the capsule should be retained for matching P218 M1 turns while its
 hash verification and explicit trigger contract remain current.
 
+The successor goal's pre-closeout runtime readback is 1,441,501 tokens; the
+final goal receipt remains authoritative because closeout itself adds usage.
+The goal produced four custody commits (`c1a99cf8`, `d60d7b16`, `5d932f3a`,
+and this evidence closeout), six retained compiler waves numbered 15 through
+20, and 24 distinct successful validation gates. One comprehensive Rust batch
+failed before the focused fixture-export and Service State parser repairs and
+was not replayed in full; every affected focused compartment passed afterward.
+Rework comprised four implementation or fixture clusters: over-pruned test
+exports, invariant-aware State parsing, fresh-daemon no-launch migration and
+optional-provider handling, and the stale workstation preview assertion.
+Operational rework comprised one unsupported `sccache` invocation, one invalid
+compartment name, and one redundant Cargo launch attempt. No installed runtime,
+provider, tenant, ingress, production, push, merge, or release effect occurred.
+
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
 inventory was accepted, but its suggestion to extract authority-bearing lease
