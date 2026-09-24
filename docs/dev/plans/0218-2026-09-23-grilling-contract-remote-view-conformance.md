@@ -558,6 +558,13 @@ path is proven to use the manager-owned transaction boundary and the P03/P05
 compatibility projections are removed. P158 remains an explicit M3 dependency,
 and G35/G45 still require authenticated live Guacamole observation. No push,
 install, browser, provider, ingress, production, or other live effect occurred.
+The same packet then removed `AGENT_BROWSER_SESSION_DISPLAY` from the ordinary
+host and daemon admission path. Default session launches now take their current
+desktop routes and route-user bindings only from SQLite `RouteKeeperAuthority`.
+P02 consequently moves from a definite violation to a detector gap; G02 stays
+partial because the older installer route-credential environment projection
+remains. The aggregate gate is now three definite violations, five detector
+gaps, and eleven unverified rows.
 
 ## Grilling Contract Ledger
 

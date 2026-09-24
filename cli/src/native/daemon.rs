@@ -971,8 +971,7 @@ impl RuntimeHostRouter {
         let action = command.get("action").and_then(Value::as_str);
         let action_is_open = action == Some("browser_session_open");
         let has_named_profile = command_has_named_profile(&command);
-        let explicit_display = std::env::var_os("AGENT_BROWSER_SESSION_DISPLAY").is_some();
-        let remote_open_candidate = action_is_open && has_named_profile && !explicit_display;
+        let remote_open_candidate = action_is_open && has_named_profile;
         let keeper_handoff_required = publish_manager_handoff;
         let keeper_required = keeper_handoff_required || remote_open_candidate;
         if keeper_required && command.get("id").and_then(Value::as_str).is_none() {
@@ -1050,7 +1049,7 @@ impl RuntimeHostRouter {
                 let journaled_open = should_journal_browser_open(
                     action_is_open,
                     has_named_profile,
-                    explicit_display,
+                    false,
                     has_remote_desktop_routes,
                     existing_open_operation,
                 );
