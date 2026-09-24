@@ -33,7 +33,6 @@ import {
   planAutomaticWorkspaceConnection,
   resolveWorkspaceViewSources,
   workspaceConnectionReadinessGeneration,
-  workspaceViewerRouteIsAttached,
   type WorkspaceViewSource,
 } from "@/lib/workspace-view-connection";
 import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
@@ -2160,8 +2159,6 @@ export function WorkspaceRemoteViewport({
     routeRecoveryAction,
     readinessGeneration: connectionReadinessGeneration,
     viewerRoute: workspaceViewerRoute,
-    viewerRouteReady: workspaceViewerRouteIsAttached(workspaceViewerRoute),
-    viewerLeaseIds: [],
     attemptedActionKeys: automaticAttemptKeys,
   });
   const connectionInProgress = Boolean(recoveryPending)

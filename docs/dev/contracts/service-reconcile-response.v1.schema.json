@@ -44,8 +44,6 @@
         "releasedRoutePoolEntries",
         "orphanedDisplayAllocations",
         "orphanedRoutes",
-        "releasedViewerLeases",
-        "expiredViewerLeases",
         "clearedControllerLeases",
         "repaired",
         "released",
@@ -69,14 +67,6 @@
           "minimum": 0
         },
         "orphanedRoutes": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "releasedViewerLeases": {
-          "type": "integer",
-          "minimum": 0
-        },
-        "expiredViewerLeases": {
           "type": "integer",
           "minimum": 0
         },

@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 11
+Plan version: 12
 
 State: OPEN
 
@@ -19,7 +19,7 @@ Original design authority: Codex thread `01a0b65d-47f9-7b51-a17b-791ee87769b3`, 
 Audit basis: accepted user and assistant design turns 207 through 349 in the
 original design authority, first reconciled against branch head `c627fd4b`,
 then structurally audited with an up-to-date CodeGraph index at `6800163f` on
-2026-09-23
+2026-09-23, and re-audited against checkpoint `d0c2a4cf` on 2026-09-24
 
 Work items: `CochranResearchGroup/agent-browser#181`, `CochranResearchGroup/agent-browser#183`, and `CochranResearchGroup/agent-browser#195`
 
@@ -403,12 +403,14 @@ The operator-renewed execution window next selected the bounded P12 and P19
 stored-viewer-authority cut. The primary removed the persisted `ViewerLease`
 collection, route and stream viewer-lease ID lists, viewer request, heartbeat,
 release, and takeover dispatch, and the dashboard controls that manufactured
-viewer presence. Session heartbeat remains unchanged. The separately fenced
-Desktop Services controller ID and epoch remain control authority and are not
-treated as viewer-presence proof. Until M3 supplies an authenticated live
-Guacamole observer, capacity and attachability project no live viewer evidence
-and configured desktop interaction fails closed rather than reconstructing a
-viewer from stored state.
+viewer presence. Session heartbeat remains unchanged. Capacity and
+attachability now project no live viewer evidence, and configured desktop
+interaction fails closed until M3 supplies an authenticated live Guacamole
+observer. The separately fenced Desktop Services controller ID and epoch still
+exist as stored control state. They are not viewer-presence proof, and the
+2026-09-24 re-audit found that their use by operator focus is not yet sufficient
+G45 authority because no live viewer heartbeat currently governs how long that
+control remains held.
 
 Retained compiler wave 24 at `/tmp/agent-browser-p218-m1-wave-24` exits 0 with
 zero first-party groups after resolving all 52 wave-21 production groups. Its
@@ -432,6 +434,76 @@ accepted fixture claim. The next packet must finish the exact wave-26 worklist,
 regenerate and verify clients, reconcile all user-facing viewer-lease docs,
 then run focused CLI compartments and strict Clippy before deciding P12 and
 P19 acceptance.
+
+## 2026-09-24 Bob/Alice Re-audit Disposition
+
+The re-audit at `d0c2a4cf` does not change the plan objective, milestone order,
+or primary topic. The current direction remains the accepted direction, but the
+checkpoint is not G42 through G45 acceptance. Findings are incorporated into
+the existing milestones as follows:
+
+1. The provider-free Browser Session Manager core is directionally correct.
+   All 26 focused `agent-browser-service-model` integration tests pass for
+   exact-session refresh, same-profile browser reuse, distinct session and tab
+   identity, attributed-tab cleanup, Alice-first browser preservation, expiry,
+   and final-session cleanup. The stronger workstation Alice/Bob fixture also
+   expresses separate targets and opaque handoffs, independent navigation and
+   clicks, Alice-first cleanup preserving Bob, and final browser termination,
+   but it is ignored and cannot become acceptance evidence while the complete
+   CLI test build is broken.
+2. M1 must finish the retained wave-26 fixture reconciliation and restore a
+   compiling complete workspace test surface. It must also remove the deleted
+   viewer-lease actions and records from generated clients, HTTP and dashboard
+   allowlists, CLI help, README, skills, docs, schemas, tests, and generators.
+   Internal API/MCP parity without those complete public surfaces is not
+   sufficient.
+3. G42 remains partial until the Browser Session Manager owns the complete
+   ordinary lifecycle, including handoff identities and exact handoff-access
+   heartbeat refresh. The separate host handoff map and JSON finalization path
+   remain evidence for P03 and P05, not an accepted parallel authority.
+4. G43 and G44 are substantially implemented but remain unaccepted until the
+   provider-free Alice/Bob fixture runs in the normal validation surface and
+   proves distinct session, tab, target, heartbeat, expiry, and handoff
+   identities plus independent command and cleanup effects from one candidate.
+5. G35 and G45 remain failed. M3 must introduce bounded authenticated
+   Guacamole connection observation and disconnect detection, make that live
+   heartbeat the only active-viewer evidence, and make it govern eager recovery
+   and continued Desktop Services control. A stored controller ID or epoch may
+   fence a control grant but cannot establish or indefinitely retain it without
+   the current authenticated connection heartbeat. Until then, no stored
+   controller record may be promoted as G45 proof.
+6. The G01 through G45 coverage manifest must be reconciled before the next
+   conformance verdict. Its G35 and G45 evidence still names removed persisted
+   viewer state; those rows remain failed for the replacement gap and stored
+   controller-retention issue instead. G42 through G44 must cite the current
+   focused tests while retaining their incomplete acceptance status.
+7. The aggregate architecture result remains four definite violations, P02,
+   P03, P05, and P09; four detector gaps, P12, P15, P16, and P19; and eleven
+   unverified rows. Zero findings from a detector-gap row are not acceptance.
+   These findings stay within the existing M1 through M3 work and do not open a
+   separate repair program.
+
+The next bounded packet remains the wave-26 fixture and public-surface
+reconciliation already selected at the version 11 checkpoint. After that packet
+compiles, the next G42 through G44 packet consolidates handoff ownership and
+runs the provider-free Alice/Bob acceptance fixture. M3 then supplies the live
+viewer and heartbeat-governed control authority required for G35 and G45. This
+ordering addresses every accepted re-audit finding without switching topics or
+prematurely pulling provider-backed M3 work into the incomplete M1 excision.
+
+The 2026-09-24 execution continuation stopped when the live goal counter first
+became available above the operator's 500,000-token checkpoint cap; the readback
+was 841,393 tokens. Active workers were interrupted immediately and no compiler
+wave, commit, push, install, browser, provider, ingress, or production effect
+followed that readback. The retained uncommitted packet removes obsolete viewer
+fixtures, HTTP and dashboard routing special cases, generated client APIs,
+dashboard viewer-lease planning and projection, contract schemas, and
+user-facing guidance. Focused Browser Session Manager and dashboard stream
+checks passed; the dashboard observer-frame fixture was under bounded repair
+when interrupted. Remaining continuation work includes interrupted worker-diff
+reconciliation, residual Rust and operational-script viewer references, the
+stale actions responsibility inventory, the explicit P158-to-M3 dependency,
+one new compiler diagnostic wave, selected validation, and a custody commit.
 
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file

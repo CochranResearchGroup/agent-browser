@@ -37,16 +37,16 @@ function add(name, from = dashboard + '/src/components/workspace-remote-viewport
 const component = add(dashboard + '/src/components/workspace-remote-viewport.tsx'), react = add('react'), dom = add('react-dom/client');
 const fixture = `
 const R=req(${react}),{createRoot}=req(${dom}),{WorkspaceRemoteViewport}=req(${component});
-const stream={id:'rdp-1',routeId:'route-1',connectionId:'connection-1',provider:'rdp_gateway',providerMode:'simultaneous_view',frameUrl:location.origin+'/guacamole/#/client/test',externalUrl:location.origin+'/guacamole/#/client/test',attachability:{state:'attached_ready'},state:'ready',health:'ready',viewerLeaseIds:[],controlInput:'manual_attached_desktop',readiness:{state:'ready'},remoteReadiness:{state:'ready'},kind:'rdp',transport:'rdp'};
+const stream={id:'rdp-1',routeId:'route-1',connectionId:'connection-1',provider:'rdp_gateway',providerMode:'simultaneous_view',frameUrl:location.origin+'/guacamole/#/client/test',externalUrl:location.origin+'/guacamole/#/client/test',attachability:{state:'attached_ready'},state:'ready',health:'ready',controlInput:'manual_attached_desktop',readiness:{state:'ready'},remoteReadiness:{state:'ready'},kind:'rdp',transport:'rdp'};
 const browser={id:'session:fixture',profileId:'fixture',health:'ready',host:'remote_headed',viewStreams:[stream]};
 const selected={browser,stream,streamChoices:[stream],streamChoiceKeys:['rdp-1'],canView:true,canControl:false,authority:{lifecycle:{live:true}},tabSelection:{tab:null,tabIndex:null,recoveredFromStaleSelection:false,staleSelectionId:null},readiness:{status:'ready',recoveryAction:null}};
 const projection={selected,candidates:[selected],tiles:[]};
-window.leaseRequested=false;window.leaseCompleted=false;window.failures=[];
+window.deletedViewerActions=[];window.failures=[];
 const primaryStartedAt=Date.now()-10000;
 window.fetch=async (url,options={})=>{
  const u=new URL(String(url),location.href),body=options.body?JSON.parse(options.body.startsWith('{')?options.body:'{}'):{};
  let value={};
- if(body.action==='service_viewer_lease_request'){window.leaseRequested=true;await new Promise(r=>window.finishLease=r);window.leaseCompleted=true;value={success:true,data:{}};}
+ if(['service_viewer_lease_request','service_viewer_lease_heartbeat','service_viewer_lease_release','service_controller_lease_takeover'].includes(body.action)){window.deletedViewerActions.push(body.action);value={success:false,error:'stored viewer authority is unavailable'};}
  else if(u.pathname.endsWith('/api/tokens'))value={authToken:'synthetic'};
  else if(u.pathname.endsWith('/activeConnections'))value={'backend-owner':{connectionIdentifier:'connection-1',connectable:true,startDate:primaryStartedAt}};
  else if(u.pathname.endsWith('/sharingProfiles'))value={profile:{identifier:'profile',name:'Agent Browser Shared Session route-1',primaryConnectionIdentifier:'connection-1'}};
@@ -67,18 +67,23 @@ try {
     await page.route('http://p159*.test/**', async (route) => { const u = new URL(route.request().url()); await route.fulfill({ contentType: 'text/html', body: u.pathname === '/guacamole/' ? '<html><body>synthetic remote frame</body></html>' : '<html><body><div id="root"></div></body></html>' }); });
     await page.goto('http://p159.test/?view=workspace:view&browser=session:fixture&session=fixture');
     await page.addScriptTag({ content: bundle });
-    await page.waitForFunction(() => window.leaseRequested, {}, { timeout: 5000 });
-    await page.frameLocator('iframe').getByText('synthetic remote frame').waitFor({ timeout: 5000 });
-    await page.evaluate(() => { window.originalFrame = document.querySelector('iframe'); window.finishLease(); });
-    await page.waitForFunction(() => document.body.innerText.includes('Reconnected the service-owned observer lease'), {}, { timeout: 5000 });
-    const result = await page.evaluate(() => ({ sameFrame: window.originalFrame === document.querySelector('iframe'), originalConnected: window.originalFrame.isConnected, frameCount: document.querySelectorAll('iframe').length, leaseCompleted: window.leaseCompleted }));
+    await page.locator('iframe').waitFor({ state: 'attached', timeout: 5000 });
+    await page.evaluate(() => { window.originalFrame = document.querySelector('iframe'); });
+    await page.waitForTimeout(100);
+    const result = await page.evaluate(() => ({
+        sameFrame: window.originalFrame === document.querySelector('iframe'),
+        originalConnected: window.originalFrame?.isConnected === true,
+        frameCount: document.querySelectorAll('iframe').length,
+        deletedViewerActions: window.deletedViewerActions,
+    }));
     console.log(JSON.stringify(result));
-    if (!result.sameFrame || !result.originalConnected)
-        throw Error('Observer lease acknowledgement detached the original remote-view iframe');
+    if (!result.sameFrame || result.deletedViewerActions.length)
+        throw Error('The ready remote-view route must render without issuing persisted viewer lease actions');
+    await page.getByText('Advanced connection controls', { exact: true }).click();
     await page.getByText('Reload view', { exact: true }).click();
     await page.waitForFunction(() => window.originalFrame !== document.querySelector('iframe'), {}, { timeout: 5000 });
     if (pageErrors.length) throw Error(pageErrors.join('\n'));
-    console.log('Observer lease preserves the rendered frame; explicit reload replaces it.');
+    console.log('Ready remote-view routes render without stored viewer actions; explicit reload replaces the iframe.');
 }
 catch (e) {
     console.error(await browser.contexts()[0].pages()[0].locator('body').innerText());

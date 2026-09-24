@@ -321,7 +321,6 @@ function projectedNodeStream(stream: ServiceViewStream, embeddable: boolean, con
     connectionName: stream.connectionName ?? null,
     routeSource: stream.routeSource ?? null,
     providerMode: stream.providerMode ?? null,
-    viewerLeaseIds: stream.viewerLeaseIds ?? [],
     controllerLeaseId: stream.controllerLeaseId ?? null,
     embeddable,
     controllable,

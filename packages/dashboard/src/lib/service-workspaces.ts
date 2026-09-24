@@ -126,7 +126,6 @@ export type WorkspaceNodeViewStream = {
   connectionName?: string | null;
   routeSource?: string | null;
   providerMode?: string | null;
-  viewerLeaseIds?: string[];
   controllerLeaseId?: string | null;
   embeddable: boolean;
   controllable: boolean;
@@ -297,7 +296,6 @@ export type WorkspaceServiceViewStream = {
   connectionName?: string | null;
   routeSource?: string | null;
   providerMode?: string | null;
-  viewerLeaseIds?: string[];
   controllerLeaseId?: string | null;
   readiness?: unknown;
   remoteReadiness?: unknown;
@@ -1534,7 +1532,6 @@ function workspaceNodeViewFromProjection(projected?: ProjectedWorkspaceView): Wo
     connectionName: stream.connectionName ?? null,
     routeSource: stream.routeSource ?? null,
     providerMode: stream.providerMode ?? null,
-    viewerLeaseIds: stream.viewerLeaseIds ?? [],
     controllerLeaseId: stream.controllerLeaseId ?? null,
     embeddable: projected.canView,
     controllable: projected.canControl,
@@ -1869,7 +1866,6 @@ function daemonViewStream(session: SessionInfo, live: boolean): WorkspaceNodeVie
     connectionName: session.session,
     routeSource: "daemon-session",
     providerMode: "single_controller",
-    viewerLeaseIds: [],
     controllerLeaseId: null,
     embeddable: true,
     controllable: true,
@@ -1894,7 +1890,6 @@ function foreignCdpSnapshotViewStream(session: SessionInfo, live: boolean): Work
     connectionName: session.session,
     routeSource: "foreign-cdp",
     providerMode: "read_only_snapshot_poll",
-    viewerLeaseIds: [],
     controllerLeaseId: null,
     embeddable: true,
     controllable: false,

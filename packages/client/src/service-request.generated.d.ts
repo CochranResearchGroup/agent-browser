@@ -41,10 +41,6 @@ export type ServiceRequestAction =
   | "service_remote_view_route_checkout"
   | "service_remote_view_route_release"
   | "service_route_pool_repair"
-  | "service_viewer_lease_request"
-  | "service_viewer_lease_heartbeat"
-  | "service_viewer_lease_release"
-  | "service_controller_lease_takeover"
   | "service_authentication_run_start"
   | "service_authentication_run_status"
   | "service_authentication_run_resume"
@@ -1235,19 +1231,6 @@ export interface ServiceBrowserRetirementApplyData {
   replayed: boolean;
 }
 
-export interface ServiceViewerLeaseMutationData {
-  status: string;
-  routeId?: string | null;
-  remoteViewRouteId?: string;
-  viewerLeaseId?: string;
-  controllerLeaseId?: string | null;
-  previousControllerLeaseId?: string | null;
-  viewerLease?: Record<string, unknown> | null;
-  remoteViewRoute?: Record<string, unknown> | null;
-  updatedAt?: string;
-  [key: string]: unknown;
-}
-
 export interface ServiceTabRecord {
   index: number;
   title: string;
@@ -1729,10 +1712,6 @@ export interface ServiceRequestActionDataMap {
   service_browser_contamination_report: ServiceBrowserContaminationReportData;
   service_browser_retirement_plan: ServiceBrowserRetirementPlanData;
   service_browser_retirement_apply: ServiceBrowserRetirementApplyData;
-  service_viewer_lease_request: ServiceViewerLeaseMutationData;
-  service_viewer_lease_heartbeat: ServiceViewerLeaseMutationData;
-  service_viewer_lease_release: ServiceViewerLeaseMutationData;
-  service_controller_lease_takeover: ServiceViewerLeaseMutationData;
   tab_list: ServiceTabListData;
   url: ServiceUrlData;
   title: ServiceTitleData;
@@ -2320,32 +2299,6 @@ export interface ServiceBrowserRetirementApplyHttpOptions extends ServiceBrowser
   signal?: AbortSignal;
 }
 
-export interface ServiceViewerLeaseRequestOptions extends Omit<ServiceRequest, "action" | "params"> {
-  routeId: string;
-  viewerId?: string;
-  viewerName?: string;
-  viewerRole?: "observer" | "controller" | "pending_controller" | "none" | string;
-  openMode?: "embedded" | "external" | "fullscreen" | "tile" | string;
-  browserId?: string;
-  expiresAt?: string;
-  params?: Record<string, unknown>;
-}
-
-export interface ServiceViewerLeaseReleaseOptions extends Omit<ServiceRequest, "action" | "params"> {
-  viewerLeaseId: string;
-  params?: Record<string, unknown>;
-}
-
-export interface ServiceViewerLeaseHeartbeatOptions extends Omit<ServiceRequest, "action" | "params"> {
-  viewerLeaseId: string;
-  expiresAt?: string;
-  params?: Record<string, unknown>;
-}
-
-export interface ServiceControllerLeaseTakeoverOptions extends ServiceViewerLeaseRequestOptions {
-  viewerLeaseId?: string;
-}
-
 export interface ServiceRemoteViewRouteCheckoutHttpOptions extends ServiceRemoteViewRouteCheckoutOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
@@ -2365,30 +2318,6 @@ export interface ServiceRemoteViewRouteReleaseHttpOptions extends ServiceRemoteV
 }
 
 export interface ServiceRoutePoolRepairHttpOptions extends ServiceRoutePoolRepairOptions {
-  baseUrl: string;
-  fetch?: typeof globalThis.fetch;
-  signal?: AbortSignal;
-}
-
-export interface ServiceViewerLeaseRequestHttpOptions extends ServiceViewerLeaseRequestOptions {
-  baseUrl: string;
-  fetch?: typeof globalThis.fetch;
-  signal?: AbortSignal;
-}
-
-export interface ServiceViewerLeaseReleaseHttpOptions extends ServiceViewerLeaseReleaseOptions {
-  baseUrl: string;
-  fetch?: typeof globalThis.fetch;
-  signal?: AbortSignal;
-}
-
-export interface ServiceViewerLeaseHeartbeatHttpOptions extends ServiceViewerLeaseHeartbeatOptions {
-  baseUrl: string;
-  fetch?: typeof globalThis.fetch;
-  signal?: AbortSignal;
-}
-
-export interface ServiceControllerLeaseTakeoverHttpOptions extends ServiceControllerLeaseTakeoverOptions {
   baseUrl: string;
   fetch?: typeof globalThis.fetch;
   signal?: AbortSignal;
@@ -2522,18 +2451,6 @@ export declare function createServiceBrowserRetirementPlanRequest(
 export declare function createServiceBrowserRetirementApplyRequest(
   input: ServiceBrowserRetirementApplyOptions,
 ): ServiceRequestForAction<"service_browser_retirement_apply">;
-export declare function createServiceViewerLeaseRequest(
-  input: ServiceViewerLeaseRequestOptions,
-): ServiceRequestForAction<"service_viewer_lease_request">;
-export declare function createServiceViewerLeaseHeartbeatRequest(
-  input: ServiceViewerLeaseHeartbeatOptions,
-): ServiceRequestForAction<"service_viewer_lease_heartbeat">;
-export declare function createServiceViewerLeaseReleaseRequest(
-  input: ServiceViewerLeaseReleaseOptions,
-): ServiceRequestForAction<"service_viewer_lease_release">;
-export declare function createServiceControllerLeaseTakeoverRequest(
-  input: ServiceControllerLeaseTakeoverOptions,
-): ServiceRequestForAction<"service_controller_lease_takeover">;
 export declare function requestServiceTab(options: ServiceTabRequestHttpOptions): Promise<ServiceRequestResponse<ServiceTabNewData>>;
 export declare function requestServiceTabFromAccessPlan(
   options: ServiceTabRequestHttpOptions,
@@ -2695,18 +2612,6 @@ export declare function requestServiceBrowserRetirementPlan(
 export declare function requestServiceBrowserRetirementApply(
   options: ServiceBrowserRetirementApplyHttpOptions,
 ): Promise<ServiceRequestResponse<ServiceBrowserRetirementApplyData>>;
-export declare function requestServiceViewerLease(
-  options: ServiceViewerLeaseRequestHttpOptions,
-): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
-export declare function heartbeatServiceViewerLease(
-  options: ServiceViewerLeaseHeartbeatHttpOptions,
-): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
-export declare function releaseServiceViewerLease(
-  options: ServiceViewerLeaseReleaseHttpOptions,
-): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
-export declare function takeoverServiceControllerLease(
-  options: ServiceControllerLeaseTakeoverHttpOptions,
-): Promise<ServiceRequestResponse<ServiceViewerLeaseMutationData>>;
 export declare function summarizeServiceCdpFreeLaunchAvailability(
   data: ServiceCdpFreeLaunchData,
 ): ServiceCdpFreeLaunchAvailability;

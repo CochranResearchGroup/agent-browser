@@ -3,8 +3,9 @@ use crate::native::browser_session_authority::browser_session_authority_snapshot
 use crate::native::service_model::{ServiceJob, ServiceState};
 use crate::native::service_resources::service_resources_response;
 use crate::native::service_status_projection::{
-    launch_configuration_from_status_command, ServiceStateProjectionMode, ServiceStatusProjector,
-    StatusAuthorityInput, StatusControlPlaneAuthority, StatusLaunchConfiguration,
+    ServiceStateProjectionMode, ServiceStatusProjector, StatusAuthorityInput,
+    StatusControlPlaneAuthority, StatusLaunchConfiguration,
+    launch_configuration_from_status_command,
 };
 use std::collections::HashSet;
 use std::sync::atomic::AtomicBool;

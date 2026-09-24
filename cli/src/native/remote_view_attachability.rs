@@ -300,7 +300,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::native::service_model::{ControlInputProvider, ViewerLease};
+    use crate::native::service_model::ControlInputProvider;
 
     #[test]
     fn attachability_reports_attached_ready_from_stream_display_proof() {
@@ -389,9 +389,8 @@ mod tests {
     }
 
     #[test]
-    fn attachability_reports_viewer_disconnected_for_ready_route_without_active_viewer() {
-        let mut browser = ready_browser("browser-1");
-        browser.view_streams[0].viewer_lease_ids = vec!["viewer-1".to_string()];
+    fn attachability_does_not_infer_viewer_presence_for_ready_route() {
+        let browser = ready_browser("browser-1");
         let mut state = ServiceState {
             browsers: BTreeMap::from([("browser-1".to_string(), browser)]),
             display_allocations: BTreeMap::from([(
@@ -413,16 +412,6 @@ mod tests {
                     ..RemoteViewRoute::default()
                 },
             )]),
-            viewer_leases: BTreeMap::from([(
-                "viewer-1".to_string(),
-                ViewerLease {
-                    id: "viewer-1".to_string(),
-                    state: "disconnected".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    ..ViewerLease::default()
-                },
-            )]),
             ..ServiceState::default()
         };
 
@@ -430,7 +419,11 @@ mod tests {
 
         assert_eq!(
             state.browsers["browser-1"].attachability.as_ref().unwrap()["state"],
-            "reattachable_viewer_disconnected"
+            "attached_ready"
+        );
+        assert_eq!(
+            state.browsers["browser-1"].attachability.as_ref().unwrap()["hasActiveViewer"],
+            false
         );
     }
 

@@ -88,7 +88,6 @@ use crate::native::service_model::{
     assert_service_trace_summary_record_contract, service_job_naming_warning_values,
     BrowserCapabilityRegistry, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     DisplayAllocation, ProfileSeedingHandoffState, RemoteViewRoute, RoutePoolEntry, ViewStream,
-    ViewerLease,
 };
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
@@ -126,7 +125,7 @@ fn unique_socket_dir(label: &str) -> PathBuf {
 }
 
 #[tokio::test]
-async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
+async fn test_remote_view_route_actions_mutate_service_state() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-route-lease-home");
     fs::create_dir_all(&home).unwrap();
@@ -311,49 +310,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
         checked_out_slot.browser_id.as_deref(),
         Some("session:rdp-a")
     );
-    let viewer = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_request", "routeId" : "route-a",
-            "viewerId" : "viewer-a", "viewerName" : "Operator A", "openMode" : "tile"
-            }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(viewer["success"], true);
-    let viewer_lease_id = viewer["data"]["viewerLeaseId"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let heartbeat = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_heartbeat", "viewerLeaseId" :
-            viewer_lease_id, "expiresAt" : "2026-05-28T04:00:00Z" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(heartbeat["success"], true);
-    assert_eq!(heartbeat["data"]["status"], "viewer_heartbeat");
-    let controller = execute_command(
-        &json!(
-            { "action" : "service_controller_lease_takeover", "routeId" : "route-a",
-            "viewerLeaseId" : viewer_lease_id, "viewerId" : "viewer-a" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(controller["success"], true);
-    assert_eq!(controller["data"]["controllerLeaseId"], viewer_lease_id);
-    let release_viewer = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_release", "viewerLeaseId" :
-            viewer_lease_id }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(release_viewer["success"], true);
     let release_route = execute_command(
         &json!(
             { "action" : "service_remote_view_route_release", "routeId" : "route-a" }
@@ -364,7 +320,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
     assert_eq!(release_route["success"], true);
     assert_eq!(release_route["data"]["status"], "released");
     assert_eq!(release_route["data"]["routeId"], "route-a");
-    assert!(release_route["data"]["releasedViewerLeaseIds"].is_array());
     assert_eq!(
         release_route["data"]["remoteViewRoute"]["lastProviderEvent"],
         "route_released"
@@ -398,26 +353,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
             .and_then(Value::as_str),
         Some("ready")
     );
-    assert_eq!(
-        persisted.viewer_leases[&viewer_lease_id].state,
-        "disconnected"
-    );
-    assert!(persisted.events.iter().any(|event| {
-        event.kind == ServiceEventKind::ViewerConnected
-            && event.details.as_ref().unwrap()["viewerLeaseId"] == viewer_lease_id
-    }));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ControllerRequested));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ControllerGranted));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ViewerDisconnected));
     assert!(persisted
         .events
         .iter()
@@ -1297,23 +1232,11 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
                         external_url: Some("https://guac.example/#/client/route-c".to_string()),
                         provider_mode: "simultaneous_view".to_string(),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["viewer-c".to_string()],
                         readiness: Some(json!({ "state" : "ready" })),
                         ..RemoteViewRoute::default()
                     },
                 ),
             ]),
-            viewer_leases: BTreeMap::from([(
-                "viewer-c".to_string(),
-                ViewerLease {
-                    id: "viewer-c".to_string(),
-                    state: "observing".to_string(),
-                    route_id: Some("route-c".to_string()),
-                    browser_id: Some("session:rdp-c".to_string()),
-                    last_heartbeat_at: Some("2026-07-05T00:01:00Z".to_string()),
-                    ..ViewerLease::default()
-                },
-            )]),
             browsers: BTreeMap::from([
                 (
                     "session:rdp-a".to_string(),
@@ -1362,7 +1285,6 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
                             route_id: Some("route-c".to_string()),
                             display_allocation_id: Some("display-c".to_string()),
                             provider_mode: Some("simultaneous_view".to_string()),
-                            viewer_lease_ids: vec!["viewer-c".to_string()],
                             remote_readiness: Some(json!({ "state" :
                                 "ready", "displayContent" : { "state" :
                                 "browser_window_visible", "displayName" : ":23" } })),

@@ -307,17 +307,7 @@ mod tests {
             serde_json::from_value(json!({
                 "id":"route-a", "browserId":"browser-a", "sessionId":"session-a",
                 "displayAllocationId":"display-a", "state":"ready", "readOnly":false,
-                "controllerLeaseId":"controller-a", "controllerEpoch":1,
-                "viewerLeaseIds":["controller-a"]
-            }))
-            .unwrap(),
-        );
-        state.viewer_leases.insert(
-            "controller-a".into(),
-            serde_json::from_value(json!({
-                "id":"controller-a", "routeId":"route-a", "browserId":"browser-a",
-                "viewerId":"dashboard:operator", "viewerRole":"controller", "state":"controlling",
-                "expiresAt":"1970-01-01T01:00:00Z"
+                "controllerLeaseId":"controller-a", "controllerEpoch":1
             }))
             .unwrap(),
         );
@@ -325,25 +315,17 @@ mod tests {
         authorize_current(&state, "operator", &binding, 1000).unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
         assert!(authorize_current(&state, "other", &binding, 1000).is_err());
-        assert!(authorize_current(&state, "operator", &binding, 3600).is_err());
-        let mut unbounded = state.clone();
-        unbounded
-            .viewer_leases
-            .get_mut("controller-a")
-            .unwrap()
-            .expires_at = None;
-        authorize_current(&unbounded, "operator", &binding, 3600).unwrap();
         for (pointer, value) in [
             ("/browsers/browser-a/pid", json!(101)),
             ("/browsers/browser-a/profileId", json!("other")),
             ("/tabs/target:target-a/targetId", json!("other")),
             ("/tabs/target:target-a/lifecycle", json!("closed")),
+            (
+                "/remoteViewRoutes/route-a/controllerLeaseId",
+                json!("controller-b"),
+            ),
             ("/remoteViewRoutes/route-a/controllerEpoch", json!(2)),
             ("/remoteViewRoutes/route-a/readOnly", json!(true)),
-            ("/remoteViewRoutes/route-a/viewerLeaseIds", json!([])),
-            ("/viewerLeases/controller-a/viewerRole", json!("observer")),
-            ("/viewerLeases/controller-a/state", json!("released")),
-            ("/viewerLeases/controller-a/expiresAt", json!("invalid")),
         ] {
             let mut changed = original.clone();
             *changed.pointer_mut(pointer).unwrap() = value;
