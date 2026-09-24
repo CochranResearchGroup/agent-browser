@@ -152,6 +152,14 @@ pub(crate) trait BrowserSessionPersistence {
         Err("browser_session_handoff_persistence_unsupported".to_string())
     }
 
+    fn publish_manager_handoff(
+        &mut self,
+        _state: &BrowserSessionState,
+        _handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        Err("browser_session_handoff_atomic_publication_unsupported".to_string())
+    }
+
     fn transfer_desktop_control(
         &mut self,
         _request: &DesktopControlTransferRequest,
@@ -287,6 +295,14 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
 
     fn save_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
         BrowserRuntimeSqliteStore::save_manager_handoff(self, handoff)
+    }
+
+    fn publish_manager_handoff(
+        &mut self,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::publish_manager_handoff(self, state, handoff)
     }
 
     fn transfer_desktop_control(
@@ -909,9 +925,17 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             authority,
             &self.handoffs,
         )?;
-        self.bind_manager_handoff(&prepared.handoff)?;
-        self.commit_state()?;
-        self.persistence.save_manager_handoff(&prepared.handoff)?;
+        let mut next_state = self.state.clone();
+        let session_id = prepared
+            .handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        next_state.bind_manager_handoff(session_id, &prepared.handoff.id)?;
+        self.persistence
+            .publish_manager_handoff(&next_state, &prepared.handoff)?;
+        self.state = next_state;
         self.handoffs
             .insert(prepared.handoff.id.clone(), prepared.handoff);
         if let (Some(data), Some(projection)) = (

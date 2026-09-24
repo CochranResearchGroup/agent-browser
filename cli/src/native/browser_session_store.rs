@@ -624,6 +624,50 @@ impl BrowserRuntimeSqliteStore {
             .map_err(|error| format!("browser_runtime_handoff_commit_failed:{error}"))
     }
 
+    /// Atomically publish manager-owned session membership and its handoff.
+    pub(crate) fn publish_manager_handoff(
+        &mut self,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_session_state_schema_unsupported:{}",
+                state.schema_version
+            ));
+        }
+        if handoff.id.is_empty() {
+            return Err("browser_runtime_handoff_identity_invalid".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_handoff_begin_failed:{error}"))?;
+        let mut registry: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        registry
+            .handoffs
+            .insert(handoff.id.clone(), handoff.clone());
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            state,
+        )?;
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_handoff_commit_failed:{error}"))
+    }
+
     pub(crate) fn load_route_keeper_authority(&self) -> Result<RouteKeeperAuthority, String> {
         load_route_keeper_authority_document(&self.connection)
     }

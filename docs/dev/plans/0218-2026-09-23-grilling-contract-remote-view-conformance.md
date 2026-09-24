@@ -551,12 +551,13 @@ reload test, complete workspace test compilation, strict workspace Clippy,
 formatting, capsule validation, coverage validation, and diff validation pass.
 The final disabled viewer-policy fixture was deleted, and Clippy fallout from
 the preceding viewer excision was repaired without restoring stored viewer
-authority. G42 remains partial because the older nonjournaled keeper-attach
-compatibility path still writes session membership and the handoff in separate
-operations; it must either join the atomic publication boundary or be removed.
-P158 remains an explicit M3 dependency, and G35/G45 still require authenticated
-live Guacamole observation. No push, install, browser, provider, ingress,
-production, or other live effect occurred.
+authority. The remaining nonjournaled keeper-attach compatibility path now
+publishes session membership and its handoff in one SQLite transaction. G42
+remains partial until every remaining ordinary command and handoff-finalization
+path is proven to use the manager-owned transaction boundary and the P03/P05
+compatibility projections are removed. P158 remains an explicit M3 dependency,
+and G35/G45 still require authenticated live Guacamole observation. No push,
+install, browser, provider, ingress, production, or other live effect occurred.
 
 ## Grilling Contract Ledger
 
