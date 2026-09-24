@@ -437,8 +437,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         legacy_service_state_path: &Path,
         config: BrowserSessionHostConfig,
     ) -> Result<Self, String> {
-        let state = persistence.load_session_state()?;
+        let mut state = persistence.load_session_state()?;
         let handoffs = persistence.load_manager_handoffs()?;
+        if bind_legacy_manager_handoffs(&mut state, &handoffs) {
+            persistence.save_session_state(&state)?;
+        }
         let mut catalog_load =
             persistence.load_or_import_profile_catalog(legacy_service_state_path)?;
         let mut catalog_changed = false;
@@ -591,6 +594,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get(session_id)
             .cloned()
             .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
         if session.expires_at_ms < activity_at_ms {
             return Err("browser_session_handoff_session_expired".to_string());
         }
@@ -657,6 +663,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             return Err("browser_session_handoff_focus_identity_changed".to_string());
         }
+        self.refresh_resolved_manager_handoff(session_id, &handoff.id, activity_at_ms)?;
         let presentation_generation = 1_u64;
         let presentation_receipt = serde_json::json!({
             "generation": presentation_generation,
@@ -720,6 +727,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get(session_id)
             .cloned()
             .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
         if session.expires_at_ms < activity_at_ms {
             return Err("browser_session_handoff_session_expired".to_string());
         }
@@ -800,6 +810,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             return Err("browser_session_handoff_focus_identity_changed".to_string());
         }
+        self.refresh_resolved_manager_handoff(session_id, &handoff.id, activity_at_ms)?;
         let presentation_generation = binding.fence.operation_generation;
         let presentation_receipt = serde_json::json!({
             "generation": presentation_generation,
@@ -898,6 +909,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             authority,
             &self.handoffs,
         )?;
+        self.bind_manager_handoff(&prepared.handoff)?;
+        self.commit_state()?;
         self.persistence.save_manager_handoff(&prepared.handoff)?;
         self.handoffs
             .insert(prepared.handoff.id.clone(), prepared.handoff);
@@ -1328,6 +1341,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                     )?
                                 }
                             };
+                            self.bind_manager_handoff(&prepared.handoff)?;
                             let mut response = response;
                             if let (Some(data), Some(projection)) = (
                                 response
@@ -1586,6 +1600,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         self.persistence.save_session_state(&self.state)
     }
 
+    fn bind_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        self.state.bind_manager_handoff(session_id, &handoff.id)
+    }
+
+    fn refresh_resolved_manager_handoff(
+        &mut self,
+        session_id: &str,
+        handoff_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<(), String> {
+        self.state.refresh_manager_handoff_activity(
+            session_id,
+            handoff_id,
+            activity_at_ms,
+            self.manager_config.session_idle_timeout_ms,
+        )?;
+        self.commit_state()
+    }
+
     fn open_request_from_command(
         &mut self,
         command: &serde_json::Value,
@@ -1627,6 +1665,72 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             _ => Err(format!("browser_session_name_ambiguous:{session_name}")),
         }
     }
+}
+
+/// Backfill session membership for handoffs written before sessions recorded IDs.
+/// Only an active, fully attributed record may acquire session ownership.
+fn bind_legacy_manager_handoffs(
+    state: &mut BrowserSessionState,
+    handoffs: &BTreeMap<String, RemoteViewHandoff>,
+) -> bool {
+    let mut changed = false;
+    for (id, handoff) in handoffs {
+        if id != &handoff.id
+            || handoff.state != "ready"
+            || !super::browser_session_handoff::is_manager_handoff(handoff)
+        {
+            continue;
+        }
+        let Some(session_id) = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+        else {
+            continue;
+        };
+        let Some(session) = state.sessions.get(session_id) else {
+            continue;
+        };
+        let Some(browser) = state.browsers.get(&session.browser_id) else {
+            continue;
+        };
+        let Some(tab) = handoff.tab_id.as_deref().and_then(|id| state.tabs.get(id)) else {
+            continue;
+        };
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(session.browser_id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || browser.id != session.browser_id
+            || !browser.active_session_ids.contains(&session.id)
+            || tab.session_id != session.id
+            || tab.browser_id != browser.id
+            || [
+                ("profileId", session.profile_id.as_str()),
+                ("sessionName", session.name.as_str()),
+                ("browserId", browser.id.as_str()),
+                ("tabId", tab.id.as_str()),
+                ("targetId", tab.target_id.as_str()),
+            ]
+            .into_iter()
+            .any(|(key, expected)| {
+                handoff
+                    .intent
+                    .get(key)
+                    .is_some_and(|value| value.as_str() != Some(expected))
+            })
+            || state.sessions.values().any(|other| {
+                other.id != session.id && other.handoff_ids.iter().any(|owned| owned == id)
+            })
+            || session.handoff_ids.iter().any(|owned| owned == id)
+        {
+            continue;
+        }
+        if state.bind_manager_handoff(session_id, id).is_ok() {
+            changed = true;
+        }
+    }
+    changed
 }
 
 impl<P, E> BrowserSessionHost<P, E>
@@ -3713,6 +3817,10 @@ mod tests {
             .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
             .unwrap();
         let tab = host.new_tab(&opened.session_id, 1_100).unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_200))
+            .unwrap();
+        let bob_tab = host.new_tab(&bob.session_id, 1_200).unwrap();
         let handoff = RemoteViewHandoff {
             id: "opaque-a".to_string(),
             state: "ready".to_string(),
@@ -3728,6 +3836,24 @@ mod tests {
             target_id: Some(tab.target_id.clone()),
             ..RemoteViewHandoff::default()
         };
+        let bob_handoff = RemoteViewHandoff {
+            id: "opaque-b".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": bob.session_id,
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/opaque-b".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some(bob.browser_id.clone()),
+            session_name: Some("bob".to_string()),
+            tab_id: Some(bob_tab.tab_id.clone()),
+            target_id: Some(bob_tab.target_id.clone()),
+            ..RemoteViewHandoff::default()
+        };
+        host.bind_manager_handoff(&handoff).unwrap();
+        host.bind_manager_handoff(&bob_handoff).unwrap();
+        host.commit_state().unwrap();
         let mut service = ServiceState::default();
         service.display_allocations.insert(
             "display-a".to_string(),
@@ -3801,6 +3927,16 @@ mod tests {
         let persisted_session = persisted.sessions.get(&opened.session_id).unwrap();
         assert_eq!(persisted_session.last_activity_at_ms, 2_000);
         assert_eq!(persisted_session.expires_at_ms, 302_000);
+        assert_eq!(persisted_session.handoff_ids, ["opaque-a"]);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].handoff_ids,
+            ["opaque-b"]
+        );
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_200
+        );
+        assert_eq!(persisted.sessions[&bob.session_id].expires_at_ms, 301_200);
         assert_eq!(
             persisted_session.current_tab_id.as_deref(),
             Some(tab.tab_id.as_str())
@@ -3880,6 +4016,64 @@ mod tests {
             .unwrap()
             .handoffs
             .contains_key(&handoff_id));
+
+        let mut legacy = host.state().clone();
+        legacy
+            .sessions
+            .get_mut(&opened.session_id)
+            .unwrap()
+            .handoff_ids
+            .clear();
+        let mut mismatched = handoff.clone();
+        mismatched.id = "opaque-mismatched".to_string();
+        mismatched.tab_id = Some("wrong-tab".to_string());
+        let mut candidates = host.handoffs.clone();
+        candidates.insert(mismatched.id.clone(), mismatched);
+        assert!(bind_legacy_manager_handoffs(&mut legacy, &candidates));
+        assert_eq!(
+            legacy.sessions[&opened.session_id].handoff_ids,
+            [handoff_id.as_str()]
+        );
+
+        let mut persisted_legacy = host.state().clone();
+        persisted_legacy
+            .sessions
+            .get_mut(&opened.session_id)
+            .unwrap()
+            .handoff_ids
+            .clear();
+        BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .save_session_state(&persisted_legacy)
+            .unwrap();
+        drop(host);
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            host.state().sessions[&opened.session_id].handoff_ids,
+            [handoff_id.as_str()]
+        );
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_session_state()
+                .unwrap()
+                .sessions[&opened.session_id]
+                .handoff_ids,
+            [handoff_id.as_str()]
+        );
 
         let activity_before = host.state().sessions[&opened.session_id].last_activity_at_ms;
         let navigation = serde_json::json!({

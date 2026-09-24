@@ -121,7 +121,7 @@ fn authorize_current(
     state: &crate::native::service_model::ServiceState,
     username: &str,
     binding: &OperatorFocusBinding,
-    now: u64,
+    _now: u64,
 ) -> Result<(), String> {
     use crate::native::service_model::{BrowserHealth, TabLifecycle};
     use crate::native::service_profile_access_policy::{

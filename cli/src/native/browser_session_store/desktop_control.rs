@@ -662,6 +662,7 @@ mod tests {
                 last_activity_at_ms: 1,
                 expires_at_ms: 10_000,
                 current_tab_id: Some("tab-1".to_string()),
+                handoff_ids: Vec::new(),
             },
         );
         sessions.sessions.insert(
@@ -675,6 +676,7 @@ mod tests {
                 last_activity_at_ms: 1,
                 expires_at_ms: 10_000,
                 current_tab_id: Some("tab-2".to_string()),
+                handoff_ids: Vec::new(),
             },
         );
         sessions.tabs.insert(

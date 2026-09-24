@@ -73,6 +73,72 @@ fn repeated_command_reuses_and_refreshes_named_session() {
 }
 
 #[test]
+fn manager_handoff_membership_and_activity_are_session_scoped() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1_000))
+        .unwrap();
+    drop(manager);
+
+    state
+        .bind_manager_handoff(&alice.session_id, "opaque-alice")
+        .unwrap();
+    state
+        .bind_manager_handoff(&alice.session_id, "opaque-alice")
+        .unwrap();
+    state
+        .bind_manager_handoff(&bob.session_id, "opaque-bob")
+        .unwrap();
+    assert_eq!(
+        state.bind_manager_handoff(&bob.session_id, "opaque-alice"),
+        Err("browser_session_handoff_session_identity_changed".to_string())
+    );
+    assert_eq!(
+        state.sessions[&alice.session_id].handoff_ids,
+        ["opaque-alice"]
+    );
+    assert_eq!(state.sessions[&bob.session_id].handoff_ids, ["opaque-bob"]);
+    assert_eq!(
+        state.refresh_manager_handoff_activity(&bob.session_id, "opaque-alice", 2_000, 300_000),
+        Err("browser_session_handoff_session_identity_changed".to_string())
+    );
+    state
+        .refresh_manager_handoff_activity(&alice.session_id, "opaque-alice", 2_000, 300_000)
+        .unwrap();
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 2_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 302_000);
+    assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, 301_000);
+
+    let mut legacy = serde_json::to_value(&state.sessions[&alice.session_id]).unwrap();
+    legacy.as_object_mut().unwrap().remove("handoffIds");
+    let restored: agent_browser_service_model::ManagedBrowserSession =
+        serde_json::from_value(legacy).unwrap();
+    assert!(restored.handoff_ids.is_empty());
+}
+
+#[test]
 fn bounded_desktop_admission_grows_before_sharing_and_preserves_existing_browsers() {
     use agent_browser_service_model::BrowserDesktopRoute;
     let mut catalog = catalog_with_named_profile();

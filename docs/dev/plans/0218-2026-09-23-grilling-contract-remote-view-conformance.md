@@ -535,6 +535,29 @@ policy fixture remains for deletion, P158 remains an explicit M3 dependency,
 and the G42 through G45 authority work remains open. No push, install, browser,
 provider, ingress, production, or other live effect occurred.
 
+The following 500,000-token continuation first hardened the M1 policy capsule
+for aggregate multi-agent efficiency. The capsule now selects subagent workflow
+optimization and parallel-plan design, defaults workers to compact fresh
+packets, admits them sequentially, polls aggregate usage at worker boundaries,
+and reserves the final 30 percent for primary reconciliation and custody. One
+fresh-context worker then implemented the bounded G42 handoff-membership packet.
+`ManagedBrowserSession` now owns its opaque handoff IDs; journaled open and
+navigation bind those IDs before their SQLite commit; successful handoff
+resolution validates membership and persists activity and expiry for only the
+exact session. Load-time migration binds an older ready manager handoff only
+when its session, browser, profile, name, tab, target, and optional intent
+attribution all agree. Focused Alice/Bob model and host tests, the SQLite keeper
+reload test, complete workspace test compilation, strict workspace Clippy,
+formatting, capsule validation, coverage validation, and diff validation pass.
+The final disabled viewer-policy fixture was deleted, and Clippy fallout from
+the preceding viewer excision was repaired without restoring stored viewer
+authority. G42 remains partial because the older nonjournaled keeper-attach
+compatibility path still writes session membership and the handoff in separate
+operations; it must either join the atomic publication boundary or be removed.
+P158 remains an explicit M3 dependency, and G35/G45 still require authenticated
+live Guacamole observation. No push, install, browser, provider, ingress,
+production, or other live effect occurred.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed

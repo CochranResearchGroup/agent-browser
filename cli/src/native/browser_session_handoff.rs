@@ -489,6 +489,7 @@ mod tests {
                     last_activity_at_ms: 2,
                     expires_at_ms: 10,
                     current_tab_id: Some("tab-a".to_string()),
+                    handoff_ids: Vec::new(),
                 },
             )]),
             browsers: BTreeMap::from([(

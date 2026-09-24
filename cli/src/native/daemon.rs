@@ -2291,6 +2291,7 @@ mod tests {
                 last_activity_at_ms: 1,
                 expires_at_ms: u64::MAX,
                 current_tab_id: Some("tab-a".to_string()),
+                handoff_ids: Vec::new(),
             },
         );
         state.browsers.insert(

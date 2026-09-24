@@ -3,6 +3,8 @@
   "scope": "Plan 0218 M1 provider-free authority and persistence cutover",
   "authority": "Current user instruction, AGENTS.md, Plan 0218, and the active lane catalog",
   "policies": [
+    "docs/dev/policies/0021-subagent-workflow-optimization.md",
+    "docs/dev/policies/0029-parallel-plan-design.md",
     "docs/dev/policies/0028-goal-execution-governance.md",
     "docs/dev/policies/0036-architecture-guardrails.md",
     "docs/dev/policies/0042-code-testing-discipline.md",
@@ -16,7 +18,12 @@
     "Keep one primary owner for Service State, Cargo manifests, architecture decisions, and acceptance.",
     "Batch one coherent causal group before invoking Cargo and retain compact compiler evidence.",
     "Preserve the frozen replacement contract and do not restore, rename, or relocate legacy authority.",
-    "Treat commits as custody checkpoints rather than turn boundaries."
+    "Treat commits as custody checkpoints rather than turn boundaries.",
+    "Optimize this milestone for total token efficiency with balanced wall-clock progress; delegate only independent bounded lanes whose expected gain exceeds setup and reconciliation cost.",
+    "Give each worker a compact self-contained packet with no inherited conversation turns by default, an exact write scope, deterministic acceptance check, per-lane allowance, and semantic stop condition.",
+    "Admit workers sequentially: start one worker, inspect aggregate token velocity and write overlap, then admit another only when the remaining budget and independent work justify it.",
+    "Check the aggregate goal counter immediately after each spawn and at every worker boundary; reserve enough allowance for primary reconciliation, validation, plan evidence, and a custody commit.",
+    "Use deterministic tools locally for search, formatting, counters, schema checks, test execution, and other judgment-light work instead of delegating them."
   ],
   "requiredChecks": [
     "scripts/ci/cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check",
@@ -25,7 +32,8 @@
   ],
   "hardStops": [
     "No push, merge, install, publication, provider, browser, ingress, or production effect without exact authority.",
-    "Stop for a scope change, an unclassified architectural decision, or exhausted cumulative budget."
+    "Stop for a scope change, an unclassified architectural decision, or exhausted cumulative budget.",
+    "Interrupt worker admission when aggregate consumption reaches 70 percent of the active checkpoint allowance; use the remainder only for reconciliation, validation, plan evidence, and custody."
   ],
   "rereadWhen": [
     "The task scope, effect class, branch, worktree, owner, validation contract, or selected policy hash changes.",

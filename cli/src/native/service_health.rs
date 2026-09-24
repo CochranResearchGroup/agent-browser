@@ -2296,7 +2296,7 @@ fn reconcile_remote_view_state(
 pub(crate) fn reconcile_remote_view_state_with_display_probe(
     state: &mut ServiceState,
     display_socket_available: impl Fn(&str) -> bool,
-    controller_fence_held: bool,
+    _controller_fence_held: bool,
 ) -> RemoteViewReconcileRepair {
     let now = current_timestamp();
     let browser_health = state
@@ -2514,12 +2514,6 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
         .iter()
         .map(|(id, route)| (id.clone(), route.state.clone()))
         .collect::<BTreeMap<_, _>>();
-    let route_browser_owners = state
-        .remote_view_routes
-        .iter()
-        .map(|(id, route)| (id.clone(), route.browser_id.clone()))
-        .collect::<BTreeMap<_, _>>();
-
     for entry in state.route_pool.values_mut() {
         if entry.state == "unavailable" {
             continue;

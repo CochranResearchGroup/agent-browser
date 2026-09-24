@@ -3,7 +3,6 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::DateTime;
 use sha2::{Digest, Sha256};
 
 use super::desktop_capture::{
@@ -70,13 +69,7 @@ impl ClosedX11Sink for ConfiguredX11Sink {
     }
 }
 
-pub(crate) struct ConfiguredControllerAuthorityRepository {
-    request: DesktopInteractionRequest,
-    route_id: String,
-    stream_id: String,
-    display_allocation_id: String,
-    machine_input: String,
-}
+pub(crate) struct ConfiguredControllerAuthorityRepository;
 
 pub(crate) struct SystemInteractionClock;
 
@@ -173,13 +166,7 @@ impl ControlledX11Provider {
             sink,
         )
         .map_err(|error| provider_error(error.code()))?;
-        let authority = ConfiguredControllerAuthorityRepository {
-            request: request.clone(),
-            route_id: capture_binding.route_id.clone(),
-            stream_id: stream.id.clone(),
-            display_allocation_id: capture_binding.display_allocation_id.clone(),
-            machine_input: provider_id.clone(),
-        };
+        let authority = ConfiguredControllerAuthorityRepository;
         Ok((
             Self {
                 admission,
@@ -592,12 +579,6 @@ fn locate_unique_color(bytes: &[u8], rgb: [u8; 3]) -> Result<PixelBounds, Deskto
         width,
         height,
     })
-}
-
-fn parse_timestamp_ms(value: &str) -> Option<u64> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .and_then(|value| u64::try_from(value.timestamp_millis()).ok())
 }
 
 fn now_ms() -> u64 {

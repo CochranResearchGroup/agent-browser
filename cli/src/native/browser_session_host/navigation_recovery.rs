@@ -274,6 +274,7 @@ where
                                 authority,
                                 &self.handoffs,
                             )?;
+                            self.bind_manager_handoff(&prepared.handoff)?;
                             if let (Some(data), Some(projection)) = (
                                 response.get_mut("data").and_then(Value::as_object_mut),
                                 prepared.projection.as_json().as_object(),

@@ -220,6 +220,9 @@ pub struct ManagedBrowserSession {
     pub last_activity_at_ms: u64,
     pub expires_at_ms: u64,
     pub current_tab_id: Option<String>,
+    /// Opaque durable handoffs owned by this exact logical session.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub handoff_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -347,6 +350,56 @@ impl Default for BrowserSessionState {
 }
 
 impl BrowserSessionState {
+    /// Bind a durable manager handoff to the logical session that prepared it.
+    pub fn bind_manager_handoff(
+        &mut self,
+        session_id: &str,
+        handoff_id: &str,
+    ) -> Result<(), String> {
+        if handoff_id.is_empty() {
+            return Err("browser_session_handoff_id_missing".to_string());
+        }
+        if self.sessions.iter().any(|(id, session)| {
+            id != session_id && session.handoff_ids.iter().any(|owned| owned == handoff_id)
+        }) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
+        let session = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "browser_session_handoff_session_missing".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == handoff_id) {
+            session.handoff_ids.push(handoff_id.to_string());
+        }
+        Ok(())
+    }
+
+    /// Refresh only the session that owns a successfully resolved handoff.
+    pub fn refresh_manager_handoff_activity(
+        &mut self,
+        session_id: &str,
+        handoff_id: &str,
+        activity_at_ms: u64,
+        idle_timeout_ms: u64,
+    ) -> Result<(), String> {
+        let session = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == handoff_id) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
+        if session.expires_at_ms < activity_at_ms {
+            return Err("browser_session_handoff_session_expired".to_string());
+        }
+        let expires_at_ms = activity_at_ms
+            .checked_add(idle_timeout_ms)
+            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        session.last_activity_at_ms = session.last_activity_at_ms.max(activity_at_ms);
+        session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
+        Ok(())
+    }
+
     /// Record every active manager session and tab as ended after an adapter
     /// has independently proved that all manager-owned browser processes are
     /// stopped. Named profile catalog entries and profile directories are not
@@ -668,6 +721,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 last_activity_at_ms: request.activity_at_ms,
                 expires_at_ms,
                 current_tab_id: None,
+                handoff_ids: Vec::new(),
             },
         );
         if let Some(allocation) = self.state.disposable_profiles.get_mut(&profile.id) {
