@@ -27,12 +27,10 @@ const CONNECTION_READ_AHEAD_CAPACITY: usize = 8;
 fn should_journal_browser_open(
     action_is_open: bool,
     has_named_profile: bool,
-    explicit_display: bool,
     has_remote_desktop_routes: bool,
     existing_operation: bool,
 ) -> bool {
-    existing_operation
-        || (action_is_open && has_named_profile && !explicit_display && has_remote_desktop_routes)
+    existing_operation || (action_is_open && has_named_profile && has_remote_desktop_routes)
 }
 
 fn command_has_named_profile(command: &Value) -> bool {
@@ -1049,7 +1047,6 @@ impl RuntimeHostRouter {
                 let journaled_open = should_journal_browser_open(
                     action_is_open,
                     has_named_profile,
-                    false,
                     has_remote_desktop_routes,
                     existing_open_operation,
                 );
@@ -2113,16 +2110,11 @@ mod tests {
     };
 
     #[test]
-    fn journaled_open_routing_preserves_explicit_display_and_existing_replay() {
-        assert!(should_journal_browser_open(true, true, false, true, false));
-        assert!(!should_journal_browser_open(true, true, true, true, false));
-        assert!(!should_journal_browser_open(
-            true, false, false, true, false
-        ));
-        assert!(!should_journal_browser_open(
-            true, true, false, false, false
-        ));
-        assert!(should_journal_browser_open(true, true, true, false, true));
+    fn journaled_open_routing_requires_named_profile_route_or_existing_replay() {
+        assert!(should_journal_browser_open(true, true, true, false));
+        assert!(!should_journal_browser_open(true, false, true, false));
+        assert!(!should_journal_browser_open(true, true, false, false));
+        assert!(should_journal_browser_open(true, true, false, true));
     }
 
     #[test]
