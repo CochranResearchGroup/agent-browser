@@ -8885,14 +8885,10 @@ mod tests {
 
         let rendered = format_service_access_plan_text(&data).unwrap();
 
-        assert!(
-            rendered.contains("Access plan: action=use_selected_profile profile=canva-default")
-        );
+        assert!(rendered.contains("Access plan: action=use_selected_profile profile=canva-default"));
         assert!(rendered.contains("browser_build=stealthcdp_chromium"));
-        assert!(
-            rendered
-                .contains("profile_selection status=selected reason=target_match effect=no_effect")
-        );
+        assert!(rendered
+            .contains("profile_selection status=selected reason=target_match effect=no_effect"));
         assert!(rendered.contains("preference_binding=canva-stealth-preference"));
         assert!(rendered.contains("browser_build_summary=build=stealthcdp_chromium"));
         assert!(
@@ -9170,11 +9166,8 @@ mod tests {
 
         let rendered = format_service_repair_retained_text(&data).unwrap();
 
-        assert!(
-            rendered.contains(
-                "Retained service repair dry-run: candidates=7 missing_lease_observed_at=7"
-            )
-        );
+        assert!(rendered
+            .contains("Retained service repair dry-run: candidates=7 missing_lease_observed_at=7"));
         assert!(rendered.contains("Observed at: 2026-05-17T12:00:00Z"));
         assert!(rendered.contains("Repaired: missing_lease_observed_at=0"));
         assert!(rendered.contains("Next: Review candidates."));

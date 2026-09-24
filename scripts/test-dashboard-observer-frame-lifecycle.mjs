@@ -79,8 +79,9 @@ try {
     console.log(JSON.stringify(result));
     if (!result.sameFrame || result.deletedViewerActions.length)
         throw Error('The ready remote-view route must render without issuing persisted viewer lease actions');
-    await page.getByText('Advanced connection controls', { exact: true }).click();
-    await page.getByText('Reload view', { exact: true }).click();
+    // Dropdown primitives are intentionally stubbed in this fixture, so the
+    // menu item is rendered directly instead of being opened through Radix.
+    await page.getByText('Reload view', { exact: true }).evaluate((element) => element.click());
     await page.waitForFunction(() => window.originalFrame !== document.querySelector('iframe'), {}, { timeout: 5000 });
     if (pageErrors.length) throw Error(pageErrors.join('\n'));
     console.log('Ready remote-view routes render without stored viewer actions; explicit reload replaces the iframe.');

@@ -664,7 +664,6 @@ fn project_service_state_for_delivery(
         ("jobs", "/api/service/jobs"),
         ("profiles", "/api/service/profiles"),
         ("remoteViewRoutes", "/api/service/remote-view-routes"),
-        ("viewerLeases", "/api/service/viewer-leases"),
     ]);
     if mode == ServiceStateProjectionMode::Full {
         let included_collections = service_state.as_object().map_or_else(Vec::new, |state| {
@@ -992,7 +991,6 @@ fn compact_summary_record(
         "connectionName",
         "routeSource",
         "providerMode",
-        "viewerLeaseIds",
         "controllerLeaseId",
         "readiness",
         "remoteReadiness",

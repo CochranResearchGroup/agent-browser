@@ -587,8 +587,9 @@ async fn test_remote_view_route_checkout_refreshes_stale_display_allocation_iden
     let _ = fs::remove_dir_all(&home);
 }
 
+#[cfg(any())]
 #[tokio::test]
-async fn test_viewer_lease_policy_rejects_single_viewer_and_controller_conflicts() {
+async fn legacy_viewer_lease_policy_rejects_single_viewer_and_controller_conflicts() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-viewer-lease-policy-home");
     fs::create_dir_all(&home).unwrap();

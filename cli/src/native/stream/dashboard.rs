@@ -1,6 +1,6 @@
 use futures_util::{FutureExt, SinkExt, StreamExt};
 use serde::Serialize;
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::fmt;
 use std::future::Future;
@@ -9,39 +9,39 @@ use std::sync::{Arc, OnceLock};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
-use tokio::sync::{Mutex, watch};
-use tokio::time::{Duration, Instant, timeout};
+use tokio::sync::{watch, Mutex};
+use tokio::time::{timeout, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
-use crate::native::service_failure_journal::{
-    ServiceFailureCategory, ServiceFailureRecord, ServiceFailureReferences,
-    append_service_failure_best_effort, opaque_identifier_hash, read_service_failures,
-    record_client_failure_observation,
-};
 #[cfg(test)]
 use crate::native::service_failure_journal::{append_service_failure_at, read_service_failures_at};
+use crate::native::service_failure_journal::{
+    append_service_failure_best_effort, opaque_identifier_hash, read_service_failures,
+    record_client_failure_observation, ServiceFailureCategory, ServiceFailureRecord,
+    ServiceFailureReferences,
+};
 use crate::native::service_model::ServiceState;
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
 
 #[cfg(test)]
 use super::super::remote_view::{display_content_from_xwininfo, should_probe_route_display};
 use super::app_intelligence::{
+    app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
+    operator_status_json, operator_turn_response, OperatorIdentity,
     APP_INTELLIGENCE_INSPECT_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE,
     APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE,
-    APP_INTELLIGENCE_STATUS_HTTP_ROUTE, OperatorIdentity, app_intelligence_status_json,
-    inspect_workspace_response, operator_confirm_response, operator_status_json,
-    operator_turn_response,
+    APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
 };
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard_auth;
 use super::discovery::discover_sessions;
 use super::foreign_cdp_control;
 use super::http::{
-    CORS_HEADERS, ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
+    ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
     runtime_manifest_json, serve_embedded_file, service_request_command_with_dashboard_generation,
-    service_request_relay_session,
+    service_request_relay_session, CORS_HEADERS,
 };
 
 const DASHBOARD_SERVICE_BACKEND_SESSION: &str = "dashboard-service-backend";
@@ -644,7 +644,11 @@ fn stream_api_port(path: &str) -> Option<u16> {
     let rest = path.strip_prefix("/api/stream/")?;
     let raw_port = rest.split('/').next()?;
     let port = raw_port.parse::<u16>().ok()?;
-    if port > 0 { Some(port) } else { None }
+    if port > 0 {
+        Some(port)
+    } else {
+        None
+    }
 }
 
 async fn handle_service_api_request(
@@ -3769,8 +3773,8 @@ mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
     use serde_json::json;
-    use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
 
     #[tokio::test]
     async fn guacamole_primary_failures_correlate_requests_without_duplicating_owner_events() {
@@ -4147,13 +4151,11 @@ mod tests {
             }
             tokio::task::yield_now().await;
         }
-        assert!(
-            !dashboard_service_status_cache()
-                .lock()
-                .await
-                .entries
-                .contains_key(&key)
-        );
+        assert!(!dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .contains_key(&key));
         {
             let events = observed.lock().unwrap();
             assert_eq!(events.len(), 1);
@@ -4255,13 +4257,11 @@ mod tests {
         let readback = read_service_failures_at(&journal_path, 10).unwrap();
         assert_eq!(readback.records.len(), 1);
         assert_eq!(readback.records[0].stage, "owner_panic");
-        assert!(
-            !dashboard_service_status_cache()
-                .lock()
-                .await
-                .entries
-                .contains_key(&key)
-        );
+        assert!(!dashboard_service_status_cache()
+            .lock()
+            .await
+            .entries
+            .contains_key(&key));
         let _ = std::fs::remove_dir_all(journal_root);
     }
 
@@ -4410,12 +4410,10 @@ mod tests {
         evict_oldest_ready_dashboard_status_entry(&mut cache);
 
         assert_eq!(cache.entries.len(), DASHBOARD_SERVICE_STATUS_CACHE_MAX_KEYS);
-        assert!(
-            cache
-                .entries
-                .values()
-                .all(|entry| matches!(entry, DashboardServiceStatusCacheEntry::InFlight { .. }))
-        );
+        assert!(cache
+            .entries
+            .values()
+            .all(|entry| matches!(entry, DashboardServiceStatusCacheEntry::InFlight { .. })));
         drop(senders);
     }
 
@@ -5510,16 +5508,14 @@ mod tests {
     #[test]
     fn dashboard_gateway_omits_fast_success_but_records_slow_success() {
         let response = Ok(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}".to_vec());
-        assert!(
-            dashboard_http_terminal_telemetry(
-                "GET",
-                "/api/service/status",
-                Duration::from_millis(10),
-                1,
-                &response,
-            )
-            .is_none()
-        );
+        assert!(dashboard_http_terminal_telemetry(
+            "GET",
+            "/api/service/status",
+            Duration::from_millis(10),
+            1,
+            &response,
+        )
+        .is_none());
         let slow = dashboard_http_terminal_telemetry(
             "GET",
             "/api/service/status",
@@ -5636,30 +5632,24 @@ mod tests {
 
     #[test]
     fn foreign_cdp_input_rejects_arbitrary_cdp_and_out_of_bounds_coordinates() {
-        assert!(
-            foreign_cdp_input_command(&json!({
-                "kind": "cdp",
-                "method": "Browser.close"
-            }))
-            .is_err()
-        );
-        assert!(
-            foreign_cdp_input_command(&json!({
-                "kind": "mouse",
-                "eventType": "mousePressed",
-                "x": -1,
-                "y": 20
-            }))
-            .is_err()
-        );
-        assert!(
-            foreign_cdp_input_command(&json!({
-                "kind": "keyboard",
-                "eventType": "rawKeyDown",
-                "key": "a",
-                "code": "KeyA"
-            }))
-            .is_err()
-        );
+        assert!(foreign_cdp_input_command(&json!({
+            "kind": "cdp",
+            "method": "Browser.close"
+        }))
+        .is_err());
+        assert!(foreign_cdp_input_command(&json!({
+            "kind": "mouse",
+            "eventType": "mousePressed",
+            "x": -1,
+            "y": 20
+        }))
+        .is_err());
+        assert!(foreign_cdp_input_command(&json!({
+            "kind": "keyboard",
+            "eventType": "rawKeyDown",
+            "key": "a",
+            "code": "KeyA"
+        }))
+        .is_err());
     }
 }

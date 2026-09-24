@@ -555,18 +555,12 @@ function exactRouteReferences(serviceState, route) {
   if (!remoteRoute || !display || !pool) ambiguities.push('service_binding_missing');
   if (remoteRoute?.browserId) blockers.push(`browser:${remoteRoute.browserId}`);
   if (remoteRoute?.sessionId) blockers.push(`session:${remoteRoute.sessionId}`);
-  for (const leaseId of remoteRoute?.viewerLeaseIds || []) blockers.push(`viewer_lease:${leaseId}`);
   if (remoteRoute?.controllerLeaseId) blockers.push(`controller_lease:${remoteRoute.controllerLeaseId}`);
   if (display?.ownerBrowserId) blockers.push(`display_browser:${display.ownerBrowserId}`);
   if (display?.ownerSessionId) blockers.push(`display_session:${display.ownerSessionId}`);
   for (const [id, lease] of Object.entries(serviceState.remoteViewAcquisitionLeases || {})) {
     if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
       blockers.push(`acquisition_lease:${id}`);
-    }
-  }
-  for (const [id, lease] of Object.entries(serviceState.viewerLeases || {})) {
-    if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
-      blockers.push(`viewer_lease:${id}`);
     }
   }
   for (const [id, handoff] of Object.entries(serviceState.remoteViewHandoffs || {})) {

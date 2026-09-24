@@ -2255,8 +2255,6 @@ pub struct RemoteViewReconcileRepair {
     pub released_route_pool_entries: usize,
     pub orphaned_display_allocations: usize,
     pub orphaned_routes: usize,
-    pub released_viewer_leases: usize,
-    pub expired_viewer_leases: usize,
     pub cleared_controller_leases: usize,
     pub completed_acquisition_rollbacks: usize,
 }
@@ -2269,8 +2267,6 @@ impl RemoteViewReconcileRepair {
             "releasedRoutePoolEntries": self.released_route_pool_entries,
             "orphanedDisplayAllocations": self.orphaned_display_allocations,
             "orphanedRoutes": self.orphaned_routes,
-            "releasedViewerLeases": self.released_viewer_leases,
-            "expiredViewerLeases": self.expired_viewer_leases,
             "clearedControllerLeases": self.cleared_controller_leases,
             "completedAcquisitionRollbacks": self.completed_acquisition_rollbacks,
             "repaired": self.unavailable_route_pool_entries
@@ -2279,9 +2275,7 @@ impl RemoteViewReconcileRepair {
                 + self.orphaned_display_allocations
                 + self.orphaned_routes
                 + self.completed_acquisition_rollbacks,
-            "released": self.released_route_pool_entries
-                + self.released_viewer_leases
-                + self.expired_viewer_leases,
+            "released": self.released_route_pool_entries,
             "skippedUnsafe": 0,
         })
     }
@@ -4710,7 +4704,6 @@ mod tests {
                         id: "remote-headed-view".to_string(),
                         route_id: Some("route-1".to_string()),
                         display_allocation_id: Some("display-1".to_string()),
-                        viewer_lease_ids: vec!["lease-1".to_string()],
                         controller_lease_id: Some("lease-1".to_string()),
                         controller_epoch: 5,
                         ..ViewStream::default()
@@ -4735,7 +4728,6 @@ mod tests {
                     display_allocation_id: Some("display-1".to_string()),
                     browser_id: Some("browser-1".to_string()),
                     state: "ready".to_string(),
-                    viewer_lease_ids: vec!["lease-1".to_string()],
                     controller_lease_id: Some("lease-1".to_string()),
                     controller_epoch: 5,
                     ..RemoteViewRoute::default()
@@ -4752,16 +4744,6 @@ mod tests {
                     ..RoutePoolEntry::default()
                 },
             )]),
-            viewer_leases: BTreeMap::from([(
-                "lease-1".to_string(),
-                ViewerLease {
-                    id: "lease-1".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "observing".to_string(),
-                    ..ViewerLease::default()
-                },
-            )]),
             ..ServiceState::default()
         };
 
@@ -4775,10 +4757,6 @@ mod tests {
             state.route_pool["route-pool-1"].current_route_allocation_id,
             None
         );
-        assert_eq!(state.viewer_leases["lease-1"].state, "disconnected");
-        assert!(state.remote_view_routes["route-1"]
-            .viewer_lease_ids
-            .is_empty());
         assert!(state.remote_view_routes["route-1"]
             .controller_lease_id
             .is_none());
@@ -4789,7 +4767,6 @@ mod tests {
         assert_eq!(remote_view["orphanedDisplayAllocations"], 1);
         assert_eq!(remote_view["orphanedRoutes"], 1);
         assert_eq!(remote_view["releasedRoutePoolEntries"], 1);
-        assert_eq!(remote_view["releasedViewerLeases"], 1);
         assert_eq!(remote_view["clearedControllerLeases"], 1);
     }
 
@@ -5137,35 +5114,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reconcile_preserves_acquisition_quarantine_with_active_viewer() {
-        let acquisition_lease_id = "remote-view-open-session-1-route-1";
-        let mut state = inactive_acquisition_quarantine_state();
-        state.viewer_leases.insert(
-            "viewer-1".to_string(),
-            ViewerLease {
-                id: "viewer-1".to_string(),
-                route_id: Some("route-1".to_string()),
-                browser_id: Some("browser-1".to_string()),
-                state: "observing".to_string(),
-                ..ViewerLease::default()
-            },
-        );
-
-        let summary = reconcile_service_state(&mut state).await;
-
-        assert_eq!(state.remote_view_routes["route-1"].state, "orphaned");
-        assert_eq!(state.display_allocations["display-1"].state, "orphaned");
-        assert_eq!(
-            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
-            "rollback_incomplete"
-        );
-        assert_eq!(
-            summary.remote_view_repair.completed_acquisition_rollbacks,
-            0
-        );
-    }
-
-    #[tokio::test]
     async fn reconcile_preserves_acquisition_quarantine_with_active_route_checkout() {
         let acquisition_lease_id = "remote-view-open-session-1-route-1";
         let mut state = inactive_acquisition_quarantine_state();
@@ -5214,11 +5162,10 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_disconnects_ownerless_viewer_and_releases_ghost_active_slot() {
+    fn reconcile_releases_ghost_active_slot_without_browser_owner() {
         let route_id = "route-1";
         let display_id = "display-1";
         let browser_id = "browser-closed";
-        let lease_id = "viewer-stale";
         let mut active_slot =
             PresentationSlot::warm_idle("slot-1").with_binding(route_id, display_id);
         active_slot.state = PresentationSlotState::Active;
@@ -5241,18 +5188,7 @@ mod tests {
                     display_allocation_id: Some(display_id.to_string()),
                     browser_id: None,
                     state: "ready".to_string(),
-                    viewer_lease_ids: vec![lease_id.to_string()],
                     ..RemoteViewRoute::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([(
-                lease_id.to_string(),
-                ViewerLease {
-                    id: lease_id.to_string(),
-                    route_id: Some(route_id.to_string()),
-                    browser_id: Some(browser_id.to_string()),
-                    state: "observing".to_string(),
-                    ..ViewerLease::default()
                 },
             )]),
             presentation_capacity: Some(
@@ -5281,11 +5217,6 @@ mod tests {
         let mut target = before.clone();
         merge_reconciled_service_state(&mut target, &before, &reconciled);
 
-        assert_eq!(repair.released_viewer_leases, 1);
-        assert_eq!(target.viewer_leases[lease_id].state, "disconnected");
-        assert!(target.remote_view_routes[route_id]
-            .viewer_lease_ids
-            .is_empty());
         let slot = &target.presentation_capacity.as_ref().unwrap().slots()[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
@@ -5312,85 +5243,6 @@ mod tests {
             slot.lease_request_id.as_deref(),
             Some("recovery-started-concurrently")
         );
-    }
-
-    #[tokio::test]
-    async fn reconcile_expires_remote_viewer_leases_without_releasing_healthy_route() {
-        let mut state = ServiceState {
-            browsers: BTreeMap::from([(
-                "browser-1".to_string(),
-                BrowserProcess {
-                    id: "browser-1".to_string(),
-                    health: BrowserHealth::Ready,
-                    display_allocation_id: Some("display-1".to_string()),
-                    ..BrowserProcess::default()
-                },
-            )]),
-            display_allocations: BTreeMap::from([(
-                "display-1".to_string(),
-                DisplayAllocation {
-                    id: "display-1".to_string(),
-                    owner_browser_id: Some("browser-1".to_string()),
-                    state: "ready".to_string(),
-                    ..DisplayAllocation::default()
-                },
-            )]),
-            remote_view_routes: BTreeMap::from([(
-                "route-1".to_string(),
-                RemoteViewRoute {
-                    id: "route-1".to_string(),
-                    display_allocation_id: Some("display-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "ready".to_string(),
-                    viewer_lease_ids: vec!["expired-lease".to_string(), "active-lease".to_string()],
-                    controller_lease_id: Some("expired-lease".to_string()),
-                    controller_epoch: 3,
-                    ..RemoteViewRoute::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([
-                (
-                    "expired-lease".to_string(),
-                    ViewerLease {
-                        id: "expired-lease".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "controlling".to_string(),
-                        expires_at: Some("2000-01-01T00:00:00Z".to_string()),
-                        ..ViewerLease::default()
-                    },
-                ),
-                (
-                    "active-lease".to_string(),
-                    ViewerLease {
-                        id: "active-lease".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "observing".to_string(),
-                        ..ViewerLease::default()
-                    },
-                ),
-            ]),
-            ..ServiceState::default()
-        };
-
-        reconcile_service_state(&mut state).await;
-
-        assert_eq!(state.display_allocations["display-1"].state, "ready");
-        assert_eq!(state.remote_view_routes["route-1"].state, "ready");
-        assert_eq!(state.viewer_leases["expired-lease"].state, "expired");
-        assert_eq!(state.viewer_leases["active-lease"].state, "observing");
-        assert_eq!(
-            state.remote_view_routes["route-1"].viewer_lease_ids,
-            vec!["active-lease".to_string()]
-        );
-        assert!(state.remote_view_routes["route-1"]
-            .controller_lease_id
-            .is_none());
-        assert_eq!(state.remote_view_routes["route-1"].controller_epoch, 4);
-        let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
-        assert_eq!(remote_view["expiredViewerLeases"], 1);
-        assert_eq!(remote_view["clearedControllerLeases"], 1);
     }
 
     #[tokio::test]
@@ -5450,20 +5302,9 @@ mod tests {
                         display_allocation_id: Some("display-1".to_string()),
                         browser_id: Some("browser-1".to_string()),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["controller-a".to_string()],
                         controller_lease_id: Some("controller-a".to_string()),
                         controller_epoch: 1,
                         ..RemoteViewRoute::default()
-                    },
-                )]),
-                viewer_leases: BTreeMap::from([(
-                    "controller-a".to_string(),
-                    ViewerLease {
-                        id: "controller-a".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "controlling".to_string(),
-                        ..ViewerLease::default()
                     },
                 )]),
                 ..ServiceState::default()
@@ -5505,23 +5346,7 @@ mod tests {
                 message: "operator acknowledged overlapping incident".to_string(),
                 ..ServiceEvent::default()
             });
-            state.viewer_leases.insert(
-                "controller-b".to_string(),
-                ViewerLease {
-                    id: "controller-b".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "controlling".to_string(),
-                    ..ViewerLease::default()
-                },
-            );
             advance_route_controller_authority(state, "route-1", Some("controller-b".to_string()))?;
-            state
-                .remote_view_routes
-                .get_mut("route-1")
-                .expect("controller route exists")
-                .viewer_lease_ids
-                .push("controller-b".to_string());
             Ok(())
         })
         .unwrap();
@@ -5551,10 +5376,6 @@ mod tests {
             Some("controller-b")
         );
         assert_eq!(persisted.remote_view_routes["route-1"].controller_epoch, 2);
-        assert!(persisted.remote_view_routes["route-1"]
-            .viewer_lease_ids
-            .iter()
-            .any(|id| id == "controller-b"));
         assert_eq!(
             persisted.sessions["session-1"].tab_ids,
             vec!["target:page-1".to_string()]
@@ -5916,7 +5737,6 @@ mod tests {
                         browser_id: Some(browser_a.clone()),
                         session_id: Some("browser-a".to_string()),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["viewer:guacamole:4:a".to_string()],
                         controller_lease_id: Some("viewer:guacamole:4:a".to_string()),
                         ..RemoteViewRoute::default()
                     },

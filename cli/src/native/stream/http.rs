@@ -1,5 +1,5 @@
 use rust_embed::Embed;
-use serde_json::{Map, Value, json};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::net::{SocketAddr, TcpStream};
 use std::path::Path;
@@ -21,37 +21,37 @@ use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state_with_principal,
 };
 use crate::native::service_contracts::{
-    SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
+    service_contracts_metadata, SERVICE_BROWSER_CAPABILITY_PREFLIGHT_HTTP_ROUTE,
     SERVICE_BROWSER_CAPABILITY_REGISTRY_HTTP_ROUTE, SERVICE_PROFILE_DIAGNOSIS_HTTP_ROUTE,
     SERVICE_PROFILE_LEASES_HTTP_ROUTE, SERVICE_PROFILE_REPAIR_APPLY_HTTP_ROUTE,
     SERVICE_PROFILE_REPAIR_PLAN_HTTP_ROUTE, SERVICE_PROFILE_RESET_APPLY_HTTP_ROUTE,
     SERVICE_PROFILE_RESET_PLAN_HTTP_ROUTE, SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_HTTP_ROUTE,
-    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE, service_contracts_metadata,
+    SERVICE_REQUEST_ACTIONS, SERVICE_REQUEST_HTTP_ROUTE,
 };
 use crate::native::service_lifecycle::{
-    ProfileDiscoveryRequest, ProfileSelectionRequest, discover_service_profiles,
+    discover_service_profiles, ProfileDiscoveryRequest, ProfileSelectionRequest,
 };
 use crate::native::service_model::{
-    BrowserBuild, BrowserProfile, ProfileSelectionReason, ServiceEntitySource, ServiceState,
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
-    service_site_policy_id_for_url, service_site_policy_sources,
+    service_site_policy_id_for_url, service_site_policy_sources, BrowserBuild, BrowserProfile,
+    ProfileSelectionReason, ServiceEntitySource, ServiceState,
 };
 use crate::native::service_monitors::{
-    MonitorCollectionFilters, parse_monitor_state, service_monitors_response,
+    parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
 use crate::native::service_request::{
-    AuthenticatedServicePrincipal, ServiceRequestFallbackPrincipal, ServiceRequestIssue,
-    ServiceRequestIssueKind, ServiceRequestNormalization, ServiceRequestPrincipalSource,
-    ServiceRequestRejection, apply_service_request_attribution, normalize_service_request,
+    apply_service_request_attribution, normalize_service_request, AuthenticatedServicePrincipal,
+    ServiceRequestFallbackPrincipal, ServiceRequestIssue, ServiceRequestIssueKind,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_trace::service_commands::service_now_timestamp;
 
 use super::app_intelligence::{
+    app_intelligence_status_json, inspect_workspace_response, operator_confirm_response,
+    operator_status_json, operator_turn_response, OperatorIdentity,
     APP_INTELLIGENCE_INSPECT_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_CONFIRM_HTTP_ROUTE,
     APP_INTELLIGENCE_OPERATOR_STATUS_HTTP_ROUTE, APP_INTELLIGENCE_OPERATOR_TURN_HTTP_ROUTE,
-    APP_INTELLIGENCE_STATUS_HTTP_ROUTE, OperatorIdentity, app_intelligence_status_json,
-    inspect_workspace_response, operator_confirm_response, operator_status_json,
-    operator_turn_response,
+    APP_INTELLIGENCE_STATUS_HTTP_ROUTE,
 };
 use super::chat::{chat_status_json, handle_chat_request, handle_models_request};
 use super::dashboard::spawn_session;
@@ -1470,7 +1470,11 @@ fn stream_api_port(path: &str, suffix: &str) -> Option<u16> {
     let rest = path.strip_prefix("/api/stream/")?;
     let raw_port = rest.strip_suffix(suffix)?;
     let port = raw_port.parse::<u16>().ok()?;
-    if port > 0 { Some(port) } else { None }
+    if port > 0 {
+        Some(port)
+    } else {
+        None
+    }
 }
 
 fn stream_api_frame_port(path: &str) -> Option<u16> {
@@ -4430,11 +4434,11 @@ mod tests {
     use crate::native::action_runtime::DaemonState;
     use crate::native::actions::execute_command;
     use crate::native::service_model::{
+        assert_service_event_record_contract, assert_service_incident_record_contract,
+        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
         BrowserProfile, Challenge, ChallengeKind, ChallengePolicy, ChallengeState, MonitorState,
         MonitorTarget, ProfileKeyringPolicy, ProfileReadinessState, ProfileSeedingMode,
         ProfileTargetReadiness, ProviderKind, ServiceProvider, SiteMonitor, SitePolicy,
-        assert_service_event_record_contract, assert_service_incident_record_contract,
-        assert_service_job_naming_warning_contract, service_job_naming_warning_values,
     };
 
     #[test]
@@ -5288,7 +5292,7 @@ mod tests {
     #[test]
     fn bearer_capability_authenticates_access_and_request_authority() {
         use crate::native::service_principal::{
-            ServicePrincipalRegistrationRequest, register_profile_capability,
+            register_profile_capability, ServicePrincipalRegistrationRequest,
         };
 
         let mut state = ServiceState::default();
@@ -5315,11 +5319,9 @@ mod tests {
 
         assert_eq!(authority.principal_id, "principal:odollo-fulfillment");
         assert_eq!(authority.profile_id, "odollo-fedex");
-        assert!(
-            optional_profile_capability_authority(&[], &state)
-                .unwrap()
-                .is_none()
-        );
+        assert!(optional_profile_capability_authority(&[], &state)
+            .unwrap()
+            .is_none());
     }
 
     #[test]
@@ -5562,7 +5564,8 @@ mod tests {
             Some("google-login-freshness")
         );
         assert_eq!(
-            service_monitor_state_command("google-login-freshness", "service_monitor_pause")["action"],
+            service_monitor_state_command("google-login-freshness", "service_monitor_pause")
+                ["action"],
             "service_monitor_pause"
         );
         assert_eq!(
@@ -5683,11 +5686,9 @@ mod tests {
         let command = service_request_command(r##"{"action":"navigate"}"##).unwrap();
 
         assert_eq!(command["action"], "navigate");
-        assert!(
-            command["id"]
-                .as_str()
-                .is_some_and(|id| id.starts_with("http-service-request-navigate-"))
-        );
+        assert!(command["id"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("http-service-request-navigate-")));
     }
 
     #[test]
@@ -5855,11 +5856,9 @@ mod tests {
 
         assert_eq!(command["callerId"], "dashboard:admin");
         assert_eq!(command["requestPrincipalSource"], "authenticated_dashboard");
-        assert!(
-            command["requestId"]
-                .as_str()
-                .is_some_and(|value| value.starts_with("http-service-request-navigate-"))
-        );
+        assert!(command["requestId"]
+            .as_str()
+            .is_some_and(|value| value.starts_with("http-service-request-navigate-")));
     }
 
     #[test]
@@ -7081,27 +7080,21 @@ mod dashboard_asset_tests {
                 .len(),
             64
         );
-        assert!(
-            manifest["supportedUiFeatures"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|feature| feature.as_str() == Some("workspace.detectedBrowsers"))
-        );
-        assert!(
-            manifest["supportedUiFeatures"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|feature| feature.as_str() == Some("workspace.foreignCdpBorrow"))
-        );
-        assert!(
-            manifest["supportedUiFeatures"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|feature| feature.as_str() == Some("workspace.noRetainedLiveRail"))
-        );
+        assert!(manifest["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature.as_str() == Some("workspace.detectedBrowsers")));
+        assert!(manifest["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature.as_str() == Some("workspace.foreignCdpBorrow")));
+        assert!(manifest["supportedUiFeatures"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|feature| feature.as_str() == Some("workspace.noRetainedLiveRail")));
     }
 
     #[test]

@@ -1479,7 +1479,7 @@ try {
       observe: () => scaledObservation,
       referenceCheck: (route) => ({
         routeId: route.routeId,
-        blockers: ['viewer_lease:fixture'],
+        blockers: ['session:fixture'],
         ambiguities: [],
       }),
       reclaimRoute: () => { blockedReclaim = true; },
@@ -1578,8 +1578,6 @@ try {
       [referencedRoute.routeId]: {
         browserId: null,
         sessionId: null,
-        viewerLeaseIds: [],
-        controllerLeaseId: null,
       },
     },
     displayAllocations: {
@@ -1590,10 +1588,6 @@ try {
     },
     routePool: { [referencedRoute.slotId]: { id: referencedRoute.slotId } },
     remoteViewAcquisitionLeases: {},
-    viewerLeases: {
-      'viewer-exact': { routeId: referencedRoute.routeId },
-      'viewer-other': { routeId: `${referencedRoute.routeId}0` },
-    },
     remoteViewHandoffs: {
       'handoff-exact': { binding: { routeId: referencedRoute.routeId } },
       'handoff-other': { binding: { routeId: `${referencedRoute.routeId}0` } },
@@ -1632,7 +1626,7 @@ try {
   });
   assert.deepEqual(referenceEffects.referenceCheck(referencedRoute, descriptor), {
     routeId: referencedRoute.routeId,
-    blockers: ['handoff:handoff-exact', 'viewer_lease:viewer-exact'],
+    blockers: ['handoff:handoff-exact'],
     ambiguities: [],
   });
 

@@ -658,12 +658,11 @@ mod tests {
     }
 
     #[test]
-    fn exact_owner_survives_viewer_changes_but_rejects_authority_and_display_drift() {
+    fn exact_owner_survives_controller_changes_but_rejects_authority_and_display_drift() {
         let mut repository = repository();
         let binding = PrimaryBinding::resolve(&repository, "route", "1").unwrap();
         assert!(binding.is_current(&repository));
         let route = repository.0.remote_view_routes.get_mut("route").unwrap();
-        route.viewer_lease_ids.push("new-viewer".into());
         route.controller_lease_id = Some("new-controller".into());
         route.controller_epoch += 1;
         assert!(binding.is_current(&repository));

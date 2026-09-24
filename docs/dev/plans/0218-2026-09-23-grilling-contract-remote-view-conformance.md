@@ -516,6 +516,25 @@ effective runtime model was unavailable. Its read-only finding was accepted by
 adding a cut-specific service-model dependency and source guard while leaving
 aggregate P15 red until the CLI closure is removed.
 
+The next operator-renewed continuation closed the retained wave-26 compiler
+breakage and produced a bounded custody packet. Obsolete viewer-lease state was
+removed from reconciliation fixtures and counters, compact status projections,
+Guacamole binding tests, route-handoff audit output, development presentation
+reference checks, and the actions responsibility inventory. The interrupted
+dashboard observer fixture was repaired without restoring viewer actions. Its
+lifecycle test and the dashboard view-stream test pass, as do the route-handoff
+audit and development presentation provider fixtures. Workspace test
+compilation at `/tmp/agent-browser-p218-m1-wave-27-no-cache` exits 0. The first
+attempt at `/tmp/agent-browser-p218-m1-wave-27` failed in the optional sccache
+wrapper before a source diagnostic; the supported cache-off retry is the code
+verdict. Formatting, the coverage-manifest validator, and diff validation pass.
+The aggregate architecture result remains intentionally red with four definite
+violations, four detector gaps, and eleven unverified rows. P12 and P19 are not
+accepted merely because compilation is restored: one disabled legacy viewer
+policy fixture remains for deletion, P158 remains an explicit M3 dependency,
+and the G42 through G45 authority work remains open. No push, install, browser,
+provider, ingress, production, or other live effect occurred.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
