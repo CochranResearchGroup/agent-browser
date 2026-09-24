@@ -57,13 +57,13 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: The Service-model authority cut compiles and passes 195 tests; CLI checkpoints 135e3b51 and df7eaf64 remove 28,824 legacy-authority lines, while compiler wave 7 retains 157 downstream integration groups and M1 remains open
-    validation_ref: df7eaf64
+    validation_status: Stored viewer authority production closure compiles at wave 24 with zero groups and P12 and P19 have zero detector findings; workspace test-build wave 26 retains 19 fixture groups, generated clients and public docs remain unreconciled, and M1 remains open
+    validation_ref: 2eadac78
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "The operator assigned P211 primary write custody for the overlapping CLI help, README, Agent Browser skill, installation docs, remote-view docs, RUNBOOK, and P211 catalog entry on 2026-09-18; P207 retains its tab-refresh source and branch history, and its feature-specific prose must be reconciled when that source integrates"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: the complete grilling contract is not yet implemented or proven; runtime JSON and environment authority, provider readiness integration, bounded history and backup, joined recovery, and external desktop/mobile acceptance remain incomplete
+    blocker: P12 and P19 require wave-26 fixture closure, generated-client and documentation reconciliation, focused CLI validation, and acceptance review; runtime JSON and environment authority, provider readiness integration, bounded history and backup, joined recovery, and external desktop/mobile acceptance also remain incomplete
     updated_at: 2026-09-23

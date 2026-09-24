@@ -1,5 +1,4 @@
 #![allow(unused_imports)]
-use super::planner::remote_view_lease_is_active;
 use super::shared::*;
 #[derive(Debug, Clone)]
 pub(crate) struct RoutePoolSelection {
@@ -21,19 +20,11 @@ pub(crate) fn select_browser_reattach_route_pool_entry(
     requested_route_id: Option<&str>,
     route_switch: bool,
     browser_id: &str,
-    controller_takeover: bool,
 ) -> Option<RoutePoolSelection> {
     let current_route_id = stream.and_then(|stream| stream.route_id.as_deref());
     if let Some(id) = requested_route_pool_entry_id {
         return state.route_pool.get(id).cloned().map(|entry| {
-            route_pool_selection_for_entry(
-                state,
-                entry,
-                route_switch,
-                browser_id,
-                current_route_id,
-                controller_takeover,
-            )
+            route_pool_selection_for_entry(state, entry, route_switch, browser_id, current_route_id)
         });
     }
     if let Some(route_id) = requested_route_id {
@@ -52,7 +43,6 @@ pub(crate) fn select_browser_reattach_route_pool_entry(
                     route_switch,
                     browser_id,
                     current_route_id,
-                    controller_takeover,
                 )
             });
     }
@@ -67,12 +57,9 @@ pub(crate) fn select_browser_reattach_route_pool_entry(
                 parked_route: None,
             });
         }
-        if let Some(selection) = select_parkable_route_pool_entry(
-            state,
-            browser_id,
-            current_route_id,
-            controller_takeover,
-        ) {
+        if let Some(selection) =
+            select_parkable_route_pool_entry(state, browser_id, current_route_id)
+        {
             return Some(selection);
         }
     }
@@ -106,18 +93,9 @@ pub(crate) fn route_pool_selection_for_entry(
     route_switch: bool,
     browser_id: &str,
     current_route_id: Option<&str>,
-    controller_takeover: bool,
 ) -> RoutePoolSelection {
     let parked_route = route_switch
-        .then(|| {
-            parkable_route_for_entry(
-                state,
-                &entry,
-                browser_id,
-                current_route_id,
-                controller_takeover,
-            )
-        })
+        .then(|| parkable_route_for_entry(state, &entry, browser_id, current_route_id))
         .flatten();
     RoutePoolSelection {
         entry,
@@ -128,20 +106,13 @@ pub(crate) fn select_parkable_route_pool_entry(
     state: &ServiceState,
     browser_id: &str,
     current_route_id: Option<&str>,
-    controller_takeover: bool,
 ) -> Option<RoutePoolSelection> {
     let mut candidates = state
         .route_pool
         .values()
         .filter(|entry| entry.provider == ViewStreamProvider::RdpGateway)
         .filter_map(|entry| {
-            let parking = parkable_route_for_entry(
-                state,
-                entry,
-                browser_id,
-                current_route_id,
-                controller_takeover,
-            )?;
+            let parking = parkable_route_for_entry(state, entry, browser_id, current_route_id)?;
             Some((
                 route_parking_sort_key(state, &parking.route_id),
                 entry.id.clone(),
@@ -166,7 +137,6 @@ pub(crate) fn parkable_route_for_entry(
     entry: &RoutePoolEntry,
     browser_id: &str,
     current_route_id: Option<&str>,
-    controller_takeover: bool,
 ) -> Option<RouteParkingPlan> {
     if !matches!(entry.state.as_str(), "checked_out" | "occupied") {
         return None;
@@ -200,14 +170,6 @@ pub(crate) fn parkable_route_for_entry(
     if !owner_browser_is_live {
         return None;
     }
-    let active_controller = route
-        .controller_lease_id
-        .as_ref()
-        .and_then(|lease_id| state.viewer_leases.get(lease_id))
-        .is_some_and(remote_view_lease_is_active);
-    if active_controller && !controller_takeover {
-        return None;
-    }
     Some(RouteParkingPlan {
         route_id: route_id.to_string(),
         route_pool_entry_id: entry.id.clone(),
@@ -216,34 +178,8 @@ pub(crate) fn parkable_route_for_entry(
         controller_lease_id: route.controller_lease_id.clone(),
     })
 }
-pub(crate) fn route_parking_sort_key(state: &ServiceState, route_id: &str) -> (usize, String) {
-    let Some(route) = state.remote_view_routes.get(route_id) else {
-        return (usize::MAX, String::new());
-    };
-    let active_viewer_count = route
-        .viewer_lease_ids
-        .iter()
-        .filter(|lease_id| {
-            state
-                .viewer_leases
-                .get(*lease_id)
-                .is_some_and(remote_view_lease_is_active)
-        })
-        .count();
-    let newest_activity = route
-        .viewer_lease_ids
-        .iter()
-        .filter_map(|lease_id| state.viewer_leases.get(lease_id))
-        .filter_map(|lease| {
-            lease
-                .last_heartbeat_at
-                .as_deref()
-                .or(lease.updated_at.as_deref())
-                .or(lease.created_at.as_deref())
-        })
-        .max()
-        .unwrap_or("");
-    (active_viewer_count, newest_activity.to_string())
+pub(crate) fn route_parking_sort_key(_state: &ServiceState, route_id: &str) -> String {
+    route_id.to_string()
 }
 pub(crate) fn merge_route_pool_entry_into_checkout(
     command: &mut Map<String, Value>,

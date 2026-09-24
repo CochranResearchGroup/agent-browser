@@ -82,7 +82,7 @@ use crate::native::service_model::{
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
     RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
     ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
-    TabLifecycle, ViewStream, ViewStreamProvider, ViewerLease,
+    TabLifecycle, ViewStream, ViewStreamProvider,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::state;

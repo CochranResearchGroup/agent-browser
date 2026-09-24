@@ -170,18 +170,6 @@ fn authorize_current(
         .remote_view_routes
         .get(&binding.route_id)
         .ok_or_else(denied)?;
-    let lease = state
-        .viewer_leases
-        .get(&binding.controller_lease_id)
-        .ok_or_else(denied)?;
-    // Viewer leases without an expiry remain active until release or controller
-    // replacement. The signed focus proof itself is always short-lived.
-    let unexpired = lease.expires_at.as_deref().is_none_or(|value| {
-        chrono::DateTime::parse_from_rfc3339(value)
-            .ok()
-            .map(|value| value.timestamp())
-            .is_some_and(|expires| expires > 0 && expires as u64 > now)
-    });
     if route.browser_id.as_ref() != Some(&binding.browser_id)
         || route.session_id.as_ref() != Some(&binding.session_name)
         || route.display_allocation_id != browser.display_allocation_id
@@ -190,16 +178,6 @@ fn authorize_current(
         || route.state != "ready"
         || route.controller_epoch != binding.controller_epoch
         || route.controller_lease_id.as_ref() != Some(&binding.controller_lease_id)
-        || !route
-            .viewer_lease_ids
-            .contains(&binding.controller_lease_id)
-        || lease.id != binding.controller_lease_id
-        || lease.route_id.as_ref() != Some(&binding.route_id)
-        || lease.browser_id.as_ref() != Some(&binding.browser_id)
-        || lease.viewer_id.as_ref() != Some(&subject)
-        || lease.viewer_role != "controller"
-        || lease.state != "controlling"
-        || !unexpired
     {
         return Err(
             "operator_focus_controller_required: acquire current controller authority".into(),

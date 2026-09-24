@@ -375,7 +375,6 @@ impl PresentationProviderInventory {
                 route.browser_id = existing.browser_id.clone();
                 route.session_id = existing.session_id.clone();
                 route.route_source = existing.route_source.clone();
-                route.viewer_lease_ids = existing.viewer_lease_ids.clone();
                 route.controller_lease_id = existing.controller_lease_id.clone();
                 route.controller_epoch = existing.controller_epoch;
                 route.last_provider_event = existing.last_provider_event.clone();

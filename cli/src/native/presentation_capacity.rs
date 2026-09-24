@@ -73,16 +73,11 @@ fn observe_slot(state: &ServiceState, slot: &PresentationSlot) -> PresentationSl
             && (route_id == Some(lease.route_id.as_str())
                 || display_id == Some(lease.display_allocation_id.as_str()))
     });
-    let route = route_id.and_then(|id| state.remote_view_routes.get(id));
-    let human_controller_active = route.is_some_and(|route| route.controller_lease_id.is_some());
-    let non_controller_staging_viewer_active = route.is_some_and(|route| {
-        route.viewer_lease_ids.iter().any(|lease_id| {
-            state.viewer_leases.get(lease_id).is_some_and(|lease| {
-                lease.viewer_role != "controller"
-                    && matches!(lease.state.as_str(), "requested" | "active" | "ready")
-            })
-        })
-    });
+    // Stored route and controller records are not live-viewer observations.
+    // The authenticated Guacamole observer introduced by M3 will populate
+    // these facts from its process-local connection heartbeat.
+    let human_controller_active = false;
+    let non_controller_staging_viewer_active = false;
     let live_handoff_browser_ids = state
         .remote_view_handoffs
         .values()

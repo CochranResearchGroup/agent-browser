@@ -56,7 +56,7 @@ pub(crate) use crate::native::service_model::{
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
     RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 pub(crate) use crate::native::service_store::{
     LockedServiceStateRepository, ServiceStateRepository,

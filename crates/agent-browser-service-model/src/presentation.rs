@@ -162,9 +162,9 @@ pub struct RemoteViewRoute {
     pub control_input: Option<ControlInputProvider>,
     pub provider_mode: String,
     pub state: String,
-    pub viewer_lease_ids: Vec<String>,
+    /// Desktop Services control authority. This is not viewer-presence proof.
     pub controller_lease_id: Option<String>,
-    /// Monotonic fencing token for primary-controller authority on this route.
+    /// Monotonic fencing token for Desktop Services control authority.
     pub controller_epoch: u64,
     pub last_provider_event: Option<String>,
     pub readiness: Option<Value>,
@@ -189,7 +189,6 @@ impl Default for RemoteViewRoute {
             control_input: Some(ControlInputProvider::ManualAttachedDesktop),
             provider_mode: "unknown".to_string(),
             state: "allocating".to_string(),
-            viewer_lease_ids: Vec::new(),
             controller_lease_id: None,
             controller_epoch: 0,
             last_provider_event: None,
@@ -199,8 +198,8 @@ impl Default for RemoteViewRoute {
 }
 
 impl RemoteViewRoute {
-    /// Advance primary-controller authority, including same-id re-grants that
-    /// would otherwise permit an ABA reuse of an older authority receipt.
+    /// Advance Desktop Services control authority without asserting that a
+    /// remote viewer is currently connected.
     pub fn advance_controller(&mut self, controller_lease_id: Option<String>) -> u64 {
         self.controller_epoch = self.controller_epoch.saturating_add(1);
         self.controller_lease_id = controller_lease_id;
@@ -375,51 +374,6 @@ impl Default for RemoteViewAcquisitionLease {
     }
 }
 
-/// Observer or controller lease for a remote-view route.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default, rename_all = "camelCase")]
-pub struct ViewerLease {
-    pub id: String,
-    /// Host boot that authenticated the package-owned viewer observation.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub boot_epoch: Option<String>,
-    pub route_id: Option<String>,
-    pub browser_id: Option<String>,
-    pub viewer_id: Option<String>,
-    pub viewer_name: Option<String>,
-    pub viewer_role: String,
-    pub open_mode: String,
-    pub state: String,
-    pub last_viewer_event: Option<String>,
-    pub expires_at: Option<String>,
-    pub created_at: Option<String>,
-    pub updated_at: Option<String>,
-    pub last_heartbeat_at: Option<String>,
-    pub service_event_id: Option<String>,
-}
-
-impl Default for ViewerLease {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            boot_epoch: None,
-            route_id: None,
-            browser_id: None,
-            viewer_id: None,
-            viewer_name: None,
-            viewer_role: "observer".to_string(),
-            open_mode: "embedded".to_string(),
-            state: "requested".to_string(),
-            last_viewer_event: None,
-            expires_at: None,
-            created_at: None,
-            updated_at: None,
-            last_heartbeat_at: None,
-            service_event_id: None,
-        }
-    }
-}
-
 /// Dashboard viewing mechanism for a browser or tab.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -457,13 +411,9 @@ pub struct ViewStream {
     /// Provider concurrency mode for observers and controllers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider_mode: Option<String>,
-    /// Viewer lease ids associated with this route.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub viewer_lease_ids: Vec<String>,
-    /// Current controller lease id for this route.
+    /// Projected Desktop Services control authority, not viewer-presence proof.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub controller_lease_id: Option<String>,
-    /// Route-owned controller fencing token copied into this stream projection.
     pub controller_epoch: u64,
     pub read_only: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -492,7 +442,6 @@ impl Default for ViewStream {
             connection_name: None,
             route_source: None,
             provider_mode: None,
-            viewer_lease_ids: Vec::new(),
             controller_lease_id: None,
             controller_epoch: 0,
             read_only: true,
@@ -504,8 +453,7 @@ impl Default for ViewStream {
 }
 
 impl ViewStream {
-    /// Copy the authoritative controller identity and fencing epoch from a
-    /// route. Streams never advance controller authority independently.
+    /// Project the separately fenced Desktop Services control identity.
     pub fn project_controller(&mut self, route: &RemoteViewRoute) {
         self.controller_lease_id = route.controller_lease_id.clone();
         self.controller_epoch = route.controller_epoch;
@@ -539,11 +487,6 @@ mod tests {
         let lease = RemoteViewAcquisitionLease::default();
         assert_eq!(lease.state, "pending");
         assert_eq!(lease.phase, "planned");
-
-        let viewer = ViewerLease::default();
-        assert_eq!(viewer.viewer_role, "observer");
-        assert_eq!(viewer.open_mode, "embedded");
-        assert_eq!(viewer.state, "requested");
 
         let stream = ViewStream::default();
         assert_eq!(stream.provider, ViewStreamProvider::CdpScreencast);

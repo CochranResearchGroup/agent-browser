@@ -122,10 +122,6 @@ use super::remote_view::open::{
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
     route_bound_open_attribution_from_authenticated_dispatch,
 };
-use super::remote_view::viewer_lease::{
-    handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
-    handle_service_viewer_lease_release, handle_service_viewer_lease_request,
-};
 use super::service_access::{
     handle_service_browser_capability_preference_guide,
     handle_service_browser_capability_preflight, handle_service_browser_capability_registry_upsert,
@@ -255,10 +251,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_remote_view_route_switch"
             | "service_remote_view_route_checkout"
             | "service_remote_view_route_release"
-            | "service_viewer_lease_request"
-            | "service_viewer_lease_heartbeat"
-            | "service_viewer_lease_release"
-            | "service_controller_lease_takeover"
             | "service_status"
             | "service_reconcile"
             | "service_browser_close"
@@ -886,13 +878,6 @@ async fn execute_command_after_navigation_admission(
             }
             "service_remote_view_route_release" => {
                 handle_service_remote_view_route_release(cmd, state).await
-            }
-            "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
-            "service_viewer_lease_heartbeat" =>
-                handle_service_viewer_lease_heartbeat(cmd, state).await,
-            "service_viewer_lease_release" => handle_service_viewer_lease_release(cmd, state).await,
-            "service_controller_lease_takeover" => {
-                handle_service_controller_lease_takeover(cmd, state).await
             }
             "viewport" => handle_viewport(cmd, state).await,
             "useragent" | "user_agent" => handle_user_agent(cmd, state).await,

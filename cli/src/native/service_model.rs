@@ -2568,8 +2568,8 @@ pub use agent_browser_service_model::{
     ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
     ServiceJob, ServiceProvider, ServiceReconciliationSnapshot, ServiceTabHandle,
     SessionCleanupPolicy, SiteMonitor, SitePolicy, TabLifecycle, ViewStream, ViewStreamProvider,
-    ViewerLease, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 #[cfg(test)]
 pub use agent_browser_service_model::{

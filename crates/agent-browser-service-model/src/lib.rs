@@ -113,7 +113,7 @@ pub use presentation::{
     route_pool_entry_matches_display, route_pool_target_string, ControlInputProvider,
     DisplayAllocation, DurableHandoffPresentationReceipt, RemoteViewAcquisitionLease,
     RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
-    ViewStream, ViewStreamProvider, ViewerLease, SERVICE_CONTROL_INPUT_PROVIDER_VALUES,
+    ViewStream, ViewStreamProvider, SERVICE_CONTROL_INPUT_PROVIDER_VALUES,
     SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
 pub use presentation_capacity::{

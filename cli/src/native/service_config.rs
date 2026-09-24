@@ -1993,7 +1993,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_profile_access_policy::{
         profile_policy_target_for_preset, ProfileAccessMode, ProfileAccessPreset,

@@ -53,12 +53,6 @@ pub(crate) fn ensure_remote_view_route_available_for_display(
         requested_display_isolation
     ))
 }
-pub(crate) fn remote_view_lease_is_active(lease: &ViewerLease) -> bool {
-    !matches!(
-        lease.state.as_str(),
-        "disconnected" | "expired" | "failed" | "released"
-    )
-}
 pub(crate) fn push_remote_view_service_event(
     state: &mut ServiceState,
     kind: ServiceEventKind,

@@ -25,7 +25,6 @@ pub const SERVICE_ACCESS_PLAN_HTTP_ROUTE: &str = "/api/service/access-plan";
 pub const SERVICE_DISPLAY_ALLOCATIONS_HTTP_ROUTE: &str = "/api/service/display-allocations";
 pub const SERVICE_REMOTE_VIEW_ROUTES_HTTP_ROUTE: &str = "/api/service/remote-view-routes";
 pub const SERVICE_ROUTE_POOL_HTTP_ROUTE: &str = "/api/service/route-pool";
-pub const SERVICE_VIEWER_LEASES_HTTP_ROUTE: &str = "/api/service/viewer-leases";
 pub const SERVICE_PROFILE_LEASES_HTTP_ROUTE: &str = "/api/service/profile-leases";
 pub const SERVICE_PROFILE_RECOVERY_PLAN_HTTP_ROUTE: &str = "/api/service/recovery/plan";
 pub const SERVICE_PROFILE_RECOVERY_APPLY_HTTP_ROUTE: &str = "/api/service/recovery/apply";
@@ -43,7 +42,6 @@ pub const SERVICE_ACCESS_PLAN_MCP_RESOURCE: &str = "agent-browser://access-plan"
 pub const SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE: &str = "agent-browser://display-allocations";
 pub const SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE: &str = "agent-browser://remote-view-routes";
 pub const SERVICE_ROUTE_POOL_MCP_RESOURCE: &str = "agent-browser://route-pool";
-pub const SERVICE_VIEWER_LEASES_MCP_RESOURCE: &str = "agent-browser://viewer-leases";
 pub const SERVICE_PROFILE_LEASES_MCP_RESOURCE: &str = "agent-browser://profile-leases";
 pub const SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE: &str = "agent-browser://profile-leases/doctor";
 pub const SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE: &str =
@@ -121,8 +119,6 @@ pub const SERVICE_REMOTE_VIEW_ROUTES_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-remote-view-routes-response.v1.schema.json";
 pub const SERVICE_ROUTE_POOL_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-route-pool-response.v1.schema.json";
-pub const SERVICE_VIEWER_LEASES_RESPONSE_SCHEMA_ID: &str =
-    "https://agent-browser.local/contracts/service-viewer-leases-response.v1.schema.json";
 pub const SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID: &str =
     "https://agent-browser.local/contracts/service-profile-leases-response.v1.schema.json";
 pub const SERVICE_PROFILE_LEASE_DETAIL_RESPONSE_SCHEMA_ID: &str =
@@ -200,10 +196,6 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "service_remote_view_route_checkout",
     "service_remote_view_route_release",
     "service_route_pool_repair",
-    "service_viewer_lease_request",
-    "service_viewer_lease_heartbeat",
-    "service_viewer_lease_release",
-    "service_controller_lease_takeover",
     "service_authentication_run_start",
     "service_authentication_run_status",
     "service_authentication_run_resume",
@@ -834,19 +826,6 @@ pub fn service_contracts_metadata() -> Value {
                 },
                 "noLaunch": true,
             },
-            "serviceViewerLeasesResponse": {
-                "version": SERVICE_REQUEST_CONTRACT_VERSION,
-                "schemaId": SERVICE_VIEWER_LEASES_RESPONSE_SCHEMA_ID,
-                "schemaPath": "docs/dev/contracts/service-viewer-leases-response.v1.schema.json",
-                "http": {
-                    "method": "GET",
-                    "route": SERVICE_VIEWER_LEASES_HTTP_ROUTE,
-                },
-                "mcp": {
-                    "resource": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
-                },
-                "noLaunch": true,
-            },
             "serviceProfileLeasesResponse": {
                 "version": SERVICE_REQUEST_CONTRACT_VERSION,
                 "schemaId": SERVICE_PROFILE_LEASES_RESPONSE_SCHEMA_ID,
@@ -1029,7 +1008,6 @@ pub fn service_contracts_metadata() -> Value {
             "serviceDisplayAllocationsRoute": SERVICE_DISPLAY_ALLOCATIONS_HTTP_ROUTE,
             "serviceRemoteViewRoutesRoute": SERVICE_REMOTE_VIEW_ROUTES_HTTP_ROUTE,
             "serviceRoutePoolRoute": SERVICE_ROUTE_POOL_HTTP_ROUTE,
-            "serviceViewerLeasesRoute": SERVICE_VIEWER_LEASES_HTTP_ROUTE,
             "serviceRemediesApplyRoute": SERVICE_REMEDIES_APPLY_HTTP_ROUTE,
             "serviceMonitorsRunDueRoute": SERVICE_MONITORS_RUN_DUE_HTTP_ROUTE,
             "serviceMonitorPauseRoute": SERVICE_MONITOR_PAUSE_HTTP_ROUTE,
@@ -1052,7 +1030,6 @@ pub fn service_contracts_metadata() -> Value {
             "serviceDisplayAllocationsResource": SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
             "serviceRemoteViewRoutesResource": SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
             "serviceRoutePoolResource": SERVICE_ROUTE_POOL_MCP_RESOURCE,
-            "serviceViewerLeasesResource": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
             "serviceProfileLeasesResource": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
             "serviceRemediesApplyTool": SERVICE_REMEDIES_APPLY_MCP_TOOL_NAME,
             "serviceMonitorsRunDueTool": SERVICE_MONITORS_RUN_DUE_MCP_TOOL_NAME,
@@ -1402,18 +1379,6 @@ mod tests {
         assert_eq!(
             metadata["contracts"]["serviceRoutePoolResponse"]["mcp"]["resource"],
             SERVICE_ROUTE_POOL_MCP_RESOURCE
-        );
-        assert_eq!(
-            metadata["contracts"]["serviceViewerLeasesResponse"]["schemaId"],
-            SERVICE_VIEWER_LEASES_RESPONSE_SCHEMA_ID
-        );
-        assert_eq!(
-            metadata["contracts"]["serviceViewerLeasesResponse"]["http"]["route"],
-            SERVICE_VIEWER_LEASES_HTTP_ROUTE
-        );
-        assert_eq!(
-            metadata["contracts"]["serviceViewerLeasesResponse"]["mcp"]["resource"],
-            SERVICE_VIEWER_LEASES_MCP_RESOURCE
         );
         assert_eq!(
             metadata["contracts"]["serviceProfileLeasesResponse"]["schemaId"],

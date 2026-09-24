@@ -215,29 +215,12 @@ pub(crate) fn settle_profile_tab_eviction(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let mut terminated_viewer_lease_ids = Vec::new();
     for route_id in &route_ids {
-        let lease_ids = state
-            .remote_view_routes
-            .get(route_id)
-            .map(|route| route.viewer_lease_ids.clone())
-            .unwrap_or_default();
-        for lease_id in lease_ids {
-            if let Some(lease) = state.viewer_leases.get_mut(&lease_id) {
-                lease.state = "disconnected".to_string();
-                lease.last_viewer_event = Some("profile_evicted".to_string());
-                lease.updated_at = Some(completed_at.to_string());
-                terminated_viewer_lease_ids.push(lease_id);
-            }
-        }
         super::service_model::advance_route_controller_authority(state, route_id, None)?;
         if let Some(route) = state.remote_view_routes.get_mut(route_id) {
-            route.viewer_lease_ids.clear();
             route.last_provider_event = Some("profile_evicted".to_string());
         }
     }
-    terminated_viewer_lease_ids.sort();
-    terminated_viewer_lease_ids.dedup();
     let all_complete = authorization.target_resource_ids.iter().all(|target| {
         state
             .tabs
@@ -275,7 +258,7 @@ pub(crate) fn settle_profile_tab_eviction(
         target_id: proof.target_id.clone(),
         cancelled_job_ids,
         released_session_id,
-        terminated_viewer_lease_ids,
+        terminated_viewer_lease_ids: Vec::new(),
         outcome: outcome.to_string(),
         completed_at: completed_at.to_string(),
     };

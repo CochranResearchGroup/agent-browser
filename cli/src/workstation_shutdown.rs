@@ -567,9 +567,7 @@ impl ShutdownPlatform for LiveShutdownPlatform {
             &self.repository,
             &chrono::Utc::now().to_rfc3339(),
         )?;
-        Ok(receipt.released_sessions > 0
-            || receipt.released_viewer_leases > 0
-            || receipt.failed_pending_acquisitions > 0)
+        Ok(receipt.released_sessions > 0 || receipt.failed_pending_acquisitions > 0)
     }
 
     fn remove_transient_metadata(&mut self) -> Result<bool, String> {

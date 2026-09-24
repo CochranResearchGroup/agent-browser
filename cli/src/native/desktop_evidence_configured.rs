@@ -1023,19 +1023,8 @@ fn resolve_scene_authority(
     } else {
         ControllerPosture::Uncontrolled
     };
-    let passive_viewer_present = route
-        .viewer_lease_ids
-        .iter()
-        .filter_map(|lease_id| state.viewer_leases.get(lease_id))
-        .any(|lease| {
-            lease.viewer_role != "controller"
-                && matches!(lease.state.as_str(), "requested" | "active" | "ready")
-        });
-    let viewer_posture = if passive_viewer_present {
-        ViewerPosture::Passive
-    } else {
-        ViewerPosture::None
-    };
+    // Stored route state cannot establish an authenticated live viewer.
+    let viewer_posture = ViewerPosture::None;
     Ok(SceneAuthority {
         binding,
         pid,

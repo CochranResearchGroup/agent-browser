@@ -31,7 +31,7 @@ use crate::native::service_model::{
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry,
     ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -166,7 +166,6 @@ pub(crate) fn remote_headed_view_streams_from_command(command: &Value) -> Vec<Vi
         connection_name,
         route_source,
         provider_mode,
-        viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
         controller_epoch: 0,
         read_only: false,
@@ -376,7 +375,6 @@ pub(crate) fn cdp_screencast_view_stream(
         connection_name: None,
         route_source: Some("daemon_stream_server".to_string()),
         provider_mode: Some("simultaneous_view".to_string()),
-        viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
         controller_epoch: 0,
         read_only: !ready,

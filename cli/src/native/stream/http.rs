@@ -2608,17 +2608,6 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
                 "count": route_pool.len(),
             }))
         }
-        "/api/service/viewer-leases" => {
-            let viewer_leases = service_state
-                .viewer_leases
-                .values()
-                .cloned()
-                .collect::<Vec<_>>();
-            Some(json!({
-                "viewerLeases": viewer_leases,
-                "count": viewer_leases.len(),
-            }))
-        }
         SERVICE_PROFILE_LEASES_HTTP_ROUTE => {
             let now = service_now_timestamp();
             Some(json!({
@@ -5427,8 +5416,6 @@ mod tests {
         let remote_view_routes =
             service_collection_contents("/api/service/remote-view-routes", None).unwrap();
         let route_pool = service_collection_contents("/api/service/route-pool", None).unwrap();
-        let viewer_leases =
-            service_collection_contents("/api/service/viewer-leases", None).unwrap();
         let profile_leases =
             service_collection_contents(SERVICE_PROFILE_LEASES_HTTP_ROUTE, None).unwrap();
         let tabs = service_collection_contents("/api/service/tabs", None).unwrap();
@@ -5448,7 +5435,6 @@ mod tests {
         assert!(display_allocations["displayAllocations"].is_array());
         assert!(remote_view_routes["remoteViewRoutes"].is_array());
         assert!(route_pool["routePool"].is_array());
-        assert!(viewer_leases["viewerLeases"].is_array());
         assert!(profile_leases["profileLeases"].is_array());
         assert!(profile_leases["doctor"].is_object());
         assert!(tabs["tabs"].is_array());
@@ -5784,10 +5770,7 @@ mod tests {
                 "sessionId":"session-a","ownerSessionId":"session-a","lifecycle":"ready","principalId":"original-agent"}},
             "remoteViewRoutes":{"route-a":{"id":"route-a","browserId":"browser-a","sessionId":"session-a",
                 "displayAllocationId":"display-a","state":"ready","readOnly":false,
-                "controllerLeaseId":"controller-a","controllerEpoch":1,"viewerLeaseIds":["controller-a"]}},
-            "viewerLeases":{"controller-a":{"id":"controller-a","routeId":"route-a","browserId":"browser-a",
-                "viewerId":"dashboard:operator","viewerRole":"controller","state":"controlling",
-                "expiresAt":"2099-01-01T00:00:00Z"}}
+                "controllerLeaseId":"controller-a","controllerEpoch":1}}
         })).unwrap();
         let original = serde_json::to_value(&state).unwrap();
         let body = json!({"action":"view_focus","serviceName":"caller-label","agentName":"caller-agent","taskName":"focus",

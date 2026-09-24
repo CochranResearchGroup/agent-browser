@@ -5,8 +5,6 @@ use super::service_model::{
     ServiceState, ViewStream, ViewStreamProvider,
 };
 
-const ACTIVE_VIEWER_LEASE_STATES: [&str; 2] = ["observing", "controlling"];
-
 pub fn refresh_remote_view_attachability(state: &mut ServiceState) {
     let snapshot = state.clone();
     for browser in state.browsers.values_mut() {
@@ -64,16 +62,6 @@ pub fn derive_stream_attachability(
         .and_then(|route| route.browser_id.as_deref())
         .map(|route_browser| route_browser == browser.id)
         .unwrap_or(true);
-    let has_active_viewer = stream
-        .viewer_lease_ids
-        .iter()
-        .chain(stream.controller_lease_id.iter())
-        .any(|id| {
-            state
-                .viewer_leases
-                .get(id)
-                .is_some_and(|lease| ACTIVE_VIEWER_LEASE_STATES.contains(&lease.state.as_str()))
-        });
     let (attachability_state, recommended_action, reason) =
         if is_terminal_browser_health(browser.health) {
             (
@@ -104,19 +92,11 @@ pub fn derive_stream_attachability(
                 "route or route-pool state is not attached-ready",
             )
         } else if route_state == "ready" && proof_state == "ready" {
-            if has_active_viewer || stream.viewer_lease_ids.is_empty() {
-                (
-                    "attached_ready",
-                    "open_existing_remote_view_route",
-                    "route, browser, display, and proof agree",
-                )
-            } else {
-                (
-                    "reattachable_viewer_disconnected",
-                    "service_viewer_lease_request",
-                    "route is ready but retained viewer leases are disconnected",
-                )
-            }
+            (
+                "attached_ready",
+                "open_existing_remote_view_route",
+                "route, browser, display, and proof agree; viewer presence is not inferred",
+            )
         } else {
             (
                 "reattachable_stale_route",
@@ -146,7 +126,7 @@ pub fn derive_stream_attachability(
         "displayContentState": display_content_state,
         "displayAgrees": display_agrees,
         "browserAgrees": browser_agrees,
-        "hasActiveViewer": has_active_viewer,
+        "hasActiveViewer": false,
     })
 }
 

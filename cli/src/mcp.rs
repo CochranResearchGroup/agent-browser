@@ -20,7 +20,7 @@ use crate::native::service_contracts::{
     SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE, SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
     SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
-    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+    SERVICE_ROUTE_POOL_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -225,12 +225,6 @@ fn service_mcp_resources() -> Vec<Value> {
             "name": "Service route pool",
             "mimeType": "application/json",
             "description": "Configured remote-view provider route pool entries sorted by pool entry id"
-        }),
-        json!({
-            "uri": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
-            "name": "Service viewer leases",
-            "mimeType": "application/json",
-            "description": "Service-owned observer and controller leases for remote-view routes sorted by lease id"
         }),
         json!({
             "uri": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
@@ -514,13 +508,6 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
             json!({
                 "routePool": route_pool,
                 "count": route_pool.len(),
-            })
-        }
-        SERVICE_VIEWER_LEASES_MCP_RESOURCE => {
-            let viewer_leases = state.viewer_leases.values().cloned().collect::<Vec<_>>();
-            json!({
-                "viewerLeases": viewer_leases,
-                "count": viewer_leases.len(),
             })
         }
         SERVICE_PROFILE_LEASES_MCP_RESOURCE => {
@@ -11663,7 +11650,6 @@ mod tests {
                 SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
                 SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
                 SERVICE_ROUTE_POOL_MCP_RESOURCE,
-                SERVICE_VIEWER_LEASES_MCP_RESOURCE,
                 SERVICE_PROFILE_LEASES_MCP_RESOURCE,
                 SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
                 TABS_RESOURCE,
@@ -16703,9 +16689,8 @@ mod tests {
         use crate::native::service_model::{
             assert_service_display_allocation_record_contract,
             assert_service_remote_view_route_record_contract,
-            assert_service_route_pool_entry_record_contract,
-            assert_service_viewer_lease_record_contract, DisplayAllocation, RemoteViewRoute,
-            RoutePoolEntry, ViewerLease,
+            assert_service_route_pool_entry_record_contract, DisplayAllocation, RemoteViewRoute,
+            RoutePoolEntry,
         };
 
         let state = ServiceState {
@@ -16734,7 +16719,6 @@ mod tests {
                 RemoteViewRoute {
                     id: "route-a".to_string(),
                     display_allocation_id: Some("display-a".to_string()),
-                    viewer_lease_ids: vec!["lease-a".to_string()],
                     ..RemoteViewRoute::default()
                 },
             )]),
@@ -16744,14 +16728,6 @@ mod tests {
                     id: "pool-a".to_string(),
                     route_id: "route-a".to_string(),
                     ..RoutePoolEntry::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([(
-                "lease-a".to_string(),
-                ViewerLease {
-                    id: "lease-a".to_string(),
-                    route_id: Some("route-a".to_string()),
-                    ..ViewerLease::default()
                 },
             )]),
             ..ServiceState::default()
@@ -16765,9 +16741,6 @@ mod tests {
                 .unwrap();
         let pool =
             read_service_mcp_resource_from_state(SERVICE_ROUTE_POOL_MCP_RESOURCE, &state).unwrap();
-        let leases =
-            read_service_mcp_resource_from_state(SERVICE_VIEWER_LEASES_MCP_RESOURCE, &state)
-                .unwrap();
 
         assert_eq!(displays["contents"]["count"], 2);
         assert_eq!(
@@ -16783,8 +16756,6 @@ mod tests {
         );
         assert_eq!(pool["contents"]["count"], 1);
         assert_service_route_pool_entry_record_contract(&pool["contents"]["routePool"][0]);
-        assert_eq!(leases["contents"]["count"], 1);
-        assert_service_viewer_lease_record_contract(&leases["contents"]["viewerLeases"][0]);
     }
 
     #[test]

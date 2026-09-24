@@ -85,7 +85,6 @@ use crate::native::service_model::{
     assert_service_trace_summary_record_contract, service_job_naming_warning_values,
     BrowserCapabilityRegistry, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     DisplayAllocation, ProfileSeedingHandoffState, RemoteViewRoute, RoutePoolEntry, ViewStream,
-    ViewerLease,
 };
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,

@@ -50,7 +50,7 @@ use crate::native::service_model::{
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
     RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 use crate::native::service_renderer_crash::{
     correlate_renderer_crash, persist_renderer_crash_in_repository, renderer_crash_targets_context,

@@ -78,7 +78,6 @@ pub enum ProfileReceiptReplayError {
 #[serde(rename_all = "camelCase")]
 pub struct ColdShutdownStateReceipt {
     pub released_sessions: usize,
-    pub released_viewer_leases: usize,
     pub failed_pending_acquisitions: usize,
 }
 
@@ -122,7 +121,6 @@ pub struct ServiceState {
     pub route_pool: BTreeMap<String, RoutePoolEntry>,
     pub remote_view_acquisition_leases: BTreeMap<String, RemoteViewAcquisitionLease>,
     pub remote_view_handoffs: BTreeMap<String, RemoteViewHandoff>,
-    pub viewer_leases: BTreeMap<String, ViewerLease>,
     /// Durable scarce presentation-slot inventory and admission authority.
     /// Logical browsers remain separate and survive slot release or parking.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -692,15 +690,6 @@ impl ServiceState {
             session.work_lease_revision = 0;
         }
 
-        let mut released_viewer_leases = 0;
-        for lease in self.viewer_leases.values_mut() {
-            if lease.state != "released" {
-                lease.state = "released".to_string();
-                lease.updated_at = Some(observed_at.to_string());
-                released_viewer_leases += 1;
-            }
-        }
-
         let mut failed_pending_acquisitions = 0;
         for lease in self.remote_view_acquisition_leases.values_mut() {
             if lease.state == "pending" {
@@ -715,7 +704,6 @@ impl ServiceState {
 
         Ok(ColdShutdownStateReceipt {
             released_sessions,
-            released_viewer_leases,
             failed_pending_acquisitions,
         })
     }
@@ -851,7 +839,6 @@ impl ServiceState {
                     route.browser_id = existing.browser_id.clone();
                     route.session_id = existing.session_id.clone();
                     route.route_source = existing.route_source.clone();
-                    route.viewer_lease_ids = existing.viewer_lease_ids.clone();
                     route.controller_lease_id = existing.controller_lease_id.clone();
                     route.controller_epoch = existing.controller_epoch;
                     route.last_provider_event = existing.last_provider_event.clone();
@@ -872,7 +859,6 @@ impl ServiceState {
             }
             self.route_pool.insert(id, entry);
         }
-        self.viewer_leases.extend(configured.viewer_leases);
         for (id, mut profile) in configured.profiles {
             if let Some(persisted) = self.profiles.get(&id) {
                 overlay_persisted_profile_freshness(&mut profile, persisted);
@@ -2905,20 +2891,6 @@ pub fn validate_service_state_invariants(
                 )));
             }
         }
-        for lease_id in &route.viewer_lease_ids {
-            if !state.viewer_leases.contains_key(lease_id) {
-                return Err(ServiceStateCodecError::Invariant(format!(
-                    "service_state_route_viewer_lease_missing:{key}:{lease_id}"
-                )));
-            }
-        }
-        if let Some(lease_id) = &route.controller_lease_id {
-            if !state.viewer_leases.contains_key(lease_id) {
-                return Err(ServiceStateCodecError::Invariant(format!(
-                    "service_state_route_controller_lease_missing:{key}:{lease_id}"
-                )));
-            }
-        }
     }
     for (key, entry) in &state.route_pool {
         if entry.id.trim().is_empty() || entry.id != *key {
@@ -2931,13 +2903,6 @@ pub fn validate_service_state_invariants(
         if lease.id.trim().is_empty() || lease.id != *key {
             return Err(ServiceStateCodecError::Invariant(format!(
                 "service_state_acquisition_lease_key_mismatch:{key}"
-            )));
-        }
-    }
-    for (key, lease) in &state.viewer_leases {
-        if lease.id.trim().is_empty() || lease.id != *key {
-            return Err(ServiceStateCodecError::Invariant(format!(
-                "service_state_viewer_lease_key_mismatch:{key}"
             )));
         }
     }

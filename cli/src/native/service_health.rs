@@ -612,12 +612,6 @@ fn merge_duplicate_browser_record(
             route.browser_id = Some(canonical_browser_id.to_string());
         }
     }
-    for lease in state.viewer_leases.values_mut() {
-        if lease.browser_id.as_deref() == Some(duplicate_browser_id) {
-            lease.browser_id = Some(canonical_browser_id.to_string());
-        }
-    }
-
     push_service_event(
         state,
         ServiceEvent {
@@ -1511,7 +1505,6 @@ fn release_one_browser_display_allocation_after_close(
                     route.state = "released".to_string();
                     route.last_provider_event =
                         Some("route_released_after_browser_close".to_string());
-                    route.viewer_lease_ids.clear();
                     route.readiness = Some(serde_json::json!({
                         "state": "released",
                         "reason": "browser_closed",
@@ -2023,12 +2016,6 @@ pub fn merge_reconciled_service_state(
                 .remote_view_routes
                 .insert(id.clone(), reconciled_route.clone());
         }
-    }
-
-    for (id, reconciled_lease) in &reconciled.viewer_leases {
-        target
-            .viewer_leases
-            .insert(id.clone(), reconciled_lease.clone());
     }
 
     for (id, reconciled_pool_entry) in &reconciled.route_pool {
@@ -2564,87 +2551,8 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
         repair.released_route_pool_entries += 1;
     }
 
-    for lease in state.viewer_leases.values_mut() {
-        if !viewer_lease_is_reconcile_active(lease) {
-            continue;
-        }
-        let route_unavailable = lease.route_id.as_ref().is_none_or(|id| {
-            let route_browser_id = route_browser_owners
-                .get(id)
-                .and_then(|browser_id| browser_id.as_deref());
-            let route_available = matches!(
-                route_states.get(id).map(String::as_str),
-                Some("ready" | "reconnecting" | "allocating")
-            ) || (route_states.get(id).map(String::as_str)
-                == Some("pending")
-                && pending_acquisition_routes.contains(id));
-            !route_available
-                || route_browser_id.is_none()
-                || route_browser_id.is_some_and(|browser_id| {
-                    browser_health.get(browser_id) != Some(&BrowserHealth::Ready)
-                        || lease
-                            .browser_id
-                            .as_deref()
-                            .is_some_and(|lease_browser_id| lease_browser_id != browser_id)
-                })
-        });
-        if viewer_lease_is_expired(lease, &now) {
-            lease.state = "expired".to_string();
-            lease.last_viewer_event = Some("expired".to_string());
-            lease.updated_at = Some(now.clone());
-            lease.last_heartbeat_at = Some(now.clone());
-            repair.expired_viewer_leases += 1;
-        } else if route_unavailable {
-            lease.state = "disconnected".to_string();
-            lease.last_viewer_event = Some("route_unavailable".to_string());
-            lease.updated_at = Some(now.clone());
-            lease.last_heartbeat_at = Some(now.clone());
-            repair.released_viewer_leases += 1;
-        }
-    }
-
-    let active_viewer_leases = state
-        .viewer_leases
-        .iter()
-        .filter(|(_id, lease)| viewer_lease_is_reconcile_active(lease))
-        .map(|(id, _lease)| id.clone())
-        .collect::<BTreeSet<_>>();
-    let controller_routes_to_clear = state
-        .remote_view_routes
-        .iter()
-        .filter(|(_route_id, route)| {
-            route
-                .controller_lease_id
-                .as_ref()
-                .is_some_and(|id| !active_viewer_leases.contains(id))
-        })
-        .map(|(route_id, _route)| route_id.clone())
-        .collect::<Vec<_>>();
-    let _controller_mutations = if controller_fence_held {
-        Vec::new()
-    } else {
-        controller_routes_to_clear
-            .iter()
-            .map(|route_id| begin_service_controller_mutation(state, route_id))
-            .collect::<Result<Vec<_>, _>>()
-            .expect("desktop control effect fence must remain available")
-    };
-    for route_id in &controller_routes_to_clear {
-        advance_route_controller_authority(state, route_id, None)
-            .expect("route was resolved before controller reconciliation");
-        repair.cleared_controller_leases += 1;
-    }
-    for route in state.remote_view_routes.values_mut() {
-        route
-            .viewer_lease_ids
-            .retain(|id| active_viewer_leases.contains(id));
-    }
-
     for browser in state.browsers.values_mut() {
         for stream in &mut browser.view_streams {
-            stream
-                .viewer_lease_ids
-                .retain(|id| active_viewer_leases.contains(id));
             if let Some(route_id) = stream.route_id.as_ref() {
                 if let Some(route) = state.remote_view_routes.get(route_id) {
                     stream.project_controller(route);
@@ -2674,22 +2582,6 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
     refresh_remote_view_attachability(state);
 
     repair
-}
-
-fn viewer_lease_is_reconcile_active(lease: &super::service_model::ViewerLease) -> bool {
-    !matches!(
-        lease.state.as_str(),
-        "disconnected" | "expired" | "failed" | "released"
-    )
-}
-
-fn viewer_lease_is_expired(lease: &super::service_model::ViewerLease, now: &str) -> bool {
-    lease
-        .expires_at
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some_and(|expires_at| expires_at <= now)
 }
 
 fn reconcile_browser_targets(
@@ -3492,7 +3384,7 @@ mod tests {
     use crate::native::service_model::{
         ControlInputProvider, DisplayAllocation, JobState, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceJob, ServiceProvider,
-        SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
+        SitePolicy, ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{
         mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
@@ -8123,7 +8015,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;

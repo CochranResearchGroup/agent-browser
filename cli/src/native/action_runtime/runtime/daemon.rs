@@ -38,7 +38,7 @@ use crate::native::service_model::{
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
     RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 use crate::native::service_profile_access_policy::{
     effective_profile_permissions, ProfileAccessMode, ProfileIdentityAssurance, ProfilePermission,

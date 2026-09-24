@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 10
+Plan version: 11
 
 State: OPEN
 
@@ -29,12 +29,17 @@ Pull request: draft PR #191
 
 Target: `main`
 
-Overall effort ceiling: inherit Plan 0217's cumulative 2,000,000-token ceiling
-without reset. The durable pre-M0 readback was 595,176 tokens. The M0 control
-readback before closeout was 340,551 tokens including worker effort, for
-935,727 cumulative and 1,064,273 remaining at that checkpoint. M0 had already
-exceeded its 200,000-token allocation by 140,551; later milestones do not
-inherit or reset that local overrun and must fit the unchanged overall ceiling.
+Overall effort ceiling: the inherited Plan 0217 cumulative 2,000,000-token
+ceiling was exhausted. The durable pre-M0 readback was 595,176 tokens and the
+M0 control readback was 340,551 tokens including worker effort, for 935,727
+cumulative at that checkpoint. The completed downstream CLI closure goal then
+used 1,446,348 tokens, bringing the reconciled Plan 0218 cumulative total to
+2,382,075 tokens. On 2026-09-23 the operator explicitly directed Plan 0218 to
+continue with a new checkpoint at 500,000 tokens. That instruction renews one
+bounded execution window and revises the cumulative ceiling to 2,882,075
+tokens. It does not reset prior usage or authorize effects excluded elsewhere
+in this plan. The new goal's live counter is authoritative for this window;
+stop for operator review when it reaches 500,000 tokens.
 
 ## Objective
 
@@ -393,6 +398,40 @@ optional-provider handling, and the stale workstation preview assertion.
 Operational rework comprised one unsupported `sccache` invocation, one invalid
 compartment name, and one redundant Cargo launch attempt. No installed runtime,
 provider, tenant, ingress, production, push, merge, or release effect occurred.
+
+The operator-renewed execution window next selected the bounded P12 and P19
+stored-viewer-authority cut. The primary removed the persisted `ViewerLease`
+collection, route and stream viewer-lease ID lists, viewer request, heartbeat,
+release, and takeover dispatch, and the dashboard controls that manufactured
+viewer presence. Session heartbeat remains unchanged. The separately fenced
+Desktop Services controller ID and epoch remain control authority and are not
+treated as viewer-presence proof. Until M3 supplies an authenticated live
+Guacamole observer, capacity and attachability project no live viewer evidence
+and configured desktop interaction fails closed rather than reconstructing a
+viewer from stored state.
+
+Retained compiler wave 24 at `/tmp/agent-browser-p218-m1-wave-24` exits 0 with
+zero first-party groups after resolving all 52 wave-21 production groups. Its
+raw JSON SHA-256 is
+`101fdc6d15c04628ab05ae0b19b166af1d3e98a1fa33581c63aa0589edc95ee4`.
+The Service Model package passes 195 library tests and all 71 package
+integration tests. The aggregate architecture report now has four definite
+violations, P02, P03, P05, and P09; P12, P15, P16, and P19 have zero findings
+but remain detector gaps rather than accepted rows. The policy capsule,
+formatting, diff check, and Service API and MCP parity gates pass.
+
+This is an incomplete custody checkpoint, not P12 or P19 acceptance. Retained
+workspace test-build wave 26 at `/tmp/agent-browser-p218-m1-wave-26` has 19
+groups and 23 occurrences, all in legacy or replacement test fixtures that
+still construct or assert persisted viewer records. The public viewer-lease
+HTTP and MCP collection and service-request action metadata were removed, but
+generated client and complete documentation reconciliation remain open. A
+Luna import-only worker completed 19 disjoint removals. A second Luna fixture
+worker was interrupted for the operator-requested checkpoint and made no
+accepted fixture claim. The next packet must finish the exact wave-26 worklist,
+regenerate and verify clients, reconcile all user-facing viewer-lease docs,
+then run focused CLI compartments and strict Clippy before deciding P12 and
+P19 acceptance.
 
 Worker receipt `/root/m1_service_model_inventory`: requested `gpt-6-luna` at
 medium effort; effective runtime model was unavailable. Its read-only six-file
