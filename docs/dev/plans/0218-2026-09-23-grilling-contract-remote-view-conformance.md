@@ -566,6 +566,18 @@ partial because the older installer route-credential environment projection
 remains. The aggregate gate is now three definite violations, five detector
 gaps, and eleven unverified rows.
 
+Custody checkpoint `acc64ad4` removes the obsolete explicit-display branch
+from journaled open routing; formatting and the focused routing test pass.
+The P03/P05 source trace still reaches `finalize_route_bound_handoff_atomic`
+through the JSON `RouteBoundOpenRepository`, while the manager host has a
+separate SQLite keeper path. G42 also remains incomplete in the ordinary
+managed-command path: `BrowserSessionHost::execute_managed_command` calls
+`tab_for_navigation`, which persists exact-session activity before the command
+effect returns. A failed command can therefore extend that session. The next
+G42 source packet must move successful-command heartbeat publication after
+effect success without losing tab attribution, and test both success and
+failure before acceptance. These are source findings, not conformance passes.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
