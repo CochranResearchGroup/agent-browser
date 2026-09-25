@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 18
+Plan version: 19
 
 State: OPEN
 
@@ -714,6 +714,31 @@ only when its membership, profile, browser, session, tab, and target all match.
 A closed handoff or a different logical tab gets a fresh opaque ID. This fixes
 the legacy preparer's prior browser/name-only aliasing while leaving
 concurrent advanced `remote_view_open` coalescing open under G31.
+
+The next architecture-detector update names both sides of the remaining
+ordinary-open split. P03 now reports the JSON repository in
+`remote_view/open/runtime.rs` as well as the handoff finalizer in
+`remote_view_handoff.rs`. P05 reports the acquisition and completion calls in
+`remote_view/open/coordinator.rs` as well as the finalizer. A fixture removes
+the finalizer alone and proves both prohibitions stay red. The status remains
+three violations, five detector gaps, and eleven unverified rows; this is a
+more complete warning, not a conformance pass.
+
+The G42/P03/P05 cut must replace the coordinator's complete JSON transaction
+sequence, not just its final call. The current direct-open path reads
+`ServiceState`, persists inline route-pool entries, reserves an acquisition
+lease, records display and launch failures against that lease, and finalizes
+the lease and handoff after the route proof. Manual seeding and durable
+resolution also call the same JSON repository. Freeze a typed SQLite operation
+for the exact session, profile, browser, tab, target, keeper slot, and handoff;
+reserve before effects, record observations for restart recovery, and publish
+the ready state and handoff in one fenced commit. On failure, reconcile the
+exact operation without admitting legacy lease or quarantine state. Keep
+manual seeding and durable resolution explicitly accounted for when removing
+the repository. The passing proof must exercise ordinary `remote_view_open`
+and handoff resolution through daemon dispatch, including two same-profile
+sessions and an injected failure, then show no JSON repository reachability
+from that path. The existing host fixture proves the manager path only.
 
 The red fixture observed `ready` after Alice's close before the fix. The
 completed batch passes all 18 provider-free host tests, strict workspace

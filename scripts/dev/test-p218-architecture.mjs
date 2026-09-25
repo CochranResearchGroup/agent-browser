@@ -18,6 +18,8 @@ try {
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\nagent-browser-lease-authority = { path = "../agent-browser-lease-authority" }\n');
   write(root, 'cli/src/native/browser_session_host.rs', 'std::env::var("AGENT_BROWSER_SESSION_DISPLAY"); default_service_state_path(); load_or_import_profile_catalog();\n');
   write(root, 'cli/src/native/remote_view_handoff.rs', 'LockedServiceStateRepository<JsonServiceStateStore> service_profile_lease runtime_owner_binding_for_session cleanup_obligation\n');
+  write(root, 'cli/src/native/remote_view/open/runtime.rs', 'LockedServiceStateRepository::default_json()\n');
+  write(root, 'cli/src/native/remote_view/open/coordinator.rs', 'begin_route_bound_handoff_plan_acquisition(); complete_route_bound_handoff_open();\n');
   write(root, 'crates/agent-browser-service-model/src/service_state.rs', 'agent_browser_lease_authority viewer_leases runtime_owner_registry\n');
   write(root, 'cli/src/native/actions.rs', 'service_viewer_lease_request service_viewer_lease_heartbeat service_viewer_lease_release\n');
   write(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx', 'service_viewer_lease_heartbeat\n');
@@ -31,6 +33,20 @@ try {
     ['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19'],
   );
   assert.ok(report.rows.find((row) => row.id === 'P15').findings.length >= 3);
+  assert.deepEqual(
+    report.rows.find((row) => row.id === 'P03').findings.map((item) => item.id),
+    ['legacy_json_import_in_default_host', 'ordinary_handoff_json_repository', 'ordinary_open_json_repository'],
+  );
+  assert.deepEqual(
+    report.rows.find((row) => row.id === 'P05').findings.map((item) => item.id),
+    ['competing_handoff_authority', 'ordinary_open_parallel_acquisition'],
+  );
+
+  write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');
+  const finalizerOnlyCut = evaluate(root);
+  assert.equal(finalizerOnlyCut.rows.find((row) => row.id === 'P03').status, 'violated');
+  assert.equal(finalizerOnlyCut.rows.find((row) => row.id === 'P05').status, 'violated');
+  write(root, 'cli/src/native/remote_view_handoff.rs', 'LockedServiceStateRepository<JsonServiceStateStore> service_profile_lease runtime_owner_binding_for_session cleanup_obligation\n');
 
   assert.equal(report.cuts.serviceModelLeaseAuthority.status, 'fail');
   assert.ok(report.cuts.serviceModelLeaseAuthority.findings.length >= 2);

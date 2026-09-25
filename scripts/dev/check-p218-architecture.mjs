@@ -41,6 +41,8 @@ export function evaluate(root = defaultRoot) {
   const serviceModelManifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
   const host = read(root, 'cli/src/native/browser_session_host.rs');
   const handoff = read(root, 'cli/src/native/remote_view_handoff.rs');
+  const openRuntime = read(root, 'cli/src/native/remote_view/open/runtime.rs');
+  const openCoordinator = read(root, 'cli/src/native/remote_view/open/coordinator.rs');
   const serviceState = read(root, 'crates/agent-browser-service-model/src/service_state.rs');
   const actions = read(root, 'cli/src/native/actions.rs');
   const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
@@ -75,6 +77,14 @@ export function evaluate(root = defaultRoot) {
   if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(handoff)) {
     add('P03', finding('ordinary_handoff_json_repository', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff finalization still requires the JSON Service State repository'));
     add('P05', finding('competing_handoff_authority', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff identity is committed outside the Browser Runtime SQLite authority'));
+  }
+  if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(openRuntime)
+    || /LockedServiceStateRepository::default_json\(\)/.test(openRuntime)) {
+    add('P03', finding('ordinary_open_json_repository', 'cli/src/native/remote_view/open/runtime.rs', 'ordinary remote-view open still loads and mutates JSON Service State'));
+  }
+  if (/begin_route_bound_handoff_plan_acquisition/.test(openCoordinator)
+    || /complete_route_bound_handoff_open/.test(openCoordinator)) {
+    add('P05', finding('ordinary_open_parallel_acquisition', 'cli/src/native/remote_view/open/coordinator.rs', 'ordinary remote-view open still reserves or finalizes a handoff outside the SQLite session operation'));
   }
   const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
   if (credentialVariables.length > 0) {
