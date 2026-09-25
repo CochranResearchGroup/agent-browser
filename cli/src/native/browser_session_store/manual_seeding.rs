@@ -59,6 +59,8 @@ pub(crate) struct ManualSeedingRecord {
     pub(crate) display_name: Option<String>,
     pub(crate) route_fence: Option<RouteKeeperFence>,
     pub(crate) process_identity: Option<RecordedProcessIdentity>,
+    #[serde(default)]
+    pub(crate) uncertain_launch_pid: Option<u32>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -302,6 +304,7 @@ impl BrowserRuntimeSqliteStore {
             display_name: None,
             route_fence: None,
             process_identity: None,
+            uncertain_launch_pid: None,
         };
         registry
             .records
@@ -316,6 +319,83 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("manual_seeding_reservation_commit_failed:{error}"))?;
         Ok((record, operation))
+    }
+
+    /// Retain an uncertain detached launch before any retry. A PID alone is
+    /// insufficient authority to terminate or adopt a process, so this state
+    /// blocks ready publication and profile reuse pending exact reconciliation.
+    #[allow(dead_code)]
+    pub(crate) fn observe_uncertain_manual_seeding_launch(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        binding: &RouteKeeperHandoffBinding,
+        pid: u32,
+    ) -> Result<(ManualSeedingRecord, BrowserRuntimeOperation), String> {
+        if pid == 0 {
+            return Err("manual_seeding_uncertain_pid_invalid".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_uncertain_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id || record.generation != generation {
+            return Err("manual_seeding_operation_identity_mismatch".to_string());
+        }
+        if record.route_slot_id.as_deref() != Some(binding.slot_id.as_str())
+            || record.display_name.as_deref() != Some(binding.display_name.as_str())
+            || record.route_fence.as_ref() != Some(&binding.fence)
+        {
+            return Err("manual_seeding_route_not_reserved".to_string());
+        }
+        if record.state == ManualSeedingState::RecoveryRequired {
+            if record.uncertain_launch_pid != Some(pid) {
+                return Err("manual_seeding_uncertain_launch_changed".to_string());
+            }
+            let operation = super::load_optional_operation(&transaction, operation_id)?
+                .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
+            return Ok((record.clone(), operation));
+        }
+        if record.state != ManualSeedingState::Reserved {
+            return Err("manual_seeding_uncertain_state_invalid".to_string());
+        }
+        let observation = serde_json::json!({
+            "phase": "manual_seeding_launch_identity_uncertain",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "routeSlotId": binding.slot_id,
+            "displayName": binding.display_name,
+            "routeFence": binding.fence,
+            "pid": pid,
+        });
+        let operation =
+            observe_operation_in_transaction(&transaction, operation_id, generation, observation)?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}") {
+            return Err("manual_seeding_operation_owner_mismatch".to_string());
+        }
+        record.state = ManualSeedingState::RecoveryRequired;
+        record.uncertain_launch_pid = Some(pid);
+        let updated = record.clone();
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_uncertain_commit_failed:{error}"))?;
+        Ok((updated, operation))
     }
 
     /// Journal one exact detached process and current provider-owned route in

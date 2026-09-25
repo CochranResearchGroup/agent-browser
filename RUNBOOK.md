@@ -11,7 +11,14 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 34 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 35 remains open on `platform/p211-simple-cold-upgrade`.
+The current source cut journals a detached manual-seeding launch with an
+uncertain process identity as `recovery_required`, preserving its PID with the
+SQLite operation observation and blocking profile reuse or ready handoff
+publication. One focused fixture, strict workspace Clippy, and formatting pass
+through `cargo-signal`. The effectful adapter has not called this path; exact
+process reconciliation, dispatch, durable resolution, and installed acceptance
+remain open.
 Source checkpoint `ef194bfc` atomically publishes a manual-seeding
 ready handoff, lifecycle state, and operation result after exact route and
 process observation plus a ready operator visibility proof. Its result exposes

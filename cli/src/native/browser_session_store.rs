@@ -4657,6 +4657,106 @@ mod tests {
     }
 
     #[test]
+    fn uncertain_manual_seeding_launch_retains_pid_and_blocks_reuse() {
+        let (directory, mut store) = sqlite_store("manual-seeding-uncertain-launch");
+        let mut catalog = store.load_profile_catalog().unwrap();
+        catalog.profiles.insert(
+            "work".to_string(),
+            agent_browser_service_model::BrowserProfileCatalogEntry {
+                id: "work".to_string(),
+                name: "Work".to_string(),
+                user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+                kind: agent_browser_service_model::BrowserProfileKind::Named,
+            },
+        );
+        store.save_profile_catalog(&catalog).unwrap();
+        let request = ManualSeedingReservation {
+            operation_id: "seed-uncertain".to_string(),
+            profile_id: "work".to_string(),
+            target_service_id: "service-a".to_string(),
+            handoff_id: "seed-uncertain-handoff".to_string(),
+            requested_url: None,
+        };
+        let (_, operation) = store.reserve_manual_seeding(&request).unwrap();
+        let expected = store.load_route_keeper_authority().unwrap();
+        let mut authority = expected.clone();
+        authority
+            .register_host_process_claim(route_keeper_host_claim(1))
+            .unwrap();
+        let mut connections = route_keeper_catalog();
+        connections.public_operator_url = Some("https://dashboard.example/remote-view".to_string());
+        authority.replace_connection_catalog(connections).unwrap();
+        authority.request_ready_slots(1).unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            agent_browser_service_model::RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                ..
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected start action, got {other:?}"),
+        };
+        authority.record_observing(&slot_id, &fence).unwrap();
+        authority
+            .record_protocol_ready(route_keeper_ready_receipt(
+                slot_id.clone(),
+                keeper_id,
+                fence,
+            ))
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&expected, &authority)
+            .unwrap();
+        let binding = authority.ready_handoff_binding(&slot_id, ":1").unwrap();
+        store
+            .bind_manual_seeding_route("work", "seed-uncertain", operation.generation, &binding)
+            .unwrap();
+        assert_eq!(
+            store.observe_uncertain_manual_seeding_launch(
+                "work",
+                "seed-uncertain",
+                operation.generation,
+                &binding,
+                0,
+            ),
+            Err("manual_seeding_uncertain_pid_invalid".to_string())
+        );
+        let observed = store
+            .observe_uncertain_manual_seeding_launch(
+                "work",
+                "seed-uncertain",
+                operation.generation,
+                &binding,
+                4_242,
+            )
+            .unwrap();
+        assert_eq!(observed.0.state, ManualSeedingState::RecoveryRequired);
+        assert_eq!(observed.0.uncertain_launch_pid, Some(4_242));
+        assert_eq!(observed.1.state, BrowserRuntimeOperationState::Observed);
+        assert_eq!(
+            store
+                .observe_uncertain_manual_seeding_launch(
+                    "work",
+                    "seed-uncertain",
+                    operation.generation,
+                    &binding,
+                    4_242,
+                )
+                .unwrap(),
+            observed
+        );
+        assert_eq!(
+            store.reserve_manual_seeding(&ManualSeedingReservation {
+                operation_id: "seed-retry".to_string(),
+                handoff_id: "seed-retry-handoff".to_string(),
+                ..request
+            }),
+            Err("manual_seeding_profile_busy:work".to_string())
+        );
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+    }
+
+    #[test]
     fn operation_journal_replays_requests_and_fences_stale_effect_commits() {
         let directory = TempDirectory::new("browser-runtime-operation-journal");
         let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);

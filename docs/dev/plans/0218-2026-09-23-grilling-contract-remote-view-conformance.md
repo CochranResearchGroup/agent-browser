@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 34
+Plan version: 35
 
 State: OPEN
 
@@ -848,6 +848,17 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 35 adds a recovery observation for the detached-launch case where a
+PID is returned but exact process identity capture fails. The SQLite record
+retains the PID and operation observation atomically, enters
+`recovery_required`, and blocks both profile reuse and ready handoff
+publication. It does not use a PID alone as termination authority. The focused
+fixture, strict workspace Clippy, and formatting pass through `cargo-signal`.
+The effectful adapter still must call this observation immediately after an
+uncertain launch, then reconcile exact process ownership before recovery or
+retry. P03/P05, installed acceptance, and the wider G01–G45 contract remain
+open.
 
 Version 34 adds a SQLite transaction for manual-seeding ready publication.
 After an exact launch observation, it rechecks the current keeper fence,
