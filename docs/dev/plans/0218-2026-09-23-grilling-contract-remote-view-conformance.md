@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 19
+Plan version: 20
 
 State: OPEN
 
@@ -739,6 +739,16 @@ the repository. The passing proof must exercise ordinary `remote_view_open`
 and handoff resolution through daemon dispatch, including two same-profile
 sessions and an injected failure, then show no JSON repository reachability
 from that path. The existing host fixture proves the manager path only.
+
+The bounded G40 SQLite restart fixture now puts an open request in the
+waiting queue, advances the host generation, and verifies that the request is
+retryable with no admitted work or browser operation. The old waiter cannot
+poll under the new generation. A fresh client request with the exact payload
+receives the only execution permit and its committed response replays. This
+closes the missing provider-free queue proof recorded in the G40 coverage row.
+G40 stays partial until an installed daemon restart proves that no browser
+launch occurs before the client resumes and that an already begun effect
+reconciles through its exact journal.
 
 The red fixture observed `ready` after Alice's close before the fix. The
 completed batch passes all 18 provider-free host tests, strict workspace

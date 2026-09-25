@@ -548,6 +548,62 @@ mod tests {
     }
 
     #[test]
+    fn queued_only_restart_waits_for_exact_client_resume() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("runtime.sqlite3");
+        let command = serde_json::json!({
+            "id": "waiting-open",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "fixture"
+        });
+        let waiting =
+            PresentationAdmissionRequest::enqueue_at(path.clone(), &command, 1, false, now_ms())
+                .unwrap();
+        assert!(waiting.poll(Some(false)).unwrap().is_none());
+
+        let mut store = BrowserRuntimeSqliteStore::open(&path).unwrap();
+        store
+            .mutate_presentation_queue(|queue| queue.advance_generation(2))
+            .unwrap();
+        let after_restart = store.load_presentation_queue().unwrap();
+        assert_eq!(
+            after_restart.entries["browser:waiting-open"].state,
+            PresentationRequestState::Retryable {
+                recovery_required: false
+            }
+        );
+        assert!(store.find_operation("waiting-open").unwrap().is_none());
+        let status = queue_status(&store).unwrap();
+        assert_eq!(
+            (status.queued, status.admitted, status.retryable),
+            (0, 0, 1)
+        );
+        assert!(matches!(
+            waiting.poll(Some(true)),
+            Err(error) if error == "presentation_queue_generation_stale"
+        ));
+        assert_eq!(store.load_presentation_queue().unwrap(), after_restart);
+
+        let resumed =
+            PresentationAdmissionRequest::enqueue_at(path.clone(), &command, 2, false, now_ms())
+                .unwrap();
+        assert_ne!(resumed.sequence, waiting.sequence);
+        assert!(store.find_operation("waiting-open").unwrap().is_none());
+        let Some(PresentationAdmission::Execute(mut permit)) = resumed.poll(Some(true)).unwrap()
+        else {
+            panic!("only the resumed request may receive an execution permit")
+        };
+        permit.require_current().unwrap();
+        let response = serde_json::json!({"success": true, "id": "waiting-open"});
+        assert_eq!(permit.finish(Ok(response.clone())).unwrap(), response);
+        let Some(PresentationAdmission::Replay(replayed)) = resumed.poll(None).unwrap() else {
+            panic!("completed resumed request must replay its exact result")
+        };
+        assert_eq!(replayed, response);
+    }
+
+    #[test]
     fn interrupted_navigation_and_committed_handoff_resume_from_exact_journals() {
         let cases = [
             (
