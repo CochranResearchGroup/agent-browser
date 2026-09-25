@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 30
+Plan version: 31
 
 State: OPEN
 
@@ -848,6 +848,15 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 31 adds an explicit CDP-free launch planner for the reserved SQLite
+named profile. It pins the catalog user-data directory, rejects conflicting
+profile selectors and path overrides, requires an absolute executable path,
+and skips the legacy Service State profile and browser-capability selectors.
+The active provider-free fixture passed one test, with strict workspace Clippy
+and formatting checks passing. The effectful launcher has not adopted this
+planner yet; no browser effect, ready handoff, or installed acceptance is
+claimed. P03/P05 remain violated.
 
 Version 30 starts the P03/P05 manual-seeding transfer with a SQLite reservation
 that is atomic with its operation generation and exclusive to a registered

@@ -36,12 +36,62 @@ use crate::native::webdriver::backend::{
 };
 use crate::native::webdriver::ios;
 use crate::native::webdriver::safari;
+use agent_browser_service_model::{
+    BrowserProfileCatalogEntry, BrowserProfileKind, ProfileSelectionReason,
+};
 use serde_json::{json, Map, Value};
 use std::env;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 pub(crate) fn build_cdp_free_launch_plan(
     cmd: &Value,
     effective_session: Option<&str>,
+) -> Result<CdpFreeLaunchPlan, String> {
+    build_cdp_free_launch_plan_inner(cmd, effective_session, None)
+}
+
+/// Build a manual-seeding launch from the exact named profile already reserved
+/// in Browser Runtime SQLite. This path never reads legacy Service State for
+/// profile selection and never inherits an ambient process profile.
+#[allow(dead_code)]
+pub(crate) fn build_cdp_free_launch_plan_for_sqlite_profile(
+    cmd: &Value,
+    profile: &BrowserProfileCatalogEntry,
+) -> Result<CdpFreeLaunchPlan, String> {
+    if profile.kind != BrowserProfileKind::Named
+        || profile.id.trim().is_empty()
+        || !std::path::Path::new(&profile.user_data_dir).is_absolute()
+    {
+        return Err("cdp_free_sqlite_named_profile_invalid".to_string());
+    }
+    for selector in ["runtimeProfile", "profileId"] {
+        if cmd
+            .get(selector)
+            .and_then(Value::as_str)
+            .is_some_and(|value| value != profile.id)
+        {
+            return Err(format!(
+                "cdp_free_sqlite_profile_selector_mismatch:{selector}"
+            ));
+        }
+    }
+    if cmd.get("profile").is_some() {
+        return Err("cdp_free_sqlite_profile_path_override_forbidden".to_string());
+    }
+    let executable_path = cmd
+        .get("executablePath")
+        .and_then(Value::as_str)
+        .filter(|path| std::path::Path::new(path).is_absolute())
+        .ok_or_else(|| "cdp_free_sqlite_executable_path_required".to_string())?;
+    if executable_path.trim().is_empty() {
+        return Err("cdp_free_sqlite_executable_path_required".to_string());
+    }
+    build_cdp_free_launch_plan_inner(cmd, None, Some(profile))
+}
+
+fn build_cdp_free_launch_plan_inner(
+    cmd: &Value,
+    effective_session: Option<&str>,
+    sqlite_profile: Option<&BrowserProfileCatalogEntry>,
 ) -> Result<CdpFreeLaunchPlan, String> {
     let url = optional_command_string(cmd, "url");
     if url.as_deref().is_some_and(|value| value.starts_with('-')) {
@@ -101,8 +151,12 @@ pub(crate) fn build_cdp_free_launch_plan(
             .and_then(|value| value.as_str())
             .map(str::to_string)
             .or_else(|| env::var("AGENT_BROWSER_PROXY_PASSWORD").ok()),
-        profile: launch_profile_from_sources(cmd, true),
-        runtime_profile: runtime_profile_from_sources(cmd, true),
+        profile: sqlite_profile
+            .map(|profile| profile.user_data_dir.clone())
+            .or_else(|| launch_profile_from_sources(cmd, true)),
+        runtime_profile: sqlite_profile
+            .map(|profile| profile.id.clone())
+            .or_else(|| runtime_profile_from_sources(cmd, true)),
         expected_browser_family: cmd
             .get("runtimeProfileBrowserFamily")
             .and_then(|value| value.as_str())
@@ -142,11 +196,22 @@ pub(crate) fn build_cdp_free_launch_plan(
     // CDP-free is a control-plane posture, not a request to abandon an
     // explicitly allocated remote-headed display or its operator view stream.
     let service_host = apply_launch_host_hints(&mut launch_options, cmd);
-    let selection_reason =
-        apply_service_profile_selection(&mut launch_options, cmd, effective_session)?;
-    let browser_capability_launch =
-        apply_service_browser_capability_selection(&mut launch_options, cmd);
-    super::daemon::require_stock_chrome_capability_selection(&browser_capability_launch)?;
+    let selection_reason = if sqlite_profile.is_some() {
+        Some(ProfileSelectionReason::ExplicitProfile)
+    } else {
+        apply_service_profile_selection(&mut launch_options, cmd, effective_session)?
+    };
+    let browser_capability_launch = if let Some(profile) = sqlite_profile {
+        super::daemon::BrowserCapabilityLaunchResolution::skipped(
+            "sqlite_reserved_executable_path",
+            super::daemon::browser_build_from_command(cmd),
+            Some(profile.id.clone()),
+        )
+    } else {
+        let resolution = apply_service_browser_capability_selection(&mut launch_options, cmd);
+        super::daemon::require_stock_chrome_capability_selection(&resolution)?;
+        resolution
+    };
     let mut metadata =
         ServiceLaunchMetadata::from_launch_options(&launch_options, Some(cmd), selection_reason);
     metadata.browser_capability_launch = Some(browser_capability_launch.to_value());

@@ -287,6 +287,65 @@ mod tests {
     use crate::native::browser_session_store::LegacyBrowserRuntimeSources;
 
     #[test]
+    fn sqlite_manual_seeding_plan_uses_exact_catalog_profile_without_json_selection() {
+        let profile = BrowserProfileCatalogEntry {
+            id: "work".to_string(),
+            name: "Work".to_string(),
+            user_data_dir: std::env::temp_dir()
+                .join("sqlite-manual-seeding-profile")
+                .to_string_lossy()
+                .into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let command = serde_json::json!({
+            "action": "cdp_free_launch",
+            "runtimeProfile": "work",
+            "profileId": "work",
+            "executablePath": "/opt/chrome",
+            "url": "https://example.test/login",
+        });
+        let build =
+            crate::native::action_runtime::runtime::build_cdp_free_launch_plan_for_sqlite_profile;
+        let plan = build(&command, &profile).unwrap();
+        assert_eq!(
+            plan.launch_options.profile.as_deref(),
+            Some(profile.user_data_dir.as_str())
+        );
+        assert_eq!(plan.launch_options.runtime_profile.as_deref(), Some("work"));
+        assert!(!plan.launch_options.attachable);
+        assert_eq!(plan.url.as_deref(), Some("https://example.test/login"));
+        assert_eq!(
+            plan.metadata
+                .browser_capability_launch
+                .as_ref()
+                .and_then(|value| value.get("reason")),
+            Some(&serde_json::json!("sqlite_reserved_executable_path"))
+        );
+
+        let mut mismatched = command.clone();
+        mismatched["runtimeProfile"] = serde_json::json!("other");
+        assert!(matches!(
+            build(&mismatched, &profile),
+            Err(error) if error == "cdp_free_sqlite_profile_selector_mismatch:runtimeProfile"
+        ));
+        let mut path_override = command.clone();
+        path_override["profile"] = serde_json::json!("/tmp/other");
+        assert!(matches!(
+            build(&path_override, &profile),
+            Err(error) if error == "cdp_free_sqlite_profile_path_override_forbidden"
+        ));
+        let mut no_executable = command;
+        no_executable
+            .as_object_mut()
+            .unwrap()
+            .remove("executablePath");
+        assert!(matches!(
+            build(&no_executable, &profile),
+            Err(error) if error == "cdp_free_sqlite_executable_path_required"
+        ));
+    }
+
+    #[test]
     fn manual_seeding_reservation_is_sqlite_owned_and_profile_exclusive() {
         let root = std::env::temp_dir().join(format!(
             "agent-browser-manual-seeding-sqlite-{}",
