@@ -11,8 +11,14 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 31 remains open on `platform/p211-simple-cold-upgrade`.
-The last source checkpoint is `6a240621`; it adds an explicit CDP-free launch
+Plan 0218 version 32 remains open on `platform/p211-simple-cold-upgrade`.
+The current uncommitted SQLite source candidate binds a ready keeper slot to
+manual seeding before launch and rejects ordinary browser-open reservations
+for that same slot. Its focused fixture passes both race orders, active-browser
+occupancy refusal, exact replay, and launch observation. Strict workspace
+Clippy and formatting pass through `cargo-signal`. No effectful adapter or
+ready handoff has moved from JSON; P03/P05 remain violated.
+The prior source checkpoint `6a240621` adds an explicit CDP-free launch
 planner for the reserved SQLite named profile. It rejects competing profile
 selectors, requires an absolute
 executable path, and skips the legacy JSON profile and browser-capability
@@ -98,8 +104,8 @@ gaps, and eleven unverified rows. The G40 focused test, strict workspace
 Clippy, formatting, coverage check, and selected service client checks pass;
 the full raw Cargo output is retained through `cargo-signal`. No installed
 runtime, provider, or production acceptance is claimed. The previous committed
-branch checkpoint matched its remote; the version 31 source checkpoint is
-currently local only. Use fresh Git readback, the plan, and the coverage
+branch checkpoint matched its remote; the version 32 source candidate is
+currently uncommitted. Use fresh Git readback, the plan, and the coverage
 manifest for exact evidence and
 remaining requirements.
 

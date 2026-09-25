@@ -6,14 +6,15 @@ use std::path::Path;
 use agent_browser_service_model::{
     BrowserProfileKind, RecordedProcessIdentity, RouteKeeperFence, RouteKeeperHandoffBinding,
 };
-use rusqlite::TransactionBehavior;
+use rusqlite::{Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 
 use super::{
     load_optional_document, load_route_keeper_authority_document, observe_operation_in_transaction,
     reserve_operation_in_transaction, save_document, BrowserProfileCatalog,
-    BrowserRuntimeOperation, BrowserRuntimeSqliteStore, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
-    PROFILE_CATALOG_DOCUMENT,
+    BrowserRuntimeOperation, BrowserRuntimeOperationState, BrowserRuntimeSqliteStore,
+    BrowserSessionState, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    PROFILE_CATALOG_DOCUMENT, SESSION_STATE_DOCUMENT,
 };
 
 const MANUAL_SEEDING_DOCUMENT: &str = "manual_seeding_registry";
@@ -62,7 +63,137 @@ struct ManualSeedingRegistry {
     records: BTreeMap<String, ManualSeedingRecord>,
 }
 
+pub(super) fn route_slot_reserved_by_manual_seeding(
+    connection: &Connection,
+    slot_id: &str,
+) -> Result<bool, String> {
+    let registry: ManualSeedingRegistry = load_optional_document(
+        connection,
+        MANUAL_SEEDING_DOCUMENT,
+        MANUAL_SEEDING_SCHEMA_V1,
+    )?;
+    Ok(registry.records.values().any(|record| {
+        record.state != ManualSeedingState::Closed
+            && record.route_slot_id.as_deref() == Some(slot_id)
+    }))
+}
+
 impl BrowserRuntimeSqliteStore {
+    /// Bind a currently ready keeper slot before launching a detached browser.
+    /// The same SQLite transaction rejects live browser membership, waiting
+    /// browser-open operations, and any other manual-seeding reservation for
+    /// that slot. No provider or browser effect occurs here.
+    #[allow(dead_code)]
+    pub(crate) fn bind_manual_seeding_route(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        binding: &RouteKeeperHandoffBinding,
+    ) -> Result<ManualSeedingRecord, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_route_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id || record.generation != generation {
+            return Err("manual_seeding_operation_identity_mismatch".to_string());
+        }
+        if record.state != ManualSeedingState::Reserved {
+            return Err("manual_seeding_route_state_invalid".to_string());
+        }
+        let operation = super::load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}")
+            || operation.generation != generation
+            || operation.state != BrowserRuntimeOperationState::Prepared
+            || super::load_owner_generation(&transaction, &operation.owner_key)? != generation
+        {
+            return Err("manual_seeding_route_operation_stale".to_string());
+        }
+        let authority = load_route_keeper_authority_document(&transaction)?;
+        if authority.ready_handoff_binding(&binding.slot_id, &binding.display_name)? != *binding {
+            return Err("manual_seeding_route_binding_changed".to_string());
+        }
+        let exact_replay = record.route_slot_id.as_deref() == Some(binding.slot_id.as_str())
+            && record.display_name.as_deref() == Some(binding.display_name.as_str())
+            && record.route_fence.as_ref() == Some(&binding.fence);
+        if record.route_slot_id.is_some() && !exact_replay {
+            return Err("manual_seeding_route_rebinding_forbidden".to_string());
+        }
+        if registry.records.iter().any(|(other_profile, other)| {
+            other_profile != profile_id
+                && other.state != ManualSeedingState::Closed
+                && other.route_slot_id.as_deref() == Some(binding.slot_id.as_str())
+        }) {
+            return Err("manual_seeding_route_busy".to_string());
+        }
+        let session_state: BrowserSessionState = load_optional_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        if session_state.browsers.values().any(|browser| {
+            browser
+                .desktop
+                .as_ref()
+                .is_some_and(|desktop| desktop.route_id == binding.slot_id)
+        }) {
+            return Err("manual_seeding_route_busy".to_string());
+        }
+        let mut statement = transaction
+            .prepare(
+                "SELECT request_json FROM operation_records
+                 WHERE owner_key = 'browser-runtime-open' AND state IN ('prepared', 'observed')",
+            )
+            .map_err(|error| format!("manual_seeding_route_operations_read_failed:{error}"))?;
+        let requests = statement
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("manual_seeding_route_operations_read_failed:{error}"))?;
+        for request in requests {
+            let request = request
+                .map_err(|error| format!("manual_seeding_route_operations_read_failed:{error}"))?;
+            let request: serde_json::Value = serde_json::from_str(&request)
+                .map_err(|error| format!("manual_seeding_route_operation_invalid:{error}"))?;
+            if request
+                .pointer("/intent/slot/routeId")
+                .and_then(serde_json::Value::as_str)
+                == Some(binding.slot_id.as_str())
+            {
+                return Err("manual_seeding_route_busy".to_string());
+            }
+        }
+        drop(statement);
+        if exact_replay {
+            return Ok(record.clone());
+        }
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        record.route_slot_id = Some(binding.slot_id.clone());
+        record.display_name = Some(binding.display_name.clone());
+        record.route_fence = Some(binding.fence.clone());
+        let updated = record.clone();
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_route_commit_failed:{error}"))?;
+        Ok(updated)
+    }
     /// Reserve one named profile for one seeding target in the same transaction
     /// that creates its operation generation. This performs no browser or
     /// provider effect and publishes no ready handoff.
@@ -217,6 +348,12 @@ impl BrowserRuntimeSqliteStore {
             && record.state != ManualSeedingState::LaunchObserved
         {
             return Err("manual_seeding_observation_state_invalid".to_string());
+        }
+        if record.route_slot_id.as_deref() != Some(binding.slot_id.as_str())
+            || record.display_name.as_deref() != Some(binding.display_name.as_str())
+            || record.route_fence.as_ref() != Some(&binding.fence)
+        {
+            return Err("manual_seeding_route_not_reserved".to_string());
         }
         let authority = load_route_keeper_authority_document(&transaction)?;
         let current = authority.ready_handoff_binding(&binding.slot_id, &binding.display_name)?;

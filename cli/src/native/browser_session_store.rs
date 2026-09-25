@@ -1985,6 +1985,18 @@ fn reserve_operation_in_transaction(
             "browser_runtime_operation_replay_mismatch:{operation_id}"
         ));
     }
+    if owner_key == "browser-runtime-open" {
+        if let Some(slot_id) = request
+            .pointer("/intent/slot/routeId")
+            .and_then(serde_json::Value::as_str)
+        {
+            if manual_seeding::route_slot_reserved_by_manual_seeding(connection, slot_id)? {
+                return Err(format!(
+                    "browser_runtime_open_route_reserved_by_manual_seeding:{slot_id}"
+                ));
+            }
+        }
+    }
     let current_generation = load_owner_generation(connection, owner_key)?;
     let generation = current_generation
         .checked_add(1)
@@ -4440,6 +4452,78 @@ mod tests {
             .compare_and_swap_route_keeper_authority(&expected, &authority)
             .unwrap();
         let binding = authority.ready_handoff_binding(&slot_id, ":1").unwrap();
+        let pending_open = store
+            .reserve_operation(
+                "open-before-seeding",
+                "browser-runtime-open",
+                serde_json::json!({"intent":{"slot":{"routeId":slot_id}}}),
+            )
+            .unwrap();
+        assert_eq!(
+            store.bind_manual_seeding_route("work", "seed-op", operation.generation, &binding),
+            Err("manual_seeding_route_busy".to_string())
+        );
+        store
+            .commit_operation(
+                &pending_open.operation_id,
+                pending_open.generation,
+                serde_json::json!({"cancelledBeforeEffect":true}),
+            )
+            .unwrap();
+        let mut occupied = BrowserSessionState::default();
+        occupied.browsers.insert(
+            "browser-occupied".to_string(),
+            ManagedBrowserInstance {
+                id: "browser-occupied".to_string(),
+                profile_id: "other-profile".to_string(),
+                pid: 4_000,
+                cdp_endpoint: "http://127.0.0.1:9222".to_string(),
+                process_identity: None,
+                desktop: Some(agent_browser_service_model::BrowserDesktopAssignment {
+                    route_id: slot_id.clone(),
+                    display_name: ":1".to_string(),
+                    live_browser_count: 1,
+                }),
+                active_session_ids: Vec::new(),
+            },
+        );
+        store.save_session_state(&occupied).unwrap();
+        assert_eq!(
+            store.bind_manual_seeding_route("work", "seed-op", operation.generation, &binding),
+            Err("manual_seeding_route_busy".to_string())
+        );
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        let bound = store
+            .bind_manual_seeding_route("work", "seed-op", operation.generation, &binding)
+            .unwrap();
+        assert_eq!(bound.route_slot_id.as_deref(), Some(slot_id.as_str()));
+        assert_eq!(
+            store
+                .bind_manual_seeding_route("work", "seed-op", operation.generation, &binding)
+                .unwrap(),
+            bound
+        );
+        store.save_session_state(&occupied).unwrap();
+        assert_eq!(
+            store.bind_manual_seeding_route("work", "seed-op", operation.generation, &binding),
+            Err("manual_seeding_route_busy".to_string())
+        );
+        store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        assert_eq!(
+            store.reserve_operation(
+                "open-collision",
+                "browser-runtime-open",
+                serde_json::json!({"intent":{"slot":{"routeId":slot_id}}}),
+            ),
+            Err(format!(
+                "browser_runtime_open_route_reserved_by_manual_seeding:{slot_id}"
+            ))
+        );
+        assert!(store.find_operation("open-collision").unwrap().is_none());
         let process = RecordedProcessIdentity {
             pid: 4_242,
             start_token: "linux:start:4242".to_string(),

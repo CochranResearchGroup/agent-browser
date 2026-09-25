@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 31
+Plan version: 32
 
 State: OPEN
 
@@ -848,6 +848,17 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 32 binds a ready keeper slot to the manual-seeding reservation in one
+SQLite transaction before effects. It rejects a slot held by a live manager
+browser, a pending or observed ordinary-open operation, or another seeding
+record. Ordinary browser-open reservation now rejects a slot already bound to
+manual seeding in that same SQLite authority. Replay rechecks current keeper
+and occupancy evidence, and launch observation requires the reserved slot and
+fence. The focused provider-free fixture proves both reservation orders and
+an active-browser conflict; strict workspace Clippy and formatting pass. This
+does not yet replace the JSON effect adapter or publish a ready handoff, so
+P03/P05 and installed acceptance remain open.
 
 Version 31 adds an explicit CDP-free launch planner for the reserved SQLite
 named profile. It pins the catalog user-data directory, rejects conflicting
