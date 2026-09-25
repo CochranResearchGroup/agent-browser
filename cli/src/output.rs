@@ -5703,6 +5703,8 @@ successful navigation records activity for that exact session.
 Managed navigation recovery reads Chrome's committed top frame for the exact
 target; provisional target URLs, child frames, and blank bootstrap pages do not
 become recovery history.
+An interrupted navigation to a URL already present before its effect remains
+unproven on replay and is never repeated automatically.
 Omitting a profile gives the named session a session-scoped disposable profile.
 Closing one session preserves a shared browser until its final session closes.
 

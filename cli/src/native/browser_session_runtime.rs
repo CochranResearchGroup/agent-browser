@@ -943,8 +943,9 @@ fn run_browser_worker(
                         .ok_or_else(|| "browser_session_navigation_target_missing".to_string())?;
                     // Target metadata can reflect an in-flight URL. The root
                     // frame is the committed document for this exact target;
-                    // child frames and bootstrap pages cannot become recovery
-                    // history.
+                    // child frames cannot become recovery history. The journal
+                    // may observe a blank root as a pre-effect baseline but
+                    // must not publish it as a recovery URL.
                     let frame_tree = manager
                         .client
                         .send_command_no_params("Page.getFrameTree", Some(&session_id))
@@ -971,12 +972,13 @@ fn run_browser_worker(
 }
 
 /// Return only the current committed root-frame document URL.
-/// Provisional target metadata, child frames, and bootstrap pages are not
-/// recovery URLs.
+/// Provisional target metadata and child frames are not recovery URLs. A blank
+/// root remains observable so the journal can distinguish a pre-effect
+/// bootstrap page from a later committed document.
 fn committed_top_frame_url(frame_tree: &Value) -> Option<&str> {
     let frame = frame_tree.get("frameTree")?.get("frame")?;
     let url = frame.get("url")?.as_str()?.trim();
-    if url.is_empty() || matches!(url, "about:blank" | "chrome://newtab/") {
+    if url.is_empty() {
         None
     } else {
         Some(url)
@@ -1233,7 +1235,7 @@ mod tests {
             committed_top_frame_url(&serde_json::json!({
                 "frameTree": {"frame": {"id": "root", "url": "about:blank"}}
             })),
-            None
+            Some("about:blank")
         );
         assert_eq!(
             committed_top_frame_url(&serde_json::json!({

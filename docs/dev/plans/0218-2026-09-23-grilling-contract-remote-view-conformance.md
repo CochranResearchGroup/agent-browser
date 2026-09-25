@@ -671,13 +671,17 @@ session, while G42's full product closure and P03/P05 remain open.
 The next independent G32 packet changes exact-target navigation observation
 from `Target.getTargetInfo` URL metadata to the root document returned by
 `Page.getFrameTree` for the target's attached CDP session. The parser excludes
-child frames and blank bootstrap pages. The journal therefore records a
+child frames; the journal retains blank roots only as pre-effect observations
+and excludes them from recovery history. The journal therefore records a
 current committed top-frame URL for managed navigation recovery, including a
 redirected destination when that document is current. This is a source and
 provider-free parser qualification only: operator-driven navigation event
 capture, bounded redirect history, and browser-backed CDP acceptance remain
-open. It does not alter the G42/P03/P05 ordinary-open SQLite batch defined
-below.
+open. A second G32 replay fixture demonstrates that an `issued` operation
+cannot use a URL already present before its effect as proof that the new
+navigation ran; the pre-effect root URL is retained in the journal for this
+comparison. It does not alter the G42/P03/P05 ordinary-open SQLite batch
+defined below.
 
 ## Grilling Contract Ledger
 

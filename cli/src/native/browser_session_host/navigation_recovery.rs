@@ -4,8 +4,8 @@
 //! command, repeating it can repeat a non-idempotent request.  The journal
 //! therefore records the target and an `issued` fence before executing the
 //! command. A later process may finish only when it can observe that exact
-//! target at the exact requested URL. URL equality is an observational
-//! recovery proof, not proof that the original headers were delivered, so a
+//! target at the requested URL and the pre-effect root was different. This is
+//! an observational recovery proof, not proof that the original headers were delivered, so a
 //! mismatched or unobservable issued operation is never retried.
 
 use agent_browser_service_model::{
@@ -22,6 +22,10 @@ use super::{
 
 const NAVIGATION_OWNER_KEY: &str = "browser-runtime-navigation";
 const NAVIGATION_OPERATION_SCHEMA: &str = "agent-browser.browser-navigation-operation.v1";
+
+fn recoverable_navigation_url(url: &str) -> bool {
+    !url.trim().is_empty() && !matches!(url, "about:blank" | "chrome://newtab/")
+}
 
 /// The one observation that can prove an issued navigation completed.
 ///
@@ -159,11 +163,20 @@ where
                             self.navigation_target_from_response(&response)?
                         }
                     };
+                    // Retain the committed URL that existed before issuing the
+                    // effect. A replay cannot use an unchanged requested URL
+                    // as proof that a same-URL navigation actually ran.
+                    let baseline_url = self
+                        .effects
+                        .observe_navigation_target(&target.browser, &target.tab)
+                        .ok()
+                        .filter(|observed| observed.target_id == target.tab.target_id)
+                        .map(|observed| observed.url);
                     operation = self.record_navigation_observation(
                         &operation,
                         "target_prepared",
                         &target,
-                        None,
+                        Some(json!({ "baselineUrl": baseline_url })),
                     )?;
                 }
                 BrowserRuntimeOperationState::Observed => {
@@ -180,8 +193,15 @@ where
                     match phase {
                         "target_prepared" => {
                             let target = self.navigation_target_from_observation(observation)?;
+                            let baseline_url = observation
+                                .get("response")
+                                .and_then(|response| response.get("baselineUrl"))
+                                .and_then(Value::as_str);
                             operation = self.record_navigation_observation(
-                                &operation, "issued", &target, None,
+                                &operation,
+                                "issued",
+                                &target,
+                                Some(json!({ "baselineUrl": baseline_url })),
                             )?;
                             execute_authorized = true;
                         }
@@ -220,6 +240,15 @@ where
                                 )?;
                                 execute_authorized = false;
                             } else {
+                                let baseline_url = observation
+                                    .get("response")
+                                    .and_then(|response| response.get("baselineUrl"))
+                                    .and_then(Value::as_str);
+                                if baseline_url.is_none_or(|baseline| baseline == url) {
+                                    return Err(
+                                        "browser_runtime_navigation_issued_unproven".to_string()
+                                    );
+                                }
                                 let observed = self
                                     .effects
                                     .observe_navigation_target(&target.browser, &target.tab)
@@ -227,7 +256,9 @@ where
                                         "browser_runtime_navigation_issued_observation_unavailable"
                                             .to_string()
                                     })?;
-                                if observed.target_id != target.tab.target_id || observed.url != url
+                                if observed.target_id != target.tab.target_id
+                                    || observed.url != url
+                                    || !recoverable_navigation_url(&observed.url)
                                 {
                                     return Err(
                                         "browser_runtime_navigation_issued_unproven".to_string()
@@ -260,6 +291,11 @@ where
                                 return Err(
                                     "browser_runtime_navigation_executed_target_unavailable"
                                         .to_string(),
+                                );
+                            }
+                            if !recoverable_navigation_url(&observed.url) {
+                                return Err(
+                                    "browser_runtime_navigation_committed_url_missing".to_string()
                                 );
                             }
                             let expected_base_state = self.state.clone();
@@ -884,6 +920,39 @@ mod tests {
         assert_eq!(pending.result.unwrap()["phase"], "issued");
         assert!(host.state().navigation_history.is_empty());
     }
+
+    #[test]
+    fn issued_navigation_cannot_recover_from_preexisting_identical_url() {
+        let (_directory, legacy_path, database_path) = navigation_fixture();
+        let authority = ready_keeper_authority_for_handoff();
+        let command = navigation_command("navigation-same-url-1");
+        let requested_url = required_string(&command, "url").unwrap().to_string();
+        let executes = Arc::new(AtomicUsize::new(0));
+        let target = Arc::new(Mutex::new(("target-fixture".to_string(), requested_url)));
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            BrowserSessionEffectAdapter::new(NavigationFixtureRuntime {
+                executes: executes.clone(),
+                target,
+                fail_after_effect: true,
+            }),
+            &legacy_path,
+            navigation_config(&authority),
+        )
+        .unwrap();
+        let first = host.handle_journaled_navigation_with_keeper(&command, &authority);
+        assert_eq!(first["success"], false);
+        assert_eq!(first["error"], "injected_navigation_interruption");
+        let replay = host.handle_journaled_navigation_with_keeper(&command, &authority);
+        assert_eq!(replay["success"], false);
+        assert_eq!(
+            replay["error"],
+            "browser_runtime_navigation_issued_unproven"
+        );
+        assert_eq!(executes.load(Ordering::SeqCst), 1);
+        assert!(host.state().navigation_history.is_empty());
+    }
+
     #[test]
     fn executed_navigation_requires_live_target_before_atomic_publication() {
         let (_directory, legacy_path, database_path) = navigation_fixture();

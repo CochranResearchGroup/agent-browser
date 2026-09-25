@@ -837,6 +837,8 @@ a redirect destination, is recorded in the result and history. The activity
 time is journaled after execution and reused after restart. Managed navigation
 recovery reads the exact target's committed top frame; provisional target URLs,
 child frames, and blank bootstrap pages do not become recovery history.
+If an interrupted issued navigation already had the requested URL before its
+effect, replay keeps the obligation unproven and does not repeat navigation.
 Navigation history, its handoff, and the result commit atomically. Older replay timestamps
 cannot shorten a session's recorded expiry.
 Handoff recovery rechecks current keeper readiness and exact browser/tab identity
