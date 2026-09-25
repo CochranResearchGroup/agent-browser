@@ -378,7 +378,18 @@ pub(crate) fn rolled_back_outcome(
         compatibility_error: failure.compatibility_error,
     })
 }
-pub(crate) async fn handle_remote_view_open(
+async fn handle_manual_seeding_route_open(
+    cmd: &Value,
+    state: &mut DaemonState,
+    attribution: RouteBoundOpenAttribution,
+) -> Result<Value, String> {
+    if cmd.get("manualSeeding").and_then(Value::as_bool) != Some(true) {
+        return Err("manual_seeding_route_open_requires_explicit_intent".to_string());
+    }
+    handle_route_bound_compatibility_open(cmd, state, attribution).await
+}
+
+async fn handle_route_bound_compatibility_open(
     cmd: &Value,
     state: &mut DaemonState,
     attribution: RouteBoundOpenAttribution,
@@ -462,7 +473,7 @@ pub(crate) async fn handle_service_profile_manual_seeding_acquire(
         command["remoteViewHandoffId"] =
             Value::String(format!("manual-seeding-{}", uuid::Uuid::new_v4().simple()));
     }
-    handle_remote_view_open(&command, state, attribution).await
+    handle_manual_seeding_route_open(&command, state, attribution).await
 }
 
 /// Close the exact detached manual-seeding process, release only the route

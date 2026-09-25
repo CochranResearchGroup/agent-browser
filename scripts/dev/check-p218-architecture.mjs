@@ -86,6 +86,10 @@ export function evaluate(root = defaultRoot) {
     || /complete_route_bound_handoff_open/.test(openCoordinator)) {
     add('P05', finding('ordinary_open_parallel_acquisition', 'cli/src/native/remote_view/open/coordinator.rs', 'ordinary remote-view open still reserves or finalizes a handoff outside the SQLite session operation'));
   }
+  if (/handle_service_profile_manual_seeding_acquire[\s\S]*?LockedServiceStateRepository::default_json\(\)/.test(openCoordinator)) {
+    add('P03', finding('manual_seeding_json_repository', 'cli/src/native/remote_view/open/coordinator.rs', 'manual seeding still acquires its browser and handoff through legacy JSON Service State'));
+    add('P05', finding('manual_seeding_parallel_handoff', 'cli/src/native/remote_view/open/coordinator.rs', 'manual-seeding handoff publication remains outside the SQLite authority used by durable resolution'));
+  }
   const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
   if (credentialVariables.length > 0) {
     add('P09', finding('persistent_route_credential_environment', 'cli/src/workstation_install.rs', `${new Set(credentialVariables).size} route credential environment keys remain in installation projection`));

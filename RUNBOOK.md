@@ -11,9 +11,65 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 20 remains open at local checkpoint `d309d123`. The
-provider-free SQLite host fixture proves Alice and Bob share one browser with
-separate sessions, tabs, targets, handoffs, and heartbeats; Alice-first cleanup
+Plan 0218 version 29 remains open on `platform/p211-simple-cold-upgrade`.
+The G03 importer now filters malformed active records, rejects orphaned
+sessions and tabs, and repairs browser session membership while retaining valid
+active state. Its SQLite fixture proves archive-byte preservation and replay;
+installed recovery and handoff import remain open.
+The new G03/G05 source cut imports valid active sessions while filtering
+malformed or conflicting legacy history rows into typed migration rejects. Its
+focused fixture passes through `cargo-signal`; installed cold migration and the
+remaining source classes are unverified. The original legacy source remains in
+the read-only migration archive. P03/P05 manual-seeding JSON authority remains
+open.
+The current G42/P03/P05 source candidate is uncommitted and has no installed
+acceptance. Ordinary `remote_view_open` is routed toward the SQLite manager
+journal for the default RDP request; URL navigation, disposable-profile
+intent, process-bound visibility proof, and exact failure observations were
+added. JSON-only handoff resolution is rejected. The read-only dry-run
+projection now uses SQLite manager state and live keeper status; the CLI no
+longer injects the legacy route-pool environment. The legacy JSON manual-seeding
+and route code still compiles, advanced effectful open options currently fail closed,
+and P03/P05 remain violated. Do not publish this candidate as a completed
+remote-view feature. The preceding committed checkpoint is `2065265b`.
+Eight focused journal tests and the ordinary-open adapter fixture pass through
+`cargo-signal`, including a crash after the navigation issue fence. The
+broader `remote_view_open` filter passes 18 retained focused cases after the
+obsolete JSON route-pool dry-run fixtures were removed. The SQLite dry-run
+store fixture passes with its legacy JSON source removed. Strict workspace
+Clippy, formatting, the coverage validator, the architecture-detector self-test,
+and the no-launch route-confusion gate pass on this candidate. Its dashboard
+fixture now expects the current projection without stored viewer counts. The
+selected live CDP tab-streaming smoke failed during daemon startup while Cargo
+admission reported memory pressure; it needs an isolated rerun. The P03/P05
+detector now reports the manual-seeding JSON path and its mismatch with
+SQLite-only durable handoff resolution explicitly.
+A disposable-home daemon-router dry-run fixture passes after deleting the
+legacy Service State source; it reads the SQLite profile catalog and publishes
+no handoff. Effectful open, manual seeding, and installed acceptance remain open.
+The effectful ordinary-open adapter now rejects an unknown named profile or
+missing default disposable policy from the SQLite catalog before presentation
+admission. The disposable-home router fixture confirms the unknown profile
+creates neither a queue entry nor a handoff after legacy JSON removal. Focused
+Rust, strict Clippy, formatting, remote-view docs checks, and the docs build
+pass. The remaining legacy route instructions across the user-facing docs still
+need reconciliation before publication.
+The ordinary remote-view adapter now carries positive `jobTimeoutMs` into its
+SQLite presentation queue admission. The two focused adapter and deadline
+fixtures, strict Clippy, final formatting, remote-view documentation check,
+and docs build pass. The full effectful path remains unqualified.
+The CLI now rejects explicit route and display selectors before dispatch,
+including a global display-isolation choice. Focused `remote_view_open` Rust
+tests pass all 18 cases, including a replacement parser rejection fixture.
+The main help, README, agent skill, and remote-view docs show the ordinary
+SQLite-managed command. Legacy service guidance elsewhere still needs an
+audit, and the P03/P05 manual-seeding JSON path remains open. Strict Clippy,
+formatting, route-confusion gates, the remote-view documentation check, and the
+docs build pass for this cut.
+
+At that checkpoint, the provider-free SQLite host fixture proves Alice and
+Bob share one browser with separate sessions, tabs, targets, handoffs, and
+heartbeats; Alice-first cleanup
 preserves Bob and final-session cleanup closes the browser. Session or tab
 closure terminalizes its exact handoff in the same SQLite transaction. A new
 G40 SQLite restart fixture proves waiting work becomes retryable and runs only

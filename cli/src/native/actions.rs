@@ -116,10 +116,10 @@ use super::recording::{
     handle_video_start, handle_video_stop,
 };
 use super::remote_view::open::{
-    handle_remote_view_open, handle_service_profile_manual_seeding_acquire,
-    handle_service_profile_manual_seeding_close, handle_service_remote_view_browser_reattach,
-    handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
-    handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
+    handle_service_profile_manual_seeding_acquire, handle_service_profile_manual_seeding_close,
+    handle_service_remote_view_browser_reattach, handle_service_remote_view_handoff_resolve,
+    handle_service_remote_view_route_checkout, handle_service_remote_view_route_preflight,
+    handle_service_remote_view_route_release,
     route_bound_open_attribution_from_authenticated_dispatch,
 };
 use super::service_access::{
@@ -850,8 +850,7 @@ async fn execute_command_after_navigation_admission(
             "view_focus" => handle_view_focus(cmd, state).await,
             "view_takeover" => handle_view_takeover(cmd, state).await,
             "remote_view_open" => {
-                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-                handle_remote_view_open(cmd, state, attribution).await
+                Err("remote_view_open_requires_sqlite_session_host".to_string())
             }
             "service_profile_manual_seeding_acquire" => {
                 let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);

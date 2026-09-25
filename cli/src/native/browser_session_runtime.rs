@@ -99,6 +99,23 @@ pub(crate) trait BrowserRuntimeDriver {
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String>;
 
+    /// Prove the exact browser process owns a visible, unobscured window on
+    /// its keeper-assigned display before a ready remote handoff is published.
+    fn observe_visible_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Value, String> {
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or_else(|| "browser_session_presentation_desktop_missing".to_string())?;
+        super::remote_view::operator_visible_browser_window_proof_for_process(
+            &desktop.route_id,
+            &desktop.display_name,
+            browser.pid,
+        )
+    }
+
     fn observe_navigation_target(
         &mut self,
         _browser: &ManagedBrowserInstance,
@@ -166,6 +183,22 @@ pub(crate) trait ManagedBrowserCommandEffects {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String>;
+}
+
+pub(crate) trait ManagerPresentationProofEffects {
+    fn observe_visible_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Value, String>;
+}
+
+impl<D: BrowserRuntimeDriver> ManagerPresentationProofEffects for BrowserSessionEffectAdapter<D> {
+    fn observe_visible_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Value, String> {
+        self.runtime.observe_visible_browser(browser)
+    }
 }
 
 impl<D: BrowserRuntimeDriver> NavigationTargetObservationEffects

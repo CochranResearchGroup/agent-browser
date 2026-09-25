@@ -543,6 +543,9 @@ profile creates a session-scoped disposable profile. The ordinary path selects
 a current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, capability, or
 recovery-token input.
+An ordinary `remote-view open` with an unknown named profile or missing default
+disposable policy returns a SQLite catalog error before waiting for presentation
+capacity.
 For commands routed through an active managed session, success refreshes only
 that session's heartbeat. A failed command retains any newly attributed tab
 for cleanup without extending the session.
@@ -555,6 +558,11 @@ proved for it. The ordinary path attempts a fresh lane and reports a concrete
 process, profile-lock, or capacity failure if the physical resource is actually
 unavailable. Preserve exact uncertain resources from cleanup; do not run lease
 repair merely to make this ordinary open admissible.
+
+Cold migration retains valid active sessions despite malformed sibling active
+or history rows. It rejects orphaned sessions and tabs and repairs browser
+session membership. Inspect typed rejects and the unchanged read-only source
+archive when a row is omitted.
 
 On host restart, configured route keepers recover retained routes only after
 proving their earlier host processes exited. Interrupted adoption also requires
@@ -695,36 +703,27 @@ working routes. After correcting the cause, repeat an explicit
 are allowed across restarts. Desired minimum and warm targets remain visible
 while capacity is growing; settings acceptance does not prove route readiness.
 
-Use the route-bound `remote-view open` command only when a service client needs
-its advanced compatibility surface. It can select a concrete route-pool entry
-or route descriptor, bind launch to that route display, open the requested tab,
-and check visible browser-window evidence:
+Use `remote-view open` for an ordinary Browser Session Manager handoff:
 
 ```bash
-agent-browser remote-view open <url> --runtime-profile <profile> --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000
+agent-browser --json --session facebook-review remote-view open https://www.facebook.com/ \
+  --runtime-profile last30days-facebook
 ```
 
-Use `--job-timeout-ms <ms>` when a route-bound durable-profile launch can
-legitimately exceed the daemon's default service-job timeout. It applies only
-to that open request and must be a positive integer; it does not reconfigure
-the daemon-wide `--service-job-timeout` policy.
+The runtime selects a current ready SQLite-backed provider route. The caller
+selects a logical session and, optionally, an exact registered named profile.
+Omitting the profile uses the default session-scoped disposable policy. An
+unknown profile or missing default policy fails before presentation admission.
+Global flags may appear before or after the command. `--session-name` can
+select a logical name distinct from the daemon lane chosen by `--session`.
 
-For a security-sensitive Google profile that was seeded in ordinary non-CDP
-Chrome and then closed normally, add `--manual-login-launch`. The resulting
-Route B browser remains service-owned and CDP-ready, but Chrome uses the same
-minimal headed flag posture as `runtime login --attachable`. This flag does
-not automate authentication and must use the exact seeded profile and browser
-build. Software clients use top-level `manualLoginLaunch: true` on
-`remote_view_open`; headless requests fail closed.
-
-Global flags may appear before or after a command. On the ordinary path, use
-`--session` for the Browser Session Manager session and `--runtime-profile`
-for the exact named profile. Use `--session-name` only for legacy saved browser
-state. For a Facebook-style operator handoff, use:
-
-```bash
-agent-browser --json --session facebook-review --runtime-profile last30days-facebook open https://www.facebook.com/
-```
+A positive `--job-timeout-ms <ms>` sets this open request's presentation queue
+wait deadline; otherwise the live runtime setting applies. `--dry-run` reads
+SQLite manager and keeper status without launching Chrome, reserving capacity,
+or issuing a handoff. The CLI rejects explicit route and display selectors
+before daemon dispatch. The current ordinary SQLite adapter rejects
+browser-build and manual-login options and caller-attribution labels. Manual
+seeding remains a separate service action.
 
 Successful responses include final post-checkout `operatorVisible`; require
 `operatorVisible.state=ready` before claiming the handoff is visible to the

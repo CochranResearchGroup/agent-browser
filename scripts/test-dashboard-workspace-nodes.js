@@ -1450,12 +1450,12 @@ assert.equal(control.viewStream?.controllable, true);
 assert.equal(control.viewStream?.routeId, 'route-control');
 assert.equal(control.viewStream?.displayAllocationId, 'display-control');
 assert.equal(control.viewStream?.providerMode, 'simultaneous_view');
-assert.deepEqual(control.viewStream?.viewerLeaseIds, ['viewer-control-observer']);
+assert.equal(control.viewStream?.viewerLeaseIds, undefined);
 assert.equal(control.viewStream?.controllerLeaseId, 'viewer-control-controller');
 assert.equal(control.viewStream?.operatorVisibleState, 'ready');
 assert.equal(control.viewStream?.operatorVisibleReason, null);
 assert.equal(control.routeBoundOwnership?.state, 'finalized');
-assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ 1 viewer, controller leased \/ ready/);
+assert.match(control.viewStream?.routeSummary ?? '', /route-control \/ display display-control \/ simultaneous view \/ controller fenced \/ ready/);
 assert.match(control.secondaryLabel, /route-control \/ display display-control/);
 assert.equal(control.profileActionability?.recommendedAction, 'takeOverViewer');
 assert.equal(control.profileActionability?.enabled, true);
@@ -1474,9 +1474,9 @@ assert.equal(privatePreferred.viewStream?.routeSource, 'pool');
 
 missingId(nodes, 'browser:session:dashboard-local-viewer-plan0016');
 assert.equal(privatePreferred.viewStream?.providerMode, 'simultaneous_view');
-assert.deepEqual(privatePreferred.viewStream?.viewerLeaseIds, ['viewer-private-a', 'viewer-private-b']);
+assert.equal(privatePreferred.viewStream?.viewerLeaseIds, undefined);
 assert.equal(privatePreferred.viewStream?.operatorVisibleState, 'ready');
-assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ 2 viewers \/ ready/);
+assert.match(privatePreferred.viewStream?.routeSummary ?? '', /route-private \/ display display-private-a \/ simultaneous view \/ no controller \/ ready/);
 
 const odolloUps = byId(nodes, 'browser:session:odollo-carrier-ups');
 assert.equal(odolloUps.group, 'active');

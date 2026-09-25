@@ -45,6 +45,8 @@ binding and its verified desktop. You do not choose a route, display, lease, tra
 digest, hash, capability, or recovery token. A successful response includes a
 durable opaque <code>handoffUrl</code> and
 <code>operatorVisible.state=ready</code>.
+An unknown named profile or missing default disposable policy returns a SQLite
+catalog error before the open waits for presentation capacity.
 
 Historical session, owner-generation, and cleanup-obligation records do not
 reserve an explicitly selected shared-local profile when no current process is
@@ -52,6 +54,11 @@ proved for it. The ordinary path attempts a fresh lane and reports a concrete
 process, profile-lock, or capacity failure if the physical resource is actually
 unavailable. It preserves exact uncertain resources instead of reclaiming them
 to make the request succeed.
+
+Cold migration retains valid active sessions when sibling active or history
+rows are malformed. It rejects orphaned sessions and tabs, repairs browser
+session membership, records typed diagnostics, and archives the unchanged
+source read-only.
 
 The selected route must provide `publicOperatorUrl` for the authenticated
 dashboard origin. If it is absent, the open has no durable handoff URL. Agent
@@ -76,6 +83,9 @@ and navigation wait within the configured request deadline while recovery is
 pending, then recheck readiness before browser effects. Manager handoff
 resolution also rechecks this evidence before focusing a browser. The older
 `presentationCapacity` projection remains a separate compatibility surface.
+For `remote-view open`, a positive `--job-timeout-ms` sets that request's
+presentation queue wait deadline. With no override, the live SQLite request
+deadline setting applies.
 
 When present, `presentationKeeper.allocation` reports `state`, `browserCount`,
 `occupiedDisplayCount`, `maximumDisplays`, and
@@ -311,30 +321,28 @@ Observer-lease acknowledgement preserves the current embedded desktop frame,
 including a frame that is still connecting. Use **Reload view** under Advanced
 connection controls for an explicit reload.
 
-## Use the advanced route-bound command
+## Open an ordinary managed handoff
 
-Use <code>remote-view open</code> when a service client needs the explicit
-route-bound compatibility surface. Ordinary users can use the simpler command
-above. Follow these steps for an advanced route-bound handoff:
+Use <code>remote-view open</code> for an ordinary Browser Session Manager
+operator handoff. The runtime selects a current ready provider route. Select a
+logical session and an optional registered named profile:
 
-1. Open the route-bound browser:
+```bash
+agent-browser --json --session alice remote-view open https://example.com/secure \
+  --runtime-profile operator-review
+```
 
-   ```bash
-   agent-browser --json remote-view open https://example.com/secure \
-     --runtime-profile operator-review \
-     --browser-build stealthcdp_chromium \
-     --view-stream-provider rdp_gateway
-   ```
+An unknown named profile or missing default disposable policy fails before
+presentation admission. Use `--dry-run` for a read-only SQLite manager and
+keeper plan; it does not launch Chrome, reserve capacity, or issue a handoff.
+A positive `--job-timeout-ms` sets this request's presentation queue deadline.
+The CLI rejects explicit route and display selectors before daemon dispatch.
+The current ordinary SQLite adapter rejects browser-build, manual-login, and
+caller-attribution selectors.
 
-2. Require `operatorVisible.state` to equal `ready`. A URL without this proof
-   does not prove that the requested browser and tab are visible.
-
-3. Copy `handoffUrl`. Its path is `/remote-view/<handoff-id>`.
-
-4. Give that URL to the operator. The operator signs in to the dashboard when
-   prompted and then continues through the same URL.
-
-5. Save the same URL for reconnection. Do not save the current provider route.
+Require `operatorVisible.state=ready` in an effectful response. Give the
+operator only `handoffUrl` under `/remote-view/<handoff-id>` and reuse the same
+URL for reconnection. Provider and Guacamole URLs can change during recovery.
 
 ## Request a handoff from software
 

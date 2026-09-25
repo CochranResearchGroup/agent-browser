@@ -151,6 +151,18 @@ impl PresentationAdmissionRequest {
         } else {
             PresentationRequestPriority::NewOpen
         };
+        // A caller's positive job timeout sets this request's queue wait budget.
+        // Without it, the live SQLite runtime configuration supplies the limit.
+        let request_deadline_ms = command
+            .get("jobTimeoutMs")
+            .map(|value| {
+                value
+                    .as_u64()
+                    .filter(|timeout| *timeout > 0)
+                    .ok_or_else(|| "presentation_queue_job_timeout_invalid".to_string())
+            })
+            .transpose()?
+            .unwrap_or(config.request_deadline_ms);
         let entry = store.mutate_presentation_queue(|queue| {
             queue.advance_generation(generation)?;
             if let Some(expected) = queue.entries.get(&key).cloned() {
@@ -167,7 +179,7 @@ impl PresentationAdmissionRequest {
                         &expected,
                         generation,
                         now,
-                        now.saturating_add(config.request_deadline_ms),
+                        now.saturating_add(request_deadline_ms),
                         config.maximum_queue_depth as usize,
                     )?;
                     if !journal_requires_recovery {
@@ -182,7 +194,7 @@ impl PresentationAdmissionRequest {
                 fingerprint,
                 priority,
                 now,
-                now.saturating_add(config.request_deadline_ms),
+                now.saturating_add(request_deadline_ms),
                 config.maximum_queue_depth as usize,
             )
         })?;
@@ -445,6 +457,43 @@ mod tests {
             .mutate_presentation_queue(|queue| queue.advance_generation(2))
             .unwrap();
         path
+    }
+
+    #[test]
+    fn sqlite_admission_uses_request_job_timeout_for_wait_deadline() {
+        let fixture = Fixture::new();
+        let now = 1_700_000_000_000;
+        let request = PresentationAdmissionRequest::enqueue_at(
+            fixture.0.join("runtime.sqlite3"),
+            &serde_json::json!({
+                "id": "long-open",
+                "action": "browser_session_open",
+                "profileId": "fixture",
+                "jobTimeoutMs": 120_000
+            }),
+            1,
+            false,
+            now,
+        )
+        .unwrap();
+        assert_eq!(request.deadline_at_ms, now + 120_000);
+        assert_eq!(
+            PresentationAdmissionRequest::enqueue_at(
+                fixture.0.join("runtime.sqlite3"),
+                &serde_json::json!({
+                    "id": "invalid-timeout",
+                    "action": "browser_session_open",
+                    "profileId": "fixture",
+                    "jobTimeoutMs": 0
+                }),
+                1,
+                false,
+                now,
+            )
+            .err()
+            .as_deref(),
+            Some("presentation_queue_job_timeout_invalid")
+        );
     }
 
     #[test]

@@ -6,13 +6,15 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
-    BrowserTabEndReason, PresentationRequestQueue, PresentationRequestState,
-    PresentationScaleInState, RemoteViewHandoff, RouteKeeperAuthority,
+    BrowserNavigationRecord, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
+    BrowserSessionState, BrowserTabEndReason, ManagedBrowserInstance, ManagedBrowserSession,
+    ManagedBrowserTab, ManagedDisposableProfile, PresentationRequestQueue,
+    PresentationRequestState, PresentationScaleInState, RemoteViewHandoff, RouteKeeperAuthority,
     RouteKeeperConnectionCatalog, RouteKeeperReconcileAction, SessionEndReason,
-    BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    TerminalBrowserSession, TerminalBrowserTab, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+    BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -271,33 +273,13 @@ impl BrowserRuntimeSqliteStore {
         };
         let mut rejections = Vec::new();
         let mut session_imported = false;
-        let session_state: BrowserSessionState =
-            match serde_json::from_slice::<BrowserSessionState>(&session_raw) {
-                Ok(state) if state.schema_version == BROWSER_SESSION_STATE_SCHEMA_V1 => {
-                    session_imported = session_source.is_some();
-                    state
-                }
-                Ok(state) => {
-                    if session_source.is_some() {
-                        rejections.push(BrowserRuntimeMigrationRejection {
-                            source_path: sources.session_state_path.to_path_buf(),
-                            code: "legacy_session_schema_unsupported",
-                            detail: state.schema_version,
-                        });
-                    }
-                    BrowserSessionState::default()
-                }
-                Err(error) => {
-                    if session_source.is_some() {
-                        rejections.push(BrowserRuntimeMigrationRejection {
-                            source_path: sources.session_state_path.to_path_buf(),
-                            code: "legacy_session_invalid",
-                            detail: error.to_string(),
-                        });
-                    }
-                    BrowserSessionState::default()
-                }
-            };
+        let session_state = import_legacy_session_state(
+            sources.session_state_path,
+            &session_raw,
+            session_source.is_some(),
+            &mut session_imported,
+            &mut rejections,
+        );
 
         let service_source = read_optional_source(sources.service_state_path)?;
         let service_raw = service_source.clone().unwrap_or_else(|| b"{}".to_vec());
@@ -2200,6 +2182,270 @@ fn read_optional_source(path: &Path) -> Result<Option<Vec<u8>>, String> {
     }
 }
 
+/// Import valid active and history records independently. The unchanged source
+/// is archived with typed reject records; rejected history never becomes a
+/// live admission or handoff-close signal.
+fn import_legacy_session_state(
+    source_path: &Path,
+    raw: &[u8],
+    source_present: bool,
+    imported: &mut bool,
+    rejections: &mut Vec<BrowserRuntimeMigrationRejection>,
+) -> BrowserSessionState {
+    let mut document: serde_json::Value = match serde_json::from_slice(raw) {
+        Ok(document) => document,
+        Err(error) => {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code: "legacy_session_invalid",
+                    detail: error.to_string(),
+                });
+            }
+            return BrowserSessionState::default();
+        }
+    };
+    let Some(object) = document.as_object_mut() else {
+        if source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_session_invalid",
+                detail: "session document is not an object".to_string(),
+            });
+        }
+        return BrowserSessionState::default();
+    };
+    for (key, code) in [
+        ("browsers", "legacy_browser_entry_invalid"),
+        ("sessions", "legacy_active_session_entry_invalid"),
+        ("tabs", "legacy_active_tab_entry_invalid"),
+        (
+            "disposableProfiles",
+            "legacy_disposable_profile_entry_invalid",
+        ),
+    ] {
+        let Some(rows) = object.get_mut(key) else {
+            continue;
+        };
+        let Some(entries) = rows.as_object() else {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code,
+                    detail: format!("{key} is not an object"),
+                });
+            }
+            *rows = serde_json::json!({});
+            continue;
+        };
+        let mut retained = serde_json::Map::new();
+        for (id, entry) in entries {
+            let valid = match key {
+                "browsers" => serde_json::from_value::<ManagedBrowserInstance>(entry.clone())
+                    .is_ok_and(|browser| browser.id == *id && !browser.profile_id.is_empty()),
+                "sessions" => serde_json::from_value::<ManagedBrowserSession>(entry.clone())
+                    .is_ok_and(|session| {
+                        session.id == *id
+                            && !session.name.is_empty()
+                            && !session.profile_id.is_empty()
+                            && !session.browser_id.is_empty()
+                    }),
+                "tabs" => {
+                    serde_json::from_value::<ManagedBrowserTab>(entry.clone()).is_ok_and(|tab| {
+                        tab.id == *id
+                            && !tab.target_id.is_empty()
+                            && !tab.browser_id.is_empty()
+                            && !tab.session_id.is_empty()
+                    })
+                }
+                _ => serde_json::from_value::<ManagedDisposableProfile>(entry.clone())
+                    .is_ok_and(|profile| profile.profile.id == *id),
+            };
+            if valid {
+                retained.insert(id.clone(), entry.clone());
+            } else if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code,
+                    detail: format!("{key}[{id}] has an invalid record or key mismatch"),
+                });
+            }
+        }
+        *rows = serde_json::Value::Object(retained);
+    }
+    for (key, code) in [
+        ("sessionHistory", "legacy_session_history_entry_invalid"),
+        ("tabHistory", "legacy_tab_history_entry_invalid"),
+        (
+            "navigationHistory",
+            "legacy_navigation_history_entry_invalid",
+        ),
+    ] {
+        let Some(history) = object.get_mut(key) else {
+            continue;
+        };
+        let Some(entries) = history.as_array() else {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code,
+                    detail: format!("{key} is not an array"),
+                });
+            }
+            *history = serde_json::json!([]);
+            continue;
+        };
+        let mut retained = Vec::with_capacity(entries.len());
+        for (index, entry) in entries.iter().enumerate() {
+            let valid = match key {
+                "sessionHistory" => {
+                    serde_json::from_value::<TerminalBrowserSession>(entry.clone()).is_ok()
+                }
+                "tabHistory" => serde_json::from_value::<TerminalBrowserTab>(entry.clone()).is_ok(),
+                _ => serde_json::from_value::<BrowserNavigationRecord>(entry.clone()).is_ok(),
+            };
+            if valid {
+                retained.push(entry.clone());
+            } else if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code,
+                    detail: format!("{key}[{index}] has an invalid record"),
+                });
+            }
+        }
+        *history = serde_json::Value::Array(retained);
+    }
+    let mut state: BrowserSessionState = match serde_json::from_value(document) {
+        Ok(state) => state,
+        Err(error) => {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code: "legacy_session_invalid",
+                    detail: error.to_string(),
+                });
+            }
+            return BrowserSessionState::default();
+        }
+    };
+    if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+        if source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_session_schema_unsupported",
+                detail: state.schema_version,
+            });
+        }
+        return BrowserSessionState::default();
+    }
+    state.sessions.retain(|id, session| {
+        let valid = state
+            .browsers
+            .get(&session.browser_id)
+            .is_some_and(|browser| {
+                browser.profile_id == session.profile_id && browser.id == session.browser_id
+            });
+        if !valid && source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_active_session_browser_conflict",
+                detail: format!("session {id} has no matching browser and profile"),
+            });
+        }
+        valid
+    });
+    state.tabs.retain(|id, tab| {
+        let valid = state.sessions.get(&tab.session_id).is_some_and(|session| {
+            session.browser_id == tab.browser_id && state.browsers.contains_key(&tab.browser_id)
+        });
+        if !valid && source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_active_tab_session_conflict",
+                detail: format!("tab {id} has no matching active session and browser"),
+            });
+        }
+        valid
+    });
+    for session in state.sessions.values_mut() {
+        if session.current_tab_id.as_deref().is_some_and(|tab_id| {
+            state
+                .tabs
+                .get(tab_id)
+                .is_none_or(|tab| tab.session_id != session.id)
+        }) {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code: "legacy_active_session_tab_conflict",
+                    detail: format!("session {} has no matching current tab", session.id),
+                });
+            }
+            session.current_tab_id = None;
+        }
+    }
+    for browser in state.browsers.values_mut() {
+        let expected = state
+            .sessions
+            .values()
+            .filter(|session| session.browser_id == browser.id)
+            .map(|session| session.id.clone())
+            .collect::<Vec<_>>();
+        let actual_ids = browser.active_session_ids.iter().collect::<BTreeSet<_>>();
+        let expected_ids = expected.iter().collect::<BTreeSet<_>>();
+        if actual_ids != expected_ids || browser.active_session_ids.len() != expected.len() {
+            if source_present {
+                rejections.push(BrowserRuntimeMigrationRejection {
+                    source_path: source_path.to_path_buf(),
+                    code: "legacy_browser_session_membership_repaired",
+                    detail: format!("browser {} active session membership changed", browser.id),
+                });
+            }
+            browser.active_session_ids = expected;
+        }
+    }
+    let mut session_counts = BTreeMap::<String, usize>::new();
+    for ended in &state.session_history {
+        *session_counts.entry(ended.id.clone()).or_default() += 1;
+    }
+    state.session_history.retain(|ended| {
+        let valid =
+            !state.sessions.contains_key(&ended.id) && session_counts.get(&ended.id) == Some(&1);
+        if !valid && source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_session_history_conflict",
+                detail: format!(
+                    "history identity {} conflicts with active or repeated state",
+                    ended.id
+                ),
+            });
+        }
+        valid
+    });
+    let mut tab_counts = BTreeMap::<String, usize>::new();
+    for ended in &state.tab_history {
+        *tab_counts.entry(ended.id.clone()).or_default() += 1;
+    }
+    state.tab_history.retain(|ended| {
+        let valid = !state.tabs.contains_key(&ended.id) && tab_counts.get(&ended.id) == Some(&1);
+        if !valid && source_present {
+            rejections.push(BrowserRuntimeMigrationRejection {
+                source_path: source_path.to_path_buf(),
+                code: "legacy_tab_history_conflict",
+                detail: format!(
+                    "history identity {} conflicts with active or repeated state",
+                    ended.id
+                ),
+            });
+        }
+        valid
+    });
+    *imported = source_present;
+    state
+}
+
 fn import_legacy_profiles(
     service_state_path: &Path,
     service_raw: &[u8],
@@ -2405,6 +2651,93 @@ mod tests {
         RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
     };
 
+    #[test]
+    fn legacy_history_rejects_bad_rows_without_dropping_active_session() {
+        let mut state = BrowserSessionState::default();
+        state.browsers.insert(
+            "browser-a".to_string(),
+            ManagedBrowserInstance {
+                id: "browser-a".to_string(),
+                profile_id: "work".to_string(),
+                pid: 4_242,
+                cdp_endpoint: "http://127.0.0.1:4242".to_string(),
+                process_identity: None,
+                desktop: None,
+                active_session_ids: vec!["session-a".to_string()],
+            },
+        );
+        state.sessions.insert(
+            "session-a".to_string(),
+            agent_browser_service_model::ManagedBrowserSession {
+                id: "session-a".to_string(),
+                name: "alice".to_string(),
+                profile_id: "work".to_string(),
+                browser_id: "browser-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: u64::MAX,
+                current_tab_id: None,
+                handoff_ids: Vec::new(),
+            },
+        );
+        state.session_history.push(TerminalBrowserSession {
+            id: "session-a".to_string(),
+            name: "alice".to_string(),
+            profile_id: "work".to_string(),
+            browser_id: "browser-a".to_string(),
+            created_at_ms: 1,
+            last_activity_at_ms: 2,
+            ended_at_ms: 3,
+            reason: SessionEndReason::ExplicitClose,
+        });
+        state.navigation_history.push(BrowserNavigationRecord {
+            profile_id: "work".to_string(),
+            session_id: "session-a".to_string(),
+            browser_id: "browser-a".to_string(),
+            tab_id: "tab-a".to_string(),
+            target_id: "target-a".to_string(),
+            url: "https://example.test/".to_string(),
+            visited_at_ms: 4,
+        });
+        let mut source = serde_json::to_value(state).unwrap();
+        source["sessionHistory"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"id":"bad"}));
+        source["tabHistory"] = serde_json::json!("malformed");
+        source["navigationHistory"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({"url":2}));
+        let mut imported = false;
+        let mut rejections = Vec::new();
+        let restored = import_legacy_session_state(
+            Path::new("/tmp/legacy-browser-session-state.json"),
+            serde_json::to_vec(&source).unwrap().as_slice(),
+            true,
+            &mut imported,
+            &mut rejections,
+        );
+        assert!(imported);
+        assert_eq!(restored.sessions["session-a"].name, "alice");
+        assert!(restored.session_history.is_empty());
+        assert!(restored.tab_history.is_empty());
+        assert_eq!(restored.navigation_history.len(), 1);
+        let codes = rejections
+            .iter()
+            .map(|row| row.code)
+            .collect::<BTreeSet<_>>();
+        assert_eq!(
+            codes,
+            BTreeSet::from([
+                "legacy_session_history_entry_invalid",
+                "legacy_session_history_conflict",
+                "legacy_tab_history_entry_invalid",
+                "legacy_navigation_history_entry_invalid",
+            ])
+        );
+    }
+
     fn route_keeper_host_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
         RouteKeeperHostProcessClaim {
             host_generation,
@@ -2561,12 +2894,70 @@ mod tests {
 
         let mut session_state = BrowserSessionState::default();
         session_state.next_session_sequence = 42;
-        write_private_json_atomic(&session_path, &session_state).unwrap();
+        session_state.browsers.insert(
+            "browser-a".to_string(),
+            ManagedBrowserInstance {
+                id: "browser-a".to_string(),
+                profile_id: "work".to_string(),
+                pid: 4_242,
+                cdp_endpoint: "http://127.0.0.1:4242".to_string(),
+                process_identity: None,
+                desktop: None,
+                active_session_ids: vec!["session-a".to_string()],
+            },
+        );
+        session_state.sessions.insert(
+            "session-a".to_string(),
+            ManagedBrowserSession {
+                id: "session-a".to_string(),
+                name: "alice".to_string(),
+                profile_id: "work".to_string(),
+                browser_id: "browser-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: u64::MAX,
+                current_tab_id: None,
+                handoff_ids: Vec::new(),
+            },
+        );
+        let mut session_source = serde_json::to_value(&session_state).unwrap();
+        session_source["sessions"]["broken"] = serde_json::json!({"id":"broken"});
+        session_source["sessions"]["orphan"] = serde_json::json!({
+            "id": "orphan",
+            "name": "orphan",
+            "profileId": "work",
+            "browserId": "missing-browser",
+            "createdAtMs": 1,
+            "lastActivityAtMs": 2,
+            "expiresAtMs": u64::MAX,
+            "currentTabId": null
+        });
+        session_source["tabs"]["orphan-tab"] = serde_json::json!({
+            "id": "orphan-tab",
+            "targetId": "target-orphan",
+            "browserId": "missing-browser",
+            "sessionId": "orphan",
+            "createdAtMs": 1,
+            "lastActivityAtMs": 2
+        });
+        session_source["browsers"]["browser-a"]["activeSessionIds"] =
+            serde_json::json!(["session-a", "orphan"]);
+        session_source["browsers"]["bad-key"] =
+            serde_json::json!({"id":"other","profileId":"work"});
+        let session_raw = serde_json::to_vec(&session_source).unwrap();
+        fs::write(&session_path, &session_raw).unwrap();
         fs::write(
             &catalog_path,
             serde_json::json!({
                 "schemaVersion": BROWSER_PROFILE_CATALOG_SCHEMA_V1,
-                "profiles": {},
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": "/managed/work",
+                        "kind": "named"
+                    }
+                },
                 "disposablePolicies": {}
             })
             .to_string(),
@@ -2589,6 +2980,17 @@ mod tests {
         .unwrap();
 
         assert_eq!(migration.imported_source_count, 2);
+        assert_eq!(migration.rejected_record_count, 5);
+        assert_eq!(
+            migration.rejection_codes,
+            vec![
+                "legacy_active_session_browser_conflict",
+                "legacy_active_session_entry_invalid",
+                "legacy_active_tab_session_conflict",
+                "legacy_browser_entry_invalid",
+                "legacy_browser_session_membership_repaired"
+            ]
+        );
         assert!(migration.archive_directory.is_dir());
         assert!(migration
             .archive_directory
@@ -2599,6 +3001,15 @@ mod tests {
             .join(BROWSER_PROFILE_CATALOG_FILENAME)
             .is_file());
         assert!(migration.archive_directory.join("state.json").is_file());
+        assert_eq!(
+            fs::read(
+                migration
+                    .archive_directory
+                    .join(BROWSER_SESSION_STATE_FILENAME)
+            )
+            .unwrap(),
+            session_raw
+        );
         assert!(fs::read_dir(&service_directory).unwrap().all(|entry| {
             !entry
                 .unwrap()
@@ -2622,6 +3033,24 @@ mod tests {
         assert_eq!(
             store.load_session_state().unwrap().next_session_sequence,
             42
+        );
+        assert_eq!(
+            store.load_session_state().unwrap().sessions["session-a"].name,
+            "alice"
+        );
+        assert!(!store
+            .load_session_state()
+            .unwrap()
+            .sessions
+            .contains_key("orphan"));
+        assert!(!store
+            .load_session_state()
+            .unwrap()
+            .tabs
+            .contains_key("orphan-tab"));
+        assert_eq!(
+            store.load_session_state().unwrap().browsers["browser-a"].active_session_ids,
+            vec!["session-a"]
         );
     }
 

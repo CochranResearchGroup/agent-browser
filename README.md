@@ -771,6 +771,11 @@ process, profile-lock, or capacity failure if the physical resource is actually
 unavailable. It does not delete or reclaim an exact uncertain resource to make
 that attempt succeed.
 
+Cold migration keeps valid active sessions when sibling active or history rows
+are malformed. It rejects orphaned sessions and tabs, repairs browser session
+membership, records typed diagnostics, and archives the unchanged source
+read-only.
+
 On host restart, configured route keepers recover retained routes only after
 proving their earlier host processes exited. Interrupted adoption also requires
 proof that the interrupted adopter exited. Recovery verifies every retained
@@ -937,9 +942,11 @@ expire when the route changes. Software clients should use
 `requestServiceRemoteViewHandoff()`, which returns only `handoffId` and
 `handoffUrl`.
 
-Use `remote-view open` only when a service client needs the advanced explicit
-route-bound request surface. Its route and display selectors are diagnostic
-and compatibility controls, not steps in the ordinary operator workflow.
+Use `remote-view open` for an ordinary Browser Session Manager operator
+handoff. The runtime selects the provider route. Explicit route and display
+selectors are rejected by the CLI before daemon dispatch. An unknown named
+profile or missing default disposable policy returns
+a catalog error before presentation admission.
 
 After resolving a stored handoff, pass the response to
 `deriveServiceRemoteViewHandoffResumeIntent()`. It returns the exact caller
@@ -4623,35 +4630,32 @@ destination before the recovery lease is released.
 The returned browser and RDP stream records include `attachability` evidence so
 clients can distinguish attached, reattachable stale-route, disconnected-viewer,
 and closed-browser states.
-Use
-`pnpm test:remote-view-route-preflight-timing` to validate the isolated
-no-launch HTTP/client route-preflight path and bounded latency without starting
-a browser. Use
-`requestServiceRemoteViewOpen()` or
-`agent-browser remote-view open <url> --runtime-profile <id> --browser-build
-stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000`
-when a caller needs the service to
-select the route binding, launch or reuse a remote-headed browser on that bound
-display, open the requested tab, check visible browser window evidence on the
-selected route display, and return dashboard and external route URLs without
-hand-editing Guacamole, display, Xauthority, or CDP fields.
-`--job-timeout-ms` sets the positive per-request service control-plane timeout
-for this open. Use it when a durable-profile or remote-display launch can
-legitimately outlive the daemon's shorter default; it does not change the
-daemon-wide `--service-job-timeout` setting.
-For a security-sensitive Google profile that was seeded in ordinary non-CDP
-Chrome and then closed normally, add `--manual-login-launch`. This preserves
-the minimal headed Chrome flag posture used by `runtime login --attachable`
-and opens the requested URL as Chrome's initial destination, while keeping CDP,
-Route B visibility, and service-owned lifecycle control. The initial
-same-origin target is reused instead of replacing a blank CDP-created tab.
-It does not perform sign-in or pairing and must target the exact seeded
-profile and browser build.
-When `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` is present, the CLI copies that
-fresh route-pool array into the `remote_view_open` request unless the caller
-already supplied `--route-pool-entry-json`. This keeps route-pool readiness
-output request-scoped and prevents a long-running daemon from selecting a
-stale retained route record.
+Use `pnpm test:remote-view-route-preflight-timing` for the separate legacy
+route-preflight fixture. For an ordinary Browser Session Manager handoff, use:
+
+```bash
+agent-browser --json --session alice remote-view open https://example.com/ \
+  --runtime-profile work
+```
+
+The runtime selects a current ready provider route from SQLite, launches or
+reuses the profile's healthy browser, opens Alice's exact tab, and returns an
+opaque `handoffUrl` when operator visibility is ready. A second logical session
+may share that browser while retaining its own tab and handoff. Omitting the
+profile selects the default session-scoped disposable policy. An unknown named
+profile or missing default policy fails before presentation admission.
+`--dry-run` reads a plan without launching Chrome, reserving capacity, or
+creating a handoff. A positive `--job-timeout-ms` sets that request's
+presentation queue wait deadline; otherwise the live runtime setting applies.
+It does not change the daemon-wide `--service-job-timeout` setting.
+
+The CLI rejects explicit route and display selectors before daemon dispatch.
+The compatibility parser still recognizes browser-build, manual-login, and
+caller-attribution selectors, which the ordinary SQLite adapter rejects. The CLI no
+longer copies `AGENT_BROWSER_RDP_ROUTE_POOL_JSON` into open requests. CDP-free
+manual seeding uses its separate service action and is not an ordinary open
+option. Keep the returned `/remote-view/<handoff-id>` URL for the operator;
+raw Guacamole and provider URLs are replaceable route details.
 
 Service status exposes `presentationCapacity` when durable presentation-slot
 authority is configured. This read-only projection reports arbitrary-size slot

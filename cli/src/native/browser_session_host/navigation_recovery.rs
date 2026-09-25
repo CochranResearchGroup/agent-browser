@@ -17,7 +17,7 @@ use super::{
     current_unix_ms, deterministic_manager_handoff_id, optional_string, required_string,
     BrowserRuntimeOperation, BrowserRuntimeOperationState, BrowserSessionHost,
     BrowserSessionPersistence, ManagedBrowserCommandEffects, ManagerHandoffAuthority,
-    ReservedBrowserRecoveryEffects,
+    ManagerPresentationProofEffects, ReservedBrowserRecoveryEffects,
 };
 
 const NAVIGATION_OWNER_KEY: &str = "browser-runtime-navigation";
@@ -61,6 +61,7 @@ where
     E: BrowserSessionEffects
         + ManagedBrowserCommandEffects
         + ReservedBrowserRecoveryEffects
+        + ManagerPresentationProofEffects
         + NavigationTargetObservationEffects,
 {
     /// Execute a managed navigation through a durable operation journal.

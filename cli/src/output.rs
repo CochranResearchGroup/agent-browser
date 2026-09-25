@@ -6432,137 +6432,57 @@ Examples:
         // === Remote View ===
         "remote-view" => {
             r##"
-agent-browser remote-view - Route-bound remote-headed browser handoff
+agent-browser remote-view - Browser Session Manager operator handoff
 
 Usage: agent-browser remote-view open [url] [options]
 
-For the ordinary trusted single-user path, identify the work with `--session`
-and select an exact named profile with `--runtime-profile`:
+Use --session for the logical session and --runtime-profile for an exact named
+profile. Omitting the profile creates a session-scoped disposable profile.
+Sessions using the same profile may share a healthy browser while retaining
+separate tabs, targets, handoffs, and activity timestamps.
 
-  agent-browser --json --session alice --runtime-profile operator-review open https://example.com/secure
+The runtime selects a current ready presentation route from its SQLite-backed
+provider authority. The caller does not select a route or display. A successful
+open returns one durable opaque handoffUrl at /remote-view/<handoff-id>.
+Require operatorVisible.state=ready before saying the browser is visible.
+Only the authenticated handoffUrl is suitable for operator sharing or later
+reconnection. Provider and Guacamole URLs describe a replaceable route.
 
-When a configured static desktop route is ready, the ordinary open shares one
-healthy browser for that profile, gives Alice an independent tab, and returns a
-durable opaque `handoffUrl`. If no durable profile is selected, Agent Browser
-uses a session-scoped disposable profile. No route ID, display ID, transaction
-revision, census digest, capability, or recovery token is required.
-Closing a managed session or its tab closes that session's opaque handoff in
-the same SQLite commit. Repeating an open for the same live tab reuses its
-handoff; a new tab receives a new handoff.
-Historical session, owner-generation, or cleanup-obligation metadata cannot
-reserve an explicitly selected shared-local profile when no current process is
-proved for that profile. Agent Browser attempts a fresh lane and reports a
-concrete process, profile-lock, or capacity failure if the physical resource is
-actually unavailable. Exact uncertain resources remain protected from cleanup.
+An unknown named profile or missing default disposable policy fails from the
+SQLite catalog before presentation admission. When capacity is pending, the
+request waits within its configured deadline. A positive --job-timeout-ms sets
+this request's presentation queue deadline. A dry run reads SQLite session and
+keeper status without launching Chrome, reserving capacity, or issuing a
+handoff; operatorVisible.state is not_checked.
+On cold migration, valid active sessions survive malformed sibling records and
+conflicting legacy history rows. Orphaned session and tab records are rejected,
+browser membership is repaired, and typed diagnostics accompany the unchanged
+read-only source archive.
 
-`remote-view open` selects a service-owned remote-view route, launches or
-reuses a remote-headed browser on the bound display, opens the requested tab,
-checks visible browser-window evidence, checks out the route, and returns
-dashboard/external operator URLs.
-Successful JSON responses include post-checkout operatorVisible; require
-operatorVisible.state=ready before claiming the handoff is visible to the
-operator. operatorVisible also includes selected target evidence and route,
-display, browser, tab, stream, and Guacamole component states. A visible
-browser with the wrong selected URL reports operatorVisible.state=wrong_tab.
-Hosted dashboards rebase only a recognized loopback /guacamole/ iframe path
-onto the configured public origin. The resulting iframe URL is internal
-presentation plumbing and is never the durable operator handoff.
-For simultaneous viewing, a connected direct frame retires its exact startup
-reservation. Reconnect requires a current reservation revision and two fresh
-empty provider snapshots before another primary is admitted. Unconfirmed
-reservations expire after 30 seconds; the election deadline stays 15 seconds.
-Repeat opens on the same route reuse a live same-origin target when available
-and report tabAcquisitionDecision plus duplicateTargetCleanup evidence.
-If the display and tab are ready but the Guacamole operator route is not,
-operatorVisible.state=guacamole_route_unavailable.
-If the selected tab has no CDP target id,
-operatorVisible.state=cdp_target_unavailable.
-If retained route-pool metadata points at a stale route allocation,
-operatorVisible.state=stale_route_record.
-Service reconciliation also compares every retained RDP route with its current
-X11 socket. A missing display changes the route-pool entry to unavailable and
-orphans its checked-out route before another browser launch is planned. Once
-the operator restores the RDP desktop, reconciliation returns the pool entry
-to available and clears the stale checkout.
-Responses also include browserBuildProof with the requested browser build,
-selected build, executable path when known, and mismatch state.
-When a likely one-time operator handoff passes a new arbitrary runtime profile,
-oneTimeProfileWarning recommends a managed one-time profile id.
-Dry runs return operatorVisible.state=not_checked.
-Simultaneous Guacamole viewers share a backend-owned primary connection bound
-to the exact browser and display. Closing a viewer preserves that primary.
-Same-handoff revalidation preserves an existing primary only with exact retained
-acquisition proof; pending routes cannot start new primaries.
-Provider inventory refresh preserves current reservations as pending.
-Revalidation retains the same browser capacity slot and its recovery lease.
-Dashboard ingress allows up to 21 seconds for the primary-start response;
-reconcile an uncertain startup outcome before another attempt.
-A failed primary remains explicit; reopening the durable URL does not restart it.
-Dashboard Retry connection can replace the exact terminated attempt after fresh
-ownership verification. It preserves live primaries, browsers and durable URLs;
-changed ownership and stale terminal retries are refused.
-Primary guards distinguish state/authority read failures from identity changes.
-A lock timeout pauses provider writes for at most three fresh proof attempts,
-100 ms apart. Changed ownership fails immediately; exhausted contention remains
-terminal. No cached proof authorizes writes during the pause.
-Primary termination records retain the typed cause, elapsed lifetime and
-route/session/display references in the private failure journal.
-Dashboard fetch-failure elapsedMs measures time until fetch resolves or rejects; delayed journal delivery does not inflate it. The client rounds the wire value to nonnegative whole milliseconds so the integer-only receiver accepts high-resolution browser timings.
-The primary connection batches image acknowledgements and checks fresh ownership before each write. Slow ownership reads run off the dashboard asynchronous workers so they do not block unrelated requests.
-Failed primary responses include occurrenceId and, when known, terminalOccurrenceId
-for journal correlation; retrySafe remains false.
+Route and display selectors are rejected by the CLI before daemon dispatch.
+Legacy browser-build, manual-login, and attribution selectors remain accepted
+by the compatibility parser but are rejected by the current ordinary SQLite
+adapter. Manual seeding has its own service action.
 
 Options:
-  --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook
-  --browser-build <build>      Browser build: stock_chrome, stealthcdp_chromium, or cdp_free_headed
+  --runtime-profile <id>       Use a registered named runtime profile
   --view-stream-provider rdp_gateway
-                               Use the Guacamole/RDP gateway view stream
-  --provider rdp_gateway       Compatibility alias for --view-stream-provider rdp_gateway
-  --route-pool-entry-id <id>   Select one retained route-pool entry
-  --route-pool-entry-json <json>
-                               Use one inline route-pool entry from doctor/readiness output
-  --route-id <id>              Select an existing remote-view route id
-  --display <name>             Bind to an explicit route display, for example :11
-  --display-allocation-id <id> Bind to an explicit display allocation id
-  --browser-id <id>            Reuse or bind a specific service browser id
-  --session-name <name>        Browser state name for cookies/localStorage
-  --service-name <name>        Caller service label for service trace records
-  --agent-name <name>          Caller agent label for service trace records
-  --task-name <name>           Caller task label for service trace records
-  --job-timeout-ms <ms>        Positive per-request service job timeout for slow launches
-  --service-state-lock-timeout-ms <ms>
-                               Serialized Service State wait budget from 1 to 300000 ms
-  --manual-login-launch        Use the minimal headed Chrome flag posture while keeping managed CDP
-  --dry-run                    Show planned route, launch, tab, and checkout commands
+                               Use the managed Guacamole/RDP view stream
+  --provider rdp_gateway       Compatibility alias for the stream provider
+  --session-name <name>        Select the logical session name for this open
+  --job-timeout-ms <ms>        Positive timeout for this request and queue wait
+  --dry-run                    Read the SQLite open plan without browser effects
   --json                       Output JSON
 
-Environment:
-  AGENT_BROWSER_RDP_ROUTE_POOL_JSON
-                               JSON array emitted by route-pool readiness. When no
-                               --route-pool-entry-json is supplied, remote-view
-                               open carries this pool in the request so a fresh
-                               caller preflight can override stale daemon state.
-  AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON
-                               Optional JSON array for workstation route-user
-                               setup. Each entry declares id, connectionName,
-                               routeUser, and optional legacyConnectionName.
-                               Passwords are generated and stored in the
-                               user-scoped Guacamole secret file.
-
 Global placement:
-  Global flags such as --runtime-profile, --session, --session-name,
-  --browser-host, --view-stream-provider, --control-input-provider, and
-  --display-isolation may appear before or after remote-view open.
-  --session selects the ordinary Browser Session Manager session. Legacy
-  service routes may still interpret it as a daemon lane. --session-name
-  selects saved browser state and is also copied into remote-view open.
+  Global flags such as --session and --runtime-profile may appear before or
+  after remote-view open. --session identifies the daemon lane and, unless
+  --session-name is supplied, the Browser Session Manager logical session.
 
 Examples:
-  agent-browser --json remote-view open https://www.facebook.com/ --view-stream-provider rdp_gateway
-  agent-browser remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000
-  agent-browser remote-view open https://messages.google.com/web/conversations --runtime-profile google-messages --browser-build stock_chrome --view-stream-provider rdp_gateway --manual-login-launch
-  agent-browser --session facebook-route remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --session-name last30days-facebook --view-stream-provider rdp_gateway
-  agent-browser remote-view open linkedin.com --route-pool-entry-id guacamole-rdp-a --display :11 --dry-run
+  agent-browser --json --session alice remote-view open https://example.com/ --runtime-profile work
+  agent-browser --json --session alice remote-view open https://example.com/ --runtime-profile work --dry-run
+  agent-browser --json --session review remote-view open https://example.com/ --job-timeout-ms 120000
 "##
         }
 
@@ -6573,7 +6493,7 @@ agent-browser doctor - Diagnose local environment and browser connectivity
 
 Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--scan-ports] [--firewall] [--json]
        agent-browser doctor remote-view [--session <name>] [--runtime-profile <id>] [--route-id <id>] [--allow-shared-target] [--json]
-       agent-browser remote-view open [url] [--runtime-profile <id>] [--browser-build <build>] [--view-stream-provider rdp_gateway] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--display <name>] [--manual-login-launch] [--dry-run]
+       agent-browser remote-view open [url] [--runtime-profile <id>] [--view-stream-provider rdp_gateway] [--job-timeout-ms <ms>] [--dry-run]
 
 Subcommands:
   windows-browser       Diagnose WSL to Windows browser CDP routing without changing system state

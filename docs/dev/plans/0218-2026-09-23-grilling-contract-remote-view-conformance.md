@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 20
+Plan version: 29
 
 State: OPEN
 
@@ -47,6 +47,12 @@ reloading the updated Cargo MCP. The goal service still reports the earlier
 600,000-token goal as blocked and rejects a replacement, so the latest window
 is tracked from this explicit instruction; the old goal remains historical
 evidence. Stop for operator review at this window's limit.
+On 2026-09-25 the operator renewed Plan 0218 again with the objective to
+verify progress and continue, a 600,000-token window, and `cargo-signal` for
+Rust compiler management. The current goal service reports this objective as
+active but does not expose a remaining-token counter, so this plan retains the
+explicit 600,000-token ceiling for the new window. Prior windows remain
+historical usage and are not reset acceptance evidence.
 
 ## Objective
 
@@ -739,6 +745,119 @@ the repository. The passing proof must exercise ordinary `remote_view_open`
 and handoff resolution through daemon dispatch, including two same-profile
 sessions and an injected failure, then show no JSON repository reachability
 from that path. The existing host fixture proves the manager path only.
+
+The version 21 readback at `2065265b` reconfirms that split. Daemon dispatch
+routes `browser_session_open` through `BrowserSessionHost` and its fenced SQLite
+operation journal, while `remote_view_open` still reaches the direct-open
+coordinator through `actions.rs`. The host journal reserves session, browser,
+desktop slot, and handoff intent, records effect observations, then commits
+session membership and the ready handoff in one SQLite transaction. Its current
+command accepts only an exact named profile and does not execute an optional
+open URL before handoff publication. The cut therefore needs a direct daemon
+adapter plus journal support for URL navigation, disposable-profile intent,
+failure reconciliation, and command response parity. Manual seeding must have
+its own explicit SQLite path, and durable resolution must read the SQLite
+handoff registry without JSON fallback. Routing only the finalizer, or only
+exact-profile requests, cannot satisfy P03/P05.
+
+The version 22 source work adds an ordinary `remote_view_open` daemon adapter
+that enters the SQLite Browser Session Manager journal for the default RDP
+request. The journal now reserves a disposable profile identity, performs an
+optional URL navigation, focuses the exact target, requires process-bound
+visible-window evidence, and records failed effects with an exact cleanup
+obligation before any ready handoff is published. Daemon dispatch no longer
+performs a second handoff publication after the journal commit, and durable
+resolution no longer falls back to a JSON-only handoff. A provider-free fixture
+proves failed navigation or visibility publication leaves no ready handoff.
+The navigation issue is fenced before its external effect; a crash after the
+fence leaves the outcome unproven and cannot replay the URL effect. Its exact
+cleanup obligation remains pending for a later reconciler.
+Version 23 moves `remote_view_open --dry-run` to a read-only SQLite manager and
+live-keeper projection. It emits no handoff and no browser effect, validates
+named profiles against the SQLite catalog, and does not consult a removed
+legacy JSON source. The CLI no longer copies
+`AGENT_BROWSER_RDP_ROUTE_POOL_JSON` into ordinary open commands. Three old
+dry-run fixtures that required operator-maintained route-pool entries were
+removed; a new SQLite-source fixture covers the replacement boundary. This
+remains an uncommitted source candidate. Advanced selectors, manual seeding,
+and non-default
+control options fail closed in that adapter; the manual-seeding coordinator,
+legacy JSON route lifecycle, and JSON handoff finalizer remain compiled. No
+daemon socket, installed browser, provider, or
+operator-view acceptance has been run. P03/P05 remain violations and G42
+remains partial. Before merge readiness, finish the SQLite manual-seeding and
+route boundary, preserve documented request semantics or update the full
+user-facing documentation set, and run the required batch validation.
+Version 24 makes the manual-seeding split explicit in the P03/P05 architecture
+detector: its acquire path still publishes through JSON while durable socket
+resolution accepts SQLite manager handoffs only. The detector self-test passes;
+this is a blocking product gap, not a resolved architecture row. The current
+candidate passes 18 focused `remote_view_open` Rust tests, strict workspace
+Clippy, formatting, coverage validation, and the no-launch route-confusion
+gate. The route gate's dashboard fixture was corrected to expect the current
+projection, which omits stored viewer-lease counts. The live CDP tab-streaming
+smoke failed during daemon startup while Cargo admission reported memory
+pressure; an isolated rerun remains required before assigning product meaning
+to that failure.
+A daemon-router fixture also passes with the legacy Service State source removed
+after migration: it returns the SQLite-backed dry-run plan and leaves the
+handoff registry empty. This is read-only router evidence, not socket dispatch,
+effectful browser launch, or manual-seeding authority closure.
+Version 25 validates an effectful ordinary open's named profile against the
+SQLite catalog before entering presentation admission. An unknown profile
+returns `browser_profile_not_found:<id>` without a queue entry or handoff;
+the same preflight rejects a missing default disposable policy. A disposable
+home router fixture proves the unknown-profile boundary after the legacy JSON
+source is removed. This is a bounded availability repair and does not close
+P03/P05, effectful launch, or manual seeding. The focused Rust fixture, strict
+workspace Clippy, formatting, remote-view documentation check, and docs build
+pass. The five user-facing documentation surfaces were updated for this error
+timing; their broader legacy route instructions still require reconciliation
+before publication.
+Version 26 carries a positive `jobTimeoutMs` from ordinary `remote_view_open`
+into its Browser Session Manager request and uses it for that request's SQLite
+presentation queue deadline. Without an override, the live configured request
+deadline applies. Focused adapter and queue fixtures pass, including rejection
+of zero timeout. The remote-view CLI help, README, agent skill, docs page, and
+inline queue comment describe this request-scoped behavior. This repairs the
+previously dropped option but does not qualify the full effectful open path.
+Strict workspace Clippy, format check, remote-view documentation check, and
+docs build pass for this source cut.
+Version 27 removes CLI emission of operator-selected route-pool entries, route
+IDs, display names, display-allocation IDs, and global display isolation for
+ordinary `remote-view open`. The CLI now rejects these selectors before daemon
+dispatch; the daemon's direct-action rejection remains a separate guard. The
+old parser fixtures that required a selected pool entry were replaced by one
+ordinary command fixture and a table of explicit route/display rejection
+cases. Their retained risk is that a caller cannot smuggle an operator route
+choice into the provider-owned SQLite path. The main CLI help, README, agent
+skill, and operator docs now show the supported ordinary open and dry-run
+examples. Older legacy guidance elsewhere in the skill and Service sections
+still needs a distinct compatibility audit before publication. This cut does
+not finish the manual-seeding JSON authority or P03/P05. The focused 18-case
+Rust filter, strict Clippy, formatting, no-launch route-confusion gate,
+remote-view documentation check, and docs build pass.
+
+Version 28 narrows the G03/G05 cold migration gap. The SQLite migration now
+filters malformed session, tab, and navigation history entries individually,
+rejects terminal identities that conflict with active rows or repeat in terminal
+history, and imports an otherwise valid active session. Each skipped row has a
+typed rejection; the existing migration archive retains the original source
+bytes read-only. The focused history fixture passes through `cargo-signal`.
+This does not establish complete G03/G05 conformance: other legacy source
+classes, installed cold restart, exact process cleanup, and no-fallback behavior
+still require a single-candidate acceptance run. The P03/P05 manual-seeding
+JSON authority remains a separate blocker.
+
+Version 29 extends the G03 source import to filter malformed active browser,
+session, tab, and disposable-profile records by map key before deserializing
+the surviving state. It rejects sessions without a matching browser and tabs
+without a matching active session, clears invalid current-tab pointers, and
+repairs each browser's active-session membership with typed diagnostics. The
+SQLite cold-migration fixture now keeps a valid active session beside malformed
+and orphaned records, verifies the original archive bytes, and checks replay
+after the source JSON changes. Full handoff import and installed recovery remain
+unproven. P03/P05 manual seeding remains on JSON authority.
 
 The bounded G40 SQLite restart fixture now puts an open request in the
 waiting queue, advances the host generation, and verifies that the request is

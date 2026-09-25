@@ -45,6 +45,207 @@ fn command_has_named_profile(command: &Value) -> bool {
         .is_some_and(|profile_id| !profile_id.trim().is_empty())
 }
 
+/// Adapt an authenticated ordinary remote-view request to the manager's one
+/// SQLite journaled open. Route and display placement stay with the keeper.
+fn manager_command_from_remote_view_open(
+    command: &Value,
+    daemon_session: &str,
+) -> Result<Value, String> {
+    manager_command_from_remote_view_open_with_mode(command, daemon_session, false)
+}
+
+fn manager_command_from_remote_view_open_with_mode(
+    command: &Value,
+    daemon_session: &str,
+    allow_dry_run: bool,
+) -> Result<Value, String> {
+    let intent = super::remote_view::normalize_remote_view_open_intent(command)?;
+    if intent.dry_run && !allow_dry_run {
+        return Err("remote_view_open_dry_run_sqlite_plan_pending".to_string());
+    }
+    if intent.view_stream_provider != agent_browser_service_model::ViewStreamProvider::RdpGateway
+        || intent.browser_host != "remote_headed"
+    {
+        return Err("remote_view_open_presentation_mode_unsupported".to_string());
+    }
+    if intent.route_id.is_some()
+        || intent.route_pool_entry_id.is_some()
+        || intent.display_allocation_id.is_some()
+        || intent.remote_headed_display.is_some()
+        || intent.display_isolation.is_some()
+        || ["routePoolEntry", "routePool", "routePoolEntryJson"]
+            .iter()
+            .any(|key| {
+                command.get(*key).is_some()
+                    || command
+                        .get("params")
+                        .and_then(|params| params.get(*key))
+                        .is_some()
+            })
+    {
+        return Err("remote_view_open_provider_owned_route_required".to_string());
+    }
+    if command
+        .get("manualSeeding")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("manualSeeding"))
+        })
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || intent.manual_login_launch
+    {
+        return Err("remote_view_open_manual_seeding_sqlite_path_pending".to_string());
+    }
+    if intent.browser_id.is_some() || intent.browser_build.is_some() {
+        return Err("remote_view_open_browser_selector_sqlite_path_pending".to_string());
+    }
+    if intent.control_input != "manual_attached_desktop" {
+        return Err("remote_view_open_control_input_unsupported".to_string());
+    }
+    if intent.service_name.is_some() || intent.agent_name.is_some() || intent.task_name.is_some() {
+        return Err("remote_view_open_attribution_sqlite_path_pending".to_string());
+    }
+    let explicit_profile = command
+        .get("profileId")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("profileId"))
+        })
+        .and_then(Value::as_str)
+        .filter(|profile| !profile.trim().is_empty());
+    let profiles = [
+        explicit_profile,
+        intent.runtime_profile.as_deref(),
+        intent.profile.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<std::collections::BTreeSet<_>>();
+    if profiles.len() > 1 {
+        return Err("remote_view_open_profile_conflict".to_string());
+    }
+    let session_name = intent.session_name.as_deref().unwrap_or(daemon_session);
+    let operation_id = command
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mut manager_command = serde_json::json!({
+        "id": operation_id,
+        "action": "browser_session_open",
+        "sessionName": session_name,
+    });
+    if let Some(profile_id) = profiles.into_iter().next() {
+        manager_command["profileId"] = Value::String(profile_id.to_string());
+    }
+    if let Some(url) = intent.url {
+        manager_command["url"] = Value::String(url);
+    }
+    if let Some(activity_at_ms) = command
+        .get("activityAtMs")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("activityAtMs"))
+        })
+        .and_then(Value::as_u64)
+    {
+        manager_command["activityAtMs"] = serde_json::json!(activity_at_ms);
+    }
+    if let Some(job_timeout) = command.get("jobTimeoutMs").or_else(|| {
+        command
+            .get("params")
+            .and_then(|params| params.get("jobTimeoutMs"))
+    }) {
+        let timeout_ms = job_timeout
+            .as_u64()
+            .filter(|timeout_ms| *timeout_ms > 0)
+            .ok_or_else(|| "remote_view_open_job_timeout_invalid".to_string())?;
+        manager_command["jobTimeoutMs"] = serde_json::json!(timeout_ms);
+    }
+    Ok(manager_command)
+}
+
+/// Project an ordinary open without reserving capacity, a browser, or a
+/// handoff. Keeper status and manager state are observations at one instant;
+/// the effectful request must recheck them under its own admission fence.
+fn sqlite_remote_view_open_plan(
+    manager_command: &Value,
+    keeper: &super::presentation_runtime_status::PresentationKeeperStatus,
+    sessions: &agent_browser_service_model::BrowserSessionState,
+) -> Value {
+    let session_name = manager_command["sessionName"].as_str().unwrap_or_default();
+    let profile_id = manager_command["profileId"].as_str();
+    let observed_at_ms = super::presentation_request_admission::now_ms();
+    let reusable = profile_id.is_some_and(|profile_id| {
+        sessions.sessions.values().any(|session| {
+            session.name == session_name
+                && session.profile_id == profile_id
+                && session.expires_at_ms > observed_at_ms
+                && sessions.browsers.contains_key(&session.browser_id)
+        })
+    });
+    serde_json::json!({
+        "schemaVersion": "agent-browser.remote-view-open-plan.v1",
+        "status": "planned",
+        "dryRun": true,
+        "browserSessionManager": true,
+        "sessionName": session_name,
+        "profileId": profile_id,
+        "disposablePolicyId": if profile_id.is_none() { Some("default") } else { None },
+        "url": manager_command.get("url"),
+        "browserAcquisition": if reusable { "reuse_candidate" } else { "launch_candidate" },
+        "browserLiveness": "not_checked",
+        "observedAtMs": observed_at_ms,
+        "presentationKeeper": keeper,
+        "presentationCapacity": keeper.allocation,
+        "operatorVisible": { "state": "not_checked" },
+        "handoffUrl": null,
+        "effects": [],
+    })
+}
+
+fn sqlite_remote_view_open_plan_from_store(
+    command: &Value,
+    daemon_session: &str,
+    keeper: &super::presentation_runtime_status::PresentationKeeperStatus,
+    store: &super::browser_session_store::BrowserRuntimeSqliteStore,
+) -> Result<Value, String> {
+    if !super::remote_view::normalize_remote_view_open_intent(command)?.dry_run {
+        return Err("remote_view_open_dry_run_required".to_string());
+    }
+    let manager_command =
+        manager_command_from_remote_view_open_with_mode(command, daemon_session, true)?;
+    validate_remote_view_open_profile(&manager_command, store)?;
+    let sessions = store.load_session_state()?;
+    Ok(serde_json::json!({
+        "id": command.get("id").cloned().unwrap_or(Value::Null),
+        "success": true,
+        "data": sqlite_remote_view_open_plan(&manager_command, keeper, &sessions),
+    }))
+}
+
+/// Reject an unavailable profile before a remote-view request waits for
+/// presentation capacity. The same SQLite catalog governs dry-run and launch.
+fn validate_remote_view_open_profile(
+    manager_command: &Value,
+    store: &super::browser_session_store::BrowserRuntimeSqliteStore,
+) -> Result<(), String> {
+    let catalog = store.load_profile_catalog()?;
+    if let Some(profile_id) = manager_command["profileId"].as_str() {
+        if !catalog.profiles.contains_key(profile_id) {
+            return Err(format!("browser_profile_not_found:{profile_id}"));
+        }
+    } else if !catalog.disposable_policies.contains_key("default") {
+        return Err("browser_disposable_policy_not_found:default".to_string());
+    }
+    Ok(())
+}
+
 fn require_keeper_handoff_resolution(
     required: bool,
     routes: &[agent_browser_service_model::BrowserDesktopRoute],
@@ -878,6 +1079,23 @@ impl RuntimeHostRouter {
             .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
     }
 
+    async fn plan_remote_view_open(&self, command: Value, daemon_session: &str) -> Value {
+        let probe = self.route_keeper_probe().await;
+        let result = (|| -> Result<Value, String> {
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            sqlite_remote_view_open_plan_from_store(
+                &command,
+                daemon_session,
+                &current_presentation_keeper_status(probe.as_ref())?,
+                &store,
+            )
+        })();
+        match result {
+            Ok(response) => response,
+            Err(error) => serde_json::json!({ "success": false, "error": error }),
+        }
+    }
+
     async fn wait_for_presentation_keeper(
         &self,
         command: Value,
@@ -956,7 +1174,31 @@ impl RuntimeHostRouter {
         Ok((probe, result))
     }
 
-    async fn handle_browser_session_command(&self, mut command: Value) -> Value {
+    async fn handle_browser_session_command(
+        &self,
+        mut command: Value,
+        daemon_session: &str,
+    ) -> Value {
+        let remote_view_open =
+            command.get("action").and_then(Value::as_str) == Some("remote_view_open");
+        if remote_view_open {
+            command = match manager_command_from_remote_view_open(&command, daemon_session) {
+                Ok(command) => command,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            };
+            let preflight_command = command.clone();
+            let profile_check = tokio::task::spawn_blocking(move || -> Result<(), String> {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                validate_remote_view_open_profile(&preflight_command, &store)
+            })
+            .await
+            .map_err(|error| format!("remote_view_open_profile_preflight_join_failed:{error}"))
+            .and_then(|result| result);
+            if let Err(error) = profile_check {
+                return serde_json::json!({ "success": false, "error": error });
+            }
+        }
         let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
         let publish_manager_handoff =
             match super::browser_session_host::browser_session_navigation_requires_handoff(
@@ -969,7 +1211,7 @@ impl RuntimeHostRouter {
         let action = command.get("action").and_then(Value::as_str);
         let action_is_open = action == Some("browser_session_open");
         let has_named_profile = command_has_named_profile(&command);
-        let remote_open_candidate = action_is_open && has_named_profile;
+        let remote_open_candidate = action_is_open && (has_named_profile || remote_view_open);
         let keeper_handoff_required = publish_manager_handoff;
         let keeper_required = keeper_handoff_required || remote_open_candidate;
         if keeper_required && command.get("id").and_then(Value::as_str).is_none() {
@@ -1046,7 +1288,7 @@ impl RuntimeHostRouter {
                 let has_remote_desktop_routes = !routes.is_empty();
                 let journaled_open = should_journal_browser_open(
                     action_is_open,
-                    has_named_profile,
+                    has_named_profile || remote_view_open,
                     has_remote_desktop_routes,
                     existing_open_operation,
                 );
@@ -1076,7 +1318,13 @@ impl RuntimeHostRouter {
                 } else {
                     host.handle_command(&command)
                 };
-                if keeper_handoff_required && action != Some("browser_session_navigate") {
+                // Journaled open already published membership and the handoff
+                // together. A second attach would bypass that operation fence
+                // and overwrite its process-bound visibility observation.
+                if keeper_handoff_required
+                    && action != Some("browser_session_navigate")
+                    && !journaled_open
+                {
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()
                     })?;
@@ -1089,6 +1337,30 @@ impl RuntimeHostRouter {
                             "reason": error,
                         });
                     }
+                }
+                if remote_view_open
+                    && response.get("success").and_then(Value::as_bool) == Some(true)
+                {
+                    let data = response
+                        .get_mut("data")
+                        .and_then(Value::as_object_mut)
+                        .ok_or_else(|| "remote_view_open_manager_response_missing".to_string())?;
+                    let handoff_url = data
+                        .get("handoffUrl")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| "remote_view_open_manager_handoff_missing".to_string())?
+                        .to_string();
+                    if data
+                        .get("operatorVisible")
+                        .and_then(|visible| visible.get("state"))
+                        .and_then(Value::as_str)
+                        != Some("ready")
+                    {
+                        return Err("remote_view_open_manager_visibility_unproven".to_string());
+                    }
+                    data.insert("status".to_string(), Value::String("ready".to_string()));
+                    data.insert("externalUrl".to_string(), Value::String(handoff_url));
+                    data.insert("browserSessionManager".to_string(), Value::Bool(true));
                 }
                 Ok(response)
             })();
@@ -1187,9 +1459,8 @@ impl RuntimeHostRouter {
         }
     }
 
-    /// Resolves a manager handoff only after loading its SQLite registry row and
-    /// the current Ready route-keeper binding immediately before browser focus.
-    /// Returns `None` only when the identifier is absent or is not manager-owned.
+    /// Resolve only a SQLite manager handoff. An absent identifier does not
+    /// fall through to the legacy JSON handoff repository.
     async fn try_resolve_manager_handoff(&self, mut command: Value) -> Option<Value> {
         let handoff_id = match command
             .get("handoffId")
@@ -1230,7 +1501,15 @@ impl RuntimeHostRouter {
             }
         };
         if !manager_owned {
-            return None;
+            return Some(serde_json::json!({
+                "success": true,
+                "data": {
+                    "status": "not_found",
+                    "resolved": false,
+                    "handoffId": handoff_id,
+                    "message": "Remote-view handoff was not found in the SQLite session authority",
+                }
+            }));
         }
         if command.get("id").and_then(Value::as_str).is_none() {
             command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
@@ -1267,10 +1546,17 @@ impl RuntimeHostRouter {
             let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
             let registry = store.load_handoff_registry()?;
             let Some(handoff) = registry.handoffs.get(handoff_id).cloned() else {
-                return Ok(None);
+                return Ok(Some(serde_json::json!({
+                    "success": true,
+                    "data": {
+                        "status": "not_found",
+                        "resolved": false,
+                        "handoffId": handoff_id,
+                    }
+                })));
             };
             if !super::browser_session_handoff::is_manager_handoff(&handoff) {
-                return Ok(None);
+                return Err("browser_session_handoff_not_manager_owned".to_string());
             }
             let mut host = browser_sessions
                 .lock()
@@ -1787,6 +2073,18 @@ async fn handle_connection<S>(
                     .get("action")
                     .and_then(|value| value.as_str())
                     .map(str::to_owned);
+                if action.as_deref() == Some("remote_view_open")
+                    && super::remote_view::normalize_remote_view_open_intent(&cmd)
+                        .is_ok_and(|intent| intent.dry_run)
+                {
+                    let response = router.plan_remote_view_open(cmd, &lane_session).await;
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
                 if action.as_deref() == Some("service_remote_view_handoff_resolve") {
                     if let Some(response) = router.try_resolve_manager_handoff(cmd.clone()).await {
                         if let Some(ref tx) = idle_reset_tx {
@@ -1815,14 +2113,15 @@ async fn handle_connection<S>(
                         continue;
                     }
                 }
-                if action
-                    .as_deref()
-                    .is_some_and(|action| action.starts_with("browser_session_"))
-                {
+                if action.as_deref().is_some_and(|action| {
+                    action.starts_with("browser_session_") || action == "remote_view_open"
+                }) {
                     if let Some(ref tx) = idle_reset_tx {
                         let _ = tx.try_send(());
                     }
-                    let response = router.handle_browser_session_command(cmd).await;
+                    let response = router
+                        .handle_browser_session_command(cmd, &lane_session)
+                        .await;
                     let mut serialized = serialize_daemon_response(response).await;
                     serialized.push('\n');
                     if writer.write_all(serialized.as_bytes()).await.is_err() {
@@ -2112,6 +2411,283 @@ mod tests {
     }
 
     #[test]
+    fn ordinary_remote_view_open_maps_to_one_manager_journal_command() {
+        let named = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "id": "open-alice",
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "sessionName": "alice",
+                "url": "https://example.test/alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(named["action"], "browser_session_open");
+        assert_eq!(named["id"], "open-alice");
+        assert_eq!(named["profileId"], "work");
+        assert_eq!(named["sessionName"], "alice");
+        assert_eq!(named["url"], "https://example.test/alice");
+
+        let disposable = manager_command_from_remote_view_open(
+            &serde_json::json!({"action":"remote_view_open"}),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(disposable["action"], "browser_session_open");
+        assert_eq!(disposable["sessionName"], "daemon-lane");
+        assert!(disposable.get("profileId").is_none());
+        assert!(disposable["id"].as_str().is_some_and(|id| !id.is_empty()));
+
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","runtimeProfile":"work","profile":"other"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_profile_conflict".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","routeId":"operator-slot"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","params":{"manualSeeding":true}}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_manual_seeding_sqlite_path_pending".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","browserBuild":"stock_chrome"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_browser_selector_sqlite_path_pending".to_string())
+        );
+        let timed = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "jobTimeoutMs": 120_000
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(timed["jobTimeoutMs"], 120_000);
+    }
+
+    #[test]
+    fn remote_view_dry_run_projects_sqlite_manager_intent_without_effects() {
+        let command = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "sessionName": "alice",
+            "runtimeProfile": "work",
+            "url": "https://example.test/alice"
+        });
+        let manager_command =
+            manager_command_from_remote_view_open_with_mode(&command, "daemon-lane", true).unwrap();
+        let keeper = super::super::presentation_runtime_status::unavailable_status(
+            "presentation_keeper_unavailable",
+        );
+        let plan = sqlite_remote_view_open_plan(
+            &manager_command,
+            &keeper,
+            &agent_browser_service_model::BrowserSessionState::default(),
+        );
+        assert_eq!(
+            plan["schemaVersion"],
+            "agent-browser.remote-view-open-plan.v1"
+        );
+        assert_eq!(plan["profileId"], "work");
+        assert_eq!(plan["sessionName"], "alice");
+        assert_eq!(plan["presentationKeeper"]["state"], "unavailable");
+        assert_eq!(plan["operatorVisible"]["state"], "not_checked");
+        assert!(plan["effects"].as_array().unwrap().is_empty());
+        assert!(plan["handoffUrl"].is_null());
+        assert_eq!(
+            manager_command_from_remote_view_open_with_mode(
+                &serde_json::json!({"action":"remote_view_open","dryRun":true,"routeId":"operator-route"}),
+                "daemon-lane",
+                true,
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open_with_mode(
+                &serde_json::json!({"action":"remote_view_open","dryRun":true,"routePool":[]}),
+                "daemon-lane",
+                true,
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+
+        let directory = std::env::temp_dir().join(format!(
+            "ab-sqlite-remote-view-plan-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let legacy_path = directory.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let database_path = directory.join("runtime.sqlite3");
+        let migration = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.join("browser-session-state.json"),
+                profile_catalog_path: &directory.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        fs::remove_file(&legacy_path).unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let result =
+            sqlite_remote_view_open_plan_from_store(&command, "daemon-lane", &keeper, &store)
+                .unwrap();
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["profileId"], "work");
+        assert_eq!(result["data"]["handoffUrl"], Value::Null);
+        let mut permissions = fs::metadata(&migration.archive_directory)
+            .unwrap()
+            .permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&migration.archive_directory, permissions).unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_view_dry_run_router_uses_sqlite_after_legacy_source_removal() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-remote-view-plan-router-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(
+            &service_state_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": home.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let database_path = BrowserRuntimeSqliteStore::default_sqlite_path().unwrap();
+        let migration = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+        fs::remove_file(&service_state_path).unwrap();
+
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .plan_remote_view_open(
+                serde_json::json!({
+                    "id": "plan-work",
+                    "action": "remote_view_open",
+                    "dryRun": true,
+                    "runtimeProfile": "work",
+                    "url": "https://example.test/work"
+                }),
+                "alice",
+            )
+            .await;
+        assert_eq!(response["id"], "plan-work");
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["status"], "planned");
+        assert_eq!(response["data"]["sessionName"], "alice");
+        assert_eq!(response["data"]["profileId"], "work");
+        assert_eq!(response["data"]["operatorVisible"]["state"], "not_checked");
+        assert!(response["data"]["effects"].as_array().unwrap().is_empty());
+        assert!(BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+
+        let rejected = router
+            .handle_browser_session_command(
+                serde_json::json!({
+                    "id": "open-missing-profile",
+                    "action": "remote_view_open",
+                    "runtimeProfile": "missing",
+                    "url": "https://example.test/work"
+                }),
+                "alice",
+            )
+            .await;
+        assert_eq!(rejected["success"], false);
+        assert_eq!(rejected["error"], "browser_profile_not_found:missing");
+        let store_after_rejection = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store_after_rejection
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+        assert!(store_after_rejection
+            .load_presentation_queue()
+            .unwrap()
+            .entries
+            .is_empty());
+
+        router.shutdown().await.unwrap();
+        let mut permissions = fs::metadata(&migration.archive_directory)
+            .unwrap()
+            .permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&migration.archive_directory, permissions).unwrap();
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
     fn remote_open_requires_at_least_one_ready_keeper_route() {
         assert_eq!(
             require_keeper_handoff_resolution(true, &[]),
@@ -2350,6 +2926,70 @@ mod tests {
             1
         );
 
+        router.shutdown().await.unwrap();
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn missing_sqlite_handoff_never_resolves_from_legacy_json_state() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home =
+            std::env::temp_dir().join(format!("ab-sqlite-handoff-only-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(&service_state_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &BrowserRuntimeSqliteStore::default_sqlite_path().unwrap(),
+            LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|state| {
+                state.remote_view_handoffs.insert(
+                    "legacy-only".to_string(),
+                    RemoteViewHandoff {
+                        id: "legacy-only".to_string(),
+                        state: "ready".to_string(),
+                        ..RemoteViewHandoff::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .try_resolve_manager_handoff(serde_json::json!({
+                "id": "resolve-legacy-only",
+                "action": "service_remote_view_handoff_resolve",
+                "params": {"handoffId": "legacy-only"}
+            }))
+            .await
+            .unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["status"], "not_found");
+        assert_eq!(response["data"]["resolved"], false);
         router.shutdown().await.unwrap();
         let _ = fs::remove_dir_all(&home);
     }
