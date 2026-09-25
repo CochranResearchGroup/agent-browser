@@ -26,6 +26,8 @@ mod target;
 pub(crate) use target::*;
 mod route_pool;
 pub(crate) use route_pool::*;
+mod manual_seeding_sqlite;
+pub(crate) use manual_seeding_sqlite::*;
 mod shared;
 
 #[cfg(any())]

@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 35
+Plan version: 36
 
 State: OPEN
 
@@ -848,6 +848,16 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 36 adds the keeper-to-presentation proof bridge for SQLite manual
+seeding. The adapter projects a ready keeper binding into the existing route
+proof shape without constructing a provider handoff URL. It checks the exact
+process before and after display access, X11 scene staging, process-owned
+window proof, and public operator URL reachability, then requires
+`operatorVisible.state=ready`. One focused provider-free fixture, strict
+workspace Clippy, and formatting pass through `cargo-signal`. The acquire
+handler does not yet call this bridge; the source does not establish visible
+pixels, responsive input, or installed acceptance. P03/P05 remain violated.
 
 Version 35 adds a recovery observation for the detached-launch case where a
 PID is returned but exact process identity capture fails. The SQLite record

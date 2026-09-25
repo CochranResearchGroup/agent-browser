@@ -19,7 +19,7 @@ fn x11_scene_readiness_is_transient(message: &str) -> bool {
         || message.contains("No viewable X11 window belongs to the browser PID")
 }
 
-async fn snapshot_browser_scene_when_ready(
+pub(crate) async fn snapshot_browser_scene_when_ready(
     browser_pid: u32,
     display_name: &str,
 ) -> Result<crate::native::x11_scene::X11SceneSnapshot, RouteBoundRuntimeIssue> {

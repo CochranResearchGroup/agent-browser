@@ -11,7 +11,13 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 35 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 36 remains open on `platform/p211-simple-cold-upgrade`.
+The current source cut adds a keeper-derived presentation proof bridge for
+SQLite manual seeding. It checks the exact process around display access,
+window staging, process-owned X11 visibility, and public operator reachability.
+One focused provider-free fixture, strict workspace Clippy, and formatting
+pass through `cargo-signal`. The effectful handler does not call this bridge,
+so P03/P05 and installed visual acceptance remain open.
 The current source cut journals a detached manual-seeding launch with an
 uncertain process identity as `recovery_required`, preserving its PID with the
 SQLite operation observation and blocking profile reuse or ready handoff
