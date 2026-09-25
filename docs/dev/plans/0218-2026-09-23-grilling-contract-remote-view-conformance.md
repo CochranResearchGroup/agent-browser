@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 29
+Plan version: 30
 
 State: OPEN
 
@@ -848,6 +848,17 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 30 starts the P03/P05 manual-seeding transfer with a SQLite reservation
+that is atomic with its operation generation and exclusive to a registered
+named profile. A second transaction journals the exact detached process and
+current provider route binding with the operation observation. Provider-free
+fixtures prove idempotent reservation, conflicting-target refusal, durable
+readback, exact launch replay, changed-binding refusal, and no premature
+handoff publication. The effectful seeding action, ready publication, durable
+resolution, and close path still use or depend on the legacy JSON authority;
+P03/P05 remain violated. No installed acceptance is claimed for this source
+foundation.
 
 Version 29 extends the G03 source import to filter malformed active browser,
 session, tab, and disposable-profile records by map key before deserializing

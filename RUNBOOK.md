@@ -11,9 +11,16 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 29 remains open on `platform/p211-simple-cold-upgrade`.
-Local source checkpoint `c6a02382` contains the SQLite ordinary-open and
-tolerant cold-migration batch. It is not an installed acceptance candidate.
+Plan 0218 version 30 remains open on `platform/p211-simple-cold-upgrade`.
+The last committed branch checkpoint is `dde6ea10`; the current uncommitted
+SQLite manual-seeding source foundation is not an installed acceptance candidate.
+Its reservation is atomic with a profile operation generation, and its exact
+process and provider-route observation is journaled in a second SQLite
+transaction. The focused reservation and observation fixtures, formatting, and
+strict workspace Clippy pass through `cargo-signal`. No ready handoff is
+published by this foundation. The effectful manual-seeding adapter, ready
+publication, durable resolution, and close path remain open; P03/P05 are still
+violated.
 The G03 importer now filters malformed active records, rejects orphaned
 sessions and tabs, and repairs browser session membership while retaining valid
 active state. Its SQLite fixture proves archive-byte preservation and replay;
@@ -24,7 +31,7 @@ focused fixture passes through `cargo-signal`; installed cold migration and the
 remaining source classes are unverified. The original legacy source remains in
 the read-only migration archive. P03/P05 manual-seeding JSON authority remains
 open.
-The current G42/P03/P05 source candidate is uncommitted and has no installed
+The G42/P03/P05 ordinary-open source cut has no installed
 acceptance. Ordinary `remote_view_open` is routed toward the SQLite manager
 journal for the default RDP request; URL navigation, disposable-profile
 intent, process-bound visibility proof, and exact failure observations were
@@ -33,7 +40,7 @@ projection now uses SQLite manager state and live keeper status; the CLI no
 longer injects the legacy route-pool environment. The legacy JSON manual-seeding
 and route code still compiles, advanced effectful open options currently fail closed,
 and P03/P05 remain violated. Do not publish this candidate as a completed
-remote-view feature. The preceding committed checkpoint is `2065265b`.
+remote-view feature. The initial ordinary-open checkpoint was `2065265b`.
 Eight focused journal tests and the ordinary-open adapter fixture pass through
 `cargo-signal`, including a crash after the navigation issue fence. The
 broader `remote_view_open` filter passes 18 retained focused cases after the
@@ -84,9 +91,9 @@ The architecture gate reports three violations (P03, P05, P09), five detector
 gaps, and eleven unverified rows. The G40 focused test, strict workspace
 Clippy, formatting, coverage check, and selected service client checks pass;
 the full raw Cargo output is retained through `cargo-signal`. No installed
-runtime, provider, push, or production acceptance is claimed. The branch is
-locally ahead of its remote; use the plan and coverage manifest for exact
-evidence and remaining requirements.
+runtime, provider, or production acceptance is claimed. The previous committed
+branch checkpoint matched its remote; use fresh Git readback, the plan, and the
+coverage manifest for exact evidence and remaining requirements.
 
 ## Turn 450 | 2026-09-23
 
