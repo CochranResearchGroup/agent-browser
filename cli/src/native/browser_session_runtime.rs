@@ -932,12 +932,26 @@ fn run_browser_worker(
                     let target_id = info["targetId"]
                         .as_str()
                         .ok_or_else(|| "browser_session_navigation_target_missing".to_string())?;
-                    let url = info["url"]
-                        .as_str()
-                        .ok_or_else(|| "browser_session_navigation_url_missing".to_string())?;
                     if target_id != tab.target_id || tab.browser_id != browser.id {
                         return Err("browser_session_navigation_target_mismatch".to_string());
                     }
+                    let session_id = manager
+                        .pages_list()
+                        .into_iter()
+                        .find(|page| page.target_id == target_id)
+                        .map(|page| page.session_id)
+                        .ok_or_else(|| "browser_session_navigation_target_missing".to_string())?;
+                    // Target metadata can reflect an in-flight URL. The root
+                    // frame is the committed document for this exact target;
+                    // child frames and bootstrap pages cannot become recovery
+                    // history.
+                    let frame_tree = manager
+                        .client
+                        .send_command_no_params("Page.getFrameTree", Some(&session_id))
+                        .await?;
+                    let url = committed_top_frame_url(&frame_tree).ok_or_else(|| {
+                        "browser_session_navigation_committed_url_missing".to_string()
+                    })?;
                     Ok(NavigationTargetObservation {
                         target_id: target_id.to_string(),
                         url: url.to_string(),
@@ -953,6 +967,19 @@ fn run_browser_worker(
         if let Some(manager) = state.lifecycle.browser.as_mut() {
             manager.relinquish_browser_for_handoff();
         }
+    }
+}
+
+/// Return only the current committed root-frame document URL.
+/// Provisional target metadata, child frames, and bootstrap pages are not
+/// recovery URLs.
+fn committed_top_frame_url(frame_tree: &Value) -> Option<&str> {
+    let frame = frame_tree.get("frameTree")?.get("frame")?;
+    let url = frame.get("url")?.as_str()?.trim();
+    if url.is_empty() || matches!(url, "about:blank" | "chrome://newtab/") {
+        None
+    } else {
+        Some(url)
     }
 }
 
@@ -1189,6 +1216,32 @@ fn tab_acquisition(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn committed_navigation_observation_uses_root_frame_only() {
+        let tree = serde_json::json!({
+            "frameTree": {
+                "frame": {"id": "root", "url": "https://example.test/final"},
+                "childFrames": [{"frame": {"id": "child", "url": "https://other.test/iframe"}}]
+            }
+        });
+        assert_eq!(
+            committed_top_frame_url(&tree),
+            Some("https://example.test/final")
+        );
+        assert_eq!(
+            committed_top_frame_url(&serde_json::json!({
+                "frameTree": {"frame": {"id": "root", "url": "about:blank"}}
+            })),
+            None
+        );
+        assert_eq!(
+            committed_top_frame_url(&serde_json::json!({
+                "frameTree": {"childFrames": [{"frame": {"url": "https://other.test"}}]}
+            })),
+            None
+        );
+    }
 
     #[test]
     fn reserved_browser_launch_has_one_exact_causal_process_marker() {

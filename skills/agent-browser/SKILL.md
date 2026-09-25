@@ -617,8 +617,10 @@ establishes current location, not proof that a particular request or its headers
 reached the server. An unavailable target or different URL retains the recovery
 obligation. For an executed navigation, the observed live target URL, including
 a redirect destination, is recorded in the result and history. The activity
-time is journaled after execution and reused after restart. Navigation
-history, its handoff, and the result commit atomically. Older replay timestamps
+time is journaled after execution and reused after restart. Managed navigation
+recovery reads the exact target's committed top frame; provisional target URLs,
+child frames, and blank bootstrap pages do not become recovery history.
+Navigation history, its handoff, and the result commit atomically. Older replay timestamps
 cannot shorten a session's recorded expiry.
 Handoff recovery rechecks current keeper readiness and exact browser/tab identity
 before idempotent focus; it preserves the opaque URL. Missing or mismatched

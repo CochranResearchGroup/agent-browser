@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 15
+Plan version: 16
 
 State: OPEN
 
@@ -41,8 +41,12 @@ tokens. It does not reset prior usage or authorize effects excluded elsewhere
 in this plan. On 2026-09-25 the operator authorized another 500,000-token
 continuation. The goal tool retained the preceding unfinished blocked goal and
 rejected a replacement, so this new window is tracked manually from the
-operator's instruction without treating old usage as reset. Stop for operator
-review at the new window's limit.
+operator's instruction without treating old usage as reset. On 2026-09-25 the
+operator renewed the continuation with an additional 500,000-token cap after
+reloading the updated Cargo MCP. The goal service still reports the earlier
+600,000-token goal as blocked and rejects a replacement, so the latest window
+is tracked from this explicit instruction; the old goal remains historical
+evidence. Stop for operator review at this window's limit.
 
 ## Objective
 
@@ -664,6 +668,17 @@ The architecture gate remains at three violations, five detector gaps, and
 eleven unverified rows. This prevents a stale replay from shortening one live
 session, while G42's full product closure and P03/P05 remain open.
 
+The next independent G32 packet changes exact-target navigation observation
+from `Target.getTargetInfo` URL metadata to the root document returned by
+`Page.getFrameTree` for the target's attached CDP session. The parser excludes
+child frames and blank bootstrap pages. The journal therefore records a
+current committed top-frame URL for managed navigation recovery, including a
+redirected destination when that document is current. This is a source and
+provider-free parser qualification only: operator-driven navigation event
+capture, bounded redirect history, and browser-backed CDP acceptance remain
+open. It does not alter the G42/P03/P05 ordinary-open SQLite batch defined
+below.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
@@ -945,6 +960,25 @@ canonical policy on drift, a trigger, or unresolved ambiguity.
   coherent batch, not after each leaf deletion. Preserve the complete raw JSON
   outside model context and review only the compact manifest plus, when
   necessary, one exact retained diagnostic.
+- For the remaining G42 and P03/P05 ordinary-open closure, freeze one causal
+  batch before editing: session membership, acquisition reservation and
+  rollback, route-bound handoff finalization, and exact-session heartbeat
+  publication must agree on the same SQLite authority boundary. Edit its
+  related model, host, store, and regression-fixture surfaces together. A
+  custody commit may preserve recoverable work, but it is not a new
+  validation batch or a reason to repeat workspace gates.
+- During that batch, run the cheapest focused check needed to resolve a
+  concrete defect. After the coherent source and fixture set is complete,
+  run one selected Cargo wave and all required changed-surface gates against
+  the resulting batch. Reuse a passing gate after a documentation-only edit
+  when its inputs are unchanged, and record pending gates at any intermediate
+  custody commit. Reopen only the gate affected by a subsequent source change.
+- Use the reusable `cargo-signal` MCP around `scripts/ci/cargo-safe.sh` for
+  compiling Cargo commands. Poll its brief status for outcome, test totals,
+  and actionable diagnostics; inspect one retained raw location only when the
+  compact receipt cannot explain a failure. Keep exact argv, exit status, and
+  artifact locator in the batch evidence. The repository wrapper remains the
+  WSL admission authority.
 - Preserve compact manifests, worklists, hashes, exit status, and reproduction
   commands in the plan or another tracked evidence index. Raw compiler JSON
   may remain in an untracked artifact directory, but a temporary locator alone

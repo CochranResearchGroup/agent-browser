@@ -5700,6 +5700,9 @@ An active managed command refreshes only its session after success. A failed
 command keeps any newly attributed tab without extending the session heartbeat.
 Failed navigation also leaves an existing session heartbeat unchanged; a
 successful navigation records activity for that exact session.
+Managed navigation recovery reads Chrome's committed top frame for the exact
+target; provisional target URLs, child frames, and blank bootstrap pages do not
+become recovery history.
 Omitting a profile gives the named session a session-scoped disposable profile.
 Closing one session preserves a shared browser until its final session closes.
 
