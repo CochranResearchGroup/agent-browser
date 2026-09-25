@@ -856,7 +856,11 @@ and skips the legacy Service State profile and browser-capability selectors.
 The active provider-free fixture passed one test, with strict workspace Clippy
 and formatting checks passing. The effectful launcher has not adopted this
 planner yet; no browser effect, ready handoff, or installed acceptance is
-claimed. P03/P05 remain violated.
+claimed. The existing `handle_cdp_free_launch` persists a legacy Service
+Browser record after launch, and `checkout_route` still calls the JSON route
+lifecycle. The next adapter cut must replace both effects and reserve a keeper
+slot without racing ordinary Browser Session Manager allocation before it can
+publish a SQLite ready handoff. P03/P05 remain violated.
 
 Version 30 starts the P03/P05 manual-seeding transfer with a SQLite reservation
 that is atomic with its operation generation and exclusive to a registered
