@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2065265b
+    checkpoint: c6a02382
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: The committed SQLite Alice/Bob and waiting-request fixtures pass; the uncommitted ordinary-open adapter rejects unknown profiles before queue admission, carries per-request job timeout into the SQLite queue, and the CLI rejects operator route and display selectors; cold migration now filters malformed active and history rows, rejects orphaned sessions and tabs, repairs browser membership, and preserves archive bytes, with focused SQLite fixtures passing but no installed acceptance; the P03/P05 detector exposes manual-seeding JSON handoff authority, P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, and M1 is open
-    validation_ref: 2065265b
+    validation_status: Source checkpoint c6a02382 has the SQLite ordinary-open adapter, CLI route-selector rejection, and tolerant cold migration with focused fixtures, strict Clippy, formatting, and docs checks passing; the P03/P05 detector still exposes manual-seeding JSON handoff authority, P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, installed acceptance is absent, and M1 is open
+    validation_ref: c6a02382
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]

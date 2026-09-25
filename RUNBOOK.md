@@ -12,6 +12,8 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 ## Current P218 status | 2026-09-25
 
 Plan 0218 version 29 remains open on `platform/p211-simple-cold-upgrade`.
+Local source checkpoint `c6a02382` contains the SQLite ordinary-open and
+tolerant cold-migration batch. It is not an installed acceptance candidate.
 The G03 importer now filters malformed active records, rejects orphaned
 sessions and tabs, and repairs browser session membership while retaining valid
 active state. Its SQLite fixture proves archive-byte preservation and replay;
