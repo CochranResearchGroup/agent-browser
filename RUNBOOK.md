@@ -11,7 +11,15 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 33 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 34 remains open on `platform/p211-simple-cold-upgrade`.
+The current uncommitted source candidate atomically publishes a manual-seeding
+ready handoff, lifecycle state, and operation result after exact route and
+process observation plus a ready operator visibility proof. Its result exposes
+the opaque handoff URL and a redacted proof digest; the focused fixture confirms
+a raw provider URL in the supplied proof is omitted. The fixture, strict
+workspace Clippy, and formatting pass through `cargo-signal`. Dispatch,
+durable resolution, live process verification, and installed visual acceptance
+remain open, and P03/P05 remain violated.
 Source checkpoint `17883ee9` adds a CDP-free launch helper that
 uses the SQLite named-profile planner and returns the exact PID plus optional
 captured process identity without writing a legacy Service Browser record.
@@ -110,8 +118,8 @@ gaps, and eleven unverified rows. The G40 focused test, strict workspace
 Clippy, formatting, coverage check, and selected service client checks pass;
 the full raw Cargo output is retained through `cargo-signal`. No installed
 runtime, provider, or production acceptance is claimed. The previous committed
-branch checkpoint matched its remote; the version 33 source checkpoint is
-currently local only. Use fresh Git readback, the plan, and the coverage
+branch checkpoint matched its remote; the version 34 source candidate is
+currently uncommitted. Use fresh Git readback, the plan, and the coverage
 manifest for exact evidence and
 remaining requirements.
 

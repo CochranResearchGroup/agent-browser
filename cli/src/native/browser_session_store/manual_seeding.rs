@@ -4,17 +4,21 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use agent_browser_service_model::{
-    BrowserProfileKind, RecordedProcessIdentity, RouteKeeperFence, RouteKeeperHandoffBinding,
+    BrowserProfileKind, ControlInputProvider, DurableHandoffPresentationReceipt,
+    RecordedProcessIdentity, RemoteViewHandoff, RouteKeeperFence, RouteKeeperHandoffBinding,
+    ViewStreamProvider,
 };
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{params, Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 use super::{
     load_optional_document, load_route_keeper_authority_document, observe_operation_in_transaction,
-    reserve_operation_in_transaction, save_document, BrowserProfileCatalog,
-    BrowserRuntimeOperation, BrowserRuntimeOperationState, BrowserRuntimeSqliteStore,
-    BrowserSessionState, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
-    PROFILE_CATALOG_DOCUMENT, SESSION_STATE_DOCUMENT,
+    reserve_operation_in_transaction, save_document, BrowserManagerHandoffRegistry,
+    BrowserProfileCatalog, BrowserRuntimeOperation, BrowserRuntimeOperationState,
+    BrowserRuntimeSqliteStore, BrowserSessionState, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+    BROWSER_SESSION_STATE_SCHEMA_V1, MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+    MANAGER_HANDOFF_REGISTRY_SCHEMA_V1, PROFILE_CATALOG_DOCUMENT, SESSION_STATE_DOCUMENT,
 };
 
 const MANUAL_SEEDING_DOCUMENT: &str = "manual_seeding_registry";
@@ -398,6 +402,252 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("manual_seeding_observation_commit_failed:{error}"))?;
         Ok((updated, operation))
+    }
+
+    /// Publish the opaque ready handoff, seeding lifecycle, and operation
+    /// result together after the caller has proved a current process-owned
+    /// window and authenticated public operator route. No provider URL enters
+    /// the operator response.
+    #[allow(dead_code)]
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn publish_manual_seeding_ready(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        binding: &RouteKeeperHandoffBinding,
+        process_identity: &RecordedProcessIdentity,
+        operator_visible: &serde_json::Value,
+        dashboard_deployment_generation: &str,
+        observed_at: &str,
+    ) -> Result<(RemoteViewHandoff, BrowserRuntimeOperation), String> {
+        if dashboard_deployment_generation.trim().is_empty() || observed_at.trim().is_empty() {
+            return Err("manual_seeding_presentation_identity_missing".to_string());
+        }
+        if operator_visible
+            .get("state")
+            .and_then(serde_json::Value::as_str)
+            != Some("ready")
+            || operator_visible
+                .get("routeId")
+                .and_then(serde_json::Value::as_str)
+                != Some(binding.slot_id.as_str())
+            || operator_visible
+                .get("displayName")
+                .and_then(serde_json::Value::as_str)
+                != Some(binding.display_name.as_str())
+            || operator_visible
+                .pointer("/manualSeedingProcess/state")
+                .and_then(serde_json::Value::as_str)
+                != Some("ready")
+            || operator_visible
+                .pointer("/manualSeedingProcess/pid")
+                .and_then(serde_json::Value::as_u64)
+                != Some(u64::from(process_identity.pid))
+        {
+            return Err("manual_seeding_operator_visibility_unproven".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_publication_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id || record.generation != generation {
+            return Err("manual_seeding_operation_identity_mismatch".to_string());
+        }
+        if record.route_slot_id.as_deref() != Some(binding.slot_id.as_str())
+            || record.display_name.as_deref() != Some(binding.display_name.as_str())
+            || record.route_fence.as_ref() != Some(&binding.fence)
+            || record.process_identity.as_ref() != Some(process_identity)
+        {
+            return Err("manual_seeding_publication_observation_changed".to_string());
+        }
+        let authority = load_route_keeper_authority_document(&transaction)?;
+        if authority.ready_handoff_binding(&binding.slot_id, &binding.display_name)? != *binding {
+            return Err("manual_seeding_route_binding_changed".to_string());
+        }
+        let mut operation = super::load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}")
+            || operation.generation != generation
+            || super::load_owner_generation(&transaction, &operation.owner_key)? != generation
+        {
+            return Err("manual_seeding_publication_operation_stale".to_string());
+        }
+        let mut handoffs: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        if record.state == ManualSeedingState::Ready
+            && operation.state == BrowserRuntimeOperationState::Committed
+        {
+            let handoff = handoffs
+                .handoffs
+                .get(&record.handoff_id)
+                .filter(|handoff| handoff.state == "ready")
+                .cloned()
+                .ok_or_else(|| "manual_seeding_ready_handoff_missing".to_string())?;
+            return Ok((handoff, operation));
+        }
+        if record.state != ManualSeedingState::LaunchObserved
+            || operation.state != BrowserRuntimeOperationState::Observed
+        {
+            return Err("manual_seeding_publication_state_invalid".to_string());
+        }
+        let expected_observation = serde_json::json!({
+            "phase": "manual_seeding_launch_observed",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "routeSlotId": binding.slot_id,
+            "displayName": binding.display_name,
+            "routeFence": binding.fence,
+            "processIdentity": process_identity,
+        });
+        if operation.result.as_ref() != Some(&expected_observation) {
+            return Err("manual_seeding_publication_observation_mismatch".to_string());
+        }
+        if handoffs.handoffs.contains_key(&record.handoff_id) {
+            return Err("manual_seeding_handoff_identity_conflict".to_string());
+        }
+        let handoff_url = crate::native::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+            &binding.public_operator_url,
+            &record.handoff_id,
+        )
+        .ok_or_else(|| "manual_seeding_public_operator_url_invalid".to_string())?;
+        let browser_id = format!("manual-seeding:{profile_id}:{generation}");
+        let target_id = format!("manual-seeding-window:{}", process_identity.pid);
+        let process_digest = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(process_identity)
+                    .map_err(|error| format!("manual_seeding_process_serialize_failed:{error}"))?
+            )
+        );
+        let visibility_digest = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(operator_visible).map_err(|error| format!(
+                    "manual_seeding_visibility_serialize_failed:{error}"
+                ))?
+            )
+        );
+        let public_visibility = serde_json::json!({
+            "state": "ready",
+            "routeId": binding.slot_id,
+            "displayName": binding.display_name,
+            "manualSeedingProcess": {
+                "state": "ready",
+                "pid": process_identity.pid,
+            },
+            "proofDigest": visibility_digest,
+        });
+        let receipt = DurableHandoffPresentationReceipt {
+            schema_version: "agent-browser.durable-handoff-presentation.v1".to_string(),
+            generation: binding.fence.operation_generation,
+            dashboard_deployment_generation: dashboard_deployment_generation.to_string(),
+            logical_browser_id: browser_id.clone(),
+            daemon_owner_generation: None,
+            process_instance_digest: Some(process_digest),
+            target_id: target_id.clone(),
+            required_stream_provider: ViewStreamProvider::RdpGateway,
+            observed_stream_provider: ViewStreamProvider::RdpGateway,
+            route_id: binding.slot_id.clone(),
+            display_allocation_id: binding.display_name.clone(),
+            observed_at: observed_at.to_string(),
+            state: "ready".to_string(),
+        };
+        let result = serde_json::json!({
+            "status": "ready",
+            "resolved": true,
+            "manualSeeding": true,
+            "profileId": profile_id,
+            "targetServiceId": record.target_service_id,
+            "handoffId": record.handoff_id,
+            "handoffUrl": handoff_url,
+            "browserId": browser_id,
+            "targetId": target_id,
+            "operatorVisible": public_visibility,
+            "viewStreamProvider": ViewStreamProvider::RdpGateway,
+            "controlInput": ControlInputProvider::ManualAttachedDesktop,
+            "presentationGeneration": receipt.generation,
+            "presentationReceipt": receipt,
+            "authentication": {
+                "state": "not_probed",
+                "reason": "visibility_is_not_authentication_evidence",
+            },
+        });
+        let handoff = RemoteViewHandoff {
+            id: record.handoff_id.clone(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "manualSeeding": true,
+                "profileId": profile_id,
+                "targetServiceId": record.target_service_id,
+                "operationId": operation_id,
+                "presentationSlotId": binding.slot_id,
+                "displayName": binding.display_name,
+            }),
+            handoff_url: Some(handoff_url),
+            desired_url: record.requested_url.clone(),
+            profile_id: Some(profile_id.to_string()),
+            browser_id: Some(browser_id),
+            session_name: None,
+            tab_id: None,
+            target_id: Some(target_id),
+            view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            last_route_id: Some(binding.slot_id.clone()),
+            last_route_pool_entry_id: None,
+            last_display_allocation_id: Some(binding.display_name.clone()),
+            created_at: Some(observed_at.to_string()),
+            updated_at: Some(observed_at.to_string()),
+            last_resolved_at: Some(observed_at.to_string()),
+            last_resolution: Some(result.clone()),
+            presentation_receipt: Some(receipt),
+        };
+        handoffs
+            .handoffs
+            .insert(handoff.id.clone(), handoff.clone());
+        record.state = ManualSeedingState::Ready;
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &handoffs,
+        )?;
+        let result_json = serde_json::to_string(&result)
+            .map_err(|error| format!("manual_seeding_result_serialize_failed:{error}"))?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Committed.as_str(),
+                    result_json
+                ],
+            )
+            .map_err(|error| format!("manual_seeding_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_publication_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Committed;
+        operation.result = Some(result);
+        Ok((handoff, operation))
     }
 
     #[allow(dead_code)]

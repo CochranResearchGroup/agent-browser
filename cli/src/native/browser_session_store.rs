@@ -4572,6 +4572,88 @@ mod tests {
         );
         assert_eq!(store.load_operation("seed-op").unwrap(), observed.1);
         assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let operator_visible = serde_json::json!({
+            "state": "ready",
+            "routeId": slot_id,
+            "displayName": ":1",
+            "manualSeedingProcess": {"state": "ready", "pid": process.pid},
+            "components": {"guacamole": {"externalUrl": "https://provider.invalid/guacamole/#/client/raw"}},
+        });
+        let mut not_visible = operator_visible.clone();
+        not_visible["state"] = serde_json::json!("not_ready");
+        assert_eq!(
+            store.publish_manual_seeding_ready(
+                "work",
+                "seed-op",
+                operation.generation,
+                &binding,
+                &process,
+                &not_visible,
+                "dashboard-generation-a",
+                "2026-09-25T00:00:00Z",
+            ),
+            Err("manual_seeding_operator_visibility_unproven".to_string())
+        );
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let published = store
+            .publish_manual_seeding_ready(
+                "work",
+                "seed-op",
+                operation.generation,
+                &binding,
+                &process,
+                &operator_visible,
+                "dashboard-generation-a",
+                "2026-09-25T00:00:00Z",
+            )
+            .unwrap();
+        assert_eq!(published.0.state, "ready");
+        assert!(!published
+            .1
+            .result
+            .as_ref()
+            .unwrap()
+            .to_string()
+            .contains("provider.invalid"));
+        assert!(published
+            .0
+            .handoff_url
+            .as_deref()
+            .unwrap()
+            .contains("/remote-view/seed-handoff"));
+        assert_eq!(published.1.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(
+            store
+                .load_manual_seeding_record("work")
+                .unwrap()
+                .unwrap()
+                .state,
+            ManualSeedingState::Ready
+        );
+        assert_eq!(
+            store
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("seed-handoff"),
+            Some(&published.0)
+        );
+        assert_eq!(store.load_operation("seed-op").unwrap(), published.1);
+        assert_eq!(
+            store
+                .publish_manual_seeding_ready(
+                    "work",
+                    "seed-op",
+                    operation.generation,
+                    &binding,
+                    &process,
+                    &operator_visible,
+                    "dashboard-generation-a",
+                    "2026-09-25T00:00:00Z",
+                )
+                .unwrap(),
+            published
+        );
     }
 
     #[test]

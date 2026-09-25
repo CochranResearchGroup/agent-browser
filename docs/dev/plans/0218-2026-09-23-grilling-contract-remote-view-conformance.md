@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 33
+Plan version: 34
 
 State: OPEN
 
@@ -848,6 +848,18 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 34 adds a SQLite transaction for manual-seeding ready publication.
+After an exact launch observation, it rechecks the current keeper fence,
+process identity, operation generation, route and display proof, then commits
+the ready handoff, seeding state, and operation result together. The operator
+result carries only the opaque durable `/remote-view/<id>` link and a redacted
+visibility summary with a proof digest; a raw provider URL in the supplied
+proof is not persisted in the result. The focused fixture passes publication,
+replay, unready-proof rejection, and no premature handoff; strict workspace
+Clippy and formatting pass. Dispatch, current-process verification, durable
+resolution across route changes, and installed visual acceptance remain open.
+P03/P05 remain violated.
 
 Version 33 adds a CDP-free launch effect helper that consumes the exact SQLite
 named-profile planner and never calls the legacy Service Browser record writer.
