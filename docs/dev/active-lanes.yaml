@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 53a73c5d
+    checkpoint: 6a240621
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: Source checkpoint 53a73c5d adds SQLite manual-seeding reservation and exact launch observation with focused fixtures, strict Clippy, and formatting passing; the effectful adapter and ready handoff remain on JSON authority, P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, installed acceptance is absent, and M1 is open
-    validation_ref: 53a73c5d
+    validation_status: Source checkpoint 6a240621 adds a SQLite named-profile CDP-free launch planner with one active focused fixture, strict Clippy, and formatting passing; the effectful adapter and ready handoff remain on JSON authority, P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, installed acceptance is absent, and M1 is open
+    validation_ref: 6a240621
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
