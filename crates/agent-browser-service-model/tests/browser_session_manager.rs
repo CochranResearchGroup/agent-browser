@@ -60,6 +60,13 @@ fn repeated_command_reuses_and_refreshes_named_session() {
             2_000,
         ))
         .unwrap();
+    let older_replay = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_500,
+        ))
+        .unwrap();
     drop(manager);
 
     assert_eq!(
@@ -67,6 +74,7 @@ fn repeated_command_reuses_and_refreshes_named_session() {
         SessionRecordDisposition::Reused
     );
     assert_eq!(repeated.session_id, first.session_id);
+    assert_eq!(older_replay.session_id, first.session_id);
     assert_eq!(effects.launches, ["profile-a"]);
     assert_eq!(state.sessions.len(), 1);
     assert_eq!(state.sessions[&first.session_id].last_activity_at_ms, 2_000);

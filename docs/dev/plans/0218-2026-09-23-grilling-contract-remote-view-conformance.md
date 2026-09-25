@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 14
+Plan version: 15
 
 State: OPEN
 
@@ -648,6 +648,21 @@ event time. All 29 service-model manager tests and four focused journaled-open
 host fixtures pass. Strict workspace Clippy, remote-view documentation checks,
 and the 35-page docs build pass. This removes one pre-handoff activity edge;
 it does not finish G42 or change the P03/P05 JSON finalizer.
+
+The next G42 replay packet keeps existing session and tab heartbeat and expiry
+monotonic when a delayed request carries an older activity timestamp. The
+named-profile reuse regression replays Alice's open at 1,500 after a 2,000
+heartbeat and proves the session still expires at 302,000. The same max rule
+now covers successful tab creation, tab close, focus, and navigation
+publication; historical event timestamps remain attributable rather than
+being silently rewritten. All 29 manager model fixtures, strict workspace
+Clippy, formatting, remote-view guidance checks, the 35-page docs build,
+coverage validation, and diff validation pass. Cargo's bounded receipts and
+full logs are under `/tmp/p218-heartbeat-monotonic/`; rerun the model test and
+strict checks through `cargo-signal` around `scripts/ci/cargo-safe.sh`.
+The architecture gate remains at three violations, five detector gaps, and
+eleven unverified rows. This prevents a stale replay from shortening one live
+session, while G42's full product closure and P03/P05 remain open.
 
 ## Grilling Contract Ledger
 

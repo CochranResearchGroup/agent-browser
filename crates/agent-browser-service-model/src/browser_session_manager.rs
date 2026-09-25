@@ -610,8 +610,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         .sessions
                         .get_mut(&session.id)
                         .ok_or_else(|| "browser_session_missing_during_refresh".to_string())?;
-                    stored.last_activity_at_ms = request.activity_at_ms;
-                    stored.expires_at_ms = expires_at_ms;
+                    stored.last_activity_at_ms =
+                        stored.last_activity_at_ms.max(request.activity_at_ms);
+                    stored.expires_at_ms = stored.expires_at_ms.max(expires_at_ms);
                 }
                 return Ok(OpenBrowserSessionResult {
                     session_id: session.id,
@@ -1217,8 +1218,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get_mut(session_id)
             .ok_or_else(|| "browser_session_missing_during_tab_creation".to_string())?;
         stored_session.current_tab_id = Some(acquisition.tab_id.clone());
-        stored_session.last_activity_at_ms = activity_at_ms;
-        stored_session.expires_at_ms = expires_at_ms;
+        stored_session.last_activity_at_ms = stored_session.last_activity_at_ms.max(activity_at_ms);
+        stored_session.expires_at_ms = stored_session.expires_at_ms.max(expires_at_ms);
         Ok(acquisition)
     }
 
@@ -1288,8 +1289,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get_mut(session_id)
             .ok_or_else(|| "browser_session_missing_during_tab_close".to_string())?;
         stored_session.current_tab_id = current_tab_id.clone();
-        stored_session.last_activity_at_ms = activity_at_ms;
-        stored_session.expires_at_ms = expires_at_ms;
+        stored_session.last_activity_at_ms = stored_session.last_activity_at_ms.max(activity_at_ms);
+        stored_session.expires_at_ms = stored_session.expires_at_ms.max(expires_at_ms);
         Ok(CloseBrowserTabResult {
             closed_tab_id: tab.id,
             current_tab_id,
@@ -1416,14 +1417,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.effects.focus_browser(&browser, tab.as_ref())?;
         if let Some(tab) = tab.as_ref() {
             if let Some(current) = self.state.tabs.get_mut(&tab.id) {
-                current.last_activity_at_ms = activity_at_ms;
+                current.last_activity_at_ms = current.last_activity_at_ms.max(activity_at_ms);
             }
             if let Some(session) = self.state.sessions.get_mut(&tab.session_id) {
                 session.current_tab_id = Some(tab.id.clone());
-                session.last_activity_at_ms = activity_at_ms;
-                session.expires_at_ms = activity_at_ms
+                session.last_activity_at_ms = session.last_activity_at_ms.max(activity_at_ms);
+                let expires_at_ms = activity_at_ms
                     .checked_add(self.config.session_idle_timeout_ms)
                     .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+                session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
             }
         }
         Ok(FocusBrowserResult {
