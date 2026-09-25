@@ -12,8 +12,8 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 ## Current P218 status | 2026-09-25
 
 Plan 0218 version 30 remains open on `platform/p211-simple-cold-upgrade`.
-The last committed branch checkpoint is `dde6ea10`; the current uncommitted
-SQLite manual-seeding source foundation is not an installed acceptance candidate.
+The committed branch checkpoint is `53a73c5d`; its SQLite manual-seeding
+source foundation is not an installed acceptance candidate.
 Its reservation is atomic with a profile operation generation, and its exact
 process and provider-route observation is journaled in a second SQLite
 transaction. The focused reservation and observation fixtures, formatting, and
@@ -92,8 +92,9 @@ gaps, and eleven unverified rows. The G40 focused test, strict workspace
 Clippy, formatting, coverage check, and selected service client checks pass;
 the full raw Cargo output is retained through `cargo-signal`. No installed
 runtime, provider, or production acceptance is claimed. The previous committed
-branch checkpoint matched its remote; use fresh Git readback, the plan, and the
-coverage manifest for exact evidence and remaining requirements.
+branch checkpoint matched its remote; `53a73c5d` is currently local only. Use
+fresh Git readback, the plan, and the coverage manifest for exact evidence and
+remaining requirements.
 
 ## Turn 450 | 2026-09-23
 
