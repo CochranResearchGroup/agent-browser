@@ -1060,29 +1060,10 @@ impl RuntimeHostRouter {
                     host.preflight_keeper_navigation_command(&command, authority)?;
                 }
                 let mut response = if journaled_open {
-                    let repository =
-                        super::service_store::LockedServiceStateRepository::default_json()?;
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()
                     })?;
-                    let response =
-                        host.handle_journaled_open_with_keeper_handoff(&command, authority);
-                    if response.get("success").and_then(Value::as_bool) == Some(true) {
-                        if let Some(handoff) = response
-                            .get("data")
-                            .and_then(|data| data.get("handoffId"))
-                            .and_then(Value::as_str)
-                            .and_then(|handoff_id| host.manager_handoff(handoff_id))
-                            .cloned()
-                        {
-                            let _ =
-                            super::browser_session_handoff::project_manager_handoff_in_repository(
-                                &handoff,
-                                &repository,
-                            );
-                        }
-                    }
-                    response
+                    host.handle_journaled_open_with_keeper_handoff(&command, authority)
                 } else if action == Some("browser_session_navigate") && keeper_handoff_required {
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()

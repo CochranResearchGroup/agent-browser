@@ -352,30 +352,6 @@ pub(crate) fn prepare_keeper_manager_handoff(
     })
 }
 
-/// Projects an already-prepared handoff into the legacy Service State registry.
-///
-/// The caller owns preparation and persistence ordering. This compatibility
-/// projection writes the exact prepared record without selecting a new identity
-/// or reconstructing route state.
-pub(crate) fn project_prepared_manager_handoff_in_repository(
-    prepared: &PreparedManagerHandoff,
-    repository: &impl ServiceStateRepository,
-) -> Result<(), String> {
-    project_manager_handoff_in_repository(&prepared.handoff, repository)
-}
-
-pub(crate) fn project_manager_handoff_in_repository(
-    handoff: &RemoteViewHandoff,
-    repository: &impl ServiceStateRepository,
-) -> Result<(), String> {
-    repository.mutate(|service| {
-        service
-            .remote_view_handoffs
-            .insert(handoff.id.clone(), handoff.clone());
-        Ok(())
-    })
-}
-
 pub(crate) fn is_manager_handoff(handoff: &RemoteViewHandoff) -> bool {
     handoff
         .intent

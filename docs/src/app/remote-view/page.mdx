@@ -90,6 +90,9 @@ allocation. Lowering a maximum does not migrate or close an existing browser.
 It reports `over_target` and refuses new allocation until occupancy is within
 the limits. Ordinary remote opens and manager handoff resolution use durable
 SQLite queue admission with a default depth of 32 and a 90-second deadline.
+Manager handoff links route through SQLite handoff and session records. Missing
+or mismatched membership is rejected before dashboard focus relay. Legacy
+handoffs retain their separate Service State resolution path.
 Exact request IDs coalesce only when the complete payload fingerprint matches;
 anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
 first, followed by existing browser or handoff requests, then new opens. Aging

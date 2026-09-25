@@ -586,7 +586,10 @@ current route evidence cannot supply an allocation.
 Lowering either maximum does not migrate or close existing browsers. It reports
 `over_target` and refuses a new allocation until occupancy returns within the
 limits. Ordinary remote opens and manager handoff resolution use durable SQLite
-queue admission with a default depth of 32 and a 90-second deadline. Exact
+queue admission with a default depth of 32 and a 90-second deadline. Manager
+handoff links route through the SQLite handoff and session records;
+missing or mismatched membership is rejected before the dashboard relays focus.
+Legacy handoffs retain their separate Service State resolution path. Exact
 request IDs coalesce only when the complete payload fingerprint matches;
 anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
 first, followed by existing browser or handoff requests, then new opens. Aging

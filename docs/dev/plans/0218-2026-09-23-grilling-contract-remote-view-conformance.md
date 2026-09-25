@@ -589,6 +589,22 @@ service-model integration tests, formatting, and strict workspace Clippy pass.
 G42 remains partial because other ordinary command and handoff-finalization
 paths have not yet been qualified, and P03/P05 remain definite violations.
 
+The next M1 packet moves authenticated dashboard routing for manager handoff
+resolution to the SQLite handoff registry and exact session membership. A
+stale manager handoff projection in legacy JSON is rejected instead of
+supplying an owner route. Journaled manager open no longer projects its
+already committed handoff into JSON Service State. The active provider-free
+Alice/Bob routing fixture proves the selected handoff belongs to Bob even
+when Alice shares the browser, and rejects missing membership; a second
+fixture rejects stale JSON manager projection. This removes one duplicate
+writer and read dependency. It does not close P03/P05: the separate
+route-bound handoff finalizer still commits through JSON, and other legacy
+manager handoff attachment paths remain to be cut.
+Focused routing tests, strict workspace Clippy, formatting, the remote-view
+documentation check, the 35-page docs build, and the coverage validator pass
+for this packet. No provider, browser, installed-runtime, or authenticated
+viewer acceptance was attempted.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
