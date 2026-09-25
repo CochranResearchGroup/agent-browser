@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 32
+Plan version: 33
 
 State: OPEN
 
@@ -848,6 +848,14 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 33 adds a CDP-free launch effect helper that consumes the exact SQLite
+named-profile planner and never calls the legacy Service Browser record writer.
+It returns the launched PID even when immediate process-identity capture is
+inconclusive, leaving exact observation or recovery to the SQLite adapter.
+The focused planner fixture, strict workspace Clippy, and formatting pass
+through `cargo-signal`. The helper is not yet dispatched, and no browser launch
+or ready handoff was exercised; P03/P05 and installed acceptance remain open.
 
 Version 32 binds a ready keeper slot to the manual-seeding reservation in one
 SQLite transaction before effects. It rejects a slot held by a live manager

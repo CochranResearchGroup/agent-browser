@@ -3,8 +3,8 @@ use super::capability::{
     close_behavior_for_attached_browser, close_behavior_for_launched_browser, service_browser_id,
 };
 use super::cdp_free_execute::{
-    build_cdp_free_launch_plan, cdp_free_launch_response, launch_ios, launch_safari,
-    validate_cdp_free_launch_plan,
+    build_cdp_free_launch_plan, build_cdp_free_launch_plan_for_sqlite_profile,
+    cdp_free_launch_response, launch_ios, launch_safari, validate_cdp_free_launch_plan,
 };
 use super::cdp_free_plan::{
     apply_launch_host_hints, apply_retained_remote_headed_launch_hints,
@@ -1130,6 +1130,43 @@ pub(crate) async fn handle_cdp_free_launch(
         &launch,
         plan.url,
     ))
+}
+
+/// Result of a CDP-free launch made against a SQLite-reserved named profile.
+/// The PID is retained even when process-identity capture is inconclusive so
+/// the caller can journal the uncertain effect and reconcile only that process.
+#[allow(dead_code)]
+pub(crate) struct SqliteCdpFreeLaunchOutcome {
+    pub(crate) response: Value,
+    pub(crate) pid: u32,
+    pub(crate) process_identity: Option<agent_browser_service_model::RecordedProcessIdentity>,
+}
+
+/// Launch the reserved named profile without writing a legacy Service Browser
+/// record. The caller owns SQLite observation, proof, and exact compensation.
+#[allow(dead_code)]
+pub(crate) fn launch_cdp_free_from_sqlite_profile(
+    cmd: &Value,
+    state: &DaemonState,
+    profile: &agent_browser_service_model::BrowserProfileCatalogEntry,
+) -> Result<SqliteCdpFreeLaunchOutcome, String> {
+    let plan = build_cdp_free_launch_plan_for_sqlite_profile(cmd, profile)?;
+    validate_cdp_free_launch_plan(&plan)?;
+    let launch = launch_chrome_detached(&plan.launch_options)?;
+    let process_identity = crate::process_identity::capture_process_identity(
+        launch.pid,
+        plan.launch_options
+            .executable_path
+            .as_deref()
+            .map(Path::new),
+        plan.launch_options.expected_browser_family.as_deref(),
+    );
+    let pid = launch.pid;
+    Ok(SqliteCdpFreeLaunchOutcome {
+        response: cdp_free_launch_response(state, &plan.launch_options, &launch, plan.url),
+        pid,
+        process_identity,
+    })
 }
 pub(crate) async fn handle_external_byop_adopt(
     cmd: &Value,
