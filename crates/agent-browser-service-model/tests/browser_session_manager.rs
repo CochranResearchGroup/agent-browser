@@ -753,7 +753,7 @@ impl BrowserSessionEffects for FixtureEffects {
 }
 
 #[test]
-fn first_navigation_adopts_bootstrap_tab_without_creating_another() {
+fn first_target_selection_adopts_bootstrap_tab_without_refreshing_session() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
@@ -781,9 +781,7 @@ fn first_navigation_adopts_bootstrap_tab_without_creating_another() {
         ))
         .unwrap();
 
-    let tab = manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
+    let tab = manager.tab_for_command(&alice.session_id, 2_000).unwrap();
     drop(manager);
 
     assert_eq!(tab.source, BrowserTabSource::Bootstrap);
@@ -794,11 +792,12 @@ fn first_navigation_adopts_bootstrap_tab_without_creating_another() {
         state.sessions[&alice.session_id].current_tab_id.as_deref(),
         Some("tab-bootstrap")
     );
-    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 2_000);
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
 }
 
 #[test]
-fn repeated_navigation_reuses_current_tab_without_another_acquisition() {
+fn repeated_target_selection_reuses_tab_without_refreshing_activity() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
@@ -826,20 +825,60 @@ fn repeated_navigation_reuses_current_tab_without_another_acquisition() {
         ))
         .unwrap();
 
-    manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
-    let repeated = manager
-        .tab_for_navigation(&alice.session_id, 3_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 2_000).unwrap();
+    let repeated = manager.tab_for_command(&alice.session_id, 3_000).unwrap();
     drop(manager);
 
     assert_eq!(repeated.source, BrowserTabSource::Current);
     assert_eq!(repeated.tab_id, "tab-bootstrap");
     assert_eq!(effects.initial_tab_requests, [alice.browser_id]);
     assert_eq!(state.tabs.len(), 1);
-    assert_eq!(state.tabs["tab-bootstrap"].last_activity_at_ms, 3_000);
+    assert_eq!(state.tabs["tab-bootstrap"].last_activity_at_ms, 2_000);
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
+}
+
+#[test]
+fn older_navigation_observation_does_not_move_session_heartbeat_backward() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-bootstrap".to_string(),
+            target_id: "target-bootstrap".to_string(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    let tab = manager.tab_for_command(&alice.session_id, 2_000).unwrap();
+    manager
+        .record_successful_command(&alice.session_id, &tab.tab_id, 3_000)
+        .unwrap();
+    let navigation = manager
+        .record_navigation(&alice.session_id, "https://example.test/old", 2_000)
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(navigation.visited_at_ms, 2_000);
+    assert_eq!(state.tabs[&tab.tab_id].last_activity_at_ms, 3_000);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 303_000);
 }
 
 #[test]
@@ -871,9 +910,7 @@ fn dashboard_focus_selects_attributed_target_and_refreshes_its_session() {
             1_000,
         ))
         .unwrap();
-    manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 2_000).unwrap();
 
     let focused = manager
         .focus_browser(&alice.browser_id, Some("target-bootstrap"), 3_000)
@@ -934,10 +971,8 @@ fn second_session_gets_one_initial_tab_when_bootstrap_is_already_attributed() {
         .open(OpenBrowserSession::exact_profile("bob", "profile-a", 2_000))
         .unwrap();
 
-    manager
-        .tab_for_navigation(&alice.session_id, 3_000)
-        .unwrap();
-    let bob_tab = manager.tab_for_navigation(&bob.session_id, 4_000).unwrap();
+    manager.tab_for_command(&alice.session_id, 3_000).unwrap();
+    let bob_tab = manager.tab_for_command(&bob.session_id, 4_000).unwrap();
     drop(manager);
 
     assert_eq!(bob_tab.source, BrowserTabSource::SessionInitial);
@@ -985,9 +1020,7 @@ fn explicit_new_tab_is_the_only_ordinary_tab_growth_path() {
             1_000,
         ))
         .unwrap();
-    manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 2_000).unwrap();
 
     let created = manager.new_tab(&alice.session_id, 3_000).unwrap();
     drop(manager);
@@ -1035,9 +1068,7 @@ fn closing_current_tab_selects_most_recent_remaining_tab() {
             1_000,
         ))
         .unwrap();
-    manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 2_000).unwrap();
     manager.new_tab(&alice.session_id, 3_000).unwrap();
 
     let closed = manager.close_current_tab(&alice.session_id, 4_000).unwrap();
@@ -1192,9 +1223,7 @@ fn closing_shared_session_closes_only_its_attributed_tabs() {
     let bob = manager
         .open(OpenBrowserSession::exact_profile("bob", "profile-a", 2_000))
         .unwrap();
-    manager
-        .tab_for_navigation(&alice.session_id, 3_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 3_000).unwrap();
 
     let closed = manager
         .close_session(&alice.session_id, SessionEndReason::ExplicitClose, 4_000)
@@ -1248,9 +1277,7 @@ fn navigation_history_remains_queryable_after_session_close() {
             1_000,
         ))
         .unwrap();
-    manager
-        .tab_for_navigation(&alice.session_id, 2_000)
-        .unwrap();
+    manager.tab_for_command(&alice.session_id, 2_000).unwrap();
     manager
         .navigate(&alice.session_id, "https://example.test/path", 3_000)
         .unwrap();

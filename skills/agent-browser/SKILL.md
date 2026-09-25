@@ -609,8 +609,10 @@ not scan unrelated processes or substitute another profile.
 Queued work is retryable after restart. Interrupted admitted opens,
 `browser_session_navigate`, and manager handoff resolution can requeue only
 with the exact original payload and their matching SQLite operation journal.
-The journal controls recovery. An issued navigation inspects the exact live
-target URL instead of repeating navigation or header effects. A matching URL
+The journal controls recovery. Tab attribution during a journaled open does not
+refresh session expiry before the handoff is ready. An issued navigation
+inspects the exact live target URL instead of repeating navigation or header
+effects. A matching URL
 establishes current location, not proof that a particular request or its headers
 reached the server. An unavailable target or different URL retains the recovery
 obligation. For an executed navigation, the observed live target URL, including

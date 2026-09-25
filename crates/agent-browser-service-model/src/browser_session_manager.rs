@@ -1051,14 +1051,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         })
     }
 
-    pub fn tab_for_navigation(
-        &mut self,
-        session_id: &str,
-        activity_at_ms: u64,
-    ) -> Result<BrowserTabAcquisition, String> {
-        self.ensure_session_tab(session_id, activity_at_ms, true)
-    }
-
     /// Select or attribute the exact session tab before a command effect.
     /// A command attempt does not refresh its session heartbeat.
     pub fn tab_for_command(
@@ -1066,7 +1058,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         session_id: &str,
         activity_at_ms: u64,
     ) -> Result<BrowserTabAcquisition, String> {
-        self.ensure_session_tab(session_id, activity_at_ms, false)
+        self.ensure_session_tab(session_id, activity_at_ms)
     }
 
     /// Publish activity only after the exact session's command succeeds.
@@ -1115,7 +1107,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         session_id: &str,
         activity_at_ms: u64,
-        refresh_activity: bool,
     ) -> Result<BrowserTabAcquisition, String> {
         let session = self
             .state
@@ -1123,27 +1114,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(session_id)
             .cloned()
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
-        let expires_at_ms = activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
-
         if let Some(tab_id) = &session.current_tab_id {
             let tab = self
                 .state
                 .tabs
-                .get_mut(tab_id)
+                .get(tab_id)
                 .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
             let target_id = tab.target_id.clone();
-            if refresh_activity {
-                tab.last_activity_at_ms = activity_at_ms;
-                let stored_session = self
-                    .state
-                    .sessions
-                    .get_mut(session_id)
-                    .ok_or_else(|| "browser_session_missing_during_tab_refresh".to_string())?;
-                stored_session.last_activity_at_ms = activity_at_ms;
-                stored_session.expires_at_ms = expires_at_ms;
-            }
             return Ok(BrowserTabAcquisition {
                 tab_id: tab_id.clone(),
                 target_id,
@@ -1193,10 +1170,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get_mut(session_id)
             .ok_or_else(|| "browser_session_missing_during_tab_adoption".to_string())?;
         stored_session.current_tab_id = Some(acquisition.tab_id.clone());
-        if refresh_activity {
-            stored_session.last_activity_at_ms = activity_at_ms;
-            stored_session.expires_at_ms = expires_at_ms;
-        }
         Ok(acquisition)
     }
 
@@ -1368,14 +1341,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.state.tabs.get_mut(&tab.id).ok_or_else(|| {
                 "browser_session_current_tab_missing_during_navigation".to_string()
             })?;
-        stored_tab.last_activity_at_ms = visited_at_ms;
+        stored_tab.last_activity_at_ms = stored_tab.last_activity_at_ms.max(visited_at_ms);
         let stored_session = self
             .state
             .sessions
             .get_mut(session_id)
             .ok_or_else(|| "browser_session_missing_during_navigation".to_string())?;
-        stored_session.last_activity_at_ms = visited_at_ms;
-        stored_session.expires_at_ms = expires_at_ms;
+        stored_session.last_activity_at_ms = stored_session.last_activity_at_ms.max(visited_at_ms);
+        stored_session.expires_at_ms = stored_session.expires_at_ms.max(expires_at_ms);
         Ok(record)
     }
 

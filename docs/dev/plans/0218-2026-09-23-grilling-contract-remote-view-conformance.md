@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 13
+Plan version: 14
 
 State: OPEN
 
@@ -637,6 +637,17 @@ commands for the focused navigation test, format check, and strict Clippy.
 This packet does not establish a committed top-level navigation event, prove
 redirects after an interrupted `issued` effect, or remove legacy JSON from
 ordinary `remote_view_open`. Those remain G32 and P03/P05 work.
+
+The following G42 model packet removes the `tab_for_navigation` API that
+could refresh a session merely by selecting or attributing a tab. The
+journaled-open `browser_opened` phase now uses effect-neutral tab attribution;
+successful command and navigation publication remain the heartbeat boundary.
+`record_navigation` also preserves a later exact-session and tab heartbeat
+when an older observation timestamp arrives, without rewriting history's
+event time. All 29 service-model manager tests and four focused journaled-open
+host fixtures pass. Strict workspace Clippy, remote-view documentation checks,
+and the 35-page docs build pass. This removes one pre-handoff activity edge;
+it does not finish G42 or change the P03/P05 JSON finalizer.
 
 ## Grilling Contract Ledger
 

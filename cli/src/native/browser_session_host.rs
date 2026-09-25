@@ -530,18 +530,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(result)
     }
 
-    pub(crate) fn tab_for_navigation(
-        &mut self,
-        session_id: &str,
-        activity_at_ms: u64,
-    ) -> Result<agent_browser_service_model::BrowserTabAcquisition, String> {
-        let result = self
-            .manager()
-            .tab_for_navigation(session_id, activity_at_ms)?;
-        self.commit_state()?;
-        Ok(result)
-    }
-
     pub(crate) fn record_navigation(
         &mut self,
         session_id: &str,
@@ -1329,7 +1317,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 response["data"]["sessionId"].as_str().ok_or_else(|| {
                                     "browser_runtime_operation_session_id_missing".to_string()
                                 })?;
-                            let tab = self.manager().tab_for_navigation(session_id, now_ms)?;
+                            // Tab attribution is durable before handoff
+                            // publication, but it is not a session heartbeat.
+                            let tab = self.manager().tab_for_command(session_id, now_ms)?;
                             let mut response = response;
                             response["data"]["tabId"] = serde_json::json!(tab.tab_id);
                             response["data"]["targetId"] = serde_json::json!(tab.target_id);
