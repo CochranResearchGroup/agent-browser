@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 16
+Plan version: 17
 
 State: OPEN
 
@@ -682,6 +682,29 @@ cannot use a URL already present before its effect as proof that the new
 navigation ran; the pre-effect root URL is retained in the journal for this
 comparison. It does not alter the G42/P03/P05 ordinary-open SQLite batch
 defined below.
+
+The G43/G44 provider-free host fixture now runs in the ordinary CLI test
+surface against the SQLite store. Alice and Bob share one exact-profile browser
+while commands use separate sessions, tabs, and targets. Keeper-backed opaque
+handoffs are distinct, and Alice's handoff access refreshes only Alice's
+heartbeat. Reopening Alice retains her session, browser, tab, and handoff.
+Closing Alice removes her tab and makes her handoff unresolvable while Bob's
+command and handoff still work. Closing Bob, the final session, closes the
+browser. This qualifies the host and SQLite path only; the ordinary
+`remote_view_open` path still has the JSON acquisition/finalization boundary
+identified by P03/P05. Browser-backed action effects, expiry, and the live
+Guacamole viewer heartbeat remain outside this fixture.
+The focused CLI test passes through `cargo-signal` and `scripts/ci/cargo-safe.sh`
+with one test passed; strict workspace Clippy and the final format check pass.
+The coverage-manifest validator passes all 45 ordered rows and its negative
+fixtures. The reproducible checks are the focused CLI test filter
+`shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite`,
+`cargo-safe.sh clippy --workspace --manifest-path Cargo.toml -- -D warnings`,
+`cargo-safe.sh fmt --all --manifest-path Cargo.toml -- --check`, and
+`node scripts/dev/test-p218-grilling-contract-coverage.mjs`. Full Cargo output
+is retained by `cargo-signal` under the user-scoped run directory; its compact
+receipts reported zero compiler errors. This source-only fixture does not
+change the architecture gate verdict or authorize runtime publication.
 
 ## Grilling Contract Ledger
 

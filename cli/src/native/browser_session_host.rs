@@ -2381,6 +2381,8 @@ mod tests {
         pub(super) live: bool,
         pub(super) next_tab: usize,
         pub(super) focuses: Option<Arc<AtomicUsize>>,
+        pub(super) browser_closes: Option<Arc<AtomicUsize>>,
+        pub(super) tab_closes: Option<Arc<Mutex<Vec<String>>>>,
     }
 
     impl BrowserRuntimeDriver for FixtureRuntime {
@@ -2404,6 +2406,9 @@ mod tests {
         }
 
         fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+            if let Some(closes) = &self.browser_closes {
+                closes.fetch_add(1, Ordering::SeqCst);
+            }
             Ok(())
         }
 
@@ -2435,8 +2440,11 @@ mod tests {
         fn close_tab(
             &mut self,
             _browser: &ManagedBrowserInstance,
-            _tab: &ManagedBrowserTab,
+            tab: &ManagedBrowserTab,
         ) -> Result<(), String> {
+            if let Some(closes) = &self.tab_closes {
+                closes.lock().unwrap().push(tab.id.clone());
+            }
             Ok(())
         }
 
@@ -2884,6 +2892,7 @@ mod tests {
             live: true,
             next_tab: 0,
             focuses: None,
+            ..FixtureRuntime::default()
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
         let resumed = restarted
@@ -3139,6 +3148,199 @@ mod tests {
             persisted.sessions[&bob.session_id].last_activity_at_ms,
             1_100
         );
+    }
+
+    #[test]
+    fn shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work",
+                "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let browser_closes = Arc::new(AtomicUsize::new(0));
+        let tab_closes = Arc::new(Mutex::new(Vec::new()));
+        let authority = ready_keeper_authority_for_handoff();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            browser_closes: Some(browser_closes.clone()),
+            tab_closes: Some(tab_closes.clone()),
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_100))
+            .unwrap();
+        assert_eq!(alice.browser_id, bob.browser_id);
+        assert_ne!(alice.session_id, bob.session_id);
+
+        let alice_command = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"alice-snapshot","action":"snapshot","activityAtMs":2_000}),
+            )
+            .unwrap()
+            .unwrap();
+        let bob_command = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-snapshot","action":"snapshot","activityAtMs":2_100}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_command["data"]["sessionId"], alice.session_id);
+        assert_eq!(bob_command["data"]["sessionId"], bob.session_id);
+        assert_ne!(alice_command["data"]["tabId"], bob_command["data"]["tabId"]);
+        assert_ne!(
+            alice_command["data"]["targetId"],
+            bob_command["data"]["targetId"]
+        );
+        let alice_tab = alice_command["data"]["tabId"].as_str().unwrap().to_string();
+        let bob_tab = bob_command["data"]["tabId"].as_str().unwrap().to_string();
+
+        let mut alice_open = serde_json::json!({"success":true,"data": {
+            "sessionId": alice.session_id,
+            "browserId": alice.browser_id,
+            "tabId": alice_tab,
+            "targetId": alice_command["data"]["targetId"]
+        }});
+        let mut bob_open = serde_json::json!({"success":true,"data": {
+            "sessionId": bob.session_id,
+            "browserId": bob.browser_id,
+            "tabId": bob_tab,
+            "targetId": bob_command["data"]["targetId"]
+        }});
+        host.attach_keeper_manager_handoff(&mut alice_open, &authority)
+            .unwrap();
+        host.attach_keeper_manager_handoff(&mut bob_open, &authority)
+            .unwrap();
+        let alice_handoff_id = alice_open["data"]["handoffId"].as_str().unwrap();
+        let bob_handoff_id = bob_open["data"]["handoffId"].as_str().unwrap();
+        assert_ne!(alice_handoff_id, bob_handoff_id);
+        let registry = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        let alice_handoff = registry.handoffs[alice_handoff_id].clone();
+        let bob_handoff = registry.handoffs[bob_handoff_id].clone();
+        let resolved_alice = host
+            .resolve_manager_handoff_with_keeper(&alice_handoff, &authority, 2_200)
+            .unwrap();
+        assert_eq!(resolved_alice["tabId"], alice_tab);
+        let after_alice_handoff = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_alice_handoff.sessions[&alice.session_id].last_activity_at_ms,
+            2_200
+        );
+        assert_eq!(
+            after_alice_handoff.sessions[&bob.session_id].last_activity_at_ms,
+            2_100
+        );
+
+        let reopened_alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 2_300))
+            .unwrap();
+        assert_eq!(reopened_alice.session_id, alice.session_id);
+        assert_eq!(reopened_alice.browser_id, alice.browser_id);
+        let reused = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            reused.sessions[&alice.session_id].current_tab_id.as_deref(),
+            Some(alice_tab.as_str())
+        );
+        assert_eq!(
+            reused.sessions[&alice.session_id].handoff_ids,
+            [alice_handoff_id]
+        );
+        assert_eq!(reused.sessions[&bob.session_id].last_activity_at_ms, 2_100);
+        assert_eq!(reused.tabs.len(), 2);
+
+        host.close_session(&alice.session_id, SessionEndReason::ExplicitClose, 3_000)
+            .unwrap();
+        let after_alice = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(!after_alice.sessions.contains_key(&alice.session_id));
+        assert!(after_alice.sessions.contains_key(&bob.session_id));
+        assert!(!after_alice.tabs.contains_key(&alice_tab));
+        assert!(after_alice.tabs.contains_key(&bob_tab));
+        assert_eq!(*tab_closes.lock().unwrap(), vec![alice_tab]);
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&alice_handoff, &authority, 3_100),
+            Err("browser_session_handoff_session_ended".to_string())
+        );
+        let resolved_bob = host
+            .resolve_manager_handoff_with_keeper(&bob_handoff, &authority, 3_100)
+            .unwrap();
+        assert_eq!(resolved_bob["tabId"], bob_tab);
+
+        let bob_after_alice = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-after-alice","action":"snapshot","activityAtMs":3_100}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(bob_after_alice["success"], true);
+        assert_eq!(bob_after_alice["data"]["tabId"], bob_tab);
+        let after_bob_command = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_bob_command.sessions[&bob.session_id].last_activity_at_ms,
+            3_100
+        );
+
+        host.close_session(&bob.session_id, SessionEndReason::ExplicitClose, 3_200)
+            .unwrap();
+        let after_bob = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(after_bob.sessions.is_empty());
+        assert!(after_bob.tabs.is_empty());
+        assert!(after_bob.browsers.is_empty());
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 1);
+        assert_eq!(*tab_closes.lock().unwrap(), vec!["tab-1"]);
     }
 
     #[test]

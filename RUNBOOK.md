@@ -9,6 +9,18 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
+## Current P218 status | 2026-09-25
+
+Plan 0218 version 17 remains open. The ordinary provider-free SQLite host test
+now proves Alice and Bob keep separate commands, tabs, targets, handoffs, and
+heartbeats while sharing one browser; Alice-first cleanup preserves Bob and
+final-session cleanup closes the browser. The G43/G44 manifest rows remain
+partial because ordinary `remote_view_open`, browser-backed effects, and expiry
+still need proof. The G42/P03/P05 JSON acquisition and finalization cut is the
+next primary-owned source batch. The architecture gate remains red; no
+installed-runtime or provider acceptance is claimed. See the plan and coverage
+manifest for exact evidence and remaining requirements.
+
 ## Turn 450 | 2026-09-23
 
 Plan 0218 M1 removes the CLI Lease Authority Cargo edge and 28,824 lines of
