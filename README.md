@@ -4789,6 +4789,10 @@ ordinary one-liner is:
 agent-browser --json --session facebook-review --runtime-profile last30days-facebook open https://www.facebook.com/
 ```
 
+Closing that managed session or its tab closes its opaque handoff in the same
+SQLite commit. Repeating an open for the same live tab reuses its handoff; a
+new tab receives a new handoff.
+
 The advanced `remote-view open` command remains available for explicit
 route-bound service requests and infrastructure diagnostics.
 

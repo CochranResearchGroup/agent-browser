@@ -11,15 +11,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 17 remains open. The ordinary provider-free SQLite host test
+Plan 0218 version 18 remains open. The ordinary provider-free SQLite host test
 now proves Alice and Bob keep separate commands, tabs, targets, handoffs, and
 heartbeats while sharing one browser; Alice-first cleanup preserves Bob and
-final-session cleanup closes the browser. The G43/G44 manifest rows remain
-partial because ordinary `remote_view_open`, browser-backed effects, and expiry
-still need proof. The G42/P03/P05 JSON acquisition and finalization cut is the
-next primary-owned source batch. The architecture gate remains red; no
+final-session cleanup closes the browser. A manager session or tab close now
+closes only its own opaque handoff in the same SQLite commit. The G43/G44
+manifest rows remain partial because ordinary `remote_view_open`, browser-backed
+effects, and expiry still need proof. The G42/P03/P05 JSON acquisition and
+finalization cut is the next primary-owned source batch. The architecture gate remains red; no
 installed-runtime or provider acceptance is claimed. See the plan and coverage
 manifest for exact evidence and remaining requirements.
+Ready handoff reuse now requires exact session membership and tab/target
+identity; closing a tab cannot alias its old link to a new tab. The focused
+handoff and host suites pass 9 and 26 tests, and the final source, guidance,
+and docs-build checks pass.
 
 ## Turn 450 | 2026-09-23
 

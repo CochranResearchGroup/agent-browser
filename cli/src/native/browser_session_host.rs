@@ -155,6 +155,14 @@ pub(crate) trait BrowserSessionPersistence {
         Err("browser_session_handoff_atomic_publication_unsupported".to_string())
     }
 
+    fn publish_session_state_and_terminal_handoffs(
+        &mut self,
+        state: &BrowserSessionState,
+    ) -> Result<Vec<RemoteViewHandoff>, String> {
+        self.save_session_state(state)?;
+        Ok(Vec::new())
+    }
+
     fn transfer_desktop_control(
         &mut self,
         _request: &DesktopControlTransferRequest,
@@ -298,6 +306,13 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
         handoff: &RemoteViewHandoff,
     ) -> Result<(), String> {
         BrowserRuntimeSqliteStore::publish_manager_handoff(self, state, handoff)
+    }
+
+    fn publish_session_state_and_terminal_handoffs(
+        &mut self,
+        state: &BrowserSessionState,
+    ) -> Result<Vec<RemoteViewHandoff>, String> {
+        BrowserRuntimeSqliteStore::publish_session_state_and_terminal_handoffs(self, state)
     }
 
     fn transfer_desktop_control(
@@ -1605,8 +1620,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
     }
 
-    fn commit_state(&self) -> Result<(), String> {
-        self.persistence.save_session_state(&self.state)
+    fn commit_state(&mut self) -> Result<(), String> {
+        let terminal = self
+            .persistence
+            .publish_session_state_and_terminal_handoffs(&self.state)?;
+        for handoff in terminal {
+            self.handoffs.insert(handoff.id.clone(), handoff);
+        }
+        Ok(())
     }
 
     fn bind_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
@@ -3291,8 +3312,57 @@ mod tests {
         assert_eq!(reused.sessions[&bob.session_id].last_activity_at_ms, 2_100);
         assert_eq!(reused.tabs.len(), 2);
 
-        host.close_session(&alice.session_id, SessionEndReason::ExplicitClose, 3_000)
+        let alice_click = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"alice-click","action":"click","activityAtMs":2_400}),
+            )
+            .unwrap()
             .unwrap();
+        assert_eq!(alice_click["data"]["tabId"], alice_tab);
+        let alice_navigation = host
+            .navigate(&alice.session_id, "https://example.test/alice", 2_500)
+            .unwrap();
+        assert_eq!(alice_navigation.tab_id, alice_tab);
+        let bob_click = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-click","action":"click","activityAtMs":2_600}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(bob_click["data"]["tabId"], bob_tab);
+        let after_actions = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_actions.sessions[&alice.session_id].last_activity_at_ms,
+            2_500
+        );
+        assert_eq!(
+            after_actions.sessions[&alice.session_id].expires_at_ms,
+            302_500
+        );
+        assert_eq!(
+            after_actions.sessions[&bob.session_id].last_activity_at_ms,
+            2_600
+        );
+        assert_eq!(
+            after_actions.sessions[&bob.session_id].expires_at_ms,
+            302_600
+        );
+        assert_eq!(after_actions.navigation_history.len(), 1);
+        assert_eq!(
+            after_actions.navigation_history[0].session_id,
+            alice.session_id
+        );
+
+        let closed_alice = host.handle_command(&serde_json::json!({
+            "id":"close-alice", "action":"browser_session_close",
+            "sessionId":alice.session_id, "activityAtMs":3_000
+        }));
+        assert_eq!(closed_alice["success"], true);
         let after_alice = BrowserRuntimeSqliteStore::open(&database_path)
             .unwrap()
             .load_session_state()
@@ -3301,6 +3371,19 @@ mod tests {
         assert!(after_alice.sessions.contains_key(&bob.session_id));
         assert!(!after_alice.tabs.contains_key(&alice_tab));
         assert!(after_alice.tabs.contains_key(&bob_tab));
+        let handoffs_after_alice = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        assert_eq!(
+            handoffs_after_alice.handoffs[alice_handoff_id].state,
+            "closed"
+        );
+        assert_eq!(handoffs_after_alice.handoffs[bob_handoff_id].state, "ready");
+        assert_eq!(
+            host.manager_handoff(alice_handoff_id).unwrap().state,
+            "closed"
+        );
         assert_eq!(*tab_closes.lock().unwrap(), vec![alice_tab]);
         assert_eq!(browser_closes.load(Ordering::SeqCst), 0);
         assert_eq!(
@@ -3330,8 +3413,27 @@ mod tests {
             3_100
         );
 
-        host.close_session(&bob.session_id, SessionEndReason::ExplicitClose, 3_200)
+        let closed_bob_tab = host.handle_command(&serde_json::json!({
+            "id":"close-bob-tab", "action":"browser_session_tab_close",
+            "sessionId":bob.session_id, "activityAtMs":3_150
+        }));
+        assert_eq!(closed_bob_tab["success"], true);
+        assert_eq!(closed_bob_tab["data"]["closedTabId"], bob_tab);
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 0);
+        let handoffs_after_bob_tab = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
             .unwrap();
+        assert_eq!(
+            handoffs_after_bob_tab.handoffs[bob_handoff_id].state,
+            "closed"
+        );
+
+        let closed_bob = host.handle_command(&serde_json::json!({
+            "id":"close-bob", "action":"browser_session_close",
+            "sessionId":bob.session_id, "activityAtMs":3_200
+        }));
+        assert_eq!(closed_bob["success"], true);
         let after_bob = BrowserRuntimeSqliteStore::open(&database_path)
             .unwrap()
             .load_session_state()
@@ -3339,8 +3441,52 @@ mod tests {
         assert!(after_bob.sessions.is_empty());
         assert!(after_bob.tabs.is_empty());
         assert!(after_bob.browsers.is_empty());
+        let handoffs_after_bob = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        assert_eq!(handoffs_after_bob.handoffs[bob_handoff_id].state, "closed");
+        assert_eq!(
+            host.manager_handoff(bob_handoff_id).unwrap().state,
+            "closed"
+        );
         assert_eq!(browser_closes.load(Ordering::SeqCst), 1);
-        assert_eq!(*tab_closes.lock().unwrap(), vec!["tab-1"]);
+        assert_eq!(*tab_closes.lock().unwrap(), vec!["tab-1", "tab-2"]);
+
+        // A browser loss may still be recoverable; only explicit close or
+        // heartbeat expiry makes the old logical handoff terminal.
+        let mut recovery_state = after_bob;
+        let alice_history = recovery_state
+            .session_history
+            .iter_mut()
+            .find(|ended| ended.id == alice.session_id)
+            .unwrap();
+        alice_history.reason = SessionEndReason::BrowserUnresponsive;
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store.save_manager_handoff(&alice_handoff).unwrap();
+        assert!(store
+            .publish_session_state_and_terminal_handoffs(&recovery_state)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store.load_handoff_registry().unwrap().handoffs[alice_handoff_id].state,
+            "ready"
+        );
+        recovery_state
+            .session_history
+            .iter_mut()
+            .find(|ended| ended.id == alice.session_id)
+            .unwrap()
+            .reason = SessionEndReason::HeartbeatExpired;
+        let terminal = store
+            .publish_session_state_and_terminal_handoffs(&recovery_state)
+            .unwrap();
+        assert_eq!(terminal.len(), 1);
+        assert_eq!(terminal[0].id, alice_handoff_id);
+        assert_eq!(
+            store.load_handoff_registry().unwrap().handoffs[alice_handoff_id].state,
+            "closed"
+        );
     }
 
     #[test]

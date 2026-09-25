@@ -454,6 +454,11 @@ surface. If the tab was deliberately closed, the handoff remains closed until
 the operator selects **Reopen tab**. That explicit action is the separate path
 that may open and navigate a replacement target.
 
+For a Browser Session Manager handoff, closing the named session or its tab
+closes the opaque handoff in the same SQLite commit. Repeating an open for the
+same live tab reuses its link; a new tab receives a new link. The closed link
+does not reconnect.
+
 Dashboard reconnect selects the browser's service-owned RDP stream for viewer
 lease authority, even when a CDP stream is currently selected for presentation.
 Synthetic daemon stream identifiers are never sent as remote-view route IDs.

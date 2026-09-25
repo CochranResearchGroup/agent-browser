@@ -7,9 +7,10 @@ use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
     BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserSessionState,
-    PresentationRequestQueue, PresentationRequestState, PresentationScaleInState,
-    RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperConnectionCatalog,
-    RouteKeeperReconcileAction, BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    BrowserTabEndReason, PresentationRequestQueue, PresentationRequestState,
+    PresentationScaleInState, RemoteViewHandoff, RouteKeeperAuthority,
+    RouteKeeperConnectionCatalog, RouteKeeperReconcileAction, SessionEndReason,
+    BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
@@ -525,6 +526,100 @@ impl BrowserRuntimeSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
             state,
         )
+    }
+
+    /// Commit a manager state change with handoffs explicitly closed by their
+    /// session or tab, or expired with their session. A browser loss is left
+    /// available for recovery. Readers see both documents change together.
+    pub(crate) fn publish_session_state_and_terminal_handoffs(
+        &mut self,
+        state: &BrowserSessionState,
+    ) -> Result<Vec<RemoteViewHandoff>, String> {
+        if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err(format!(
+                "browser_session_state_schema_unsupported:{}",
+                state.schema_version
+            ));
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_session_commit_begin_failed:{error}"))?;
+        let mut registry: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        let mut terminal = Vec::new();
+        let observed_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        for handoff in registry.handoffs.values_mut() {
+            if handoff.state != "ready"
+                || !super::browser_session_handoff::is_manager_handoff(handoff)
+            {
+                continue;
+            }
+            let session_id = handoff
+                .intent
+                .get("sessionId")
+                .and_then(serde_json::Value::as_str);
+            let session_closed = session_id.is_some_and(|session_id| {
+                !state.sessions.contains_key(session_id)
+                    && state.session_history.iter().any(|ended| {
+                        ended.id == session_id
+                            && matches!(
+                                ended.reason,
+                                SessionEndReason::ExplicitClose
+                                    | SessionEndReason::HeartbeatExpired
+                            )
+                    })
+            });
+            let tab_closed =
+                session_id
+                    .zip(handoff.tab_id.as_deref())
+                    .is_some_and(|(session_id, tab_id)| {
+                        !state.tabs.contains_key(tab_id)
+                            && state.tab_history.iter().any(|ended| {
+                                ended.id == tab_id
+                                    && ended.session_id == session_id
+                                    && handoff.browser_id.as_deref()
+                                        == Some(ended.browser_id.as_str())
+                                    && handoff.target_id.as_deref()
+                                        == Some(ended.target_id.as_str())
+                                    && ended.reason == BrowserTabEndReason::ExplicitClose
+                            })
+                    });
+            if !session_closed && !tab_closed {
+                continue;
+            }
+            handoff.state = "closed".to_string();
+            handoff.updated_at = Some(observed_at.clone());
+            handoff.last_resolution = Some(serde_json::json!({
+                "status": "closed",
+                "reason": "manager_session_or_tab_ended",
+            }));
+            if let Some(receipt) = handoff.presentation_receipt.as_mut() {
+                receipt.state = "closed".to_string();
+            }
+            terminal.push(handoff.clone());
+        }
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            state,
+        )?;
+        if !terminal.is_empty() {
+            save_document(
+                &transaction,
+                MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+                MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+                &registry,
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_session_commit_failed:{error}"))?;
+        Ok(terminal)
     }
 
     pub(crate) fn load_profile_catalog(&self) -> Result<BrowserProfileCatalog, String> {

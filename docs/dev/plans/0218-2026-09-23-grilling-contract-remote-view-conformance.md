@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 17
+Plan version: 18
 
 State: OPEN
 
@@ -688,12 +688,51 @@ surface against the SQLite store. Alice and Bob share one exact-profile browser
 while commands use separate sessions, tabs, and targets. Keeper-backed opaque
 handoffs are distinct, and Alice's handoff access refreshes only Alice's
 heartbeat. Reopening Alice retains her session, browser, tab, and handoff.
+Provider-free click routing and Alice's navigation history stay on their exact
+tabs; SQLite holds separate activity and expiry values after those commands.
 Closing Alice removes her tab and makes her handoff unresolvable while Bob's
 command and handoff still work. Closing Bob, the final session, closes the
 browser. This qualifies the host and SQLite path only; the ordinary
 `remote_view_open` path still has the JSON acquisition/finalization boundary
-identified by P03/P05. Browser-backed action effects, expiry, and the live
+identified by P03/P05. Browser-backed action effects, actual expiry, and the live
 Guacamole viewer heartbeat remain outside this fixture.
+
+The next G31/G42/G44 packet fixes durable handoff state on manager session
+or tab close. Before the fix, the provider-free test showed that Alice's
+session was removed while her SQLite handoff still said `ready`. The host now
+commits a session-state change and any newly terminal manager handoffs in one
+SQLite transaction. It also updates its in-memory handoff map only after the
+commit. The fixture uses ordinary `browser_session_close` and
+`browser_session_tab_close` actions: Alice's session close terminates only her
+handoff, Bob's tab close terminates only his, and the final session close
+releases the shared browser. An unresponsive browser leaves the handoff
+available for recovery, while an expired session terminates it. The legacy
+JSON route-bound finalizer still exists, so this does not clear P03/P05 or
+qualify every ordinary open path.
+Both legacy and keeper manager-handoff preparers now reuse a ready handoff
+only when its membership, profile, browser, session, tab, and target all match.
+A closed handoff or a different logical tab gets a fresh opaque ID. This fixes
+the legacy preparer's prior browser/name-only aliasing while leaving
+concurrent advanced `remote_view_open` coalescing open under G31.
+
+The red fixture observed `ready` after Alice's close before the fix. The
+completed batch passes all 18 provider-free host tests, strict workspace
+Clippy, formatting, the remote-view documentation check, the coverage
+validator, the docs build, and diff validation. `cargo-signal` retained full
+output outside model context and returned compact zero-error receipts for the
+focused Rust, Clippy, format, and docs-build commands. This source checkpoint
+does not prove installed or browser-backed behavior.
+The disposable-home `scripts/ci/rust-tests.sh --focused browser_session_host`
+lane also passes 26 tests through the same compact receipt path.
+After the exact-reuse change, the disposable-home handoff and host filters
+pass 9 and 26 tests respectively. Final strict workspace Clippy, formatting,
+the remote-view documentation check, the coverage validator, the docs build,
+and diff validation pass. The exact Cargo and docs commands ran through
+`cargo-signal` with complete logs retained in its user-scoped run directory;
+the focused tests ran through `scripts/ci/rust-tests.sh --focused` behind the
+repository's Cargo admission wrapper. No installed-runtime or provider
+acceptance is claimed.
+
 The focused CLI test passes through `cargo-signal` and `scripts/ci/cargo-safe.sh`
 with one test passed; strict workspace Clippy and the final format check pass.
 The coverage-manifest validator passes all 45 ordered rows and its negative

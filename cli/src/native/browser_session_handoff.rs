@@ -1,8 +1,8 @@
 //! Durable remote-view handoffs for ordinary Browser Session Manager browsers.
 
 use agent_browser_service_model::{
-    BrowserSessionState, ControlInputProvider, RemoteViewHandoff, RouteKeeperAuthority,
-    ServiceState, ViewStreamProvider,
+    BrowserSessionState, ControlInputProvider, ManagedBrowserInstance, ManagedBrowserSession,
+    ManagedBrowserTab, RemoteViewHandoff, RouteKeeperAuthority, ServiceState, ViewStreamProvider,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -31,6 +31,31 @@ pub(crate) struct ManagerHandoffResponseProjection {
     pub(crate) handoff_url: String,
     pub(crate) operator_visible: Value,
     pub(crate) view_stream_provider: ViewStreamProvider,
+}
+
+/// Reuse only a ready handoff for this exact logical session and target.
+/// A closed handoff or another tab receives a fresh opaque identity.
+fn reusable_manager_handoff_id<'a>(
+    existing: &'a BTreeMap<String, RemoteViewHandoff>,
+    session: &ManagedBrowserSession,
+    browser: &ManagedBrowserInstance,
+    tab: &ManagedBrowserTab,
+) -> Option<&'a str> {
+    existing
+        .values()
+        .find(|handoff| {
+            handoff.state == "ready"
+                && is_manager_handoff(handoff)
+                && session.handoff_ids.iter().any(|id| id == &handoff.id)
+                && handoff.intent.get("sessionId").and_then(Value::as_str)
+                    == Some(session.id.as_str())
+                && handoff.profile_id.as_deref() == Some(session.profile_id.as_str())
+                && handoff.browser_id.as_deref() == Some(browser.id.as_str())
+                && handoff.session_name.as_deref() == Some(session.name.as_str())
+                && handoff.tab_id.as_deref() == Some(tab.id.as_str())
+                && handoff.target_id.as_deref() == Some(tab.target_id.as_str())
+        })
+        .map(|handoff| handoff.id.as_str())
 }
 
 impl ManagerHandoffResponseProjection {
@@ -164,14 +189,8 @@ pub(crate) fn prepare_manager_handoff(
         &desktop.route_id,
         &desktop.display_name,
     )?;
-    let handoff_id = existing_handoffs
-        .values()
-        .find(|handoff| {
-            is_manager_handoff(handoff)
-                && handoff.browser_id.as_deref() == Some(browser.id.as_str())
-                && handoff.session_name.as_deref() == Some(session.name.as_str())
-        })
-        .map(|handoff| handoff.id.clone())
+    let handoff_id = reusable_manager_handoff_id(existing_handoffs, session, browser, tab)
+        .map(str::to_string)
         .unwrap_or(candidate_id);
     let handoff_url = durable_remote_view_handoff_url(&binding, &handoff_id)
         .ok_or_else(|| "browser_session_handoff_public_operator_url_missing".to_string())?;
@@ -280,15 +299,8 @@ pub(crate) fn prepare_keeper_manager_handoff(
         .map(str::to_string)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let handoff_id = existing_handoffs
-        .values()
-        .find(|handoff| {
-            is_manager_handoff(handoff)
-                && handoff.browser_id.as_deref() == Some(browser.id.as_str())
-                && handoff.session_name.as_deref() == Some(session.name.as_str())
-                && handoff.tab_id.as_deref() == Some(tab.id.as_str())
-        })
-        .map(|handoff| handoff.id.clone())
+    let handoff_id = reusable_manager_handoff_id(existing_handoffs, session, browser, tab)
+        .map(str::to_string)
         .unwrap_or(candidate_id);
     let handoff_url = durable_remote_view_handoff_url_from_public_operator_url(
         &binding.public_operator_url,
@@ -641,7 +653,7 @@ mod tests {
     #[test]
     fn keeper_handoff_is_opaque_and_reuses_logical_identity_without_legacy_state() {
         let authority = ready_keeper_authority();
-        let sessions = keeper_managed_sessions();
+        let mut sessions = keeper_managed_sessions();
         let response = manager_navigation_response();
         let first =
             prepare_keeper_manager_handoff(&response, &sessions, &authority, &BTreeMap::new())
@@ -667,6 +679,9 @@ mod tests {
         assert!(!serialized.contains("guacamole"));
         assert!(!serialized.contains("127.0.0.1:8193"));
 
+        sessions
+            .bind_manager_handoff("session-a", &first.handoff.id)
+            .unwrap();
         let existing = BTreeMap::from([(first.handoff.id.clone(), first.handoff.clone())]);
         let replay =
             prepare_keeper_manager_handoff(&response, &sessions, &authority, &existing).unwrap();
@@ -787,11 +802,12 @@ mod tests {
     #[test]
     fn prepare_manager_handoff_reuses_existing_handoff_and_reserved_response_id() {
         let mut service = ready_service_state();
+        let mut sessions = managed_sessions();
         let mut response = manager_navigation_response();
         response["data"]["handoffId"] = json!("reserved-handoff");
         let first = prepare_manager_handoff(
             &response,
-            &managed_sessions(),
+            &sessions,
             &service,
             &static_inventory(),
             &service.remote_view_handoffs,
@@ -801,11 +817,14 @@ mod tests {
         service
             .remote_view_handoffs
             .insert(first.handoff.id.clone(), first.handoff.clone());
+        sessions
+            .bind_manager_handoff("session-a", &first.handoff.id)
+            .unwrap();
 
         response["data"]["url"] = json!("https://example.test/account");
         let reused = prepare_manager_handoff(
             &response,
-            &managed_sessions(),
+            &sessions,
             &service,
             &static_inventory(),
             &service.remote_view_handoffs,
@@ -818,6 +837,61 @@ mod tests {
             reused.handoff.desired_url.as_deref(),
             Some("https://example.test/account")
         );
+    }
+
+    #[test]
+    fn closed_or_different_tab_manager_handoff_gets_new_identity() {
+        let service = ready_service_state();
+        let mut sessions = managed_sessions();
+        let mut response = manager_navigation_response();
+        response["data"]["handoffId"] = json!("first-handoff");
+        let first = prepare_manager_handoff(
+            &response,
+            &sessions,
+            &service,
+            &static_inventory(),
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        sessions
+            .bind_manager_handoff("session-a", &first.handoff.id)
+            .unwrap();
+
+        let mut closed = first.handoff.clone();
+        closed.state = "closed".to_string();
+        response["data"]["handoffId"] = json!("after-close");
+        let after_close = prepare_manager_handoff(
+            &response,
+            &sessions,
+            &service,
+            &static_inventory(),
+            &BTreeMap::from([(closed.id.clone(), closed)]),
+        )
+        .unwrap();
+        assert_eq!(after_close.handoff.id, "after-close");
+
+        let mut next_sessions = sessions.clone();
+        let mut next_tab = next_sessions.tabs["tab-a"].clone();
+        next_tab.id = "tab-b".to_string();
+        next_tab.target_id = "target-b".to_string();
+        next_sessions.tabs.insert(next_tab.id.clone(), next_tab);
+        next_sessions
+            .sessions
+            .get_mut("session-a")
+            .unwrap()
+            .current_tab_id = Some("tab-b".to_string());
+        response["data"]["handoffId"] = json!("new-tab-handoff");
+        response["data"]["tabId"] = json!("tab-b");
+        response["data"]["targetId"] = json!("target-b");
+        let new_tab = prepare_manager_handoff(
+            &response,
+            &next_sessions,
+            &service,
+            &static_inventory(),
+            &BTreeMap::from([(first.handoff.id.clone(), first.handoff)]),
+        )
+        .unwrap();
+        assert_eq!(new_tab.handoff.id, "new-tab-handoff");
     }
 
     #[test]

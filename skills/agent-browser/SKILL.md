@@ -505,6 +505,8 @@ browser:
    90-second job budget.
 8. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
+9. A managed session or tab close closes its opaque handoff. Repeat an open
+   for the same live tab to reuse its link; a new tab receives a new link.
 
 Do not confuse this remote-view link with `agent-browser handoff
 prepare|resume`, which transfers browser ownership across daemon executable

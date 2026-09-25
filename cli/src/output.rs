@@ -6446,6 +6446,9 @@ healthy browser for that profile, gives Alice an independent tab, and returns a
 durable opaque `handoffUrl`. If no durable profile is selected, Agent Browser
 uses a session-scoped disposable profile. No route ID, display ID, transaction
 revision, census digest, capability, or recovery token is required.
+Closing a managed session or its tab closes that session's opaque handoff in
+the same SQLite commit. Repeating an open for the same live tab reuses its
+handoff; a new tab receives a new handoff.
 Historical session, owner-generation, or cleanup-obligation metadata cannot
 reserve an explicitly selected shared-local profile when no current process is
 proved for that profile. Agent Browser attempts a fresh lane and reports a
