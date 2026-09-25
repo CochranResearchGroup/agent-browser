@@ -1860,6 +1860,9 @@ same exact named profile reuse one healthy browser. Closing one session leaves
 that browser running while another session still uses it. The final close ends
 the browser. Disposable profiles are session-scoped and are deleted only after
 their exact cleanup delay and ownership checks pass.
+For commands routed through an active managed session, only a successful
+command extends that session's heartbeat. A failed command retains any newly
+attributed tab for cleanup without extending the session.
 
 Set `AGENT_BROWSER_RUNTIME_HOST=1` only for disposable source validation. The
 installed workstation selects the shared host automatically. A current binary

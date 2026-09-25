@@ -5696,6 +5696,8 @@ Usage: agent-browser session [operation]
 Manage named browser sessions. On the ordinary trusted single-user path,
 sessions that select the same exact named runtime profile share one healthy
 browser while retaining separate current tabs, command state, and heartbeats.
+An active managed command refreshes only its session after success. A failed
+command keeps any newly attributed tab without extending the session heartbeat.
 Omitting a profile gives the named session a session-scoped disposable profile.
 Closing one session preserves a shared browser until its final session closes.
 

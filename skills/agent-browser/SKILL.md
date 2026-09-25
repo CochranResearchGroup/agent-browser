@@ -541,6 +541,9 @@ profile creates a session-scoped disposable profile. The ordinary path selects
 a current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, capability, or
 recovery-token input.
+For commands routed through an active managed session, success refreshes only
+that session's heartbeat. A failed command retains any newly attributed tab
+for cleanup without extending the session.
 
 Historical session, owner-generation, and cleanup-obligation records do not
 reserve an explicitly selected shared-local profile when no current process is

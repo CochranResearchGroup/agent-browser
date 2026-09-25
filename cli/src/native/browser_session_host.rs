@@ -1951,7 +1951,12 @@ where
             .get("activityAtMs")
             .and_then(serde_json::Value::as_u64)
             .unwrap_or_else(current_unix_ms);
-        let tab = self.tab_for_navigation(&session_id, now_ms)?;
+        let tab = self.manager().tab_for_command(&session_id, now_ms)?;
+        if tab.source != agent_browser_service_model::BrowserTabSource::Current {
+            // A newly acquired browser tab must remain attributed even when
+            // the command effect fails. This does not refresh the session.
+            self.commit_state()?;
+        }
         let session = self
             .state
             .sessions
@@ -1970,9 +1975,15 @@ where
             .get(&tab.tab_id)
             .cloned()
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
-        self.effects
-            .execute_command(&browser, &tab, &session.id, &session.name, command)
-            .map(Some)
+        let response =
+            self.effects
+                .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if response.get("success").and_then(serde_json::Value::as_bool) == Some(true) {
+            self.manager()
+                .record_successful_command(&session.id, &tab.id, now_ms)?;
+            self.commit_state()?;
+        }
+        Ok(Some(response))
     }
 }
 
@@ -2458,6 +2469,16 @@ mod tests {
             session_name: &str,
             command: &serde_json::Value,
         ) -> Result<serde_json::Value, String> {
+            if command.get("id").and_then(serde_json::Value::as_str) == Some("command-error") {
+                return Err("injected_command_error".to_string());
+            }
+            if command.get("id").and_then(serde_json::Value::as_str) == Some("command-failed") {
+                return Ok(serde_json::json!({
+                    "id": "command-failed",
+                    "success": false,
+                    "error": "injected_command_failure",
+                }));
+            }
             if command.get("id").and_then(serde_json::Value::as_str)
                 == Some("navigate-with-headers")
                 && command.get("headers") != Some(&serde_json::json!({"Remote-User": "operator"}))
@@ -2998,6 +3019,109 @@ mod tests {
             .unwrap()
             .profiles
             .contains_key("work"));
+    }
+
+    #[test]
+    fn managed_command_heartbeat_is_persisted_only_after_success() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work",
+                "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_100))
+            .unwrap();
+        assert_eq!(alice.browser_id, bob.browser_id);
+
+        let failed = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"command-failed","action":"snapshot","activityAtMs":2_000}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed["success"], false);
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(persisted.sessions[&alice.session_id]
+            .current_tab_id
+            .is_some());
+        assert_eq!(persisted.tabs.len(), 1);
+        assert_eq!(
+            persisted.sessions[&alice.session_id].last_activity_at_ms,
+            1_000
+        );
+        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 301_000);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_100
+        );
+
+        let succeeded = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"command-succeeded","action":"snapshot","activityAtMs":3_000}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(succeeded["success"], true);
+        let error = host.execute_managed_command(
+            "alice",
+            &serde_json::json!({"id":"command-error","action":"snapshot","activityAtMs":4_000}),
+        );
+        assert_eq!(error, Err("injected_command_error".to_string()));
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            persisted.sessions[&alice.session_id].last_activity_at_ms,
+            3_000
+        );
+        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 303_000);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_100
+        );
     }
 
     #[test]

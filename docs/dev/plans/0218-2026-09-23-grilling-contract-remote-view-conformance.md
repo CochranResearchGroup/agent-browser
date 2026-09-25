@@ -578,6 +578,17 @@ G42 source packet must move successful-command heartbeat publication after
 effect success without losing tab attribution, and test both success and
 failure before acceptance. These are source findings, not conformance passes.
 
+The next G42 packet corrects that managed-command path. Tab selection or first
+attribution no longer publishes a session heartbeat; a successful command
+response refreshes only its exact session and current tab afterward. A failed
+response or execution error leaves the heartbeat unchanged, while a newly
+acquired tab remains attributed in SQLite for cleanup. The SQLite Alice/Bob
+regression first failed on the old code because a failed Alice command advanced
+her activity from 1,000 to 2,000; it then passed with the fix. All 27 focused
+service-model integration tests, formatting, and strict workspace Clippy pass.
+G42 remains partial because other ordinary command and handoff-finalization
+paths have not yet been qualified, and P03/P05 remain definite violations.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed
