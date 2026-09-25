@@ -94,15 +94,14 @@ where
         self.preflight_keeper_navigation_command(command, authority)?;
         let operation_id = required_string(command, "id")?;
         let url = required_string(command, "url")?.to_string();
-        let activity_at_ms = command
+        let explicit_activity_at_ms = command
             .get("activityAtMs")
             .or_else(|| {
                 command
                     .get("params")
                     .and_then(|params| params.get("activityAtMs"))
             })
-            .and_then(Value::as_u64)
-            .unwrap_or_else(current_unix_ms);
+            .and_then(Value::as_u64);
         let existing_operation = self.persistence.find_operation(operation_id)?;
         let request = if let Some(existing) = &existing_operation {
             if existing.owner_key != NAVIGATION_OWNER_KEY
@@ -138,7 +137,10 @@ where
                     });
                 }
                 BrowserRuntimeOperationState::Prepared => {
-                    let target = match self.persisted_navigation_target(command, activity_at_ms)? {
+                    let target = match self.persisted_navigation_target(
+                        command,
+                        explicit_activity_at_ms.unwrap_or_else(current_unix_ms),
+                    )? {
                         Some(target) => target,
                         None => {
                             let bootstrap = self.navigation_bootstrap_command(
@@ -208,7 +210,13 @@ where
                                         .to_string());
                                 }
                                 operation = self.record_navigation_observation(
-                                    &operation, "executed", &target, None,
+                                    &operation,
+                                    "executed",
+                                    &target,
+                                    Some(json!({
+                                        "activityAtMs": explicit_activity_at_ms
+                                            .unwrap_or_else(current_unix_ms),
+                                    })),
                                 )?;
                                 execute_authorized = false;
                             } else {
@@ -226,15 +234,21 @@ where
                                     );
                                 }
                                 operation = self.record_navigation_observation(
-                                    &operation, "executed", &target, None,
+                                    &operation,
+                                    "executed",
+                                    &target,
+                                    Some(json!({
+                                        "activityAtMs": explicit_activity_at_ms
+                                            .unwrap_or_else(current_unix_ms),
+                                    })),
                                 )?;
                             }
                         }
                         "executed" => {
                             let target = self.navigation_target_from_observation(observation)?;
-                            // A persisted successful execution is not proof that its
-                            // target still exists after restart. Redirects are valid,
-                            // so requalify identity without requiring the original URL.
+                            // Requalify the exact target after execution. The live
+                            // target URL is the navigation result, including redirects;
+                            // the requested URL is only the operation intent.
                             let observed = self
                                 .effects
                                 .observe_navigation_target(&target.browser, &target.tab)
@@ -249,9 +263,15 @@ where
                                 );
                             }
                             let expected_base_state = self.state.clone();
+                            let activity_at_ms = observation
+                                .get("response")
+                                .and_then(|response| response.get("activityAtMs"))
+                                .and_then(Value::as_u64)
+                                .or(explicit_activity_at_ms)
+                                .unwrap_or_else(current_unix_ms);
                             let navigation = self.manager().record_navigation(
                                 &target.session_id,
-                                &url,
+                                &observed.url,
                                 activity_at_ms,
                             )?;
                             let mut response = json!({
@@ -895,6 +915,7 @@ mod tests {
             .unwrap();
         let mut observation = operation.result.unwrap();
         observation["phase"] = json!("executed");
+        observation["response"] = json!({ "activityAtMs": 2_000 });
         host.persistence
             .record_operation_observation(
                 "navigation-executed-1",
@@ -940,6 +961,8 @@ mod tests {
         );
         let recovered = restarted.handle_journaled_navigation_with_keeper(&command, &authority);
         assert_eq!(recovered["success"], true, "{recovered}");
+        assert_eq!(recovered["data"]["url"], "https://example.test/login");
+        assert_eq!(recovered["data"]["visitedAtMs"], 2_000);
         assert_eq!(
             restarted
                 .persistence
@@ -950,5 +973,23 @@ mod tests {
             1
         );
         assert_eq!(executes.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            restarted
+                .persistence
+                .load_session_state()
+                .unwrap()
+                .navigation_history[0]
+                .url,
+            "https://example.test/login"
+        );
+        assert_eq!(
+            restarted
+                .persistence
+                .load_session_state()
+                .unwrap()
+                .navigation_history[0]
+                .visited_at_ms,
+            2_000
+        );
     }
 }

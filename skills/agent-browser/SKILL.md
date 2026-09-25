@@ -613,7 +613,10 @@ The journal controls recovery. An issued navigation inspects the exact live
 target URL instead of repeating navigation or header effects. A matching URL
 establishes current location, not proof that a particular request or its headers
 reached the server. An unavailable target or different URL retains the recovery
-obligation. Navigation history, its handoff, and the result commit atomically.
+obligation. For an executed navigation, the observed live target URL, including
+a redirect destination, is recorded in the result and history. The activity
+time is journaled after execution and reused after restart. Navigation
+history, its handoff, and the result commit atomically.
 Handoff recovery rechecks current keeper readiness and exact browser/tab identity
 before idempotent focus; it preserves the opaque URL. Missing or mismatched
 journals retain `recovery_required`. Cancelling one duplicate

@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 12
+Plan version: 13
 
 State: OPEN
 
@@ -38,8 +38,11 @@ used 1,446,348 tokens, bringing the reconciled Plan 0218 cumulative total to
 continue with a new checkpoint at 500,000 tokens. That instruction renews one
 bounded execution window and revises the cumulative ceiling to 2,882,075
 tokens. It does not reset prior usage or authorize effects excluded elsewhere
-in this plan. The new goal's live counter is authoritative for this window;
-stop for operator review when it reaches 500,000 tokens.
+in this plan. On 2026-09-25 the operator authorized another 500,000-token
+continuation. The goal tool retained the preceding unfinished blocked goal and
+rejected a replacement, so this new window is tracked manually from the
+operator's instruction without treating old usage as reset. Stop for operator
+review at the new window's limit.
 
 ## Objective
 
@@ -615,6 +618,25 @@ This does not qualify journaled navigation or the full G42 lifecycle.
 The P03/P05 trace also shows why the remaining route-bound finalizer cannot
 be moved alone: it mutates the legacy acquisition lease and handoff together
 in JSON. The upstream ordinary open dependency closure must be cut instead.
+
+The next bounded G42/G32 navigation packet makes journaled publication use
+the exact live target URL observed after execution, so a redirect destination
+reaches the response and SQLite navigation history. The `executed` journal
+phase also retains the successful activity time; restart recovery reuses that
+time when committing the exact session and tab. An `issued` operation still
+requires an exact requested-URL observation before recovery and never repeats
+the effect. The three provider-free navigation recovery fixtures pass,
+including a resumed `executed` operation with a redirected URL and a retained
+activity timestamp. Strict workspace Clippy, formatting, remote-view guidance
+checks, the 35-page docs build, and diff validation pass. The architecture
+gate remains at P03/P05/P09 violated, P02/P12/P15/P16/P19 detector gaps, and
+eleven unverified rows. The compact Cargo receipts are under
+`/tmp/p218-journaled-navigation/`, with full output retained separately;
+the reproducer is `cargo-signal start` around the repository `cargo-safe.sh`
+commands for the focused navigation test, format check, and strict Clippy.
+This packet does not establish a committed top-level navigation event, prove
+redirects after an interrupted `issued` effect, or remove legacy JSON from
+ordinary `remote_view_open`. Those remain G32 and P03/P05 work.
 
 ## Grilling Contract Ledger
 
