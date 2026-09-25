@@ -495,7 +495,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
-        self.open_internal(request, None, None)
+        self.open_internal(request, None, None, true)
+    }
+
+    /// Select or create a session before a browser command without refreshing
+    /// an existing session's heartbeat until that command succeeds.
+    pub fn open_for_command(
+        &mut self,
+        request: OpenBrowserSession,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        self.open_internal(request, None, None, false)
     }
 
     pub fn open_reserved(
@@ -503,7 +512,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         request: OpenBrowserSession,
         reservation: BrowserOpenReservation,
     ) -> Result<OpenBrowserSessionResult, String> {
-        self.open_internal(request, Some(reservation), None)
+        self.open_internal(request, Some(reservation), None, true)
     }
 
     /// Publishes an exact reserved browser launch that was already observed by
@@ -526,7 +535,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 self.effects,
                 self.config.clone(),
             );
-            candidate_manager.open_internal(request, Some(reservation), Some(observed_launch))?
+            candidate_manager.open_internal(
+                request,
+                Some(reservation),
+                Some(observed_launch),
+                true,
+            )?
         };
         *self.state = candidate_state;
         Ok(result)
@@ -537,6 +551,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         request: OpenBrowserSession,
         reservation: Option<BrowserOpenReservation>,
         mut observed_launch: Option<BrowserLaunch>,
+        refresh_activity_on_reuse: bool,
     ) -> Result<OpenBrowserSessionResult, String> {
         let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
@@ -585,17 +600,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 if observed_launch.is_some() {
                     return Err("browser_session_observed_launch_unexpected_on_reuse".to_string());
                 }
-                let expires_at_ms = request
-                    .activity_at_ms
-                    .checked_add(self.config.session_idle_timeout_ms)
-                    .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
-                let stored = self
-                    .state
-                    .sessions
-                    .get_mut(&session.id)
-                    .ok_or_else(|| "browser_session_missing_during_refresh".to_string())?;
-                stored.last_activity_at_ms = request.activity_at_ms;
-                stored.expires_at_ms = expires_at_ms;
+                if refresh_activity_on_reuse {
+                    let expires_at_ms = request
+                        .activity_at_ms
+                        .checked_add(self.config.session_idle_timeout_ms)
+                        .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+                    let stored = self
+                        .state
+                        .sessions
+                        .get_mut(&session.id)
+                        .ok_or_else(|| "browser_session_missing_during_refresh".to_string())?;
+                    stored.last_activity_at_ms = request.activity_at_ms;
+                    stored.expires_at_ms = expires_at_ms;
+                }
                 return Ok(OpenBrowserSessionResult {
                     session_id: session.id,
                     session_name: session.name,
@@ -1368,7 +1385,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         url: &str,
         activity_at_ms: u64,
     ) -> Result<BrowserNavigationRecord, String> {
-        let acquisition = self.tab_for_navigation(session_id, activity_at_ms)?;
+        let acquisition = self.tab_for_command(session_id, activity_at_ms)?;
         let session = self
             .state
             .sessions

@@ -544,6 +544,8 @@ recovery-token input.
 For commands routed through an active managed session, success refreshes only
 that session's heartbeat. A failed command retains any newly attributed tab
 for cleanup without extending the session.
+Navigation follows the same rule: failure leaves an existing session heartbeat
+unchanged, while success records activity for that exact session.
 
 Historical session, owner-generation, and cleanup-obligation records do not
 reserve an explicitly selected shared-local profile when no current process is

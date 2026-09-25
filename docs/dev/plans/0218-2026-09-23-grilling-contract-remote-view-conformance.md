@@ -605,6 +605,17 @@ documentation check, the 35-page docs build, and the coverage validator pass
 for this packet. No provider, browser, installed-runtime, or authenticated
 viewer acceptance was attempted.
 
+The next G42 navigation packet separates attempt-time tab attribution from
+heartbeat publication. Reusing an existing session for navigation no longer
+refreshes it before the effect, and failed ordinary navigation retains the
+attributed tab without recording activity. Successful navigation records the
+exact session and tab. The provider-free service-model Alice/Bob regression
+passes; the focused host fixture checks the header-bearing failure path.
+This does not qualify journaled navigation or the full G42 lifecycle.
+The P03/P05 trace also shows why the remaining route-bound finalizer cannot
+be moved alone: it mutates the legacy acquisition lease and handoff together
+in JSON. The upstream ordinary open dependency closure must be cut instead.
+
 ## Grilling Contract Ledger
 
 Every row is normative. Later implementation notes, safety language, renamed

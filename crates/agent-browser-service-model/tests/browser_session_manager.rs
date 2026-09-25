@@ -24,6 +24,7 @@ struct FixtureEffects {
     disposable_allocations: Vec<String>,
     disposable_deletions: Vec<String>,
     navigations: Vec<(String, String, String)>,
+    fail_navigation: bool,
     focuses: Vec<(String, Option<String>)>,
 }
 
@@ -136,6 +137,87 @@ fn manager_handoff_membership_and_activity_are_session_scoped() {
     let restored: agent_browser_service_model::ManagedBrowserSession =
         serde_json::from_value(legacy).unwrap();
     assert!(restored.handoff_ids.is_empty());
+}
+
+#[test]
+fn failed_navigation_keeps_alice_heartbeat_and_bob_untouched() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tabs: VecDeque::from([
+            BrowserTabAcquisition {
+                tab_id: "tab-alice".to_string(),
+                target_id: "target-alice".to_string(),
+                source: BrowserTabSource::Bootstrap,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-bob".to_string(),
+                target_id: "target-bob".to_string(),
+                source: BrowserTabSource::SessionInitial,
+            },
+        ]),
+        fail_navigation: true,
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1_000))
+        .unwrap();
+    assert_eq!(alice.browser_id, bob.browser_id);
+    manager
+        .open_for_command(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            2_000,
+        ))
+        .unwrap();
+    assert_eq!(
+        manager.navigate(&alice.session_id, "https://example.test/fail", 2_000),
+        Err("injected_navigation_failure".to_string())
+    );
+    drop(manager);
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, 301_000);
+    assert_eq!(
+        state.sessions[&alice.session_id].current_tab_id.as_deref(),
+        Some("tab-alice")
+    );
+    assert!(state.navigation_history.is_empty());
+
+    effects.fail_navigation = false;
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    manager
+        .navigate(&alice.session_id, "https://example.test/ok", 3_000)
+        .unwrap();
+    drop(manager);
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
+    assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
 }
 
 #[test]
@@ -628,7 +710,11 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<(), String> {
         self.navigations
             .push((browser.id.clone(), tab.target_id.clone(), url.to_string()));
-        Ok(())
+        if self.fail_navigation {
+            Err("injected_navigation_failure".to_string())
+        } else {
+            Ok(())
+        }
     }
 
     fn focus_browser(

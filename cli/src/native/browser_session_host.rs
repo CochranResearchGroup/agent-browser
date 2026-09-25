@@ -1509,7 +1509,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .unwrap_or_else(current_unix_ms);
         match action {
             "browser_session_open" => {
-                let opened = self.open_request_from_command(command, now_ms)?;
+                let opened = self.open_request_from_command(command, now_ms, true)?;
                 Ok(serde_json::json!({
                     "sessionId": opened.session_id,
                     "sessionName": opened.session_name,
@@ -1532,7 +1532,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             "browser_session_navigate" => {
                 let opened = if optional_string(command, "sessionId").is_none() {
-                    Some(self.open_request_from_command(command, now_ms)?)
+                    Some(self.open_request_from_command(command, now_ms, false)?)
                 } else {
                     None
                 };
@@ -1647,6 +1647,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         command: &serde_json::Value,
         activity_at_ms: u64,
+        refresh_activity_on_reuse: bool,
     ) -> Result<OpenBrowserSessionResult, String> {
         let session_name = required_string(command, "sessionName")?;
         let request = if let Some(profile_id) = optional_string(command, "profileId") {
@@ -1659,7 +1660,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
             )
         };
-        self.open(request)
+        let result = if refresh_activity_on_reuse {
+            self.manager().open(request)?
+        } else {
+            self.manager().open_for_command(request)?
+        };
+        self.commit_state()?;
+        Ok(result)
     }
 
     fn session_id_from_command(&self, command: &serde_json::Value) -> Result<String, String> {
@@ -1759,6 +1766,7 @@ where
 {
     /// Open or reuse a managed session, then run a header-bearing navigation
     /// through the ordinary command executor bound to the manager-owned tab.
+    /// Reuse and tab attribution leave the heartbeat unchanged until success.
     pub(crate) fn handle_managed_navigation_command(
         &mut self,
         command: &serde_json::Value,
@@ -1791,8 +1799,9 @@ where
             if let Some(authority) = authority {
                 self.preflight_keeper_navigation_command(command, authority)?;
             }
-            let opened = self.open_request_from_command(command, now_ms)?;
-            let tab = self.tab_for_navigation(&opened.session_id, now_ms)?;
+            let opened = self.open_request_from_command(command, now_ms, false)?;
+            let tab = self.manager().tab_for_command(&opened.session_id, now_ms)?;
+            self.commit_state()?;
             let session = self
                 .state
                 .sessions
@@ -2711,7 +2720,10 @@ mod tests {
         )
         .unwrap();
         let store = BrowserSessionJsonStore::new(&directory.0);
-        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
         let mut host = BrowserSessionHost::load(
             store,
             effects,
@@ -2742,6 +2754,21 @@ mod tests {
         );
         assert_eq!(host.state().sessions.len(), 1);
         assert_eq!(host.state().tabs.len(), 1);
+        assert_eq!(host.state().navigation_history.len(), 1);
+
+        let failed = host.handle_managed_navigation_command(&serde_json::json!({
+            "id": "command-failed",
+            "action": "browser_session_navigate",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/fail",
+            "headers": {"Remote-User": "operator"},
+            "activityAtMs": 2_000
+        }));
+        assert_eq!(failed["success"], false);
+        let session = host.state().sessions.values().next().unwrap();
+        assert_eq!(session.last_activity_at_ms, 1_000);
+        assert_eq!(session.expires_at_ms, 301_000);
         assert_eq!(host.state().navigation_history.len(), 1);
     }
 

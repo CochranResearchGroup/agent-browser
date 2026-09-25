@@ -5698,6 +5698,8 @@ sessions that select the same exact named runtime profile share one healthy
 browser while retaining separate current tabs, command state, and heartbeats.
 An active managed command refreshes only its session after success. A failed
 command keeps any newly attributed tab without extending the session heartbeat.
+Failed navigation also leaves an existing session heartbeat unchanged; a
+successful navigation records activity for that exact session.
 Omitting a profile gives the named session a session-scoped disposable profile.
 Closing one session preserves a shared browser until its final session closes.
 
