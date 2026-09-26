@@ -136,6 +136,20 @@ Current action: join the minimum M2A provider and live-viewer path, then freeze
 and qualify one M2B Alice/Bob candidate. The early candidate cannot supply
 final proof for a different final candidate.
 
+M2A checkpoint: candidate generation `0.28.0-7396ef55af20` is installed with
+production unchanged and three clean browser-launch cycles. The installed
+generation now proves its Guacamole/XRDP route-keeper capability through
+immutable metadata, and provider preflight passes after the narrow helper
+restored an absent XRDP substrate. Provider apply published the six-binding
+catalog and started only development-owned resources, but runtime-owned warming
+timed out and produced quarantined receipt
+`apply-1790450842088-71115.json`.
+The authoritative SQLite record for `route-slot-02` is quarantined with
+`route_keeper_stop_ownership_unproven` and preserved observation
+`rdp_route_session_boot_identity_changed` from host generation 32; the current
+host is generation 38. No override, record deletion, broad cleanup, ingress
+publication, or further apply retry is authorized. M2A and M2B remain open.
+
 Retained stops: no production/staging mutation, ingress publication, merge,
 release, worktree removal, private-site acceptance, or automatic external
 workflow retries. GitHub CI remains operator-disabled. Recheck development

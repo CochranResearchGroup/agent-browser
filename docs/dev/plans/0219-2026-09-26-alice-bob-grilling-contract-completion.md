@@ -425,3 +425,13 @@ are promoted to pass. B05 and B06 source closure is complete. G25 is partial
 and P09 passes after private SQLite custody, legacy-key scrubbing, transient
 privileged-helper stdin and provider-sync replay fixtures. Installed provider
 cleanup, rotation and handoff-identity evidence remain in M2A.
+
+M2A execution checkpoint: development generation
+`0.28.0-7396ef55af20` proves the installed runtime-owned route-keeper
+capability and passes provider preflight. The joined warm-route attempt stops
+at the intended durable quarantine boundary: `route-slot-02` retains
+`route_keeper_stop_ownership_unproven` with
+`rdp_route_session_boot_identity_changed` from generation 32 while the
+current host is generation 38. No quarantine override, record deletion, broad
+cleanup, ingress publication or blind apply retry is authorized. M2A and M2B
+remain incomplete.

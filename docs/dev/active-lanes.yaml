@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: the minimum M2A provider/live-viewer join and installed M2B Alice/Bob checkpoint remain; provider cleanup and identity-preserving credential rotation require installed evidence; the renewed window stops at complete M2B or 1,000,000 additional tokens, with the last 200,000 reserved for closeout
+    blocker: M2A runtime-owned warming is stopped by durable route-slot-02 quarantine route_keeper_stop_ownership_unproven with preserved observation rdp_route_session_boot_identity_changed from host generation 32; current host generation is 38; no override, record deletion, broad cleanup, ingress publication or further apply retry is authorized; installed M2B remains pending
     updated_at: 2026-09-26
