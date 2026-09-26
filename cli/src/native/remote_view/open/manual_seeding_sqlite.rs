@@ -16,7 +16,8 @@ use crate::native::action_runtime::runtime::{
     validate_cdp_free_launch_plan, DaemonState,
 };
 use crate::native::browser_session_store::{
-    BrowserRuntimeSqliteStore, ManualSeedingReservation, ManualSeedingState,
+    public_manual_seeding_visibility, BrowserRuntimeSqliteStore, ManualSeedingReservation,
+    ManualSeedingState,
 };
 use crate::native::remote_view::RemoteViewRouteBinding;
 use crate::native::remote_view_handoff::route_bound_manual_seeding_operator_visible;
@@ -634,7 +635,10 @@ pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
     let binding = BrowserRuntimeSqliteStore::default_sqlite()?
         .load_route_keeper_authority()?
         .ready_handoff_binding(slot_id, display_name)?;
-    if record.route_fence.as_ref() != Some(&binding.fence)
+    if record
+        .route_user
+        .as_deref()
+        .is_some_and(|route_user| route_user != binding.route_user.as_str())
         || handoff.last_route_id.as_deref() != Some(slot_id)
         || handoff.last_display_allocation_id.as_deref() != Some(display_name)
     {
@@ -646,6 +650,9 @@ pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
         .ok_or_else(|| "manual_seeding_handoff_browser_id_missing".to_string())?;
     let visibility =
         prove_sqlite_manual_seeding_presentation(&binding, process, browser_id).await?;
+    if !crate::process_identity::recorded_process_is_running(process)? {
+        return Err("manual_seeding_process_exited_after_proof".to_string());
+    }
     let store = BrowserRuntimeSqliteStore::default_sqlite()?;
     let current = store
         .load_manual_seeding_record(&record.profile_id)?
@@ -653,13 +660,43 @@ pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
     let current_binding = store
         .load_route_keeper_authority()?
         .ready_handoff_binding(&binding.slot_id, &binding.display_name)?;
-    if current != record || current_binding != binding {
+    let current_handoff = store
+        .load_handoff_registry()?
+        .handoffs
+        .get(handoff_id)
+        .cloned();
+    if current != record || current_binding != binding || current_handoff.as_ref() != Some(&handoff)
+    {
         return Err("manual_seeding_handoff_changed_during_proof".to_string());
+    }
+    if record.route_fence.as_ref() != Some(&binding.fence) {
+        let previous_fence = record
+            .route_fence
+            .as_ref()
+            .ok_or_else(|| "manual_seeding_handoff_previous_fence_missing".to_string())?;
+        let dashboard_generation = crate::dashboard_ingress::selected_dashboard_generation()
+            .map_err(|_| "manual_seeding_dashboard_generation_unavailable".to_string())?;
+        let observed_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let mut store = store;
+        let (_, operation) = store.rebind_ready_manual_seeding_handoff(
+            &record.profile_id,
+            &record.operation_id,
+            record.generation,
+            previous_fence,
+            &binding,
+            process,
+            &visibility,
+            &dashboard_generation,
+            &observed_at,
+        )?;
+        return operation
+            .result
+            .ok_or_else(|| "manual_seeding_rebind_result_missing".to_string());
     }
     let mut result = handoff
         .last_resolution
         .ok_or_else(|| "manual_seeding_handoff_result_missing".to_string())?;
-    result["operatorVisible"] = visibility;
+    result["operatorVisible"] = public_manual_seeding_visibility(&binding, process, &visibility)?;
     Ok(result)
 }
 

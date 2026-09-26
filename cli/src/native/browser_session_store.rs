@@ -26,7 +26,9 @@ mod desktop_control;
 mod manual_seeding;
 mod provisioning;
 pub(crate) use desktop_control::{DesktopControlLease, DesktopControlTransferRequest};
-pub(crate) use manual_seeding::{ManualSeedingReservation, ManualSeedingState};
+pub(crate) use manual_seeding::{
+    public_manual_seeding_visibility, ManualSeedingReservation, ManualSeedingState,
+};
 pub(crate) use provisioning::{PresentationProvisioningConfig, PresentationProvisioningOperation};
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
@@ -4627,6 +4629,16 @@ mod tests {
             "manualSeedingProcess": {"state": "ready", "pid": process.pid},
             "components": {"guacamole": {"externalUrl": "https://provider.invalid/guacamole/#/client/raw"}},
         });
+        let public =
+            public_manual_seeding_visibility(&binding, &process, &operator_visible).unwrap();
+        assert_eq!(public["state"], "ready");
+        assert!(!public.to_string().contains("provider.invalid"));
+        let mut wrong_process = operator_visible.clone();
+        wrong_process["manualSeedingProcess"]["pid"] = serde_json::json!(1);
+        assert_eq!(
+            public_manual_seeding_visibility(&binding, &process, &wrong_process),
+            Err("manual_seeding_operator_visibility_unproven".to_string())
+        );
         let mut not_visible = operator_visible.clone();
         not_visible["state"] = serde_json::json!("not_ready");
         assert_eq!(
@@ -4732,6 +4744,186 @@ mod tests {
                 )
                 .unwrap(),
             closed
+        );
+
+        let second_request = ManualSeedingReservation {
+            operation_id: "seed-op-rebind".to_string(),
+            handoff_id: "seed-handoff-rebind".to_string(),
+            ..request
+        };
+        let (_, second_operation) = store.reserve_manual_seeding(&second_request).unwrap();
+        store
+            .bind_manual_seeding_route(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding,
+            )
+            .unwrap();
+        store
+            .mark_manual_seeding_launch_issued(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding,
+            )
+            .unwrap();
+        let live_process =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        store
+            .observe_manual_seeding_launch(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding,
+                &live_process,
+            )
+            .unwrap();
+        let live_visible = serde_json::json!({
+            "state": "ready",
+            "routeId": binding.slot_id,
+            "displayName": binding.display_name,
+            "manualSeedingProcess": {"state": "ready", "pid": live_process.pid},
+            "components": {"guacamole": {"externalUrl": "https://provider.invalid/raw"}},
+        });
+        let original_handoff = store
+            .publish_manual_seeding_ready(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-a",
+                "2026-09-25T00:02:00Z",
+            )
+            .unwrap()
+            .0;
+        let before_adoption = store.load_route_keeper_authority().unwrap();
+        let mut adopted_authority = before_adoption.clone();
+        let previous_ready = adopted_authority.records[&slot_id]
+            .protocol_ready
+            .as_ref()
+            .unwrap()
+            .clone();
+        adopted_authority
+            .record_disconnect(
+                &slot_id,
+                &binding.fence,
+                &previous_ready.guacamole_connection_uuid,
+            )
+            .unwrap();
+        adopted_authority
+            .register_host_process_claim(route_keeper_host_claim(2))
+            .unwrap();
+        let new_fence = match adopted_authority.begin_adoption(&slot_id, 2).unwrap() {
+            agent_browser_service_model::RouteKeeperReconcileAction::Adopt { fence, .. } => fence,
+            other => panic!("expected adoption, got {other:?}"),
+        };
+        let mut new_ready = previous_ready.clone();
+        new_ready.fence = new_fence;
+        new_ready.guacamole_connection_uuid = "guacamole-rebound".to_string();
+        adopted_authority
+            .adopt(agent_browser_service_model::RouteKeeperAdoptionReceipt {
+                previous_host_generation: 1,
+                previous_guacamole_connection_uuid: previous_ready.guacamole_connection_uuid,
+                ready: new_ready,
+                adopted_at: "2026-09-25T00:03:00Z".to_string(),
+            })
+            .unwrap();
+        store
+            .compare_and_swap_route_keeper_authority(&before_adoption, &adopted_authority)
+            .unwrap();
+        let rebound = adopted_authority
+            .ready_handoff_binding(&slot_id, ":1")
+            .unwrap();
+        assert_ne!(binding.fence, rebound.fence);
+        let mut changed_user = rebound.clone();
+        changed_user.route_user = "different-user".to_string();
+        assert!(store
+            .rebind_ready_manual_seeding_handoff(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding.fence,
+                &changed_user,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-b",
+                "2026-09-25T00:04:00Z",
+            )
+            .is_err());
+        let mut changed_display = rebound.clone();
+        changed_display.display_name = ":2".to_string();
+        assert!(store
+            .rebind_ready_manual_seeding_handoff(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding.fence,
+                &changed_display,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-b",
+                "2026-09-25T00:04:00Z",
+            )
+            .is_err());
+        let mut changed_origin = rebound.clone();
+        changed_origin.public_operator_url = "https://other.example/remote-view".to_string();
+        assert!(store
+            .rebind_ready_manual_seeding_handoff(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding.fence,
+                &changed_origin,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-b",
+                "2026-09-25T00:04:00Z",
+            )
+            .is_err());
+        let (rebound_handoff, rebound_operation) = store
+            .rebind_ready_manual_seeding_handoff(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding.fence,
+                &rebound,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-b",
+                "2026-09-25T00:04:00Z",
+            )
+            .unwrap();
+        assert_eq!(rebound_handoff.handoff_url, original_handoff.handoff_url);
+        assert_eq!(rebound_handoff.browser_id, original_handoff.browser_id);
+        assert!(!rebound_operation
+            .result
+            .unwrap()
+            .to_string()
+            .contains("provider.invalid"));
+        assert!(store
+            .rebind_ready_manual_seeding_handoff(
+                "work",
+                &second_request.operation_id,
+                second_operation.generation,
+                &binding.fence,
+                &rebound,
+                &live_process,
+                &live_visible,
+                "dashboard-generation-b",
+                "2026-09-25T00:05:00Z",
+            )
+            .is_err());
+        assert_eq!(
+            store
+                .load_manual_seeding_record("work")
+                .unwrap()
+                .unwrap()
+                .route_fence,
+            Some(rebound.fence)
         );
     }
 

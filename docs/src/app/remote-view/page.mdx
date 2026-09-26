@@ -471,8 +471,12 @@ For a registered profile that needs manual sign-in, the
 <code>service_profile_manual_seeding_acquire</code> request reserves the profile
 and a ready keeper slot in SQLite. It returns an opaque handoff only after the
 headed browser is visible through the public route. Opening that handoff
-rechecks the exact browser process and current route visibility. Use
-<code>service_profile_manual_seeding_close</code> with the returned profile,
+rechecks the exact browser process and current route visibility. For a handoff
+with a recorded route user, use the same opaque URL after keeper adoption on
+the same slot, display, and route user;
+resolution refreshes the route fence only after fresh presentation proof.
+A changed display or route user requires recovery. Provider URLs stay internal.
+Use <code>service_profile_manual_seeding_close</code> with the returned profile,
 target service, handoff ID, and PID when finished. Close stops only that
 verified process instance and closes the handoff. The provider-owned keeper
 route remains available for another browser.
