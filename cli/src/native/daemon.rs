@@ -116,10 +116,20 @@ fn manager_command_from_remote_view_open_with_mode(
         })
         .and_then(Value::as_str)
         .filter(|profile| !profile.trim().is_empty());
+    let resolved_runtime_profile_path = intent.runtime_profile.as_deref().and_then(|profile_id| {
+        crate::runtime_profile::resolve_profile(None, Some(profile_id))
+            .ok()
+            .map(|profile| profile.user_data_dir)
+    });
+    let independent_profile = intent.profile.as_deref().filter(|profile| {
+        resolved_runtime_profile_path
+            .as_ref()
+            .is_none_or(|resolved| resolved != std::path::Path::new(profile))
+    });
     let profiles = [
         explicit_profile,
         intent.runtime_profile.as_deref(),
-        intent.profile.as_deref(),
+        independent_profile,
     ]
     .into_iter()
     .flatten()
@@ -2705,6 +2715,21 @@ mod tests {
         assert_eq!(named["profileId"], "work");
         assert_eq!(named["sessionName"], "alice");
         assert_eq!(named["url"], "https://example.test/alice");
+
+        let resolved_work = crate::runtime_profile::resolve_profile(None, Some("work"))
+            .unwrap()
+            .user_data_dir;
+        let configured_path = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "profile": resolved_work,
+                "sessionName": "alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(configured_path["profileId"], "work");
 
         let noisy_history = manager_command_from_remote_view_open(
             &serde_json::json!({
