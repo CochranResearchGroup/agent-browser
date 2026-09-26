@@ -58,7 +58,7 @@ lanes:
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
     validation_status: M1A is reconciled; ordinary manager open and navigation bootstrap are keeper-only, stale history cannot change manager translation or block valid migrated profile opens, and focused receipts pass; inventory is zero pass, 28 partial, seven fail, ten missing; P09 is violated, seven detectors have gaps and eleven prohibitions are unverified; no installed P219 acceptance
-    validation_ref: 1884c407
+    validation_ref: bf33210e
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]

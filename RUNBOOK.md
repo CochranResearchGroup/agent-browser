@@ -47,6 +47,12 @@ share one execution permit and replay one operation and handoff
 browser operation before exact client resume
 (`job-20260926T175854Z-10e864191671`). G19, G31 and G40 remain partial until
 their browser-host and installed-daemon boundaries are proven.
+The B05 inventory confirms that ordinary page-effect commands centralize
+success-only heartbeat publication in `execute_managed_command`. Failure,
+execution-error, success and exact Alice/Bob isolation pass in
+`job-20260926T180401Z-b2578ab7c2d2`; shared-browser command and cleanup
+isolation passes in `job-20260926T180405Z-5f6a121c50fc`. B05 remains open for
+generation-plus-operation fencing and browser-backed qualification.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

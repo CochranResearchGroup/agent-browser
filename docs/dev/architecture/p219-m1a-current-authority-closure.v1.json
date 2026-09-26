@@ -34,6 +34,11 @@
       "id": "ordinary-open-coalescing-and-waiting-restart",
       "evidence": "cargo-signal jobs job-20260926T175808Z-5fb37dfa5612 and job-20260926T175854Z-10e864191671",
       "result": "Exact concurrent ordinary requests share one SQLite execution permit and replay one operation and handoff result; waiting-only restart performs no browser operation until the exact client resumes."
+    },
+    {
+      "id": "managed-command-heartbeat-and-session-isolation",
+      "evidence": "cargo-signal jobs job-20260926T180401Z-b2578ab7c2d2 and job-20260926T180405Z-5f6a121c50fc",
+      "result": "Managed command failure and execution error preserve activity, success refreshes only the addressed session, and Alice-first cleanup preserves Bob until the final browser close."
     }
   ],
   "blockers": [
@@ -53,7 +58,7 @@
       "symbols": ["BrowserSessionHost::execute_managed_command", "BrowserRuntimeSqliteStore::commit_browser_navigation", "BrowserSessionManager::close_session"],
       "writeSurfaces": ["cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_host/navigation_recovery.rs", "crates/agent-browser-service-model/src/browser_session_manager.rs"],
       "existingTests": ["shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite", "journaled navigation tests"],
-      "nextCheck": "Inventory every ordinary command variant, then add missing success-only heartbeat and generation-fencing cases before browser-backed qualification."
+      "nextCheck": "The centralized managed-command success-only heartbeat and Alice/Bob isolation fixtures pass. Next freeze and repair generation-plus-operation fencing for browser effects, callbacks, completion and recovery commits before browser-backed qualification."
     },
     {
       "id": "M1A-B06",
