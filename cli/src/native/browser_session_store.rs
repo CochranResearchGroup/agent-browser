@@ -4784,11 +4784,11 @@ mod tests {
                 "seed-uncertain",
                 operation.generation,
                 &binding,
-                4_242,
+                i32::MAX as u32,
             )
             .unwrap();
         assert_eq!(observed.0.state, ManualSeedingState::RecoveryRequired);
-        assert_eq!(observed.0.uncertain_launch_pid, Some(4_242));
+        assert_eq!(observed.0.uncertain_launch_pid, Some(i32::MAX as u32));
         assert_eq!(observed.1.state, BrowserRuntimeOperationState::Observed);
         assert_eq!(
             store
@@ -4797,7 +4797,7 @@ mod tests {
                     "seed-uncertain",
                     operation.generation,
                     &binding,
-                    4_242,
+                    i32::MAX as u32,
                 )
                 .unwrap(),
             observed
@@ -4806,11 +4806,80 @@ mod tests {
             store.reserve_manual_seeding(&ManualSeedingReservation {
                 operation_id: "seed-retry".to_string(),
                 handoff_id: "seed-retry-handoff".to_string(),
-                ..request
+                ..request.clone()
             }),
             Err("manual_seeding_profile_busy:work".to_string())
         );
         assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let reconciled = store
+            .reconcile_absent_uncertain_manual_seeding_launch(
+                "work",
+                "seed-uncertain",
+                operation.generation,
+                i32::MAX as u32,
+            )
+            .unwrap();
+        assert_eq!(reconciled.0.state, ManualSeedingState::Closed);
+        assert_eq!(reconciled.1.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(
+            reconciled.1.result.as_ref().unwrap()["retryRequiresNewOperation"],
+            true
+        );
+        assert_eq!(
+            store
+                .reconcile_absent_uncertain_manual_seeding_launch(
+                    "work",
+                    "seed-uncertain",
+                    operation.generation,
+                    i32::MAX as u32,
+                )
+                .unwrap(),
+            reconciled
+        );
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let retry = ManualSeedingReservation {
+            operation_id: "seed-retry".to_string(),
+            handoff_id: "seed-retry-handoff".to_string(),
+            ..request
+        };
+        let (_, next_operation) = store.reserve_manual_seeding(&retry).unwrap();
+        store
+            .bind_manual_seeding_route("work", "seed-retry", next_operation.generation, &binding)
+            .unwrap();
+        store
+            .mark_manual_seeding_launch_issued(
+                "work",
+                "seed-retry",
+                next_operation.generation,
+                &binding,
+            )
+            .unwrap();
+        store
+            .observe_uncertain_manual_seeding_launch(
+                "work",
+                "seed-retry",
+                next_operation.generation,
+                &binding,
+                std::process::id(),
+            )
+            .unwrap();
+        assert_eq!(
+            store.reconcile_absent_uncertain_manual_seeding_launch(
+                "work",
+                "seed-retry",
+                next_operation.generation,
+                std::process::id(),
+            ),
+            Err("manual_seeding_uncertain_pid_not_absent".to_string())
+        );
+        assert_eq!(
+            store
+                .load_manual_seeding_record("work")
+                .unwrap()
+                .unwrap()
+                .state,
+            ManualSeedingState::RecoveryRequired
+        );
     }
 
     #[test]

@@ -476,6 +476,10 @@ rechecks the exact browser process and current route visibility. Use
 target service, handoff ID, and PID when finished. Close stops only that
 verified process instance and closes the handoff. The provider-owned keeper
 route remains available for another browser.
+If the launch returned a PID without an exact process identity, acquisition
+keeps the profile reserved while that PID exists. Once the PID is absent, the
+next acquire returns <code>retryRequiresNewOperation: true</code> and does not
+launch a browser. Submit a new request ID before retrying.
 
 Dashboard reconnect selects the browser's service-owned RDP stream for viewer
 lease authority, even when a CDP stream is currently selected for presentation.

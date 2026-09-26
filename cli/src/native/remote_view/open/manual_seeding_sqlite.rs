@@ -131,6 +131,33 @@ fn prepare_sqlite_manual_seeding_acquisition(
         .filter(|record| record.state != ManualSeedingState::Closed)
     {
         Some(record) => {
+            // A PID without launch identity is never adoption or kill authority.
+            // Terminalize only when that PID has disappeared; the caller must
+            // submit a new operation before another launch can be issued.
+            if record.state == ManualSeedingState::RecoveryRequired
+                && record.process_identity.is_none()
+            {
+                if let Some(pid) = record.uncertain_launch_pid {
+                    store.reconcile_absent_uncertain_manual_seeding_launch(
+                        &profile_id,
+                        &record.operation_id,
+                        record.generation,
+                        pid,
+                    )?;
+                    return Ok(ManualSeedingAcquisition::Existing(json!({
+                        "status": "uncertain_launch_process_absent",
+                        "resolved": false,
+                        "profileId": profile_id,
+                        "handoffId": record.handoff_id,
+                        "pid": pid,
+                        "retryRequiresNewOperation": true,
+                        "operatorVisible": {
+                            "state": "not_checked",
+                            "reason": "no_live_manual_seeding_browser",
+                        },
+                    })));
+                }
+            }
             if record.target_service_id != target_service_id
                 || record.requested_url != requested_url
             {

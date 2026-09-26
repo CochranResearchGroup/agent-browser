@@ -617,6 +617,119 @@ impl BrowserRuntimeSqliteStore {
         Ok((updated, operation))
     }
 
+    /// Release an uncertain launch only after the recorded PID is absent.
+    /// A live PID cannot be adopted or killed from this evidence. The
+    /// original operation becomes terminal; a later acquire needs a new ID.
+    pub(crate) fn reconcile_absent_uncertain_manual_seeding_launch(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        pid: u32,
+    ) -> Result<(ManualSeedingRecord, BrowserRuntimeOperation), String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_absent_reconcile_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id
+            || record.generation != generation
+            || record.uncertain_launch_pid != Some(pid)
+            || record.process_identity.is_some()
+        {
+            return Err("manual_seeding_absent_reconcile_identity_mismatch".to_string());
+        }
+        let mut operation = super::load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}")
+            || operation.generation != generation
+            || super::load_owner_generation(&transaction, &operation.owner_key)? != generation
+        {
+            return Err("manual_seeding_absent_reconcile_operation_stale".to_string());
+        }
+        let result = serde_json::json!({
+            "status": "uncertain_launch_process_absent",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "pid": pid,
+            "retryRequiresNewOperation": true,
+        });
+        if record.state == ManualSeedingState::Closed
+            && operation.state == BrowserRuntimeOperationState::Committed
+            && operation.result.as_ref() == Some(&result)
+        {
+            return Ok((record.clone(), operation));
+        }
+        let expected_observation = serde_json::json!({
+            "phase": "manual_seeding_launch_identity_uncertain",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "routeSlotId": record.route_slot_id.as_deref()
+                .ok_or_else(|| "manual_seeding_absent_reconcile_route_missing".to_string())?,
+            "displayName": record.display_name.as_deref()
+                .ok_or_else(|| "manual_seeding_absent_reconcile_display_missing".to_string())?,
+            "routeFence": record.route_fence.as_ref()
+                .ok_or_else(|| "manual_seeding_absent_reconcile_fence_missing".to_string())?,
+            "pid": pid,
+        });
+        if record.state != ManualSeedingState::RecoveryRequired
+            || operation.state != BrowserRuntimeOperationState::Observed
+            || operation.result.as_ref() != Some(&expected_observation)
+        {
+            return Err("manual_seeding_absent_reconcile_state_invalid".to_string());
+        }
+        if !matches!(
+            crate::process_identity::observe_process(pid),
+            crate::process_identity::ProcessObservation::Missing
+        ) {
+            return Err("manual_seeding_uncertain_pid_not_absent".to_string());
+        }
+        let handoffs: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        if handoffs.handoffs.contains_key(&record.handoff_id) {
+            return Err("manual_seeding_absent_reconcile_handoff_conflict".to_string());
+        }
+        record.state = ManualSeedingState::Closed;
+        let updated = record.clone();
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Committed.as_str(),
+                    serde_json::to_string(&result).map_err(|error| format!(
+                        "manual_seeding_absent_reconcile_result_invalid:{error}"
+                    ))?
+                ],
+            )
+            .map_err(|error| {
+                format!("manual_seeding_absent_reconcile_operation_save_failed:{error}")
+            })?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_absent_reconcile_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Committed;
+        operation.result = Some(result);
+        Ok((updated, operation))
+    }
+
     /// Journal one exact detached process and current provider-owned route in
     /// the same transaction. A later ready handoff must recheck both witnesses.
     #[allow(dead_code)]
