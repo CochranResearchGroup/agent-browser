@@ -1893,14 +1893,27 @@ impl RuntimeHostRouter {
             let host = host
                 .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())?;
-            serde_json::to_value(host.state())
-                .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))
+            let snapshot = serde_json::to_value(host.state())
+                .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))?;
+            let authority =
+                super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                    .load_route_keeper_authority()?;
+            Ok::<_, String>((snapshot, authority))
         })
         .await
         .map_err(|error| format!("browser_session_status_join_failed:{error}"))
         .and_then(|snapshot| snapshot);
+        let response = match &snapshot {
+            Ok((state, authority)) => {
+                attach_keeper_view_routes_to_status(response, state, authority)
+            }
+            Err(_) => response,
+        };
         attach_presentation_keeper_status(
-            attach_browser_session_state_to_status(response, snapshot),
+            attach_browser_session_state_to_status(
+                response,
+                snapshot.map(|(state, _authority)| state),
+            ),
             keeper_status,
         )
     }
@@ -2009,6 +2022,114 @@ fn attach_browser_session_state_to_status(
         Err(error) => {
             data.insert("browserSessionState".to_string(), Value::Null);
             data.insert("browserSessionStateError".to_string(), Value::String(error));
+        }
+    }
+    response
+}
+
+fn attach_keeper_view_routes_to_status(
+    mut response: Value,
+    browser_sessions: &Value,
+    authority: &agent_browser_service_model::RouteKeeperAuthority,
+) -> Value {
+    let Some(legacy_routes) = response
+        .pointer("/data/service_state/remoteViewRoutes")
+        .and_then(Value::as_object)
+        .cloned()
+    else {
+        return response;
+    };
+    let legacy_pool = response
+        .pointer("/data/service_state/routePool")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    let Some(browsers) = browser_sessions.get("browsers").and_then(Value::as_object) else {
+        return response;
+    };
+    let mut projections = Vec::new();
+    for (browser_id, browser) in browsers {
+        let Some(desktop) = browser.get("desktop") else {
+            continue;
+        };
+        let Some(slot_id) = desktop.get("routeId").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(display_name) = desktop.get("displayName").and_then(Value::as_str) else {
+            continue;
+        };
+        let Some(record) = authority.records.get(slot_id) else {
+            continue;
+        };
+        if record.phase != agent_browser_service_model::RouteKeeperPhase::Ready {
+            continue;
+        }
+        let Some(ready) = record.protocol_ready.as_ref() else {
+            continue;
+        };
+        if ready.display_name != display_name {
+            continue;
+        }
+        let Some(binding) = authority.connection_catalog.bindings.get(slot_id) else {
+            continue;
+        };
+        let connection_id = binding.guacamole_connection_id.to_string();
+        let Some((route_id, template)) = legacy_routes.iter().find(|(_id, route)| {
+            route.get("connectionId").and_then(Value::as_str) == Some(connection_id.as_str())
+        }) else {
+            continue;
+        };
+        let mut route = template.clone();
+        route["browserId"] = Value::String(browser_id.clone());
+        route["state"] = Value::String("ready".to_string());
+        route["routeSource"] = Value::String("runtime_keeper".to_string());
+        route["readiness"] = serde_json::json!({
+            "state": "ready",
+            "component": "runtime_keeper",
+            "displayName": display_name,
+            "hostGeneration": record.fence.host_generation,
+        });
+        route["remoteReadiness"] = serde_json::json!({
+            "state": "ready",
+            "displayName": display_name,
+        });
+        route["attachability"] = serde_json::json!({
+            "state": "attached_ready",
+            "displayName": display_name,
+        });
+        let pool = legacy_pool
+            .values()
+            .find(|entry| entry.get("routeId").and_then(Value::as_str) == Some(route_id.as_str()))
+            .cloned()
+            .unwrap_or_else(|| serde_json::json!({}));
+        let mut pool_alias = pool;
+        pool_alias["id"] = Value::String(slot_id.to_string());
+        pool_alias["routeId"] = Value::String(route_id.clone());
+        pool_alias["state"] = Value::String("ready".to_string());
+        pool_alias["readiness"] = route["readiness"].clone();
+        projections.push((slot_id.to_string(), route_id.clone(), route, pool_alias));
+    }
+    let Some(service_state) = response
+        .pointer_mut("/data/service_state")
+        .and_then(Value::as_object_mut)
+    else {
+        return response;
+    };
+    let Some(routes) = service_state
+        .get_mut("remoteViewRoutes")
+        .and_then(Value::as_object_mut)
+    else {
+        return response;
+    };
+    for (_slot_id, route_id, route, _) in &projections {
+        routes.insert(route_id.clone(), route.clone());
+    }
+    if let Some(pool) = service_state
+        .get_mut("routePool")
+        .and_then(Value::as_object_mut)
+    {
+        for (slot_id, _route_id, _route, pool_alias) in projections {
+            pool.insert(slot_id, pool_alias);
         }
     }
     response
@@ -3994,6 +4115,78 @@ mod tests {
         assert_eq!(
             joined["data"]["browserSessionStateError"],
             "browser-session-state unreadable"
+        );
+    }
+
+    #[test]
+    fn service_status_joins_keeper_route_by_stable_connection_identity() {
+        let mut authority = agent_browser_service_model::RouteKeeperAuthority::new(7).unwrap();
+        authority.connection_catalog =
+            agent_browser_service_model::RouteKeeperConnectionCatalog::new([
+                agent_browser_service_model::RouteKeeperConnectionBinding {
+                    slot_id: "route-slot-01".to_string(),
+                    connection_key: "connection-key-1".to_string(),
+                    connection_name: "Connection 1".to_string(),
+                    route_user: "route-user-1".to_string(),
+                    guacamole_connection_id: 41,
+                },
+            ])
+            .unwrap();
+        let record = authority.records.get_mut("route-slot-01").unwrap();
+        record.phase = agent_browser_service_model::RouteKeeperPhase::Ready;
+        record.protocol_ready = Some(
+            agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+                slot_id: "route-slot-01".to_string(),
+                keeper_id: record.keeper_id.clone(),
+                fence: record.fence.clone(),
+                guacamole_connection_uuid: "connection-uuid-1".to_string(),
+                xrdp_session_id: "c41".to_string(),
+                display_name: ":41".to_string(),
+                xrdp_ownership: None,
+                observed_at: "2026-09-26T21:00:00Z".to_string(),
+            },
+        );
+        let response = serde_json::json!({
+            "success": true,
+            "data": { "service_state": {
+                "remoteViewRoutes": { "provider-route-1": {
+                    "id": "provider-route-1",
+                    "connectionId": "41",
+                    "frameUrl": "/guacamole/frame/1",
+                    "state": "orphaned",
+                    "readiness": { "state": "orphaned" }
+                }},
+                "routePool": { "provider-slot-1": {
+                    "id": "provider-slot-1",
+                    "routeId": "provider-route-1",
+                    "state": "unavailable"
+                }}
+            }}
+        });
+        let browser_sessions = serde_json::json!({ "browsers": {
+            "browser:alice": {
+                "desktop": { "routeId": "route-slot-01", "displayName": ":41" }
+            }
+        }});
+
+        let joined = attach_keeper_view_routes_to_status(response, &browser_sessions, &authority);
+
+        assert_eq!(
+            joined["data"]["service_state"]["remoteViewRoutes"]["provider-route-1"]["browserId"],
+            "browser:alice"
+        );
+        assert_eq!(
+            joined["data"]["service_state"]["remoteViewRoutes"]["provider-route-1"]["readiness"]
+                ["state"],
+            "ready"
+        );
+        assert_eq!(
+            joined["data"]["service_state"]["routePool"]["route-slot-01"]["routeId"],
+            "provider-route-1"
+        );
+        assert_eq!(
+            joined["data"]["service_state"]["routePool"]["route-slot-01"]["state"],
+            "ready"
         );
     }
 
