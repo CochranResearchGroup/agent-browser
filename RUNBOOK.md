@@ -11,7 +11,22 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 39 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 40 remains open on `platform/p211-simple-cold-upgrade`.
+Source checkpoint `bd1af167` refreshes a ready SQLite manual-seeding handoff
+after same-slot, same-display, same-user keeper adoption, with fresh process
+and presentation proof and one transaction for the fence, receipt, and result.
+The opaque URL and browser identity remain unchanged; provider URLs are
+redacted. Legacy records without a stored route user can resolve on the old
+fence but cannot be refenced. Five focused Rust cases, strict Clippy, format,
+route-confusion, selected workstation no-launch, handoff docs, and docs build
+checks pass. Installed visual and input evidence, ordinary handoff authority,
+and live viewer control remain open. P03, P05, and P09 remain violated; five
+detector gaps and 11 unverified rows remain. Coverage is zero pass, 27 partial,
+seven fail, and 11 missing.
+
+### Earlier P218 source checkpoints
+
+Plan 0218 version 39 remained open on `platform/p211-simple-cold-upgrade`.
 Source checkpoint `547e958e` closes an exited ready manual-seeding browser's
 exact SQLite handoff on acquire or durable resolution, including when the old
 keeper binding is unavailable. A missing or reused unrelated PID may close;
@@ -44,8 +59,6 @@ keeper change, uncertain-launch reconciliation, and the live keeper probe
 remain open. The current architecture audit reports P03, P05, and P09
 violated, five detector gaps, and 11 unverified rows. The G01–G45 coverage
 inventory remains zero pass, 27 partial, seven fail, and 11 missing.
-
-### Earlier P218 source checkpoints
 
 Source checkpoint `12025924` added a keeper-derived presentation proof bridge for
 SQLite manual seeding. It checks the exact process around display access,

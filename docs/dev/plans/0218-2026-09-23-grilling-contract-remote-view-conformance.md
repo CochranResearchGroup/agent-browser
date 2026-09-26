@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 39
+Plan version: 40
 
 State: OPEN
 
@@ -848,6 +848,23 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 40 adds exact same-slot, same-display, same-route-user keeper refencing
+for a ready SQLite manual-seeding handoff. Source checkpoint `bd1af167`
+rechecks the recorded process, current keeper binding, and fresh presentation
+proof before one SQLite transaction updates the route fence, handoff receipt,
+and committed operation result. The opaque URL and logical browser identity
+remain fixed; returned visibility omits raw provider URLs. A changed display,
+route user, public origin, or stale fence is rejected by the focused fixture.
+Legacy ready records without a stored route user can still resolve on their
+unchanged fence, but cannot be refenced from that incomplete identity. Five
+focused manual-seeding Rust cases, strict workspace Clippy, format check,
+route-confusion and selected workstation no-launch gates, handoff documentation
+check, and docs build passed. This is source-only evidence; no installed
+presentation or input acceptance is claimed. The architecture audit still has
+P03, P05, and P09 violated, five detector gaps, and eleven unverified rows.
+The G01 through G45 manifest remains zero pass, 27 partial, seven fail, and
+eleven missing. Plan 0218 remains OPEN.
 
 Version 39 closes a ready manual-seeding handoff when its exact recorded
 browser process has exited. Source checkpoint `547e958e` makes both acquire

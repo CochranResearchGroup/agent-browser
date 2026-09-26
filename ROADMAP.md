@@ -38,9 +38,10 @@ mobile visual-operational acceptance.
 
 The [current plan](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
 owns the `PL-PLATFORM` outcome for issues #181, #183, and #195 on the inherited
-P211 branch and draft PR #191. The next milestone is M0: map every normative
-G01 through G24 decision to current source and evidence, then install red
-architecture gates for every violation before further repair. Production
+P211 branch and draft PR #191. M0 mapping and red architecture gates exist;
+M1 ordinary handoff and JSON authority closure remains open, followed by M2
+provider integration, M3 durable recovery and live viewer control, and M4
+installed visual-operational acceptance. Production
 installation, ingress publication, release, and merge remain excluded.
 
 ## P216 | Service Model Extraction Landing
