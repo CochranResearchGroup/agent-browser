@@ -979,12 +979,24 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     where
         E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
     {
+        self.handle_journaled_open_with_keeper_handoff_fenced(command, authority, &mut || Ok(()))
+    }
+
+    pub(crate) fn handle_journaled_open_with_keeper_handoff_fenced(
+        &mut self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+        require_current: &mut dyn FnMut() -> Result<(), String>,
+    ) -> serde_json::Value
+    where
+        E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
+    {
         let id = command
             .get("id")
             .cloned()
             .unwrap_or(serde_json::Value::Null);
         let baseline_state = self.state.clone();
-        let result = self.journaled_open_with_handoff_result(command, authority);
+        let result = self.journaled_open_with_handoff_result(command, authority, require_current);
         match result {
             Ok(response) => response,
             Err(error) => {
@@ -1001,6 +1013,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         command: &serde_json::Value,
         authority: &RouteKeeperAuthority,
+        require_current: &mut dyn FnMut() -> Result<(), String>,
     ) -> Result<serde_json::Value, String>
     where
         E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
@@ -1154,6 +1167,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .is_none_or(|operation| operation.state == BrowserRuntimeOperationState::Prepared);
 
         loop {
+            require_current()?;
             match operation.state {
                 BrowserRuntimeOperationState::Committed => {
                     return observation_response(operation.result.as_ref().ok_or_else(|| {
@@ -1172,6 +1186,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             "handoffId": handoff_id,
                         }
                     });
+                    require_current()?;
                     operation =
                         self.record_open_observation(&operation, "launch_started", response, None)?;
                 }
@@ -1297,6 +1312,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 serde_json::json!(
                                     format!("{:?}", opened.session_disposition).to_lowercase()
                                 );
+                            require_current()?;
                             operation = self.record_open_observation(
                                 &operation,
                                 "browser_opened",
@@ -1325,6 +1341,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             let mut response = response;
                             response["data"]["tabId"] = serde_json::json!(tab.tab_id);
                             response["data"]["targetId"] = serde_json::json!(tab.target_id);
+                            require_current()?;
                             operation = self.record_open_observation(
                                 &operation,
                                 "tab_acquired",
@@ -1359,6 +1376,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                             serde_json::json!(navigation.tab_id);
                                         response["data"]["targetId"] =
                                             serde_json::json!(navigation.target_id);
+                                        require_current()?;
                                         operation = self.record_open_observation(
                                             &operation,
                                             "navigation_completed",
@@ -1368,6 +1386,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                         continue;
                                     }
                                     Err(error) => {
+                                        require_current()?;
                                         self.record_open_effect_failure(
                                             &operation,
                                             &response,
@@ -1378,6 +1397,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                     }
                                 }
                             }
+                            require_current()?;
                             operation = self.record_open_observation(
                                 &operation,
                                 "navigation_completed",
@@ -1387,6 +1407,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         }
                         "navigation_issued" => {
                             let error = "browser_runtime_open_navigation_outcome_unproven";
+                            require_current()?;
                             self.record_open_effect_failure(
                                 &operation,
                                 &response,
@@ -1409,6 +1430,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 Some(target_id),
                                 activity_at_ms,
                             ) {
+                                require_current()?;
                                 self.record_open_effect_failure(
                                     &operation,
                                     &response,
@@ -1432,6 +1454,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 Ok(_) => {
                                     let error = "browser_runtime_operator_presentation_not_ready"
                                         .to_string();
+                                    require_current()?;
                                     self.record_open_effect_failure(
                                         &operation,
                                         &response,
@@ -1441,6 +1464,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                     return Err(error);
                                 }
                                 Err(error) => {
+                                    require_current()?;
                                     self.record_open_effect_failure(
                                         &operation,
                                         &response,
@@ -1452,6 +1476,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             };
                             let mut response = response;
                             response["data"]["operatorVisible"] = proof;
+                            require_current()?;
                             operation = self.record_open_observation(
                                 &operation,
                                 "presentation_observed",
@@ -1481,6 +1506,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             }
                             response["data"]["operatorVisible"] =
                                 observation["response"]["data"]["operatorVisible"].clone();
+                            require_current()?;
                             operation = self.record_open_observation(
                                 &operation,
                                 "ready",
@@ -1497,6 +1523,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             .map_err(|error| {
                                 format!("browser_runtime_operation_handoff_invalid:{error}")
                             })?;
+                            require_current()?;
                             let committed = self
                                 .persistence
                                 .commit_browser_open(

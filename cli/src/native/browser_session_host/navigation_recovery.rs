@@ -74,9 +74,18 @@ where
         command: &Value,
         authority: &RouteKeeperAuthority,
     ) -> Value {
+        self.handle_journaled_navigation_with_keeper_fenced(command, authority, &mut || Ok(()))
+    }
+
+    pub(crate) fn handle_journaled_navigation_with_keeper_fenced(
+        &mut self,
+        command: &Value,
+        authority: &RouteKeeperAuthority,
+        require_current: &mut dyn FnMut() -> Result<(), String>,
+    ) -> Value {
         let id = command.get("id").cloned().unwrap_or(Value::Null);
         let baseline_state = self.state.clone();
-        match self.journaled_navigation_with_keeper_result(command, authority) {
+        match self.journaled_navigation_with_keeper_result(command, authority, require_current) {
             Ok(response) => response,
             Err(error) => {
                 self.state = self
@@ -92,6 +101,7 @@ where
         &mut self,
         command: &Value,
         authority: &RouteKeeperAuthority,
+        require_current: &mut dyn FnMut() -> Result<(), String>,
     ) -> Result<Value, String> {
         if command.get("action").and_then(Value::as_str) != Some("browser_session_navigate") {
             return Err("browser_runtime_navigation_action_invalid".to_string());
@@ -135,6 +145,7 @@ where
         let mut execute_authorized = false;
 
         loop {
+            require_current()?;
             match operation.state {
                 BrowserRuntimeOperationState::Committed => {
                     return operation.result.ok_or_else(|| {
@@ -157,8 +168,11 @@ where
                                             .to_string()
                                     })?,
                             )?;
-                            let response =
-                                self.journaled_open_with_handoff_result(&bootstrap, authority)?;
+                            let response = self.journaled_open_with_handoff_result(
+                                &bootstrap,
+                                authority,
+                                require_current,
+                            )?;
                             self.navigation_target_from_response(&response)?
                         }
                     };
@@ -171,6 +185,7 @@ where
                         .ok()
                         .filter(|observed| observed.target_id == target.tab.target_id)
                         .map(|observed| observed.url);
+                    require_current()?;
                     operation = self.record_navigation_observation(
                         &operation,
                         "target_prepared",
@@ -228,6 +243,7 @@ where
                                         .unwrap_or("browser_session_navigation_failed")
                                         .to_string());
                                 }
+                                require_current()?;
                                 operation = self.record_navigation_observation(
                                     &operation,
                                     "executed",
@@ -263,6 +279,7 @@ where
                                         "browser_runtime_navigation_issued_unproven".to_string()
                                     );
                                 }
+                                require_current()?;
                                 operation = self.record_navigation_observation(
                                     &operation,
                                     "executed",
@@ -338,6 +355,7 @@ where
                                     data.insert(key.clone(), value.clone());
                                 }
                             }
+                            require_current()?;
                             let committed = self
                                 .persistence
                                 .commit_browser_navigation(

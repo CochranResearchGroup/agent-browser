@@ -87,6 +87,14 @@ independent Lease Authority crate remains a workspace member. P15, P16 and the
 type, architecture and generation checks pass. The umbrella
 `pnpm test:service-client` command remains independently red because its P157
 oracle references the already-absent `cli/src/native/service_profile_acquisition.rs`.
+B05 source fencing is complete. Journaled open and navigation now thread the
+exact admitted permit through nested bootstrap, provider observations,
+recovery, handoff binding and terminal SQLite commits. Each phase rechecks the
+current host generation before work and after effect completion. Focused
+recovery fixtures pass in `job-20260926T190143Z-ca2738398002` and
+`job-20260926T190143Z-aa61dba822d2`; strict Clippy passes in
+`job-20260926T190229Z-bbba0fcd7b4c`. Installed daemon-restart qualification
+remains in M2B.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

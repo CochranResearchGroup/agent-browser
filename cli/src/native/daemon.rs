@@ -1436,12 +1436,26 @@ impl RuntimeHostRouter {
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()
                     })?;
-                    host.handle_journaled_open_with_keeper_handoff(&command, authority)
+                    host.handle_journaled_open_with_keeper_handoff_fenced(
+                        &command,
+                        authority,
+                        &mut || match permit.as_mut() {
+                            Some(permit) => permit.require_current(),
+                            None => Ok(()),
+                        },
+                    )
                 } else if action == Some("browser_session_navigate") && keeper_handoff_required {
                     let authority = keeper_authority.as_ref().ok_or_else(|| {
                         "browser_session_keeper_handoff_authority_missing".to_string()
                     })?;
-                    host.handle_journaled_navigation_with_keeper(&command, authority)
+                    host.handle_journaled_navigation_with_keeper_fenced(
+                        &command,
+                        authority,
+                        &mut || match permit.as_mut() {
+                            Some(permit) => permit.require_current(),
+                            None => Ok(()),
+                        },
+                    )
                 } else if action == Some("browser_session_navigate")
                     && command.get("headers").is_some()
                 {
