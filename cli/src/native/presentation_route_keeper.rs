@@ -357,6 +357,9 @@ async fn observe_inflight_routes_before_shutdown(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
 ) -> Result<(), String> {
+    const SHUTDOWN_OBSERVATION_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
+    const SHUTDOWN_OBSERVATION_INTERVAL: std::time::Duration =
+        std::time::Duration::from_millis(100);
     let candidates = repository
         .load_route_keeper_authority()?
         .records
@@ -386,11 +389,19 @@ async fn observe_inflight_routes_before_shutdown(
             keeper_id: record.keeper_id.clone(),
             fence: record.fence.clone(),
         };
-        let observation = connector.observe(&action).await?;
-        if let RouteKeeperConnectorObservation::Ready(receipt) = &observation {
-            require_ready_matches_action(&action, receipt)?;
+        let deadline = tokio::time::Instant::now() + SHUTDOWN_OBSERVATION_WINDOW;
+        loop {
+            let observation = connector.observe(&action).await?;
+            if let RouteKeeperConnectorObservation::Ready(receipt) = &observation {
+                require_ready_matches_action(&action, receipt)?;
+                apply_ready_observation(repository, expected, observation)?;
+                break;
+            }
+            if tokio::time::Instant::now() >= deadline {
+                break;
+            }
+            tokio::time::sleep(SHUTDOWN_OBSERVATION_INTERVAL).await;
         }
-        apply_ready_observation(repository, expected, observation)?;
     }
     Ok(())
 }
@@ -1951,6 +1962,7 @@ mod tests {
         shutdown_after_adoption: Option<watch::Sender<bool>>,
         stops: Vec<RouteKeeperReconcileAction>,
         routes: BTreeMap<String, RouteKeeperProtocolReadyReceipt>,
+        observe_pending_count: usize,
         unproven_stop: Option<String>,
         resume_stop_override: Option<Result<RouteKeeperStopObservation, String>>,
         terminal_events: Vec<RouteKeeperTerminalEvent>,
@@ -2020,6 +2032,10 @@ mod tests {
             action: &RouteKeeperReconcileAction,
         ) -> Result<RouteKeeperConnectorObservation, String> {
             self.observes.push(action.clone());
+            if self.observe_pending_count > 0 {
+                self.observe_pending_count -= 1;
+                return Ok(RouteKeeperConnectorObservation::Pending);
+            }
             let (slot_id, _, fence) = action_identity(action);
             let mut receipt = self
                 .routes
@@ -4230,7 +4246,10 @@ mod tests {
     async fn configured_shutdown_promotes_and_stops_inflight_owned_route() {
         let directory = TempDirectory::new("route-keeper-configured-inflight-shutdown");
         let repository = repository(&directory);
-        let mut connector = FakeConnector::default();
+        let mut connector = FakeConnector {
+            observe_pending_count: 2,
+            ..FakeConnector::default()
+        };
         reconcile_once(&repository, &mut connector).await.unwrap();
         assert_eq!(
             repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
@@ -4249,7 +4268,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(connector.observes.len(), 1);
+        assert_eq!(connector.observes.len(), 3);
         assert_eq!(connector.stops.len(), 1);
         assert_eq!(connector.shutdowns, 1);
         assert_eq!(
