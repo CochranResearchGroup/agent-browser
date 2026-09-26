@@ -201,6 +201,11 @@ pub(crate) trait PresentationRouteConnector: Send {
 
 #[async_trait::async_trait]
 pub(crate) trait SupervisedPresentationRouteConnector: PresentationRouteConnector {
+    /// Enter shutdown cleanup before the final ownership observation. This
+    /// lets connectors retain an exact physical witness even when its logical
+    /// transport closes during that observation.
+    fn begin_shutdown_cleanup(&mut self) {}
+
     fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent>;
 
     fn terminal_event_is_current(&self, event: &RouteKeeperTerminalEvent) -> bool;
@@ -319,6 +324,9 @@ async fn shutdown_and_persist(
     connector: &mut impl SupervisedPresentationRouteConnector,
     stop_ready: bool,
 ) -> Result<(), String> {
+    if stop_ready {
+        connector.begin_shutdown_cleanup();
+    }
     let observe_result = if stop_ready {
         observe_inflight_routes_before_shutdown(repository, connector).await
     } else {

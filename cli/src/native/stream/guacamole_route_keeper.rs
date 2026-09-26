@@ -1024,6 +1024,12 @@ where
                 };
                 match owned.task.status() {
                     PrimaryStatus::Ready(current) if current == guacamole_connection_uuid => {}
+                    PrimaryStatus::Closed(_) if self.shutting_down => {
+                        // Shutdown cleanup is allowed to retain an exact XRDP
+                        // witness captured while this primary was still
+                        // attributable. It is promoted only so the existing
+                        // exact-stop path can remove the physical session.
+                    }
                     PrimaryStatus::Closed(_) => {
                         return Ok(RouteKeeperConnectorObservation::Pending);
                     }
@@ -1250,6 +1256,10 @@ where
     F: RouteKeeperPrimaryFactory,
     O: RouteKeeperProtocolObserver,
 {
+    fn begin_shutdown_cleanup(&mut self) {
+        self.shutting_down = true;
+    }
+
     fn take_terminal_events(&mut self) -> Vec<RouteKeeperTerminalEvent> {
         self.drain_terminal_events()
     }
@@ -1754,6 +1764,8 @@ mod tests {
         fail_stop_once: bool,
         block_stop: bool,
         stop_entered: Option<Arc<tokio::sync::Notify>>,
+        observe_entered: Option<Arc<tokio::sync::Notify>>,
+        observe_release: Option<Arc<tokio::sync::Notify>>,
     }
 
     #[async_trait::async_trait]
@@ -1764,6 +1776,12 @@ mod tests {
             guacamole_connection_uuid: &str,
         ) -> Result<Option<RouteKeeperProtocolReadyReceipt>, String> {
             self.observations += 1;
+            if let Some(entered) = &self.observe_entered {
+                entered.notify_one();
+            }
+            if let Some(release) = &self.observe_release {
+                release.notified().await;
+            }
             let (slot_id, keeper_id, fence) = observe_identity(action)?;
             let xrdp_session_id = format!("xrdp-{slot_id}");
             Ok(Some(RouteKeeperProtocolReadyReceipt {
@@ -2759,6 +2777,55 @@ mod tests {
         connector.acknowledge_terminal_event(&events[0]);
         assert!(connector.tasks.is_empty());
         assert!(connector.take_terminal_events().is_empty());
+    }
+
+    #[tokio::test]
+    async fn shutdown_cleanup_retains_exact_witness_when_primary_closes_during_observation() {
+        let (_directory, path) = database();
+        let repository = SqliteRouteKeeperRepository::new(&path);
+        let (client, mut server) = duplex_pair().await;
+        let observe_entered = Arc::new(tokio::sync::Notify::new());
+        let observe_release = Arc::new(tokio::sync::Notify::new());
+        let mut connector = GuacamoleRouteKeeperConnector::new(
+            path,
+            DuplexPrimaryFactory {
+                socket: Some(client),
+                starts: Arc::new(AtomicUsize::new(0)),
+            },
+            ExactProtocolObserver {
+                observe_entered: Some(observe_entered.clone()),
+                observe_release: Some(observe_release.clone()),
+                ..ExactProtocolObserver::default()
+            },
+        );
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        server
+            .send(Message::Text(
+                "0.,36.00000000-0000-4000-8000-000000000215;4.sync,1.1;".into(),
+            ))
+            .await
+            .unwrap();
+        wait_for_primary_ready(&connector, "route-slot-01").await;
+        let record =
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].clone();
+        let action = RouteKeeperReconcileAction::Observe {
+            slot_id: record.slot_id,
+            keeper_id: record.keeper_id,
+            fence: record.fence,
+        };
+        connector.begin_shutdown_cleanup();
+
+        let close_during_observation = async {
+            observe_entered.notified().await;
+            server.close(None).await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+            observe_release.notify_one();
+        };
+        let (observation, ()) = tokio::join!(connector.observe(&action), close_during_observation);
+        assert!(matches!(
+            observation.unwrap(),
+            RouteKeeperConnectorObservation::Ready(_)
+        ));
     }
 
     #[tokio::test]
