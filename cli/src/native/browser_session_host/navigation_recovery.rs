@@ -676,6 +676,24 @@ mod tests {
             Ok(())
         }
 
+        // Keep recovery fixtures independent of a real X11 display.
+        fn observe_visible_browser(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+        ) -> Result<Value, String> {
+            let desktop = browser
+                .desktop
+                .as_ref()
+                .ok_or_else(|| "navigation_fixture_browser_desktop_missing".to_string())?;
+            Ok(json!({
+                "state": "ready",
+                "routeId": desktop.route_id,
+                "displayName": desktop.display_name,
+                "browserPid": browser.pid,
+                "displayContent": {"state": "browser_window_visible"},
+            }))
+        }
+
         fn observe_navigation_target(
             &mut self,
             _browser: &ManagedBrowserInstance,
