@@ -357,7 +357,9 @@ async fn observe_inflight_routes_before_shutdown(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
 ) -> Result<(), String> {
-    const SHUTDOWN_OBSERVATION_WINDOW: std::time::Duration = std::time::Duration::from_secs(3);
+    // Match the primary transport startup deadline, with one second for the
+    // final exact XRDP ownership observation at the boundary.
+    const SHUTDOWN_OBSERVATION_WINDOW: std::time::Duration = std::time::Duration::from_secs(16);
     const SHUTDOWN_OBSERVATION_INTERVAL: std::time::Duration =
         std::time::Duration::from_millis(100);
     let candidates = repository
