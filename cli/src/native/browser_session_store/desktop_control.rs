@@ -11,6 +11,7 @@ use super::*;
 
 const DOCUMENT: &str = "desktop_control";
 const SCHEMA: &str = "agent-browser.desktop-control.v1";
+const LIVE_VIEWER_TTL_MS: u64 = 15_000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct DesktopControlTransferRequest {
@@ -34,12 +35,57 @@ pub(crate) struct DesktopControlLease {
     pub(crate) route_binding: RouteKeeperHandoffBinding,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LiveViewerActivationRequest {
+    pub(crate) operation_id: String,
+    pub(crate) handoff_id: String,
+    pub(crate) client_connection_id: String,
+    pub(crate) authenticated_principal: String,
+    pub(crate) provider_route_id: String,
+    pub(crate) guacamole_connection_id: u64,
+    pub(crate) observed_shared_connection_count: u64,
+    pub(crate) observed_at_ms: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LiveViewerHeartbeatRequest {
+    pub(crate) lease_id: String,
+    pub(crate) authenticated_principal: String,
+    pub(crate) provider_route_id: String,
+    pub(crate) guacamole_connection_id: u64,
+    pub(crate) observed_shared_connection_count: u64,
+    pub(crate) observed_at_ms: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct DesktopControlState {
     next_epoch: u64,
     current_operation_ids: BTreeMap<String, String>,
     operations: BTreeMap<String, DesktopControlRecord>,
+    #[serde(default)]
+    live_viewers: BTreeMap<String, LiveViewerRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LiveViewerRecord {
+    lease_id: String,
+    operation_id: String,
+    handoff_id: String,
+    client_connection_id: String,
+    authenticated_principal: String,
+    provider_route_id: String,
+    guacamole_connection_id: u64,
+    slot_id: String,
+    host_generation: u64,
+    boot_epoch: String,
+    controller_epoch: u64,
+    observed_shared_connection_count: u64,
+    state: String,
+    created_at_ms: u64,
+    updated_at_ms: u64,
+    expires_at_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -131,6 +177,180 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("desktop_control_commit_failed:{error}"))?;
         Ok(lease)
+    }
+
+    /// Grant control only after the caller has independently observed at
+    /// least one live restricted Guacamole sharing tunnel for this keeper.
+    pub(crate) fn activate_live_viewer(
+        &mut self,
+        request: &LiveViewerActivationRequest,
+    ) -> Result<DesktopControlLease, String> {
+        validate_live_viewer_request(request)?;
+        let boot_epoch = crate::process_identity::current_boot_epoch()
+            .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("live_viewer_begin_failed:{error}"))?;
+        let resolved = resolve_ready_manager_handoff(&transaction, &request.handoff_id)?;
+        if resolved.route_binding.guacamole_connection_id != request.guacamole_connection_id {
+            return Err("live_viewer_connection_binding_mismatch".to_string());
+        }
+        let mut state: DesktopControlState =
+            load_optional_document(&transaction, DOCUMENT, SCHEMA)?;
+        expire_live_viewers(&mut state, request.observed_at_ms, &boot_epoch);
+        let lease = stage_desktop_control_transfer(
+            &transaction,
+            &mut state,
+            &DesktopControlTransferRequest {
+                operation_id: request.operation_id.clone(),
+                handoff_id: request.handoff_id.clone(),
+                client_connection_id: request.client_connection_id.clone(),
+                expected_binding: resolved.route_binding.clone(),
+            },
+        )?;
+        let lease_id = format!("live-viewer:{}", request.operation_id);
+        let expires_at_ms = request
+            .observed_at_ms
+            .checked_add(LIVE_VIEWER_TTL_MS)
+            .ok_or_else(|| "live_viewer_expiry_overflow".to_string())?;
+        if let Some(existing) = state.live_viewers.get(&lease_id) {
+            if existing.operation_id != request.operation_id
+                || existing.handoff_id != request.handoff_id
+                || existing.client_connection_id != request.client_connection_id
+                || existing.authenticated_principal != request.authenticated_principal
+                || existing.provider_route_id != request.provider_route_id
+                || existing.guacamole_connection_id != request.guacamole_connection_id
+            {
+                return Err("live_viewer_operation_conflict".to_string());
+            }
+        }
+        let created_at_ms = state
+            .live_viewers
+            .get(&lease_id)
+            .map(|record| record.created_at_ms)
+            .unwrap_or(request.observed_at_ms);
+        state.live_viewers.insert(
+            lease_id,
+            LiveViewerRecord {
+                lease_id: format!("live-viewer:{}", request.operation_id),
+                operation_id: request.operation_id.clone(),
+                handoff_id: request.handoff_id.clone(),
+                client_connection_id: request.client_connection_id.clone(),
+                authenticated_principal: request.authenticated_principal.clone(),
+                provider_route_id: request.provider_route_id.clone(),
+                guacamole_connection_id: request.guacamole_connection_id,
+                slot_id: lease.route_binding.slot_id.clone(),
+                host_generation: lease.host_generation,
+                boot_epoch,
+                controller_epoch: lease.epoch,
+                observed_shared_connection_count: request.observed_shared_connection_count,
+                state: "controlling".to_string(),
+                created_at_ms,
+                updated_at_ms: request.observed_at_ms,
+                expires_at_ms,
+            },
+        );
+        save_document(&transaction, DOCUMENT, SCHEMA, &state)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("live_viewer_commit_failed:{error}"))?;
+        Ok(lease)
+    }
+
+    pub(crate) fn heartbeat_live_viewer(
+        &mut self,
+        request: &LiveViewerHeartbeatRequest,
+    ) -> Result<DesktopControlLease, String> {
+        validate_identifier(&request.lease_id, "live_viewer_lease")?;
+        validate_identifier(&request.authenticated_principal, "authenticated_principal")?;
+        validate_identifier(&request.provider_route_id, "provider_route")?;
+        if request.guacamole_connection_id == 0 {
+            return Err("live_viewer_connection_binding_invalid".to_string());
+        }
+        if request.observed_shared_connection_count == 0 {
+            return Err("live_viewer_tunnel_absent".to_string());
+        }
+        let boot_epoch = crate::process_identity::current_boot_epoch()
+            .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("live_viewer_heartbeat_begin_failed:{error}"))?;
+        let mut state: DesktopControlState =
+            load_optional_document(&transaction, DOCUMENT, SCHEMA)?;
+        expire_live_viewers(&mut state, request.observed_at_ms, &boot_epoch);
+        let record = state
+            .live_viewers
+            .get_mut(&request.lease_id)
+            .ok_or_else(|| "live_viewer_lease_inactive".to_string())?;
+        if record.authenticated_principal != request.authenticated_principal
+            || record.provider_route_id != request.provider_route_id
+            || record.guacamole_connection_id != request.guacamole_connection_id
+            || record.boot_epoch != boot_epoch
+            || record.state != "controlling"
+        {
+            return Err("live_viewer_authority_mismatch".to_string());
+        }
+        record.observed_shared_connection_count = request.observed_shared_connection_count;
+        record.updated_at_ms = request.observed_at_ms;
+        record.expires_at_ms = request
+            .observed_at_ms
+            .checked_add(LIVE_VIEWER_TTL_MS)
+            .ok_or_else(|| "live_viewer_expiry_overflow".to_string())?;
+        let handoff_id = record.handoff_id.clone();
+        let client_connection_id = record.client_connection_id.clone();
+        let controller_epoch = record.controller_epoch;
+        let lease = load_and_validate_current(
+            &transaction,
+            &handoff_id,
+            &client_connection_id,
+            controller_epoch,
+        )?;
+        save_document(&transaction, DOCUMENT, SCHEMA, &state)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("live_viewer_heartbeat_commit_failed:{error}"))?;
+        Ok(lease)
+    }
+
+    pub(crate) fn disconnect_live_viewer(
+        &mut self,
+        lease_id: &str,
+        authenticated_principal: &str,
+        disconnected_at_ms: u64,
+    ) -> Result<(), String> {
+        validate_identifier(lease_id, "live_viewer_lease")?;
+        validate_identifier(authenticated_principal, "authenticated_principal")?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("live_viewer_disconnect_begin_failed:{error}"))?;
+        let mut state: DesktopControlState =
+            load_optional_document(&transaction, DOCUMENT, SCHEMA)?;
+        let record = state
+            .live_viewers
+            .get_mut(lease_id)
+            .ok_or_else(|| "live_viewer_lease_inactive".to_string())?;
+        if record.authenticated_principal != authenticated_principal {
+            return Err("live_viewer_authority_mismatch".to_string());
+        }
+        record.state = "disconnected".to_string();
+        record.updated_at_ms = disconnected_at_ms;
+        record.expires_at_ms = disconnected_at_ms;
+        if state
+            .current_operation_ids
+            .get(&record.slot_id)
+            .map(String::as_str)
+            == Some(record.operation_id.as_str())
+        {
+            state.current_operation_ids.remove(&record.slot_id);
+        }
+        save_document(&transaction, DOCUMENT, SCHEMA, &state)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("live_viewer_disconnect_commit_failed:{error}"))?;
+        Ok(())
     }
 
     /// Publish one controller transfer together with its guarded effect and
@@ -230,11 +450,89 @@ impl BrowserRuntimeSqliteStore {
         }
         let lease =
             load_and_validate_current(&transaction, handoff_id, client_connection_id, epoch)?;
+        validate_live_viewer_current(&transaction, &lease, current_time_ms()?)?;
         let result = effect(&lease)?;
         transaction
             .commit()
             .map_err(|error| format!("desktop_control_effect_commit_failed:{error}"))?;
         Ok(result)
+    }
+}
+
+fn current_time_ms() -> Result<u64, String> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "live_viewer_clock_invalid".to_string())?
+        .as_millis();
+    u64::try_from(millis).map_err(|_| "live_viewer_clock_invalid".to_string())
+}
+
+fn validate_live_viewer_current(
+    connection: &Connection,
+    lease: &DesktopControlLease,
+    now_ms: u64,
+) -> Result<(), String> {
+    let state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let lease_id = format!("live-viewer:{}", lease.operation_id);
+    let record = state
+        .live_viewers
+        .get(&lease_id)
+        .ok_or_else(|| "authenticated_live_viewer_authority_unavailable".to_string())?;
+    let current_boot = crate::process_identity::current_boot_epoch()
+        .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+    if record.state != "controlling"
+        || record.operation_id != lease.operation_id
+        || record.handoff_id != lease.handoff_id
+        || record.client_connection_id != lease.controller_client_connection_id
+        || record.slot_id != lease.route_binding.slot_id
+        || record.host_generation != lease.host_generation
+        || record.controller_epoch != lease.epoch
+        || record.boot_epoch != current_boot
+        || record.observed_shared_connection_count == 0
+        || record.expires_at_ms < now_ms
+    {
+        return Err("authenticated_live_viewer_authority_unavailable".to_string());
+    }
+    Ok(())
+}
+
+fn validate_live_viewer_request(request: &LiveViewerActivationRequest) -> Result<(), String> {
+    for (value, field) in [
+        (&request.operation_id, "operation"),
+        (&request.handoff_id, "handoff"),
+        (&request.client_connection_id, "client_connection"),
+        (&request.authenticated_principal, "authenticated_principal"),
+        (&request.provider_route_id, "provider_route"),
+    ] {
+        validate_identifier(value, field)?;
+    }
+    if request.guacamole_connection_id == 0 || request.observed_shared_connection_count == 0 {
+        return Err("live_viewer_tunnel_absent".to_string());
+    }
+    Ok(())
+}
+
+fn expire_live_viewers(state: &mut DesktopControlState, now_ms: u64, boot_epoch: &str) {
+    let mut expired = Vec::new();
+    for record in state.live_viewers.values_mut() {
+        if record.state == "controlling"
+            && (record.boot_epoch != boot_epoch || record.expires_at_ms < now_ms)
+        {
+            record.state = "expired".to_string();
+            record.updated_at_ms = now_ms;
+            expired.push((record.slot_id.clone(), record.operation_id.clone()));
+        }
+    }
+    for (slot_id, operation_id) in expired {
+        if state
+            .current_operation_ids
+            .get(&slot_id)
+            .map(String::as_str)
+            == Some(operation_id.as_str())
+        {
+            state.current_operation_ids.remove(&slot_id);
+        }
     }
 }
 
@@ -776,6 +1074,23 @@ mod tests {
         }
     }
 
+    fn live_request(
+        operation_id: &str,
+        client_connection_id: &str,
+        connection_id: u64,
+    ) -> LiveViewerActivationRequest {
+        LiveViewerActivationRequest {
+            operation_id: operation_id.to_string(),
+            handoff_id: "handoff-1".to_string(),
+            client_connection_id: client_connection_id.to_string(),
+            authenticated_principal: "operator@example.test".to_string(),
+            provider_route_id: "development-route-1".to_string(),
+            guacamole_connection_id: connection_id,
+            observed_shared_connection_count: 1,
+            observed_at_ms: current_time_ms().unwrap(),
+        }
+    }
+
     #[test]
     fn failed_atomic_activation_preserves_the_prior_controller_and_session_state() {
         let mut fixture = fixture("activation-failure");
@@ -909,7 +1224,11 @@ mod tests {
             .unwrap();
         let second = fixture
             .store
-            .transfer_desktop_control(&request("operation-b", "client-b", &fixture.binding))
+            .activate_live_viewer(&live_request(
+                "operation-b",
+                "client-b",
+                fixture.binding.guacamole_connection_id,
+            ))
             .unwrap();
         assert!(second.epoch > first.epoch);
         assert_eq!(

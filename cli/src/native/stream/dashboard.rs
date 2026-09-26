@@ -401,6 +401,14 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
+    if method == "POST" && path == "/api/live-viewer-authority" {
+        let body_str = read_post_body(&mut stream, &buf, n).await;
+        let principal = authenticated_dashboard_user.as_deref().unwrap_or("unknown");
+        let (status, value) = super::guacamole_live_viewer::response(&body_str, principal).await;
+        write_json_value(&mut stream, status, value).await;
+        return;
+    }
+
     if path.starts_with("/api/stream/") {
         let body_str = if matches!(method, "POST" | "PUT" | "PATCH" | "DELETE") {
             read_post_body(&mut stream, &buf, n).await

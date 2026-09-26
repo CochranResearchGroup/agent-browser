@@ -49,12 +49,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())?;
         // Focus is idempotent. The resolver checks current session expiry,
         // exact target attribution, live browser and current keeper binding.
-        let activation = super::handoff_control::HandoffControlActivation {
-            operation_id,
-            client_connection_id: operation_id,
-        };
-        let result =
-            self.resolve_keeper_handoff(handoff, authority, activity_at_ms, Some(&activation))?;
+        // It deliberately does not grant desktop control: only the separate
+        // authenticated live-viewer endpoint may do so after observing the
+        // restricted Guacamole tunnel.
+        let result = self.resolve_keeper_handoff(handoff, authority, activity_at_ms, None)?;
         if operation.state != BrowserRuntimeOperationState::Committed {
             self.persistence
                 .commit_operation(operation_id, operation.generation, result.clone())?
@@ -290,7 +288,7 @@ mod tests {
         }
     }
     #[test]
-    fn successor_activation_fences_old_focus_replay() {
+    fn handoff_resolution_never_manufactures_viewer_control() {
         let fixture = Fixture::new();
         let mut host = fixture.host();
         let first = host
@@ -311,21 +309,17 @@ mod tests {
                 2_100,
             )
             .unwrap();
-        assert!(
-            second["desktopControl"]["epoch"].as_u64().unwrap()
-                > first["desktopControl"]["epoch"].as_u64().unwrap()
-        );
-        let focuses = fixture.focuses.load(Ordering::SeqCst);
-        assert!(host
+        assert!(first["desktopControl"].is_null());
+        assert!(second["desktopControl"].is_null());
+        let replay = host
             .resolve_journaled_manager_handoff_with_keeper(
                 &fixture.command,
                 &fixture.handoff,
                 &fixture.authority,
                 2_200,
             )
-            .is_err());
-        assert_eq!(fixture.focuses.load(Ordering::SeqCst), focuses);
-        assert_eq!(second["desktopControl"]["state"], "focus_authorized");
+            .unwrap();
+        assert!(replay["desktopControl"].is_null());
         assert_eq!(second["handoffUrl"], first["handoffUrl"]);
     }
 }

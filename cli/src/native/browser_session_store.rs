@@ -25,7 +25,10 @@ use super::service_store::default_service_state_path;
 mod desktop_control;
 mod manual_seeding;
 mod provisioning;
-pub(crate) use desktop_control::{DesktopControlLease, DesktopControlTransferRequest};
+pub(crate) use desktop_control::{
+    DesktopControlLease, DesktopControlTransferRequest, LiveViewerActivationRequest,
+    LiveViewerHeartbeatRequest,
+};
 pub(crate) use manual_seeding::{
     public_manual_seeding_visibility, ManualSeedingReservation, ManualSeedingState,
 };

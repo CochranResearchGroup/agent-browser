@@ -8,6 +8,7 @@ mod dashboard_auth;
 pub(crate) use dashboard_auth::verify_operator_focus;
 mod discovery;
 mod foreign_cdp_control;
+mod guacamole_live_viewer;
 mod guacamole_primary_binding;
 mod guacamole_primary_protocol;
 mod guacamole_primary_provider;

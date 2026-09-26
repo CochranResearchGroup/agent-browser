@@ -1353,6 +1353,7 @@ export function WorkspaceRemoteViewport({
   const [streamRefreshNonce, setStreamRefreshNonce] = useState(() => Date.now());
   const [viewerFrameUrl, setViewerFrameUrl] = useState<string | null>(null);
   const [viewerShareAttempt, setViewerShareAttempt] = useState<GuacamoleShareFrameAttempt | null>(null);
+  const [viewerReadyAttemptId, setViewerReadyAttemptId] = useState<string | null>(null);
   const [primaryRevision, setPrimaryRevision] = useState<string | null>(null);
   const [sharingResolutionNonce, setSharingResolutionNonce] = useState(0);
   const [tileRefreshNonces, setTileRefreshNonces] = useState<Record<string, number>>({});
@@ -1896,6 +1897,7 @@ export function WorkspaceRemoteViewport({
       });
       if (!outcome) return;
       if (outcome === "ready") {
+        setViewerReadyAttemptId(attempt.attemptId);
         if (viewportTargetToken) {
           dispatchViewportController({ type: "preflight_succeeded", targetToken: viewportTargetToken });
         }
@@ -1937,6 +1939,67 @@ export function WorkspaceRemoteViewport({
     window.addEventListener("message", onGuacamoleShareAuthMessage);
     return () => window.removeEventListener("message", onGuacamoleShareAuthMessage);
   }, [browser?.id, browser?.profileId, stream?.displayAllocationId, stream?.provider, stream?.routeId, viewportSelection?.selection.sessionId, viewportTargetToken]);
+
+  useEffect(() => {
+    const attempt = viewerShareAttempt;
+    if (!attempt || viewerReadyAttemptId !== attempt.attemptId || !stream?.routeId || !stream.connectionId) return;
+    const handoffId = typeof window.history.state?.remoteViewHandoff === "string"
+      ? window.history.state.remoteViewHandoff
+      : window.location.pathname.match(/^\/remote-view\/([A-Za-z0-9_-]+)$/)?.[1];
+    if (!handoffId) return;
+    const controller = new AbortController();
+    let leaseId: string | null = null;
+    let heartbeat: number | null = null;
+    const payload = {
+      routeId: stream.routeId,
+      connectionId: stream.connectionId,
+    };
+    const post = async (body: Record<string, unknown>) => {
+      const response = await fetch("/api/live-viewer-authority", {
+        method: "POST",
+        credentials: "include",
+        cache: "no-store",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const result = await response.json() as { success?: boolean; leaseId?: string; code?: string };
+      if (!response.ok || result.success !== true) throw new Error(result.code || `live viewer returned HTTP ${response.status}`);
+      return result;
+    };
+    void post({ operation: "connect", handoffId, attemptId: attempt.attemptId, ...payload }).then((result) => {
+      if (controller.signal.aborted || !result.leaseId) return;
+      leaseId = result.leaseId;
+      setFocusMessage("Authenticated live viewer has desktop control.");
+      heartbeat = window.setInterval(() => {
+        if (!leaseId || controller.signal.aborted) return;
+        void post({ operation: "heartbeat", leaseId, ...payload }).catch(() => {
+          if (controller.signal.aborted) return;
+          setFocusMessage("Live viewer authority expired; desktop input is disabled.");
+          if (heartbeat !== null) window.clearInterval(heartbeat);
+          heartbeat = null;
+        });
+      }, 5_000);
+    }).catch((cause) => {
+      if (controller.signal.aborted) return;
+      setFocusMessage(cause instanceof Error
+        ? `Live viewer control unavailable: ${cause.message}`
+        : "Live viewer control unavailable.");
+    });
+    return () => {
+      if (heartbeat !== null) window.clearInterval(heartbeat);
+      if (leaseId) {
+        void fetch("/api/live-viewer-authority", {
+          method: "POST",
+          credentials: "include",
+          keepalive: true,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ operation: "disconnect", leaseId }),
+        });
+      }
+      controller.abort();
+    };
+  }, [stream?.connectionId, stream?.routeId, viewerReadyAttemptId, viewerShareAttempt]);
 
   const onFrameLoad = useCallback(() => {
     const failure = detectWorkspaceFrameFailure(viewportFrameRef.current);
