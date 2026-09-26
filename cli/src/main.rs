@@ -928,6 +928,21 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 browser_family.as_deref(),
             ) {
                 Ok(config_path) => {
+                    let sqlite_registration = (|| {
+                        let mut store = native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                        store.register_named_runtime_profile(
+                            &runtime_name,
+                            std::path::Path::new(&user_data_dir),
+                        )
+                    })();
+                    if let Err(error) = sqlite_registration {
+                        if flags.json {
+                            print_json_error(error);
+                        } else {
+                            eprintln!("{} {}", color::error_indicator(), error);
+                        }
+                        exit(1);
+                    }
                     if flags.json {
                         print_json_value(json!({
                             "created": true,

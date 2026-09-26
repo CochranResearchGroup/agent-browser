@@ -2395,6 +2395,10 @@ agent-browser job is active; for service-mode work, request the target site or
 login identity and let agent-browser select, queue, or reuse the managed
 profile.
 
+`runtime create` registers the same immutable profile identity in user config
+and the SQLite browser-runtime catalog, so ordinary named-session and
+`remote-view open` acquisition can use it immediately.
+
 ```bash
 # Create and register a dedicated Chrome runtime profile
 agent-browser runtime create work --browser-family chrome --set-default

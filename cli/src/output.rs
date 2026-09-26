@@ -7344,7 +7344,7 @@ Usage:
   agent-browser runtime attach [name]
 
 Commands:
-  create [name]         Create a named runtime profile and persist it to user config
+  create [name]         Create a named profile in user config and SQLite runtime authority
   list                  Show configured and on-disk runtime profiles
   status [name]         Show PID, profile path, DevTools reachability, and targets
   login [url]           Launch a detached headed browser for manual sign-in

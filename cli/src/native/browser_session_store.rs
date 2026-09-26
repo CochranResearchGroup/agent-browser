@@ -629,6 +629,51 @@ impl BrowserRuntimeSqliteStore {
         )
     }
 
+    /// Register one named runtime profile in the SQLite authority used by
+    /// ordinary browser-session and remote-view acquisition.
+    ///
+    /// Runtime configuration and the profile directory are prepared by the
+    /// CLI adapter. This transaction refuses identity rebinding and preserves
+    /// concurrent catalog entries instead of rewriting a stale snapshot.
+    pub(crate) fn register_named_runtime_profile(
+        &mut self,
+        profile_id: &str,
+        user_data_dir: &Path,
+    ) -> Result<(), String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_profile_catalog_begin_failed:{error}"))?;
+        let mut catalog: BrowserProfileCatalog = load_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+        )?;
+        let entry = agent_browser_service_model::BrowserProfileCatalogEntry {
+            id: profile_id.to_string(),
+            name: profile_id.to_string(),
+            user_data_dir: user_data_dir.display().to_string(),
+            kind: agent_browser_service_model::BrowserProfileKind::Named,
+        };
+        if let Some(existing) = catalog.profiles.get(profile_id) {
+            if existing != &entry {
+                return Err("browser_profile_catalog_identity_conflict".to_string());
+            }
+            return Ok(());
+        }
+        catalog.profiles.insert(profile_id.to_string(), entry);
+        validate_catalog_schema(&catalog)?;
+        save_document(
+            &transaction,
+            PROFILE_CATALOG_DOCUMENT,
+            BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+            &catalog,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_profile_catalog_commit_failed:{error}"))
+    }
+
     pub(crate) fn load_handoff_registry(&self) -> Result<BrowserManagerHandoffRegistry, String> {
         load_optional_document(
             &self.connection,
@@ -3145,6 +3190,44 @@ mod tests {
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_session_state().unwrap(), state);
         assert_eq!(reopened.load_profile_catalog().unwrap(), catalog);
+    }
+
+    #[test]
+    fn named_runtime_profile_registration_is_atomic_and_refuses_rebinding() {
+        let directory = TempDirectory::new("browser-runtime-profile-registration");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let session_path = directory.0.join(BROWSER_SESSION_STATE_FILENAME);
+        let catalog_path = directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME);
+        let service_path = directory.0.join("state.json");
+        write_private_json_atomic(&session_path, &BrowserSessionState::default()).unwrap();
+        write_private_json_atomic(&catalog_path, &BrowserProfileCatalog::default()).unwrap();
+        fs::write(&service_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &service_path,
+            },
+        )
+        .unwrap();
+
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let profile_path = directory.0.join("profiles/p219-m2b");
+        store
+            .register_named_runtime_profile("p219-m2b", &profile_path)
+            .unwrap();
+        store
+            .register_named_runtime_profile("p219-m2b", &profile_path)
+            .unwrap();
+        assert_eq!(
+            store.load_profile_catalog().unwrap().profiles["p219-m2b"].user_data_dir,
+            profile_path.display().to_string()
+        );
+        assert_eq!(
+            store.register_named_runtime_profile("p219-m2b", &directory.0.join("profiles/other")),
+            Err("browser_profile_catalog_identity_conflict".to_string())
+        );
     }
 
     #[test]

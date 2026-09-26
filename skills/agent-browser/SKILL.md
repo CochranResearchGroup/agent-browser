@@ -1578,6 +1578,9 @@ profile for a new browser family.
 
 To create and track a managed profile explicitly, use:
 
+`runtime create` writes the named identity to both user config and the SQLite
+browser-runtime catalog used by ordinary session and remote-view acquisition.
+
 ```bash
 agent-browser runtime create work --browser-family chrome --set-default
 agent-browser runtime create canva-stealthcdp-chromium --browser-family chromium
