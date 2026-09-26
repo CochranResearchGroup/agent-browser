@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M2A runtime-owned warming is stopped by durable route-slot-02 quarantine route_keeper_stop_ownership_unproven with preserved observation rdp_route_session_boot_identity_changed from host generation 32; current host generation is 38; no override, record deletion, broad cleanup, ingress publication or further apply retry is authorized; installed M2B remains pending
+    blocker: generation 39 safely cleared the prior route-slot-02 quarantine; M2A now stops because runtime-owned Guacamole primaries authenticate and reach RDP but close after roughly 6 to 7 seconds, while terminal folding discards the bounded close code; receipt apply-1790451432634-9571.json; no blind retry or ingress publication; installed M2B remains pending
     updated_at: 2026-09-26

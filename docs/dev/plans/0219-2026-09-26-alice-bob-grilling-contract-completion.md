@@ -427,11 +427,11 @@ privileged-helper stdin and provider-sync replay fixtures. Installed provider
 cleanup, rotation and handoff-identity evidence remain in M2A.
 
 M2A execution checkpoint: development generation
-`0.28.0-7396ef55af20` proves the installed runtime-owned route-keeper
-capability and passes provider preflight. The joined warm-route attempt stops
-at the intended durable quarantine boundary: `route-slot-02` retains
-`route_keeper_stop_ownership_unproven` with
-`rdp_route_session_boot_identity_changed` from generation 32 while the
-current host is generation 38. No quarantine override, record deletion, broad
-cleanup, ingress publication or blind apply retry is authorized. M2A and M2B
-remain incomplete.
+`0.28.0-9484cfa7ef3b` proves the installed runtime-owned route-keeper
+capability and passes provider preflight. Its exact prior-boot absence proof
+cleared the retained generation-32 quarantine through ordinary cold recovery.
+The next join authenticates Guacamole connections 1 and 2 and reaches RDP, but
+each runtime-owned primary closes after roughly 6–7 seconds. Receipt
+`apply-1790451432634-9571.json` quarantines only development resources.
+Terminal folding currently discards the bounded close code, so no blind retry
+or ingress publication is authorized. M2A and M2B remain incomplete.
