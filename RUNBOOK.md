@@ -16,7 +16,7 @@ policy capsule at `8bb9518eb78b37c22aaec0183348ee6c77adf0da`. The inherited work
 No candidate, runtime, provider, or installed acceptance changed in this slice.
 
 Acceptance: the inherited [coverage ledger](docs/dev/contracts/p218-grilling-contract-coverage.v1.json)
-has zero pass, 28 partial, seven fail, and ten missing rows. M1A will
+has zero pass, 29 partial, seven fail, and nine missing rows. M1A will
 reconcile stale evidence descriptions without promoting tests to installed
 acceptance. `541d7346` already removed the JSON ordinary-open coordinator and
 fallback. SQLite manual-seeding dispatch already uses its dedicated launcher,
@@ -72,6 +72,11 @@ read-only status is excluded. Two focused fixtures pass in
 `job-20260926T183842Z-e73e88231e49`. B05 now narrows to liveness
 reconciliation, provider callbacks, asynchronous completion and recovery
 commits plus joined daemon-restart qualification.
+Status no longer performs liveness reconciliation as a side effect. The
+periodic fenced lifecycle operation now owns both liveness reconciliation and
+expiry reap. The deterministic `statusReadOnly` architecture cut and negative
+fixture pass, advancing G30 from missing to partial; complete status/doctor
+field mapping and redaction remain open.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

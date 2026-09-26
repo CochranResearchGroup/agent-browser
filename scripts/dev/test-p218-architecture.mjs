@@ -58,6 +58,13 @@ try {
   assert.equal(report.cuts.serviceModelLeaseAuthority.status, 'fail');
   assert.ok(report.cuts.serviceModelLeaseAuthority.findings.length >= 2);
 
+  write(root, 'cli/src/native/daemon.rs', 'async fn attach_browser_session_state() { host.reconcile_liveness_current(); }\nasync fn reap_browser_sessions_if_loaded() {}\n');
+  const mutatingStatus = evaluate(root);
+  assert.equal(mutatingStatus.cuts.statusReadOnly.status, 'fail');
+  assert.equal(mutatingStatus.cuts.statusReadOnly.findings[0].id, 'status_projection_mutates_browser_session_state');
+  write(root, 'cli/src/native/daemon.rs', 'async fn attach_browser_session_state() { serde_json::to_value(host.state()); }\nasync fn reap_browser_sessions_if_loaded() {}\n');
+  assert.equal(evaluate(root).cuts.statusReadOnly.status, 'pass');
+
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\n');
   write(root, 'crates/agent-browser-service-model/src/service_state.rs', 'pub struct ServiceState;\n');
   const modelCut = evaluate(root);

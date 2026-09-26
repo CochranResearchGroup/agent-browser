@@ -1869,7 +1869,6 @@ impl RuntimeHostRouter {
             let host = host
                 .as_mut()
                 .ok_or_else(|| "browser_session_host_missing".to_string())?;
-            host.reconcile_liveness_current()?;
             serde_json::to_value(host.state())
                 .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))
         })
@@ -1913,6 +1912,7 @@ impl RuntimeHostRouter {
                     .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
                 permit.require_current()?;
                 if let Some(host) = host.as_mut() {
+                    host.reconcile_liveness_current()?;
                     host.reap_current()?;
                 }
                 Ok(serde_json::json!({

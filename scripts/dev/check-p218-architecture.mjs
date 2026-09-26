@@ -46,6 +46,7 @@ export function evaluate(root = defaultRoot) {
   const openCoordinator = read(root, 'cli/src/native/remote_view/open/coordinator.rs');
   const serviceState = read(root, 'crates/agent-browser-service-model/src/service_state.rs');
   const actions = read(root, 'cli/src/native/actions.rs');
+  const daemon = read(root, 'cli/src/native/daemon.rs');
   const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
   const workstationInstall = read(root, 'cli/src/workstation_install.rs');
   const productFiles = [
@@ -165,6 +166,17 @@ export function evaluate(root = defaultRoot) {
       ));
     }
   }
+  const statusReadOnlyFindings = [];
+  const statusProjection = daemon.match(
+    /async fn attach_browser_session_state[\s\S]*?(?=async fn reap_browser_sessions_if_loaded)/,
+  )?.[0] || '';
+  if (/reconcile_liveness_current|reap_current|handle_command\(/.test(statusProjection)) {
+    statusReadOnlyFindings.push(finding(
+      'status_projection_mutates_browser_session_state',
+      'cli/src/native/daemon.rs',
+      'service status invokes Browser Session Manager reconciliation or lifecycle mutation',
+    ));
+  }
   return {
     schemaVersion: 'p218-architecture-conformance.v1',
     plan: 'docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md',
@@ -174,6 +186,10 @@ export function evaluate(root = defaultRoot) {
       serviceModelLeaseAuthority: {
         status: serviceModelLeaseAuthorityFindings.length === 0 ? 'pass' : 'fail',
         findings: serviceModelLeaseAuthorityFindings,
+      },
+      statusReadOnly: {
+        status: statusReadOnlyFindings.length === 0 ? 'pass' : 'fail',
+        findings: statusReadOnlyFindings,
       },
     },
     summary: rows.reduce((counts, row) => {

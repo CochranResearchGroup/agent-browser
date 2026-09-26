@@ -58,7 +58,7 @@
       "symbols": ["BrowserSessionHost::execute_managed_command", "BrowserRuntimeSqliteStore::commit_browser_navigation", "BrowserSessionManager::close_session"],
       "writeSurfaces": ["cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_host/navigation_recovery.rs", "crates/agent-browser-service-model/src/browser_session_manager.rs"],
       "existingTests": ["shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite", "journaled navigation tests"],
-      "nextCheck": "Page effects, every effectful browser_session action, view focus and periodic reap now use an exact current-generation permit without coupling cleanup to provider readiness. Next close liveness reconciliation, provider callback, asynchronous completion and recovery commit coverage before browser-backed qualification."
+      "nextCheck": "Page effects, every effectful browser_session action, view focus, liveness reconciliation and periodic reap now use an exact current-generation permit without coupling cleanup to provider readiness. Next close provider callback, asynchronous completion and recovery commit coverage before browser-backed qualification."
     },
     {
       "id": "M1A-B06",
