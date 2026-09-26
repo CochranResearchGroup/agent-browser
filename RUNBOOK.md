@@ -14,7 +14,7 @@ policy capsule at `8bb9518eb78b37c22aaec0183348ee6c77adf0da`. The inherited work
 No candidate, runtime, provider, or installed acceptance changed in this slice.
 
 Acceptance: the inherited [coverage ledger](docs/dev/contracts/p218-grilling-contract-coverage.v1.json)
-has zero pass, 27 partial, seven fail, and eleven missing rows. M1A will
+has zero pass, 28 partial, seven fail, and ten missing rows. M1A will
 reconcile stale evidence descriptions without promoting tests to installed
 acceptance. `541d7346` already removed the JSON ordinary-open coordinator and
 fallback. SQLite manual-seeding dispatch already uses its dedicated launcher,
@@ -37,6 +37,16 @@ bound them to the current keeper route and the exact rerun passed. M1A's
 inventory is complete. M1B continues with stale-history availability, ordinary
 open coalescing, restart behavior, and remaining command heartbeat coverage.
 Strict workspace Clippy passes in `job-20260926T175308Z-6dc3a4cd5bae`.
+G05 advances from missing to partial: malformed owner, cleanup and ambiguous
+historical fields do not change ordinary manager translation
+(`job-20260926T175454Z-a004f9e83c83`), and contradictory migration history
+does not block valid profile opens (`job-20260926T175616Z-5f35b7c10690`).
+Provider-free B04 qualification also passes: concurrent exact ordinary opens
+share one execution permit and replay one operation and handoff
+(`job-20260926T175808Z-5fb37dfa5612`), while waiting-only restart performs no
+browser operation before exact client resume
+(`job-20260926T175854Z-10e864191671`). G19, G31 and G40 remain partial until
+their browser-host and installed-daemon boundaries are proven.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

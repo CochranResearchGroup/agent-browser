@@ -24,6 +24,16 @@
       "id": "keeper-only-manager-handoff",
       "evidence": "P219 architecture red guard plus cargo-signal job-20260926T175133Z-8e7342c18660",
       "result": "The compiled Legacy manager-handoff authority is removed; ordinary open and navigation bootstrap use Route Keeper authority, and all eight journaled-open tests pass."
+    },
+    {
+      "id": "stale-history-availability",
+      "evidence": "cargo-signal jobs job-20260926T175454Z-a004f9e83c83 and job-20260926T175616Z-5f35b7c10690",
+      "result": "Malformed owner, cleanup and ambiguous history cannot alter ordinary manager translation, and contradictory migration history cannot block valid profile opens."
+    },
+    {
+      "id": "ordinary-open-coalescing-and-waiting-restart",
+      "evidence": "cargo-signal jobs job-20260926T175808Z-5fb37dfa5612 and job-20260926T175854Z-10e864191671",
+      "result": "Exact concurrent ordinary requests share one SQLite execution permit and replay one operation and handoff result; waiting-only restart performs no browser operation until the exact client resumes."
     }
   ],
   "blockers": [
@@ -35,24 +45,6 @@
       "writeSurfaces": ["cli/src/native", "scripts/dev/check-p218-architecture.mjs", "scripts/dev/test-p218-architecture.mjs"],
       "existingTests": ["test-service-model-architecture", "check-p218-architecture"],
       "nextCheck": "Freeze compiled production references and dispatch edges separately from cfg(test) and migration-only code before selecting a removal batch."
-    },
-    {
-      "id": "M1A-B03",
-      "requirements": ["G05", "G23"],
-      "prohibitions": ["P16"],
-      "symbols": ["ordinary_remote_view_open_never_enters_profile_lease_admission", "manager_command_from_remote_view_open"],
-      "writeSurfaces": ["cli/src/native/action_runtime/runtime/route_host_tests.rs", "cli/src/native/daemon.rs"],
-      "existingTests": ["ordinary_remote_view_open_never_enters_profile_lease_admission"],
-      "nextCheck": "Add malformed, contradictory and stale historical metadata cases that still reach fresh ordinary admission."
-    },
-    {
-      "id": "M1A-B04",
-      "requirements": ["G19", "G31"],
-      "prohibitions": [],
-      "symbols": ["PresentationRequestAdmission", "BrowserRuntimeOperationJournal", "BrowserSessionHost::journaled_open_with_handoff_result"],
-      "writeSurfaces": ["cli/src/native/daemon.rs", "cli/src/native/presentation_request_admission.rs", "cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_store.rs"],
-      "existingTests": ["journaled_open_*", "presentation_request_admission tests"],
-      "nextCheck": "Prove two concurrent ordinary requests coalesce to one operation and handoff, then prove waiting-only restart does not launch until exact resume."
     },
     {
       "id": "M1A-B05",
@@ -73,10 +65,10 @@
       "nextCheck": "Replace four persistent route credential environment keys with SQLite authority and transient projection in the provider batch."
     }
   ],
-  "nextBatch": "M1A-B03 stale-history availability qualification, then M1A-B04 ordinary coalescing and restart behavior",
+  "nextBatch": "M1A-B05 ordinary-command heartbeat, generation fencing and Alice/Bob close semantics",
   "acceptance": {
     "coverageRows": 45,
-    "promotedRows": 0,
+    "promotedRows": 1,
     "installedEvidence": false
   }
 }

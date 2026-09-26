@@ -2513,6 +2513,25 @@ mod tests {
         assert_eq!(named["sessionName"], "alice");
         assert_eq!(named["url"], "https://example.test/alice");
 
+        let noisy_history = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "id": "open-alice",
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "sessionName": "alice",
+                "url": "https://example.test/alice",
+                "runtimeOwner": "malformed historical owner",
+                "cleanupObligation": {
+                    "state": "owned",
+                    "browserId": "contradictory-browser"
+                },
+                "historicalAuthority": [null, "ambiguous", {"stale": true}]
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(noisy_history, named);
+
         let selected = manager_command_from_remote_view_open(
             &serde_json::json!({
                 "action": "remote_view_open",
@@ -2573,6 +2592,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(timed["jobTimeoutMs"], 120_000);
+    }
+
+    #[test]
+    fn concurrent_ordinary_remote_view_open_replays_one_operation_and_handoff() {
+        use super::super::presentation_request_admission::{
+            now_ms, PresentationAdmission, PresentationAdmissionRequest,
+        };
+
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-ordinary-open-coalesce-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let path = root.join("runtime.sqlite3");
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &root.join("sessions.json"),
+                profile_catalog_path: &root.join("profiles.json"),
+                service_state_path: &root.join("service.json"),
+            },
+        )
+        .unwrap();
+        let command = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "id": "open-alice",
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "sessionName": "alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        let first =
+            PresentationAdmissionRequest::enqueue_at(path.clone(), &command, 1, false, now_ms())
+                .unwrap();
+        let duplicate =
+            PresentationAdmissionRequest::enqueue_at(path, &command, 1, false, now_ms()).unwrap();
+        let Some(PresentationAdmission::Execute(mut permit)) = first.poll(Some(true)).unwrap()
+        else {
+            panic!("first ordinary open must own the execution permit")
+        };
+        assert!(duplicate.poll(Some(true)).unwrap().is_none());
+        permit.require_current().unwrap();
+        let response = serde_json::json!({
+            "success": true,
+            "data": {
+                "operationId": "open-alice",
+                "handoffId": "handoff-alice"
+            }
+        });
+        assert_eq!(permit.finish(Ok(response.clone())).unwrap(), response);
+        let Some(PresentationAdmission::Replay(replayed)) = duplicate.poll(None).unwrap() else {
+            panic!("duplicate ordinary open must replay the first result")
+        };
+        assert_eq!(replayed, response);
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

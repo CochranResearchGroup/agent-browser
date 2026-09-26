@@ -57,7 +57,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: Inherits P218 source evidence including JSON coordinator removal, SQLite manual-seeding dispatch, both direct Lease Authority dependency removals, 270 model tests and 31 host tests; inventory remains zero pass, 27 partial, seven fail, eleven missing; P09 is violated, seven detectors have gaps and eleven prohibitions are unverified; no installed P218 or P219 acceptance
+    validation_status: M1A is reconciled; ordinary manager open and navigation bootstrap are keeper-only, stale history cannot change manager translation or block valid migrated profile opens, and focused receipts pass; inventory is zero pass, 28 partial, seven fail, ten missing; P09 is violated, seven detectors have gaps and eleven prohibitions are unverified; no installed P219 acceptance
     validation_ref: 1884c407
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []

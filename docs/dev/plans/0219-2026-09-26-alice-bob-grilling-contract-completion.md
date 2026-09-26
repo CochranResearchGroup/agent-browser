@@ -76,7 +76,7 @@ At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
 accepted pixels, input, joined recovery, or complete grilling conformance.
 The [inherited coverage ledger](../contracts/p218-grilling-contract-coverage.v1.json)
-has 45 rows: zero pass, 27 partial, seven fail, and eleven missing. Retain its
+has 45 rows: zero pass, 28 partial, seven fail, and ten missing. Retain its
 filename and row IDs as the single evidence ledger. Succession promotes no row.
 
 Completed work materially changes the starting point:
