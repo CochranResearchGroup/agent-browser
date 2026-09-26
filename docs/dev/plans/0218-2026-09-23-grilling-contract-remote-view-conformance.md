@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 42
+Plan version: 43
 
 State: OPEN
 
@@ -78,6 +78,13 @@ legacy JSON.
 
 ## Current State
 
+Source checkpoint `680eb2df` repairs the navigation recovery fixture that
+blocked the broader host filter. Its synthetic runtime now supplies an
+explicit visible-browser proof, so the journal recovery cases no longer
+probe an external X11 display. All four navigation recovery tests and all 30
+Browser Session Host tests pass; final format and strict workspace Clippy pass.
+The earlier failed receipt remains diagnostic history, not an accepted gate.
+
 Source checkpoint `44961424` routes an explicit `browserId` through the
 authenticated ordinary-open adapter, SQLite journal, and Browser Session
 Manager. It reuses only that current live browser, checks its profile and
@@ -86,12 +93,8 @@ replacement launch. A dry run checks stored identity without claiming live
 browser readiness. The full service-model crate passes 270 tests, and the
 changed journal, daemon translation, dry-run, and CLI parser fixtures pass.
 Strict workspace Clippy, formatting, route-confusion gates, documentation
-checks, docs build, and architecture detector self-test pass. The broader
-Browser Session Host filter is red in a navigation recovery fixture that
-panics on a missing operation observation after 137 seconds; the exact
-selector fixture passes. The failure is retained for follow-up, with no
-whole-host-suite claim. Installed browser, visual, input, and full G01–G45
-acceptance remain open.
+checks, docs build, and architecture detector self-test pass. Installed
+browser, visual, input, and full G01–G45 acceptance remain open.
 
 P211 implemented substantial SQLite, operation-journal, route-keeper,
 capacity, handoff, desktop-control, and migration foundations. P217 commit
@@ -1056,6 +1059,17 @@ fixtures. The reproducible checks are the focused CLI test filter
 is retained by `cargo-signal` under the user-scoped run directory; its compact
 receipts reported zero compiler errors. This source-only fixture does not
 change the architecture gate verdict or authorize runtime publication.
+
+Version 43 repairs the navigation recovery test fixture at `680eb2df`.
+The isolated failure from version 42 returned
+`operator_presentation_observation_failed` after attempting to inspect a
+synthetic browser on real X11 display `:10`; the missing journal observation
+was a consequence of that earlier presentation failure. The fixture now
+returns a synthetic visible-browser proof for its synthetic process and route.
+All four navigation recovery tests pass in under a second, and the complete
+30-case Browser Session Host filter passes. Final format and strict workspace
+Clippy pass. This is a provider-free fixture repair, not installed visual
+acceptance; the original failed receipt remains retained.
 
 Version 42 adds an exact `browserId` selector to the SQLite ordinary-open
 path at source checkpoint `44961424`. Daemon translation retains the selector;
