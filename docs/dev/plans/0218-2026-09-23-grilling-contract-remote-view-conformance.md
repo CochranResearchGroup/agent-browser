@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 36
+Plan version: 37
 
 State: OPEN
 
@@ -848,6 +848,26 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 37 connects the SQLite manual-seeding path to authenticated acquire,
+close, and durable resolution dispatch. Source checkpoint `2b7e866e`
+reserves the named profile against ordinary browser opens, pins the executable
+and keeper slot before launch, journals the launch issue and exact or uncertain
+process observation, and publishes an opaque handoff only after current
+process-owned window and public-route proof. It avoids a parallel runtime JSON
+write. Close signals only a verified process instance and atomically closes
+the seeding record and handoff after process exit, while retaining the
+provider-owned keeper route. Durable resolution re-proves the exact process,
+slot fence, window, and public route; the dashboard accepts its process-bound
+receipt without inventing a daemon owner generation. The focused five-case
+manual-seeding Rust filter, strict workspace Clippy, format check, route
+confusion gates, dashboard handoff and inspector checks, remote-view
+documentation check, dashboard build, and docs build pass on this candidate.
+The close fixture refuses to terminalize a live process. The route-change
+rebind path, uncertain-launch reconciliation, live keeper probe, installed
+browser and visual/input acceptance, and full G01–G45 audit remain open.
+The current architecture audit still reports P03, P05, and P09 violated;
+coverage remains zero pass, 27 partial, seven fail, and 11 missing.
 
 Version 36 adds the keeper-to-presentation proof bridge for SQLite manual
 seeding. The adapter projects a ready keeper binding into the existing route

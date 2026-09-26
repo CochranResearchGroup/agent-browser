@@ -11,20 +11,34 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 36 remains open on `platform/p211-simple-cold-upgrade`.
-The current source cut adds a keeper-derived presentation proof bridge for
+Plan 0218 version 37 remains open on `platform/p211-simple-cold-upgrade`.
+Source checkpoint `2b7e866e` dispatches SQLite manual-seeding acquire,
+verified-process close, and current-proof durable resolution. It journals the
+launch issue before effects, avoids the parallel runtime JSON writer, and
+retains the provider-owned keeper after close. The dashboard accepts the
+process-bound receipt. Five focused Rust cases, strict workspace Clippy,
+formatting, route-confusion and dashboard handoff checks, remote-view docs
+checks, dashboard build, and docs build pass. This is source-only evidence:
+no installed browser, pixels, or input were accepted. Route rebinding after a
+keeper change, uncertain-launch reconciliation, and the live keeper probe
+remain open. The current architecture audit reports P03, P05, and P09
+violated, five detector gaps, and 11 unverified rows. The G01–G45 coverage
+inventory remains zero pass, 27 partial, seven fail, and 11 missing.
+
+### Earlier P218 source checkpoints
+
+Source checkpoint `12025924` added a keeper-derived presentation proof bridge for
 SQLite manual seeding. It checks the exact process around display access,
 window staging, process-owned X11 visibility, and public operator reachability.
 One focused provider-free fixture, strict workspace Clippy, and formatting
-pass through `cargo-signal`. The effectful handler does not call this bridge,
-so P03/P05 and installed visual acceptance remain open.
-The current source cut journals a detached manual-seeding launch with an
+passed through `cargo-signal`. At that checkpoint the effectful handler did
+not call this bridge; P03/P05 and installed visual acceptance remain open.
+An earlier source cut journaled a detached manual-seeding launch with an
 uncertain process identity as `recovery_required`, preserving its PID with the
 SQLite operation observation and blocking profile reuse or ready handoff
 publication. One focused fixture, strict workspace Clippy, and formatting pass
-through `cargo-signal`. The effectful adapter has not called this path; exact
-process reconciliation, dispatch, durable resolution, and installed acceptance
-remain open.
+through `cargo-signal`. That adapter did not call this path at the time;
+exact process reconciliation and installed acceptance remain open.
 Source checkpoint `ef194bfc` atomically publishes a manual-seeding
 ready handoff, lifecycle state, and operation result after exact route and
 process observation plus a ready operator visibility proof. Its result exposes
