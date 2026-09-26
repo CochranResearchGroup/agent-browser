@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 43
+Plan version: 44
 
 State: OPEN
 
@@ -77,6 +77,15 @@ route inventories, operator-managed display numbers, or runtime fallback to
 legacy JSON.
 
 ## Current State
+
+Source checkpoint `1884c407` adds SQLite-backed evidence that an interrupted
+journaled navigation leaves its existing session heartbeat unchanged, while
+recovery of that exact effect advances the heartbeat and expiry once. The
+fixture attributes the initial tab before navigation so a successful bootstrap
+open cannot be mistaken for a failed navigation's heartbeat. The 31-case
+Browser Session Host filter, final formatting, and strict workspace Clippy
+pass. G42 remains partial across other ordinary command variants and installed
+handoff access; no live visual or input acceptance is inferred.
 
 Source checkpoint `680eb2df` repairs the navigation recovery fixture that
 blocked the broader host filter. Its synthetic runtime now supplies an
@@ -1059,6 +1068,20 @@ fixtures. The reproducible checks are the focused CLI test filter
 is retained by `cargo-signal` under the user-scoped run directory; its compact
 receipts reported zero compiler errors. This source-only fixture does not
 change the architecture gate verdict or authorize runtime publication.
+
+Version 44 adds a journaled-navigation heartbeat fixture at `1884c407`.
+The first fixture run correctly observed activity at `2_000` after a successful
+bootstrap open had created Alice's initial tab; it could not isolate the
+navigation effect. The revised fixture attributes Alice's tab at `1_000`
+before the journaled command. An interrupted navigation leaves her persisted
+activity and expiry at `1_000` and `301_000`; recovering the same effect
+commits them at `2_000` and `302_000` without executing it twice. The full
+31-case host filter passes, as do final format and strict workspace Clippy.
+The first failed test receipt remains diagnostic evidence. After the reboot,
+the initial Clippy process hung in `sccache` before compilation; the retained
+failed invocation was replaced with a passing run using the documented
+`AGENT_BROWSER_CARGO_CACHE=off` opt-out while preserving Cargo admission and
+resource limits. This is partial G42 source evidence, not installed acceptance.
 
 Version 43 repairs the navigation recovery test fixture at `680eb2df`.
 The isolated failure from version 42 returned

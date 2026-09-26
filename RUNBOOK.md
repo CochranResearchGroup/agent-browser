@@ -9,21 +9,23 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
-## Current P218 status | 2026-09-25
+## Current P218 status | 2026-09-26
 
-Plan 0218 version 43 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 44 remains open on `platform/p211-simple-cold-upgrade`.
 Source checkpoint `44961424` carries explicit `browserId` through authenticated
 ordinary-open translation, the SQLite journal, and the session manager. An
 exact current live browser may be reused with matching profile and session
 identity; invalid or inactive IDs cannot launch a substitute. The full model
 crate passes 270 tests. Source checkpoint `680eb2df` gives the synthetic
 navigation recovery runtime an explicit visible-browser proof; all four
-navigation recovery cases and the full 30-case Browser Session Host filter
-pass. Selector fixtures, strict Clippy, format, docs build, route-confusion,
-architecture self-test, and documentation checks also pass. P09 remains
+navigation recovery cases pass. Checkpoint `1884c407` adds success-only
+journaled-navigation heartbeat proof; all 31 Browser Session Host tests,
+strict Clippy with the Cargo cache opt-out after reboot, and final format
+pass. Selector fixtures, docs build, route-confusion, architecture self-test,
+and documentation checks also pass. P09 remains
 violated, P03/P05 and five other detectors have gaps, and 11 rows remain
 unverified. Coverage is zero pass, 27 partial, seven fail, and 11 missing.
-Next: continue browser-build or exact-session heartbeat work. Installed
+Next: qualify remaining ordinary command heartbeat and browser-build paths. Installed
 visual/input evidence and the full G01–G45 audit remain open.
 
 ### Earlier P218 source checkpoints
