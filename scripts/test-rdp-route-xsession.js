@@ -483,6 +483,21 @@ fi
         state: 'ownership_unproven',
         code: 'rdp_route_session_live',
       });
+      writeFileSync(join(proc, 'boot-id'), 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee\n');
+      const priorBootAbsence = spawnSync('bash', absentArgs, {
+        encoding: 'utf8',
+        env: helperEnv,
+      });
+      assert.equal(priorBootAbsence.status, 0, priorBootAbsence.stderr);
+      const priorBootProof = JSON.parse(priorBootAbsence.stdout);
+      assert.equal(priorBootProof.state, 'absent');
+      assert.match(priorBootProof.witnessDigest, /^[a-f0-9]{64}$/);
+      assert.deepEqual(priorBootProof.verification, {
+        sessionInstanceAbsent: true,
+        xServerInstanceAbsent: true,
+        ownedScopeEmptyOrAbsent: true,
+      });
+      writeFileSync(join(proc, 'boot-id'), `${witness.bootId}\n`);
       const ambiguousAbsence = spawnSync('bash', absentArgs, {
         encoding: 'utf8',
         env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'multiple' },

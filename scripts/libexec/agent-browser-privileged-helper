@@ -685,9 +685,23 @@ verify_rdp_route_session_absent() {
   require_route_user "$user_name"
   W_ROUTE_USER="$user_name"
   W_ROUTE_UID="$(managed_route_uid "$user_name")"
+  W_SESSION_ID="$session_id"
+  W_SESSION_SCOPE="session-$session_id.scope"
+  W_SCOPE_INVOCATION_ID="$scope_invocation_id"
+  W_CGROUP_PATH="/user.slice/user-$W_ROUTE_UID.slice/session-$session_id.scope"
+  W_CGROUP_DEVICE="$cgroup_device"
+  W_CGROUP_INODE="$cgroup_inode"
+  W_LEADER_PID="$leader_pid"
+  W_LEADER_START_TICKS="$leader_start_ticks"
+  W_X_SERVER_PID="$x_server_pid"
+  W_X_SERVER_START_TICKS="$x_server_start_ticks"
+  W_DISPLAY_NAME="$display_name"
+  W_X11_SOCKET_INODE="$x11_socket_inode"
   W_BOOT_ID="$(<"$BOOT_ID_PATH")" || return 1
   if [[ "$W_BOOT_ID" != "$boot_id" ]]; then
-    emit_route_session_state "ownership_unproven" "rdp_route_session_boot_identity_changed"
+    local witness_digest
+    witness_digest="$(route_session_witness_digest)"
+    printf '{"schemaVersion":1,"state":"absent","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
     return 0
   fi
 

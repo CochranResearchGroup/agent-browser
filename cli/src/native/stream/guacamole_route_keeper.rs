@@ -621,6 +621,14 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
                     })
                 {
                     Ok(XrdpHelperStop::Stopped)
+                } else if absent.schema_version == 1
+                    && absent.state == "ownership_unproven"
+                    && absent.code.as_deref() == Some("rdp_route_session_boot_identity_changed")
+                {
+                    // The root-owned helper compared the retained witness to
+                    // the current kernel boot ID. An exact process, cgroup,
+                    // and X11 socket instance cannot survive that boundary.
+                    Ok(XrdpHelperStop::Stopped)
                 } else {
                     Ok(XrdpHelperStop::OwnershipUnproven(
                         absent
