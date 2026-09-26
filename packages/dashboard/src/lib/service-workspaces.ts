@@ -667,7 +667,7 @@ export function deriveWorkspaceViewAuthorityLedger(input: WorkspaceNodeInput): W
           : authorityViewAllowed
             ? "service-owned-view-only-browser"
             : "service-owned-diagnostic-browser");
-    const subjectKey = `browser:${browser.id}`;
+    const subjectKey = browserWorkspaceId(browser.id);
     const viewReason = authorityViewAllowed ? null : attention ?? "Canonical browser authority does not permit viewing.";
     const controlReason = authorityControlAllowed ? null : attention ?? routeBoundOwnership?.reason ?? "Canonical browser authority does not permit control.";
     const presentationActionCeilings = browser.presentationActionCeilings ?? {
@@ -852,7 +852,7 @@ export function deriveWorkspaceNodes(input: WorkspaceNodeInput): WorkspaceNode[]
       jobs: relatedJobs,
       incidents: relatedIncidents,
       diagnostics,
-      authorityEntry: authorityLedger[`browser:${browser.id}`],
+      authorityEntry: authorityLedger[browserWorkspaceId(browser.id)],
       projectedView: projectedViewByBrowserId.get(browser.id),
     });
     nodes.push(applyWorkspaceInventoryPlacement(node));
@@ -1462,7 +1462,7 @@ function createBrowserWorkspaceNode({
   ]).join(" / ");
 
   return {
-    id: `browser:${browser.id}`,
+    id: browserWorkspaceId(browser.id),
     source: "service-browser",
     role: viewerClient.active ? "viewer-client" : "target-browser",
     roleReason: viewerClient.reason,
@@ -2894,6 +2894,10 @@ function compactLabels(values: Array<string | number | null | undefined>): strin
   return values
     .map((value) => (value == null ? "" : String(value).trim()))
     .filter(Boolean);
+}
+
+function browserWorkspaceId(browserId: string): string {
+  return browserId.startsWith("browser:") ? browserId : `browser:${browserId}`;
 }
 
 function normalize(value: string | null | undefined): string {
