@@ -756,6 +756,11 @@ try {
   assert.equal(existsSync(descriptor.manifest), false);
   const preflight = developmentPresentationProviderSystemPreflight({
     env,
+    routeKeeperRuntime: () => ({
+      integrated: true,
+      provider: 'guacamole-xrdp',
+      authority: 'browser-runtime-sqlite',
+    }),
     run(command, args) {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
@@ -770,15 +775,14 @@ try {
       throw new Error(`Unexpected preflight command: ${command} ${args.join(' ')}`);
     },
   });
-  assert.equal(preflight.success, false);
+  assert.equal(preflight.success, true);
   assert.equal(preflight.authorizesEffects, false);
   assert.equal(
     preflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
-    false,
+    true,
   );
   assert.ok(
     preflight.checks
-      .filter((check) => check.name !== 'route-keeper-runtime')
       .every((check) => check.ok),
   );
   const firstSecrets = prepareDevelopmentPresentationProviderSecrets({ env });
@@ -1167,6 +1171,11 @@ try {
   assert.equal(existsSync(descriptor.manifest), true);
   const reconcilePreflight = developmentPresentationProviderSystemPreflight({
     env,
+    routeKeeperRuntime: () => ({
+      integrated: true,
+      provider: 'guacamole-xrdp',
+      authority: 'browser-runtime-sqlite',
+    }),
     run(command, args) {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
@@ -1193,14 +1202,13 @@ try {
     },
   });
   assert.equal(reconcilePreflight.mode, 'reconcile');
-  assert.equal(reconcilePreflight.success, false);
+  assert.equal(reconcilePreflight.success, true);
   assert.equal(
     reconcilePreflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
-    false,
+    true,
   );
   assert.ok(
     reconcilePreflight.checks
-      .filter((check) => check.name !== 'route-keeper-runtime')
       .every((check) => check.ok),
   );
 

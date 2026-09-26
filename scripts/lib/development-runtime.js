@@ -294,6 +294,11 @@ export function installDevelopmentRuntime({
     sourceBinary,
     browserExecutable: descriptor.browserExecutable,
     externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
+    presentationRouteKeeper: {
+      integrated: true,
+      provider: 'guacamole-xrdp',
+      authority: 'browser-runtime-sqlite',
+    },
     desktopInputProvider: {
       enabled: true,
       providerId: 'controlled-x11-xtest',

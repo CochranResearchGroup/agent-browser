@@ -34,6 +34,7 @@ const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
 export function developmentPresentationProviderSystemPreflight({
   env = process.env,
   run = commandResult,
+  routeKeeperRuntime = developmentRouteKeeperRuntimeStatus,
 } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   const configured = existsSync(descriptor.manifest);
@@ -50,11 +51,8 @@ export function developmentPresentationProviderSystemPreflight({
     descriptor.externalIngress.configured === true,
     descriptor.externalIngress,
   ));
-  checks.push(check(
-    'route-keeper-runtime',
-    false,
-    'provider mutation is deferred until the runtime-host route keeper is integrated',
-  ));
+  const routeKeeper = routeKeeperRuntime(env);
+  checks.push(check('route-keeper-runtime', routeKeeper.integrated === true, routeKeeper));
   const docker = run('docker', ['info', '--format', '{{.ServerVersion}}']);
   checks.push(check('docker', docker.status === 0, docker.status === 0 ? docker.stdout.trim() : commandError(docker)));
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
@@ -158,6 +156,31 @@ export function developmentPresentationProviderSystemPreflight({
     success: checks.every((item) => item.ok),
     descriptor,
     checks,
+  };
+}
+
+function developmentRouteKeeperRuntimeStatus(env) {
+  const runtime = developmentRuntimeNamespace(env);
+  const installRoot = env.AGENT_BROWSER_DEV_INSTALL_ROOT ||
+    join(env.HOME, '.local', 'lib', runtime.name);
+  const metadataPath = join(installRoot, 'current', 'generation.json');
+  let metadata = null;
+  try {
+    metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+  } catch {
+    return { integrated: false, metadataPath, reason: 'generation_metadata_unavailable' };
+  }
+  const capability = metadata.presentationRouteKeeper;
+  const integrated = capability?.integrated === true &&
+    capability.provider === 'guacamole-xrdp' &&
+    capability.authority === 'browser-runtime-sqlite';
+  return {
+    integrated,
+    metadataPath,
+    generationId: metadata.generationId ?? null,
+    provider: capability?.provider ?? null,
+    authority: capability?.authority ?? null,
+    ...(!integrated ? { reason: 'presentation_route_keeper_capability_missing' } : {}),
   };
 }
 

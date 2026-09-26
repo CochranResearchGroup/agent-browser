@@ -338,6 +338,11 @@ try {
     readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
   );
   assert.equal(generationManifest.externalBrowserDiscovery, 'disabled');
+  assert.deepEqual(generationManifest.presentationRouteKeeper, {
+    integrated: true,
+    provider: 'guacamole-xrdp',
+    authority: 'browser-runtime-sqlite',
+  });
   assert.equal(
     readFileSync(join(descriptor.stateDir, 'service', 'runtime.sqlite3'), 'utf8'),
     '',
