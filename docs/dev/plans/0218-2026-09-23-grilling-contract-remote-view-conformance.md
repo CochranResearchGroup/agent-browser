@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 41
+Plan version: 42
 
 State: OPEN
 
@@ -77,6 +77,21 @@ route inventories, operator-managed display numbers, or runtime fallback to
 legacy JSON.
 
 ## Current State
+
+Source checkpoint `44961424` routes an explicit `browserId` through the
+authenticated ordinary-open adapter, SQLite journal, and Browser Session
+Manager. It reuses only that current live browser, checks its profile and
+logical session binding, and rejects unknown or inactive identities before a
+replacement launch. A dry run checks stored identity without claiming live
+browser readiness. The full service-model crate passes 270 tests, and the
+changed journal, daemon translation, dry-run, and CLI parser fixtures pass.
+Strict workspace Clippy, formatting, route-confusion gates, documentation
+checks, docs build, and architecture detector self-test pass. The broader
+Browser Session Host filter is red in a navigation recovery fixture that
+panics on a missing operation observation after 137 seconds; the exact
+selector fixture passes. The failure is retained for follow-up, with no
+whole-host-suite claim. Installed browser, visual, input, and full G01–G45
+acceptance remain open.
 
 P211 implemented substantial SQLite, operation-journal, route-keeper,
 capacity, handoff, desktop-control, and migration foundations. P217 commit
@@ -1041,6 +1056,28 @@ fixtures. The reproducible checks are the focused CLI test filter
 is retained by `cargo-signal` under the user-scoped run directory; its compact
 receipts reported zero compiler errors. This source-only fixture does not
 change the architecture gate verdict or authorize runtime publication.
+
+Version 42 adds an exact `browserId` selector to the SQLite ordinary-open
+path at source checkpoint `44961424`. Daemon translation retains the selector;
+dry-run validation checks the stored browser, profile, disposable allocation,
+and active same-name session; the journal reserves the selected identity; and
+the manager either reuses that exact live browser or returns a typed error
+without launching a substitute. The selector fixture covers named-browser
+reuse across logical sessions, same-session mismatch, unknown and inactive
+IDs, profile mismatch, and reuse after session expiry while the browser stays
+live. The journal fixture proves no second launch and no operation persisted
+for an unknown ID. The full service-model crate passes 270 tests. Focused
+journal, daemon, parser, and route-confusion checks pass; final format, strict
+workspace Clippy, docs build, documentation checks, architecture self-test,
+and diff validation pass. The broader host filter is red in
+`executed_navigation_requires_live_target_before_atomic_publication`: its
+operation observation is absent at an existing recovery assertion, and the
+isolated case takes 137 seconds. This failure is retained rather than counted
+as a passing gate. The architecture audit still reports P09 violated, seven
+detector gaps including P03/P05, and eleven unverified rows. Coverage remains
+zero pass, 27 partial, seven fail, and eleven missing. Selector source evidence
+does not close P03/P05 or G31; browser-build selection, exact-session heartbeat
+publication, installed pixels and input, and the full G01–G45 audit remain.
 
 Source checkpoint `541d7346` removes the obsolete JSON ordinary-open
 coordinator, its acquisition repository, and the generic JSON handoff-resolve

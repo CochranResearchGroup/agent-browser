@@ -11,17 +11,20 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 41 remains open on `platform/p211-simple-cold-upgrade`.
-Source checkpoint `541d7346` removes the obsolete JSON ordinary-open
-coordinator and generic JSON handoff resolver. Authenticated daemon open and
-resolution use the SQLite session host. Focused handoff and daemon fixtures,
-strict Clippy, formatting, route-confusion gates, architecture self-test, and
-coverage validation pass. The source detector now reports P09 violated,
-P03/P05 plus five other detector gaps, and 11 unverified rows. P03/P05 are not
-accepted: selector coverage, exact-session heartbeat, installed visual/input
-evidence, live viewer control, and the full G01–G45 audit remain open. Coverage
-is zero pass, 27 partial, seven fail, and 11 missing. The next packet should
-address a concrete ordinary-open selector or heartbeat gap in the SQLite host.
+Plan 0218 version 42 remains open on `platform/p211-simple-cold-upgrade`.
+Source checkpoint `44961424` carries explicit `browserId` through authenticated
+ordinary-open translation, the SQLite journal, and the session manager. An
+exact current live browser may be reused with matching profile and session
+identity; invalid or inactive IDs cannot launch a substitute. The full model
+crate passes 270 tests; selector fixtures, strict Clippy, format, docs build,
+route-confusion, architecture self-test, and documentation checks pass. The
+broader host filter fails in a navigation recovery fixture at a missing
+operation observation; its isolated receipt is retained and the changed
+journal fixture passes. P09 remains violated, P03/P05 and five other detectors
+have gaps, and 11 rows remain unverified. Coverage is zero pass, 27 partial,
+seven fail, and 11 missing. Next: resolve the navigation recovery failure,
+then continue browser-build or exact-session heartbeat work. Installed
+visual/input evidence and the full G01–G45 audit remain open.
 
 ### Earlier P218 source checkpoints
 

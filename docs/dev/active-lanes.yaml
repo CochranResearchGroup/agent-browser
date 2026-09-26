@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 541d7346
+    checkpoint: 44961424
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: Source checkpoint 541d7346 removes the legacy JSON ordinary-open coordinator and generic JSON handoff fallback; 48 focused handoff cases, two daemon fixtures, strict Clippy, format, route-confusion, architecture self-test, and coverage validator pass; P09 remains violated, P03 and P05 move to detector gaps without acceptance, seven detectors have gaps, eleven are unverified, installed visual and input acceptance plus the full G01-G45 audit remain open, and M1 is open
-    validation_ref: 541d7346
+    validation_status: Source checkpoint 44961424 routes explicit browserId through SQLite ordinary open for exact live reuse without replacement launch; 270 model tests, changed selector fixtures, strict Clippy, format, docs build, route-confusion, architecture self-test, and documentation checks pass; broader host filter fails in a retained navigation recovery fixture; P09 remains violated, P03/P05 and five other detectors have gaps, eleven are unverified, installed visual and input acceptance plus the full G01-G45 audit remain open, and M1 is open
+    validation_ref: 44961424
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
