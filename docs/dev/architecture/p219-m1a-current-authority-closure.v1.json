@@ -63,10 +63,10 @@
       "symbols": ["workstation installer route credential projection"],
       "writeSurfaces": ["cli/src/workstation_install.rs", "cli/src/native/browser_session_store.rs"],
       "existingTests": ["check-p218-architecture"],
-      "nextCheck": "Replace four persistent route credential environment keys with SQLite authority and transient projection in the provider batch."
+      "nextCheck": "Source custody is complete: route credentials migrate once into private browser-runtime SQLite, legacy keys are scrubbed, and privileged user provisioning receives transient stdin. Qualify provider projection cleanup and identity-preserving rotation in installed M2A."
     }
   ],
-  "nextBatch": "Finish M1B-B05 provider callback and recovery fencing, then M1B-B06 transient provider credential custody",
+  "nextBatch": "M1B source closure is complete. Join the minimum M2A provider and live-viewer path, then freeze one M2B Alice/Bob candidate.",
   "acceptance": {
     "coverageRows": 45,
     "promotedRows": 3,

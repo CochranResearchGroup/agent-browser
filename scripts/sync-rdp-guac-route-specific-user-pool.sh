@@ -21,6 +21,7 @@ done
 
 GUAC_DIR="${AGENT_BROWSER_GUACAMOLE_DIR:-$HOME/.agent-browser/guacamole}"
 SECRET_FILE="${AGENT_BROWSER_GUACAMOLE_SECRET_FILE:-$HOME/.agent-browser/secrets/guacamole.env}"
+RUNTIME_DATABASE="${AGENT_BROWSER_BROWSER_RUNTIME_DATABASE:-$HOME/.agent-browser/service/browser-runtime.sqlite3}"
 HOSTNAME="${AGENT_BROWSER_RDP_TARGET_HOST:-host.docker.internal}"
 PORT="${AGENT_BROWSER_RDP_TARGET_PORT:-3389}"
 POSTGRES_CONTAINER="${AGENT_BROWSER_GUACAMOLE_POSTGRES_CONTAINER:-agent-browser-guacamole-postgres}"
@@ -70,7 +71,7 @@ ensure_guacamole_postgres() {
   bash "$SCRIPT_DIR/ensure-rdp-guac-postgres.sh" --apply
 }
 
-ROUTE_USER_POOL_JSON="$(python3 "$ROUTE_USER_HELPER" resolve --secret-file "$SECRET_FILE")"
+ROUTE_USER_POOL_JSON="$(python3 "$ROUTE_USER_HELPER" resolve --secret-file "$SECRET_FILE" --database "$RUNTIME_DATABASE")"
 ROUTE_COUNT="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' <<<"$ROUTE_USER_POOL_JSON")"
 ROUTE_SUMMARY="$(python3 -c 'import json,sys; [print("{}\t{}\t{}".format(route["id"], route["routeUser"], route["connectionName"])) for route in json.load(sys.stdin)]' <<<"$ROUTE_USER_POOL_JSON")"
 

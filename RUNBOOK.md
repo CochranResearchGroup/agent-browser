@@ -16,7 +16,7 @@ policy capsule at `8bb9518eb78b37c22aaec0183348ee6c77adf0da`. The inherited work
 No candidate, runtime, provider, or installed acceptance changed in this slice.
 
 Acceptance: the inherited [coverage ledger](docs/dev/contracts/p218-grilling-contract-coverage.v1.json)
-has two pass, 28 partial, six fail, and nine missing rows. M1A will
+has two pass, 29 partial, five fail, and nine missing rows. M1A will
 reconcile stale evidence descriptions without promoting tests to installed
 acceptance. `541d7346` already removed the JSON ordinary-open coordinator and
 fallback. SQLite manual-seeding dispatch already uses its dedicated launcher,
@@ -102,10 +102,10 @@ success-only heartbeat. The recorded 270 model tests, 31 host tests, format,
 strict Clippy, docs, and contract checks retain their original scope. They were
 not rerun as Rust or installed acceptance during successor writing.
 
-Architecture readback: P09 is violated; P02/P03/P05/P12/P19 have detector
-gaps; P15 and P16 pass; eleven prohibitions are unverified. The Service-model
-and legacy-authority quarantine cuts pass. The old M0 dependency graph is
-historical, not current reachability.
+Architecture readback: P09, P15 and P16 pass; P02/P03/P05/P12/P19 have
+detector gaps; eleven prohibitions are unverified. The Service-model,
+legacy-authority quarantine and provider-credential custody cuts pass. The old
+M0 dependency graph is historical, not current reachability.
 
 Authority and effort: the latest P218 600,000-token window is exhausted. The
 September 26 handoff recorded goal thread
@@ -122,10 +122,19 @@ open after that stop. The verified policy entrypoint is [the P219 M1B–M2B
 capsule](docs/dev/policy-capsules/p219-m1b-m2b.md); broad policy rereads occur
 only on one of its explicit triggers.
 
-Current action: finish M1B's B05 and B06 source blockers, join the minimum
-M2A provider and live-viewer path, then freeze and qualify one M2B Alice/Bob
-candidate. The early candidate cannot supply final proof for a different final
-candidate.
+M1B source closure is complete. B06 moves the route-user inventory into the
+private Browser Runtime SQLite `provider_credentials` table, migrates and
+scrubs the legacy environment keys, and supplies the privileged helper only
+through transient stdin. The route-user, provider-sync, workstation-install,
+host-provision, Guacamole-asset, PostgreSQL-durability and architecture
+fixtures pass; formatting passes in
+`job-20260926T191050Z-12d5bec83d96`. G25 advances from fail to partial and
+P09 passes. Installed provider projection cleanup and identity-preserving
+credential rotation remain M2A evidence.
+
+Current action: join the minimum M2A provider and live-viewer path, then freeze
+and qualify one M2B Alice/Bob candidate. The early candidate cannot supply
+final proof for a different final candidate.
 
 Retained stops: no production/staging mutation, ingress publication, merge,
 release, worktree removal, private-site acceptance, or automatic external

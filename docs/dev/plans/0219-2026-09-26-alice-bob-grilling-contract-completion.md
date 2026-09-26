@@ -78,7 +78,7 @@ At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
 accepted pixels, input, joined recovery, or complete grilling conformance.
 The [inherited coverage ledger](../contracts/p218-grilling-contract-coverage.v1.json)
-has 45 rows: two pass, 28 partial, six fail, and nine missing. Retain its
+has 45 rows: two pass, 29 partial, five fail, and nine missing. Retain its
 filename and row IDs as the single evidence ledger. Succession promotes no row.
 
 Completed work materially changes the starting point:
@@ -100,10 +100,11 @@ formatting, and strict workspace Clippy. The 31-test receipt is
 runs or installed acceptance. Preserve the earlier fixture failure and
 `sccache` failure receipt `job-20260926T151732Z-4573b2171baa`.
 
-The architecture report re-read on September 26 has P09 violated, five
-detector gaps (P02/P03/P05/P12/P19), P15 and P16 passing, and eleven unverified prohibitions.
-P09 identifies four persistent route-credential environment keys in
-`workstation_install.rs`. Neither a detector gap nor an unverified row passes.
+The current architecture report has P09, P15 and P16 passing, five detector
+gaps (P02/P03/P05/P12/P19), and eleven unverified prohibitions. B06 migrated
+the four persistent route credentials into private Browser Runtime SQLite,
+scrubs legacy keys and projects credentials transiently. Neither a detector gap
+nor an unverified row passes.
 
 Several inherited ledger descriptions and the
 [M0 dependency snapshot](../architecture/p218-ordinary-open-handoff-closure.v1.json)
@@ -411,8 +412,8 @@ source identities, plan, roadmap, runbook, catalog, and PR must agree.
 
 The M2B milestone is an intermediate outcome. P218's cancellation is
 supersession, not acceptance. A partial pass keeps this plan open after
-execution starts. The current implementation action is the remaining M1B B05
-generation/recovery closure followed by B06 transient credential custody.
+execution starts. M1B source closure is complete; the current action is the
+minimum M2A provider/live-viewer join followed by a frozen M2B candidate.
 
 Execution checkpoint on September 26: M1B-B02 is complete. The trusted product
 no longer deserializes or replays legacy runtime-owner transaction sidecars and
@@ -420,4 +421,7 @@ no longer embeds or exposes protected owner observations through Service State,
 launch metadata, inventory, generated client or public documentation. P15,
 P16, `serviceModelLeaseAuthority` and `legacyAuthorityQuarantine` pass; strict
 workspace Clippy passes in `job-20260926T185357Z-7d9bc2827369`. G23 and G41
-are promoted to pass. B05 and B06 remain the source blockers before M2A.
+are promoted to pass. B05 and B06 source closure is complete. G25 is partial
+and P09 passes after private SQLite custody, legacy-key scrubbing, transient
+privileged-helper stdin and provider-sync replay fixtures. Installed provider
+cleanup, rotation and handoff-identity evidence remain in M2A.

@@ -25,6 +25,7 @@ done
 
 GUAC_DIR="${AGENT_BROWSER_GUACAMOLE_DIR:-$HOME/.agent-browser/guacamole}"
 SECRET_FILE="${AGENT_BROWSER_GUACAMOLE_SECRET_FILE:-$HOME/.agent-browser/secrets/guacamole.env}"
+RUNTIME_DATABASE="${AGENT_BROWSER_BROWSER_RUNTIME_DATABASE:-$HOME/.agent-browser/service/browser-runtime.sqlite3}"
 HOSTNAME="${AGENT_BROWSER_RDP_TARGET_HOST:-host.docker.internal}"
 PORT="${AGENT_BROWSER_RDP_TARGET_PORT:-3389}"
 PRIVILEGED_HELPER="${AGENT_BROWSER_PRIVILEGED_HELPER:-/usr/local/libexec/agent-browser/agent-browser-privileged-helper}"
@@ -104,7 +105,7 @@ else
 fi
 
 DESIRED_ROUTE_USER_POOL_JSON="$(python3 "$ROUTE_USER_HELPER" resolve \
-  --secret-file "$SECRET_FILE" --allow-missing-passwords)"
+  --secret-file "$SECRET_FILE" --database "$RUNTIME_DATABASE" --allow-missing-passwords)"
 ROUTE_COUNT="$(python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' \
   <<<"$DESIRED_ROUTE_USER_POOL_JSON")"
 ROUTE_SUMMARY="$(python3 -c 'import json,sys; print("\n".join("  {}: {} -> {}".format(r["id"], r["routeUser"], r["connectionName"]) for r in json.load(sys.stdin)))' \
@@ -191,7 +192,7 @@ setup_user() {
 }
 
 ROUTE_USER_POOL_JSON="$(python3 "$ROUTE_USER_HELPER" resolve \
-  --secret-file "$SECRET_FILE" --generate-passwords)"
+  --secret-file "$SECRET_FILE" --database "$RUNTIME_DATABASE" --generate-passwords)"
 
 if [[ "$REUSE_EXISTING_ROUTE_USERS" != "1" ]]; then
   while IFS=$'\t' read -r route_user route_password; do

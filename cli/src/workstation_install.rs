@@ -1628,31 +1628,45 @@ fn ensure_route_users(
     paths: &InstallPaths,
     command_env: &[(String, String)],
 ) -> Result<(), String> {
-    let values = secret_values(&paths.guacamole_secret_file)?;
+    let route_helper = paths.support_dir.join("scripts/lib/rdp-route-user-pool.py");
+    let database = paths
+        .root
+        .join(".agent-browser/service/browser-runtime.sqlite3");
+    let route_output = run_status(
+        "python3",
+        &[
+            route_helper
+                .to_str()
+                .ok_or_else(|| "invalid route-user helper path".to_string())?,
+            "resolve",
+            "--secret-file",
+            paths
+                .guacamole_secret_file
+                .to_str()
+                .ok_or_else(|| "invalid Guacamole secret path".to_string())?,
+            "--database",
+            database
+                .to_str()
+                .ok_or_else(|| "invalid browser runtime database path".to_string())?,
+            "--generate-passwords",
+        ],
+        &paths.support_dir,
+        command_env,
+        true,
+    )?;
+    let routes: Vec<Value> = serde_json::from_slice(&route_output.stdout)
+        .map_err(|_| "route_user_inventory_invalid".to_string())?;
     let helper = "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
-    for (user_key, password_key, expected_user) in [
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_A_USERNAME",
-            "XRDP_AGENT_BROWSER_ROUTE_A_PASSWORD",
-            "agent-browser-rdp-a",
-        ),
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_B_USERNAME",
-            "XRDP_AGENT_BROWSER_ROUTE_B_PASSWORD",
-            "agent-browser-rdp-b",
-        ),
-    ] {
-        let user = values
-            .get(user_key)
-            .ok_or_else(|| format!("Missing required route username key {user_key}"))?;
-        let password = values
-            .get(password_key)
-            .ok_or_else(|| format!("Missing required route password key {password_key}"))?;
-        if user != expected_user || password.is_empty() {
-            return Err(format!(
-                "Route credential identity is invalid for {expected_user}"
-            ));
-        }
+    for route in routes {
+        let user = route
+            .get("routeUser")
+            .and_then(Value::as_str)
+            .ok_or_else(|| "route_user_inventory_user_missing".to_string())?;
+        let password = route
+            .get("password")
+            .and_then(Value::as_str)
+            .filter(|password| !password.is_empty())
+            .ok_or_else(|| "route_user_inventory_password_missing".to_string())?;
         let mut process = Command::new("sudo");
         process
             .args(["-n", helper, "ensure-rdp-route-user", "--user", user])
@@ -1677,7 +1691,7 @@ fn ensure_route_users(
             .map_err(|error| format!("Unable to wait for protected route-user helper: {error}"))?;
         if !status.success() {
             return Err(format!(
-                "Protected route-user helper failed for {expected_user}; output was redacted"
+                "Protected route-user helper failed for {user}; output was redacted"
             ));
         }
     }
@@ -3801,40 +3815,14 @@ fn ensure_workstation_state(
 
 fn ensure_secret_values(secret_file: &Path) -> Result<(), String> {
     let mut contents = fs::read_to_string(secret_file).unwrap_or_default();
-    let required = [
-        (
-            "POSTGRES_PASSWORD",
-            format!(
-                "{}{}",
-                uuid::Uuid::new_v4().simple(),
-                uuid::Uuid::new_v4().simple()
-            ),
+    let required = [(
+        "POSTGRES_PASSWORD",
+        format!(
+            "{}{}",
+            uuid::Uuid::new_v4().simple(),
+            uuid::Uuid::new_v4().simple()
         ),
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_A_USERNAME",
-            "agent-browser-rdp-a".to_string(),
-        ),
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_A_PASSWORD",
-            format!(
-                "{}{}",
-                uuid::Uuid::new_v4().simple(),
-                uuid::Uuid::new_v4().simple()
-            ),
-        ),
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_B_USERNAME",
-            "agent-browser-rdp-b".to_string(),
-        ),
-        (
-            "XRDP_AGENT_BROWSER_ROUTE_B_PASSWORD",
-            format!(
-                "{}{}",
-                uuid::Uuid::new_v4().simple(),
-                uuid::Uuid::new_v4().simple()
-            ),
-        ),
-    ];
+    )];
     for (key, value) in required {
         let present = contents.lines().any(|line| {
             line.split_once('=')

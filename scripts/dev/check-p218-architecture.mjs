@@ -55,6 +55,10 @@ export function evaluate(root = defaultRoot) {
   const daemon = read(root, 'cli/src/native/daemon.rs');
   const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
   const workstationInstall = read(root, 'cli/src/workstation_install.rs');
+  const browserSessionStore = read(root, 'cli/src/native/browser_session_store.rs');
+  const routeUserPool = read(root, 'scripts/lib/rdp-route-user-pool.py');
+  const routeSetup = read(root, 'scripts/setup-rdp-guac-route-pool.sh');
+  const routeSync = read(root, 'scripts/sync-rdp-guac-route-specific-user-pool.sh');
   const productFiles = [
     ...filesUnder(root, 'cli/src', ['.rs']),
     ...filesUnder(root, 'crates/agent-browser-service-model/src', ['.rs']),
@@ -177,6 +181,12 @@ export function evaluate(root = defaultRoot) {
   const legacyAuthorityDetectorComplete = trustedLegacyAuthoritySources.every((path) =>
     existsSync(join(root, path))
   );
+  const providerCredentialCustodyComplete =
+    /CREATE TABLE IF NOT EXISTS provider_credentials/.test(browserSessionStore)
+    && /SQLITE_KEY\s*=\s*["']rdp_route_user_inventory\.v1["']/.test(routeUserPool)
+    && /remove_inventory_secrets\(secret_file\)/.test(routeUserPool)
+    && /--database/.test(routeSetup)
+    && /--database/.test(routeSync);
   const definitelyViolated = new Set(['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19']);
   const rows = Array.from({ length: 19 }, (_, index) => {
     const id = `P${String(index + 1).padStart(2, '0')}`;
@@ -185,6 +195,7 @@ export function evaluate(root = defaultRoot) {
     if (definitelyViolated.has(id)) status = evidence.length > 0 ? 'violated' : 'detector_gap';
     if (id === 'P15' && evidence.length === 0 && leaseAuthorityIsIndependent) status = 'pass';
     if (id === 'P16' && evidence.length === 0 && legacyAuthorityDetectorComplete) status = 'pass';
+    if (id === 'P09' && evidence.length === 0 && providerCredentialCustodyComplete) status = 'pass';
     return { id, status, findings: evidence };
   });
   const serviceModelLeaseAuthorityFindings = [];
@@ -241,6 +252,11 @@ export function evaluate(root = defaultRoot) {
           ...(violations.get('P15') || []),
           ...(violations.get('P16') || []),
         ],
+      },
+      providerCredentialCustody: {
+        status: providerCredentialCustodyComplete
+          && (violations.get('P09') || []).length === 0 ? 'pass' : 'fail',
+        findings: violations.get('P09') || [],
       },
     },
     summary: rows.reduce((counts, row) => {

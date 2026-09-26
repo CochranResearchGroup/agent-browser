@@ -7,6 +7,7 @@ import argparse
 import json
 import os
 import secrets
+import sqlite3
 import string
 import sys
 from pathlib import Path
@@ -16,6 +17,7 @@ CANONICAL_SECRET = "XRDP_AGENT_BROWSER_ROUTE_USER_POOL_JSON"
 PASSWORD_ALPHABET = string.ascii_letters + string.digits + "-_."
 MAX_CONNECTIONS = 8
 MAX_CONNECTIONS_PER_USER = 8
+SQLITE_KEY = "rdp_route_user_inventory.v1"
 
 
 def read_env_file(path: Path) -> dict[str, str]:
@@ -87,12 +89,14 @@ def normalized_inventory(raw: object) -> list[dict[str, str]]:
 
 def resolve_inventory(
     secret_file: Path,
+    database: Path | None,
     generate_passwords: bool,
     allow_missing_passwords: bool = False,
     rotate_route_ids: set[str] | None = None,
 ) -> list[dict[str, str]]:
     values = read_env_file(secret_file)
-    raw_text = os.environ.get(CANONICAL_ENV) or values.get(CANONICAL_SECRET)
+    stored = read_sqlite_inventory(database) if database else None
+    raw_text = stored or os.environ.get(CANONICAL_ENV) or values.get(CANONICAL_SECRET)
     raw = json.loads(raw_text) if raw_text else legacy_inventory(values)
     routes = normalized_inventory(raw)
     requested_rotations = rotate_route_ids or set()
@@ -112,9 +116,59 @@ def resolve_inventory(
             )
     if not allow_missing_passwords and any(not route["password"] for route in routes):
         raise ValueError("route_user_inventory_password_missing")
-    if generate_passwords or requested_rotations:
+    if database:
+        write_sqlite_inventory(database, routes)
+        remove_inventory_secrets(secret_file)
+    elif generate_passwords or requested_rotations:
         write_inventory_secret(secret_file, routes)
     return routes
+
+
+def read_sqlite_inventory(database: Path) -> str | None:
+    if not database.is_file():
+        return None
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS provider_credentials (key TEXT PRIMARY KEY, value BLOB NOT NULL)"
+        )
+        row = connection.execute(
+            "SELECT value FROM provider_credentials WHERE key = ?", (SQLITE_KEY,)
+        ).fetchone()
+        return bytes(row[0]).decode() if row else None
+
+
+def write_sqlite_inventory(database: Path, routes: list[dict[str, str]]) -> None:
+    database.parent.mkdir(parents=True, exist_ok=True)
+    database.parent.chmod(0o700)
+    payload = json.dumps(routes, separators=(",", ":")).encode()
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "CREATE TABLE IF NOT EXISTS provider_credentials (key TEXT PRIMARY KEY, value BLOB NOT NULL)"
+        )
+        connection.execute(
+            "INSERT INTO provider_credentials (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (SQLITE_KEY, payload),
+        )
+    database.chmod(0o600)
+
+
+def remove_inventory_secrets(path: Path) -> None:
+    if not path.exists():
+        return
+    removable = {
+        CANONICAL_SECRET,
+        "XRDP_AGENT_BROWSER_ROUTE_A_USERNAME",
+        "XRDP_AGENT_BROWSER_ROUTE_A_PASSWORD",
+        "XRDP_AGENT_BROWSER_ROUTE_B_USERNAME",
+        "XRDP_AGENT_BROWSER_ROUTE_B_PASSWORD",
+    }
+    retained = [
+        line for line in path.read_text().splitlines()
+        if line.split("=", 1)[0].strip() not in removable
+    ]
+    path.write_text("\n".join(retained) + ("\n" if retained else ""))
+    path.chmod(0o600)
 
 
 def write_inventory_secret(path: Path, routes: list[dict[str, str]]) -> None:
@@ -341,6 +395,7 @@ def main() -> int:
     subparsers = parser.add_subparsers(dest="command", required=True)
     resolve = subparsers.add_parser("resolve")
     resolve.add_argument("--secret-file", required=True)
+    resolve.add_argument("--database")
     resolve.add_argument("--generate-passwords", action="store_true")
     resolve.add_argument("--allow-missing-passwords", action="store_true")
     resolve.add_argument("--rotate-route-id", action="append", default=[])
@@ -359,6 +414,7 @@ def main() -> int:
         if args.command == "resolve":
             routes = resolve_inventory(
                 Path(args.secret_file),
+                Path(args.database) if args.database else None,
                 args.generate_passwords,
                 args.allow_missing_passwords,
                 set(args.rotate_route_id),

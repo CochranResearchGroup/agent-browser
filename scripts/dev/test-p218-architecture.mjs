@@ -83,6 +83,11 @@ try {
   write(root, 'Cargo.toml', '[workspace]\nmembers = ["crates/agent-browser-lease-authority"]\n');
   write(root, 'crates/agent-browser-lease-authority/Cargo.toml', '[package]\nname = "agent-browser-lease-authority"\n');
   write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');
+  write(root, 'cli/src/workstation_install.rs', 'pub fn install() {}\n');
+  write(root, 'cli/src/native/browser_session_store.rs', 'CREATE TABLE IF NOT EXISTS provider_credentials\n');
+  write(root, 'scripts/lib/rdp-route-user-pool.py', 'SQLITE_KEY = "rdp_route_user_inventory.v1"\nremove_inventory_secrets(secret_file)\n');
+  write(root, 'scripts/setup-rdp-guac-route-pool.sh', '--database\n');
+  write(root, 'scripts/sync-rdp-guac-route-specific-user-pool.sh', '--database\n');
   for (const path of [
     'cli/src/native/control_plane.rs',
     'cli/src/native/service_store.rs',
@@ -104,6 +109,8 @@ try {
   assert.equal(quarantineCut.rows.find((row) => row.id === 'P15').status, 'pass');
   assert.equal(quarantineCut.rows.find((row) => row.id === 'P16').status, 'pass');
   assert.equal(quarantineCut.cuts.legacyAuthorityQuarantine.status, 'pass');
+  assert.equal(quarantineCut.rows.find((row) => row.id === 'P09').status, 'pass');
+  assert.equal(quarantineCut.cuts.providerCredentialCustody.status, 'pass');
 
   const closure = JSON.parse(readFileSync(new URL(
     '../../docs/dev/architecture/p218-ordinary-open-handoff-closure.v1.json',

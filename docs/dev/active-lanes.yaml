@@ -57,7 +57,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M1A is reconciled and M1B is partial; keeper-only handoff, stale-history availability, legacy-authority physical quarantine, ordinary-open coalescing, waiting-only restart, generation-fenced ordinary effects, read-only status, success-only heartbeat and provider-free Alice/Bob isolation receipts pass; inventory is two pass, 28 partial, six fail, nine missing; no installed P219 acceptance; execution renewed for M1B through the M2B outcome checkpoint under the verified capsule
+    validation_status: M1A is reconciled and M1B source closure is complete; keeper-only handoff, stale-history availability, legacy-authority physical quarantine, ordinary-open coalescing, waiting-only restart, generation-fenced ordinary effects, read-only status, success-only heartbeat, provider-free Alice/Bob isolation and SQLite provider-credential custody receipts pass; inventory is two pass, 29 partial, five fail, nine missing; no installed P219 acceptance; execution continues through the M2B outcome checkpoint under the verified capsule
     validation_ref: 3946f81b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M1B blockers B05 and B06 remain before the minimum M2A provider join and installed M2B Alice/Bob checkpoint; the renewed window stops at complete M2B or 1,000,000 additional tokens, with the last 200,000 reserved for closeout
+    blocker: the minimum M2A provider/live-viewer join and installed M2B Alice/Bob checkpoint remain; provider cleanup and identity-preserving credential rotation require installed evidence; the renewed window stops at complete M2B or 1,000,000 additional tokens, with the last 200,000 reserved for closeout
     updated_at: 2026-09-26
