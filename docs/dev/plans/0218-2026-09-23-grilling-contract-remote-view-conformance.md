@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 37
+Plan version: 38
 
 State: OPEN
 
@@ -848,6 +848,21 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 38 adds bounded recovery for a manual-seeding launch whose PID was
+journaled but whose exact process identity was not captured. Source
+checkpoint `0d994c7a` rechecks the journaled operation, generation, route,
+handoff, and PID under the SQLite transaction. It terminalizes that operation
+only when the PID is observed absent, publishes no handoff, and requires a
+new operation ID before any retry. A live or unreadable PID keeps the profile
+reserved and cannot be adopted or killed from PID-only evidence. The focused
+provider-free fixture proves absent recovery, replay, new-operation
+admission, and live-PID refusal. Strict workspace Clippy, formatting,
+route-confusion gates, the handoff documentation check, and the docs build
+pass. This is source-only evidence. Launch-issued outcomes without a PID,
+live-PID identity reconciliation, route rebinding, installed browser and
+visual/input acceptance, and the full G01–G45 audit remain open. P03, P05,
+and P09 are still violated by the current architecture audit.
 
 Version 37 connects the SQLite manual-seeding path to authenticated acquire,
 close, and durable resolution dispatch. Source checkpoint `2b7e866e`
