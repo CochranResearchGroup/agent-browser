@@ -43,6 +43,7 @@ pub(crate) struct LiveViewerActivationRequest {
     pub(crate) authenticated_principal: String,
     pub(crate) provider_route_id: String,
     pub(crate) guacamole_connection_id: u64,
+    pub(crate) guacamole_primary_active_connection_id: String,
     pub(crate) observed_shared_connection_count: u64,
     pub(crate) observed_at_ms: u64,
 }
@@ -53,6 +54,7 @@ pub(crate) struct LiveViewerHeartbeatRequest {
     pub(crate) authenticated_principal: String,
     pub(crate) provider_route_id: String,
     pub(crate) guacamole_connection_id: u64,
+    pub(crate) guacamole_primary_active_connection_id: String,
     pub(crate) observed_shared_connection_count: u64,
     pub(crate) observed_at_ms: u64,
 }
@@ -77,6 +79,7 @@ struct LiveViewerRecord {
     authenticated_principal: String,
     provider_route_id: String,
     guacamole_connection_id: u64,
+    guacamole_primary_active_connection_id: String,
     slot_id: String,
     host_generation: u64,
     boot_epoch: String,
@@ -221,6 +224,8 @@ impl BrowserRuntimeSqliteStore {
                 || existing.authenticated_principal != request.authenticated_principal
                 || existing.provider_route_id != request.provider_route_id
                 || existing.guacamole_connection_id != request.guacamole_connection_id
+                || existing.guacamole_primary_active_connection_id
+                    != request.guacamole_primary_active_connection_id
             {
                 return Err("live_viewer_operation_conflict".to_string());
             }
@@ -240,6 +245,9 @@ impl BrowserRuntimeSqliteStore {
                 authenticated_principal: request.authenticated_principal.clone(),
                 provider_route_id: request.provider_route_id.clone(),
                 guacamole_connection_id: request.guacamole_connection_id,
+                guacamole_primary_active_connection_id: request
+                    .guacamole_primary_active_connection_id
+                    .clone(),
                 slot_id: lease.route_binding.slot_id.clone(),
                 host_generation: lease.host_generation,
                 boot_epoch,
@@ -265,6 +273,10 @@ impl BrowserRuntimeSqliteStore {
         validate_identifier(&request.lease_id, "live_viewer_lease")?;
         validate_identifier(&request.authenticated_principal, "authenticated_principal")?;
         validate_identifier(&request.provider_route_id, "provider_route")?;
+        validate_identifier(
+            &request.guacamole_primary_active_connection_id,
+            "guacamole_primary_active_connection",
+        )?;
         if request.guacamole_connection_id == 0 {
             return Err("live_viewer_connection_binding_invalid".to_string());
         }
@@ -287,6 +299,8 @@ impl BrowserRuntimeSqliteStore {
         if record.authenticated_principal != request.authenticated_principal
             || record.provider_route_id != request.provider_route_id
             || record.guacamole_connection_id != request.guacamole_connection_id
+            || record.guacamole_primary_active_connection_id
+                != request.guacamole_primary_active_connection_id
             || record.boot_epoch != boot_epoch
             || record.state != "controlling"
         {
@@ -504,6 +518,10 @@ fn validate_live_viewer_request(request: &LiveViewerActivationRequest) -> Result
         (&request.client_connection_id, "client_connection"),
         (&request.authenticated_principal, "authenticated_principal"),
         (&request.provider_route_id, "provider_route"),
+        (
+            &request.guacamole_primary_active_connection_id,
+            "guacamole_primary_active_connection",
+        ),
     ] {
         validate_identifier(value, field)?;
     }
@@ -1086,6 +1104,7 @@ mod tests {
             authenticated_principal: "operator@example.test".to_string(),
             provider_route_id: "development-route-1".to_string(),
             guacamole_connection_id: connection_id,
+            guacamole_primary_active_connection_id: "primary-fixture".to_string(),
             observed_shared_connection_count: 1,
             observed_at_ms: current_time_ms().unwrap(),
         }

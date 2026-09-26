@@ -1953,6 +1953,7 @@ export function WorkspaceRemoteViewport({
     const payload = {
       routeId: stream.routeId,
       connectionId: stream.connectionId,
+      primaryActiveConnectionId: attempt.primaryActiveConnectionId,
     };
     const post = async (body: Record<string, unknown>) => {
       const response = await fetch("/api/live-viewer-authority", {

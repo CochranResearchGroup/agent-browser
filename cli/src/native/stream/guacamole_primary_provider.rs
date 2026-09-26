@@ -59,12 +59,17 @@ impl GuacamolePrimaryConnectSpec {
     }
 }
 
-/// Observe current restricted sharing tunnels through the reviewed loopback
-/// Guacamole API. The authentication token remains transient in this module.
-/// A positive count is live provider evidence, not a durable viewer grant.
-pub(super) async fn observe_shared_connection_count(
+/// Re-observe the exact backend-owned Guacamole primary that donated a
+/// restricted viewer key. The browser separately accepts the key only after
+/// an origin-bound ready message from the sharing iframe; both facts are
+/// required before live-view authority is renewed.
+pub(super) async fn observe_active_connection(
     spec: GuacamolePrimaryConnectSpec,
-) -> Result<u64, &'static str> {
+    expected_active_connection_id: &str,
+) -> Result<bool, &'static str> {
+    if expected_active_connection_id.is_empty() || expected_active_connection_id.len() > 512 {
+        return Err("guacamole_live_viewer_active_connection_invalid");
+    }
     let principal = std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -122,19 +127,15 @@ pub(super) async fn observe_shared_connection_count(
         .json()
         .await
         .map_err(|_| "guacamole_live_viewer_observation_invalid")?;
-    let count = connections
+    let present = connections
         .as_object()
         .ok_or("guacamole_live_viewer_observation_invalid")?
-        .values()
-        .filter(|connection| {
+        .get(expected_active_connection_id)
+        .is_some_and(|connection| {
             connection["connectionIdentifier"].as_str() == Some(spec.connection_id.as_str())
                 && connection["connectable"].as_bool() == Some(true)
-                && connection["sharingProfileIdentifier"]
-                    .as_str()
-                    .is_some_and(|value| !value.is_empty())
-        })
-        .count();
-    u64::try_from(count).map_err(|_| "guacamole_live_viewer_observation_invalid")
+        });
+    Ok(present)
 }
 
 pub(super) async fn connect(
@@ -291,49 +292,46 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn live_viewer_observation_counts_only_exact_restricted_tunnels() {
+    async fn live_viewer_observation_requires_the_exact_active_primary() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let provider = format!("http://{}/guacamole/", listener.local_addr().unwrap());
         let server = tokio::spawn(async move {
-            for response_body in [
-                serde_json::json!({
-                    "authToken": "synthetic-token",
-                    "availableDataSources": ["postgresql"],
-                    "username": "synthetic-operator"
-                }),
-                serde_json::json!({
-                    "shared-exact": {
-                        "connectionIdentifier": "41",
-                        "connectable": true,
-                        "sharingProfileIdentifier": "sharing-41"
-                    },
-                    "primary-excluded": {
-                        "connectionIdentifier": "41",
-                        "connectable": true,
-                        "sharingProfileIdentifier": null
-                    },
-                    "foreign-excluded": {
-                        "connectionIdentifier": "42",
-                        "connectable": true,
-                        "sharingProfileIdentifier": "sharing-42"
+            for _ in 0..2 {
+                for response_body in [
+                    serde_json::json!({
+                        "authToken": "synthetic-token",
+                        "availableDataSources": ["postgresql"],
+                        "username": "synthetic-operator"
+                    }),
+                    serde_json::json!({
+                        "primary-exact": {
+                            "connectionIdentifier": "41",
+                            "connectable": true,
+                            "sharingProfileIdentifier": null
+                        },
+                        "foreign-excluded": {
+                            "connectionIdentifier": "42",
+                            "connectable": true,
+                            "sharingProfileIdentifier": "sharing-42"
+                        }
+                    }),
+                ] {
+                    let (mut http, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    while !request.ends_with(b"\r\n\r\n") {
+                        request.push(http.read_u8().await.unwrap());
                     }
-                }),
-            ] {
-                let (mut http, _) = listener.accept().await.unwrap();
-                let mut request = Vec::new();
-                while !request.ends_with(b"\r\n\r\n") {
-                    request.push(http.read_u8().await.unwrap());
-                }
-                if request.starts_with(b"GET ") {
-                    let text = String::from_utf8(request).unwrap();
-                    assert!(text
-                        .contains("GET /guacamole/api/session/data/postgresql/activeConnections "));
-                    assert!(text
-                        .to_ascii_lowercase()
-                        .contains("guacamole-token: synthetic-token\r\n"));
-                }
-                let body = response_body.to_string();
-                http.write_all(
+                    if request.starts_with(b"GET ") {
+                        let text = String::from_utf8(request).unwrap();
+                        assert!(text.contains(
+                            "GET /guacamole/api/session/data/postgresql/activeConnections "
+                        ));
+                        assert!(text
+                            .to_ascii_lowercase()
+                            .contains("guacamole-token: synthetic-token\r\n"));
+                    }
+                    let body = response_body.to_string();
+                    http.write_all(
                     format!(
                         "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
                         body.len(), body
@@ -341,14 +339,19 @@ mod tests {
                     .as_bytes(),
                 )
                 .await
-                .unwrap();
+                    .unwrap();
+                }
             }
         });
         let spec = GuacamolePrimaryConnectSpec::from_local_embed(&provider, "41").unwrap();
         let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_GUACAMOLE_HEADER_USER"]);
         guard.set("AGENT_BROWSER_GUACAMOLE_HEADER_USER", "synthetic-operator");
-        let count = observe_shared_connection_count(spec).await.unwrap();
-        assert_eq!(count, 1);
+        assert!(observe_active_connection(spec.clone(), "primary-exact")
+            .await
+            .unwrap());
+        assert!(!observe_active_connection(spec, "foreign-excluded")
+            .await
+            .unwrap());
         server.await.unwrap();
     }
 

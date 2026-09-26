@@ -7,9 +7,7 @@
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
-use super::guacamole_primary_provider::{
-    observe_shared_connection_count, GuacamolePrimaryConnectSpec,
-};
+use super::guacamole_primary_provider::{observe_active_connection, GuacamolePrimaryConnectSpec};
 use crate::native::browser_session_store::{
     BrowserRuntimeSqliteStore, LiveViewerActivationRequest, LiveViewerHeartbeatRequest,
 };
@@ -115,9 +113,13 @@ async fn response_inner(body: &str, principal: &str) -> Result<Value, &'static s
             let attempt_id = string_field(&body, "attemptId")?;
             let route_id = string_field(&body, "routeId")?;
             let connection_id = connection_id(&body)?;
-            let count =
-                observe_shared_connection_count(provider_spec(route_id, connection_id)?).await?;
-            if count == 0 {
+            let primary_active_connection_id = string_field(&body, "primaryActiveConnectionId")?;
+            if !observe_active_connection(
+                provider_spec(route_id, connection_id)?,
+                primary_active_connection_id,
+            )
+            .await?
+            {
                 return Err("live_viewer_tunnel_absent");
             }
             let operation_id = operation_id(principal, handoff_id, attempt_id);
@@ -130,7 +132,9 @@ async fn response_inner(body: &str, principal: &str) -> Result<Value, &'static s
                     authenticated_principal: principal.to_string(),
                     provider_route_id: route_id.to_string(),
                     guacamole_connection_id: connection_id,
-                    observed_shared_connection_count: count,
+                    guacamole_primary_active_connection_id: primary_active_connection_id
+                        .to_string(),
+                    observed_shared_connection_count: 1,
                     observed_at_ms: now_ms()?,
                 })
                 .map_err(map_store_error)?;
@@ -147,9 +151,13 @@ async fn response_inner(body: &str, principal: &str) -> Result<Value, &'static s
             let lease_id = string_field(&body, "leaseId")?;
             let route_id = string_field(&body, "routeId")?;
             let connection_id = connection_id(&body)?;
-            let count =
-                observe_shared_connection_count(provider_spec(route_id, connection_id)?).await?;
-            if count == 0 {
+            let primary_active_connection_id = string_field(&body, "primaryActiveConnectionId")?;
+            if !observe_active_connection(
+                provider_spec(route_id, connection_id)?,
+                primary_active_connection_id,
+            )
+            .await?
+            {
                 return Err("live_viewer_tunnel_absent");
             }
             let lease = BrowserRuntimeSqliteStore::default_sqlite()
@@ -159,7 +167,9 @@ async fn response_inner(body: &str, principal: &str) -> Result<Value, &'static s
                     authenticated_principal: principal.to_string(),
                     provider_route_id: route_id.to_string(),
                     guacamole_connection_id: connection_id,
-                    observed_shared_connection_count: count,
+                    guacamole_primary_active_connection_id: primary_active_connection_id
+                        .to_string(),
+                    observed_shared_connection_count: 1,
                     observed_at_ms: now_ms()?,
                 })
                 .map_err(map_store_error)?;
