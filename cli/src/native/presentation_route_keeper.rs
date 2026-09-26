@@ -404,8 +404,7 @@ async fn observe_inflight_routes_before_shutdown(
             let observation = match connector.observe(&action).await {
                 Ok(observation) => observation,
                 Err(error)
-                    if error
-                        == "route_keeper_xrdp_ownership_unproven:rdp_route_session_evidence_invalid"
+                    if error.starts_with("route_keeper_xrdp_ownership_unproven:")
                         && tokio::time::Instant::now() < deadline =>
                 {
                     tokio::time::sleep(SHUTDOWN_OBSERVATION_INTERVAL).await;
@@ -2069,8 +2068,7 @@ mod tests {
             if self.observe_transient_error_count > 0 {
                 self.observe_transient_error_count -= 1;
                 return Err(
-                    "route_keeper_xrdp_ownership_unproven:rdp_route_session_evidence_invalid"
-                        .to_string(),
+                    "route_keeper_xrdp_ownership_unproven:rdp_route_session_ambiguous".to_string(),
                 );
             }
             if self.observe_pending_count > 0 {
