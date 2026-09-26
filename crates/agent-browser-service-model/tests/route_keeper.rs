@@ -4,7 +4,7 @@ use agent_browser_service_model::{
     RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy,
     RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState, RouteKeeperReconcileAction,
     RouteKeeperStartPriority, RouteKeeperStopDisposition, RouteKeeperStopReceipt,
-    RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    RouteKeeperTerminalReceipt, RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 
 fn host_process_claim(host_generation: u64) -> RouteKeeperHostProcessClaim {
@@ -591,6 +591,37 @@ fn pre_ready_terminal_returns_exact_attempt_to_absent_for_new_fence() {
     assert_eq!(
         authority.record_start_terminated(&slot_id, &first_fence),
         Err("route_keeper_stale_observation".to_string())
+    );
+}
+
+#[test]
+fn terminal_receipt_survives_next_host_generation_operation_reset() {
+    let mut authority = authority(3);
+    let (slot_id, keeper_id, fence) =
+        expect_start(&mut authority, RouteKeeperStartPriority::Minimum);
+    authority.record_observing(&slot_id, &fence).unwrap();
+    authority
+        .record_terminal(RouteKeeperTerminalReceipt {
+            slot_id: slot_id.clone(),
+            keeper_id,
+            fence: fence.clone(),
+            occurrence_id: "00000000-0000-4000-8000-000000000301".to_string(),
+            guacamole_connection_uuid: None,
+            code: "guacamole_primary_stopped".to_string(),
+            elapsed_ms: 3_177,
+        })
+        .unwrap();
+    authority.record_start_terminated(&slot_id, &fence).unwrap();
+
+    authority
+        .register_host_process_claim(host_process_claim(4))
+        .unwrap();
+    let record = &authority.records[&slot_id];
+    assert_eq!(record.fence.host_generation, 4);
+    assert_eq!(record.fence.operation_generation, 0);
+    assert_eq!(
+        record.last_terminal.as_ref().unwrap().fence.host_generation,
+        3
     );
 }
 

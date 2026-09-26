@@ -1693,7 +1693,8 @@ fn validate_record(
         if terminal.slot_id != record.slot_id
             || terminal.keeper_id != record.keeper_id
             || terminal.fence.host_generation > record.fence.host_generation
-            || terminal.fence.operation_generation > record.fence.operation_generation
+            || (terminal.fence.host_generation == record.fence.host_generation
+                && terminal.fence.operation_generation > record.fence.operation_generation)
             || terminal.fence.connection_catalog_digest != record.fence.connection_catalog_digest
             || terminal.occurrence_id.is_empty()
             || terminal.occurrence_id.len() > 128
