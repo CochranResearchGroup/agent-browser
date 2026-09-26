@@ -391,7 +391,18 @@ async fn observe_inflight_routes_before_shutdown(
         };
         let deadline = tokio::time::Instant::now() + SHUTDOWN_OBSERVATION_WINDOW;
         loop {
-            let observation = connector.observe(&action).await?;
+            let observation = match connector.observe(&action).await {
+                Ok(observation) => observation,
+                Err(error)
+                    if error
+                        == "route_keeper_xrdp_ownership_unproven:rdp_route_session_evidence_invalid"
+                        && tokio::time::Instant::now() < deadline =>
+                {
+                    tokio::time::sleep(SHUTDOWN_OBSERVATION_INTERVAL).await;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
             if let RouteKeeperConnectorObservation::Ready(receipt) = &observation {
                 require_ready_matches_action(&action, receipt)?;
                 apply_ready_observation(repository, expected, observation)?;
@@ -1974,6 +1985,7 @@ mod tests {
         stops: Vec<RouteKeeperReconcileAction>,
         routes: BTreeMap<String, RouteKeeperProtocolReadyReceipt>,
         observe_pending_count: usize,
+        observe_transient_error_count: usize,
         unproven_stop: Option<String>,
         unproven_stop_once: Option<String>,
         resume_stop_override: Option<Result<RouteKeeperStopObservation, String>>,
@@ -2044,6 +2056,13 @@ mod tests {
             action: &RouteKeeperReconcileAction,
         ) -> Result<RouteKeeperConnectorObservation, String> {
             self.observes.push(action.clone());
+            if self.observe_transient_error_count > 0 {
+                self.observe_transient_error_count -= 1;
+                return Err(
+                    "route_keeper_xrdp_ownership_unproven:rdp_route_session_evidence_invalid"
+                        .to_string(),
+                );
+            }
             if self.observe_pending_count > 0 {
                 self.observe_pending_count -= 1;
                 return Ok(RouteKeeperConnectorObservation::Pending);
@@ -4264,6 +4283,7 @@ mod tests {
         let directory = TempDirectory::new("route-keeper-configured-inflight-shutdown");
         let repository = repository(&directory);
         let mut connector = FakeConnector {
+            observe_transient_error_count: 2,
             observe_pending_count: 2,
             ..FakeConnector::default()
         };
@@ -4285,7 +4305,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(connector.observes.len(), 3);
+        assert_eq!(connector.observes.len(), 5);
         assert_eq!(connector.stops.len(), 1);
         assert_eq!(connector.shutdowns, 1);
         assert_eq!(
