@@ -410,23 +410,34 @@ async fn stop_ready_routes(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
 ) -> Result<(), String> {
+    let mut failed_slots = Vec::new();
     loop {
         let authority = repository.load_route_keeper_authority()?;
         let Some(slot_id) = authority
             .records
             .values()
-            .find(|record| record.phase == RouteKeeperPhase::Ready)
+            .find(|record| {
+                matches!(
+                    record.phase,
+                    RouteKeeperPhase::Ready | RouteKeeperPhase::Degraded
+                )
+            })
             .map(|record| record.slot_id.clone())
         else {
-            return Ok(());
+            return if failed_slots.is_empty() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "route_keeper_supervisor_shutdown_stop_incomplete:{}",
+                    failed_slots.join(",")
+                ))
+            };
         };
-        stop_once(repository, connector, &slot_id).await?;
-        if repository.load_route_keeper_authority()?.records[&slot_id].phase
-            == RouteKeeperPhase::Quarantined
+        if stop_once(repository, connector, &slot_id).await.is_err()
+            || repository.load_route_keeper_authority()?.records[&slot_id].phase
+                == RouteKeeperPhase::Quarantined
         {
-            return Err(format!(
-                "route_keeper_supervisor_shutdown_stop_unproven:{slot_id}"
-            ));
+            failed_slots.push(slot_id);
         }
     }
 }
@@ -1964,6 +1975,7 @@ mod tests {
         routes: BTreeMap<String, RouteKeeperProtocolReadyReceipt>,
         observe_pending_count: usize,
         unproven_stop: Option<String>,
+        unproven_stop_once: Option<String>,
         resume_stop_override: Option<Result<RouteKeeperStopObservation, String>>,
         terminal_events: Vec<RouteKeeperTerminalEvent>,
         current_terminal_occurrences: BTreeMap<String, String>,
@@ -2089,6 +2101,11 @@ mod tests {
             action: &RouteKeeperReconcileAction,
         ) -> Result<RouteKeeperStopObservation, String> {
             self.stops.push(action.clone());
+            if let Some(identity) = self.unproven_stop_once.take() {
+                return Ok(RouteKeeperStopObservation::OwnershipUnproven {
+                    preserved_observed_keeper_id: identity,
+                });
+            }
             if let Some(identity) = &self.unproven_stop {
                 return Ok(RouteKeeperStopObservation::OwnershipUnproven {
                     preserved_observed_keeper_id: identity.clone(),
@@ -4302,6 +4319,50 @@ mod tests {
         assert_eq!(connector.shutdowns, 1);
         assert_eq!(
             repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Absent
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_shutdown_continues_after_one_unproven_stop() {
+        let directory = TempDirectory::new("route-keeper-configured-multi-stop");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        for _ in 0..4 {
+            reconcile_once(&repository, &mut connector).await.unwrap();
+        }
+        assert_eq!(
+            repository
+                .load_route_keeper_authority()
+                .unwrap()
+                .records
+                .values()
+                .filter(|record| record.phase == RouteKeeperPhase::Ready)
+                .count(),
+            2
+        );
+        connector.unproven_stop_once = Some("fixture_scope_live".to_string());
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        shutdown_tx.send(true).unwrap();
+
+        assert_eq!(
+            run_configured_route_keeper_supervisor(
+                &repository,
+                &mut connector,
+                &mut ticks,
+                &mut shutdown,
+            )
+            .await,
+            Err("route_keeper_supervisor_shutdown_stop_incomplete:route-slot-01".to_string())
+        );
+        assert_eq!(connector.stops.len(), 2);
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Quarantined
+        );
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-02"].phase,
             RouteKeeperPhase::Absent
         );
     }

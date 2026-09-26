@@ -608,34 +608,48 @@ impl XrdpHelperTransport for InstalledXrdpHelperTransport {
             {
                 let mut verify_args = vec!["verify-rdp-route-session-absent".to_string()];
                 verify_args.extend(witness_args);
-                let absent = self.run(&verify_args).await?;
                 let expected_witness_digest = xrdp_witness_digest(witness);
-                let verification = absent.verification.as_ref();
-                if absent.schema_version == 1
-                    && absent.state == "absent"
-                    && absent.witness_digest.as_deref() == Some(expected_witness_digest.as_str())
-                    && verification.is_some_and(|proof| {
-                        proof.session_instance_absent
-                            && proof.x_server_instance_absent
-                            && proof.owned_scope_empty_or_absent
-                    })
-                {
-                    Ok(XrdpHelperStop::Stopped)
-                } else if absent.schema_version == 1
-                    && absent.state == "ownership_unproven"
-                    && absent.code.as_deref() == Some("rdp_route_session_boot_identity_changed")
-                {
-                    // The root-owned helper compared the retained witness to
-                    // the current kernel boot ID. An exact process, cgroup,
-                    // and X11 socket instance cannot survive that boundary.
-                    Ok(XrdpHelperStop::Stopped)
-                } else {
-                    Ok(XrdpHelperStop::OwnershipUnproven(
-                        absent
-                            .code
-                            .unwrap_or_else(|| "route_keeper_xrdp_absence_unproven".to_string()),
-                    ))
+                for attempt in 0..=20 {
+                    let absent = self.run(&verify_args).await?;
+                    let verification = absent.verification.as_ref();
+                    if absent.schema_version == 1
+                        && absent.state == "absent"
+                        && absent.witness_digest.as_deref()
+                            == Some(expected_witness_digest.as_str())
+                        && verification.is_some_and(|proof| {
+                            proof.session_instance_absent
+                                && proof.x_server_instance_absent
+                                && proof.owned_scope_empty_or_absent
+                        })
+                    {
+                        return Ok(XrdpHelperStop::Stopped);
+                    }
+                    if absent.schema_version == 1
+                        && absent.state == "ownership_unproven"
+                        && absent.code.as_deref() == Some("rdp_route_session_boot_identity_changed")
+                    {
+                        // The root-owned helper compared the retained witness
+                        // to the current kernel boot ID. An exact process,
+                        // cgroup, and X11 socket cannot survive that boundary.
+                        return Ok(XrdpHelperStop::Stopped);
+                    }
+                    let settling = absent.schema_version == 1
+                        && matches!(absent.state.as_str(), "ownership_unproven" | "incomplete")
+                        && matches!(
+                            absent.code.as_deref(),
+                            Some("rdp_route_session_reobservation_failed")
+                                | Some("rdp_route_session_scope_not_empty")
+                        );
+                    if !settling || attempt == 20 {
+                        return Ok(XrdpHelperStop::OwnershipUnproven(
+                            absent.code.unwrap_or_else(|| {
+                                "route_keeper_xrdp_absence_unproven".to_string()
+                            }),
+                        ));
+                    }
+                    tokio::time::sleep(Duration::from_millis(100)).await;
                 }
+                unreachable!("the final XRDP absence verification attempt returns")
             }
             "ownership_unproven" | "incomplete" | "unsupported" => {
                 Ok(XrdpHelperStop::OwnershipUnproven(
