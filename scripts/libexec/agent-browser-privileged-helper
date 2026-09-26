@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-09-19.p211-route-desktop-v7"
+HELPER_VERSION="2026-09-26.p219-route-desktop-v8"
 ROUTE_USER_LEGACY_COMMENT="agent-browser route-pool RDP session"
 ROUTE_USER_OWNED_COMMENT_PREFIX="agent-browser route-pool RDP session; operation-id="
 
@@ -18,6 +18,7 @@ Commands:
   observe-rdp-route-session --user <user>
   terminate-rdp-route-session-exact [exact observed identity]
   verify-rdp-route-session-absent [exact retained observed identity]
+  reclaim-rdp-route-display-lock-exact --user <user> --display <display> --x-server-pid <pid>
   restart-xrdp
   grant-display-access --operator-user <user> --route-user <user> --display <display>
 
@@ -169,11 +170,20 @@ verify_install() {
 
 display_socket_exists() {
   local display_number="$1"
-  local display_socket="/tmp/.X11-unix/X$display_number"
+  local tmp_root="${AGENT_BROWSER_HELPER_TEST_TMP_ROOT:-/tmp}"
+  local proc_net_unix_path="${PROC_NET_UNIX_PATH:-/proc/net/unix}"
+  if [[ "$tmp_root" != "/tmp" && "$EUID" == "0" ]]; then
+    echo "test tmp root is forbidden for a root helper" >&2
+    exit 2
+  fi
+  local display_socket="$tmp_root/.X11-unix/X$display_number"
   if [[ -S "$display_socket" ]]; then
     return 0
   fi
-  if [[ -r /proc/net/unix ]] && grep -F "@/tmp/.X11-unix/X$display_number" /proc/net/unix >/dev/null 2>&1; then
+  if [[ -r "$proc_net_unix_path" ]] \
+    && awk -v path="/tmp/.X11-unix/X$display_number" \
+      '$NF == path || $NF == "@" path { found = 1; exit } END { exit !found }' \
+      "$proc_net_unix_path"; then
     return 0
   fi
   return 1
@@ -196,7 +206,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -773,9 +783,138 @@ verify_rdp_route_session_absent() {
   W_X_SERVER_START_TICKS="$x_server_start_ticks"
   W_DISPLAY_NAME="$display_name"
   W_X11_SOCKET_INODE="$x11_socket_inode"
+  reclaim_route_display_lock_identity "$display_name" "$x_server_pid"
+  if [[ "$W_LOCK_RECLAIM_STATE" != "absent" && "$W_LOCK_RECLAIM_STATE" != "reclaimed" ]]; then
+    emit_route_session_state "$W_LOCK_RECLAIM_STATE" "$W_LOCK_RECLAIM_CODE"
+    return 0
+  fi
   local witness_digest
   witness_digest="$(route_session_witness_digest)"
   printf '{"schemaVersion":1,"state":"absent","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
+}
+
+reclaim_route_display_lock_identity() {
+  local display_name="$1"
+  local x_server_pid="$2"
+  W_LOCK_RECLAIM_STATE="ownership_unproven"
+  W_LOCK_RECLAIM_CODE="rdp_route_display_lock_identity_invalid"
+
+  if [[ -d "$PROC_ROOT/$x_server_pid" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_pid_live"
+    return 0
+  fi
+
+  local display_number="${display_name#:}"
+  display_number="${display_number%%.*}"
+  local tmp_root="${AGENT_BROWSER_HELPER_TEST_TMP_ROOT:-/tmp}"
+  if [[ "$tmp_root" != "/tmp" && "$EUID" == "0" ]]; then
+    echo "test tmp root is forbidden for a root helper" >&2
+    exit 2
+  fi
+  local lock_path="$tmp_root/.X${display_number}-lock"
+  if display_socket_exists "$display_number"; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_socket_live"
+    return 0
+  fi
+  if [[ ! -e "$lock_path" ]]; then
+    W_LOCK_RECLAIM_STATE="absent"
+    W_LOCK_RECLAIM_CODE=""
+    return 0
+  fi
+
+  local file_type lock_uid link_count device inode mode expected_uid lock_pid
+  IFS=: read -r file_type lock_uid link_count device inode mode < <(
+    stat -c '%F:%u:%h:%d:%i:%a' "$lock_path" 2>/dev/null || true
+  )
+  expected_uid="$W_ROUTE_UID"
+  if [[ "$tmp_root" != "/tmp" && "$EUID" != "0" ]]; then
+    expected_uid="$(stat -c '%u' "$tmp_root")"
+  fi
+  if [[ "$file_type" != "regular file" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_type_invalid"
+    return 0
+  fi
+  if [[ "$lock_uid" != "$expected_uid" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_owner_mismatch"
+    return 0
+  fi
+  if [[ "$link_count" != "1" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_link_count_invalid"
+    return 0
+  fi
+  if [[ "$mode" != "444" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_mode_invalid"
+    return 0
+  fi
+  if [[ ! "$device" =~ ^[1-9][0-9]*$ || ! "$inode" =~ ^[1-9][0-9]*$ ]]; then
+    return 0
+  fi
+  lock_pid="$(tr -d '[:space:]' <"$lock_path" 2>/dev/null || true)"
+  if [[ "$lock_pid" != "$x_server_pid" ]]; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_pid_mismatch"
+    return 0
+  fi
+
+  local current_identity
+  current_identity="$(stat -c '%d:%i:%u:%h:%a:%F' "$lock_path" 2>/dev/null || true)"
+  if [[ "$current_identity" != "$device:$inode:$lock_uid:1:444:regular file" \
+    || -d "$PROC_ROOT/$x_server_pid" ]] || display_socket_exists "$display_number"; then
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_identity_changed"
+    return 0
+  fi
+  find "$tmp_root" -maxdepth 1 -xdev -type f -uid "$lock_uid" -links 1 \
+    -inum "$inode" -name ".X${display_number}-lock" -delete
+  if [[ -e "$lock_path" ]]; then
+    W_LOCK_RECLAIM_STATE="incomplete"
+    W_LOCK_RECLAIM_CODE="rdp_route_display_lock_reclaim_failed"
+    return 0
+  fi
+  W_LOCK_RECLAIM_STATE="reclaimed"
+  W_LOCK_RECLAIM_CODE=""
+}
+
+reclaim_rdp_route_display_lock_exact() {
+  require_root
+  local user_name="" display_name="" x_server_pid=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --user) user_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --display) display_name="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      --x-server-pid) x_server_pid="$(arg_value "$1" "${2:-}")"; shift 2 ;;
+      *) echo "Unknown reclaim-rdp-route-display-lock-exact argument: $1" >&2; exit 2 ;;
+    esac
+  done
+  if [[ -z "$user_name" || -z "$display_name" || -z "$x_server_pid" ]]; then
+    echo "reclaim-rdp-route-display-lock-exact requires --user, --display, and --x-server-pid" >&2
+    exit 2
+  fi
+  require_route_user "$user_name"
+  require_display_name "$display_name"
+  [[ "$x_server_pid" =~ ^[1-9][0-9]*$ ]] || {
+    echo "x-server-pid must be a positive integer" >&2
+    exit 2
+  }
+
+  if ! collect_rdp_route_session "$user_name"; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_evidence_invalid"
+    return 0
+  fi
+  if [[ "$W_STATE" != "pending" || "$W_CODE" != "rdp_route_session_absent" ]]; then
+    emit_route_session_state "ownership_unproven" "rdp_route_session_live_or_ambiguous"
+    return 0
+  fi
+  reclaim_route_display_lock_identity "$display_name" "$x_server_pid"
+  if [[ "$W_LOCK_RECLAIM_STATE" == "absent" ]]; then
+    printf '{"schemaVersion":1,"state":"absent","display":"%s","xServerPid":%s,"lockRemoved":false}\n' \
+      "$display_name" "$x_server_pid"
+    return 0
+  fi
+  if [[ "$W_LOCK_RECLAIM_STATE" != "reclaimed" ]]; then
+    emit_route_session_state "$W_LOCK_RECLAIM_STATE" "$W_LOCK_RECLAIM_CODE"
+    return 0
+  fi
+  printf '{"schemaVersion":1,"state":"reclaimed","display":"%s","xServerPid":%s,"lockRemoved":true}\n' \
+    "$display_name" "$x_server_pid"
 }
 
 process_instance_gone_or_replaced() {
@@ -885,6 +1024,10 @@ case "${1:-}" in
   verify-rdp-route-session-absent)
     shift
     verify_rdp_route_session_absent "$@"
+    ;;
+  reclaim-rdp-route-display-lock-exact)
+    shift
+    reclaim_rdp_route_display_lock_exact "$@"
     ;;
   restart-xrdp)
     shift

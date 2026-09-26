@@ -543,6 +543,7 @@ helper_contract_ready() {
     '"retainedDirectoryIdentity":true' \
     '"usesCgroupKill":true' \
     '"broadUserTermination":false' \
+    '"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true}' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
     '"boundedXhostTimeoutSeconds":2' \

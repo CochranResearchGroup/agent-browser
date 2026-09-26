@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
@@ -107,8 +107,8 @@ for (const file of files) {
     assert.equal(report.schemaVersion, 1, `${file} status-json schema version should be stable`);
     assert.match(
       report.helperVersion,
-      /^2026-09-19\.p211-route-desktop-v\d+$/,
-      `${file} status-json should expose the P211 helper contract version`,
+      /^2026-09-26\.p219-route-desktop-v\d+$/,
+      `${file} status-json should expose the P219 helper contract version`,
     );
     assert.equal(report.routeDesktopSession?.ready, true);
     assert.equal(report.routeDesktopSession?.state, 'browser_control_ready_template');
@@ -122,6 +122,13 @@ for (const file of files) {
     assert.equal(report.routeSessionTermination?.retainedDirectoryIdentity, true);
     assert.equal(report.routeSessionTermination?.usesCgroupKill, true);
     assert.equal(report.routeSessionTermination?.broadUserTermination, false);
+    assert.equal(report.staleDisplayLockReclamation?.supported, true);
+    assert.equal(report.staleDisplayLockReclamation?.exactRouteUser, true);
+    assert.equal(report.staleDisplayLockReclamation?.requiresSessionAbsent, true);
+    assert.equal(report.staleDisplayLockReclamation?.requiresSocketAbsent, true);
+    assert.equal(report.staleDisplayLockReclamation?.requiresPidAbsent, true);
+    assert.equal(report.staleDisplayLockReclamation?.retainsInodeIdentity, true);
+    assert.equal(report.staleDisplayLockReclamation?.integratedWithAbsenceVerification, true);
     assert.equal(report.displayAccess?.supportsFilesystemX11Socket, true);
     assert.equal(report.displayAccess?.supportsAbstractX11Socket, true);
     assert.equal(report.displayAccess?.boundedXhostTimeoutSeconds, 2);
@@ -224,6 +231,7 @@ mkdir -p "$target"
     const bin = join(fixture, 'bin');
     const proc = join(fixture, 'proc');
     const cgroup = join(fixture, 'cgroup');
+    const fixtureTmp = join(fixture, 'tmp');
     const scope = join(cgroup, 'user.slice', 'user-2001.slice', 'session-c42.scope');
     const commandLog = join(fixture, 'commands.log');
     try {
@@ -231,6 +239,7 @@ mkdir -p "$target"
       mkdirSync(join(proc, '41002', 'fd'), { recursive: true });
       mkdirSync(join(proc, '41003', 'fd'), { recursive: true });
       mkdirSync(scope, { recursive: true });
+      mkdirSync(join(fixtureTmp, '.X11-unix'), { recursive: true });
       writeFileSync(join(bin, 'id'), '#!/bin/sh\nprintf "0\\n"\n', { mode: 0o755 });
       writeFileSync(
         join(bin, 'getent'),
@@ -328,6 +337,7 @@ fi
         AGENT_BROWSER_HELPER_TEST_CGROUP_ROOT: cgroup,
         AGENT_BROWSER_HELPER_TEST_BOOT_ID_PATH: join(proc, 'boot-id'),
         AGENT_BROWSER_HELPER_TEST_PROC_NET_UNIX_PATH: join(proc, 'net-unix'),
+        AGENT_BROWSER_HELPER_TEST_TMP_ROOT: fixtureTmp,
       };
       const observed = spawnSync('bash', [file, 'observe-rdp-route-session', '--user', 'agent-browser-rdp-dev-6'], {
         encoding: 'utf8',
@@ -594,6 +604,31 @@ fi
       assert.equal(readFileSync(join(scope, 'cgroup.kill'), 'utf8'), '1\n');
       assert.doesNotMatch(readFileSync(commandLog, 'utf8'), /terminate-user/);
 
+      const displayLock = join(fixtureTmp, '.X21-lock');
+      writeFileSync(displayLock, '      41003\n', { mode: 0o444 });
+      chmodSync(displayLock, 0o444);
+      const reclaimArgs = [
+        file, 'reclaim-rdp-route-display-lock-exact',
+        '--user', witness.routeUser,
+        '--display', witness.displayName,
+        '--x-server-pid', String(witness.xServerPid),
+      ];
+      const liveSocketReclaim = spawnSync('bash', reclaimArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(liveSocketReclaim.status, 0, liveSocketReclaim.stderr);
+      assert.deepEqual(JSON.parse(liveSocketReclaim.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_display_socket_live',
+      });
+      assert.equal(existsSync(displayLock), true);
+
+      writeFileSync(
+        join(proc, 'net-unix'),
+        'Num RefCount Protocol Flags Type St Inode Path\n',
+      );
       const absent = spawnSync('bash', absentArgs, {
         encoding: 'utf8',
         env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
@@ -607,6 +642,38 @@ fi
         xServerInstanceAbsent: true,
         ownedScopeEmptyOrAbsent: true,
       });
+      assert.equal(existsSync(displayLock), false);
+
+      writeFileSync(displayLock, '      99999\n', { mode: 0o444 });
+      chmodSync(displayLock, 0o444);
+      const mismatchedLockReclaim = spawnSync('bash', reclaimArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(mismatchedLockReclaim.status, 0, mismatchedLockReclaim.stderr);
+      assert.deepEqual(JSON.parse(mismatchedLockReclaim.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_display_lock_pid_mismatch',
+      });
+      assert.equal(existsSync(displayLock), true);
+
+      chmodSync(displayLock, 0o644);
+      writeFileSync(displayLock, '      41003\n');
+      chmodSync(displayLock, 0o444);
+      const reclaimed = spawnSync('bash', reclaimArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(reclaimed.status, 0, reclaimed.stderr);
+      assert.deepEqual(JSON.parse(reclaimed.stdout), {
+        schemaVersion: 1,
+        state: 'reclaimed',
+        display: ':21',
+        xServerPid: 41003,
+        lockRemoved: true,
+      });
+      assert.equal(existsSync(displayLock), false);
 
       const rejected = spawnSync('bash', [file, 'observe-rdp-route-session', '--user', 'ecochran76'], {
         encoding: 'utf8',

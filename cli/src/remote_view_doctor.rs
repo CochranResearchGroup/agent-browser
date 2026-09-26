@@ -4010,7 +4010,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-19.p211-route-desktop-v7",
+                "helperVersion": "2026-09-26.p219-route-desktop-v8",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -4027,6 +4027,15 @@ EOF
                     "retainedDirectoryIdentity": true,
                     "usesCgroupKill": true,
                     "broadUserTermination": false
+                },
+                "staleDisplayLockReclamation": {
+                    "supported": true,
+                    "exactRouteUser": true,
+                    "requiresSessionAbsent": true,
+                    "requiresSocketAbsent": true,
+                    "requiresPidAbsent": true,
+                    "retainsInodeIdentity": true,
+                    "integratedWithAbsenceVerification": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
@@ -4055,7 +4064,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-19.p211-route-desktop-v7",
+                "helperVersion": "2026-09-26.p219-route-desktop-v8",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -4072,6 +4081,15 @@ EOF
                     "retainedDirectoryIdentity": true,
                     "usesCgroupKill": true,
                     "broadUserTermination": false
+                },
+                "staleDisplayLockReclamation": {
+                    "supported": true,
+                    "exactRouteUser": true,
+                    "requiresSessionAbsent": true,
+                    "requiresSocketAbsent": true,
+                    "requiresPidAbsent": true,
+                    "retainsInodeIdentity": true,
+                    "integratedWithAbsenceVerification": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
