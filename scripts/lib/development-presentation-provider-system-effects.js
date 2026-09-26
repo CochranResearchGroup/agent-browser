@@ -205,8 +205,9 @@ export function createDevelopmentPresentationProviderSystemEffects({
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  const routeKeeperRuntime = developmentRouteKeeperRuntimeStatus(env);
   return {
-    routeKeeperRuntimeReady: false,
+    routeKeeperRuntimeReady: routeKeeperRuntime.integrated === true,
     snapshotProduction: () => namespaced ? {
       production: productionSnapshot(env),
       defaultDevelopment: defaultDevelopmentSnapshot(env),
