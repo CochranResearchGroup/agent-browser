@@ -1,0 +1,393 @@
+# Plan 0219 | Alice/Bob Grilling Contract Completion
+
+Date: 2026-09-26
+
+Plan version: 2
+
+State: OPEN
+
+Consolidation: required
+
+Product lane: PL-PLATFORM
+
+Lane: P219
+
+Predecessor: [Plan 0218](0218-2026-09-23-grilling-contract-remote-view-conformance.md), superseded while incomplete
+
+Work items: `CochranResearchGroup/agent-browser#181`, `CochranResearchGroup/agent-browser#183`, and `CochranResearchGroup/agent-browser#195`; issues #189 and #190 remain regression subcases of #195
+
+Branch: `platform/p211-simple-cold-upgrade`, retaining P211, P217, and P218 custody
+
+Pull request: [draft PR #191](https://github.com/CochranResearchGroup/agent-browser/pull/191)
+
+Target: `main`
+
+Execution baseline: `8bb9518eb78b37c22aaec0183348ee6c77adf0da`; successor planning began at `6b3a41e265d1fd3da27431788e4373b66177225d`
+
+Execution owner: the primary agent assigned by the operator to this inherited lane
+
+Authority: the operator directed execution of Plan 0219 on 2026-09-26; ordinary in-scope implementation, validation, isolated development runtime effects, and bounded repair are authorized under this plan's controls and non-goals
+
+Overall effort ceiling: 600,000 tokens from the current goal's zero-token baseline; reserve 120,000 tokens for final reconciliation, validation, evidence, and closeout; all prior effort, attempts, reviews, and failures carry forward
+
+## Objective
+
+Complete the September 19 Alice/Bob grilling specification in the trusted
+single-user runtime. A valid ordinary instruction opens or recovers a usable
+browser and authenticated remote view unless a concrete current resource,
+configuration, authentication, or execution failure prevents it.
+
+Alice and Bob can share one healthy exact-profile browser while retaining
+distinct sessions, tabs, targets, handoffs, activity times, and expiry. Commands
+and cleanup affect the addressed session. The final active session closes the
+browser. One SQLite authority, the existing runtime host, a provider-owned
+presentation service, and Desktop Services own the complete workflow.
+
+Historical uncertainty remains diagnostic and can protect an exact resource
+from destructive cleanup. It cannot deny a separate valid request, reserve
+phantom capacity, or substitute a different profile. Session heartbeat, live
+authenticated viewer heartbeat, and Desktop Services control remain distinct.
+
+## Specification And Authority
+
+The original design authority is Codex thread
+`01a0b65d-47f9-7b51-a17b-791ee87769b3`, accepted design turns 207 through 349.
+This plan incorporates, unchanged, P218's normative sections at the source
+baseline:
+
+- [Grilling Contract Ledger, G01 through G45](0218-2026-09-23-grilling-contract-remote-view-conformance.md#grilling-contract-ledger).
+- [Simple Session State Machine](0218-2026-09-23-grilling-contract-remote-view-conformance.md#simple-session-state-machine).
+- [Architectural Prohibitions, P01 through P19](0218-2026-09-23-grilling-contract-remote-view-conformance.md#architectural-prohibitions).
+
+Those sections remain the specification even though P218 is superseded. This
+plan replaces P218's execution sequence, not its requirements. Any conflict
+between a packet summary and a normative row resolves in favor of that row.
+Changing a requirement still needs explicit operator direction.
+
+[ROADMAP.md](../../../ROADMAP.md) owns priority,
+[RUNBOOK.md](../../../RUNBOOK.md) owns current execution and cumulative control
+state, and the [lane catalog](../active-lanes.yaml) records inherited custody.
+P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218.md)
+preserve history. Keep new execution narratives in the runbook.
+
+## Current State
+
+At succession, local HEAD and the directly queried remote branch both resolve
+to the source baseline. P218 is incomplete; no installed P218 candidate has
+accepted pixels, input, joined recovery, or complete grilling conformance.
+The [inherited coverage ledger](../contracts/p218-grilling-contract-coverage.v1.json)
+has 45 rows: zero pass, 27 partial, seven fail, and eleven missing. Retain its
+filename and row IDs as the single evidence ledger. Succession promotes no row.
+
+Completed work materially changes the starting point:
+
+| Surface | Inherited evidence | Remaining qualification |
+| --- | --- | --- |
+| Ordinary open and handoff | `541d7346` removed the JSON ordinary-open coordinator, its acquisition repository, and the generic JSON handoff-resolution fallback. Historical acquisition/finalization helpers are under `cfg(test)` in `remote_view_handoff/legacy_json_tests.rs`. | Prove the complete current dispatch and adjacent lifecycle closure; repair only reachable defects. Do not repeat the removed coordinator cut. |
+| Lease Authority | Neither `cli/Cargo.toml` nor the Service-model manifest directly depends on the crate. The current Service-model cut guard passes; the independent crate remains a workspace member. | Prove the whole default-product dependency, serialization, API, and dispatch closure for G41/P15/P16. Manifest absence alone is insufficient. |
+| Manual seeding | `2b7e866e` dispatched SQLite acquire, close, and durable resolution. The current adapter calls `launch_cdp_free_from_sqlite_profile`. `0d994c7a` and `547e958e` added bounded exited-process reconciliation. | Keeper rebinding, launch-issued uncertainty, live-PID reconciliation, and installed presentation remain incomplete. Do not rediscover the helper as undispatched. |
+| Alice/Bob lifecycle | The SQLite host fixture proves separate identities, command routing and heartbeat publication, Alice-first cleanup, terminal handoffs, and final-session close through provider-free effects. | Ordinary ingress parity, remaining command variants, real expiry, browser effects, and final process termination. |
+| Explicit browser selection | `44961424` carries `browserId` through ordinary-open translation and journaling; unknown or inactive identities cannot launch a replacement. | Remaining supported selectors and browser-build selection, concurrency, installed behavior, and complete request-path qualification. |
+| Navigation heartbeat | `1884c407` proves interrupted navigation preserves activity/expiry at `1_000/301_000`; recovery commits `2_000/302_000` once. | Other ordinary command variants, operator navigation, and installed recovery. |
+
+The last recorded Rust evidence includes 270 model tests, 31 host tests,
+formatting, and strict workspace Clippy. The 31-test receipt is
+`job-20260926T151649Z-af01c876429d`; format is
+`job-20260926T151723Z-b610dc2d68fd`; Clippy is
+`job-20260926T151941Z-abe496c2fc6a`. These are inherited receipts, not new test
+runs or installed acceptance. Preserve the earlier fixture failure and
+`sccache` failure receipt `job-20260926T151732Z-4573b2171baa`.
+
+The architecture report re-read on September 26 has P09 violated, seven
+detector gaps (P02/P03/P05/P12/P15/P16/P19), and eleven unverified prohibitions.
+P09 identifies four persistent route-credential environment keys in
+`workstation_install.rs`. Neither a detector gap nor an unverified row passes.
+
+Several inherited ledger descriptions and the
+[M0 dependency snapshot](../architecture/p218-ordinary-open-handoff-closure.v1.json)
+predate the completed cuts above. Keep the snapshot as historical evidence.
+M1A reconciles current reachability and ledger descriptions before selecting
+another removal. Old graph edges and old prose are not evidence that deleted
+production paths still execute.
+
+## Consolidated Batch
+
+Deliver the complete unchanged contract through an early installed Alice/Bob
+proof, then expand qualification to the remaining operational requirements.
+The first useful outcome is one ordinary named-profile workflow that provides
+real pixels, responsive input, separate Alice/Bob session effects, and exact
+cleanup through durable authenticated handoffs.
+
+The source and minimum provider prerequisites include transactional authority,
+current generation and operation fencing, capacity before launch, SQLite
+credential custody, live viewer observation, and shared Desktop Services
+control. Complete those before the installed proof. Full scaling, storage
+maintenance, quotas, and the failure matrix remain mandatory afterward.
+
+Check development provider and external-observer prerequisites early, using
+read-only diagnostics within the renewed scope. The September 26 handoff
+reported stopped Guacamole services and failed development preflight for
+ingress binding, keeper integration, XRDP, and bundle/manifest comparisons.
+These are boot-specific leads, not a current diagnosis or permission to start
+containers. Treat environment repair and product changes as separate causes.
+
+## Scope And Non-Goals
+
+Included: all G01–G45 and P01–P19 requirements; ordinary CLI, authenticated
+Service, HTTP/MCP, dashboard and generated-client parity where those paths
+participate; supported manual-seeding transitions; provider-free fixtures;
+isolated development implementation and synthetic external acceptance after
+execution is authorized; all required documentation and contract updates.
+
+Excluded: production or staging mutation, public ingress publication, formal
+release, merge, branch/worktree deletion, private-site acceptance content,
+new multi-tenant admission policy, disposable-profile promotion, and recovery
+that replays clicks, forms, submissions, downloads, or other page effects.
+The existing branch, worktree, work items, and draft PR retain custody.
+
+## Delivery Sequence And Budget
+
+The latest P218 execution window was 600,000 tokens. The September 26 handoff
+recorded goal thread `01a0da16-eee9-7511-99e6-ffc04d7b3cff` as `blocked` with
+`tokensUsed=3,808,483` and explicitly stopped execution. This is a historical
+service readback, not a fresh counter or an independently reconciled total of
+all preceding windows. Do not sum overlapping counters or treat a new thread
+with no goal as renewed authority.
+
+The operator subsequently directed execution of Plan 0219 with a 600,000-token
+ceiling. The current goal began at a zero-token baseline. Reserve 120,000
+tokens for final reconciliation, validation, evidence, and closeout. Reassess
+delivery economics at each material checkpoint and no less often than every
+60 minutes of active work. M1A's first evidence deadline is 60,000 tokens for
+the reconciled blocker inventory and at least one discriminating current-source
+result. Historical P218 milestone estimates are not available budget, and all
+predecessor attempt accounting carries forward.
+
+Sequence: M1A → M1B → M2A → M2B → M3/M4 → M5. Read-only environment
+readiness checks may accompany M1. M3 and independent M4 work may overlap only
+after shared interfaces and write ownership are fixed; both join before M5.
+
+### M1A | Reconcile the current authority boundary
+
+Use current source and the existing red gates to reconcile known ledger drift
+for G01/G03/G04/G19/G23/G31/G41/G42 and related prohibitions. Freeze the actual
+ordinary ingress, host, store, handoff, command, cleanup, and manual-seeding
+dependency closure. Inspect CodeGraph freshness banners and read listed stale
+files directly; do not repeat an old removal based on stale graph edges.
+
+Exit with one bounded list of current source blockers, their G/P IDs, exact
+write surfaces, existing tests, and cheapest discriminating check. Update the
+same evidence ledger with completed subproofs and remaining gaps, preserving
+historical failures and requirement text. Implement detector coverage as part
+of the relevant source batch; inventories alone cannot satisfy prohibitions.
+
+### M1B | Qualify the complete ordinary SQLite lifecycle
+
+Finish only the current gaps identified by M1A: supported selectors and browser
+builds, session membership, reservation and rollback, handoff publication,
+exact success-only heartbeat, concurrent-open coalescing, expiry and cleanup.
+Admission, browser identity, presentation reservation, and handoff publication
+must share one SQLite operation. Remove reachable ordinary JSON or legacy
+authority dependencies without recreating them under new names.
+
+Exit with the ordinary authenticated request path covered by provider-free
+Alice/Bob fixtures, restart/journal cases, and deterministic guards for its
+authority boundaries. Include the model, host, store, ingress adapters, and
+fixtures in one causal batch. Separate session liveness from viewer liveness;
+the live Guacamole half of G35/G45 is an M2 prerequisite.
+
+### M2A | Join the minimum provider and live viewer path
+
+Join the runtime-owned keeper, Guacamole, XRDP, browser launch, SQLite
+credentials with transient secret projection, authenticated viewer observation,
+and Desktop Services. A complete ready route must precede Chrome launch;
+minimum readiness must be observed, and warm capacity may grow afterward.
+Remove the readiness interlock only after its real integration exists.
+
+Every launch already requires current memory, process, and disk admission.
+Provider effects already require exact ownership and the narrowly typed helper
+where privilege is needed. M4 completes pressure, scaling, and privilege
+qualification; it cannot defer these prerequisites for M2 effects.
+
+Bound viewer heartbeat and disconnect detection. Require that observation for
+viewer activity and continued desktop control, without making it browser
+admission authority. Opening or activating another handoff transfers control
+visibly and leaves other viewers view-only.
+
+Exit with focused provider and request-path qualification, a validated
+development environment and reviewed external observer inputs, and a frozen
+candidate capable of M2B. Do not publish a candidate with known blockers in
+this exercised dependency closure. Untested wider requirements remain visible.
+
+### M2B | Prove the installed Alice/Bob workflow
+
+Publish the coherent candidate to the isolated development runtime and record
+source, binary digest, installed generation, database schema, provider manifest,
+configuration, and exact route denominator. Use synthetic content and the
+ordinary authenticated ingress, not a private host test API.
+
+1. Open Alice on a named profile. Receive an opaque authenticated handoff and
+   observe the intended browser with complete current pixels and responsive
+   pointer, keyboard, and scroll input.
+2. Open Bob on that exact profile. Prove one browser and distinct session, tab,
+   target, handoff, heartbeat, and expiry identities. Reopen each session and
+   repeat or concurrently issue an open without creating duplicates.
+3. Navigate and issue session-addressed commands for each. Show that effects
+   and successful activity refresh remain on the addressed session; a failed
+   command does not extend its heartbeat. Resolve each handoff to the correct
+   tab, with focus and control transferred through Desktop Services.
+4. Observe an authenticated viewer connect, heartbeat, disconnect, and control
+   transfer. Prove stored URLs, session activity, and controller epochs cannot
+   manufacture or indefinitely retain a live viewer or control grant.
+5. Close Alice and verify Bob's command path, handoff, and browser survive.
+   Close Bob and verify final browser termination with a fresh OS census.
+   Exercise actual expiry isolation in a separately bounded case.
+6. On a separate retained synthetic pair, restart the runtime and reopen the
+   same durable handoffs. Preserve logical session, profile, and handoff
+   identity; attribute any replacement browser process or target correctly.
+   Prove recovery without page-effect replay or competing replacement.
+
+Record each case independently. A partial result locates the failing transition
+and remains incomplete; it does not close the grilling contract. This is the
+first installed outcome checkpoint, before broad stress or storage work.
+
+### M3 | Complete recovery and retention
+
+Extend the proven workflow across provider, Guacamole, route, display, browser,
+tab, and viewer-disconnect failures. Prove bounded singular recovery, eager
+baseline/active-viewer recovery and lazy dormant recovery, committed top-level
+operator navigation including bounded redirects, and waiting-only restart
+behavior that launches nothing until exact client resumption.
+
+Complete named versus disposable retention, oldest-inactive quota cleanup,
+protected-session refusal, no implicit pin/promotion, and the remaining
+manual-seeding recovery and route-rebinding cases. Qualify their source with
+provider-free failure injection, then run installed joined cases during M4's
+final candidate qualification. M3's installed exit remains pending until those
+cases pass; intermediate source commits do not require separate publications.
+Preserve each first failure.
+
+### M4 | Complete operational conformance and freeze final acceptance
+
+Complete all mutable typed settings, placement and queue ordering, growth and
+cooldown scale-in, live pressure admission, non-evicting limit convergence,
+compact history and daily compaction, integrity checks, verified rotating
+backup and restore gaps, privilege receipts, and read-only status/doctor.
+Implement backup safeguards before any acceptance case migrates or restores
+retained data. The early M2B fixture uses a new isolated database and synthetic
+named profiles that the test owns; it does not depend on unfinished disposable
+profile quota behavior or touch retained operator profiles.
+
+Freeze the final source and installed candidate after known blocking repairs.
+Prove one forward-only cold upgrade, provider-row reconstruction, three
+zero-process cold starts, and an injected capacity timeout with no Chrome
+launch. Validate the provisional 90-second readiness deadline and density of
+four under development pressure; retain any evidence-driven lower setting.
+
+Every frozen route must pass authenticated external desktop and mobile pixels,
+clean desktop and z-order, focus, pointer, keyboard, scroll, resize, control
+transfer, reconnect, and the complete recovery matrix. Use the manually
+dispatched P158 external-vantage workflow when its contract applies, with its
+required identity, credentials, synchronized schedule and synthetic-only
+attestation; otherwise freeze the reviewed manual procedure and observers
+before effects. No automatic dispatch or retry is authorized by this plan.
+
+### M5 | Qualify the full contract and prepare integration
+
+Re-run the Alice/Bob acceptance cases on the final frozen candidate, select
+validation from the complete inherited change, and reconcile every G/P row.
+Earlier candidates supply scoped development evidence, not a composite final
+pass. Complete one closed-world review of accepted findings and critical
+regressions. Update documentation, lane state, remote checkpoint, and draft
+PR through the authorized publication workflow. Exit with an evidence-backed
+integration handoff; merge and production remain separate actions.
+
+## Requirement Mapping
+
+Every G-row has one completion owner below. Dependencies and early subproofs
+may span milestones; M5 adjudicates all 45 against the final candidate.
+
+| Completion owner | Requirements | Main dependency |
+| --- | --- | --- |
+| M1 | G01, G03, G04, G05, G19, G23, G26, G31, G41, G42, G43, G44 | Current authority and ordinary lifecycle closure; installed portions qualify in M2B/M4. |
+| M2 | G02, G06, G07, G08, G11, G25, G35, G45 | Provider integration, capacity-before-launch, live viewer and desktop control. |
+| M3 | G12, G13, G14, G15, G21, G32, G36, G37, G38, G40 | Working handoffs and live viewer observation from M2; quota settings from M4 where needed. |
+| M4 | G09, G10, G16, G17, G18, G20, G22, G27, G28, G29, G30, G33, G34, G39 | Stable provider/store interfaces; all safety prerequisites required by earlier effects stay earlier. |
+| M5 | G24 | Development evidence and complete final qualification before any separately authorized production action. |
+
+## Worker Assignments
+
+The primary owns the critical path, all shared model/host/store interfaces,
+authority and budget accounting, the evidence ledger, candidate identity,
+runtime effects, and acceptance. Default concurrency is one active agent;
+this planning transition assigns no worker or additional worktree.
+
+Potential independent work after interfaces are frozen includes pure compaction
+fixtures, read-only status field coverage, and documentation parity. If later
+delegated, give each worker exact disjoint files, inputs, G/P IDs, one focused
+verifier, and a stop on a shared-interface change or second causal defect.
+Workers return evidence to the primary and do not own runtime or acceptance.
+P207 retains its branch and tab-refresh feature history; this inherited lane
+owns its already-assigned shared help, README, skill, installation, remote-view,
+and planning prose. P214 retains desktop candidate-event source ownership.
+
+## Controls And Stop Rules
+
+- Carry all predecessor attempts, review findings, and cumulative usage forward.
+  A successor, renamed packet, worker, or fixture cannot reset them. Reconcile
+  consumed attempts before resuming an unmet criterion; there is no fresh
+  blanket retry allocation here.
+- Before a source batch, budget its implementation, required compilation,
+  documentation and qualification, reserving at least 20 percent for closeout.
+  Do not start a batch that cannot reach its stated terminal condition within
+  the renewed allowance. Record the first installed-proof deadline then.
+- At most one implementation attempt and one consolidated repair apply per
+  inherited milestone, less attempts already consumed. At a repeated failure,
+  classify product, fixture, or environment cause, then split or reframe within
+  remaining authority. No automatic open-ended retry or new discovery review.
+- Two consecutive checkpoints without outcome progress or 30 minutes without
+  it end the current tactic. Report the affected criterion and choose a
+  different evidence-backed approach within remaining bounds, or record the
+  exact block. A passing unrelated fixture does not reset this clock.
+- Use `cargo-signal` around `scripts/ci/cargo-safe.sh` for compiling Rust work.
+  Retain raw logs and exact argv, exit status, and receipts; read compact
+  diagnostics first. The documented cache opt-out may address the observed
+  `sccache` failure; Cargo admission and resource limits stay enabled.
+- Validate a coherent source batch once for every touched surface. Reuse
+  unchanged passed gates after prose-only edits. Preserve first failures and
+  record pending gates at intermediate custody commits.
+- Plan one development publication for the completed M2B batch and one for
+  the completed final M4 batch only if executable inputs differ. Each consumes
+  the newly authorized budget. Additional publication requires a demonstrated
+  defect, impact analysis, and enough allowance for the affected acceptance.
+- Candidate freezes are distinct. No final row may borrow installed proof from
+  another candidate. Preserve earlier valid subproofs with their original scope.
+- Use only positively identified development resources. Provider effects need
+  the reviewed ingress binding and supported preflight. Reuse durable opaque
+  handoffs; URL presence, a process, doctor output, or unit tests do not prove
+  visible pixels or responsive input.
+- Keep GitHub CI operator-disabled unless separately directed. Do not publish
+  ingress, mutate production/staging, merge, release, or remove custody as an
+  inferred consequence of completing a source or planning packet.
+
+## Evidence And Exit
+
+Maintain the inherited G01–G45 ledger as the single requirement-to-evidence
+surface, with its validator. Before changing evidence semantics, update the
+validator and consumer metadata in the same bounded batch. Distinguish source
+implementation, provider-free qualification, installed qualification, and
+external user-visible proof. Each result records source/candidate identity,
+test or artifact, scope, first failure, remaining gap, and primary disposition.
+
+P219 completes only when every normative G-row passes from the final frozen
+candidate, every P01–P19 prohibition has a deterministic gate, the Alice/Bob
+workflow and full route/recovery matrix pass, and fresh process/resource
+readback accounts for browser, daemon, keeper, XRDP, and Guacamole residue.
+Exact uncertain foreign resources remain untouched without blocking separate
+valid work. Required public documentation, generated contracts, local/remote
+source identities, plan, roadmap, runbook, catalog, and PR must agree.
+
+The M2B milestone is an intermediate outcome. P218's cancellation is
+supersession, not acceptance. A partial pass keeps this plan open after
+execution starts. The next implementation action, once authorized, is M1A's
+bounded reconciliation against the recorded baseline.

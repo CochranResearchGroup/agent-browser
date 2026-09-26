@@ -1,0 +1,82 @@
+{
+  "schemaVersion": "p219-m1a-current-authority-closure.v1",
+  "plan": "docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md",
+  "milestone": "M1A",
+  "sourceBaseline": "8bb9518eb78b37c22aaec0183348ee6c77adf0da",
+  "observedAt": "2026-09-26",
+  "completedCuts": [
+    {
+      "id": "ordinary-json-coordinator",
+      "evidence": "541d7346",
+      "result": "Authenticated ordinary open and manager handoff resolution no longer enter the JSON coordinator or generic JSON resolution fallback."
+    },
+    {
+      "id": "direct-lease-authority-dependencies",
+      "evidence": "current manifests and check-p218-architecture serviceModelLeaseAuthority pass",
+      "result": "Neither trusted product manifest directly depends on agent-browser-lease-authority."
+    },
+    {
+      "id": "compiled-json-manager-attachment",
+      "evidence": "P219 architecture red guard plus cargo-signal job-20260926T174302Z-3972e141d58c",
+      "result": "The unreachable compiled JSON manager-handoff adapter and its JSON-only tests are removed; six focused handoff tests pass."
+    },
+    {
+      "id": "keeper-only-manager-handoff",
+      "evidence": "P219 architecture red guard plus cargo-signal job-20260926T175133Z-8e7342c18660",
+      "result": "The compiled Legacy manager-handoff authority is removed; ordinary open and navigation bootstrap use Route Keeper authority, and all eight journaled-open tests pass."
+    }
+  ],
+  "blockers": [
+    {
+      "id": "M1A-B02",
+      "requirements": ["G41"],
+      "prohibitions": ["P15", "P16"],
+      "symbols": ["RuntimeOwnerRegistry", "service_lease_authority_adapter", "runtime_owner_transfer"],
+      "writeSurfaces": ["cli/src/native", "scripts/dev/check-p218-architecture.mjs", "scripts/dev/test-p218-architecture.mjs"],
+      "existingTests": ["test-service-model-architecture", "check-p218-architecture"],
+      "nextCheck": "Freeze compiled production references and dispatch edges separately from cfg(test) and migration-only code before selecting a removal batch."
+    },
+    {
+      "id": "M1A-B03",
+      "requirements": ["G05", "G23"],
+      "prohibitions": ["P16"],
+      "symbols": ["ordinary_remote_view_open_never_enters_profile_lease_admission", "manager_command_from_remote_view_open"],
+      "writeSurfaces": ["cli/src/native/action_runtime/runtime/route_host_tests.rs", "cli/src/native/daemon.rs"],
+      "existingTests": ["ordinary_remote_view_open_never_enters_profile_lease_admission"],
+      "nextCheck": "Add malformed, contradictory and stale historical metadata cases that still reach fresh ordinary admission."
+    },
+    {
+      "id": "M1A-B04",
+      "requirements": ["G19", "G31"],
+      "prohibitions": [],
+      "symbols": ["PresentationRequestAdmission", "BrowserRuntimeOperationJournal", "BrowserSessionHost::journaled_open_with_handoff_result"],
+      "writeSurfaces": ["cli/src/native/daemon.rs", "cli/src/native/presentation_request_admission.rs", "cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_store.rs"],
+      "existingTests": ["journaled_open_*", "presentation_request_admission tests"],
+      "nextCheck": "Prove two concurrent ordinary requests coalesce to one operation and handoff, then prove waiting-only restart does not launch until exact resume."
+    },
+    {
+      "id": "M1A-B05",
+      "requirements": ["G26", "G42", "G43", "G44"],
+      "prohibitions": [],
+      "symbols": ["BrowserSessionHost::execute_managed_command", "BrowserRuntimeSqliteStore::commit_browser_navigation", "BrowserSessionManager::close_session"],
+      "writeSurfaces": ["cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_host/navigation_recovery.rs", "crates/agent-browser-service-model/src/browser_session_manager.rs"],
+      "existingTests": ["shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite", "journaled navigation tests"],
+      "nextCheck": "Inventory every ordinary command variant, then add missing success-only heartbeat and generation-fencing cases before browser-backed qualification."
+    },
+    {
+      "id": "M1A-B06",
+      "requirements": ["G02", "G04", "G25"],
+      "prohibitions": ["P09"],
+      "symbols": ["workstation installer route credential projection"],
+      "writeSurfaces": ["cli/src/workstation_install.rs", "cli/src/native/browser_session_store.rs"],
+      "existingTests": ["check-p218-architecture"],
+      "nextCheck": "Replace four persistent route credential environment keys with SQLite authority and transient projection in the provider batch."
+    }
+  ],
+  "nextBatch": "M1A-B03 stale-history availability qualification, then M1A-B04 ordinary coalescing and restart behavior",
+  "acceptance": {
+    "coverageRows": 45,
+    "promotedRows": 0,
+    "installedEvidence": false
+  }
+}

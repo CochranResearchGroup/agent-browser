@@ -16,8 +16,9 @@ const root = mkdtempSync(join(tmpdir(), 'p218-architecture-'));
 try {
   write(root, 'cli/Cargo.toml', '[dependencies]\nagent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }\n');
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\nagent-browser-lease-authority = { path = "../agent-browser-lease-authority" }\n');
-  write(root, 'cli/src/native/browser_session_host.rs', 'std::env::var("AGENT_BROWSER_SESSION_DISPLAY"); default_service_state_path(); load_or_import_profile_catalog();\n');
+  write(root, 'cli/src/native/browser_session_host.rs', 'std::env::var("AGENT_BROWSER_SESSION_DISPLAY"); default_service_state_path(); load_or_import_profile_catalog(); enum ManagerHandoffAuthority { Legacy, Keeper }\n');
   write(root, 'cli/src/native/remote_view_handoff.rs', 'LockedServiceStateRepository<JsonServiceStateStore> service_profile_lease runtime_owner_binding_for_session cleanup_obligation\n');
+  write(root, 'cli/src/native/browser_session_handoff.rs', 'fn attach_manager_handoff() { LockedServiceStateRepository::default_json(); }\n');
 
   write(root, 'cli/src/native/actions.rs', '"service_remote_view_handoff_resolve" => { handle_service_remote_view_handoff_resolve(cmd, state, attribution).await }\n');
   const fallback = evaluate(root);
@@ -41,11 +42,11 @@ try {
   assert.ok(report.rows.find((row) => row.id === 'P15').findings.length >= 3);
   assert.deepEqual(
     report.rows.find((row) => row.id === 'P03').findings.map((item) => item.id),
-    ['legacy_json_import_in_default_host', 'ordinary_handoff_json_repository', 'ordinary_open_json_repository', 'manual_seeding_json_repository'],
+    ['legacy_json_import_in_default_host', 'legacy_manager_handoff_authority', 'ordinary_handoff_json_repository', 'manager_handoff_json_fallback', 'ordinary_open_json_repository', 'manual_seeding_json_repository'],
   );
   assert.deepEqual(
     report.rows.find((row) => row.id === 'P05').findings.map((item) => item.id),
-    ['competing_handoff_authority', 'ordinary_open_parallel_acquisition', 'manual_seeding_parallel_handoff'],
+    ['parallel_manager_handoff_authority', 'competing_handoff_authority', 'manager_handoff_competing_authority', 'ordinary_open_parallel_acquisition', 'manual_seeding_parallel_handoff'],
   );
 
   write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');

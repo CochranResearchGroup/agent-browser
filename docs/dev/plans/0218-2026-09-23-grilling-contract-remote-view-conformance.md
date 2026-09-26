@@ -2,15 +2,17 @@
 
 Date: 2026-09-23
 
-Plan version: 44
+Plan version: 45
 
-State: OPEN
+State: CANCELLED
 
 Consolidation: required
 
 Product lane: PL-PLATFORM
 
 Lane: P218
+
+Successor: [Plan 0219](0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 
 Predecessor: [Plan 0217](0217-2026-09-22-availability-first-remote-view-reliability.md), superseded because it covered only availability and visual reliability rather than the complete accepted grilling contract
 
@@ -28,6 +30,21 @@ Branch: `platform/p211-simple-cold-upgrade` with inherited P211 and P217 custody
 Pull request: draft PR #191
 
 Target: `main`
+
+Disposition: superseded while incomplete on 2026-09-26. Plan 0219 owns the
+remaining execution. The G01–G45 ledger, simple session state machine, and
+P01–P19 prohibitions below remain unchanged normative specification. Historical
+checkpoints and milestone instructions below do not grant current authority.
+
+Current authority: the latest 600,000-token execution window is exhausted.
+The September 26 handoff recorded goal thread
+`01a0da16-eee9-7511-99e6-ffc04d7b3cff` as `blocked`, with
+`tokensUsed=3,808,483`, and stopped implementation. This is the handoff's
+historical readback; no new implementation budget follows from supersession.
+The final inventory remains zero pass, 27 partial, seven fail, and eleven
+missing. The operator authorized writing the successor and planning transition.
+
+## Historical Effort Record
 
 Overall effort ceiling: the inherited Plan 0217 cumulative 2,000,000-token
 ceiling was exhausted. The durable pre-M0 readback was 595,176 tokens and the
@@ -49,9 +66,9 @@ is tracked from this explicit instruction; the old goal remains historical
 evidence. Stop for operator review at this window's limit.
 On 2026-09-25 the operator renewed Plan 0218 again with the objective to
 verify progress and continue, a 600,000-token window, and `cargo-signal` for
-Rust compiler management. The current goal service reports this objective as
-active but does not expose a remaining-token counter, so this plan retains the
-explicit 600,000-token ceiling for the new window. Prior windows remain
+Rust compiler management. At that checkpoint the goal service reported this
+objective as active without a remaining-token counter, so the plan retained
+the explicit 600,000-token ceiling for that window. Prior windows remain
 historical usage and are not reset acceptance evidence.
 
 ## Objective
@@ -77,6 +94,13 @@ route inventories, operator-managed display numbers, or runtime fallback to
 legacy JSON.
 
 ## Current State
+
+Superseded by Plan 0219 at source baseline
+`6b3a41e265d1fd3da27431788e4373b66177225d`. The following checkpoint narrative
+is retained history. Current execution state is in [RUNBOOK.md](../../../RUNBOOK.md).
+Some earlier descriptions below and in the inherited coverage inventory
+predate the completed JSON coordinator and Lease Authority dependency cuts;
+the successor records that drift without claiming G-row acceptance.
 
 Source checkpoint `1884c407` adds SQLite-backed evidence that an interrupted
 journaled navigation leaves its existing session heartbeat unchanged, while

@@ -16,8 +16,8 @@ use serde_json::{json, Value};
 use super::{
     current_unix_ms, deterministic_manager_handoff_id, optional_string, required_string,
     BrowserRuntimeOperation, BrowserRuntimeOperationState, BrowserSessionHost,
-    BrowserSessionPersistence, ManagedBrowserCommandEffects, ManagerHandoffAuthority,
-    ManagerPresentationProofEffects, ReservedBrowserRecoveryEffects,
+    BrowserSessionPersistence, ManagedBrowserCommandEffects, ManagerPresentationProofEffects,
+    ReservedBrowserRecoveryEffects,
 };
 
 const NAVIGATION_OWNER_KEY: &str = "browser-runtime-navigation";
@@ -157,10 +157,8 @@ where
                                             .to_string()
                                     })?,
                             )?;
-                            let response = self.journaled_open_with_handoff_result(
-                                &bootstrap,
-                                ManagerHandoffAuthority::Keeper(authority),
-                            )?;
+                            let response =
+                                self.journaled_open_with_handoff_result(&bootstrap, authority)?;
                             self.navigation_target_from_response(&response)?
                         }
                     };

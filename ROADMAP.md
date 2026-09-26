@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-19
+Updated: 2026-09-26
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -25,24 +25,28 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
-## P218 | Grilling-Contract Remote View Conformance
+## P219 | Alice/Bob Grilling Contract Completion
 
 State: OPEN
 
-Current State: Plan 0218 supersedes Plans 0211 and 0217 without resetting evidence, retry
-history, or cumulative effort. It owns the complete September 19 grilling
-contract: one SQLite and provider authority, no legacy ordinary-path denial,
-no hidden viewer browser, cold-start capacity, durable handoff recovery, shared
-Desktop Services control, bounded history and storage, and external desktop and
-mobile visual-operational acceptance.
+Current State: [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+inherits the full G01–G45 specification and evidence from P218 on the existing
+P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
+#181, #183, and #195. The sequence reconciles completed source cuts, qualifies
+the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
+forward before broad operational qualification. All requirements remain in
+scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
+Execution resumed on September 26 with a 600,000-token ceiling; M1A
+current-source reconciliation is active.
 
-The [current plan](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
-owns the `PL-PLATFORM` outcome for issues #181, #183, and #195 on the inherited
-P211 branch and draft PR #191. M0 mapping and red architecture gates exist;
-M1 ordinary handoff and JSON authority closure remains open, followed by M2
-provider integration, M3 durable recovery and live viewer control, and M4
-installed visual-operational acceptance. Production
-installation, ingress publication, release, and merge remain excluded.
+## P218 | Grilling-Contract Remote View Conformance
+
+State: CANCELLED
+
+Current State: [Plan 0218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
+is superseded while incomplete by P219. Its normative specification and
+historical evidence remain preserved. Supersession does not assert acceptance
+or reset cost, retries, findings, or runtime restrictions.
 
 ## P216 | Service Model Extraction Landing
 

@@ -40,6 +40,7 @@ export function evaluate(root = defaultRoot) {
   const cliManifest = read(root, 'cli/Cargo.toml');
   const serviceModelManifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
   const host = read(root, 'cli/src/native/browser_session_host.rs');
+  const browserSessionHandoff = read(root, 'cli/src/native/browser_session_handoff.rs');
   const handoff = read(root, 'cli/src/native/remote_view_handoff.rs');
   const openRuntime = read(root, 'cli/src/native/remote_view/open/runtime.rs');
   const openCoordinator = read(root, 'cli/src/native/remote_view/open/coordinator.rs');
@@ -74,9 +75,18 @@ export function evaluate(root = defaultRoot) {
   if (/default_service_state_path\(\)/.test(host) && /load_or_import_profile_catalog/.test(host)) {
     add('P03', finding('legacy_json_import_in_default_host', 'cli/src/native/browser_session_host.rs', 'the default host supplies legacy Service State to ordinary host loading'));
   }
+  if (/ManagerHandoffAuthority[\s\S]*?Legacy/.test(host)) {
+    add('P03', finding('legacy_manager_handoff_authority', 'cli/src/native/browser_session_host.rs', 'the compiled Browser Session Host retains a non-keeper manager handoff authority'));
+    add('P05', finding('parallel_manager_handoff_authority', 'cli/src/native/browser_session_host.rs', 'manager handoff construction can bypass the SQLite Route Keeper authority'));
+  }
   if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(handoff)) {
     add('P03', finding('ordinary_handoff_json_repository', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff finalization still requires the JSON Service State repository'));
     add('P05', finding('competing_handoff_authority', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff identity is committed outside the Browser Runtime SQLite authority'));
+  }
+  if (/LockedServiceStateRepository::default_json\(\)/.test(browserSessionHandoff)
+    && /attach_manager_handoff/.test(browserSessionHandoff)) {
+    add('P03', finding('manager_handoff_json_fallback', 'cli/src/native/browser_session_handoff.rs', 'compiled manager-handoff compatibility code can publish an ordinary handoff through JSON Service State'));
+    add('P05', finding('manager_handoff_competing_authority', 'cli/src/native/browser_session_handoff.rs', 'compiled manager-handoff compatibility code can commit identity outside Browser Runtime SQLite'));
   }
   if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(openRuntime)
     || /LockedServiceStateRepository::default_json\(\)/.test(openRuntime)) {
