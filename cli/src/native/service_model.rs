@@ -2560,15 +2560,14 @@ pub use agent_browser_service_model::{
     JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, MonitorState, MonitorTarget,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
     ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
-    ProfileSeedingMode, ProfileSelectionReason, ProfileTargetReadiness,
-    ProtectedBrowserOwnerObservation, RemoteViewAcquisitionLease, RemoteViewHandoff,
-    RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
-    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
-    ServiceJob, ServiceProvider, ServiceReconciliationSnapshot, ServiceTabHandle,
-    SessionCleanupPolicy, SiteMonitor, SitePolicy, TabLifecycle, ViewStream, ViewStreamProvider,
-    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileTargetReadiness, RemoteViewAcquisitionLease,
+    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
+    ServiceActor, ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent,
+    ServiceEventKind, ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity,
+    ServiceIncidentState, ServiceJob, ServiceProvider, ServiceReconciliationSnapshot,
+    ServiceTabHandle, SessionCleanupPolicy, SiteMonitor, SitePolicy, TabLifecycle, ViewStream,
+    ViewStreamProvider, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 #[cfg(test)]
 pub use agent_browser_service_model::{

@@ -27,11 +27,10 @@ use crate::native::service_model::{
     BrowserHost as ServiceBrowserHost, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     ControlInputProvider, DisplayAllocation, JobState as ServiceJobState, LeaseState, MonitorState,
     ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
-    ProfileOrigin, ProfileSelectionReason, ProtectedBrowserOwnerObservation,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry,
-    ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
-    ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider,
+    ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RoutePoolEntry, ServiceBrowserProcessIdentity, ServiceEntitySource,
+    ServiceEvent, ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy,
+    TabLifecycle, ViewStream, ViewStreamProvider,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::service_trace::service_commands::service_now_timestamp;

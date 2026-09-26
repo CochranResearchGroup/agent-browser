@@ -78,7 +78,7 @@ At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
 accepted pixels, input, joined recovery, or complete grilling conformance.
 The [inherited coverage ledger](../contracts/p218-grilling-contract-coverage.v1.json)
-has 45 rows: zero pass, 29 partial, seven fail, and nine missing. Retain its
+has 45 rows: two pass, 28 partial, six fail, and nine missing. Retain its
 filename and row IDs as the single evidence ledger. Succession promotes no row.
 
 Completed work materially changes the starting point:
@@ -86,7 +86,7 @@ Completed work materially changes the starting point:
 | Surface | Inherited evidence | Remaining qualification |
 | --- | --- | --- |
 | Ordinary open and handoff | `541d7346` removed the JSON ordinary-open coordinator, its acquisition repository, and the generic JSON handoff-resolution fallback. Historical acquisition/finalization helpers are under `cfg(test)` in `remote_view_handoff/legacy_json_tests.rs`. | Prove the complete current dispatch and adjacent lifecycle closure; repair only reachable defects. Do not repeat the removed coordinator cut. |
-| Lease Authority | Neither `cli/Cargo.toml` nor the Service-model manifest directly depends on the crate. The current Service-model cut guard passes; the independent crate remains a workspace member. | Prove the whole default-product dependency, serialization, API, and dispatch closure for G41/P15/P16. Manifest absence alone is insufficient. |
+| Lease Authority | P15, P16, `serviceModelLeaseAuthority`, and `legacyAuthorityQuarantine` pass. The independent crate remains a workspace member while trusted product serialization, inventory, generated-client and dispatch exposure are removed. | Preserve the physical-quarantine gates through later batches; historical disabled tests are not product authority. |
 | Manual seeding | `2b7e866e` dispatched SQLite acquire, close, and durable resolution. The current adapter calls `launch_cdp_free_from_sqlite_profile`. `0d994c7a` and `547e958e` added bounded exited-process reconciliation. | Keeper rebinding, launch-issued uncertainty, live-PID reconciliation, and installed presentation remain incomplete. Do not rediscover the helper as undispatched. |
 | Alice/Bob lifecycle | The SQLite host fixture proves separate identities, command routing and heartbeat publication, Alice-first cleanup, terminal handoffs, and final-session close through provider-free effects. | Ordinary ingress parity, remaining command variants, real expiry, browser effects, and final process termination. |
 | Explicit browser selection | `44961424` carries `browserId` through ordinary-open translation and journaling; unknown or inactive identities cannot launch a replacement. | Remaining supported selectors and browser-build selection, concurrency, installed behavior, and complete request-path qualification. |
@@ -100,8 +100,8 @@ formatting, and strict workspace Clippy. The 31-test receipt is
 runs or installed acceptance. Preserve the earlier fixture failure and
 `sccache` failure receipt `job-20260926T151732Z-4573b2171baa`.
 
-The architecture report re-read on September 26 has P09 violated, seven
-detector gaps (P02/P03/P05/P12/P15/P16/P19), and eleven unverified prohibitions.
+The architecture report re-read on September 26 has P09 violated, five
+detector gaps (P02/P03/P05/P12/P19), P15 and P16 passing, and eleven unverified prohibitions.
 P09 identifies four persistent route-credential environment keys in
 `workstation_install.rs`. Neither a detector gap nor an unverified row passes.
 
@@ -411,5 +411,13 @@ source identities, plan, roadmap, runbook, catalog, and PR must agree.
 
 The M2B milestone is an intermediate outcome. P218's cancellation is
 supersession, not acceptance. A partial pass keeps this plan open after
-execution starts. The next implementation action, once authorized, is M1A's
-bounded reconciliation against the recorded baseline.
+execution starts. The current implementation action is the remaining M1B B05
+generation/recovery closure followed by B06 transient credential custody.
+
+Execution checkpoint on September 26: M1B-B02 is complete. The trusted product
+no longer deserializes or replays legacy runtime-owner transaction sidecars and
+no longer embeds or exposes protected owner observations through Service State,
+launch metadata, inventory, generated client or public documentation. P15,
+P16, `serviceModelLeaseAuthority` and `legacyAuthorityQuarantine` pass; strict
+workspace Clippy passes in `job-20260926T185357Z-7d9bc2827369`. G23 and G41
+are promoted to pass. B05 and B06 remain the source blockers before M2A.

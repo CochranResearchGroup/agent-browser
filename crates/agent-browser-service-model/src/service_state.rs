@@ -168,11 +168,6 @@ pub struct ServiceState {
     #[doc(hidden)]
     pub crash_regeneration_transactions: BTreeMap<String, crate::CrashRegenerationTransaction>,
     pub browsers: BTreeMap<String, BrowserProcess>,
-    /// Non-authoritative protected-owner observations keyed by Service State
-    /// browser id. The root authority remains the only mutation gate.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    #[doc(hidden)]
-    pub protected_browser_owner_observations: BTreeMap<String, ProtectedBrowserOwnerObservation>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub browser_process_identities: BTreeMap<String, ServiceBrowserProcessIdentity>,
     pub sessions: BTreeMap<String, BrowserSession>,

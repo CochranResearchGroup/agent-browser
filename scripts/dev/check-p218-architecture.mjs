@@ -36,8 +36,14 @@ function manifestDependsOnLeaseAuthority(source) {
   return /^\s*agent-browser-lease-authority\s*=|^\s*[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bpackage\s*=\s*["']agent-browser-lease-authority["']/m.test(source);
 }
 
+function beforeDisabledLegacyTests(source) {
+  return source.split(/\n#\[cfg\((?:any\(\)|test)\)\]\nmod tests\s*\{/u, 1)[0];
+}
+
 export function evaluate(root = defaultRoot) {
   const cliManifest = read(root, 'cli/Cargo.toml');
+  const workspaceManifest = read(root, 'Cargo.toml');
+  const leaseAuthorityManifest = read(root, 'crates/agent-browser-lease-authority/Cargo.toml');
   const serviceModelManifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
   const host = read(root, 'cli/src/native/browser_session_host.rs');
   const browserSessionHandoff = read(root, 'cli/src/native/browser_session_handoff.rs');
@@ -133,6 +139,30 @@ export function evaluate(root = defaultRoot) {
   if (/runtime_owner_registry/.test(serviceState)) {
     add('P16', finding('runtime_owner_in_ordinary_state', 'crates/agent-browser-service-model/src/service_state.rs', 'runtime-owner state remains embedded in the ordinary Service State model'));
   }
+  const trustedLegacyAuthoritySources = [
+    'cli/src/native/control_plane.rs',
+    'cli/src/native/service_store.rs',
+    'cli/src/native/service_health.rs',
+    'cli/src/native/service_inventory.rs',
+    'cli/src/native/service_lifecycle.rs',
+    'cli/src/native/service_failure.rs',
+    'cli/src/native/stream/guacamole_primary_binding.rs',
+    'crates/agent-browser-service-model/src/service_state.rs',
+    'crates/agent-browser-service-model/src/browser_process.rs',
+    'packages/dashboard/src/components/service-panel.tsx',
+    'packages/client/src/service-observability.generated.d.ts',
+  ];
+  const legacyAuthorityPattern = /agent_browser_lease_authority|runtime_owner_transfer|runtime_owner_registry|ProtectedBrowserOwnerObservation|protected_browser_owner_observation|protected_lease_authority/u;
+  for (const path of trustedLegacyAuthoritySources) {
+    const source = beforeDisabledLegacyTests(read(root, path));
+    if (legacyAuthorityPattern.test(source)) {
+      add('P16', finding(
+        'trusted_product_legacy_authority_reference',
+        path,
+        'trusted product code retains a compiled or exposed legacy lease/runtime-owner authority reference',
+      ));
+    }
+  }
   if (/service_viewer_lease_heartbeat/.test(actions)) {
     add('P19', finding('persisted_viewer_heartbeat_authority', 'cli/src/native/actions.rs', 'viewer heartbeat is represented by the persisted viewer-lease action surface'));
     if (/service_viewer_lease_(?:request|release)/.test(dashboardViewport)) {
@@ -140,12 +170,21 @@ export function evaluate(root = defaultRoot) {
     }
   }
 
+  const leaseAuthorityIsIndependent =
+    existsSync(join(root, 'crates/agent-browser-lease-authority/Cargo.toml'))
+    && /name\s*=\s*["']agent-browser-lease-authority["']/u.test(leaseAuthorityManifest)
+    && /["']crates\/agent-browser-lease-authority["']/u.test(workspaceManifest);
+  const legacyAuthorityDetectorComplete = trustedLegacyAuthoritySources.every((path) =>
+    existsSync(join(root, path))
+  );
   const definitelyViolated = new Set(['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19']);
   const rows = Array.from({ length: 19 }, (_, index) => {
     const id = `P${String(index + 1).padStart(2, '0')}`;
     const evidence = violations.get(id) || [];
     let status = 'unverified';
     if (definitelyViolated.has(id)) status = evidence.length > 0 ? 'violated' : 'detector_gap';
+    if (id === 'P15' && evidence.length === 0 && leaseAuthorityIsIndependent) status = 'pass';
+    if (id === 'P16' && evidence.length === 0 && legacyAuthorityDetectorComplete) status = 'pass';
     return { id, status, findings: evidence };
   });
   const serviceModelLeaseAuthorityFindings = [];
@@ -190,6 +229,18 @@ export function evaluate(root = defaultRoot) {
       statusReadOnly: {
         status: statusReadOnlyFindings.length === 0 ? 'pass' : 'fail',
         findings: statusReadOnlyFindings,
+      },
+      legacyAuthorityQuarantine: {
+        status: leaseAuthorityIsIndependent
+          && legacyAuthorityDetectorComplete
+          && (violations.get('P15') || []).length === 0
+          && (violations.get('P16') || []).length === 0
+          ? 'pass'
+          : 'fail',
+        findings: [
+          ...(violations.get('P15') || []),
+          ...(violations.get('P16') || []),
+        ],
       },
     },
     summary: rows.reduce((counts, row) => {

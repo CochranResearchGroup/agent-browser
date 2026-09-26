@@ -37,7 +37,7 @@ const serviceStateMigrationFields = [
   'profile_reset_receipts', 'profile_lifecycle_authorizations',
   'profile_lifecycle_effect_receipts', 'browser_retirement_receipts',
   'abandoned_browser_retirements', 'crash_regeneration_transactions',
-  'protected_browser_owner_observations', 'runtime_owner_registry',
+  'runtime_owner_registry',
   'authentication_runs', 'challenge_tasks', 'unknown_fields',
 ];
 const serviceStateFieldTypes = {

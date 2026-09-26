@@ -80,6 +80,31 @@ try {
   assert.equal(changed.rows.find((row) => row.id === 'P15').status, 'detector_gap');
   assert.equal(changed.rows.find((row) => row.id === 'P15').findings.length, 0);
 
+  write(root, 'Cargo.toml', '[workspace]\nmembers = ["crates/agent-browser-lease-authority"]\n');
+  write(root, 'crates/agent-browser-lease-authority/Cargo.toml', '[package]\nname = "agent-browser-lease-authority"\n');
+  write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');
+  for (const path of [
+    'cli/src/native/control_plane.rs',
+    'cli/src/native/service_store.rs',
+    'cli/src/native/service_health.rs',
+    'cli/src/native/service_inventory.rs',
+    'cli/src/native/service_lifecycle.rs',
+    'cli/src/native/service_failure.rs',
+    'cli/src/native/stream/guacamole_primary_binding.rs',
+    'crates/agent-browser-service-model/src/browser_process.rs',
+    'packages/dashboard/src/components/service-panel.tsx',
+    'packages/client/src/service-observability.generated.d.ts',
+  ]) write(root, path, 'pub struct CurrentAuthority;\n');
+  write(
+    root,
+    'cli/src/native/service_store.rs',
+    'pub struct CurrentAuthority;\n#[cfg(any())]\nmod tests { use crate::runtime_owner_transfer; }\n',
+  );
+  const quarantineCut = evaluate(root);
+  assert.equal(quarantineCut.rows.find((row) => row.id === 'P15').status, 'pass');
+  assert.equal(quarantineCut.rows.find((row) => row.id === 'P16').status, 'pass');
+  assert.equal(quarantineCut.cuts.legacyAuthorityQuarantine.status, 'pass');
+
   const closure = JSON.parse(readFileSync(new URL(
     '../../docs/dev/architecture/p218-ordinary-open-handoff-closure.v1.json',
     import.meta.url,

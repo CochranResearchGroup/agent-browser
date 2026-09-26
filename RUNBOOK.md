@@ -16,7 +16,7 @@ policy capsule at `8bb9518eb78b37c22aaec0183348ee6c77adf0da`. The inherited work
 No candidate, runtime, provider, or installed acceptance changed in this slice.
 
 Acceptance: the inherited [coverage ledger](docs/dev/contracts/p218-grilling-contract-coverage.v1.json)
-has zero pass, 29 partial, seven fail, and nine missing rows. M1A will
+has two pass, 28 partial, six fail, and nine missing rows. M1A will
 reconcile stale evidence descriptions without promoting tests to installed
 acceptance. `541d7346` already removed the JSON ordinary-open coordinator and
 fallback. SQLite manual-seeding dispatch already uses its dedicated launcher,
@@ -77,6 +77,16 @@ periodic fenced lifecycle operation now owns both liveness reconciliation and
 expiry reap. The deterministic `statusReadOnly` architecture cut and negative
 fixture pass, advancing G30 from missing to partial; complete status/doctor
 field mapping and redaction remain open.
+B02 is complete. Ordinary Service State transactions no longer deserialize or
+replay runtime-owner and lifecycle sidecars, and Service State, launch metadata,
+inventory, generated client and public documentation no longer expose protected
+owner observations. Disabled historical fixtures remain noncompiled; the
+independent Lease Authority crate remains a workspace member. P15, P16 and the
+`legacyAuthorityQuarantine` cut pass. Strict workspace Clippy passes in
+`job-20260926T185357Z-7d9bc2827369`; directly affected observability, JavaScript
+type, architecture and generation checks pass. The umbrella
+`pnpm test:service-client` command remains independently red because its P157
+oracle references the already-absent `cli/src/native/service_profile_acquisition.rs`.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled
@@ -84,9 +94,10 @@ success-only heartbeat. The recorded 270 model tests, 31 host tests, format,
 strict Clippy, docs, and contract checks retain their original scope. They were
 not rerun as Rust or installed acceptance during successor writing.
 
-Architecture readback: P09 is violated; P02/P03/P05/P12/P15/P16/P19 have
-detector gaps; eleven prohibitions are unverified. The Service-model cut
-guard passes. The old M0 dependency graph is historical, not current reachability.
+Architecture readback: P09 is violated; P02/P03/P05/P12/P19 have detector
+gaps; P15 and P16 pass; eleven prohibitions are unverified. The Service-model
+and legacy-authority quarantine cuts pass. The old M0 dependency graph is
+historical, not current reachability.
 
 Authority and effort: the latest P218 600,000-token window is exhausted. The
 September 26 handoff recorded goal thread
@@ -103,7 +114,7 @@ open after that stop. The verified policy entrypoint is [the P219 M1B–M2B
 capsule](docs/dev/policy-capsules/p219-m1b-m2b.md); broad policy rereads occur
 only on one of its explicit triggers.
 
-Current action: finish M1B's B02, B05 and B06 source blockers, join the minimum
+Current action: finish M1B's B05 and B06 source blockers, join the minimum
 M2A provider and live-viewer path, then freeze and qualify one M2B Alice/Bob
 candidate. The early candidate cannot supply final proof for a different final
 candidate.

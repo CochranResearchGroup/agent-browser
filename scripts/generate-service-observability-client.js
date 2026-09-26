@@ -462,22 +462,6 @@ export interface ServiceBrowserRecord {
   [key: string]: unknown;
 }
 
-export interface ServiceProtectedBrowserOwnerObservation {
-  schemaVersion: 'agent-browser.protected-browser-owner-observation.v1';
-  source: 'protected_lease_authority_receipt';
-  operationalAuthority: false;
-  launchReceiptId: string;
-  ownerId: string;
-  ownerGeneration: number;
-  logicalBrowserId: string;
-  daemonSessionRoute: string;
-  processInstanceDigest: string;
-  processPid: number;
-  ownerRevision: number;
-  observedAt: string;
-  freshnessExpiresAt: string;
-}
-
 export interface ServiceDisplayAllocationRecord {
   id: string;
   displayName: string;
@@ -1352,7 +1336,6 @@ export interface ServiceProfileSeedingHandoffUpdateResponse {
 
 export interface ServiceBrowsersResponse extends ServiceListResponse<ServiceBrowserRecord> {
   browsers: ServiceBrowserRecord[];
-  protectedBrowserOwnerObservations: Record<string, ServiceProtectedBrowserOwnerObservation>;
 }
 
 export interface ServiceDisplayAllocationsResponse extends ServiceListResponse<ServiceDisplayAllocationRecord> {

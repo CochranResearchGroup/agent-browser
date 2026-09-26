@@ -819,30 +819,6 @@ pub fn persist_service_browser_record_in_repository(
                 .as_ref()
                 .and_then(|browser| browser.record_provenance.clone()),
         };
-        if pid.is_none() {
-            service_state
-                .protected_browser_owner_observations
-                .remove(&id);
-        } else if let Some(metadata) = metadata.as_ref() {
-            match metadata.protected_browser_owner_observation.as_ref() {
-                Some(observation) => {
-                    validate_protected_browser_owner_observation(
-                        observation,
-                        &id,
-                        session_id,
-                        pid,
-                    )?;
-                    service_state
-                        .protected_browser_owner_observations
-                        .insert(id.clone(), observation.clone());
-                }
-                None => {
-                    service_state
-                        .protected_browser_owner_observations
-                        .remove(&id);
-                }
-            }
-        }
         upsert_browser_display_allocation(
             service_state,
             session_id,
@@ -893,85 +869,6 @@ pub fn persist_service_browser_record_in_repository(
     })
 }
 
-pub(crate) fn validate_protected_browser_owner_observation(
-    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
-    browser_id: &str,
-    session_id: &str,
-    pid: Option<u32>,
-) -> Result<(), String> {
-    validate_protected_browser_owner_observation_record(observation, browser_id, session_id)?;
-    if Some(observation.process_pid) != pid {
-        return Err("protected_browser_owner_observation_invalid".to_string());
-    }
-    Ok(())
-}
-
-fn validate_protected_browser_owner_observation_record(
-    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
-    browser_id: &str,
-    session_id: &str,
-) -> Result<(), String> {
-    let observed_at = chrono::DateTime::parse_from_rfc3339(&observation.observed_at)
-        .map_err(|_| "protected_browser_owner_observation_invalid".to_string())?;
-    let freshness_expires_at =
-        chrono::DateTime::parse_from_rfc3339(&observation.freshness_expires_at)
-            .map_err(|_| "protected_browser_owner_observation_invalid".to_string())?;
-    let valid_digest = |value: &str| {
-        value.strip_prefix("sha256:").is_some_and(|digest| {
-            digest.len() == 64
-                && digest
-                    .bytes()
-                    .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-        })
-    };
-    if observation.schema_version != "agent-browser.protected-browser-owner-observation.v1"
-        || observation.source != "protected_lease_authority_receipt"
-        || observation.operational_authority
-        || observation.authority_receipt_id.trim().is_empty()
-        || observation.owner_id.trim().is_empty()
-        || observation.owner_generation == 0
-        || observation.logical_browser_id.trim().is_empty()
-        || browser_id != service_browser_id_for_session(session_id)
-        || observation.daemon_session_route != session_id
-        || !valid_digest(&observation.process_instance_digest)
-        || observation.process_pid <= 1
-        || observation.owner_revision == 0
-        || freshness_expires_at <= observed_at
-        || freshness_expires_at - observed_at > chrono::Duration::seconds(60)
-    {
-        return Err("protected_browser_owner_observation_invalid".to_string());
-    }
-    Ok(())
-}
-
-pub(crate) fn validate_protected_browser_owner_observation_for_inventory(
-    observation: &crate::native::service_model::ProtectedBrowserOwnerObservation,
-    browser: &BrowserProcess,
-) -> Result<(), String> {
-    // Inventory is an observational surface. A terminal browser may retain the
-    // last structurally valid owner receipt after its process PID is cleared.
-    // Accept that history without treating it as current process authority;
-    // live and nonterminal rows still require an exact PID binding.
-    validate_protected_browser_owner_observation_record(
-        observation,
-        &browser.id,
-        &observation.daemon_session_route,
-    )?;
-    if browser.pid == Some(observation.process_pid)
-        || (browser.pid.is_none()
-            && matches!(
-                browser.health,
-                BrowserHealth::NotStarted
-                    | BrowserHealth::ProcessExited
-                    | BrowserHealth::Closing
-                    | BrowserHealth::Faulted
-            ))
-    {
-        return Ok(());
-    }
-    Err("protected_browser_owner_observation_invalid".to_string())
-}
-
 pub(crate) fn remove_browser_operational_record(
     service_state: &mut ServiceState,
     browser_id: &str,
@@ -979,9 +876,6 @@ pub(crate) fn remove_browser_operational_record(
 ) -> usize {
     let removed_browser = service_state.browsers.remove(browser_id);
     service_state.browser_process_identities.remove(browser_id);
-    service_state
-        .protected_browser_owner_observations
-        .remove(browser_id);
     let mut related_session_ids = BTreeSet::new();
     if let Some(session_id) = explicit_session_id {
         related_session_ids.insert(session_id.to_string());

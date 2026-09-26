@@ -39,18 +39,14 @@
       "id": "managed-command-heartbeat-and-session-isolation",
       "evidence": "cargo-signal jobs job-20260926T180401Z-b2578ab7c2d2 and job-20260926T180405Z-5f6a121c50fc",
       "result": "Managed command failure and execution error preserve activity, success refreshes only the addressed session, and Alice-first cleanup preserves Bob until the final browser close."
+    },
+    {
+      "id": "legacy-authority-physical-quarantine",
+      "evidence": "P15/P16 and legacyAuthorityQuarantine pass; strict Clippy job-20260926T185357Z-7d9bc2827369",
+      "result": "Trusted product manifests, Service State, transaction recovery, inventory, generated client and ordinary dispatch no longer link, embed, replay or expose legacy Lease Authority/runtime-owner authority. Disabled historical tests remain noncompiled and the independent crate remains a workspace member."
     }
   ],
   "blockers": [
-    {
-      "id": "M1A-B02",
-      "requirements": ["G41"],
-      "prohibitions": ["P15", "P16"],
-      "symbols": ["RuntimeOwnerRegistry", "service_lease_authority_adapter", "runtime_owner_transfer"],
-      "writeSurfaces": ["cli/src/native", "scripts/dev/check-p218-architecture.mjs", "scripts/dev/test-p218-architecture.mjs"],
-      "existingTests": ["test-service-model-architecture", "check-p218-architecture"],
-      "nextCheck": "Freeze compiled production references and dispatch edges separately from cfg(test) and migration-only code before selecting a removal batch."
-    },
     {
       "id": "M1A-B05",
       "requirements": ["G26", "G42", "G43", "G44"],
@@ -70,10 +66,10 @@
       "nextCheck": "Replace four persistent route credential environment keys with SQLite authority and transient projection in the provider batch."
     }
   ],
-  "nextBatch": "M1A-B05 ordinary-command heartbeat, generation fencing and Alice/Bob close semantics",
+  "nextBatch": "Finish M1B-B05 provider callback and recovery fencing, then M1B-B06 transient provider credential custody",
   "acceptance": {
     "coverageRows": 45,
-    "promotedRows": 1,
+    "promotedRows": 3,
     "installedEvidence": false
   }
 }

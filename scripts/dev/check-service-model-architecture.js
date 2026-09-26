@@ -315,7 +315,7 @@ const SERVICE_STATE_MIGRATION_FIELDS = [
   'profile_reset_receipts', 'profile_lifecycle_authorizations',
   'profile_lifecycle_effect_receipts', 'browser_retirement_receipts',
   'abandoned_browser_retirements', 'crash_regeneration_transactions',
-  'protected_browser_owner_observations', 'runtime_owner_registry',
+  'runtime_owner_registry',
   'authentication_runs', 'challenge_tasks', 'unknown_fields',
 ];
 
@@ -965,8 +965,8 @@ function check(root = repoRoot) {
   const hiddenFields = [...serviceStateStruct.matchAll(
     /#\s*\[\s*doc\s*\(\s*hidden\s*\)\s*\]\s*(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:/g,
   )].map((match) => match[1]);
-  requireCondition(hiddenFields.length === 20,
-    `service-model aggregate must mark exactly 20 migration fields #[doc(hidden)] (found ${hiddenFields.length})`);
+  requireCondition(hiddenFields.length === SERVICE_STATE_MIGRATION_FIELDS.length,
+    `service-model aggregate must mark exactly ${SERVICE_STATE_MIGRATION_FIELDS.length} migration fields #[doc(hidden)] (found ${hiddenFields.length})`);
   for (const field of SERVICE_STATE_MIGRATION_FIELDS) {
     requireCondition(hiddenFields.includes(field),
       `service-model aggregate migration field must be #[doc(hidden)]: ${field}`);

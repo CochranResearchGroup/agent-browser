@@ -55,8 +55,7 @@ pub use browser_desktop_selector::{
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
     BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
-    ProtectedBrowserOwnerObservation, RecordedProcessIdentity, ServiceBrowserProcessIdentity,
-    SERVICE_BROWSER_HEALTH_VALUES,
+    RecordedProcessIdentity, ServiceBrowserProcessIdentity, SERVICE_BROWSER_HEALTH_VALUES,
 };
 pub use browser_profile::{
     BrowserHost, BrowserProfile, BrowserProfileRegistration, ProfileClass, ProfileOrigin,
