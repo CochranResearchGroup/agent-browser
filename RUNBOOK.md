@@ -11,7 +11,17 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 38 remains open on `platform/p211-simple-cold-upgrade`.
+Plan 0218 version 39 remains open on `platform/p211-simple-cold-upgrade`.
+Source checkpoint `547e958e` closes an exited ready manual-seeding browser's
+exact SQLite handoff on acquire or durable resolution, including when the old
+keeper binding is unavailable. A missing or reused unrelated PID may close;
+an ambiguous process observation retains the reservation. The focused five
+Rust cases, strict Clippy, formatting, route-confusion gates, handoff docs
+check, and docs build pass. Installed browser, pixels, input, live keeper
+rebinding, and launch-issued or live-PID recovery remain open. P03, P05, and
+P09 remain violated; coverage stays at zero pass, 27 partial, seven fail,
+and 11 missing.
+
 Source checkpoint `0d994c7a` reconciles a PID-only manual-seeding launch
 only after the recorded PID is absent. It atomically closes the old SQLite
 operation without a handoff or launch retry; the next launch requires a new

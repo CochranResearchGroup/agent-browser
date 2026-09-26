@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 38
+Plan version: 39
 
 State: OPEN
 
@@ -848,6 +848,20 @@ This does not establish complete G03/G05 conformance: other legacy source
 classes, installed cold restart, exact process cleanup, and no-fallback behavior
 still require a single-candidate acceptance run. The P03/P05 manual-seeding
 JSON authority remains a separate blocker.
+
+Version 39 closes a ready manual-seeding handoff when its exact recorded
+browser process has exited. Source checkpoint `547e958e` makes both acquire
+and durable resolution assess the recorded process before replaying
+visibility. A missing or reused unrelated PID terminalizes only the matching
+SQLite seeding record and handoff, even when the previous keeper binding is
+unavailable, and returns `retryRequiresNewOperation` without launching a
+browser. An ambiguous observation remains reserved. The focused five-case
+manual-seeding Rust filter, strict workspace Clippy, format check,
+route-confusion gates, handoff documentation check, and docs build pass. The
+fixture proves ready-handoff closure and replay after process absence. This
+does not prove installed process or route recovery; live keeper rebinding,
+launch-issued and live-PID reconciliation, and visual/input acceptance remain
+open. P03, P05, and P09 remain violated.
 
 Version 38 adds bounded recovery for a manual-seeding launch whose PID was
 journaled but whose exact process identity was not captured. Source

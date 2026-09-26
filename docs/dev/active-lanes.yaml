@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0d994c7a
+    checkpoint: 547e958e
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: merge through the protected pull-request workflow after provider-free shutdown, cold-install, restart, remote-view, and documentation validation
-    validation_status: Source checkpoint 0d994c7a reconciles a PID-only manual-seeding launch only when its PID is absent, with focused Rust, strict Clippy, format, route, and docs checks passing; launch-issued outcomes without a PID, live-PID reconciliation, route rebinding, installed visual and input acceptance, and the full G01-G45 audit remain open; P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, and M1 is open
-    validation_ref: 0d994c7a
+    validation_status: Source checkpoint 547e958e closes an exited ready manual-seeding handoff on acquire or durable resolution with five focused Rust cases, strict Clippy, format, route, and docs checks passing; launch-issued outcomes without a PID, live-PID reconciliation, route rebinding, installed visual and input acceptance, and the full G01-G45 audit remain open; P03, P05, and P09 remain violated, five detectors have gaps, eleven are unverified, and M1 is open
+    validation_ref: 547e958e
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P218:remote-view-regression-subcases-189-190]
