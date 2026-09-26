@@ -126,6 +126,9 @@ pub struct OpenBrowserSession {
     pub session_name: String,
     pub profile_intent: BrowserProfileIntent,
     pub activity_at_ms: u64,
+    /// An explicit current browser identity may be reused, never substituted
+    /// with another browser or a new launch.
+    pub requested_browser_id: Option<String>,
 }
 
 impl OpenBrowserSession {
@@ -140,6 +143,7 @@ impl OpenBrowserSession {
                 profile_id: profile_id.into(),
             },
             activity_at_ms,
+            requested_browser_id: None,
         }
     }
 
@@ -154,7 +158,13 @@ impl OpenBrowserSession {
                 policy_id: policy_id.into(),
             },
             activity_at_ms,
+            requested_browser_id: None,
         }
+    }
+
+    pub fn with_browser_id(mut self, browser_id: impl Into<String>) -> Self {
+        self.requested_browser_id = Some(browser_id.into());
+        self
     }
 }
 
@@ -553,6 +563,31 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         mut observed_launch: Option<BrowserLaunch>,
         refresh_activity_on_reuse: bool,
     ) -> Result<OpenBrowserSessionResult, String> {
+        if let Some(browser_id) = request.requested_browser_id.as_deref() {
+            let selected = self.state.browsers.get(browser_id).ok_or_else(|| {
+                format!("browser_session_selected_browser_not_found:{browser_id}")
+            })?;
+            match &request.profile_intent {
+                BrowserProfileIntent::Exact { profile_id }
+                    if selected.profile_id != *profile_id =>
+                {
+                    return Err("browser_session_selected_browser_profile_mismatch".to_string());
+                }
+                BrowserProfileIntent::Disposable { policy_id } => {
+                    let allocation = self
+                        .state
+                        .disposable_profiles
+                        .get(&selected.profile_id)
+                        .ok_or("browser_session_selected_browser_profile_mismatch")?;
+                    if allocation.policy_id != *policy_id
+                        || allocation.session_name != request.session_name
+                    {
+                        return Err("browser_session_selected_browser_profile_mismatch".to_string());
+                    }
+                }
+                _ => {}
+            }
+        }
         let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
             .state
@@ -583,6 +618,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
             .cloned();
         if let Some(session) = existing_session {
+            if request
+                .requested_browser_id
+                .as_deref()
+                .is_some_and(|browser_id| browser_id != session.browser_id.as_str())
+            {
+                return Err("browser_session_selected_browser_session_mismatch".to_string());
+            }
             let browser = self
                 .state
                 .browsers
@@ -623,6 +665,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     session_disposition: SessionRecordDisposition::Reused,
                 });
             }
+            if request.requested_browser_id.is_some() {
+                return Err("browser_session_selected_browser_not_live".to_string());
+            }
             self.retire_browser(
                 &browser,
                 SessionEndReason::BrowserUnresponsive,
@@ -644,12 +689,18 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         {
             return Err("browser_session_reserved_session_identity_mismatch".to_string());
         }
-        let reusable_browser = self
-            .state
-            .browsers
-            .values()
-            .find(|browser| browser.profile_id == profile.id)
-            .cloned();
+        let reusable_browser = if let Some(browser_id) = request.requested_browser_id.as_deref() {
+            self.state.browsers.get(browser_id).cloned()
+        } else {
+            self.state
+                .browsers
+                .values()
+                .find(|browser| browser.profile_id == profile.id)
+                .cloned()
+        };
+        if request.requested_browser_id.is_some() && reusable_browser.is_none() {
+            return Err("browser_session_selected_browser_not_live".to_string());
+        }
         let (browser_id, disposition, launched) = if let Some(browser) = reusable_browser {
             if self.effects.browser_is_live(&browser)? {
                 if reservation.as_ref().is_some_and(|reservation| {
@@ -663,6 +714,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 }
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else {
+                if request.requested_browser_id.is_some() {
+                    return Err("browser_session_selected_browser_not_live".to_string());
+                }
                 self.retire_browser(
                     &browser,
                     SessionEndReason::BrowserUnresponsive,

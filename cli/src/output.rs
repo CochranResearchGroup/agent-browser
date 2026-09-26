@@ -6463,9 +6463,14 @@ Route and display selectors are rejected by the CLI before daemon dispatch.
 Legacy browser-build, manual-login, and attribution selectors remain accepted
 by the compatibility parser but are rejected by the current ordinary SQLite
 adapter. Manual seeding has its own service action.
+An explicit --browser-id reuses only that current live browser when its profile
+matches. An existing logical session cannot switch browsers. Unknown,
+mismatched, or inactive IDs do not launch a replacement browser. A dry run
+checks SQLite identity without live probing.
 
 Options:
   --runtime-profile <id>       Use a registered named runtime profile
+  --browser-id <id>            Reuse this exact current SQLite browser
   --view-stream-provider rdp_gateway
                                Use the managed Guacamole/RDP view stream
   --provider rdp_gateway       Compatibility alias for the stream provider
@@ -6482,6 +6487,7 @@ Global placement:
 Examples:
   agent-browser --json --session alice remote-view open https://example.com/ --runtime-profile work
   agent-browser --json --session alice remote-view open https://example.com/ --runtime-profile work --dry-run
+  agent-browser --json --session alice remote-view open https://example.com/ --browser-id browser-123
   agent-browser --json --session review remote-view open https://example.com/ --job-timeout-ms 120000
 "##
         }
@@ -6493,12 +6499,12 @@ agent-browser doctor - Diagnose local environment and browser connectivity
 
 Usage: agent-browser doctor windows-browser [--port <port>] [--host <host>] [--scan-ports] [--firewall] [--json]
        agent-browser doctor remote-view [--session <name>] [--runtime-profile <id>] [--route-id <id>] [--allow-shared-target] [--json]
-       agent-browser remote-view open [url] [--runtime-profile <id>] [--view-stream-provider rdp_gateway] [--job-timeout-ms <ms>] [--dry-run]
+       agent-browser remote-view open [url] [--runtime-profile <id>] [--browser-id <id>] [--view-stream-provider rdp_gateway] [--job-timeout-ms <ms>] [--dry-run]
 
 Subcommands:
   windows-browser       Diagnose WSL to Windows browser CDP routing without changing system state
   remote-view           Diagnose install, RDP gateway, private display allocator, Guacamole local/public routes, XRDP, RDP user, privilege, config, route-display, and display-access state
-  remote-view open      Select a service-owned remote-view route, launch on the bound display, open a tab, and return dashboard/external route URLs
+  remote-view open      Select a provider-owned route, open the session, and return one opaque durable handoff URL
 
 Options:
   --port <port>         Fixed CDP port to probe for operator-owned browsers (default: 9222)
@@ -6511,21 +6517,22 @@ Options:
                        Report readiness for one retained runtime profile
   --route-id <id>       Report readiness for one retained remote-view route
   --browser-build <build>
-                       Select the browser build for remote-view open, for example stealthcdp_chromium
+                       Legacy selector rejected by ordinary SQLite remote-view open
+  --browser-id <id>     Reuse one exact current live SQLite browser
   --view-stream-provider rdp_gateway
                        Select the RDP gateway view stream for remote-view open
   --provider rdp_gateway
                        Compatibility alias for --view-stream-provider rdp_gateway
-  --route-pool-entry-id Select one retained route-pool entry for remote-view open
+  --route-pool-entry-id Legacy selector rejected by ordinary remote-view open
   --route-pool-entry-json
-                       Use one inline route-pool entry, including route descriptor URL roles, for remote-view open
-  --display <name>      Bind remote-view open to the selected route display, for example :11
-  --manual-login-launch Use the minimal headed Chrome flag posture while keeping managed CDP
+                       Legacy selector rejected by ordinary remote-view open
+  --display <name>      Legacy selector rejected by ordinary remote-view open
+  --manual-login-launch Legacy selector rejected by ordinary SQLite remote-view open
   --json               Output machine-readable diagnostics
 
 Environment:
   AGENT_BROWSER_RDP_ROUTE_POOL_JSON
-                       JSON route-pool array copied into remote-view open requests when no inline route entry is supplied
+                       Legacy route inventory; ordinary remote-view open does not read it
   AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON
                        Optional arbitrary-size route-user inventory consumed by workstation route setup
 

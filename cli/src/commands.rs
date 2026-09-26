@@ -686,7 +686,7 @@ fn parse_service_profile_reset(
     Ok(command)
 }
 
-const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--view-stream-provider rdp_gateway] [--provider rdp_gateway] [--session-name <name>] [--job-timeout-ms <ms>] [--dry-run]";
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-id <id>] [--view-stream-provider rdp_gateway] [--provider rdp_gateway] [--session-name <name>] [--job-timeout-ms <ms>] [--dry-run]";
 
 fn apply_explicit_global_launch_routing_flags(cmd: &mut Value, flags: &Flags) {
     if flags.cli_profile && cmd.get("profile").is_none() {
@@ -2060,8 +2060,8 @@ fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, Pars
 }
 
 /// Parse one manager-owned remote-view open. Route and display selection stays
-/// with the provider, while a positive per-request timeout reaches SQLite
-/// presentation admission.
+/// with the provider. An explicit browser ID selects only that current SQLite
+/// browser; a positive per-request timeout reaches presentation admission.
 fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
     if flags.display_isolation.is_some() {
         return Err(ParseError::InvalidValue {
@@ -9512,7 +9512,7 @@ mod tests {
     #[test]
     fn test_remote_view_open_builds_managed_service_action() {
         let raw = args(
-            "--runtime-profile work remote-view open linkedin.com --provider rdp_gateway --dry-run",
+            "--runtime-profile work remote-view open linkedin.com --browser-id browser-work --provider rdp_gateway --dry-run",
         );
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
@@ -9521,6 +9521,7 @@ mod tests {
         assert_eq!(cmd["action"], "remote_view_open");
         assert_eq!(cmd["url"], "https://linkedin.com");
         assert_eq!(cmd["runtimeProfile"], "work");
+        assert_eq!(cmd["browserId"], "browser-work");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["provider"], "rdp_gateway");

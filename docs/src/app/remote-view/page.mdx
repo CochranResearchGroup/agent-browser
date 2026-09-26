@@ -339,6 +339,10 @@ A positive `--job-timeout-ms` sets this request's presentation queue deadline.
 The CLI rejects explicit route and display selectors before daemon dispatch.
 The current ordinary SQLite adapter rejects browser-build, manual-login, and
 caller-attribution selectors.
+Use `--browser-id <id>` to reuse one exact current live SQLite browser. The
+profile must match, and an existing logical session cannot switch browsers.
+An unknown, mismatched, or inactive ID does not launch a replacement browser.
+Dry run checks stored identity without probing browser liveness.
 
 Require `operatorVisible.state=ready` in an effectful response. Give the
 operator only `handoffUrl` under `/remote-view/<handoff-id>` and reuse the same

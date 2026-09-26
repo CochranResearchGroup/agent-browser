@@ -29,6 +29,117 @@ struct FixtureEffects {
 }
 
 #[test]
+fn explicit_browser_id_reuses_only_that_live_profile_browser() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let first = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .open(OpenBrowserSession::exact_profile(
+        "alice",
+        "profile-a",
+        1_000,
+    ))
+    .unwrap();
+    let mut selected = state.browsers[&first.browser_id].clone();
+    selected.id = "browser-selected".to_string();
+    selected.active_session_ids.clear();
+    state.browsers.insert(selected.id.clone(), selected);
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    );
+    let bob = manager
+        .open(
+            OpenBrowserSession::exact_profile("bob", "profile-a", 2_000)
+                .with_browser_id("browser-selected"),
+        )
+        .unwrap();
+    assert_eq!(bob.browser_id, "browser-selected");
+    assert_eq!(bob.disposition, SessionBrowserDisposition::Reused);
+    assert_eq!(
+        manager.open(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 3_000)
+                .with_browser_id("browser-selected"),
+        ),
+        Err("browser_session_selected_browser_session_mismatch".to_string())
+    );
+    assert_eq!(
+        manager.open(
+            OpenBrowserSession::exact_profile("carol", "profile-a", 3_000)
+                .with_browser_id("browser-missing"),
+        ),
+        Err("browser_session_selected_browser_not_found:browser-missing".to_string())
+    );
+    assert_eq!(
+        manager.open(
+            OpenBrowserSession::exact_profile("carol", "other-profile", 3_000)
+                .with_browser_id("browser-selected"),
+        ),
+        Err("browser_session_selected_browser_profile_mismatch".to_string())
+    );
+    drop(manager);
+    effects.browser_live = false;
+    let before = state.clone();
+    let result = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .open(
+        OpenBrowserSession::exact_profile("carol", "profile-a", 3_000)
+            .with_browser_id("browser-selected"),
+    );
+    assert_eq!(
+        result,
+        Err("browser_session_selected_browser_not_live".to_string())
+    );
+    assert_eq!(state, before);
+    assert_eq!(effects.launches, ["profile-a"]);
+
+    effects.browser_live = true;
+    let expired_selection = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .open(
+        OpenBrowserSession::exact_profile("carol", "profile-a", 400_000)
+            .with_browser_id("browser-selected"),
+    );
+    let expired_selection = expired_selection.unwrap();
+    assert_eq!(expired_selection.browser_id, "browser-selected");
+    assert_eq!(
+        expired_selection.disposition,
+        SessionBrowserDisposition::Reused
+    );
+    assert_eq!(effects.launches, ["profile-a"]);
+}
+
+#[test]
 fn repeated_command_reuses_and_refreshes_named_session() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();

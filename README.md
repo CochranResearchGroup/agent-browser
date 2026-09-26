@@ -947,6 +947,10 @@ handoff. The runtime selects the provider route. Explicit route and display
 selectors are rejected by the CLI before daemon dispatch. An unknown named
 profile or missing default disposable policy returns
 a catalog error before presentation admission.
+Use `--browser-id <id>` to reuse one exact current live SQLite browser.
+Its profile must match, and an existing logical session cannot switch browser
+identity. An unknown, mismatched, or inactive ID does not trigger a replacement
+launch. Dry run checks the stored identity without probing browser liveness.
 
 After resolving a stored handoff, pass the response to
 `deriveServiceRemoteViewHandoffResumeIntent()`. It returns the exact caller
@@ -2610,6 +2614,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--session <name>` | Use a named Browser Session Manager session (or `AGENT_BROWSER_SESSION` env) |
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
 | `--runtime-profile <name>` | Managed runtime profile name (or `AGENT_BROWSER_RUNTIME_PROFILE` env) |
+| `--browser-id <id>` | For `remote-view open`, reuse only this exact current live SQLite browser |
 | `--profile <path>` | Persistent custom user-data-dir path (or `AGENT_BROWSER_PROFILE` env) |
 | `--state <path>` | Load storage state from JSON file (or `AGENT_BROWSER_STATE` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
@@ -4636,6 +4641,8 @@ route-preflight fixture. For an ordinary Browser Session Manager handoff, use:
 ```bash
 agent-browser --json --session alice remote-view open https://example.com/ \
   --runtime-profile work
+agent-browser --json --session alice remote-view open https://example.com/ \
+  --browser-id browser-123
 ```
 
 The runtime selects a current ready provider route from SQLite, launches or
@@ -4648,6 +4655,10 @@ profile or missing default policy fails before presentation admission.
 creating a handoff. A positive `--job-timeout-ms` sets that request's
 presentation queue wait deadline; otherwise the live runtime setting applies.
 It does not change the daemon-wide `--service-job-timeout` setting.
+`--browser-id` selects one exact current live browser from SQLite. Another
+logical session may share that named-profile browser, while an existing session
+cannot switch browser identity. It cannot substitute a different browser or
+launch a replacement when that identity is unknown, mismatched, or inactive.
 
 The CLI rejects explicit route and display selectors before daemon dispatch.
 The compatibility parser still recognizes browser-build, manual-login, and

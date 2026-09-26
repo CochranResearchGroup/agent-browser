@@ -716,6 +716,10 @@ Omitting the profile uses the default session-scoped disposable policy. An
 unknown profile or missing default policy fails before presentation admission.
 Global flags may appear before or after the command. `--session-name` can
 select a logical name distinct from the daemon lane chosen by `--session`.
+Use `--browser-id <id>` to reuse an exact current live SQLite browser. The
+profile must match, and an existing logical session cannot switch browsers.
+An unknown, mismatched, or inactive ID fails without a replacement launch.
+Dry run checks stored identity without probing browser liveness.
 
 A positive `--job-timeout-ms <ms>` sets this open request's presentation queue
 wait deadline; otherwise the live runtime setting applies. `--dry-run` reads

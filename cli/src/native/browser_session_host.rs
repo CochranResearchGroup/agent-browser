@@ -1059,7 +1059,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
         let operation_id = required_string(command, "id")?;
         let session_name = required_string(command, "sessionName")?;
-        let profile_id = self.profile_id_for_journaled_open(command, session_name)?;
+        let existing_operation = self.persistence.find_operation(operation_id)?;
+        let profile_id = if let Some(existing) = &existing_operation {
+            existing.request["intent"]["session"]["profileId"]
+                .as_str()
+                .ok_or("browser_runtime_operation_profile_id_missing")?
+                .to_string()
+        } else {
+            self.profile_id_for_journaled_open(command, session_name)?
+        };
         let activity_at_ms = command
             .get("activityAtMs")
             .or_else(|| {
@@ -1070,7 +1078,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .and_then(serde_json::Value::as_u64)
             .unwrap_or_else(current_unix_ms);
         let owner_key = "browser-runtime-open";
-        let existing_operation = self.persistence.find_operation(operation_id)?;
         let request = if let Some(existing) = &existing_operation {
             if existing.request.get("command") != Some(command) {
                 return Err(format!(
@@ -1084,14 +1091,31 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     && session.profile_id == profile_id
                     && activity_at_ms < session.expires_at_ms
             });
-            let reusable_browser = matching_session
-                .and_then(|session| self.state.browsers.get(&session.browser_id))
-                .or_else(|| {
-                    self.state
-                        .browsers
-                        .values()
-                        .find(|browser| browser.profile_id == profile_id)
-                });
+            let selected_browser_id = optional_string(command, "browserId");
+            if matching_session.is_some_and(|session| {
+                selected_browser_id
+                    .is_some_and(|browser_id| browser_id != session.browser_id.as_str())
+            }) {
+                return Err("browser_session_selected_browser_session_mismatch".to_string());
+            }
+            let reusable_browser = if let Some(browser_id) = selected_browser_id {
+                let browser = self.state.browsers.get(browser_id).ok_or_else(|| {
+                    format!("browser_session_selected_browser_not_found:{browser_id}")
+                })?;
+                if !self.effects.browser_is_live(browser)? {
+                    return Err("browser_session_selected_browser_not_live".to_string());
+                }
+                Some(browser)
+            } else {
+                matching_session
+                    .and_then(|session| self.state.browsers.get(&session.browser_id))
+                    .or_else(|| {
+                        self.state
+                            .browsers
+                            .values()
+                            .find(|browser| browser.profile_id == profile_id)
+                    })
+            };
             let live_display_names = self
                 .state
                 .browsers
@@ -1271,12 +1295,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                     &reservation.browser_id,
                                 ) {
                                     Ok(ReservedBrowserRecovery::Recovered(launch)) => {
+                                        let open_request = self.open_request_for_journaled_command(
+                                            command,
+                                            session_name,
+                                            &profile_id,
+                                            activity_at_ms,
+                                        );
                                         match self.manager().open_reserved_observed(
-                                            Self::open_request_for_journaled_command(
-                                                command,
-                                                session_name,
-                                                activity_at_ms,
-                                            ),
+                                            open_request,
                                             reservation,
                                             launch,
                                         ) {
@@ -1574,10 +1600,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         reservation: BrowserOpenReservation,
     ) -> Result<OpenBrowserSessionResult, String> {
         let session_name = required_string(command, "sessionName")?;
-        self.manager().open_reserved(
-            Self::open_request_for_journaled_command(command, session_name, activity_at_ms),
-            reservation,
-        )
+        let profile_id = self.profile_id_for_journaled_open(command, session_name)?;
+        let request = self.open_request_for_journaled_command(
+            command,
+            session_name,
+            &profile_id,
+            activity_at_ms,
+        );
+        self.manager().open_reserved(request, reservation)
     }
 
     /// Resolve the profile identity without allocating a disposable directory.
@@ -1587,6 +1617,27 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         session_name: &str,
     ) -> Result<String, String> {
+        if let Some(browser_id) = optional_string(command, "browserId") {
+            let browser = self.state.browsers.get(browser_id).ok_or_else(|| {
+                format!("browser_session_selected_browser_not_found:{browser_id}")
+            })?;
+            if optional_string(command, "profileId")
+                .is_some_and(|profile_id| profile_id != browser.profile_id)
+            {
+                return Err("browser_session_selected_browser_profile_mismatch".to_string());
+            }
+            if let Some(allocation) = self.state.disposable_profiles.get(&browser.profile_id) {
+                if allocation.session_name != session_name
+                    || optional_string(command, "disposablePolicyId")
+                        .is_some_and(|policy_id| policy_id != allocation.policy_id)
+                {
+                    return Err("browser_session_selected_browser_profile_mismatch".to_string());
+                }
+            } else if !self.catalog.profiles.contains_key(&browser.profile_id) {
+                return Err(format!("browser_profile_not_found:{}", browser.profile_id));
+            }
+            return Ok(browser.profile_id.clone());
+        }
         if let Some(profile_id) = optional_string(command, "profileId") {
             return Ok(profile_id.to_string());
         }
@@ -1609,20 +1660,30 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn open_request_for_journaled_command(
+        &self,
         command: &serde_json::Value,
         session_name: &str,
+        profile_id: &str,
         activity_at_ms: u64,
     ) -> OpenBrowserSession {
-        match optional_string(command, "profileId") {
-            Some(profile_id) => {
-                OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
-            }
-            None => OpenBrowserSession::disposable(
+        let request = if let Some(allocation) = self.state.disposable_profiles.get(profile_id) {
+            OpenBrowserSession::disposable(session_name, &allocation.policy_id, activity_at_ms)
+        } else if optional_string(command, "profileId").is_some()
+            || optional_string(command, "browserId").is_some()
+        {
+            OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
+        } else {
+            OpenBrowserSession::disposable(
                 session_name,
                 optional_string(command, "disposablePolicyId")
                     .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
                 activity_at_ms,
-            ),
+            )
+        };
+        if let Some(browser_id) = optional_string(command, "browserId") {
+            request.with_browser_id(browser_id)
+        } else {
+            request
         }
     }
 
@@ -4066,9 +4127,10 @@ mod tests {
         )
         .unwrap();
         let authority = ready_keeper_authority_for_handoff();
+        let launches = Arc::new(AtomicUsize::new(0));
         let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
             database_path: database_path.clone(),
-            launches: Arc::new(AtomicUsize::new(0)),
+            launches: launches.clone(),
             reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
             recovery_probes: Arc::new(AtomicUsize::new(0)),
             recover_reserved_browser: false,
@@ -4110,10 +4172,44 @@ mod tests {
         assert_eq!(opened["success"], true, "{opened}");
         assert_eq!(opened["data"]["profileId"], "disposable:default:1");
         assert_eq!(opened["data"]["url"], "https://example.test/disposable");
+        let browser_id = opened["data"]["browserId"].as_str().unwrap();
+        let selected = host.handle_journaled_open_with_keeper_handoff(
+            &serde_json::json!({
+                "id": "journal-open-selected",
+                "action": "browser_session_open",
+                "sessionName": "alice",
+                "browserId": browser_id,
+                "activityAtMs": 2_000
+            }),
+            &authority,
+        );
+        assert_eq!(selected["success"], true, "{selected}");
+        assert_eq!(selected["data"]["browserId"], browser_id);
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        let missing = host.handle_journaled_open_with_keeper_handoff(
+            &serde_json::json!({
+                "id": "journal-open-missing",
+                "action": "browser_session_open",
+                "sessionName": "alice",
+                "browserId": "browser-missing",
+                "activityAtMs": 3_000
+            }),
+            &authority,
+        );
+        assert_eq!(missing["success"], false);
+        assert_eq!(
+            missing["error"],
+            "browser_session_selected_browser_not_found:browser-missing"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
         drop(host);
         let persisted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         let operation = persisted.load_operation("journal-open-1").unwrap();
         assert_eq!(operation.state, BrowserRuntimeOperationState::Committed);
+        assert!(persisted
+            .find_operation("journal-open-missing")
+            .unwrap()
+            .is_none());
         assert_eq!(
             operation.request["intent"]["browser"]["profileId"],
             "disposable:default:1"
@@ -4122,7 +4218,11 @@ mod tests {
         assert_eq!(state.sessions.len(), 1);
         assert_eq!(state.disposable_profiles.len(), 1);
         assert_eq!(state.navigation_history.len(), 1);
-        assert_eq!(persisted.load_handoff_registry().unwrap().handoffs.len(), 1);
+        assert!(!persisted
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
     }
 
     #[test]

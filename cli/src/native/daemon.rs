@@ -98,7 +98,7 @@ fn manager_command_from_remote_view_open_with_mode(
     {
         return Err("remote_view_open_manual_seeding_sqlite_path_pending".to_string());
     }
-    if intent.browser_id.is_some() || intent.browser_build.is_some() {
+    if intent.browser_build.is_some() {
         return Err("remote_view_open_browser_selector_sqlite_path_pending".to_string());
     }
     if intent.control_input != "manual_attached_desktop" {
@@ -142,6 +142,9 @@ fn manager_command_from_remote_view_open_with_mode(
     if let Some(profile_id) = profiles.into_iter().next() {
         manager_command["profileId"] = Value::String(profile_id.to_string());
     }
+    if let Some(browser_id) = intent.browser_id {
+        manager_command["browserId"] = Value::String(browser_id);
+    }
     if let Some(url) = intent.url {
         manager_command["url"] = Value::String(url);
     }
@@ -180,23 +183,35 @@ fn sqlite_remote_view_open_plan(
 ) -> Value {
     let session_name = manager_command["sessionName"].as_str().unwrap_or_default();
     let profile_id = manager_command["profileId"].as_str();
+    let selected_browser_id = manager_command["browserId"].as_str();
     let observed_at_ms = super::presentation_request_admission::now_ms();
-    let reusable = profile_id.is_some_and(|profile_id| {
-        sessions.sessions.values().any(|session| {
-            session.name == session_name
-                && session.profile_id == profile_id
-                && session.expires_at_ms > observed_at_ms
-                && sessions.browsers.contains_key(&session.browser_id)
-        })
-    });
+    let reusable = selected_browser_id
+        .is_some_and(|browser_id| sessions.browsers.contains_key(browser_id))
+        || profile_id.is_some_and(|profile_id| {
+            sessions.sessions.values().any(|session| {
+                session.name == session_name
+                    && session.profile_id == profile_id
+                    && session.expires_at_ms > observed_at_ms
+                    && sessions.browsers.contains_key(&session.browser_id)
+            })
+        });
+    let resolved_profile_id = selected_browser_id
+        .and_then(|browser_id| sessions.browsers.get(browser_id))
+        .map(|browser| browser.profile_id.as_str())
+        .or(profile_id);
+    let disposable_policy_id = resolved_profile_id
+        .and_then(|profile_id| sessions.disposable_profiles.get(profile_id))
+        .map(|allocation| allocation.policy_id.as_str())
+        .or_else(|| resolved_profile_id.is_none().then_some("default"));
     serde_json::json!({
         "schemaVersion": "agent-browser.remote-view-open-plan.v1",
         "status": "planned",
         "dryRun": true,
         "browserSessionManager": true,
         "sessionName": session_name,
-        "profileId": profile_id,
-        "disposablePolicyId": if profile_id.is_none() { Some("default") } else { None },
+        "profileId": resolved_profile_id,
+        "browserId": selected_browser_id,
+        "disposablePolicyId": disposable_policy_id,
         "url": manager_command.get("url"),
         "browserAcquisition": if reusable { "reuse_candidate" } else { "launch_candidate" },
         "browserLiveness": "not_checked",
@@ -236,6 +251,47 @@ fn validate_remote_view_open_profile(
     store: &super::browser_session_store::BrowserRuntimeSqliteStore,
 ) -> Result<(), String> {
     let catalog = store.load_profile_catalog()?;
+    if let Some(browser_id) = manager_command["browserId"].as_str() {
+        let state = store.load_session_state()?;
+        let browser = state
+            .browsers
+            .get(browser_id)
+            .ok_or_else(|| format!("browser_session_selected_browser_not_found:{browser_id}"))?;
+        if manager_command["profileId"]
+            .as_str()
+            .is_some_and(|profile_id| profile_id != browser.profile_id)
+        {
+            return Err("browser_session_selected_browser_profile_mismatch".to_string());
+        }
+        if let Some(allocation) = state.disposable_profiles.get(&browser.profile_id) {
+            if manager_command["sessionName"].as_str() != Some(allocation.session_name.as_str()) {
+                return Err("browser_session_selected_browser_profile_mismatch".to_string());
+            }
+            if !catalog
+                .disposable_policies
+                .contains_key(&allocation.policy_id)
+            {
+                return Err(format!(
+                    "browser_disposable_policy_not_found:{}",
+                    allocation.policy_id
+                ));
+            }
+        } else if !catalog.profiles.contains_key(&browser.profile_id) {
+            return Err(format!("browser_profile_not_found:{}", browser.profile_id));
+        }
+        let activity_at_ms = manager_command["activityAtMs"]
+            .as_u64()
+            .unwrap_or_else(super::presentation_request_admission::now_ms);
+        if state.sessions.values().any(|session| {
+            session.name == manager_command["sessionName"].as_str().unwrap_or_default()
+                && session.profile_id == browser.profile_id
+                && activity_at_ms < session.expires_at_ms
+                && session.browser_id.as_str() != browser_id
+        }) {
+            return Err("browser_session_selected_browser_session_mismatch".to_string());
+        }
+        return Ok(());
+    }
     if let Some(profile_id) = manager_command["profileId"].as_str() {
         if !catalog.profiles.contains_key(profile_id) {
             return Err(format!("browser_profile_not_found:{profile_id}"));
@@ -2457,6 +2513,18 @@ mod tests {
         assert_eq!(named["sessionName"], "alice");
         assert_eq!(named["url"], "https://example.test/alice");
 
+        let selected = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "browserId": "browser:work",
+                "sessionName": "alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(selected["browserId"], "browser:work");
+        assert!(selected.get("profileId").is_none());
+
         let disposable = manager_command_from_remote_view_open(
             &serde_json::json!({"action":"remote_view_open"}),
             "daemon-lane",
@@ -2536,6 +2604,35 @@ mod tests {
         assert_eq!(plan["operatorVisible"]["state"], "not_checked");
         assert!(plan["effects"].as_array().unwrap().is_empty());
         assert!(plan["handoffUrl"].is_null());
+        let mut selected_state = agent_browser_service_model::BrowserSessionState::default();
+        selected_state.browsers.insert(
+            "browser-work".to_string(),
+            agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser-work".to_string(),
+                profile_id: "work".to_string(),
+                pid: 42,
+                cdp_endpoint: "http://127.0.0.1:9222".to_string(),
+                process_identity: None,
+                desktop: None,
+                active_session_ids: Vec::new(),
+            },
+        );
+        let selected_command = manager_command_from_remote_view_open_with_mode(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "dryRun": true,
+                "browserId": "browser-work",
+                "sessionName": "bob"
+            }),
+            "daemon-lane",
+            true,
+        )
+        .unwrap();
+        let selected_plan =
+            sqlite_remote_view_open_plan(&selected_command, &keeper, &selected_state);
+        assert_eq!(selected_plan["browserId"], "browser-work");
+        assert_eq!(selected_plan["profileId"], "work");
+        assert_eq!(selected_plan["browserAcquisition"], "reuse_candidate");
         assert_eq!(
             manager_command_from_remote_view_open_with_mode(
                 &serde_json::json!({"action":"remote_view_open","dryRun":true,"routeId":"operator-route"}),
@@ -2592,6 +2689,37 @@ mod tests {
         assert_eq!(result["success"], true);
         assert_eq!(result["data"]["profileId"], "work");
         assert_eq!(result["data"]["handoffUrl"], Value::Null);
+        store.save_session_state(&selected_state).unwrap();
+        let selected_dry_run = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "browserId": "browser-work",
+            "sessionName": "bob"
+        });
+        let selected_result = sqlite_remote_view_open_plan_from_store(
+            &selected_dry_run,
+            "daemon-lane",
+            &keeper,
+            &store,
+        )
+        .unwrap();
+        assert_eq!(selected_result["data"]["browserId"], "browser-work");
+        assert_eq!(selected_result["data"]["profileId"], "work");
+        assert_eq!(
+            selected_result["data"]["browserAcquisition"],
+            "reuse_candidate"
+        );
+        let conflicting = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "browserId": "browser-work",
+            "runtimeProfile": "other",
+            "sessionName": "bob"
+        });
+        assert_eq!(
+            sqlite_remote_view_open_plan_from_store(&conflicting, "daemon-lane", &keeper, &store),
+            Err("browser_session_selected_browser_profile_mismatch".to_string())
+        );
         let mut permissions = fs::metadata(&migration.archive_directory)
             .unwrap()
             .permissions();
