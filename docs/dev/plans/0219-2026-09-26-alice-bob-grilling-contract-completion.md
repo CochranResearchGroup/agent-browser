@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -28,7 +28,9 @@ Execution owner: the primary agent assigned by the operator to this inherited la
 
 Authority: the operator directed execution of Plan 0219 on 2026-09-26; ordinary in-scope implementation, validation, isolated development runtime effects, and bounded repair are authorized under this plan's controls and non-goals
 
-Overall effort ceiling: 600,000 tokens from the current goal's zero-token baseline; reserve 120,000 tokens for final reconciliation, validation, evidence, and closeout; all prior effort, attempts, reviews, and failures carry forward
+Renewed effort ceiling: 1,000,000 additional tokens from the operator's 2026-09-26 resume direction; reserve 200,000 tokens for final reconciliation, validation, evidence, and closeout; the prior 545,502-token P219 window and every predecessor attempt, review, failure, and receipt carry forward
+
+Policy capsule: [P219 M1B through M2B](../policy-capsules/p219-m1b-m2b.md); use this verified capsule instead of broad policy rereads until one of its explicit triggers fires
 
 ## Objective
 
@@ -154,14 +156,34 @@ service readback, not a fresh counter or an independently reconciled total of
 all preceding windows. Do not sum overlapping counters or treat a new thread
 with no goal as renewed authority.
 
-The operator subsequently directed execution of Plan 0219 with a 600,000-token
-ceiling. The current goal began at a zero-token baseline. Reserve 120,000
-tokens for final reconciliation, validation, evidence, and closeout. Reassess
-delivery economics at each material checkpoint and no less often than every
-60 minutes of active work. M1A's first evidence deadline is 60,000 tokens for
-the reconciled blocker inventory and at least one discriminating current-source
-result. Historical P218 milestone estimates are not available budget, and all
-predecessor attempt accounting carries forward.
+The first Plan 0219 execution window stopped at 545,502 tokens after M1A and a
+partial M1B. The operator renewed execution with 1,000,000 additional tokens.
+This is a new bounded allowance, not erasure of the earlier usage. Reserve
+200,000 tokens for final reconciliation, validation, evidence and custody.
+At 700,000 renewed tokens, require direct evidence that the source is candidate
+capable and that remaining environment work can reach M2B within the 100,000
+implementation tokens still available before the reserve. If not, stop
+implementation and preserve the exact blocker. In all cases, implementation
+stops at 800,000 renewed tokens and the final 200,000 are closeout-only.
+
+The reasonable accomplishment for this renewal is the first installed outcome
+checkpoint: complete M1B, complete the minimum M2A provider/live-viewer join,
+and pass M2B on one frozen isolated-development candidate. Reaching that exact
+outcome is an alternative stop criterion even when tokens remain. It must
+include the ordinary authenticated Alice/Bob workflow, distinct session, tab,
+target, handoff, activity and expiry identities on one exact-profile browser,
+success-only command activity, Alice-first cleanup with Bob preserved, final
+browser termination with fresh process census, authenticated pixels and input,
+viewer connect, heartbeat, disconnect and control transfer, and bounded
+restart plus durable-handoff recovery without page-effect replay. Stop after
+reconciling its evidence and custody; M3, M4 and M5 remain open for a successor
+window.
+
+Use the verified [P219 capsule](../policy-capsules/p219-m1b-m2b.md) as the
+policy entrypoint. Its hashes match the adopted policy sources at renewal. Do
+not reread the broad policy set unless the capsule's scope, effect class,
+branch, worktree, owner, validation contract or policy hash changes, or a
+failure exposes an ambiguity the capsule does not resolve.
 
 Sequence: M1A → M1B → M2A → M2B → M3/M4 → M5. Read-only environment
 readiness checks may accompany M1. M3 and independent M4 work may overlap only

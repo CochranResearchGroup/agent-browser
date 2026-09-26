@@ -4,7 +4,9 @@
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is `OPEN`. P218 version 45 is `CANCELLED` as superseded while incomplete.
-The operator directed execution of Plan 0219 on September 26.
+The operator directed execution of Plan 0219 on September 26 and renewed the
+blocked campaign with 1,000,000 additional tokens after the first P219 window
+stopped at 545,502 tokens.
 The full G01–G45 specification and P01–P19 prohibitions remain unchanged.
 
 Custody remains on `platform/p211-simple-cold-upgrade`, draft PR #191, work
@@ -69,16 +71,20 @@ September 26 handoff recorded goal thread
 `01a0da16-eee9-7511-99e6-ffc04d7b3cff` as `blocked` with
 `tokensUsed=3,808,483`. This is a historical service readback, not a new
 measurement or a sum of all windows. P218's earlier budget/attempt history
-remains preserved. The current Plan 0219 goal starts from a zero-token baseline
-with a 600,000-token ceiling. Reserve 120,000 tokens for final reconciliation,
-validation, evidence, and closeout. M1A's first evidence deadline is 60,000
-tokens; reassess delivery economics at each material checkpoint and at least
-hourly.
+remains preserved. The renewed P219 allowance is 1,000,000 additional tokens
+with 200,000 held for reconciliation, validation, evidence and custody. At
+700,000 renewed tokens, implementation continues only if direct evidence shows
+M2B remains reachable before the 800,000 implementation stop. The alternative
+outcome stop is complete M1B and M2A plus one frozen isolated-development
+candidate passing the installed M2B Alice/Bob checkpoint. M3 through M5 remain
+open after that stop. The verified policy entrypoint is [the P219 M1B–M2B
+capsule](docs/dev/policy-capsules/p219-m1b-m2b.md); broad policy rereads occur
+only on one of its explicit triggers.
 
-Current action: run P219 M1A's bounded evidence reconciliation, then qualify remaining ordinary
-paths and the minimum provider setup. The first installed outcome is the
-Alice/Bob workflow, followed by complete recovery and operational conformance.
-The early candidate cannot supply final proof for a different final candidate.
+Current action: finish M1B's B02, B05 and B06 source blockers, join the minimum
+M2A provider and live-viewer path, then freeze and qualify one M2B Alice/Bob
+candidate. The early candidate cannot supply final proof for a different final
+candidate.
 
 Retained stops: no production/staging mutation, ingress publication, merge,
 release, worktree removal, private-site acceptance, or automatic external

@@ -57,13 +57,13 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M1A is reconciled; ordinary manager open and navigation bootstrap are keeper-only, stale history cannot change manager translation or block valid migrated profile opens, and focused receipts pass; inventory is zero pass, 28 partial, seven fail, ten missing; P09 is violated, seven detectors have gaps and eleven prohibitions are unverified; no installed P219 acceptance
-    validation_ref: bf33210e
+    validation_status: M1A is reconciled and M1B is partial; keeper-only handoff, stale-history availability, ordinary-open coalescing, waiting-only restart, success-only heartbeat and provider-free Alice/Bob isolation receipts pass; inventory is zero pass, 28 partial, seven fail, ten missing; no installed P219 acceptance; execution renewed for M1B through the M2B outcome checkpoint under the verified capsule
+    validation_ref: 3946f81b
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: Execution resumed with a 600,000-token ceiling; M1A must reconcile stale G-row and closure evidence before remaining ordinary paths, provider integration, installed Alice/Bob acceptance, recovery, and operational conformance
+    blocker: M1B blockers B02, B05 and B06 remain before the minimum M2A provider join and installed M2B Alice/Bob checkpoint; the renewed window stops at complete M2B or 1,000,000 additional tokens, with the last 200,000 reserved for closeout
     updated_at: 2026-09-26
