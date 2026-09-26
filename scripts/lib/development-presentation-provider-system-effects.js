@@ -440,8 +440,22 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         throw new Error('development Guacamole operator route grant count drifted');
       }
     },
-    openWarmRoutes() {
-      throw new Error('development hidden-viewer bootstrap removed; route-keeper runtime required');
+    openWarmRoutes(descriptor) {
+      const runtime = developmentRuntimeNamespace(env);
+      runRequired(
+        run,
+        'systemctl',
+        ['--user', 'restart', `${runtime.name}-runtime-host.service`],
+        {},
+        'restart development runtime host for route-keeper catalog adoption',
+      );
+      waitFor(
+        run,
+        () => probeDevelopmentPresentationProvider(descriptor, { run }).displays.length >=
+          descriptor.warmSlots,
+        90000,
+        'runtime-owned development warm routes',
+      );
     },
     observe: (descriptor) => probeDevelopmentPresentationProvider(descriptor, { run }),
     grantDisplayAccess(display) {
