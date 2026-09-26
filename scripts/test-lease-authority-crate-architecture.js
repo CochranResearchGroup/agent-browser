@@ -84,7 +84,7 @@ function check(root) {
   }
   requireCondition(workspace.includes('crates/agent-browser-lease-authority'), 'root Cargo workspace must include agent-browser-lease-authority');
   requireCondition(crateManifest.includes('name = "agent-browser-lease-authority"'), 'agent-browser-lease-authority package manifest must exist');
-  requireCondition(cliManifest.includes('agent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }'), 'CLI must depend directly on the local Lease-authority crate');
+  requireCondition(!cliManifest.includes('agent-browser-lease-authority'), 'default CLI must not depend on the quarantined Lease-authority crate');
   requireCondition(existsSync(join(root, 'crates/agent-browser-lease-authority/src/lib.rs')), 'Lease-authority crate must own src/lib.rs');
   requireCondition(runtimeOwnerSource.length > 0, 'Lease-authority crate must own the runtime-owner kernel');
   requireCondition(!existsSync(join(root, 'cli/src/native/service_lease_authority.rs')), 'legacy native::service_lease_authority implementation must be absent');
@@ -101,7 +101,7 @@ function check(root) {
     'Lease-authority crate must retain an independent non-fail-fast Linux, macOS, and Windows CI gate',
   );
   requireCondition(!cliSources.some((source) => /(?:crate::native::|super(?:::\s*super)*::)service_lease_authority\b/.test(source)), 'CLI source must not import the removed native service_lease_authority owner');
-  requireCondition(cliSources.some((source) => /\b(?:use|pub\s+use)\s+agent_browser_lease_authority(?:::|\s*;)/.test(source)), 'CLI consumers must import agent_browser_lease_authority directly');
+  requireCondition(!cliSources.some((source) => /\bagent_browser_lease_authority\b/.test(source)), 'default CLI source must not import the quarantined Lease-authority crate');
   requireCondition(!/\bagent-browser\s*=/.test(crateManifest), 'Lease-authority crate must not depend back on the agent-browser package');
   const forbiddenDependencies = ['agent-browser-cdp', 'tokio', 'reqwest', 'image'];
   requireCondition(
@@ -155,22 +155,22 @@ function selfTest() {
     mkdirSync(join(root, 'crates/agent-browser-lease-authority/src'), { recursive: true });
     mkdirSync(join(root, '.github/workflows'), { recursive: true });
     writeFileSync(join(root, 'Cargo.toml'), '[workspace]\nmembers = ["cli", "crates/agent-browser-lease-authority"]\n');
-    writeFileSync(join(root, 'cli/Cargo.toml'), '[dependencies]\nagent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }\n');
+    writeFileSync(join(root, 'cli/Cargo.toml'), '[dependencies]\n');
     writeFileSync(join(root, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n');
     writeFileSync(join(root, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct Authority;\n');
     writeFileSync(join(root, 'crates/agent-browser-lease-authority/src/runtime_owner.rs'), 'pub struct RuntimeOwnerRegistry {\n  revision: u64,\n  owners: BTreeMap<String, ProfileOwner>,\n  principal_bindings: BTreeMap<String, RuntimeOwnerPrincipalBinding>,\n  lifecycle_records: BTreeMap<String, RuntimeLifecycleRecord>,\n}\n');
     writeFileSync(join(root, '.github/workflows/lease-authority.yml'), 'strategy:\n  fail-fast: false\nrun: cargo test --profile ci -p agent-browser-lease-authority\ntargets: x86_64-unknown-linux-gnu aarch64-apple-darwin x86_64-apple-darwin x86_64-pc-windows-msvc\n');
     writeFileSync(join(root, 'cli/src/native/mod.rs'), 'pub(crate) mod adapter;\n');
-    writeFileSync(join(root, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\n');
+    writeFileSync(join(root, 'cli/src/native/adapter.rs'), 'pub fn adapter() {}\n');
     writeFileSync(join(root, 'cli/src/native/service_store.rs'), 'fn project(persistence: &RuntimeOwnerPersistenceParts) { let _ = &persistence.lifecycle_records; }\n');
-    writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\n');
-    writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub(crate) use agent_browser_lease_authority::BrowserAdoptionMode;\n');
+    writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub fn removed_runtime_owner_surface() {}\n');
+    writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub fn removed_runtime_adoption_surface() {}\n');
     if (check(root).length) throw new Error('valid extracted fixture was rejected');
     const cases = [
       ['missing crate', 'rm-crate'], ['upward import', 'upward-import'],
       ['retained implementation', 'retained-implementation'], ['retained directory', 'retained-directory'],
-      ['retained facade', 'retained-facade'], ['missing direct dependency', 'missing-dependency'],
-      ['reverse dependency', 'reverse-dependency'], ['missing direct import', 'missing-import'],
+      ['retained facade', 'retained-facade'], ['forbidden CLI dependency', 'forbidden-cli-dependency'],
+      ['reverse dependency', 'reverse-dependency'], ['forbidden CLI import', 'forbidden-cli-import'],
       ['upward crate import', 'upward-crate-import'],
       ['forbidden dependency', 'forbidden-dependency'], ['public signing type', 'public-signing-type'],
       ['public secret loader', 'public-secret-loader'], ['public claim map', 'public-claim-map'],
@@ -204,13 +204,9 @@ function selfTest() {
         if (mutation === 'retained-implementation') writeFileSync(join(mutated, 'cli/src/native/service_lease_authority.rs'), 'pub struct Authority;\n');
         if (mutation === 'retained-directory') mkdirSync(join(mutated, 'cli/src/native/service_lease_authority'), { recursive: true });
         if (mutation === 'retained-facade') writeFileSync(join(mutated, 'cli/src/native/mod.rs'), 'mod service_lease_authority;\n');
-        if (mutation === 'missing-dependency') writeFileSync(join(mutated, 'cli/Cargo.toml'), '[dependencies]\n');
+        if (mutation === 'forbidden-cli-dependency') writeFileSync(join(mutated, 'cli/Cargo.toml'), '[dependencies]\nagent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }\n');
         if (mutation === 'reverse-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\nagent-browser = { path = "../../cli" }\n');
-        if (mutation === 'missing-import') {
-          writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'pub fn adapter() {}\n');
-          writeFileSync(join(mutated, 'cli/src/runtime_owner_transfer.rs'), 'pub fn adapter() {}\n');
-          writeFileSync(join(mutated, 'cli/src/runtime_adoption.rs'), 'pub fn adapter() {}\n');
-        }
+        if (mutation === 'forbidden-cli-import') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\n');
         if (mutation === 'upward-crate-import') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'use crate::native::service_lease_authority::Authority;\n');
         if (mutation === 'forbidden-dependency') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/Cargo.toml'), '[package]\nname = "agent-browser-lease-authority"\n[dependencies]\ntokio = "1"\n');
         if (mutation === 'public-signing-type') writeFileSync(join(mutated, 'crates/agent-browser-lease-authority/src/lib.rs'), 'pub struct LeaseAuthoritySigningKey;\n');

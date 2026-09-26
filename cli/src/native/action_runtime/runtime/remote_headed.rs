@@ -1,10 +1,6 @@
 #![allow(unused_imports)]
 use super::capability::service_browser_id;
 use super::cdp_free_plan::{browser_host_from_command, optional_command_string};
-use super::daemon::ServiceProfileLeaseGate;
-use super::profile_lease::{
-    profile_lease_wait_timeout_ms_from_command, service_profile_lease_gate,
-};
 use super::recovery::DaemonState;
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
@@ -20,7 +16,6 @@ use crate::native::service_health::{
     BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
     BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
 };
-use crate::native::service_lease_authority_adapter::authorize_lease_effect_in_repository;
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
     ProfileSelectionRequest, ServiceLaunchMetadata,
@@ -36,7 +31,7 @@ use crate::native::service_model::{
     RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry,
     ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -44,7 +39,6 @@ use crate::native::state;
 use crate::native::stream_runtime::{
     stream_file_path, write_engine_file, write_extensions_file, write_provider_file,
 };
-use agent_browser_lease_authority::{LeaseEffectAuthorization, LeaseEffectContext};
 use serde_json::{json, Map, Value};
 use std::env;
 use std::fs;
@@ -172,7 +166,6 @@ pub(crate) fn remote_headed_view_streams_from_command(command: &Value) -> Vec<Vi
         connection_name,
         route_source,
         provider_mode,
-        viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
         controller_epoch: 0,
         read_only: false,
@@ -382,7 +375,6 @@ pub(crate) fn cdp_screencast_view_stream(
         connection_name: None,
         route_source: Some("daemon_stream_server".to_string()),
         provider_mode: Some("simultaneous_view".to_string()),
-        viewer_lease_ids: Vec::new(),
         controller_lease_id: None,
         controller_epoch: 0,
         read_only: !ready,
@@ -474,45 +466,7 @@ pub(crate) fn persist_current_browser_health(
     health: ServiceBrowserHealth,
     metadata: Option<ServiceLaunchMetadata>,
 ) -> Result<(), String> {
-    register_current_browser_lifecycle(state)?;
     persist_current_browser_projection(state, host, health, metadata)
-}
-
-#[cfg(target_os = "linux")]
-pub(crate) fn persist_protected_current_browser_health(
-    state: &mut DaemonState,
-    owner: &agent_browser_lease_authority::ProtectedBrowserOwner,
-    host: ServiceBrowserHost,
-    health: ServiceBrowserHealth,
-    metadata: Option<ServiceLaunchMetadata>,
-) -> Result<(), String> {
-    let observed_pid = state
-        .browser
-        .as_ref()
-        .and_then(|manager| manager.browser_pid().or(state.attached_browser_pid))
-        .ok_or_else(|| "protected_browser_projection_pid_missing".to_string())?;
-    if owner.process_pid != observed_pid || owner.daemon_session_route != state.session_id {
-        return Err("protected_browser_projection_owner_mismatch".to_string());
-    }
-    let observed_at = chrono::Utc::now();
-    let mut metadata = metadata.unwrap_or_default();
-    metadata.protected_browser_owner_observation = Some(ProtectedBrowserOwnerObservation {
-        schema_version: "agent-browser.protected-browser-owner-observation.v1".to_string(),
-        source: "protected_lease_authority_receipt".to_string(),
-        operational_authority: false,
-        authority_receipt_id: owner.authority_receipt_id.clone(),
-        owner_id: owner.owner_id.clone(),
-        owner_generation: owner.owner_generation,
-        logical_browser_id: owner.logical_browser_id.clone(),
-        daemon_session_route: owner.daemon_session_route.clone(),
-        process_instance_digest: owner.process_instance_digest.clone(),
-        process_pid: owner.process_pid,
-        owner_revision: owner.revision,
-        observed_at: observed_at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
-        freshness_expires_at: (observed_at + chrono::Duration::seconds(30))
-            .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true),
-    });
-    persist_current_browser_projection(state, host, health, Some(metadata))
 }
 
 fn persist_current_browser_projection(
@@ -583,256 +537,4 @@ fn persist_current_browser_projection(
         }
     }
     Ok(())
-}
-
-pub(crate) fn register_current_browser_lifecycle(state: &mut DaemonState) -> Result<(), String> {
-    let Some(manager) = state.browser.as_ref() else {
-        return Ok(());
-    };
-    let Some(pid) = manager.browser_pid().or(state.attached_browser_pid) else {
-        return Ok(());
-    };
-    let profile_root = manager
-        .browser_user_data_dir()
-        .map(Path::to_path_buf)
-        .or_else(|| {
-            state
-                .attached_runtime_profile
-                .as_deref()
-                .and_then(|profile| {
-                    crate::runtime_profile::runtime_profile_user_data_dir(profile).ok()
-                })
-        });
-    let Some(profile_root) = profile_root else {
-        if manager.browser_pid().is_some() {
-            return Err("runtime_lifecycle_owned_browser_profile_unavailable".to_string());
-        }
-        return Ok(());
-    };
-    let process_identity = crate::process_identity::capture_process_identity(pid, None, None)
-        .ok_or_else(|| "runtime_lifecycle_process_identity_unavailable".to_string())?;
-    let cdp_endpoint = manager.get_cdp_url().to_string();
-    let target_ids = manager
-        .pages_list()
-        .into_iter()
-        .map(|page| page.target_id)
-        .collect::<Vec<_>>();
-    let repository = LockedServiceStateRepository::default_json()?;
-    let service_state = repository.load_snapshot()?;
-    let process_instance_digest = crate::native::runtime_lifecycle::digest_json(&process_identity)?;
-    let logical_browser_id = managed_lane_logical_browser_id(
-        &state.session_id,
-        state.runtime_owner_binding.as_ref(),
-        &service_state,
-        &process_instance_digest,
-    )?;
-    let authority = crate::native::runtime_lifecycle::RuntimeLifecycleAuthority::new(&repository);
-    let registration = crate::native::runtime_lifecycle::ManagedLaneRegistration {
-        logical_browser_id,
-        profile_root,
-        daemon_session_route: state.session_id.clone(),
-        process_group_id: crate::process_identity::observe_process_group_id(pid),
-        process_identity: process_identity.clone(),
-        browser_family: state.engine.clone(),
-        cdp_endpoint,
-        target_ids,
-    };
-    let binding = authority.register_managed_lane(registration)?;
-    state.runtime_owner_binding = Some(binding);
-    let binding = state
-        .runtime_owner_binding
-        .as_ref()
-        .expect("newly registered runtime owner binding remains present");
-    let reviewed_process_tree = authority.reviewed_process_tree(binding, &process_identity)?;
-    if let Some(manager) = state.browser.as_mut() {
-        manager.mark_lifecycle_managed(reviewed_process_tree);
-    }
-    Ok(())
-}
-
-fn managed_lane_logical_browser_id(
-    daemon_session_route: &str,
-    binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
-    service_state: &crate::native::service_model::ServiceState,
-    process_instance_digest: &str,
-) -> Result<String, String> {
-    let default_browser_id = super::capability::service_browser_id(daemon_session_route);
-    let Some(binding) = binding else {
-        return Ok(default_browser_id);
-    };
-    if binding.claim.daemon_session_route != daemon_session_route
-        || binding.claim.process_instance_digest != process_instance_digest
-    {
-        return Err("runtime_lifecycle_bound_browser_identity_inconsistent".to_string());
-    }
-    if service_state
-        .browsers
-        .get(&binding.claim.logical_browser_id)
-        .is_some_and(|browser| {
-            browser
-                .active_session_ids
-                .iter()
-                .any(|session_id| session_id == daemon_session_route)
-        })
-    {
-        return Ok(binding.claim.logical_browser_id.clone());
-    }
-    if service_state
-        .browsers
-        .contains_key(&binding.claim.logical_browser_id)
-        || service_state.browsers.contains_key(&default_browser_id)
-    {
-        return Err("runtime_lifecycle_bound_browser_identity_unproven".to_string());
-    }
-    let mut candidates = service_state
-        .browsers
-        .values()
-        .filter(|browser| {
-            browser
-                .active_session_ids
-                .iter()
-                .any(|session_id| session_id == daemon_session_route)
-        })
-        .filter(|browser| {
-            service_state
-                .browser_process_identities
-                .get(&browser.id)
-                .and_then(|identity| {
-                    crate::native::runtime_lifecycle::digest_json(&identity.process_identity).ok()
-                })
-                .as_deref()
-                == Some(process_instance_digest)
-        });
-    let candidate = candidates
-        .next()
-        .ok_or_else(|| "runtime_lifecycle_bound_browser_identity_unproven".to_string())?;
-    if candidates.next().is_some() {
-        return Err("runtime_lifecycle_bound_browser_identity_ambiguous".to_string());
-    }
-    Ok(candidate.id.clone())
-}
-
-#[cfg(test)]
-#[test]
-fn managed_lane_recovers_stable_browser_from_legacy_route_alias() {
-    let process_identity = crate::process_identity::RecordedProcessIdentity {
-        pid: 4242,
-        start_token: "linux:boot:4242".to_string(),
-        executable_path: Some("/opt/chrome".to_string()),
-        browser_family: Some("chrome".to_string()),
-    };
-    let process_instance_digest =
-        crate::native::runtime_lifecycle::digest_json(&process_identity).unwrap();
-    let browser_id = "session:bill-soylei".to_string();
-    let daemon_session_route = "handoff-bill";
-    let service_state = crate::native::service_model::ServiceState {
-        browsers: std::collections::BTreeMap::from([(
-            browser_id.clone(),
-            crate::native::service_model::BrowserProcess {
-                id: browser_id.clone(),
-                active_session_ids: vec![daemon_session_route.to_string()],
-                ..Default::default()
-            },
-        )]),
-        browser_process_identities: std::collections::BTreeMap::from([(
-            browser_id.clone(),
-            crate::native::service_model::ServiceBrowserProcessIdentity {
-                process_identity,
-                user_data_dir: None,
-                runtime_profile: Some("bill-soylei".to_string()),
-            },
-        )]),
-        ..Default::default()
-    };
-    let binding = crate::runtime_owner_transfer::RuntimeOwnerBinding::observation_only(
-        crate::runtime_owner_transfer::OwnerAuthorityClaim {
-            owner_id: "owner-bill".to_string(),
-            profile_identity_digest: "1".repeat(64),
-            owner_generation: 7,
-            logical_browser_id: "session:historical-source-route".to_string(),
-            daemon_session_route: daemon_session_route.to_string(),
-            process_instance_digest: process_instance_digest.clone(),
-        },
-    );
-
-    assert_eq!(
-        managed_lane_logical_browser_id(
-            daemon_session_route,
-            Some(&binding),
-            &service_state,
-            &process_instance_digest,
-        )
-        .unwrap(),
-        browser_id
-    );
-
-    let mut occupied_alias = service_state;
-    occupied_alias.browsers.insert(
-        binding.claim.logical_browser_id.clone(),
-        crate::native::service_model::BrowserProcess {
-            id: binding.claim.logical_browser_id.clone(),
-            active_session_ids: vec!["foreign-route".to_string()],
-            ..Default::default()
-        },
-    );
-    assert_eq!(
-        managed_lane_logical_browser_id(
-            daemon_session_route,
-            Some(&binding),
-            &occupied_alias,
-            &process_instance_digest,
-        )
-        .unwrap_err(),
-        "runtime_lifecycle_bound_browser_identity_unproven"
-    );
-}
-/// Enforces service-owned profile leases before Chrome starts.
-///
-/// The control-plane scheduler handles bounded `wait` policy by requeueing the
-/// request so the worker can run other jobs. This launch-path guard remains as
-/// a deterministic fallback for direct execution and rejects unresolved waits.
-/// The same retained session may still reuse its browser, and non-service
-/// launches keep the existing direct-control behavior.
-pub(crate) async fn ensure_service_profile_lease_available(
-    metadata: &ServiceLaunchMetadata,
-    session_id: &str,
-    command: &Value,
-) -> Result<(), String> {
-    if let Some(value) = command.get("leaseEffectAuthorization") {
-        let authorization: LeaseEffectAuthorization = serde_json::from_value(value.clone())
-            .map_err(|error| format!("lease_authority_invalid_effect_authorization:{error}"))?;
-        let expected_profile_id = metadata
-            .profile_id
-            .as_deref()
-            .ok_or_else(|| "lease_authority_effect_profile_missing".to_string())?;
-        if authorization.profile_id() != Some(expected_profile_id) {
-            return Err("lease_authority_effect_profile_mismatch".to_string());
-        }
-        let operation_idempotency_key = command
-            .get("leaseEffectOperationId")
-            .and_then(Value::as_str)
-            .filter(|value| !value.trim().is_empty())
-            .ok_or_else(|| "lease_authority_effect_operation_id_missing".to_string())?;
-        let context = LeaseEffectContext {
-            action_class: "browser_launch",
-            audience: session_id,
-            operation_idempotency_key,
-        };
-        let repository = LockedServiceStateRepository::default_json()?;
-        authorize_lease_effect_in_repository(
-            &repository,
-            &authorization,
-            &service_now_timestamp(),
-            &context,
-        )?;
-        return Ok(());
-    }
-    let wait_timeout_ms = profile_lease_wait_timeout_ms_from_command(command)?;
-    match service_profile_lease_gate(command, session_id, Some(wait_timeout_ms))? {
-        ServiceProfileLeaseGate::Ready => Ok(()),
-        ServiceProfileLeaseGate::Reject { error, .. } => Err(error),
-        ServiceProfileLeaseGate::Wait { .. } => Err(
-            "Service profile lease wait must be handled by the control-plane scheduler".to_string(),
-        ),
-    }
 }

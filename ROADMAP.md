@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-17
+Updated: 2026-09-19
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,25 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P218 | Grilling-Contract Remote View Conformance
+
+State: OPEN
+
+Current State: Plan 0218 supersedes Plans 0211 and 0217 without resetting evidence, retry
+history, or cumulative effort. It owns the complete September 19 grilling
+contract: one SQLite and provider authority, no legacy ordinary-path denial,
+no hidden viewer browser, cold-start capacity, durable handoff recovery, shared
+Desktop Services control, bounded history and storage, and external desktop and
+mobile visual-operational acceptance.
+
+The [current plan](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
+owns the `PL-PLATFORM` outcome for issues #181, #183, and #195 on the inherited
+P211 branch and draft PR #191. M0 mapping and red architecture gates exist;
+M1 ordinary handoff and JSON authority closure remains open, followed by M2
+provider integration, M3 durable recovery and live viewer control, and M4
+installed visual-operational acceptance. Production
+installation, ingress publication, release, and merge remain excluded.
 
 ## P216 | Service Model Extraction Landing
 

@@ -132,13 +132,9 @@
       "type": ["string", "null"],
       "description": "Static route-pool entry used to resolve the remote-view route, when known."
     },
-    "viewerLeaseId": {
-      "type": ["string", "null"],
-      "description": "Viewer lease id requested or created by a view operation."
-    },
     "controllerLeaseId": {
       "type": ["string", "null"],
-      "description": "Controller lease id requested or granted by a view operation."
+      "description": "Existing controller lease id supplied for an authenticated desktop interaction, when applicable."
     },
     "target": {
       "oneOf": [

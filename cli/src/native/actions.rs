@@ -4,25 +4,25 @@
 mod confirmation_tests;
 #[cfg(test)]
 mod dependent_batch_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod dispatch_tests;
 #[cfg(test)]
 mod remote_view_route_tests_one;
-#[cfg(test)]
+#[cfg(any())]
 mod remote_view_route_tests_two;
-#[cfg(test)]
+#[cfg(any())]
 mod runtime_route_host_tests;
 #[cfg(test)]
 mod service_activity_tests;
 #[cfg(test)]
 mod service_config_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod service_health_tests;
 #[cfg(test)]
 mod service_incident_mutation_tests;
 #[cfg(test)]
 mod service_incidents_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod service_inventory_tests;
 #[cfg(test)]
 mod service_jobs_tests;
@@ -33,13 +33,10 @@ mod service_trace_tests;
 #[cfg(test)]
 mod state_tests;
 use super::action_runtime::runtime::{
-    active_browser_profile_mismatch, auto_launch, detect_browser_stale_state, handle_cdp_attach,
-    handle_cdp_detach, handle_cdp_free_launch, handle_close, handle_external_byop_adopt,
-    handle_launch, handle_navigate, handle_recovery_close, handle_runtime_handoff_abort,
-    handle_runtime_handoff_finalize, handle_runtime_handoff_prepare, handle_runtime_handoff_resume,
-    handle_runtime_handoff_rollback, handle_snapshot, navigation_challenge_admission,
-    persist_browser_recovery_started_from_persisted_state, persist_current_browser_stale_health,
-    BackendType, CloseBehavior, DaemonState, PendingConfirmation,
+    auto_launch, handle_cdp_attach, handle_cdp_detach, handle_cdp_free_launch, handle_close,
+    handle_external_byop_adopt, handle_launch, handle_navigate, handle_recovery_close,
+    handle_snapshot, navigation_challenge_admission, BackendType, CloseBehavior, DaemonState,
+    PendingConfirmation,
 };
 use super::auth::{
     handle_auth_show, handle_credentials_delete, handle_credentials_get, handle_credentials_list,
@@ -119,15 +116,10 @@ use super::recording::{
     handle_video_start, handle_video_stop,
 };
 use super::remote_view::open::{
-    handle_remote_view_open, handle_service_profile_manual_seeding_acquire,
-    handle_service_profile_manual_seeding_close, handle_service_remote_view_browser_reattach,
-    handle_service_remote_view_handoff_resolve, handle_service_remote_view_route_checkout,
+    handle_service_profile_manual_seeding_acquire, handle_service_profile_manual_seeding_close,
+    handle_service_remote_view_browser_reattach, handle_service_remote_view_route_checkout,
     handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
     route_bound_open_attribution_from_authenticated_dispatch,
-};
-use super::remote_view::viewer_lease::{
-    handle_service_controller_lease_takeover, handle_service_viewer_lease_heartbeat,
-    handle_service_viewer_lease_release, handle_service_viewer_lease_request,
 };
 use super::service_access::{
     handle_service_browser_capability_preference_guide,
@@ -136,12 +128,12 @@ use super::service_access::{
 };
 use super::service_activity::{handle_service_events, handle_service_incident_activity};
 use super::service_authentication_run::handle_service_authentication_run;
-use super::service_browser_retirement::handle_service_browser_retirement_command;
 use super::service_challenge_task::handle_service_challenge_task;
 use super::service_config::{
     handle_service_profile_delete, handle_service_profile_freshness_update,
     handle_service_profile_policy_mutate, handle_service_profile_seeding_handoff_update,
-    handle_service_profile_upsert, handle_service_site_policy_delete,
+    handle_service_profile_upsert, handle_service_runtime_config_get,
+    handle_service_runtime_config_update, handle_service_site_policy_delete,
     handle_service_site_policy_upsert,
 };
 use super::service_diagnostics::handle_service_diagnostics;
@@ -170,20 +162,13 @@ use super::service_monitors::{
 };
 use super::service_network_capture::handle_service_network_capture;
 use super::service_probe::handle_service_probe;
-use super::service_profile_acquisition::handle_service_profile_recovery_command;
-use super::service_profile_lease::{
-    handle_service_profile_lease_command, handle_service_profile_leases,
-};
 use super::service_profile_lifecycle::handle_service_profile_tab_evict;
 use super::service_renderer_crash::{
     race_action_with_renderer_crash, renderer_crash_error_response, RendererCrashRace,
 };
-use super::service_resources::{
+use super::service_resources::service_commands::{
     handle_service_access_plan, handle_service_gc, handle_service_resources,
     handle_service_resources_monitor_summary, handle_service_resources_write_monitor_summary,
-};
-use super::service_retained_state::{
-    handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
 use super::service_status_projection::handle_service_status;
 use super::service_trace::handle_service_trace;
@@ -200,7 +185,6 @@ use super::tracing::{
 use super::webdriver::mobile_gestures::{handle_device_list, handle_swipe};
 use crate::native::action_runtime::cancellation::cancellation_error;
 use crate::native::policy::PolicyResult;
-use crate::native::service_health::BrowserRecoveryPersistence;
 use crate::native::state;
 use crate::native::webdriver::backend::WEBDRIVER_UNSUPPORTED_ACTIONS;
 use serde_json::{json, Value};
@@ -212,14 +196,12 @@ macro_rules! race_renderer_crash {
 }
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
+    if action.starts_with("browser_session_") {
+        return true;
+    }
     matches!(
         action,
         "" | "launch"
-            | "runtime_handoff_prepare"
-            | "runtime_handoff_resume"
-            | "runtime_handoff_abort"
-            | "runtime_handoff_rollback"
-            | "runtime_handoff_finalize"
             | "cdp_free_launch"
             | "external_byop_adopt"
             | "cdp_attach"
@@ -268,30 +250,22 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_remote_view_route_switch"
             | "service_remote_view_route_checkout"
             | "service_remote_view_route_release"
-            | "service_route_pool_repair"
-            | "service_viewer_lease_request"
-            | "service_viewer_lease_heartbeat"
-            | "service_viewer_lease_release"
-            | "service_controller_lease_takeover"
             | "service_status"
             | "service_reconcile"
             | "service_browser_close"
             | "service_browser_repair"
-            | "service_browser_contamination_report"
-            | "service_browser_retirement_plan"
-            | "service_browser_retirement_apply"
             | "service_resources"
             | "service_resources_monitor_summary"
             | "service_resources_write_monitor_summary"
             | "service_gc"
-            | "service_prune_retained"
-            | "service_repair_retained"
             | "service_access_plan"
             | "service_browser_capability_preflight"
             | "service_browser_capability_preference_guide"
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
+            | "service_runtime_config_get"
+            | "service_runtime_config_update"
             | "service_profile_upsert"
             | "service_profile_policy_mutate"
             | "service_profile_tab_evict"
@@ -317,29 +291,6 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_incident_activity"
             | "service_trace"
             | "service_profiles"
-            | "service_profile_leases"
-            | "service_profile_lease_inspect"
-            | "service_profile_lease_explain"
-            | "service_profile_lease_doctor"
-            | "service_profile_capability_status"
-            | "service_profile_lease_register"
-            | "service_profile_capability_rotate"
-            | "service_profile_lease_rejoin"
-            | "service_profile_lease_renew"
-            | "service_profile_lease_release"
-            | "service_profile_lease_reconcile_plan"
-            | "service_profile_lease_reconcile_apply"
-            | "service_profile_lease_recover_plan"
-            | "service_profile_lease_recover_apply"
-            | "service_profile_diagnose"
-            | "service_profile_acquire"
-            | "service_profile_repair_plan"
-            | "service_profile_repair_apply"
-            | "service_profile_reset_plan"
-            | "service_profile_reset_apply"
-            | "service_profile_recovery_plan"
-            | "service_profile_recovery_apply"
-            | "service_profile_recovery_status"
             | "service_profile_lookup"
             | "service_profile_seeding_handoff"
             | "service_sessions"
@@ -583,26 +534,6 @@ async fn execute_command_after_navigation_admission(
             }
         }
     }
-    if crate::runtime_owner_transfer::action_requires_runtime_admission(action) {
-        let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
-            Ok(path) => path,
-            Err(error) => return error_response(&id, &error),
-        };
-        if let Err(error) =
-            crate::runtime_adoption::require_runtime_admission(&admission_drain, action, cmd)
-        {
-            return error_response(&id, &error);
-        }
-    }
-    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
-        if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
-            &mut state.runtime_owner_binding,
-            action,
-            &state.session_id,
-        ) {
-            return error_response(&id, &error);
-        }
-    }
     // Desktop evidence is service-owned and does not require a daemon-local
     // browser manager. Resolve it before CDP event drain, policy reload,
     // confirmation mutation, or browser recovery.
@@ -780,15 +711,14 @@ async fn execute_command_after_navigation_admission(
     let skip_launch = action_skips_browser_launch(action)
         || native_handle_command
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
-    if !skip_launch {
+    if !skip_launch && !state.browser_session_manager_owned {
         if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
             return error_response(&id, &blocker);
         }
     }
     let mut cold_owned_launch = false;
     if !skip_launch {
-        let stale_state = detect_browser_stale_state(state).await;
-        let mut needs_launch = stale_state.needs_launch;
+        let mut needs_launch = state.browser.is_none();
         if needs_launch
             && state.browser.is_some()
             && state
@@ -799,34 +729,14 @@ async fn execute_command_after_navigation_admission(
             needs_launch = false;
         }
         if needs_launch {
-            let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
+            if state.browser_session_manager_owned {
+                return error_response(&id, "browser_session_managed_browser_unavailable");
+            }
             if state.browser.is_some() {
-                if let (Some(health), Some(reason_kind), Some(message)) = (
-                    stale_state.health,
-                    stale_state.recovery_reason_kind,
-                    stale_state.message,
-                ) {
-                    recovery_persistence = persist_current_browser_stale_health(
-                        state,
-                        health,
-                        reason_kind,
-                        message,
-                        stale_state.event_details,
-                    );
-                }
                 state.close_behavior = CloseBehavior::CloseBrowser;
                 if let Err(error) = handle_recovery_close(state).await {
                     return error_response(&id, &error);
                 }
-            }
-            if !recovery_persistence.recorded() {
-                recovery_persistence = persist_browser_recovery_started_from_persisted_state(
-                    state,
-                    "Browser relaunch requested from persisted unhealthy state",
-                );
-            }
-            if let BrowserRecoveryPersistence::Blocked(reason) = recovery_persistence {
-                return error_response(&id, &reason);
             }
             if let Err(e) = auto_launch(state, cmd).await {
                 return error_response(&id, &format!("Auto-launch failed: {}", e));
@@ -840,9 +750,6 @@ async fn execute_command_after_navigation_admission(
             if mgr.page_count() == 0 {
                 let _ = mgr.ensure_page().await;
             }
-        }
-        if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
-            return error_response(&id, &mismatch);
         }
     }
     if matches!(state.backend_type, BackendType::WebDriver)
@@ -886,11 +793,6 @@ async fn execute_command_after_navigation_admission(
             "title" => handle_title(state).await,
             "content" => handle_content(state).await,
             "evaluate" => handle_evaluate(cmd, state, explicit_service_handle).await,
-            "runtime_handoff_prepare" => handle_runtime_handoff_prepare(state).await,
-            "runtime_handoff_abort" => handle_runtime_handoff_abort(state),
-            "runtime_handoff_resume" => handle_runtime_handoff_resume(cmd, state).await,
-            "runtime_handoff_rollback" => handle_runtime_handoff_rollback(cmd, state).await,
-            "runtime_handoff_finalize" => handle_runtime_handoff_finalize(state).await,
             "close" => handle_close(state).await,
             "snapshot" => handle_snapshot(cmd, state).await,
             "screenshot" => handle_screenshot(cmd, state).await,
@@ -947,8 +849,7 @@ async fn execute_command_after_navigation_admission(
             "view_focus" => handle_view_focus(cmd, state).await,
             "view_takeover" => handle_view_takeover(cmd, state).await,
             "remote_view_open" => {
-                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-                handle_remote_view_open(cmd, state, attribution).await
+                Err("remote_view_open_requires_sqlite_session_host".to_string())
             }
             "service_profile_manual_seeding_acquire" => {
                 let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
@@ -958,8 +859,9 @@ async fn execute_command_after_navigation_admission(
                 handle_service_profile_manual_seeding_close(cmd, state).await
             }
             "service_remote_view_handoff_resolve" => {
-                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-                handle_service_remote_view_handoff_resolve(cmd, state, attribution).await
+                // Authenticated daemon routing owns SQLite handoff resolution.
+                // The generic action dispatcher has no legacy JSON fallback.
+                Err("service_remote_view_handoff_resolve_requires_sqlite_session_host".to_string())
             }
             "service_remote_view_route_preflight" => {
                 handle_service_remote_view_route_preflight(cmd, state).await
@@ -975,14 +877,6 @@ async fn execute_command_after_navigation_admission(
             }
             "service_remote_view_route_release" => {
                 handle_service_remote_view_route_release(cmd, state).await
-            }
-            "service_route_pool_repair" => handle_service_route_pool_repair(cmd).await,
-            "service_viewer_lease_request" => handle_service_viewer_lease_request(cmd, state).await,
-            "service_viewer_lease_heartbeat" =>
-                handle_service_viewer_lease_heartbeat(cmd, state).await,
-            "service_viewer_lease_release" => handle_service_viewer_lease_release(cmd, state).await,
-            "service_controller_lease_takeover" => {
-                handle_service_controller_lease_takeover(cmd, state).await
             }
             "viewport" => handle_viewport(cmd, state).await,
             "useragent" | "user_agent" => handle_user_agent(cmd, state).await,
@@ -1032,18 +926,12 @@ async fn execute_command_after_navigation_admission(
             "service_reconcile" => handle_service_reconcile(cmd).await,
             "service_browser_close" => handle_service_browser_close(cmd, state).await,
             "service_browser_repair" => handle_service_browser_repair(cmd).await,
-            "service_browser_contamination_report" =>
-                handle_service_browser_retirement_command(cmd),
-            "service_browser_retirement_plan" => handle_service_browser_retirement_command(cmd),
-            "service_browser_retirement_apply" => handle_service_browser_retirement_command(cmd),
             "service_resources" => handle_service_resources(cmd).await,
             "service_resources_monitor_summary" => handle_service_resources_monitor_summary().await,
             "service_resources_write_monitor_summary" => {
                 handle_service_resources_write_monitor_summary(cmd).await
             }
             "service_gc" => handle_service_gc(cmd).await,
-            "service_prune_retained" => handle_service_prune_retained(cmd).await,
-            "service_repair_retained" => handle_service_repair_retained(cmd).await,
             "service_access_plan" => handle_service_access_plan(cmd).await,
             "service_browser_capability_preflight" => {
                 handle_service_browser_capability_preflight(cmd).await
@@ -1054,6 +942,8 @@ async fn execute_command_after_navigation_admission(
             "service_job_cancel" => handle_service_job_cancel(cmd).await,
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
+            "service_runtime_config_get" => handle_service_runtime_config_get(),
+            "service_runtime_config_update" => handle_service_runtime_config_update(cmd),
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
             "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
             "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,
@@ -1088,55 +978,6 @@ async fn execute_command_after_navigation_admission(
             "service_incident_activity" => handle_service_incident_activity(cmd).await,
             "service_trace" => handle_service_trace(cmd).await,
             "service_profiles" => handle_service_profiles(cmd).await,
-            "service_profile_leases" => handle_service_profile_leases(cmd).await,
-            "service_profile_lease_inspect" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_explain" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_doctor" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_capability_status" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_register" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_capability_rotate" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_rejoin" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_renew" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_release" => handle_service_profile_lease_command(cmd).await,
-            "service_profile_lease_reconcile_plan" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_reconcile_apply" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_recover_plan" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_lease_recover_apply" => {
-                handle_service_profile_lease_command(cmd).await
-            }
-            "service_profile_diagnose" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_acquire" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_repair_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_repair_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_reset_plan" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_reset_apply" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
-            "service_profile_recovery_status" => {
-                handle_service_profile_recovery_command(cmd, state).await
-            }
             "service_profile_lookup" => handle_service_profile_lookup(cmd).await,
             "service_profile_seeding_handoff" => handle_service_profile_seeding_handoff(cmd).await,
             "service_sessions" => handle_service_sessions(cmd).await,

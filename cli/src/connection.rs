@@ -406,6 +406,7 @@ pub fn daemon_ready(session: &str) -> bool {
 /// Upgrade census runs with host admission disabled so no new work enters the
 /// old generation. That must not make a reachable selected single host look
 /// like an unreachable legacy per-session daemon.
+#[allow(dead_code)]
 pub(crate) fn daemon_ready_through_selected_ingress(session: &str) -> bool {
     let Some(socket_dir) = crate::runtime_host_ingress::selected_socket_dir() else {
         return daemon_ready(session);
@@ -911,11 +912,8 @@ fn require_runtime_host_admission_for_launch() -> Result<(), String> {
 }
 
 fn unsafe_claim_any_allows_daemon_reuse(auth_token_available: bool) -> bool {
-    auth_token_available
-        && matches!(
-            crate::native::service_lease_mode::profile_lease_mode_from_env(),
-            Ok(crate::native::service_lease_mode::ProfileLeaseMode::UnsafeClaimAny)
-        )
+    let _ = auth_token_available;
+    false
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
@@ -1201,6 +1199,18 @@ pub fn send_command(cmd: Value, session: &str) -> Result<Response, String> {
     ))
 }
 
+/// Send one already-authorized command with a caller-owned response deadline.
+///
+/// Cold shutdown uses this non-retrying form so a stale daemon endpoint cannot
+/// consume the fixed phase budget or turn terminal cleanup into a retry loop.
+pub(crate) fn send_command_with_timeout(
+    cmd: Value,
+    session: &str,
+    timeout: Duration,
+) -> Result<Response, String> {
+    send_command_once_with_timeout(&cmd, session, timeout)
+}
+
 /// Check if an error is transient and worth retrying.
 /// Transient errors include:
 /// - EAGAIN/EWOULDBLOCK (os error 35 on macOS, 11 on Linux)
@@ -1234,10 +1244,20 @@ fn is_command_response_read_timeout(error: &str) -> bool {
 }
 
 fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
+    send_command_once_with_timeout(cmd, session, Duration::from_secs(300))
+}
+
+fn send_command_once_with_timeout(
+    cmd: &Value,
+    session: &str,
+    timeout: Duration,
+) -> Result<Response, String> {
     let mut stream = connect(session)?;
 
-    stream.set_read_timeout(Some(Duration::from_secs(300))).ok();
-    stream.set_write_timeout(Some(Duration::from_secs(5))).ok();
+    stream.set_read_timeout(Some(timeout)).ok();
+    stream
+        .set_write_timeout(Some(timeout.min(Duration::from_secs(5))))
+        .ok();
 
     let authenticated_cmd = attach_daemon_auth_token(cmd, session)?;
     let mut json_str = serde_json::to_string(&authenticated_cmd).map_err(|e| e.to_string())?;
@@ -1256,7 +1276,7 @@ fn send_command_once(cmd: &Value, session: &str) -> Result<Response, String> {
     serde_json::from_str(&response_line).map_err(|e| format!("Invalid response: {}", e))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;

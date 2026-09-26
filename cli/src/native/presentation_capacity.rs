@@ -73,16 +73,11 @@ fn observe_slot(state: &ServiceState, slot: &PresentationSlot) -> PresentationSl
             && (route_id == Some(lease.route_id.as_str())
                 || display_id == Some(lease.display_allocation_id.as_str()))
     });
-    let route = route_id.and_then(|id| state.remote_view_routes.get(id));
-    let human_controller_active = route.is_some_and(|route| route.controller_lease_id.is_some());
-    let non_controller_staging_viewer_active = route.is_some_and(|route| {
-        route.viewer_lease_ids.iter().any(|lease_id| {
-            state.viewer_leases.get(lease_id).is_some_and(|lease| {
-                lease.viewer_role != "controller"
-                    && matches!(lease.state.as_str(), "requested" | "active" | "ready")
-            })
-        })
-    });
+    // Stored route and controller records are not live-viewer observations.
+    // The authenticated Guacamole observer introduced by M3 will populate
+    // these facts from its process-local connection heartbeat.
+    let human_controller_active = false;
+    let non_controller_staging_viewer_active = false;
     let live_handoff_browser_ids = state
         .remote_view_handoffs
         .values()
@@ -334,7 +329,7 @@ mod tests {
     use super::*;
     use crate::native::service_model::{
         BrowserProcess, DisplayAllocation, RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry,
-        ViewStream, ViewerLease,
+        ViewStream,
     };
     use std::collections::BTreeMap;
 
@@ -427,57 +422,41 @@ mod tests {
     }
 
     #[test]
-    fn controller_and_viewer_facts_preserve_request_dependent_policy() {
+    fn stored_controller_does_not_prove_live_viewer_for_capacity() {
         let mut state = ServiceState::default();
-        state.viewer_leases.insert(
-            "viewer-1".to_string(),
-            ViewerLease {
-                id: "viewer-1".to_string(),
-                route_id: Some("route-1".to_string()),
-                state: "active".to_string(),
-                ..Default::default()
-            },
-        );
         state.remote_view_routes.insert(
             "route-1".to_string(),
             RemoteViewRoute {
                 id: "route-1".to_string(),
                 controller_lease_id: Some("controller-1".to_string()),
-                viewer_lease_ids: vec!["viewer-1".to_string()],
+                controller_epoch: 5,
                 ..Default::default()
             },
         );
 
+        let observations = observe_presentation_capacity(&state, &one_slot_authority());
+        assert!(!observations.slots[0].human_controller_active);
+        assert!(!observations.slots[0].non_controller_staging_viewer_active);
+
         let mut automated = one_slot_authority();
-        let blocked = request_with_service_state(
+        assert!(request_with_service_state(
             &mut automated,
             PresentationRequest::observation("observe").for_browser("browser-1"),
             PressureAdmission::admit(1),
             Some(&state),
-        );
-        assert_eq!(
-            blocked.limiting_resource(),
-            Some(CapacityLimitingResource::HumanController)
-        );
+        )
+        .is_granted());
 
-        state
-            .remote_view_routes
-            .get_mut("route-1")
-            .unwrap()
-            .controller_lease_id = None;
         let mut staging = one_slot_authority();
-        let blocked = request_with_service_state(
+        assert!(request_with_service_state(
             &mut staging,
             PresentationRequest::observation("stage")
                 .for_browser("browser-1")
                 .requiring_staging(),
             PressureAdmission::admit(1),
             Some(&state),
-        );
-        assert_eq!(
-            blocked.limiting_resource(),
-            Some(CapacityLimitingResource::ViewerStagingConflict)
-        );
+        )
+        .is_granted());
 
         let mut capture = one_slot_authority();
         assert!(request_with_service_state(

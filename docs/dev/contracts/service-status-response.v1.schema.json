@@ -177,6 +177,63 @@
       },
       "additionalProperties": true
     },
+    "presentationKeeper": {
+      "description": "Optional redacted presentation keeper health projection. It contains aggregate readiness and supervisor state only; browser and route identifiers and raw errors are excluded.",
+      "type": "object",
+      "required": [
+        "schemaVersion", "supervisor", "hostGeneration", "state",
+        "readyRouteCount", "configuredSlotCount", "minimumReady", "warmTarget",
+        "minimumSatisfied", "warmTargetSatisfied", "unavailableReason"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.presentation-keeper-status.v1" },
+        "supervisor": {
+          "type": "object",
+          "required": ["state"],
+          "properties": {
+            "state": { "enum": ["recovering", "supervising", "failed", "stopping", "stopped", "unavailable"] },
+            "code": { "type": "string" }
+          },
+          "additionalProperties": false
+        },
+        "hostGeneration": { "type": ["number", "null"] },
+        "state": { "enum": ["ready", "recovering", "unavailable", "quarantined", "degraded"] },
+        "readyRouteCount": { "type": "number", "minimum": 0 },
+        "configuredSlotCount": { "type": "number", "minimum": 0 },
+        "minimumReady": { "type": "number", "minimum": 0 },
+        "warmTarget": { "type": "number", "minimum": 0 },
+        "minimumSatisfied": { "type": "boolean" },
+        "warmTargetSatisfied": { "type": "boolean" },
+        "unavailableReason": { "type": ["string", "null"] },
+        "queue": {
+          "type": "object",
+          "required": ["hostGeneration", "maximumDepth", "queued", "admitted", "completed", "retryable", "recoveryRequired"],
+          "properties": {
+            "hostGeneration": { "type": "integer", "minimum": 0 },
+            "maximumDepth": { "type": "integer", "minimum": 0 },
+            "queued": { "type": "integer", "minimum": 0 },
+            "admitted": { "type": "integer", "minimum": 0 },
+            "completed": { "type": "integer", "minimum": 0 },
+            "retryable": { "type": "integer", "minimum": 0 },
+            "recoveryRequired": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "allocation": {
+          "type": "object",
+          "required": ["state", "browserCount", "occupiedDisplayCount", "maximumDisplays", "maximumBrowsersPerDisplay"],
+          "properties": {
+            "state": { "enum": ["available", "pending", "full", "over_target", "unavailable"] },
+            "browserCount": { "type": "integer", "minimum": 0 },
+            "occupiedDisplayCount": { "type": "integer", "minimum": 0 },
+            "maximumDisplays": { "type": "integer", "minimum": 0 },
+            "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "browserSessionAuthority": {
       "description": "Read-only daemon authority snapshot that reconciles modeled browser rows with process/resource truth before clients present browsers as viable.",
       "type": "object",

@@ -2002,6 +2002,60 @@ impl LeaseAuthorityState {
         self.revision
     }
 
+    /// Number of claims that can currently authorize resource effects.
+    pub fn active_claim_count(&self) -> usize {
+        self.active_claims.len()
+    }
+
+    /// Release every current resource claim after an explicit workstation cold
+    /// shutdown has removed the corresponding local effects. Historical events
+    /// and fencing high-water marks remain durable, so a later startup cannot
+    /// reuse authority from before the shutdown.
+    ///
+    /// Caller authorization and process-exit proof belong to the adapter. This
+    /// pure kernel operation validates time, fences each active resource, and is
+    /// idempotent once no active claims remain.
+    pub fn release_all_for_cold_shutdown(
+        &mut self,
+        now: &str,
+    ) -> Result<usize, LeaseAuthorityError> {
+        self.ensure_supported_schema()?;
+        if chrono::DateTime::parse_from_rfc3339(now).is_err() {
+            return Err(LeaseAuthorityError::InvalidRequest);
+        }
+        let mut staged = self.clone();
+        let claims = staged.active_claims.values().cloned().collect::<Vec<_>>();
+        for claim in &claims {
+            let resource_key = claim.resource.storage_key();
+            let fencing_high_water = staged
+                .next_fencing_tokens
+                .get(&resource_key)
+                .copied()
+                .unwrap_or(claim.fencing_token)
+                .max(claim.fencing_token);
+            let terminal_fencing_token = fencing_high_water
+                .checked_add(1)
+                .ok_or(LeaseAuthorityError::CounterExhausted)?;
+            let mut event = terminal_event(claim, LeaseEventKind::Released, now);
+            event.fencing_token = terminal_fencing_token;
+            staged
+                .next_fencing_tokens
+                .insert(resource_key.clone(), terminal_fencing_token);
+            staged.active_claims.remove(&resource_key);
+            staged.events.push(event);
+            staged.revision = staged
+                .revision
+                .checked_add(1)
+                .filter(|revision| *revision > 0)
+                .ok_or(LeaseAuthorityError::CounterExhausted)?;
+        }
+        if !claims.is_empty() {
+            staged.schema_version = LEASE_AUTHORITY_SCHEMA_VERSION.to_string();
+            *self = staged;
+        }
+        Ok(claims.len())
+    }
+
     pub fn acquire_with_receipt(
         &mut self,
         request: AcquireLeaseClaimRequest,
@@ -3613,6 +3667,46 @@ mod tests {
         assert_eq!(claim.fencing_token, 42);
         assert_eq!(authority.active_claims.len(), 1);
         assert_eq!(authority.events.len(), 2);
+    }
+
+    #[test]
+    fn cold_shutdown_releases_and_fences_all_active_claims_idempotently() {
+        let mut authority = LeaseAuthorityState::default();
+        let first = authority.acquire(request()).unwrap();
+        let mut second_request = request();
+        second_request.resource = LeaseResourceKey::profile("other-profile");
+        second_request.principal_id = "principal:other".to_string();
+        second_request.capability_id = "capability:other".to_string();
+        second_request.idempotency_key = "acquire:other:tick-1".to_string();
+        let second = authority.acquire(second_request).unwrap();
+        let revision_before = authority.revision();
+        assert_eq!(authority.active_claim_count(), 2);
+
+        assert_eq!(
+            authority
+                .release_all_for_cold_shutdown("2026-08-31T12:01:00Z")
+                .unwrap(),
+            2
+        );
+        assert!(authority.active_claims.is_empty());
+        assert_eq!(authority.active_claim_count(), 0);
+        assert_eq!(authority.revision(), revision_before + 2);
+        for claim in [&first, &second] {
+            assert!(authority.events.iter().any(|event| {
+                event.claim_id == claim.claim_id
+                    && event.kind == LeaseEventKind::Released
+                    && event.fencing_token > claim.fencing_token
+            }));
+        }
+
+        let after_first = authority.clone();
+        assert_eq!(
+            authority
+                .release_all_for_cold_shutdown("2026-08-31T12:01:00Z")
+                .unwrap(),
+            0
+        );
+        assert_eq!(authority, after_first);
     }
 
     #[test]

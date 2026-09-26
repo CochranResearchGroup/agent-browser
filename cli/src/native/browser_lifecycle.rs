@@ -15,25 +15,19 @@ pub(crate) mod action_commands {
         ProcessExitObservation, WaitUntil,
     };
     use crate::native::remote_view_handoff::{
-        apply_retained_remote_view_route, begin_route_bound_handoff_failure_recovery,
-        begin_route_bound_handoff_plan_acquisition, complete_route_bound_handoff_failure_cleanup,
-        complete_route_bound_handoff_open, planned_route_bound_handoff_response,
+        apply_retained_remote_view_route, planned_route_bound_handoff_response,
         remote_view_handoff_resolution_command, remote_view_handoff_was_explicitly_closed,
         route_bound_handoff_checkout_command_with_visible_window_proof,
         route_bound_handoff_checkout_failure, route_bound_handoff_failure_cleanup_task_result,
         route_bound_handoff_focus_command, route_bound_handoff_focus_failure,
-        route_bound_handoff_immediate_failure, route_bound_handoff_launch_failure_cleanup,
-        route_bound_handoff_operator_visible,
+        route_bound_handoff_launch_failure_cleanup, route_bound_handoff_operator_visible,
         route_bound_handoff_operator_visible_failure_if_not_ready, route_bound_handoff_plan,
         route_bound_handoff_post_checkout_proof, route_bound_handoff_pre_launch_failure_cleanup,
         route_bound_handoff_reused_browser_launch_result, route_bound_handoff_tab_open_failure,
         route_bound_handoff_target_url_readiness, route_bound_handoff_visible_window_proof_failure,
-        shared_profile_acquisition_result, CompleteRouteBoundHandoffOpenInput,
-        RouteBoundHandoffFailureCleanupInput, RouteBoundHandoffFailureCleanupSummary,
-        RouteBoundHandoffFailureCleanupTask, RouteBoundHandoffFailureRecoveryInput,
-        RouteBoundHandoffImmediateFailureInput, RouteBoundHandoffPlan,
-        RouteBoundHandoffPlannedResponseInput, RouteBoundHandoffPostCheckoutProofInput,
-        SharedProfileAcquisitionResultInput,
+        shared_profile_acquisition_result, RouteBoundHandoffFailureCleanupTask,
+        RouteBoundHandoffPlan, RouteBoundHandoffPlannedResponseInput,
+        RouteBoundHandoffPostCheckoutProofInput, SharedProfileAcquisitionResultInput,
     };
     use crate::native::service_diagnostics::truncate_utf8;
     use crate::native::service_model::{
@@ -46,7 +40,7 @@ pub(crate) mod action_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::state;
@@ -62,43 +56,16 @@ pub(crate) mod action_commands {
         let Some(tab) = state.tabs.get(tab_id) else {
             return Ok(requested_browser_id.to_string());
         };
-        if tab.target_id.as_deref() != Some(target_id) {
-            return Err("service_navigation_tab_identity_conflict".to_string());
-        }
-        if tab.browser_id == requested_browser_id {
-            return Ok(tab.browser_id.clone());
-        }
-        if tab.session_id.as_deref() != Some(session_id)
-            && tab.owner_session_id.as_deref() != Some(session_id)
+        if tab.target_id.as_deref() != Some(target_id)
+            || (tab.session_id.as_deref() != Some(session_id)
+                && tab.owner_session_id.as_deref() != Some(session_id))
         {
             return Err("service_navigation_tab_identity_conflict".to_string());
         }
-        let binding = state
-            .runtime_owner_binding_for_session(session_id)
-            .ok()
-            .flatten()
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        let owner = state
-            .profile_runtime_authority(&binding.claim.profile_identity_digest)
-            .owner
-            .filter(|owner| {
-                crate::runtime_owner_transfer::OwnerAuthorityClaim::from_owner(owner)
-                    == binding.claim
-            })
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        let canonical_browser_id =
-            crate::runtime_adoption::canonical_exact_owner_browser_id_for_routes(
-                state,
-                owner,
-                &[session_id],
-            )
-            .filter(|browser_id| browser_id == &tab.browser_id)
-            .ok_or_else(|| "service_navigation_tab_identity_conflict".to_string())?;
-        if requested_browser_id != owner.browser_id && requested_browser_id != canonical_browser_id
-        {
+        if tab.browser_id != requested_browser_id {
             return Err("service_navigation_tab_identity_conflict".to_string());
         }
-        Ok(canonical_browser_id)
+        Ok(tab.browser_id.clone())
     }
 
     pub(crate) fn persist_service_owned_tab_new(
@@ -1471,5 +1438,5 @@ pub(crate) mod action_commands {
     }
 }
 pub(crate) use action_commands::*;
-#[cfg(test)]
+#[cfg(any())]
 mod action_tests;

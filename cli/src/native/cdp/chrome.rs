@@ -76,7 +76,6 @@ pub struct ChromeProcess {
     owns_process: bool,
     lifecycle_managed: bool,
     lifecycle_close_approved: bool,
-    reviewed_process_tree: Option<Box<crate::native::runtime_reconciliation::ReviewedProcessTree>>,
     temp_user_data_dir: Option<PathBuf>,
     user_data_dir: PathBuf,
     runtime_profile: Option<String>,
@@ -156,13 +155,9 @@ impl ChromeStderrLogBuffer {
 }
 
 impl ChromeProcess {
-    pub fn mark_lifecycle_managed(
-        &mut self,
-        reviewed_process_tree: Option<crate::native::runtime_reconciliation::ReviewedProcessTree>,
-    ) {
+    pub fn mark_lifecycle_managed(&mut self) {
         self.lifecycle_managed = true;
         self.lifecycle_close_approved = false;
-        self.reviewed_process_tree = reviewed_process_tree.map(Box::new);
     }
 
     pub fn approve_lifecycle_close(&mut self) {
@@ -189,9 +184,6 @@ impl ChromeProcess {
     }
 
     pub fn kill_with_outcome(&mut self) -> ProcessShutdownOutcome {
-        if let Some(reviewed) = self.reviewed_process_tree.clone() {
-            return self.kill_reviewed_process_tree(&reviewed);
-        }
         let pid = self.child.id();
         let mut outcome = ProcessShutdownOutcome {
             pid: Some(pid),
@@ -259,44 +251,6 @@ impl ChromeProcess {
             outcome
                 .errors
                 .push("Failed to force kill Chrome process: forced by smoke test".to_string());
-        }
-        outcome
-    }
-
-    fn kill_reviewed_process_tree(
-        &mut self,
-        reviewed: &crate::native::runtime_reconciliation::ReviewedProcessTree,
-    ) -> ProcessShutdownOutcome {
-        let profile_root = self.user_data_dir.clone();
-        let reviewed_outcome = {
-            let mut runtime = OwnedChromeProcessTreeRuntime {
-                child: &mut self.child,
-                profile_root: &profile_root,
-            };
-            crate::native::runtime_reconciliation::shutdown_reviewed_process_tree(
-                reviewed,
-                &profile_root,
-                &mut runtime,
-            )
-        };
-        let mut outcome = ProcessShutdownOutcome {
-            pid: Some(reviewed.root_process.pid),
-            exact_process_exited: reviewed_outcome.exact_process_exited,
-            profile_lock_released: reviewed_outcome.profile_lock_released,
-            force_kill_attempted: reviewed_outcome.terminate_sent || reviewed_outcome.kill_sent,
-            force_kill_succeeded: reviewed_outcome.exact_process_exited
-                && reviewed_outcome.profile_lock_released
-                && reviewed_outcome.blocked_reason.is_none()
-                && reviewed_outcome.errors.is_empty(),
-            errors: reviewed_outcome.errors,
-            ..ProcessShutdownOutcome::default()
-        };
-        if let Some(reason) = reviewed_outcome.blocked_reason {
-            outcome.errors.push(reason);
-        }
-        if outcome.exact_process_exited {
-            let aux_ok = kill_aux_processes(&mut self.aux_processes, &mut outcome);
-            outcome.force_kill_succeeded &= aux_ok;
         }
         outcome
     }
@@ -402,107 +356,6 @@ impl ChromeProcess {
 
         let outcome = self.kill_with_outcome();
         complete_controlled_shutdown(outcome, &self.user_data_dir, timeout)
-    }
-}
-
-struct OwnedChromeProcessTreeRuntime<'a> {
-    child: &'a mut Child,
-    profile_root: &'a Path,
-}
-
-impl crate::native::runtime_reconciliation::ReviewedProcessTreeRuntime
-    for OwnedChromeProcessTreeRuntime<'_>
-{
-    fn recheck(
-        &mut self,
-        reviewed: &crate::native::runtime_reconciliation::ReviewedProcessTree,
-    ) -> Result<(), String> {
-        let process = match crate::process_identity::observe_process(reviewed.root_process.pid) {
-            crate::process_identity::ProcessObservation::Observed(process) => process,
-            crate::process_identity::ProcessObservation::Missing => {
-                return Err("runtime_process_tree_root_missing".to_string())
-            }
-            crate::process_identity::ProcessObservation::Failed { reason } => {
-                return Err(format!("runtime_process_tree_observation_failed: {reason}"))
-            }
-        };
-        let repository =
-            crate::native::service_store::LockedServiceStateRepository::default_json()?;
-        let state =
-            crate::native::service_store::ServiceStateRepository::load_snapshot(&repository)?;
-        let decision =
-            crate::native::runtime_reconciliation::RuntimeResourceReconciler::new(&state).classify(
-                crate::native::runtime_reconciliation::RuntimeProcessEvidence {
-                    process,
-                    process_group_id: crate::process_identity::observe_process_group_id(
-                        reviewed.root_process.pid,
-                    ),
-                    logical_browser_id: Some(reviewed.logical_browser_id.clone()),
-                    profile_root: Some(self.profile_root.to_string_lossy().into_owned()),
-                },
-            );
-        match decision {
-            crate::native::runtime_reconciliation::RuntimeResourceDecision::Owned(current)
-                if current == *reviewed =>
-            {
-                Ok(())
-            }
-            crate::native::runtime_reconciliation::RuntimeResourceDecision::Owned(_) => {
-                Err("runtime_process_tree_review_changed".to_string())
-            }
-            crate::native::runtime_reconciliation::RuntimeResourceDecision::Protected {
-                reason,
-            } => Err(reason.to_string()),
-        }
-    }
-
-    fn signal_group(
-        &mut self,
-        process_group_id: u32,
-        signal: crate::native::runtime_reconciliation::ProcessTreeSignal,
-    ) -> Result<(), String> {
-        #[cfg(unix)]
-        {
-            let signal = match signal {
-                crate::native::runtime_reconciliation::ProcessTreeSignal::Terminate => {
-                    libc::SIGTERM
-                }
-                crate::native::runtime_reconciliation::ProcessTreeSignal::Kill => libc::SIGKILL,
-            };
-            let result = unsafe { libc::kill(-(process_group_id as i32), signal) };
-            if result == 0 || std::io::Error::last_os_error().raw_os_error() == Some(libc::ESRCH) {
-                Ok(())
-            } else {
-                Err(format!(
-                    "process_group_signal_failed: {}",
-                    std::io::Error::last_os_error()
-                ))
-            }
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = (process_group_id, signal);
-            Err("process_group_shutdown_unsupported".to_string())
-        }
-    }
-
-    fn wait_after_signal(&mut self) {
-        std::thread::sleep(Duration::from_millis(500));
-    }
-
-    fn process_exited(&mut self, _root_pid: u32) -> Result<bool, String> {
-        self.child
-            .try_wait()
-            .map(|status| status.is_some())
-            .map_err(|error| format!("runtime_process_tree_wait_failed: {error}"))
-    }
-
-    fn profile_lock_released(&mut self, _profile_root: &Path) -> Result<bool, String> {
-        match std::fs::symlink_metadata(self.profile_root.join("SingletonLock")) {
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(true),
-            Ok(_) => Ok(false),
-            Err(error) => Err(format!("profile_lock_observation_failed: {error}")),
-        }
     }
 }
 
@@ -1071,7 +924,7 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     };
     validate_profile_browser_family(options, &chrome_path)?;
     if let Some(runtime_profile) = options.runtime_profile.as_deref() {
-        agent_browser_lease_authority::validate_runtime_profile_name(runtime_profile)?;
+        crate::runtime_profile::validate_runtime_profile_name(runtime_profile)?;
     }
 
     let max_attempts = 3;
@@ -1142,6 +995,22 @@ fn retain_manual_child_for_reaping(child: Child, pid: u32) -> Result<(), String>
 }
 
 pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLaunch, String> {
+    launch_chrome_detached_inner(options, true)
+}
+
+/// Launch a detached browser whose process and profile custody is journaled
+/// by Browser Runtime SQLite. This path must not write a parallel runtime
+/// profile state file.
+pub(crate) fn launch_chrome_detached_without_runtime_state(
+    options: &LaunchOptions,
+) -> Result<ManualChromeLaunch, String> {
+    launch_chrome_detached_inner(options, false)
+}
+
+fn launch_chrome_detached_inner(
+    options: &LaunchOptions,
+    persist_runtime_state: bool,
+) -> Result<ManualChromeLaunch, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => find_chrome().ok_or_else(|| {
@@ -1259,7 +1128,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     } else {
         None
     };
-    if let Some(ref runtime_profile_name) = runtime_profile {
+    if let Some(runtime_profile_name) = runtime_profile.as_ref().filter(|_| persist_runtime_state) {
         let state = RuntimeState {
             runtime_profile: runtime_profile_name.clone(),
             user_data_dir: user_data_dir.display().to_string(),
@@ -1294,7 +1163,9 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
         }
     }
     if let Err(error) = retain_manual_child_for_reaping(child, pid) {
-        if let Some(runtime_profile_name) = runtime_profile.as_deref() {
+        if let Some(runtime_profile_name) =
+            runtime_profile.as_deref().filter(|_| persist_runtime_state)
+        {
             let _ = crate::runtime_profile::clear_runtime_state(runtime_profile_name);
         }
         return Err(error);
@@ -1779,7 +1650,6 @@ fn try_launch_chrome(
         owns_process: true,
         lifecycle_managed: false,
         lifecycle_close_approved: false,
-        reviewed_process_tree: None,
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
@@ -3938,7 +3808,6 @@ mod tests {
             owns_process: true,
             lifecycle_managed: false,
             lifecycle_close_approved: false,
-            reviewed_process_tree: None,
             temp_user_data_dir: None,
             user_data_dir: dir.to_path_buf(),
             runtime_profile: None,
@@ -4015,7 +3884,6 @@ mod tests {
             owns_process: true,
             lifecycle_managed: false,
             lifecycle_close_approved: false,
-            reviewed_process_tree: None,
             temp_user_data_dir: None,
             user_data_dir: user_data_dir.clone(),
             runtime_profile: None,
@@ -4058,7 +3926,6 @@ mod tests {
             owns_process: true,
             lifecycle_managed: false,
             lifecycle_close_approved: false,
-            reviewed_process_tree: None,
             temp_user_data_dir: None,
             user_data_dir: dir.to_path_buf(),
             runtime_profile: None,
@@ -4655,7 +4522,6 @@ mod tests {
                 owns_process: true,
                 lifecycle_managed: false,
                 lifecycle_close_approved: false,
-                reviewed_process_tree: None,
                 temp_user_data_dir: Some(dir.clone()),
                 user_data_dir: dir.clone(),
                 runtime_profile: None,
@@ -4688,7 +4554,6 @@ mod tests {
             owns_process: true,
             lifecycle_managed: false,
             lifecycle_close_approved: false,
-            reviewed_process_tree: None,
             temp_user_data_dir: Some(dir.clone()),
             user_data_dir: dir.clone(),
             runtime_profile: None,
@@ -4697,7 +4562,7 @@ mod tests {
             stderr_drainer: None,
             pgid: None,
         };
-        process.mark_lifecycle_managed(None);
+        process.mark_lifecycle_managed();
 
         drop(process);
 
@@ -4724,7 +4589,6 @@ mod tests {
             owns_process: true,
             lifecycle_managed: false,
             lifecycle_close_approved: false,
-            reviewed_process_tree: None,
             temp_user_data_dir: Some(dir.clone()),
             user_data_dir: dir.clone(),
             runtime_profile: None,

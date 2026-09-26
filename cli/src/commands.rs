@@ -1,6 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::{json, Value};
-use std::env;
 use std::io::{self, BufRead};
 
 use crate::color;
@@ -687,32 +686,7 @@ fn parse_service_profile_reset(
     Ok(command)
 }
 
-const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-build <stock_chrome|stealthcdp_chromium|cdp_free_headed>] [--view-stream-provider <rdp_gateway>] [--provider <rdp_gateway>] [--profile <path>] [--route-pool-entry-id <id>] [--route-pool-entry-json <json>] [--route-id <id>] [--display <name>] [--display-allocation-id <id>] [--browser-id <id>] [--session-name <name>] [--service-name <name>] [--agent-name <name>] [--task-name <name>] [--job-timeout-ms <ms>] [--manual-login-launch] [--dry-run]";
-
-fn remote_view_route_pool_from_env_value(raw: Option<String>) -> Result<Option<Value>, ParseError> {
-    let Some(raw) = raw else {
-        return Ok(None);
-    };
-    if raw.trim().is_empty() {
-        return Ok(None);
-    }
-    let value = serde_json::from_str::<Value>(&raw).map_err(|err| ParseError::InvalidValue {
-        message: format!("Invalid AGENT_BROWSER_RDP_ROUTE_POOL_JSON value: {}", err),
-        usage: REMOTE_VIEW_OPEN_USAGE,
-    })?;
-    if !value.is_array() {
-        return Err(ParseError::InvalidValue {
-            message: "Invalid AGENT_BROWSER_RDP_ROUTE_POOL_JSON value: expected a JSON array"
-                .to_string(),
-            usage: REMOTE_VIEW_OPEN_USAGE,
-        });
-    }
-    Ok(Some(value))
-}
-
-fn remote_view_route_pool_from_env() -> Result<Option<Value>, ParseError> {
-    remote_view_route_pool_from_env_value(env::var("AGENT_BROWSER_RDP_ROUTE_POOL_JSON").ok())
-}
+const REMOTE_VIEW_OPEN_USAGE: &str = "remote-view open [url] [--url <url>] [--runtime-profile <id>] [--browser-id <id>] [--view-stream-provider rdp_gateway] [--provider rdp_gateway] [--session-name <name>] [--job-timeout-ms <ms>] [--dry-run]";
 
 fn apply_explicit_global_launch_routing_flags(cmd: &mut Value, flags: &Flags) {
     if flags.cli_profile && cmd.get("profile").is_none() {
@@ -2085,9 +2059,16 @@ fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, Pars
     }
 }
 
-/// Parse one route-bound open, including an optional command-level timeout
-/// that overrides the service control plane's shorter daemon default.
+/// Parse one manager-owned remote-view open. Route and display selection stays
+/// with the provider. An explicit browser ID selects only that current SQLite
+/// browser; a positive per-request timeout reaches presentation admission.
 fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
+    if flags.display_isolation.is_some() {
+        return Err(ParseError::InvalidValue {
+            message: "remote-view open selects its provider-owned display; --display-isolation is unsupported".to_string(),
+            usage: REMOTE_VIEW_OPEN_USAGE,
+        });
+    }
     let mut cmd = json!({
         "id": id,
         "action": "remote_view_open",
@@ -2101,9 +2082,6 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     }
     if let Some(profile) = flags.profile.as_ref() {
         cmd["profile"] = json!(profile);
-    }
-    if let Some(display_isolation) = flags.display_isolation.as_ref() {
-        cmd["displayIsolation"] = json!(display_isolation);
     }
     if let Some(session_name) = flags.session_name.as_ref() {
         cmd["sessionName"] = json!(session_name);
@@ -2218,42 +2196,21 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
                 cmd["profile"] = json!(value);
                 i += 1;
             }
-            "--route-pool-entry-id" | "--pool-entry-id" => {
-                let value =
-                    required_next(rest, i, "--route-pool-entry-id", REMOTE_VIEW_OPEN_USAGE)?;
-                cmd["routePoolEntryId"] = json!(value);
-                i += 1;
-            }
-            "--route-pool-entry-json" => {
-                let value =
-                    required_next(rest, i, "--route-pool-entry-json", REMOTE_VIEW_OPEN_USAGE)?;
-                let entry = serde_json::from_str::<Value>(&value).map_err(|err| {
-                    ParseError::InvalidValue {
-                        message: format!("Invalid --route-pool-entry-json value: {}", err),
-                        usage: REMOTE_VIEW_OPEN_USAGE,
-                    }
-                })?;
-                if let Some(entry_id) = entry.get("id").and_then(Value::as_str) {
-                    cmd["routePoolEntryId"] = json!(entry_id);
-                }
-                cmd["routePoolEntry"] = entry;
-                i += 1;
-            }
-            "--route-id" | "--remote-view-route-id" => {
-                let value = required_next(rest, i, "--route-id", REMOTE_VIEW_OPEN_USAGE)?;
-                cmd["routeId"] = json!(value);
-                i += 1;
-            }
-            "--display" | "--remote-headed-display" => {
-                let value = required_next(rest, i, "--display", REMOTE_VIEW_OPEN_USAGE)?;
-                cmd["remoteHeadedDisplay"] = json!(value);
-                i += 1;
-            }
-            "--display-allocation-id" => {
-                let value =
-                    required_next(rest, i, "--display-allocation-id", REMOTE_VIEW_OPEN_USAGE)?;
-                cmd["displayAllocationId"] = json!(value);
-                i += 1;
+            "--route-pool-entry-id"
+            | "--pool-entry-id"
+            | "--route-pool-entry-json"
+            | "--route-id"
+            | "--remote-view-route-id"
+            | "--display"
+            | "--remote-headed-display"
+            | "--display-allocation-id" => {
+                return Err(ParseError::InvalidValue {
+                    message: format!(
+                        "remote-view open selects its provider-owned route and display; {} is unsupported",
+                        rest[i]
+                    ),
+                    usage: REMOTE_VIEW_OPEN_USAGE,
+                });
             }
             "--browser-id" => {
                 let value = required_next(rest, i, "--browser-id", REMOTE_VIEW_OPEN_USAGE)?;
@@ -2329,11 +2286,6 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     if cmd.get("url").and_then(Value::as_str).is_none() {
         if let Some(url) = positional_url {
             cmd["url"] = json!(url);
-        }
-    }
-    if cmd.get("routePoolEntry").is_none() && cmd.get("routePool").is_none() {
-        if let Some(route_pool) = remote_view_route_pool_from_env()? {
-            cmd["routePool"] = route_pool;
         }
     }
     Ok(cmd)
@@ -3556,6 +3508,23 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("runtime-config") => {
+                const USAGE: &str = "service runtime-config get | set <json-object>";
+                match (rest.get(1).copied(), rest.len()) {
+                    (Some("get"), 2) => Ok(json!({"id":id,"action":"service_runtime_config_get"})),
+                    (Some("set"), 3) => {
+                        let config: Value = serde_json::from_str(rest[2]).map_err(|error| ParseError::InvalidValue {
+                            message: format!("Invalid runtime config JSON: {error}"), usage: USAGE,
+                        })?;
+                        if !config.is_object() {
+                            return Err(ParseError::InvalidValue { message: "Runtime config must be a JSON object".to_string(), usage: USAGE });
+                        }
+                        Ok(json!({"id":id,"action":"service_runtime_config_update","config":config}))
+                    }
+                    _ => Err(ParseError::InvalidValue { message: "Expected runtime-config get or set with one JSON object".to_string(), usage: USAGE }),
+                }
+            }
+
             Some("connections") => {
                 if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
                     return Err(ParseError::InvalidValue {
@@ -8797,6 +8766,26 @@ mod tests {
     }
 
     #[test]
+    fn runtime_config_commands_parse_without_revision_tokens() {
+        let get = parse_command(&args("service runtime-config get"), &default_flags()).unwrap();
+        assert_eq!(get["action"], "service_runtime_config_get");
+        let set = parse_command(
+            &args(r#"service runtime-config set {"warmTarget":2}"#),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(set["action"], "service_runtime_config_update");
+        assert_eq!(set["config"]["warmTarget"], 2);
+        for invalid in [
+            "service runtime-config",
+            "service runtime-config get extra",
+            "service runtime-config set []",
+        ] {
+            assert!(parse_command(&args(invalid), &default_flags()).is_err());
+        }
+    }
+
+    #[test]
     fn test_service_status_includes_configured_service_state() {
         let mut flags = default_flags();
         flags.service_state.site_policies.insert(
@@ -9521,33 +9510,31 @@ mod tests {
     }
 
     #[test]
-    fn test_remote_view_open_builds_route_bound_service_action() {
-        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --manual-login-launch --dry-run");
+    fn test_remote_view_open_builds_managed_service_action() {
+        let raw = args(
+            "--runtime-profile work remote-view open linkedin.com --browser-id browser-work --provider rdp_gateway --dry-run",
+        );
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
 
         assert_eq!(cmd["action"], "remote_view_open");
         assert_eq!(cmd["url"], "https://linkedin.com");
-        assert_eq!(cmd["runtimeProfile"], "stealthcdp-default");
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
+        assert_eq!(cmd["runtimeProfile"], "work");
+        assert_eq!(cmd["browserId"], "browser-work");
         assert_eq!(cmd["browserHost"], "remote_headed");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert_eq!(cmd["provider"], "rdp_gateway");
         assert_eq!(cmd["controlInput"], "manual_attached_desktop");
-        assert_eq!(cmd["displayIsolation"], "shared_display");
-        assert_eq!(cmd["routePoolEntryId"], "pool-a");
-        assert_eq!(cmd["serviceName"], "AuraCall");
-        assert_eq!(cmd["agentName"], "codex");
-        assert_eq!(cmd["taskName"], "authenticateLinkedIn");
-        assert_eq!(cmd["manualLoginLaunch"], true);
+        assert!(cmd.get("displayIsolation").is_none());
+        assert!(cmd.get("routePoolEntryId").is_none());
         assert_eq!(cmd["dryRun"], true);
         assert!(cmd["serviceState"].is_object());
     }
 
     #[test]
     fn test_remote_view_open_accepts_canonical_view_stream_provider() {
-        let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --dry-run");
+        let raw = args("--runtime-profile work remote-view open linkedin.com --view-stream-provider rdp_gateway --dry-run");
         let flags = crate::flags::parse_flags(&raw);
         let clean = crate::flags::clean_args(&raw);
         let cmd = parse_command(&clean, &flags).unwrap();
@@ -9556,8 +9543,8 @@ mod tests {
         assert_eq!(cmd["url"], "https://linkedin.com");
         assert_eq!(cmd["viewStreamProvider"], "rdp_gateway");
         assert!(cmd.get("provider").is_none());
-        assert_eq!(cmd["browserBuild"], "stealthcdp_chromium");
-        assert_eq!(cmd["routePoolEntryId"], "pool-a");
+        assert!(cmd.get("browserBuild").is_none());
+        assert!(cmd.get("routePoolEntryId").is_none());
         assert_eq!(cmd["dryRun"], true);
     }
 
@@ -9637,44 +9624,41 @@ mod tests {
     }
 
     #[test]
-    fn test_remote_view_open_accepts_inline_route_pool_entry_json() {
-        let raw = args(
-            r#"remote-view open https://www.linkedin.com/ --display :10 --route-pool-entry-json {"id":"guacamole-rdp-a","routeId":"guacamole:1","frameUrl":"http://127.0.0.1:8092/guacamole/#/client/route-a","target":{"hostname":"host.docker.internal"},"state":"available"} --dry-run"#,
+    fn test_remote_view_open_rejects_operator_route_and_display_selectors() {
+        for selector in [
+            "--route-pool-entry-id pool-a",
+            "--route-pool-entry-json {}",
+            "--route-id route-a",
+            "--display :10",
+            "--display-allocation-id display-a",
+        ] {
+            let raw = args(&format!(
+                "remote-view open https://example.test/ {selector}"
+            ));
+            let error = parse_command(&raw, &default_flags()).unwrap_err();
+            assert!(error.format().contains("provider-owned route and display"));
+        }
+        let raw = args("--display-isolation shared_display remote-view open https://example.test/");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let error = parse_command(&clean, &flags).unwrap_err();
+        assert!(error.format().contains("provider-owned display"));
+    }
+
+    #[test]
+    fn remote_view_open_ignores_legacy_route_pool_environment() {
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_RDP_ROUTE_POOL_JSON"]);
+        guard.set(
+            "AGENT_BROWSER_RDP_ROUTE_POOL_JSON",
+            "invalid legacy route pool",
         );
-        let cmd = parse_command(&raw, &default_flags()).unwrap();
-
-        assert_eq!(cmd["action"], "remote_view_open");
-        assert_eq!(cmd["url"], "https://www.linkedin.com/");
-        assert_eq!(cmd["remoteHeadedDisplay"], ":10");
-        assert_eq!(cmd["routePoolEntryId"], "guacamole-rdp-a");
-        assert_eq!(cmd["routePoolEntry"]["routeId"], "guacamole:1");
-        assert_eq!(cmd["dryRun"], true);
-    }
-
-    #[test]
-    fn test_remote_view_route_pool_env_value_accepts_array() {
-        let route_pool = remote_view_route_pool_from_env_value(Some(
-            r#"[{"id":"guacamole-rdp-a","routeId":"guacamole:3","target":{"displayName":":11"}}]"#
-                .to_string(),
-        ))
-        .unwrap()
+        let command = parse_command(
+            &args("remote-view open https://example.test/ --runtime-profile work --dry-run"),
+            &default_flags(),
+        )
         .unwrap();
-
-        assert_eq!(route_pool[0]["id"], "guacamole-rdp-a");
-        assert_eq!(route_pool[0]["routeId"], "guacamole:3");
-    }
-
-    #[test]
-    fn test_remote_view_route_pool_env_value_rejects_non_array() {
-        let err =
-            remote_view_route_pool_from_env_value(Some(r#"{"id":"guacamole-rdp-a"}"#.to_string()))
-                .unwrap_err();
-
-        let ParseError::InvalidValue { message, .. } = err else {
-            panic!("expected invalid route-pool env value");
-        };
-        assert!(message.contains("AGENT_BROWSER_RDP_ROUTE_POOL_JSON"));
-        assert!(message.contains("JSON array"));
+        assert_eq!(command["action"], "remote_view_open");
+        assert!(command.get("routePool").is_none());
     }
 
     #[test]

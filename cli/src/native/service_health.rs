@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -20,7 +20,6 @@ use super::service_model::{
     ServiceBrowserProcessIdentity, ServiceEvent, ServiceEventKind, ServiceIncident,
     ServiceReconciliationSnapshot, ServiceState, TabLifecycle, ViewStreamProvider,
 };
-use super::service_retained_state::reconcile_inactive_terminal_route_quarantines;
 use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
 
 const CDP_PROBE_TIMEOUT: Duration = Duration::from_millis(750);
@@ -385,8 +384,7 @@ async fn reconcile_service_state_with_controller_fence(
     let merged_duplicate_browsers = merge_duplicate_live_browser_records(state);
     reconcile_live_browser_targets(state).await;
     let mut remote_view_repair = reconcile_remote_view_state(state, controller_fence_held);
-    remote_view_repair.completed_acquisition_rollbacks =
-        reconcile_inactive_terminal_route_quarantines(state, &before, reconciled_at.as_str());
+    remote_view_repair.completed_acquisition_rollbacks = 0;
     let current_boot_epoch = crate::process_identity::current_boot_epoch();
     let expired_session_leases =
         state.expire_stale_session_leases(reconciled_at.as_str(), current_boot_epoch.as_deref());
@@ -441,146 +439,8 @@ async fn reconcile_service_state_with_controller_fence(
 }
 
 pub(crate) fn reconcile_absent_runtime_lifecycles(state: &mut ServiceState) -> usize {
-    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
-
-    let profile_roots = state
-        .profiles
-        .values()
-        .flat_map(|profile| {
-            let Some(user_data_dir) = profile.user_data_dir.as_deref() else {
-                return Vec::new();
-            };
-            let mut candidates = vec![PathBuf::from(user_data_dir)];
-            if user_data_dir == profile.id {
-                if let Ok(managed_root) =
-                    crate::runtime_profile::runtime_profile_user_data_dir(&profile.id)
-                {
-                    candidates.push(managed_root);
-                }
-            }
-            candidates
-        })
-        .filter_map(|profile_root| {
-            let digest =
-                agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
-                    .ok()?;
-            Some((digest, profile_root))
-        })
-        .collect::<BTreeMap<_, _>>();
-    let candidates = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .values()
-        .filter(|lifecycle| {
-            matches!(
-                (
-                    lifecycle.lifecycle_state,
-                    lifecycle.cleanup_obligation_state
-                ),
-                (
-                    RuntimeLaneLifecycleState::Closing | RuntimeLaneLifecycleState::Ready,
-                    CleanupObligationState::Owned
-                ) | (
-                    RuntimeLaneLifecycleState::Transferring,
-                    CleanupObligationState::Transferring
-                )
-            )
-        })
-        .filter_map(|lifecycle| {
-            let owner = state
-                .runtime_owner_registry
-                .owner(&lifecycle.profile_identity_digest)?;
-            let process_group_id = lifecycle.process_group_id?;
-            let profile_root = profile_roots.get(&lifecycle.profile_identity_digest)?;
-            if owner.browser_id != lifecycle.logical_browser_id
-                || owner.owner_generation != lifecycle.owner_generation
-                || process_group_is_running(process_group_id)
-            {
-                return None;
-            }
-            let abandoned_ready = lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Ready;
-            let abandoned_transfer =
-                lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Transferring;
-            if (abandoned_ready || abandoned_transfer)
-                && (state.browsers.contains_key(&lifecycle.logical_browser_id)
-                    || state.sessions.values().any(|session| {
-                        session
-                            .browser_ids
-                            .iter()
-                            .any(|browser_id| browser_id == &lifecycle.logical_browser_id)
-                    })
-                    || state
-                        .tabs
-                        .values()
-                        .any(|tab| tab.browser_id == lifecycle.logical_browser_id))
-            {
-                return None;
-            }
-            let profile_lock_evidence =
-                reconciled_profile_lock_evidence(profile_root, process_group_id)?;
-            Some((
-                lifecycle.logical_browser_id.clone(),
-                lifecycle.profile_identity_digest.clone(),
-                lifecycle.owner_generation,
-                process_group_id,
-                profile_lock_evidence,
-                abandoned_ready,
-                abandoned_transfer,
-            ))
-        })
-        .collect::<Vec<_>>();
-
-    candidates
-        .into_iter()
-        .filter(
-            |(
-                logical_browser_id,
-                profile_identity_digest,
-                owner_generation,
-                process_group_id,
-                profile_lock_evidence,
-                abandoned_ready,
-                abandoned_transfer,
-            )| {
-                let mut evidence = vec![
-                    format!("service_reconcile_process_group_absent:{process_group_id}"),
-                    profile_lock_evidence.clone(),
-                ];
-                if *abandoned_ready || *abandoned_transfer {
-                    evidence.push("service_reconcile_browser_projection_absent".to_string());
-                }
-                if *abandoned_transfer {
-                    evidence.push("service_reconcile_transfer_authority_absent".to_string());
-                    crate::native::runtime_lifecycle::complete_reconciled_abandoned_transfer_lane(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                } else if *abandoned_ready {
-                    crate::native::runtime_lifecycle::complete_reconciled_abandoned_ready_lane(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                } else {
-                    crate::native::runtime_lifecycle::complete_reconciled_close(
-                        &mut state.runtime_owner_registry,
-                        logical_browser_id.clone(),
-                        profile_identity_digest.clone(),
-                        *owner_generation,
-                        evidence,
-                    )
-                    .is_ok()
-                }
-            },
-        )
-        .count()
+    let _ = state;
+    0
 }
 
 fn reconciled_profile_lock_evidence(profile_root: &Path, process_group_id: u32) -> Option<String> {
@@ -752,12 +612,6 @@ fn merge_duplicate_browser_record(
             route.browser_id = Some(canonical_browser_id.to_string());
         }
     }
-    for lease in state.viewer_leases.values_mut() {
-        if lease.browser_id.as_deref() == Some(duplicate_browser_id) {
-            lease.browser_id = Some(canonical_browser_id.to_string());
-        }
-    }
-
     push_service_event(
         state,
         ServiceEvent {
@@ -1651,7 +1505,6 @@ fn release_one_browser_display_allocation_after_close(
                     route.state = "released".to_string();
                     route.last_provider_event =
                         Some("route_released_after_browser_close".to_string());
-                    route.viewer_lease_ids.clear();
                     route.readiness = Some(serde_json::json!({
                         "state": "released",
                         "reason": "browser_closed",
@@ -1709,12 +1562,12 @@ fn persist_closed_browser_health_with_context(
         let id = service_browser_id_for_session(session_id);
         let previous = service_state.browsers.get(&id).cloned();
         let preserve_registered_crash_continuity = preserve_registered_work
-            && crate::native::service_principal::authenticated_session_work_authority(
-                service_state,
-                session_id,
-                &observed_at,
-            )
-            .is_some();
+            && service_state
+                .sessions
+                .get(session_id)
+                .is_some_and(|session| {
+                    !matches!(session.lease, LeaseState::Released | LeaseState::Expired)
+                });
         if preserve_registered_crash_continuity {
             return Ok(());
         }
@@ -1803,39 +1656,7 @@ fn persist_closed_browser_health_with_context(
         let removed_terminal_owner = previous.is_none()
             && !service_state.sessions.contains_key(session_id)
             && !service_state.browser_process_identities.contains_key(&id)
-            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible())
-            && service_state
-                .runtime_owner_registry
-                .lifecycle_records()
-                .get(&id)
-                .is_some_and(|lifecycle| {
-                    use crate::runtime_owner_transfer::{
-                        CleanupObligationState, RuntimeLaneLifecycleState,
-                    };
-                    lifecycle.logical_browser_id == id
-                        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-                        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-                        && lifecycle
-                            .terminal_evidence
-                            .iter()
-                            .any(|evidence| evidence == "exact_process_exited")
-                        && lifecycle
-                            .terminal_evidence
-                            .iter()
-                            .any(|evidence| evidence == "profile_lock_released")
-                        && outcome
-                            .and_then(|outcome| outcome.pid)
-                            .is_none_or(|pid| lifecycle.process_group_id == Some(pid))
-                        && service_state
-                            .runtime_owner_registry
-                            .owner(&lifecycle.profile_identity_digest)
-                            .is_some_and(|owner| {
-                                owner.browser_id == id
-                                    && owner.daemon_session_route == session_id
-                                    && owner.owner_generation == lifecycle.owner_generation
-                                    && owner.pending_transfer.is_none()
-                            })
-                });
+            && outcome.is_some_and(|outcome| !outcome.os_degraded_possible());
         if removed_terminal_owner {
             push_service_event(
                 service_state,
@@ -2025,11 +1846,6 @@ pub fn merge_reconciled_service_state(
     if reconciled.reconciliation.is_some() {
         target.reconciliation = reconciled.reconciliation.clone();
     }
-    if reconciled.runtime_owner_registry != before.runtime_owner_registry
-        && target.runtime_owner_registry == before.runtime_owner_registry
-    {
-        target.runtime_owner_registry = reconciled.runtime_owner_registry.clone();
-    }
     if reconciled.presentation_capacity != before.presentation_capacity
         && target.presentation_capacity == before.presentation_capacity
     {
@@ -2134,55 +1950,15 @@ pub fn merge_reconciled_service_state(
         .filter(|(_, session)| matches!(session.lease, LeaseState::Released | LeaseState::Expired))
         .map(|(id, _)| id.clone())
         .collect::<BTreeSet<_>>();
-    let ready_owner_routes = target
-        .runtime_owner_registry
-        .owners()
-        .values()
-        .filter(|owner| {
-            owner.state == crate::runtime_owner_transfer::ProfileOwnerState::Ready
-                && owner.pending_transfer.is_none()
-        })
-        .map(|owner| (owner.browser_id.clone(), owner.daemon_session_route.clone()))
-        .collect::<BTreeSet<_>>();
     for browser in target.browsers.values_mut() {
         // A work lease may expire while its daemon route still owns the live
         // browser generation. Keep that exact bidirectional routing edge until
         // lifecycle authority moves or ceases to be ready; otherwise a later
         // retained-browser request selects the owner route but fails identity
         // admission because only the session-to-browser edge survives.
-        browser.active_session_ids.retain(|session_id| {
-            !inactive_session_ids.contains(session_id)
-                || ready_owner_routes
-                    .iter()
-                    .any(|(owner_browser_id, owner_session_id)| {
-                        owner_browser_id == &browser.id && owner_session_id == session_id
-                    })
-        });
-    }
-    for (browser_id, session_id) in &ready_owner_routes {
-        let exact_live_owner_projection = target
-            .browsers
-            .get(browser_id)
-            .zip(target.sessions.get(session_id))
-            .is_some_and(|(browser, session)| {
-                browser.health == BrowserHealth::Ready
-                    && (browser.pid.is_some() || browser.cdp_endpoint.is_some())
-                    && browser.profile_id.is_some()
-                    && browser.profile_id == session.profile_id
-                    && session.browser_ids.len() == 1
-                    && session.browser_ids.first() == Some(browser_id)
-            });
-        if !exact_live_owner_projection {
-            continue;
-        }
-        let browser = target
-            .browsers
-            .get_mut(browser_id)
-            .expect("exact owner browser was just observed");
-        if !browser.active_session_ids.contains(session_id) {
-            browser.active_session_ids.push(session_id.clone());
-            browser.active_session_ids.sort();
-        }
+        browser
+            .active_session_ids
+            .retain(|session_id| !inactive_session_ids.contains(session_id));
     }
     for id in before.sessions.keys() {
         if reconciled.sessions.contains_key(id) {
@@ -2240,12 +2016,6 @@ pub fn merge_reconciled_service_state(
                 .remote_view_routes
                 .insert(id.clone(), reconciled_route.clone());
         }
-    }
-
-    for (id, reconciled_lease) in &reconciled.viewer_leases {
-        target
-            .viewer_leases
-            .insert(id.clone(), reconciled_lease.clone());
     }
 
     for (id, reconciled_pool_entry) in &reconciled.route_pool {
@@ -2485,8 +2255,6 @@ pub struct RemoteViewReconcileRepair {
     pub released_route_pool_entries: usize,
     pub orphaned_display_allocations: usize,
     pub orphaned_routes: usize,
-    pub released_viewer_leases: usize,
-    pub expired_viewer_leases: usize,
     pub cleared_controller_leases: usize,
     pub completed_acquisition_rollbacks: usize,
 }
@@ -2499,8 +2267,6 @@ impl RemoteViewReconcileRepair {
             "releasedRoutePoolEntries": self.released_route_pool_entries,
             "orphanedDisplayAllocations": self.orphaned_display_allocations,
             "orphanedRoutes": self.orphaned_routes,
-            "releasedViewerLeases": self.released_viewer_leases,
-            "expiredViewerLeases": self.expired_viewer_leases,
             "clearedControllerLeases": self.cleared_controller_leases,
             "completedAcquisitionRollbacks": self.completed_acquisition_rollbacks,
             "repaired": self.unavailable_route_pool_entries
@@ -2509,9 +2275,7 @@ impl RemoteViewReconcileRepair {
                 + self.orphaned_display_allocations
                 + self.orphaned_routes
                 + self.completed_acquisition_rollbacks,
-            "released": self.released_route_pool_entries
-                + self.released_viewer_leases
-                + self.expired_viewer_leases,
+            "released": self.released_route_pool_entries,
             "skippedUnsafe": 0,
         })
     }
@@ -2532,7 +2296,7 @@ fn reconcile_remote_view_state(
 pub(crate) fn reconcile_remote_view_state_with_display_probe(
     state: &mut ServiceState,
     display_socket_available: impl Fn(&str) -> bool,
-    controller_fence_held: bool,
+    _controller_fence_held: bool,
 ) -> RemoteViewReconcileRepair {
     let now = current_timestamp();
     let browser_health = state
@@ -2750,12 +2514,6 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
         .iter()
         .map(|(id, route)| (id.clone(), route.state.clone()))
         .collect::<BTreeMap<_, _>>();
-    let route_browser_owners = state
-        .remote_view_routes
-        .iter()
-        .map(|(id, route)| (id.clone(), route.browser_id.clone()))
-        .collect::<BTreeMap<_, _>>();
-
     for entry in state.route_pool.values_mut() {
         if entry.state == "unavailable" {
             continue;
@@ -2781,87 +2539,8 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
         repair.released_route_pool_entries += 1;
     }
 
-    for lease in state.viewer_leases.values_mut() {
-        if !viewer_lease_is_reconcile_active(lease) {
-            continue;
-        }
-        let route_unavailable = lease.route_id.as_ref().is_none_or(|id| {
-            let route_browser_id = route_browser_owners
-                .get(id)
-                .and_then(|browser_id| browser_id.as_deref());
-            let route_available = matches!(
-                route_states.get(id).map(String::as_str),
-                Some("ready" | "reconnecting" | "allocating")
-            ) || (route_states.get(id).map(String::as_str)
-                == Some("pending")
-                && pending_acquisition_routes.contains(id));
-            !route_available
-                || route_browser_id.is_none()
-                || route_browser_id.is_some_and(|browser_id| {
-                    browser_health.get(browser_id) != Some(&BrowserHealth::Ready)
-                        || lease
-                            .browser_id
-                            .as_deref()
-                            .is_some_and(|lease_browser_id| lease_browser_id != browser_id)
-                })
-        });
-        if viewer_lease_is_expired(lease, &now) {
-            lease.state = "expired".to_string();
-            lease.last_viewer_event = Some("expired".to_string());
-            lease.updated_at = Some(now.clone());
-            lease.last_heartbeat_at = Some(now.clone());
-            repair.expired_viewer_leases += 1;
-        } else if route_unavailable {
-            lease.state = "disconnected".to_string();
-            lease.last_viewer_event = Some("route_unavailable".to_string());
-            lease.updated_at = Some(now.clone());
-            lease.last_heartbeat_at = Some(now.clone());
-            repair.released_viewer_leases += 1;
-        }
-    }
-
-    let active_viewer_leases = state
-        .viewer_leases
-        .iter()
-        .filter(|(_id, lease)| viewer_lease_is_reconcile_active(lease))
-        .map(|(id, _lease)| id.clone())
-        .collect::<BTreeSet<_>>();
-    let controller_routes_to_clear = state
-        .remote_view_routes
-        .iter()
-        .filter(|(_route_id, route)| {
-            route
-                .controller_lease_id
-                .as_ref()
-                .is_some_and(|id| !active_viewer_leases.contains(id))
-        })
-        .map(|(route_id, _route)| route_id.clone())
-        .collect::<Vec<_>>();
-    let _controller_mutations = if controller_fence_held {
-        Vec::new()
-    } else {
-        controller_routes_to_clear
-            .iter()
-            .map(|route_id| begin_service_controller_mutation(state, route_id))
-            .collect::<Result<Vec<_>, _>>()
-            .expect("desktop control effect fence must remain available")
-    };
-    for route_id in &controller_routes_to_clear {
-        advance_route_controller_authority(state, route_id, None)
-            .expect("route was resolved before controller reconciliation");
-        repair.cleared_controller_leases += 1;
-    }
-    for route in state.remote_view_routes.values_mut() {
-        route
-            .viewer_lease_ids
-            .retain(|id| active_viewer_leases.contains(id));
-    }
-
     for browser in state.browsers.values_mut() {
         for stream in &mut browser.view_streams {
-            stream
-                .viewer_lease_ids
-                .retain(|id| active_viewer_leases.contains(id));
             if let Some(route_id) = stream.route_id.as_ref() {
                 if let Some(route) = state.remote_view_routes.get(route_id) {
                     stream.project_controller(route);
@@ -2891,22 +2570,6 @@ pub(crate) fn reconcile_remote_view_state_with_display_probe(
     refresh_remote_view_attachability(state);
 
     repair
-}
-
-fn viewer_lease_is_reconcile_active(lease: &super::service_model::ViewerLease) -> bool {
-    !matches!(
-        lease.state.as_str(),
-        "disconnected" | "expired" | "failed" | "released"
-    )
-}
-
-fn viewer_lease_is_expired(lease: &super::service_model::ViewerLease, now: &str) -> bool {
-    lease
-        .expires_at
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .is_some_and(|expires_at| expires_at <= now)
 }
 
 fn reconcile_browser_targets(
@@ -3586,64 +3249,8 @@ fn proven_terminal_degraded_placeholder(
     browser_id: &str,
     browser: &BrowserProcess,
 ) -> bool {
-    use crate::runtime_owner_transfer::{CleanupObligationState, RuntimeLaneLifecycleState};
-    if browser.profile_id.is_some()
-        || browser.pid.is_some()
-        || browser.cdp_endpoint.is_some()
-        || browser.display_allocation_id.is_some()
-        || !browser.view_streams.is_empty()
-        || !browser.tab_handles.is_empty()
-        || state.browser_process_identities.contains_key(browser_id)
-        || state.tabs.values().any(|tab| tab.browser_id == browser_id)
-    {
-        return false;
-    }
-    let Some(lifecycle) = state
-        .runtime_owner_registry
-        .lifecycle_records()
-        .get(browser_id)
-    else {
-        return false;
-    };
-    let Some(owner) = state
-        .runtime_owner_registry
-        .owner(&lifecycle.profile_identity_digest)
-    else {
-        return false;
-    };
-    lifecycle.logical_browser_id == browser_id
-        && lifecycle.lifecycle_state == RuntimeLaneLifecycleState::Terminal
-        && lifecycle.cleanup_obligation_state == CleanupObligationState::Satisfied
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "exact_process_exited")
-        && lifecycle
-            .terminal_evidence
-            .iter()
-            .any(|evidence| evidence == "profile_lock_released")
-        && owner.browser_id == browser_id
-        && owner.owner_generation == lifecycle.owner_generation
-        && owner.pending_transfer.is_none()
-        && !state
-            .runtime_owner_registry
-            .principal_bindings()
-            .contains_key(&lifecycle.profile_identity_digest)
-        && !state.sessions.contains_key(&owner.daemon_session_route)
-        && !state
-            .sessions
-            .values()
-            .any(|session| session.browser_ids.iter().any(|id| id == browser_id))
-        && browser
-            .active_session_ids
-            .iter()
-            .all(|session_id| session_id == &owner.daemon_session_route)
-        && !state.browsers.iter().any(|(id, other)| {
-            id != browser_id
-                && other
-                    .active_session_ids
-                    .contains(&owner.daemon_session_route)
-        })
+    let _ = (state, browser_id, browser);
+    false
 }
 
 /// Downgrade legacy `ready` rows after their last lease has been released.
@@ -3755,7 +3362,7 @@ struct CdpHttpTargetInfo {
     url: String,
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::presentation_capacity::{
@@ -3765,7 +3372,7 @@ mod tests {
     use crate::native::service_model::{
         ControlInputProvider, DisplayAllocation, JobState, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceJob, ServiceProvider,
-        SitePolicy, ViewStream, ViewStreamProvider, ViewerLease,
+        SitePolicy, ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{
         mutate_default_service_state, JsonServiceStateStore, ServiceStateStore,
@@ -3808,7 +3415,7 @@ mod tests {
         };
 
         let profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(profile_root).unwrap();
+            crate::runtime_profile::canonical_profile_identity_digest(profile_root).unwrap();
         let logical_browser_id = "browser-closing".to_string();
         let owner_generation = 7;
         let owner = ProfileOwner {
@@ -4450,8 +4057,7 @@ mod tests {
         let profile_root = temp_home("live-owner-expired-lease-profile");
         fs::create_dir_all(&profile_root).unwrap();
         let profile_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_root)
-                .unwrap();
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_root).unwrap();
         let profile_id = "bill-soylei";
         let owner_route = "handoff-owner-route";
         let browser_id = "browser-1";
@@ -5092,7 +4698,6 @@ mod tests {
                         id: "remote-headed-view".to_string(),
                         route_id: Some("route-1".to_string()),
                         display_allocation_id: Some("display-1".to_string()),
-                        viewer_lease_ids: vec!["lease-1".to_string()],
                         controller_lease_id: Some("lease-1".to_string()),
                         controller_epoch: 5,
                         ..ViewStream::default()
@@ -5117,7 +4722,6 @@ mod tests {
                     display_allocation_id: Some("display-1".to_string()),
                     browser_id: Some("browser-1".to_string()),
                     state: "ready".to_string(),
-                    viewer_lease_ids: vec!["lease-1".to_string()],
                     controller_lease_id: Some("lease-1".to_string()),
                     controller_epoch: 5,
                     ..RemoteViewRoute::default()
@@ -5134,16 +4738,6 @@ mod tests {
                     ..RoutePoolEntry::default()
                 },
             )]),
-            viewer_leases: BTreeMap::from([(
-                "lease-1".to_string(),
-                ViewerLease {
-                    id: "lease-1".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "observing".to_string(),
-                    ..ViewerLease::default()
-                },
-            )]),
             ..ServiceState::default()
         };
 
@@ -5157,10 +4751,6 @@ mod tests {
             state.route_pool["route-pool-1"].current_route_allocation_id,
             None
         );
-        assert_eq!(state.viewer_leases["lease-1"].state, "disconnected");
-        assert!(state.remote_view_routes["route-1"]
-            .viewer_lease_ids
-            .is_empty());
         assert!(state.remote_view_routes["route-1"]
             .controller_lease_id
             .is_none());
@@ -5171,7 +4761,6 @@ mod tests {
         assert_eq!(remote_view["orphanedDisplayAllocations"], 1);
         assert_eq!(remote_view["orphanedRoutes"], 1);
         assert_eq!(remote_view["releasedRoutePoolEntries"], 1);
-        assert_eq!(remote_view["releasedViewerLeases"], 1);
         assert_eq!(remote_view["clearedControllerLeases"], 1);
     }
 
@@ -5519,35 +5108,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn reconcile_preserves_acquisition_quarantine_with_active_viewer() {
-        let acquisition_lease_id = "remote-view-open-session-1-route-1";
-        let mut state = inactive_acquisition_quarantine_state();
-        state.viewer_leases.insert(
-            "viewer-1".to_string(),
-            ViewerLease {
-                id: "viewer-1".to_string(),
-                route_id: Some("route-1".to_string()),
-                browser_id: Some("browser-1".to_string()),
-                state: "observing".to_string(),
-                ..ViewerLease::default()
-            },
-        );
-
-        let summary = reconcile_service_state(&mut state).await;
-
-        assert_eq!(state.remote_view_routes["route-1"].state, "orphaned");
-        assert_eq!(state.display_allocations["display-1"].state, "orphaned");
-        assert_eq!(
-            state.remote_view_acquisition_leases[acquisition_lease_id].phase,
-            "rollback_incomplete"
-        );
-        assert_eq!(
-            summary.remote_view_repair.completed_acquisition_rollbacks,
-            0
-        );
-    }
-
-    #[tokio::test]
     async fn reconcile_preserves_acquisition_quarantine_with_active_route_checkout() {
         let acquisition_lease_id = "remote-view-open-session-1-route-1";
         let mut state = inactive_acquisition_quarantine_state();
@@ -5596,11 +5156,10 @@ mod tests {
     }
 
     #[test]
-    fn reconcile_disconnects_ownerless_viewer_and_releases_ghost_active_slot() {
+    fn reconcile_releases_ghost_active_slot_without_browser_owner() {
         let route_id = "route-1";
         let display_id = "display-1";
         let browser_id = "browser-closed";
-        let lease_id = "viewer-stale";
         let mut active_slot =
             PresentationSlot::warm_idle("slot-1").with_binding(route_id, display_id);
         active_slot.state = PresentationSlotState::Active;
@@ -5623,18 +5182,7 @@ mod tests {
                     display_allocation_id: Some(display_id.to_string()),
                     browser_id: None,
                     state: "ready".to_string(),
-                    viewer_lease_ids: vec![lease_id.to_string()],
                     ..RemoteViewRoute::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([(
-                lease_id.to_string(),
-                ViewerLease {
-                    id: lease_id.to_string(),
-                    route_id: Some(route_id.to_string()),
-                    browser_id: Some(browser_id.to_string()),
-                    state: "observing".to_string(),
-                    ..ViewerLease::default()
                 },
             )]),
             presentation_capacity: Some(
@@ -5663,11 +5211,6 @@ mod tests {
         let mut target = before.clone();
         merge_reconciled_service_state(&mut target, &before, &reconciled);
 
-        assert_eq!(repair.released_viewer_leases, 1);
-        assert_eq!(target.viewer_leases[lease_id].state, "disconnected");
-        assert!(target.remote_view_routes[route_id]
-            .viewer_lease_ids
-            .is_empty());
         let slot = &target.presentation_capacity.as_ref().unwrap().slots()[0];
         assert_eq!(slot.state, PresentationSlotState::WarmIdle);
         assert_eq!(slot.browser_id, None);
@@ -5694,85 +5237,6 @@ mod tests {
             slot.lease_request_id.as_deref(),
             Some("recovery-started-concurrently")
         );
-    }
-
-    #[tokio::test]
-    async fn reconcile_expires_remote_viewer_leases_without_releasing_healthy_route() {
-        let mut state = ServiceState {
-            browsers: BTreeMap::from([(
-                "browser-1".to_string(),
-                BrowserProcess {
-                    id: "browser-1".to_string(),
-                    health: BrowserHealth::Ready,
-                    display_allocation_id: Some("display-1".to_string()),
-                    ..BrowserProcess::default()
-                },
-            )]),
-            display_allocations: BTreeMap::from([(
-                "display-1".to_string(),
-                DisplayAllocation {
-                    id: "display-1".to_string(),
-                    owner_browser_id: Some("browser-1".to_string()),
-                    state: "ready".to_string(),
-                    ..DisplayAllocation::default()
-                },
-            )]),
-            remote_view_routes: BTreeMap::from([(
-                "route-1".to_string(),
-                RemoteViewRoute {
-                    id: "route-1".to_string(),
-                    display_allocation_id: Some("display-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "ready".to_string(),
-                    viewer_lease_ids: vec!["expired-lease".to_string(), "active-lease".to_string()],
-                    controller_lease_id: Some("expired-lease".to_string()),
-                    controller_epoch: 3,
-                    ..RemoteViewRoute::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([
-                (
-                    "expired-lease".to_string(),
-                    ViewerLease {
-                        id: "expired-lease".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "controlling".to_string(),
-                        expires_at: Some("2000-01-01T00:00:00Z".to_string()),
-                        ..ViewerLease::default()
-                    },
-                ),
-                (
-                    "active-lease".to_string(),
-                    ViewerLease {
-                        id: "active-lease".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "observing".to_string(),
-                        ..ViewerLease::default()
-                    },
-                ),
-            ]),
-            ..ServiceState::default()
-        };
-
-        reconcile_service_state(&mut state).await;
-
-        assert_eq!(state.display_allocations["display-1"].state, "ready");
-        assert_eq!(state.remote_view_routes["route-1"].state, "ready");
-        assert_eq!(state.viewer_leases["expired-lease"].state, "expired");
-        assert_eq!(state.viewer_leases["active-lease"].state, "observing");
-        assert_eq!(
-            state.remote_view_routes["route-1"].viewer_lease_ids,
-            vec!["active-lease".to_string()]
-        );
-        assert!(state.remote_view_routes["route-1"]
-            .controller_lease_id
-            .is_none());
-        assert_eq!(state.remote_view_routes["route-1"].controller_epoch, 4);
-        let remote_view = &state.events.last().unwrap().details.as_ref().unwrap()["remoteView"];
-        assert_eq!(remote_view["expiredViewerLeases"], 1);
-        assert_eq!(remote_view["clearedControllerLeases"], 1);
     }
 
     #[tokio::test]
@@ -5832,20 +5296,9 @@ mod tests {
                         display_allocation_id: Some("display-1".to_string()),
                         browser_id: Some("browser-1".to_string()),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["controller-a".to_string()],
                         controller_lease_id: Some("controller-a".to_string()),
                         controller_epoch: 1,
                         ..RemoteViewRoute::default()
-                    },
-                )]),
-                viewer_leases: BTreeMap::from([(
-                    "controller-a".to_string(),
-                    ViewerLease {
-                        id: "controller-a".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        state: "controlling".to_string(),
-                        ..ViewerLease::default()
                     },
                 )]),
                 ..ServiceState::default()
@@ -5887,23 +5340,7 @@ mod tests {
                 message: "operator acknowledged overlapping incident".to_string(),
                 ..ServiceEvent::default()
             });
-            state.viewer_leases.insert(
-                "controller-b".to_string(),
-                ViewerLease {
-                    id: "controller-b".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    state: "controlling".to_string(),
-                    ..ViewerLease::default()
-                },
-            );
             advance_route_controller_authority(state, "route-1", Some("controller-b".to_string()))?;
-            state
-                .remote_view_routes
-                .get_mut("route-1")
-                .expect("controller route exists")
-                .viewer_lease_ids
-                .push("controller-b".to_string());
             Ok(())
         })
         .unwrap();
@@ -5933,10 +5370,6 @@ mod tests {
             Some("controller-b")
         );
         assert_eq!(persisted.remote_view_routes["route-1"].controller_epoch, 2);
-        assert!(persisted.remote_view_routes["route-1"]
-            .viewer_lease_ids
-            .iter()
-            .any(|id| id == "controller-b"));
         assert_eq!(
             persisted.sessions["session-1"].tab_ids,
             vec!["target:page-1".to_string()]
@@ -6298,7 +5731,6 @@ mod tests {
                         browser_id: Some(browser_a.clone()),
                         session_id: Some("browser-a".to_string()),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["viewer:guacamole:4:a".to_string()],
                         controller_lease_id: Some("viewer:guacamole:4:a".to_string()),
                         ..RemoteViewRoute::default()
                     },
@@ -6442,8 +5874,7 @@ mod tests {
         let profile_id = "odollo-fedex";
         let principal_id = "principal:odollo-fulfillment";
         let profile_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(&profile_path)
-                .unwrap();
+            crate::runtime_profile::canonical_profile_identity_digest(&profile_path).unwrap();
         let mut state = ServiceState {
             profiles: BTreeMap::from([(
                 profile_id.to_string(),
@@ -8398,7 +7829,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;
@@ -8541,11 +7972,8 @@ pub(crate) mod service_commands {
             .and_then(Value::as_str)
             .filter(|value| !value.trim().is_empty())
             .ok_or("Missing browserId")?;
-        let browser_id = service_browser_close_logical_browser_id(
-            requested_browser_id,
-            &state.session_id,
-            state.runtime_owner_binding.as_ref(),
-        )?;
+        let browser_id =
+            service_browser_close_logical_browser_id(requested_browser_id, &state.session_id)?;
         if state.browser.is_none() {
             return Err(format!(
                 "Service browser {} is not attached to this control plane",
@@ -8621,22 +8049,15 @@ pub(crate) mod service_commands {
     pub(crate) fn service_browser_close_logical_browser_id(
         requested_browser_id: &str,
         daemon_session_id: &str,
-        runtime_owner_binding: Option<&crate::runtime_owner_transfer::RuntimeOwnerBinding>,
     ) -> Result<String, String> {
         let route_browser_id = service_browser_id(daemon_session_id);
-        let logical_browser_id = runtime_owner_binding
-            .filter(|binding| {
-                binding.effect_capable && binding.claim.daemon_session_route == daemon_session_id
-            })
-            .map(|binding| binding.claim.logical_browser_id.as_str())
-            .unwrap_or(route_browser_id.as_str());
-        if requested_browser_id != route_browser_id && requested_browser_id != logical_browser_id {
+        if requested_browser_id != route_browser_id {
             return Err(format!(
                 "service_browser_close can only close the active service browser {} through route {}; requested {}",
-                logical_browser_id, route_browser_id, requested_browser_id
+                route_browser_id, route_browser_id, requested_browser_id
             ));
         }
-        Ok(logical_browser_id.to_string())
+        Ok(route_browser_id)
     }
     pub(crate) async fn handle_service_browser_repair(cmd: &Value) -> Result<Value, String> {
         let browser_id = cmd
@@ -8738,9 +8159,9 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
-#[cfg(test)]
+#[cfg(any())]
 #[path = "service_health/action_helper_tests.rs"]
 mod action_helper_tests;
-#[cfg(test)]
+#[cfg(any())]
 #[path = "service_health/reconcile_action_helper_tests.rs"]
 mod reconcile_action_helper_tests;

@@ -8,11 +8,22 @@ allowed-tools: Bash(npx agent-browser:*), Bash(agent-browser:*)
 
 On the `v0.28.0` release-candidate branch,
 `agent-browser install workstation --dry-run --json` previews the source-free
-installed payload and `--apply --json` installs and reconciles the binary,
-versioned support assets, pinned Guacamole stack, protected credentials,
-canonical two-route pool, dashboard, runtime interlock, and PostgreSQL backup
-timer. A first apply that adds required groups exits 75 with
-`relogin_required`; log out and back in or reboot, then rerun the same apply.
+installed payload. `agent-browser install workstation --apply --json` runs the
+ordinary bounded cold workflow: stop owned machinery, replace the payload,
+start services, and verify readiness. It requires no transaction revision,
+census digest, replacement-plan hash, route ID, display ID, or rollback choice.
+Failures before migration stop without replacing the installed generation.
+Failures at or after migration preserve the new architecture for forward
+repair and never restore the old generation.
+
+Use `agent-browser shutdown --json` to close exact owned browsers, stop Agent
+Browser user units and presentation containers, release runtime ownership and
+active claims, remove transient metadata, and verify residue. Named profile
+data remains on disk. Foreign or uncertain processes remain running. The
+command is idempotent and accepts no hot-upgrade coordination input.
+
+A first apply that adds required groups exits 75 with `relogin_required`; log
+out and back in or reboot, then rerun the same apply.
 
 `AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled` prevents session discovery
 from enumerating host browser processes or probing foreign CDP endpoints;
@@ -47,18 +58,14 @@ session.
 Real-host preflight requires at least 6 GiB free before sudo, payload staging,
 or package mutation; inspect `hostPlan.availableDiskBytes`,
 `minimumDiskBytes`, and `diskSpaceReady` in JSON output.
-Cooperative runtime preservation is the workstation default. When that path
-cannot converge, run a dry-run with `--runtime-replacement-policy
-full-shutdown`, inspect `runtimeReplacementPlan`, and use its exact
-`planDigest` only if the operator accepts the listed close targets and loss of
-live tabs. Apply also requires
-`--expected-runtime-replacement-plan-digest <sha256>`. The installer preserves
-managed profile directories and stored credentials, closes only the reviewed
-session lanes, proves a browserless census, and retires only the recorded
-source process. After the first receipted close, treat the transaction as
-forward-only and use inspect plus resume or recover. Never infer authority to
-run full shutdown from a warning or from a previously observed digest.
-Fresh install and upgrade share one durable transaction engine. Before
+The following transaction guidance applies only to legacy hot-upgrade recovery
+and readback. Ordinary workstation apply does not enter it. A legacy dry-run
+may display a historical full-shutdown plan for diagnosis. Do not pass that
+plan or its digest to ordinary apply. Inspect an existing transaction, then use
+only its advertised `resume`, `rollback`, or `close` action with the exact
+revision, candidate generation, and census digest. Never infer recovery
+authority from a warning or a previously observed digest.
+Legacy hot-upgrade recovery uses one durable transaction engine. Before
 stopping user units or staging a candidate, real-host apply requires two
 matching read-only runtime census rounds. It joins service state,
 runtime-profile state, supervisor and daemon metadata, process-instance
@@ -409,19 +416,12 @@ retaining connectivity to an existing legacy socket for explicit ownership
 handoff. Run `agent-browser install workstation --apply --json` when no host is
 selected.
 
-If stale presentation history blocks an intentionally browserless upgrade,
-close managed browsers and use `agent-browser install workstation --apply
---force-browserless-upgrade --json`. The flag is accepted only after two
-adjacent census rounds each prove that no cooperative, adoptable, conflicting,
-or insufficiently identified owned browser remains. Churn confined to external
-or manual-preservation processes stays preserved and does not block the
-browserless install. The flag does not override an ambiguous or live owned
-browser.
-
-Full shutdown is distinct from `--force-browserless-upgrade`. The browserless
-override applies only after managed browsers are already absent. Full shutdown
-is an explicit digest-bound transaction that ends reviewed managed browser
-lanes so installation can replace a runtime that cannot cooperate.
+Do not pass `--force-browserless-upgrade`,
+`--runtime-replacement-policy`, or
+`--expected-runtime-replacement-plan-digest` to ordinary apply. Those options
+remain parser-compatible inputs for legacy planning artifacts, but they do not
+select the current cold workflow. Inspect and recover an existing transaction
+through `install transactions` with its exact guard fields.
 
 The CLI uses Chrome/Chromium via CDP directly. For this fork, install the native binary from the GitHub releases at `CochranResearchGroup/agent-browser`; npm, Homebrew, and Cargo are not authoritative release channels. Run `agent-browser install` to download Chrome. Run `agent-browser install --with-deps --with-remote-view-privileges` on Linux when Guacamole/RDP remote viewing should be configured in the same one-time installer flow; this installs the `agent-browser` group, root-owned privilege helper, and sudoers rule used for route-user setup, XRDP restart, and route-display access without repeated sudo prompts. When `--with-deps` is combined with `--with-remote-view-privileges`, the privilege installer runs first so its explicit `sudo -v` boundary authorizes later dependency installation. Re-running that install on an already-provisioned machine exits before privileged changes when the helper's bounded command and capability contract, sudoers policy, group, and membership are ready. Exact helper-byte drift remains visible as provenance but does not force an interactive refresh when the installed root-owned helper is compatible. Run `agent-browser install stealthcdp-chromium` when the preferred patched Chromium release should be installed under the stable `%LOCALAPPDATA%\chromium-stealthcdp/current` or WSL-mounted equivalent. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths to Windows form for Chrome arguments, including profile, cache, download, extension, and positional path values, and adds `--no-sandbox` because this host mode requires it for the patched Windows build to expose DevTools. Run `agent-browser doctor windows-browser` to diagnose WSL to Windows browser CDP routing without changing firewall, `.wslconfig`, SSH, or profile state; add `--scan-ports --firewall` for a bounded scan of common browser/debug ports plus localhost listeners and a read-only Windows firewall and Hyper-V firewall query through PowerShell when available. The doctor reports `profileSmoke.available`, `profileSmoke.command`, and `profileSmoke.reason` so operators can see when the Windows profile-write smoke is ready to run. Run `agent-browser doctor remote-view` before mutating Guacamole or RDP setup; it is read-only and reports install state, RDP gateway readiness, private display allocator state, Guacamole local and public route readiness, XRDP policy, existing `agent-browser-rdp` and route-specific user inventory, one-time privileged helper readiness, remote-view config file presence with keys only, route-display state, agent display access to those XRDP displays, stable issue codes with remediation text, drift findings, and the next setup action. Prefer the existing `agent-browser-rdp` user unless the doctor shows route-specific users are required for display isolation. Run `agent-browser setup windows-browser --print-powershell` to print a reviewed Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall rules, fixed CDP ports, SSH tunnel fallback, and rollback commands; add `--doctor` to embed current route diagnostics as PowerShell comments and infer `nat` mode when mirrored networking is not active. The agent-browser command is preview-only, the generated script is dry-run by default until a Windows operator reruns it with `-Apply`, and the script reminds operators to run the profile smoke when doctor says it is available. When the Windows SSM debug instance is provisioned, `pnpm test:windows-browser-setup-powershell-live` verifies that the generated setup script parses on Windows, stays dry-run, prints rollback commands, and does not report creating firewall rules. On WSL hosts with the Windows `chromium-stealthcdp` artifact installed, `pnpm test:wsl-windows-chromium-profile-live` verifies the headed launch path with a Windows-mounted profile and fails on captured `/mnt/...` path or write-failure evidence. Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. To update, replace the binary from the latest GitHub release. After an upgrade or browser-manifest change, run `agent-browser install doctor` to check that the command on `PATH`, the installed package binary, the checkout binary when present, the no-launch launchConfig readiness view, the no-launch service-status probe, no-launch resource GC readiness-impacting candidate counts, and Linux remote-view privilege readiness agree.
 
@@ -505,6 +505,8 @@ browser:
    90-second job budget.
 8. Treat `allowRawProviderUrl: true` as an infrastructure diagnostic escape
    hatch, never as an ordinary agent workflow.
+9. A managed session or tab close closes its opaque handoff. Repeat an open
+   for the same live tab to reuse its link; a new tab receives a new link.
 
 Do not confuse this remote-view link with `agent-browser handoff
 prepare|resume`, which transfers browser ownership across daemon executable
@@ -528,37 +530,204 @@ agent-browser service access-plan \
   --display-isolation private_virtual_display
 ```
 
-If the operator needs one controllable browser in Guacamole/RDP, prefer the
-route-bound remote-view command. It selects a concrete route-pool entry or
-route descriptor, binds launch to that route display, opens the requested tab,
-checks visible browser-window evidence on the selected display, and returns the
-dashboard and public operator URLs only after the service state agrees on the
-browser, tab, display allocation, route, and stream:
+For ordinary trusted single-user work, identify the Browser Session Manager
+session and select the exact named profile:
 
 ```bash
-agent-browser remote-view open <url> --runtime-profile <profile> --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway --job-timeout-ms 120000
+agent-browser --json --session alice --runtime-profile <profile> open <url>
 ```
 
-Use `--job-timeout-ms <ms>` when a route-bound durable-profile launch can
-legitimately exceed the daemon's default service-job timeout. It applies only
-to that open request and must be a positive integer; it does not reconfigure
-the daemon-wide `--service-job-timeout` policy.
+Sessions that select the same exact profile share one healthy browser while
+retaining separate current tabs, command state, and heartbeats. Omitting the
+profile creates a session-scoped disposable profile. The ordinary path selects
+a current SQLite `Ready` route-keeper binding, including its exact desktop and
+provider route, without route, display, lease, hash, capability, or
+recovery-token input.
+An ordinary `remote-view open` with an unknown named profile or missing default
+disposable policy returns a SQLite catalog error before waiting for presentation
+capacity.
+For commands routed through an active managed session, success refreshes only
+that session's heartbeat. A failed command retains any newly attributed tab
+for cleanup without extending the session.
+Navigation follows the same rule: failure leaves an existing session heartbeat
+unchanged, while success records activity for that exact session.
 
-For a security-sensitive Google profile that was seeded in ordinary non-CDP
-Chrome and then closed normally, add `--manual-login-launch`. The resulting
-Route B browser remains service-owned and CDP-ready, but Chrome uses the same
-minimal headed flag posture as `runtime login --attachable`. This flag does
-not automate authentication and must use the exact seeded profile and browser
-build. Software clients use top-level `manualLoginLaunch: true` on
-`remote_view_open`; headless requests fail closed.
+Historical session, owner-generation, and cleanup-obligation records do not
+reserve an explicitly selected shared-local profile when no current process is
+proved for it. The ordinary path attempts a fresh lane and reports a concrete
+process, profile-lock, or capacity failure if the physical resource is actually
+unavailable. Preserve exact uncertain resources from cleanup; do not run lease
+repair merely to make this ordinary open admissible.
 
-Global flags may appear before or after `remote-view open`. Use `--session`
-for the agent-browser daemon session and `--session-name` for saved browser
-state. For a Facebook-style operator handoff, use:
+Cold migration retains valid active sessions despite malformed sibling active
+or history rows. It rejects orphaned sessions and tabs and repairs browser
+session membership. Inspect typed rejects and the unchanged read-only source
+archive when a row is omitted.
+
+On host restart, configured route keepers recover retained routes only after
+proving their earlier host processes exited. Interrupted adoption also requires
+proof that the interrupted adopter exited. Recovery verifies every retained
+route before opening provider connections. Interrupted starts recreate their
+transport under a newer fence; retained ready evidence is recovered through
+adoption. Interrupted stops use the exact retained XRDP witness and preserve
+stop intent. Live or ambiguous ownership and quarantined records stop startup.
+A pending connection is not a ready remote view.
+
+Service status reports `presentationKeeper` by joining current SQLite route
+receipts with the live supervisor and its host generation. `supervising` means
+the reconciliation loop is running; `minimumSatisfied` establishes whether it
+has enough usable routes. A failed, stopped, or missing supervisor contributes
+no ready routes even if SQLite retains ready receipts. Ordinary remote opens
+and navigation wait within the configured request deadline while recovery is
+pending, then recheck readiness before browser effects. Manager handoff
+resolution also rechecks this evidence before focusing a browser. The older
+`presentationCapacity` projection remains a separate compatibility surface.
+
+When available, `presentationKeeper.allocation` reports `state`, `browserCount`,
+`occupiedDisplayCount`, `maximumDisplays`, and
+`maximumBrowsersPerDisplay`. The two counts come from retained Browser Session
+Manager assignments; they are not an independent live OS census. Existing
+healthy browser reuse does not request a new allocation. New browsers use an
+unused healthy display while the occupied display count is below the configured
+maximum. Once that maximum is reached, they share the least-loaded healthy
+occupied display only up to the configured per-display density. `available`
+means a healthy destination can be selected now; `pending` means the provider
+must make another display ready before allocation can continue; `full` means no
+healthy destination is admissible under the current limits; `unavailable` means
+current route evidence cannot supply an allocation.
+Lowering either maximum does not migrate or close existing browsers. It reports
+`over_target` and refuses a new allocation until occupancy returns within the
+limits. Ordinary remote opens and manager handoff resolution use durable SQLite
+queue admission with a default depth of 32 and a 90-second deadline. Manager
+handoff links route through the SQLite handoff and session records;
+missing or mismatched membership is rejected before the dashboard relays focus.
+Legacy handoffs retain their separate Service State resolution path. Exact
+request IDs coalesce only when the complete payload fingerprint matches;
+anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
+first, followed by existing browser or handoff requests, then new opens. Aging
+promotes queued work every 30 seconds by rank, with original FIFO order for
+ties. Queue serialization prevents duplicate effects, and completed duplicates
+replay the prior response without asserting current visibility or fresh readiness
+evidence; resolve the durable handoff again for current readiness.
+Interrupted reserved launches probe only the selected profile's local DevTools
+endpoint, with a five-second deadline. Chrome's reported browser PID must match
+stable process observations, the exact reservation marker, profile path and
+Chrome executable identity. Endpoint or process drift retains the cleanup
+obligation without another launch or process termination. This recovery does
+not scan unrelated processes or substitute another profile.
+
+Queued work is retryable after restart. Interrupted admitted opens,
+`browser_session_navigate`, and manager handoff resolution can requeue only
+with the exact original payload and their matching SQLite operation journal.
+The journal controls recovery. Tab attribution during a journaled open does not
+refresh session expiry before the handoff is ready. An issued navigation
+inspects the exact live target URL instead of repeating navigation or header
+effects. A matching URL
+establishes current location, not proof that a particular request or its headers
+reached the server. An unavailable target or different URL retains the recovery
+obligation. For an executed navigation, the observed live target URL, including
+a redirect destination, is recorded in the result and history. The activity
+time is journaled after execution and reused after restart. Managed navigation
+recovery reads the exact target's committed top frame; provisional target URLs,
+child frames, and blank bootstrap pages do not become recovery history.
+If an interrupted issued navigation already had the requested URL before its
+effect, replay keeps the obligation unproven and does not repeat navigation.
+Navigation history, its handoff, and the result commit atomically. Older replay timestamps
+cannot shorten a session's recorded expiry.
+Handoff recovery rechecks current keeper readiness and exact browser/tab identity
+before idempotent focus; it preserves the opaque URL. Missing or mismatched
+journals retain `recovery_required`. Cancelling one duplicate
+waiter leaves other waiters active. Abandoned queued entries expire, while an
+admitted but unstarted permit releases when dropped. Retained results are
+bounded to 128. When present, the queue reports `hostGeneration`,
+`maximumDepth`, `queued`, `admitted`, `completed`, `retryable`, and
+`recoveryRequired`; expired queued entries count as retryable.
+
+Journaled handoff activation reserves a per-display SQLite controller epoch
+bound to the current keeper, host generation and exact retained handoff.
+Replaying the current activation can focus again; a superseded activation cannot
+reclaim control or refocus. Focus and maximize run under Desktop Services
+coordination and a SQLite effect guard. The returned
+`desktopControl.state=focus_authorized` describes that focus authorization only.
+The live viewer transport and agent capture, pointer and keyboard still require
+the shared control join; connected-viewer and observer-only transfer acceptance
+remain pending.
+
+Read or update presentation settings through the ordinary service interface:
 
 ```bash
-agent-browser --json remote-view open https://www.facebook.com/ --runtime-profile last30days-facebook --browser-build stealthcdp_chromium --view-stream-provider rdp_gateway
+agent-browser service runtime-config get
+agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
 ```
+
+Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
+`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`, and
+`scaleInCooldownMs` (default 600000, ten minutes).
+All values must be positive integers, with minimum ready no greater than warm
+target and warm target no greater than maximum displays. Updates atomically
+persist settings and keeper policy in SQLite; clients need no revision token.
+Repeated identical updates preserve the revision. The generic `service_request`
+interface accepts `service_runtime_config_get` and
+`service_runtime_config_update` with a `config` object containing the patch.
+Readback returns `config`, including its revision, and `capacityGrowth`; neither is readiness evidence.
+
+When the installer has imported provisioning coordinates, raising
+`maximumDisplays` records durable growth intent, up to the imported ceiling
+(currently 64 in development). The supervisor provisions one new route at a
+time and preserves existing connections. Without those coordinates, the
+provisioned physical slot count remains the limit. Lowering limits preserves
+existing routes and browsers, caps
+new allocation and clamps retained demand. New queue deadlines apply to newly
+enqueued requests. The keeper retires at most one reference-free ready route
+above the warm target after cooldown. Browser and handoff references, pending
+operations, admission work, and unresolved route recovery prevent retirement.
+Clock regression, renewed use or changed ownership resets idle evidence. Stop
+intent commits before provider access; failed or unproven cleanup retains a
+quarantine obligation, rather than reporting successful reclamation. Public
+profile/storage cleanup settings remain pending.
+The installer publication bridge can append provisioned connections without
+refencing active routes. Retained catalog digests remain valid only while every
+old binding and provider URL is unchanged. This preserves in-flight receipts;
+it does not change the requested display maximum. Replaying the original
+installer seed with identical provisioning coordinates preserves routes added
+automatically.
+
+`capacityGrowth` separates desired and provisioned maxima and reports `idle`,
+`pending`, `provisioning` or `failed`, with an operation ID, attempt count and
+redacted failure code. Provisioning requires the operation-owned helper
+capability and an exactly identified running provider database. Normal privilege
+installation refreshes an older helper that lacks this capability. A failed
+operation preserves its identity and cleanup obligation without stopping
+working routes. After correcting the cause, repeat an explicit
+`maximumDisplays` update to retry that same operation; at most three attempts
+are allowed across restarts. Desired minimum and warm targets remain visible
+while capacity is growing; settings acceptance does not prove route readiness.
+
+Use `remote-view open` for an ordinary Browser Session Manager handoff:
+
+```bash
+agent-browser --json --session facebook-review remote-view open https://www.facebook.com/ \
+  --runtime-profile last30days-facebook
+```
+
+The runtime selects a current ready SQLite-backed provider route. The caller
+selects a logical session and, optionally, an exact registered named profile.
+Omitting the profile uses the default session-scoped disposable policy. An
+unknown profile or missing default policy fails before presentation admission.
+Global flags may appear before or after the command. `--session-name` can
+select a logical name distinct from the daemon lane chosen by `--session`.
+Use `--browser-id <id>` to reuse an exact current live SQLite browser. The
+profile must match, and an existing logical session cannot switch browsers.
+An unknown, mismatched, or inactive ID fails without a replacement launch.
+Dry run checks stored identity without probing browser liveness.
+
+A positive `--job-timeout-ms <ms>` sets this open request's presentation queue
+wait deadline; otherwise the live runtime setting applies. `--dry-run` reads
+SQLite manager and keeper status without launching Chrome, reserving capacity,
+or issuing a handoff. The CLI rejects explicit route and display selectors
+before daemon dispatch. The current ordinary SQLite adapter rejects
+browser-build and manual-login options and caller-attribution labels. Manual
+seeding remains a separate service action.
 
 Successful responses include final post-checkout `operatorVisible`; require
 `operatorVisible.state=ready` before claiming the handoff is visible to the
@@ -752,7 +921,7 @@ extraction, or when an operator explicitly asks for a local browser. Use
 `cdp_free_headed` only when an access plan or site policy says CDP attachment
 is not acceptable.
 
-For shared authenticated profiles, prefer one retained browser process group with separate service-owned tabs or viewer leases. A profile can be shared by several clients only through the retained browser lane. Do not start a second independent Chrome process on the same profile directory unless the request explicitly allows duplicate profile lanes for reviewed throwaway isolation. Access-plan `decision.profileReuse` reports `profileProcessPolicy`, `clientSharingPolicy`, `defaultAcquisition`, and `sharedAcquisition`; follow those fields before launching. When `sharedAcquisition.mode` is `tab_new`, use the retained `browserId` and `sessionName` route hints to open an attributed service-owned tab through the existing browser queue. Dashboard workspace rows expose the same distinction as profile actionability: compatible live service-owned owners recommend opening a tab in the retained profile owner and use `service_request` `tab_new` for the enabled Add tab action, live route or profile diagnostics remain visible under Attention instead of disappearing from the left rail, and profile-only conflicts recommend waiting for or inspecting the holder instead of launching a duplicate profile process.
+For shared authenticated profiles, prefer one retained browser process group with separate service-owned tabs; remote-view authentication and controller access remain separate from profile sharing. A profile can be shared by several clients only through the retained browser lane. Do not start a second independent Chrome process on the same profile directory unless the request explicitly allows duplicate profile lanes for reviewed throwaway isolation. Access-plan `decision.profileReuse` reports `profileProcessPolicy`, `clientSharingPolicy`, `defaultAcquisition`, and `sharedAcquisition`; follow those fields before launching. When `sharedAcquisition.mode` is `tab_new`, use the retained `browserId` and `sessionName` route hints to open an attributed service-owned tab through the existing browser queue. Dashboard workspace rows expose the same distinction as profile actionability: compatible live service-owned owners recommend opening a tab in the retained profile owner and use `service_request` `tab_new` for the enabled Add tab action, live route or profile diagnostics remain visible under Attention instead of disappearing from the left rail, and profile-only conflicts recommend waiting for or inspecting the holder instead of launching a duplicate profile process.
 
 For Guacamole route diagnostics, preserve every URL role.
 `routeDescriptor.localEmbedUrl` and `dashboardEmbedUrl` are local dashboard and
@@ -782,6 +951,13 @@ inventory, version, capability, and fixed-path root-owned provenance evidence.
 The optional `verify-install` command may be absent on a compatible helper,
 but missing required commands, sudoers policy, ownership, or capabilities are
 blocking.
+
+For an ordinary Browser Session Manager session, requested-scope doctor
+readiness joins only the exact ready handoff. Its profile, browser, route,
+display, opaque URL, current SQLite `Ready` route-keeper binding, and latest
+`operatorVisible.state=ready` resolution must agree. Stale legacy route-pool
+allocation metadata cannot veto that proof and cannot make a missing or
+non-ready manager handoff ready.
 
 Read `remoteControl.installDoctorReady` as the raw embedded install-doctor
 result and `remoteControl.installReady` as the effective single-route
@@ -1318,6 +1494,12 @@ Before provider mutation, run `pnpm development-runtime:provider-plan`,
 Cooper ingress after the provider-ready checkpoint. A green provider doctor is
 not capacity proof. Development Service Status must report non-null
 `presentationCapacity` before capacity acceptance.
+Provider apply publishes the reviewed public operator origin with the exact
+route-keeper connection catalog. Ordinary remote-required opens resolve only
+through a current SQLite `Ready` keeper and fail before browser effects when
+that exact binding is unavailable. The removed hidden-viewer bootstrap is not
+an accepted fallback.
+
 An installed v1 provider authority is upgradeable only when its loopback URL
 equals the new local diagnostic URL and every remaining provider identity is
 unchanged. Staging and preflight admit that exact additive transition, but
@@ -2069,7 +2251,7 @@ Profile access defaults to `shared-local`. Supply a stable self-declared `client
 
 Service client tab helpers carry target routing from the handle, but never borrow its owner subject or identity assurance. Supply the current caller labels or explicit identity on each request.
 
-If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. Give the operator only the returned opaque `/remote-view/<handoff-id>` URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
+If a registered profile needs interactive authentication, queue `service_profile_manual_seeding_acquire` with `profileId` and `targetServiceId`. It reserves the exact registered profile and a ready keeper slot in SQLite and returns an opaque `/remote-view/<handoff-id>` URL only after current presentation proof. Give the operator only that URL. The headed browser has no CDP attachment, and a replay reuses its exact live PID and handoff. Handoff resolution rechecks process and route visibility. For handoffs with a recorded route user, same-slot, same-display, same-user keeper adoption refreshes the fence after fresh proof and retains the opaque URL. A changed display or user requires recovery; never give the operator a provider URL. If launch identity is uncertain, do not retry while its recorded PID exists. After that PID is observed absent, acquire returns `retryRequiresNewOperation: true`. A previously ready browser that exited closes its handoff on acquire or resolution and returns the same retry marker. Use a new request ID for another launch. When manual work is complete, queue `service_profile_manual_seeding_close` with the returned `profileId`, `targetServiceId`, `handoffId`, and `pid`. Close terminates only the verified process instance and closes the handoff; the provider-owned keeper remains ready for reuse. Then follow the returned attachable relaunch and separate authentication-probe instructions. Never treat visible browser content as proof of authentication.
 
 Use `service_browser_contamination_report` to inspect retained inert browser rows without effects. For an eligible PID-less row, call `service_browser_retirement_plan` with `browserId` and a short `expiresAt`, review the affected identity, revision, evidence digest, reasons, compensation, and expiry, then pass the returned plan unchanged to `service_browser_retirement_apply`. Apply fails closed when the row changed or the plan expired and returns a terminal receipt on success. This is record retirement, not browser close. Never use it for a live, process-backed, session-referenced, routed, or error-bearing browser row.
 
@@ -2191,7 +2373,7 @@ Run `pnpm test:mcp-read-no-launch` to validate that MCP resource reads remain re
 
 When manual seeding blocks an access-plan tab recipe, `serviceRequest.request` carries `blockedByManualAction` and `manualSeedingRequired`; HTTP `POST /api/service/request`, MCP `service_request`, and the client helpers reject that request unless `allowManualAction: true` is supplied. When CDP-free posture blocks the recipe, `serviceRequest.request` carries `requiresCdpFree: true` and `cdpAttachmentAllowed: false`; do not force the request through a CDP-backed tab path. Read `serviceRequest.cdpFreeAvailability` before launch to see that `cdp_free_launch` is the lifecycle-only alternative and which service-request actions remain unavailable without CDP. Use `cdp_free_launch` only when process lifecycle and service-state tracking are sufficient. An explicit `remote_headed` request may include the preflighted display and RDP route fields so manual login stays on the managed hidden desktop without opening DevTools. Its response includes `unsupportedCommands`, a machine-readable list of service-request actions that still require CDP. Software clients can call `summarizeServiceCdpFreeLaunchAvailability()` or `isServiceCdpFreeActionAvailable()` before exposing follow-up controls. When CDP is allowed, request a service-owned tab first, extract the valid `serviceTabHandle`, then call `requestServiceCdpAttach()` with `cdpAttachmentAllowed: true`. The attach helper rejects missing, stale, CDP-free, and policy-blocked handles before posting the request. Use `requestServiceExternalByopAdopt()` or `adoptExternalByopBrowser()` only when a client has already registered an `external_byop` profile and can supply exactly one explicit `cdpUrl` or `cdpPort` for an already-running Chrome lane. That action records the lane as retained `host: "attached_existing"` service state, returns a `serviceTabHandle`, leaves cleanup as detach, and must not be used for `external_observed` profiles. Run `pnpm test:service-external-byop-adopt-live` when changing this path. Use `requestServiceEvaluate()` for bounded JavaScript reads against that handle; it requires positive `timeoutMs` and `maxReturnBytes` and returns URL/title plus result truncation metadata. Use `requestServiceDiagnostics()` when a client needs compact evidence for the same handle, including optional screenshot capture. Call `requestServiceCdpDetach()` when finished; detach records service trace evidence and preserves the browser process by default.
 
-Use `agent-browser service reconcile` to run persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json`, expires due or orphaned service session leases without launching a browser, refreshes live tab records for reachable browser CDP endpoints, and returns the reconciled service state plus total and changed browser counts. It completes an owned closing runtime lifecycle only when the exact owner generation still matches, the recorded process group is absent, the registered profile path matches the lifecycle identity, and the profile lock is absent. Live, locked, unmatched, and ambiguous lanes remain unchanged. A later managed launch may replace that exact `terminal/satisfied` owner under a new logical browser ID only by advancing one generation with no pending transfer or lifecycle-key collision; the lifecycle record moves to the new ID and retains one cleanup obligation. Reconcile responses include `expiredSessionLeases`, `expiredSessionLeaseCount`, and `remoteViewRepair` counts for route-pool entries invalidated or restored from live X11 socket evidence, stale route checkouts released after their owner becomes orphaned, plus orphaned remote-view displays, routes, viewer leases, and controller leases repaired during reconcile. The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError`, bounded recent control-plane job records in `jobs`, a derived `incidents` collection grouped by browser or service scope, and a bounded `events` log for reconciliation summaries, browser health transitions, browser recovery starts, profile lease wait transitions, ownership repairs, and tab lifecycle changes.
+Use `agent-browser service reconcile` to run persisted browser health and target probes intentionally without requesting a control-plane status snapshot. It updates `~/.agent-browser/service/state.json`, expires due or orphaned service session leases without launching a browser, refreshes live tab records for reachable browser CDP endpoints, and returns the reconciled service state plus total and changed browser counts. It completes an owned closing runtime lifecycle only when the exact owner generation still matches, the recorded process group is absent, the registered profile path matches the lifecycle identity, and the profile lock is absent. Live, locked, unmatched, and ambiguous lanes remain unchanged. A later managed launch may replace that exact `terminal/satisfied` owner under a new logical browser ID only by advancing one generation with no pending transfer or lifecycle-key collision; the lifecycle record moves to the new ID and retains one cleanup obligation. Reconcile responses include `expiredSessionLeases`, `expiredSessionLeaseCount`, and `remoteViewRepair` counts for route-pool entries invalidated or restored from live X11 socket evidence, stale route checkouts released after their owner becomes orphaned, plus orphaned remote-view displays and routes repaired during reconcile. The persisted service state includes a `reconciliation` snapshot with `lastReconciledAt`, `browserCount`, `changedBrowsers`, and `lastError`, bounded recent control-plane job records in `jobs`, a derived `incidents` collection grouped by browser or service scope, and a bounded `events` log for reconciliation summaries, browser health transitions, browser recovery starts, profile lease wait transitions, ownership repairs, and tab lifecycle changes.
 
 Reconciliation removes a legacy degraded, profile-less late-close browser row only when its exact owner generation proves terminal process exit and profile-lock release, cleanup is satisfied, and no operational session, tab, process identity, or presentation remains. It preserves the close failure in a `terminal_degraded_placeholder_removed` reconciliation event and retains the lifecycle evidence. Missing or conflicting proof keeps the row for inspection.
 
@@ -2288,8 +2470,6 @@ Retained service jobs preserve target identity hints for profile debugging. Sing
 
 HTTP service request objects follow `docs/dev/contracts/service-request.v1.schema.json`. MCP `service_request` tool-call wrappers follow `docs/dev/contracts/service-request-mcp-tool-call.v1.schema.json`. HTTP `GET /api/service/contracts` and MCP `agent-browser://contracts` expose matching compatibility metadata for service request schema IDs, contract versions, routes, MCP tool names, and supported actions. The HTTP contracts metadata also advertises the `serviceBrowserCapabilityRegistryResponse` contract for `GET /api/service/browser-capability-registry` and MCP `agent-browser://browser-capability-registry`, the `serviceBrowserCapabilityRegistryUpsertResponse` contract for `POST /api/service/browser-capability-registry/<collection>/<id>` and MCP `service_browser_capability_registry_upsert`, the `serviceBrowserCapabilityPreflightResponse` contract for `GET /api/service/browser-capability/preflight` and MCP `service_browser_capability_preflight`, the `serviceProfileAllocationResponse` contract for `GET /api/service/profiles/<id>/allocation` and MCP `agent-browser://profiles/{profile_id}/allocation`, `serviceProfileReadinessResponse` for `GET /api/service/profiles/<id>/readiness` and MCP `agent-browser://profiles/{profile_id}/readiness`, and `serviceProfileLookupResponse` for `GET /api/service/profiles/lookup` and MCP `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}`. Registry, readiness, lookup, and preflight metadata names the `@agent-browser/client/service-observability` helpers and the lookup selection order.
 
-`createServiceControllerLeaseTakeoverRequest()` and `takeoverServiceControllerLease()` place route/viewer convenience fields and `expiresAt` only in `params`. Browser and session identity stay in the top-level service envelope; an explicit convenience value overrides the matching `params` value without changing the caller object.
-
 Software clients in this repo can use `@agent-browser/client/service-request` for generated `createServiceRequest`, `createServiceRequestMcpToolCall`, `postServiceRequest`, `createServiceTabRequest`, `createServiceTabRequestFromAccessPlan`, `requestServiceTab`, `requestServiceTabFromAccessPlan`, `createServiceExternalByopAdoptRequest`, `requestServiceExternalByopAdopt`, `adoptExternalByopBrowser`, `createServiceCdpAttachRequest`, `requestServiceCdpAttach`, `attachServiceTabCdp`, `createServiceCdpDetachRequest`, `requestServiceCdpDetach`, `createServiceEvaluateRequest`, `requestServiceEvaluate`, `evaluateServiceTab`, `createServiceProbeRequest`, `requestServiceProbe`, `probeServiceTab`, `createServiceUiActionRequest`, `requestServiceUiAction`, `runServiceUiAction`, `createServiceNetworkCaptureRequest`, `requestServiceNetworkCapture`, `captureServiceNetwork`, `createServiceFileTransferRequest`, `requestServiceFileTransfer`, `transferServiceFiles`, `createServiceDiagnosticsRequest`, `requestServiceDiagnostics`, `getServiceTabDiagnostics`, `createServiceCdpFreeLaunchRequest`, `requestServiceCdpFreeLaunch`, `requestServiceRemoteViewOpen`, `summarizeServiceRemoteViewOpenProof`, `summarizeServiceSharedProfileAcquisition`, `requireServiceRemoteViewOpenOperatorVisible`, `requestServiceRemoteViewRouteCheckout`, `requestServiceRemoteViewRouteRelease`, `requestServiceViewerLease`, `heartbeatServiceViewerLease`, `releaseServiceViewerLease`, `takeoverServiceControllerLease`, `summarizeServiceCdpFreeLaunchAvailability`, `isServiceCdpFreeActionAvailable`, and TypeScript declarations. Use `requestServiceTab` when software asks agent-browser for a queued tab by site or login identity and does not need to hand-build the underlying `tab_new` service request. Use `requestServiceTabFromAccessPlan()` when software already has the no-launch access-plan response and should follow that service-owned recommendation. Use `summarizeServiceSharedProfileAcquisition()` on the access-plan response or tab response when software needs requested profile, planned profile, retained browser/session route hints, tab handle, acquisition mode, and duplicate-process policy without parsing raw `decision.profileReuse` or action-specific response data. Use `requestServiceExternalByopAdopt()` when software already owns a registered BYOP Chrome/profile lane and wants the next access plan to reuse it instead of recommending a duplicate launch. Use `evaluateServiceTab()` when software needs a timeout-bound and size-capped JavaScript read against a leased tab handle, and use `getServiceTabDiagnostics()` when it needs compact evidence for that same handle. Before an effect-capable input action, require diagnostics `controlPlaneAttestation.complete` to be true and `missingProofs` to be empty; this binds the current owner generation, browser process start identity and current exclusive profile lease from one persisted service snapshot. Owner custody requires a current transfer receipt or an exact managed-launch lifecycle record matching the current boot, owner generation and process; `ownerCustody` reports the basis without inventing a handoff. Older active handle lease metadata is checked against current tab and session records; released, foreign and conflicting identities remain denied. Use `probeServiceTab()`, `runServiceUiAction()`, `captureServiceNetwork()`, and `transferServiceFiles()` for generic identity or account probes, UI recipes, capped network evidence, and allowlisted file transfer against the same handle. Use `requestServiceCdpFreeLaunch({ accessPlan, url })` when a CDP-free access plan blocks tab control and the caller only needs a headed no-DevTools launch plus service-state tracking. Use the remote-view helpers when software needs to open a route-bound Guacamole or RDP browser, check out a route, release it, attach, heartbeat, or release a viewer lease, or take the controller lease without hand-building the underlying route and lease service requests. `requestServiceRemoteViewOpen()` rejects successful-looking route-bound handoffs unless the response includes `operatorVisible.state="ready"`; dry-runs return `not_checked`, and infrastructure-only callers must pass `allowInfrastructureOnlyReadiness: true` explicitly. Use `summarizeServiceRemoteViewOpenProof()` for the compact route, tab, profile, and visual-proof log line, and use `requireServiceRemoteViewOpenOperatorVisible()` when validating a response obtained through lower-level HTTP or MCP calls. These helpers accept an access-plan response through `accessPlan`, merge `decision.serviceRequest.request`, and let explicit call fields such as `url`, `params`, `jobTimeoutMs`, or caller-label overrides win. Remote-view routes with `providerMode: "single_viewer"` reject additional active viewers, and controller requests reject an existing controller unless the caller uses the explicit takeover helper. When the access plan reports `manualSeedingRequired` with `seedingHandoff`, helpers throw before posting `/api/service/request` unless the caller explicitly passes `allowManualAction: true`; show the handoff and retry after seeding instead. When a client just ran due profile-readiness monitors, pass `monitorRunDueSummary` from `acquireServiceLoginProfile()` or `runServiceAccessPlanMonitorRunDue().accessPlanSummary`; helpers throw if the requested target is expired, still unverified, or lacks matching monitor evidence unless `allowMonitorFreshnessRisk: true` is supplied, and preserve that summary in the submitted request so HTTP and MCP guards enforce the same decision. Tab helpers also throw when the access plan reports `requiresCdpFree` with `cdpAttachmentAllowed: false` because tab requests are CDP-backed. `postServiceRequest`, `requestServiceTab`, `requestServiceTabFromAccessPlan`, `requestServiceExternalByopAdopt`, `attachServiceTabCdp`, `requestServiceCdpDetach`, `evaluateServiceTab`, `probeServiceTab`, `runServiceUiAction`, `captureServiceNetwork`, `transferServiceFiles`, `getServiceTabDiagnostics`, `requestServiceCdpFreeLaunch`, and the remote-view helpers return `ServiceRequestResponse`, the standard service command envelope with `success`, optional `data`, optional `error`, optional `warning`, and action-specific fields. Every action currently listed in `docs/dev/contracts/service-request.v1.schema.json` gets a typed `data` shape through `ServiceRequestDataForAction`; `requestServiceTab` returns typed `tab_new` data, `requestServiceExternalByopAdopt` returns typed adopted browser and service-tab-handle metadata, `attachServiceTabCdp` returns typed attach metadata, `evaluateServiceTab` returns typed bounded evaluate metadata, `probeServiceTab` returns typed detector metadata, `runServiceUiAction` returns typed per-step metadata, `captureServiceNetwork` returns typed capped network metadata, `transferServiceFiles` returns typed upload and download metadata, `getServiceTabDiagnostics` returns typed diagnostics metadata, `requestServiceCdpFreeLaunch` returns typed headed no-DevTools launch metadata, remote-view helpers return typed route and lease mutation metadata, and `summarizeServiceCdpFreeLaunchAvailability(response.data)` returns serializable command availability for API, MCP, or dashboard clients. Helpers preserve `loginId` and `targetServiceId` in the request payload before any browser-launching request is sent. When adding or removing service request actions, update the Rust `SERVICE_REQUEST_ACTIONS` list, the JSON schema enum, MCP `service_request`, HTTP `/api/service/request`, and generated client files together. Service request helpers accept `profileLeasePolicy: "reject"` or `"wait"` plus `profileLeaseWaitTimeoutMs` for callers that want agent-browser to wait for a profile lease rather than fail immediately. Run `pnpm generate:service-client` after changing the service request schemas, then run `pnpm test:service-client` to verify generated files, helper types, package export resolution, typed service command responses, service request helpers, and observability helpers. `examples/service-client/broker-bridge.mjs` is the generic migration harness for access-plan, service-tab handle, CDP attach, bounded evaluate, diagnostics, and detach without provider selectors or private profile data. `examples/service-client/composed-workflow.mjs` extends that into access-plan, tab handle, attach, probe, UI action, network capture, file transfer, diagnostics, and detach with caller-owned recipes; `pnpm test:service-composed-workflow-live` validates it against an isolated daemon. `pnpm test:service-request-live` also verifies that an access-plan response can be passed into `requestServiceTab()` against an isolated daemon and real browser session. Use `pnpm test:service-external-byop-adopt-live` to validate BYOP adoption against an isolated source Chrome and service daemon. Use `pnpm test:service-client-contract`, `pnpm test:service-client-types`, `pnpm test:service-client-exports`, `pnpm test:service-request-client`, or `pnpm test:service-observability-client` when only one client contract needs validation.
 
 For access-plan tab helpers, caller overrides never win for `browserId` or `sessionName`. Both values must match the complete planned reuse route. The helper rejects unavailable plans, missing reuse hints, and contradictory route overrides before posting; `url`, non-routing params, timeouts, and caller labels remain normal caller inputs.
@@ -2323,7 +2503,7 @@ viewer/controller authority.
 
 If a caller bypasses `requestServiceTab()` and submits a copied access-plan request directly through HTTP or MCP, the `blockedByManualAction` and `manualSeedingRequired` markers still require the same explicit `allowManualAction: true` override. Raw HTTP and MCP requests that include `monitorRunDueSummary` are also rejected when the summary reports expired, unverified, or missing target freshness evidence unless `allowMonitorFreshnessRisk: true` is explicitly supplied.
 
-Use `@agent-browser/client/service-observability` for generated HTTP helpers around service status, contract metadata, browser capability registry, collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and traces. It exposes `getServiceStatus`, `getServiceContracts`, `getServiceBrowserCapabilityRegistry`, `getServiceProfiles`, `getServiceProfileAllocation`, `getServiceProfileReadiness`, `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`, `summarizeServiceProfileReadiness`, `summarizeServiceProfileAllocationBrowserHealth`, `summarizeServiceProfileAcquisition`, `summarizeServiceAccessPlanMonitorRunDue`, `findServiceProfileForIdentity`, `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`, `runServiceAccessPlanPostSeedingProbe`, `runServiceAccessPlanMonitorRunDue`, `runServiceAccessPlanBrowserCapabilityPreflight`, `acquireServiceLoginProfile`, `getServiceBrowsers`, `getServiceDisplayAllocations`, `getServiceRemoteViewRoutes`, `getServiceRoutePool`, `getServiceViewerLeases`, `findServiceDisplayAllocation`, `findServiceRemoteViewRoute`, `findServiceViewerLease`, `getServiceSessions`, `getServiceTabs`, `getServiceSitePolicies`, `getServiceProviders`, `getServiceChallenges`, `postServiceReconcile`, `upsertServiceProfile`, `registerServiceLoginProfile`, `registerExternalProfile`, `createServiceProfileReadinessMonitor`, `upsertServiceProfileReadinessMonitor`, `updateServiceProfileFreshness`, `verifyServiceProfileSeeding`, `deleteServiceProfile`, `upsertServiceSession`, `deleteServiceSession`, `upsertServiceSitePolicy`, `deleteServiceSitePolicy`, `upsertServiceProvider`, `deleteServiceProvider`, `upsertServiceBrowserCapabilityRegistryRecord`, `summarizeServiceBrowserPreferenceCommands`, `upsertServiceBrowserPreferenceBinding`, `cancelServiceJob`, `retryServiceBrowser`, `applyServiceRemedies`, `acknowledgeServiceIncident`, `resolveServiceIncident`, `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`, `getServiceIncident`, `getServiceIncidentActivity`, `getServiceTrace`, `createServiceTraceHandoff`, and `createServiceIncidentHandoff`. Use the display allocation, remote-view route, route pool, and viewer lease helpers to compare `displayAllocationId`, `remoteViewRouteId`, `routePoolEntryId`, `viewerLeaseId`, and `controllerLeaseId` without parsing Guacamole URLs. `createServiceTraceHandoff()` returns the CLI command, HTTP path or URL, and MCP `service_trace` arguments for one trace filter set so software clients can hand off the same trace context as the dashboard. `createServiceIncidentHandoff()` returns the CLI command, HTTP path or URL, MCP `service_incidents` arguments, and activity references when an incident id is known. `runServiceAccessPlanPostSeedingProbe()` runs the discovered `decision.postSeedingProbe` recipe directly from an access-plan response: it confirms the broker-selected profile, opens one queued service tab, reads bounded URL and title evidence, then records the seeding result. `runServiceAccessPlanMonitorRunDue()` runs the discovered `decision.monitorRunDue` recipe through the serialized service monitor queue when access-plan says retained profile freshness should be checked before use and returns `accessPlanSummary` so clients can see whether the requested target is fresh, expired, or still unverified. `runServiceAccessPlanBrowserCapabilityPreflight()` runs the discovered `decision.browserCapabilityPreflight` recipe without launching Chrome so clients can check executable, host, profile compatibility, and validation evidence gates before browser work. `acquireServiceLoginProfile()` is the preferred broker-first helper for software clients that might need a recurring managed profile: it asks for an access plan first, registers the fallback profile only when no selected profile exists, optionally adds the standard profile-readiness monitor, optionally runs `runServiceAccessPlanMonitorRunDue()` when `runDueReadinessMonitor` is true and access-plan recommends it, refreshes the access plan, optionally runs the final access plan's browser-capability preflight when `runBrowserCapabilityPreflight` is true, returns `monitorRunDueSummary`, returns `browserCapabilityPreflight`, and returns the final recommendation for `requestServiceTab()`. Use `summarizeServiceProfileAcquisition()` on that result when a client needs compact selected-profile, registration, due-monitor, browser-preflight, access-plan attention, and CDP-free launch availability fields for logs, traces, dashboard chips, or operator output. `registerServiceLoginProfile` can also record bounded-probe freshness with `readinessState`, `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`; explicit `targetReadiness` rows override generated rows for matching targets. `registerExternalProfile()` is the explicit BYOP/observed-profile path: it records `profileOrigin`, caller service and agent metadata, target identities, account ids, user-data directory, and browser family/build compatibility evidence so access-plan, readback, and cleanup policy can distinguish external profiles from agent-browser-owned lanes. `updateServiceProfileFreshness` posts to the service-side freshness mutation endpoint so agent-browser performs the serialized merge, preserves unrelated fields, updates `authenticatedServiceIds` for fresh, stale, or blocked target states, and advances matching closed seeding handoffs to `verification_pending` or `fresh`. Use `verifyServiceProfileSeeding()` when the freshness update specifically records the bounded post-close seeding auth probe. `upsertServiceProfileReadinessMonitor()` writes the standard retained `profile_readiness` monitor so recurring managed profiles can surface expired freshness through access-plan `monitorFindings` before a client requests a tab; access-plan also reports due or never-checked matching monitors through `profileReadinessProbeDue`, `profileReadinessDueMonitorIds`, and `profileReadinessNeverCheckedMonitorIds` so agents can run `service monitors run-due` before relying on retained freshness.
+Use `@agent-browser/client/service-observability` for generated HTTP helpers around service status, contract metadata, browser capability registry, collections, config mutations, operator remedies, reconcile, jobs, events, incidents, incident activity, and traces. It exposes `getServiceStatus`, `getServiceContracts`, `getServiceBrowserCapabilityRegistry`, `getServiceProfiles`, `getServiceProfileAllocation`, `getServiceProfileReadiness`, `getServiceProfileSeedingHandoff`, `updateServiceProfileSeedingHandoff`, `summarizeServiceProfileReadiness`, `summarizeServiceProfileAllocationBrowserHealth`, `summarizeServiceProfileAcquisition`, `summarizeServiceAccessPlanMonitorRunDue`, `findServiceProfileForIdentity`, `getServiceProfileForIdentity`, `lookupServiceProfile`, `getServiceAccessPlan`, `runServiceAccessPlanPostSeedingProbe`, `runServiceAccessPlanMonitorRunDue`, `runServiceAccessPlanBrowserCapabilityPreflight`, `acquireServiceLoginProfile`, `getServiceBrowsers`, `getServiceDisplayAllocations`, `getServiceRemoteViewRoutes`, `getServiceRoutePool`, `getServiceViewerLeases`, `findServiceDisplayAllocation`, `findServiceRemoteViewRoute`, `findServiceViewerLease`, `getServiceSessions`, `getServiceTabs`, `getServiceSitePolicies`, `getServiceProviders`, `getServiceChallenges`, `postServiceReconcile`, `upsertServiceProfile`, `registerServiceLoginProfile`, `registerExternalProfile`, `createServiceProfileReadinessMonitor`, `upsertServiceProfileReadinessMonitor`, `updateServiceProfileFreshness`, `verifyServiceProfileSeeding`, `deleteServiceProfile`, `upsertServiceSession`, `deleteServiceSession`, `upsertServiceSitePolicy`, `deleteServiceSitePolicy`, `upsertServiceProvider`, `deleteServiceProvider`, `upsertServiceBrowserCapabilityRegistryRecord`, `summarizeServiceBrowserPreferenceCommands`, `upsertServiceBrowserPreferenceBinding`, `cancelServiceJob`, `retryServiceBrowser`, `applyServiceRemedies`, `acknowledgeServiceIncident`, `resolveServiceIncident`, `getServiceJobs`, `getServiceJob`, `getServiceEvents`, `getServiceIncidents`, `getServiceIncident`, `getServiceIncidentActivity`, `getServiceTrace`, `createServiceTraceHandoff`, and `createServiceIncidentHandoff`. Use the display allocation, remote-view route, route pool, and route helpers to compare `displayAllocationId`, `remoteViewRouteId`, and `routePoolEntryId` without parsing Guacamole URLs. `createServiceTraceHandoff()` returns the CLI command, HTTP path or URL, and MCP `service_trace` arguments for one trace filter set so software clients can hand off the same trace context as the dashboard. `createServiceIncidentHandoff()` returns the CLI command, HTTP path or URL, MCP `service_incidents` arguments, and activity references when an incident id is known. `runServiceAccessPlanPostSeedingProbe()` runs the discovered `decision.postSeedingProbe` recipe directly from an access-plan response: it confirms the broker-selected profile, opens one queued service tab, reads bounded URL and title evidence, then records the seeding result. `runServiceAccessPlanMonitorRunDue()` runs the discovered `decision.monitorRunDue` recipe through the serialized service monitor queue when access-plan says retained profile freshness should be checked before use and returns `accessPlanSummary` so clients can see whether the requested target is fresh, expired, or still unverified. `runServiceAccessPlanBrowserCapabilityPreflight()` runs the discovered `decision.browserCapabilityPreflight` recipe without launching Chrome so clients can check executable, host, profile compatibility, and validation evidence gates before browser work. `acquireServiceLoginProfile()` is the preferred broker-first helper for software clients that might need a recurring managed profile: it asks for an access plan first, registers the fallback profile only when no selected profile exists, optionally adds the standard profile-readiness monitor, optionally runs `runServiceAccessPlanMonitorRunDue()` when `runDueReadinessMonitor` is true and access-plan recommends it, refreshes the access plan, optionally runs the final access plan's browser-capability preflight when `runBrowserCapabilityPreflight` is true, returns `monitorRunDueSummary`, returns `browserCapabilityPreflight`, and returns the final recommendation for `requestServiceTab()`. Use `summarizeServiceProfileAcquisition()` on that result when a client needs compact selected-profile, registration, due-monitor, browser-preflight, access-plan attention, and CDP-free launch availability fields for logs, traces, dashboard chips, or operator output. `registerServiceLoginProfile` can also record bounded-probe freshness with `readinessState`, `readinessEvidence`, `lastVerifiedAt`, and `freshnessExpiresAt`; explicit `targetReadiness` rows override generated rows for matching targets. `registerExternalProfile()` is the explicit BYOP/observed-profile path: it records `profileOrigin`, caller service and agent metadata, target identities, account ids, user-data directory, and browser family/build compatibility evidence so access-plan, readback, and cleanup policy can distinguish external profiles from agent-browser-owned lanes. `updateServiceProfileFreshness` posts to the service-side freshness mutation endpoint so agent-browser performs the serialized merge, preserves unrelated fields, updates `authenticatedServiceIds` for fresh, stale, or blocked target states, and advances matching closed seeding handoffs to `verification_pending` or `fresh`. Use `verifyServiceProfileSeeding()` when the freshness update specifically records the bounded post-close seeding auth probe. `upsertServiceProfileReadinessMonitor()` writes the standard retained `profile_readiness` monitor so recurring managed profiles can surface expired freshness through access-plan `monitorFindings` before a client requests a tab; access-plan also reports due or never-checked matching monitors through `profileReadinessProbeDue`, `profileReadinessDueMonitorIds`, and `profileReadinessNeverCheckedMonitorIds` so agents can run `service monitors run-due` before relying on retained freshness.
 
 The service-observability helper set also includes `summarizeServiceAccessPlanBrowserBuildSelection()` for compact software-client browser routing audit output.
 
@@ -2413,7 +2593,7 @@ HTTP `/api/service/incidents`, HTTP `/api/service/incidents/<id>`, MCP `agent-br
 
 HTTP `/api/service/events`, MCP `agent-browser://events`, and service trace event records follow `docs/dev/contracts/service-event-record.v1.schema.json`. CLI and HTTP `service_events` response envelopes follow `docs/dev/contracts/service-events-response.v1.schema.json`.
 
-HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, challenge, display allocation, remote-view route, route pool, and viewer lease records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files. Profile records include derived `targetReadiness` rows for no-launch target-service readiness; built-in Google and Gmail targets without authenticated evidence use headed stealth Chromium and report attachable unknown readiness. Only an effective CDP-free policy reports `needs_manual_seeding` and recommends detached `runtime login`. Once a managed profile lists the target in `authenticatedServiceIds`, readiness changes to `seeded_unknown_freshness` and access-plan no longer treats first-login seeding as a required manual action. Explicit `fresh`, `stale`, and `blocked_by_attached_devtools` readiness rows, plus rows with `lastVerifiedAt` or `freshnessExpiresAt`, are preserved through derived refreshes. Service status and compact collection response envelopes follow the matching status and collection response schemas under `docs/dev/contracts/`. `GET /api/service/display-allocations`, `GET /api/service/remote-view-routes`, `GET /api/service/route-pool`, `GET /api/service/viewer-leases`, MCP `agent-browser://display-allocations`, MCP `agent-browser://remote-view-routes`, MCP `agent-browser://route-pool`, and MCP `agent-browser://viewer-leases` expose the no-launch remote-view allocation state so clients can compare `displayAllocationId` and `routeId` instead of parsing Guacamole URLs. `GET /api/service/monitors` returns retained monitor records for heartbeat, tab, site-policy, and profile-readiness probes; active monitors are checked by the daemon scheduler when due. Profile collection responses include `profileSources`, and profile allocation rows include the same `targetReadiness` rows. `GET /api/service/profiles/<id>/readiness` and MCP `agent-browser://profiles/{profile_id}/readiness` return one profile's no-launch readiness rows without allocation details. `GET /api/service/profiles/<id>/seeding-handoff` and MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` return the operator-ready detached seeding command, steps, and persisted lifecycle record for one target readiness row; `POST /api/service/profiles/<id>/seeding-handoff` and MCP `service_profile_seeding_handoff_update` update that lifecycle. `GET /api/service/profiles/lookup` and MCP `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}` apply the authoritative service profile selector for `serviceName` plus target, site, or login identity and return the selected profile, selected profile source, selector reason, matched profile field, matched identity, readiness, and readiness summary. Profile, session, site-policy, monitor, and provider mutation responses follow the matching upsert and delete response schemas under `docs/dev/contracts/`. Job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching operator remedy response schemas under `docs/dev/contracts/`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`.
+HTTP and MCP profile, browser, session, tab, monitor, site policy, provider, challenge, display allocation, remote-view route and route pool records follow the matching `docs/dev/contracts/service-*-record.v1.schema.json` files. Profile records include derived `targetReadiness` rows for no-launch target-service readiness; built-in Google and Gmail targets without authenticated evidence use headed stealth Chromium and report attachable unknown readiness. Only an effective CDP-free policy reports `needs_manual_seeding` and recommends detached `runtime login`. Once a managed profile lists the target in `authenticatedServiceIds`, readiness changes to `seeded_unknown_freshness` and access-plan no longer treats first-login seeding as a required manual action. Explicit `fresh`, `stale`, and `blocked_by_attached_devtools` readiness rows, plus rows with `lastVerifiedAt` or `freshnessExpiresAt`, are preserved through derived refreshes. Service status and compact collection response envelopes follow the matching status and collection response schemas under `docs/dev/contracts/`. `GET /api/service/display-allocations`, `GET /api/service/remote-view-routes`, `GET /api/service/route-pool`, MCP `agent-browser://display-allocations`, MCP `agent-browser://remote-view-routes`, MCP `agent-browser://route-pool`, and  expose the no-launch remote-view allocation state so clients can compare `displayAllocationId` and `routeId` instead of parsing Guacamole URLs. `GET /api/service/monitors` returns retained monitor records for heartbeat, tab, site-policy, and profile-readiness probes; active monitors are checked by the daemon scheduler when due. Profile collection responses include `profileSources`, and profile allocation rows include the same `targetReadiness` rows. `GET /api/service/profiles/<id>/readiness` and MCP `agent-browser://profiles/{profile_id}/readiness` return one profile's no-launch readiness rows without allocation details. `GET /api/service/profiles/<id>/seeding-handoff` and MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` return the operator-ready detached seeding command, steps, and persisted lifecycle record for one target readiness row; `POST /api/service/profiles/<id>/seeding-handoff` and MCP `service_profile_seeding_handoff_update` update that lifecycle. `GET /api/service/profiles/lookup` and MCP `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}` apply the authoritative service profile selector for `serviceName` plus target, site, or login identity and return the selected profile, selected profile source, selector reason, matched profile field, matched identity, readiness, and readiness summary. Profile, session, site-policy, monitor, and provider mutation responses follow the matching upsert and delete response schemas under `docs/dev/contracts/`. Job cancel, browser retry, and incident acknowledgement or resolution responses follow the matching operator remedy response schemas under `docs/dev/contracts/`. Service reconcile responses follow `docs/dev/contracts/service-reconcile-response.v1.schema.json`.
 
 `service_trace` responses follow `docs/dev/contracts/service-trace-response.v1.schema.json`, with summary and activity records covered by `docs/dev/contracts/service-trace-summary-record.v1.schema.json` and `docs/dev/contracts/service-trace-activity-record.v1.schema.json`.
 
@@ -2497,7 +2677,7 @@ Use `agent-browser service incidents --limit <n>` to inspect grouped retained in
 
 Use `agent-browser service events --limit <n>` to inspect recent service events directly without parsing the full service status payload. Launch, health, recovery, and profile lease events include `profileId`, `sessionId`, `serviceName`, `agentName`, and `taskName` when that context is known. Add `--kind <kind>`, `--browser-id <id>`, `--profile-id <id>`, `--session-id <id>`, `--service-name <name>`, `--agent-name <name>`, `--task-name <name>`, or `--since <timestamp>` to filter events before the limit is applied. Valid kinds are `reconciliation`, `browser_launch_recorded`, `browser_health_changed`, `browser_recovery_started`, `browser_recovery_override`, `tab_lifecycle_changed`, `profile_lease_wait_started`, `profile_lease_wait_ended`, `profile_lease_lifecycle_changed`, `reconciliation_error`, `incident_acknowledged`, and `incident_resolved`. Wait events include `details.jobId`, `details.outcome`, `details.conflictSessionIds`, retry timing, and waited timing when known. Lifecycle events identify registration, rejoin, renewal, or release without retaining the raw capability. `--since` accepts RFC 3339 timestamps.
 
-When a session stream server is running, use `GET /api/browser/url`, `GET /api/browser/title`, `GET /api/browser/tabs?verbose=true`, `POST /api/browser/viewport`, `POST /api/browser/user-agent`, `POST /api/browser/media`, `POST /api/browser/timezone`, `POST /api/browser/locale`, `POST /api/browser/geolocation`, `POST /api/browser/permissions`, `POST /api/browser/cookies/get`, `POST /api/browser/cookies/set`, `POST /api/browser/cookies/clear`, `POST /api/browser/storage/get`, `POST /api/browser/storage/set`, `POST /api/browser/storage/clear`, `POST /api/browser/console`, `POST /api/browser/errors`, `POST /api/browser/set-content`, `POST /api/browser/headers`, `POST /api/browser/offline`, `POST /api/browser/dialog`, `POST /api/browser/clipboard`, `POST /api/browser/upload`, `POST /api/browser/download`, `POST /api/browser/wait-for-download`, `POST /api/browser/pdf`, `POST /api/browser/response-body`, `POST /api/browser/har/start`, `POST /api/browser/har/stop`, `POST /api/browser/route`, `POST /api/browser/unroute`, `POST /api/browser/requests`, `POST /api/browser/request-detail`, `POST /api/browser/navigate`, `POST /api/browser/back`, `POST /api/browser/forward`, `POST /api/browser/reload`, `POST /api/browser/new-tab`, `POST /api/browser/switch-tab`, `POST /api/browser/close-tab`, `POST /api/browser/snapshot`, `POST /api/browser/screenshot`, `POST /api/browser/click`, `POST /api/browser/fill`, `POST /api/browser/wait`, `POST /api/browser/type`, `POST /api/browser/press`, `POST /api/browser/hover`, `POST /api/browser/select`, `POST /api/browser/get-text`, `POST /api/browser/get-value`, `POST /api/browser/is-visible`, `POST /api/browser/get-attribute`, `POST /api/browser/get-html`, `POST /api/browser/get-styles`, `POST /api/browser/count`, `POST /api/browser/get-box`, `POST /api/browser/is-enabled`, `POST /api/browser/is-checked`, `POST /api/browser/check`, `POST /api/browser/uncheck`, `POST /api/browser/scroll`, `POST /api/browser/scroll-into-view`, `POST /api/browser/focus`, and `POST /api/browser/clear` for named browser-control wrappers over the same daemon command queue as `/api/command` and MCP tools. POST bodies accept the same command fields as the underlying action, including `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs` for traceable software clients. Use `GET /api/service/status`, `GET /api/service/contracts`, `GET /api/service/access-plan`, `GET /api/service/profiles`, `GET /api/service/profiles/lookup`, `GET /api/service/profiles/<profile-id>/allocation`, `POST /api/service/profiles/<id>`, `DELETE /api/service/profiles/<id>`, `GET /api/service/sessions`, `POST /api/service/sessions/<id>`, `DELETE /api/service/sessions/<id>`, `GET /api/service/browsers`, `POST /api/service/browsers/<browser-id>/retry`, `GET /api/service/display-allocations`, `GET /api/service/remote-view-routes`, `GET /api/service/route-pool`, `GET /api/service/viewer-leases`, `GET /api/service/tabs`, `GET /api/service/site-policies`, `POST /api/service/site-policies/<id>`, `DELETE /api/service/site-policies/<id>`, `GET /api/service/providers`, `POST /api/service/providers/<id>`, `DELETE /api/service/providers/<id>`, `GET /api/service/challenges`, `GET /api/service/trace?limit=<n>&browser-id=<id>&profile-id=<id>&session-id=<id>&service-name=<name>&agent-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/jobs?limit=<n>&state=<state>&action=<action>&service-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/jobs/<job-id>`, `POST /api/service/jobs/<job-id>/cancel`, `GET /api/service/incidents?summary=true&limit=<n>&severity=<severity>&escalation=<escalation>&handling-state=<state>&kind=<kind>&browser-id=<id>&service-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/incidents?summary=true&remedies=true`, `GET /api/service/incidents/<incident-id>`, `GET /api/service/incidents/<incident-id>/activity`, `POST /api/service/incidents/<incident-id>/acknowledge?by=<actor>&note=<text>`, `POST /api/service/incidents/<incident-id>/resolve?by=<actor>&note=<text>`, `GET /api/service/events?limit=<n>&kind=<kind>&browser-id=<id>&service-name=<name>&task-name=<name>&since=<timestamp>`, or `POST /api/service/reconcile` on the stream port for a programmatic service surface that does not require shelling out. Profile, session, site policy, and provider mutation paths persist service config records through the service worker queue, use the path ID as authoritative, reject a request body whose nested `id` conflicts with the path, and enforce the profile/session ownership policy. The collection endpoints return compact arrays matching MCP resources, each with a `count` field. Site-policy collections also include `sitePolicySources` so operators and clients can see whether each effective policy came from config, persisted state, or built-in defaults.
+When a session stream server is running, use `GET /api/browser/url`, `GET /api/browser/title`, `GET /api/browser/tabs?verbose=true`, `POST /api/browser/viewport`, `POST /api/browser/user-agent`, `POST /api/browser/media`, `POST /api/browser/timezone`, `POST /api/browser/locale`, `POST /api/browser/geolocation`, `POST /api/browser/permissions`, `POST /api/browser/cookies/get`, `POST /api/browser/cookies/set`, `POST /api/browser/cookies/clear`, `POST /api/browser/storage/get`, `POST /api/browser/storage/set`, `POST /api/browser/storage/clear`, `POST /api/browser/console`, `POST /api/browser/errors`, `POST /api/browser/set-content`, `POST /api/browser/headers`, `POST /api/browser/offline`, `POST /api/browser/dialog`, `POST /api/browser/clipboard`, `POST /api/browser/upload`, `POST /api/browser/download`, `POST /api/browser/wait-for-download`, `POST /api/browser/pdf`, `POST /api/browser/response-body`, `POST /api/browser/har/start`, `POST /api/browser/har/stop`, `POST /api/browser/route`, `POST /api/browser/unroute`, `POST /api/browser/requests`, `POST /api/browser/request-detail`, `POST /api/browser/navigate`, `POST /api/browser/back`, `POST /api/browser/forward`, `POST /api/browser/reload`, `POST /api/browser/new-tab`, `POST /api/browser/switch-tab`, `POST /api/browser/close-tab`, `POST /api/browser/snapshot`, `POST /api/browser/screenshot`, `POST /api/browser/click`, `POST /api/browser/fill`, `POST /api/browser/wait`, `POST /api/browser/type`, `POST /api/browser/press`, `POST /api/browser/hover`, `POST /api/browser/select`, `POST /api/browser/get-text`, `POST /api/browser/get-value`, `POST /api/browser/is-visible`, `POST /api/browser/get-attribute`, `POST /api/browser/get-html`, `POST /api/browser/get-styles`, `POST /api/browser/count`, `POST /api/browser/get-box`, `POST /api/browser/is-enabled`, `POST /api/browser/is-checked`, `POST /api/browser/check`, `POST /api/browser/uncheck`, `POST /api/browser/scroll`, `POST /api/browser/scroll-into-view`, `POST /api/browser/focus`, and `POST /api/browser/clear` for named browser-control wrappers over the same daemon command queue as `/api/command` and MCP tools. POST bodies accept the same command fields as the underlying action, including `serviceName`, `agentName`, `taskName`, and `jobTimeoutMs` for traceable software clients. Use `GET /api/service/status`, `GET /api/service/contracts`, `GET /api/service/access-plan`, `GET /api/service/profiles`, `GET /api/service/profiles/lookup`, `GET /api/service/profiles/<profile-id>/allocation`, `POST /api/service/profiles/<id>`, `DELETE /api/service/profiles/<id>`, `GET /api/service/sessions`, `POST /api/service/sessions/<id>`, `DELETE /api/service/sessions/<id>`, `GET /api/service/browsers`, `POST /api/service/browsers/<browser-id>/retry`, `GET /api/service/display-allocations`, `GET /api/service/remote-view-routes`, `GET /api/service/route-pool`, `GET /api/service/tabs`, `GET /api/service/site-policies`, `POST /api/service/site-policies/<id>`, `DELETE /api/service/site-policies/<id>`, `GET /api/service/providers`, `POST /api/service/providers/<id>`, `DELETE /api/service/providers/<id>`, `GET /api/service/challenges`, `GET /api/service/trace?limit=<n>&browser-id=<id>&profile-id=<id>&session-id=<id>&service-name=<name>&agent-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/jobs?limit=<n>&state=<state>&action=<action>&service-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/jobs/<job-id>`, `POST /api/service/jobs/<job-id>/cancel`, `GET /api/service/incidents?summary=true&limit=<n>&severity=<severity>&escalation=<escalation>&handling-state=<state>&kind=<kind>&browser-id=<id>&service-name=<name>&task-name=<name>&since=<timestamp>`, `GET /api/service/incidents?summary=true&remedies=true`, `GET /api/service/incidents/<incident-id>`, `GET /api/service/incidents/<incident-id>/activity`, `POST /api/service/incidents/<incident-id>/acknowledge?by=<actor>&note=<text>`, `POST /api/service/incidents/<incident-id>/resolve?by=<actor>&note=<text>`, `GET /api/service/events?limit=<n>&kind=<kind>&browser-id=<id>&service-name=<name>&task-name=<name>&since=<timestamp>`, or `POST /api/service/reconcile` on the stream port for a programmatic service surface that does not require shelling out. Profile, session, site policy, and provider mutation paths persist service config records through the service worker queue, use the path ID as authoritative, reject a request body whose nested `id` conflicts with the path, and enforce the profile/session ownership policy. The collection endpoints return compact arrays matching MCP resources, each with a `count` field. Site-policy collections also include `sitePolicySources` so operators and clients can see whether each effective policy came from config, persisted state, or built-in defaults.
 
 Use HTTP `GET /api/service/monitors` on the stream port to inspect retained monitor records. Add `state=active|paused|faulted`, `failed=true`, or `summary=true` to filter and summarize monitor health without scanning events. Active monitors are checked by the daemon scheduler when due.
 
@@ -3021,12 +3201,22 @@ tab custody. A session label does not grant restricted-profile access.
 Owned-tab binding preserves native `eval` arguments and its per-command deadline.
 Explicit Service API evaluation still requires `timeoutMs` and `maxReturnBytes`.
 
-When running multiple agents or automations concurrently, always use named sessions to avoid command namespace conflicts. Do not add a new runtime profile merely to avoid another active job. For service-mode work, include `serviceName`, `agentName`, `taskName`, and a target identity so agent-browser can queue work against the right managed browser:
+When running multiple agents or automations concurrently, always use named
+sessions to avoid command namespace conflicts. Named sessions that select the
+same exact runtime profile share one healthy browser and retain separate tabs,
+command state, and heartbeats. Do not add a runtime profile merely to avoid
+another active job. Omitting a profile creates a session-scoped disposable
+profile. For service-mode work, include `serviceName`, `agentName`, `taskName`,
+and a target identity so Agent Browser can queue work against the right managed
+browser:
 
 ```bash
-# Each agent gets its own isolated session
-agent-browser --session agent1 open site-a.com
-agent-browser --session agent2 open site-b.com
+# Each agent gets an independent tab in the same named-profile browser
+agent-browser --session agent1 --runtime-profile work open site-a.com
+agent-browser --session agent2 --runtime-profile work open site-b.com
+
+# Omit the profile for a session-scoped disposable profile
+agent-browser --session scratch open https://example.com
 
 # A worker targets its own runtime profile only for a deliberate identity lane
 agent-browser --session agent1 --runtime-profile billing open https://app.example.com
@@ -3036,7 +3226,8 @@ agent-browser --session agent2 --runtime-profile support open https://app.exampl
 agent-browser session list
 ```
 
-Always close your browser session when done to avoid leaked processes:
+Close your browser session when done. Closing one session preserves a shared
+browser while another session still uses it. The final close ends the browser:
 
 ```bash
 agent-browser close                    # Close default session

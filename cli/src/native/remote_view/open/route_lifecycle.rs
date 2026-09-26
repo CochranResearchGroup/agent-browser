@@ -1,8 +1,7 @@
 #![allow(unused_imports)]
 use super::planner::{
     ensure_remote_view_route_available_for_display, inline_route_pool_entry_from_command,
-    push_remote_view_service_event, remote_view_lease_is_active,
-    service_remote_view_acquisition_plan_from_state,
+    push_remote_view_service_event, service_remote_view_acquisition_plan_from_state,
 };
 use super::proof::command_object_with_action;
 use super::route_pool::{
@@ -187,9 +186,6 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
         .or_else(|| optional_command_or_params_string(cmd, "viewStreamRouteId"));
     let requested_route_pool_entry_id = optional_command_or_params_string(cmd, "routePoolEntryId")
         .or_else(|| optional_command_or_params_string(cmd, "poolEntryId"));
-    let controller_takeover = optional_command_or_params_bool(cmd, "controllerTakeover")
-        .or_else(|| optional_command_or_params_bool(cmd, "allowControllerTakeover"))
-        .unwrap_or(false);
     let selected_pool = select_browser_reattach_route_pool_entry(
         &snapshot,
         stream.as_ref(),
@@ -197,7 +193,6 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
         requested_route_id.as_deref(),
         route_switch,
         &browser_id,
-        controller_takeover,
     );
     let selected_pool_entry = selected_pool
         .as_ref()
@@ -236,26 +231,6 @@ pub(crate) async fn handle_service_remote_view_browser_reattach(
             })
             .cloned()
     });
-    if route_switch {
-        if let Some(previous_route_id) = previous_owned_route_id.as_deref() {
-            if let Some(previous_route) = snapshot.remote_view_routes.get(previous_route_id) {
-                let active_controller = previous_route
-                    .controller_lease_id
-                    .as_ref()
-                    .and_then(|lease_id| snapshot.viewer_leases.get(lease_id))
-                    .is_some_and(remote_view_lease_is_active);
-                if active_controller && !controller_takeover {
-                    return Err(
-                        format!(
-                            "remote_view_route_switch_controller_active: route '{}' has active controller lease '{}'",
-                            previous_route_id, previous_route.controller_lease_id
-                            .as_deref().unwrap_or("unknown")
-                        ),
-                    );
-                }
-            }
-        }
-    }
     let display_allocation_id = optional_command_or_params_string(cmd, "displayAllocationId")
         .or_else(|| {
             route_switch
@@ -821,7 +796,6 @@ pub(crate) async fn handle_service_remote_view_route_release(
         let display_allocation_id = route.display_allocation_id.clone();
         let browser_id = route.browser_id.clone();
         let session_id = route.session_id.clone();
-        let viewer_lease_ids = route.viewer_lease_ids.clone();
         if let (Some(capacity), Some(display_allocation_id), Some(browser_id)) = (
             state.presentation_capacity.as_mut(),
             display_allocation_id.as_deref(),
@@ -847,14 +821,6 @@ pub(crate) async fn handle_service_remote_view_route_release(
         released_route.state = "released".to_string();
         released_route.last_provider_event = Some("route_released".to_string());
         let released_route = released_route.clone();
-        for lease_id in &viewer_lease_ids {
-            if let Some(lease) = state.viewer_leases.get_mut(lease_id) {
-                lease.state = "disconnected".to_string();
-                lease.last_viewer_event = Some("disconnected".to_string());
-                lease.updated_at = Some(now.clone());
-                lease.last_heartbeat_at = Some(now.clone());
-            }
-        }
         for entry in state.route_pool.values_mut() {
             if entry.current_route_allocation_id.as_deref() == Some(route_id.as_str()) {
                 entry.state = "available".to_string();
@@ -893,7 +859,6 @@ pub(crate) async fn handle_service_remote_view_route_release(
             if let Some(browser) = state.browsers.get_mut(browser_id) {
                 for stream in &mut browser.view_streams {
                     if stream.route_id.as_deref() == Some(route_id.as_str()) {
-                        stream.viewer_lease_ids.clear();
                         stream.project_controller(&released_route);
                         stream.remote_readiness =
                             Some(json!({ "state" : "released", "updatedAt" : now, }));
@@ -910,15 +875,14 @@ pub(crate) async fn handle_service_remote_view_route_release(
             format!("Remote view route '{}' released", route_id),
             json!(
                 { "routeId" : route_id, "displayAllocationId" :
-                display_allocation_id, "releasedViewerLeaseIds" : viewer_lease_ids,
+                display_allocation_id,
                 "parkForRouteSwitch" : park_for_route_switch, }
             ),
         );
         refresh_remote_view_attachability(state);
         Ok(json!(
             { "status" : "released", "routeId" : route_id, "remoteViewRoute" :
-            state.remote_view_routes.get(& route_id), "releasedViewerLeaseIds" :
-            viewer_lease_ids, "parkForRouteSwitch" : park_for_route_switch,
+            state.remote_view_routes.get(& route_id), "parkForRouteSwitch" : park_for_route_switch,
             "updatedAt" : now, }
         ))
     })
@@ -964,7 +928,6 @@ pub(crate) fn upsert_remote_view_stream_for_route(
         stream.connection_name = route.connection_name.clone();
         stream.route_source = Some(route.route_source.clone());
         stream.provider_mode = Some(route.provider_mode.clone());
-        stream.viewer_lease_ids = route.viewer_lease_ids.clone();
         stream.project_controller(route);
         stream.read_only = route.read_only;
         stream.readiness = route.readiness.clone();

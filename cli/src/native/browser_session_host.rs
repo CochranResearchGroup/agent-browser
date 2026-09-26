@@ -1,0 +1,5446 @@
+//! Durable host for the ordinary Browser Session Manager path.
+
+use std::collections::BTreeMap;
+use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
+
+use agent_browser_service_model::{
+    BrowserDesktopRoute, BrowserDisposableProfilePolicy, BrowserOpenReservation,
+    BrowserProfileCatalog, BrowserSessionEffects, BrowserSessionManager,
+    BrowserSessionManagerConfig, BrowserSessionState, CloseBrowserSessionResult,
+    CloseBrowserTabResult, ControlInputProvider, OpenBrowserSession, OpenBrowserSessionResult,
+    ReapBrowserSessionsResult, RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperPhase,
+    ServiceState, SessionEndReason, ViewStreamProvider,
+};
+use sha2::{Digest, Sha256};
+
+use super::browser_session_runtime::{
+    BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
+    ManagedBrowserCommandEffects, ManagerPresentationProofEffects, ReservedBrowserRecovery,
+    ReservedBrowserRecoveryEffects,
+};
+use super::browser_session_store::{
+    BrowserManagerHandoffRegistry, BrowserProfileCatalogLoad, BrowserRuntimeOperation,
+    BrowserRuntimeOperationState, BrowserRuntimeSqliteStore, BrowserSessionJsonStore,
+    DesktopControlLease, DesktopControlTransferRequest,
+};
+use super::presentation_inventory::StaticRouteInventory;
+
+mod handoff_control;
+mod handoff_recovery;
+pub(crate) mod navigation_recovery;
+
+const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
+
+pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
+    BrowserRuntimeSqliteStore,
+    BrowserSessionEffectAdapter<BrowserManagerRuntime>,
+>;
+
+pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
+    let database_path = BrowserRuntimeSqliteStore::default_sqlite_path()?;
+    let service_directory = database_path
+        .parent()
+        .ok_or_else(|| "browser_session_service_directory_missing".to_string())?;
+    // The SQLite persistence adapter ignores this migration-only locator. Keep
+    // it out of ordinary default-host authority while retaining the generic
+    // JSON-store test seam.
+    let legacy_state_path = service_directory.join("state.json");
+    let store = BrowserRuntimeSqliteStore::default_sqlite()?;
+    let runtime_config = store.load_runtime_config()?;
+    let disposable_root = service_directory.join("disposable-profiles");
+    let authority = store.load_route_keeper_authority()?;
+    let remote_desktop_routes = route_keeper_desktop_routes(&authority)?;
+    let route_users_by_display = authority
+        .records
+        .values()
+        .filter(|record| record.phase == RouteKeeperPhase::Ready)
+        .filter_map(|record| {
+            let ready = record.protocol_ready.as_ref()?;
+            let binding = authority
+                .ready_handoff_binding(&record.slot_id, &ready.display_name)
+                .ok()?;
+            Some((binding.display_name, binding.route_user))
+        })
+        .collect();
+    let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+        headless: true,
+        executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
+        display: None,
+        remote_headed: false,
+        route_users_by_display,
+    })?;
+    BrowserSessionHost::load(
+        store,
+        BrowserSessionEffectAdapter::new(runtime),
+        &legacy_state_path,
+        BrowserSessionHostConfig {
+            session_idle_timeout_ms: runtime_config.session_idle_timeout_ms,
+            remote_desktop_routes,
+            default_disposable_policy: Some(BrowserDisposableProfilePolicy {
+                id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
+                user_data_root: disposable_root.to_string_lossy().into_owned(),
+                cleanup_delay_ms: runtime_config.disposable_inactivity_ms,
+            }),
+        },
+    )
+}
+
+pub(crate) fn route_keeper_desktop_routes(
+    authority: &RouteKeeperAuthority,
+) -> Result<Vec<BrowserDesktopRoute>, String> {
+    authority.projection()?;
+    authority
+        .records
+        .values()
+        .filter(|record| record.phase == RouteKeeperPhase::Ready)
+        .map(|record| {
+            let ready = record
+                .protocol_ready
+                .as_ref()
+                .ok_or_else(|| "route_keeper_handoff_ready_receipt_missing".to_string())?;
+            let binding = authority.ready_handoff_binding(&record.slot_id, &ready.display_name)?;
+            super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+                &binding.public_operator_url,
+                "preflight",
+            )
+            .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+            Ok(BrowserDesktopRoute {
+                id: binding.slot_id,
+                display_name: binding.display_name,
+                healthy: true,
+            })
+        })
+        .collect()
+}
+
+pub(crate) fn browser_session_navigation_requires_handoff(
+    command: &serde_json::Value,
+    _runtime_environment: Option<&str>,
+) -> Result<bool, String> {
+    if command
+        .get("internalPresentationBootstrap")
+        .is_some_and(|value| value != &serde_json::Value::Bool(false))
+    {
+        return Err("internal_presentation_bootstrap_removed".to_string());
+    }
+    Ok(command.get("action").and_then(serde_json::Value::as_str)
+        == Some("browser_session_navigate")
+        && optional_string(command, "profileId")
+            .or_else(|| optional_string(command, "runtimeProfile"))
+            .is_some())
+}
+
+pub(crate) trait BrowserSessionPersistence {
+    fn load_session_state(&self) -> Result<BrowserSessionState, String>;
+    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String>;
+    fn load_or_import_profile_catalog(
+        &self,
+        legacy_service_state_path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String>;
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String>;
+
+    fn load_manager_handoffs(&self) -> Result<BTreeMap<String, RemoteViewHandoff>, String> {
+        Ok(BTreeMap::new())
+    }
+
+    fn save_manager_handoff(&mut self, _handoff: &RemoteViewHandoff) -> Result<(), String> {
+        Err("browser_session_handoff_persistence_unsupported".to_string())
+    }
+
+    fn publish_manager_handoff(
+        &mut self,
+        _state: &BrowserSessionState,
+        _handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        Err("browser_session_handoff_atomic_publication_unsupported".to_string())
+    }
+
+    fn publish_session_state_and_terminal_handoffs(
+        &mut self,
+        state: &BrowserSessionState,
+    ) -> Result<Vec<RemoteViewHandoff>, String> {
+        self.save_session_state(state)?;
+        Ok(Vec::new())
+    }
+
+    fn transfer_desktop_control(
+        &mut self,
+        _request: &DesktopControlTransferRequest,
+    ) -> Result<DesktopControlLease, String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
+    }
+
+    fn activate_desktop_control<T>(
+        &mut self,
+        _request: &DesktopControlTransferRequest,
+        _expected_state: &BrowserSessionState,
+        _effect: impl FnOnce(&DesktopControlLease) -> Result<(T, BrowserSessionState), String>,
+    ) -> Result<(T, DesktopControlLease), String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
+    }
+
+    fn with_current_desktop_control<T>(
+        &mut self,
+        _lease: &DesktopControlLease,
+        _expected_state: &BrowserSessionState,
+        _effect: impl FnOnce(&DesktopControlLease) -> Result<T, String>,
+    ) -> Result<T, String> {
+        Err("browser_session_desktop_control_persistence_unsupported".into())
+    }
+
+    fn reserve_operation(
+        &mut self,
+        _operation_id: &str,
+        _owner_key: &str,
+        _request: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn find_operation(
+        &self,
+        _operation_id: &str,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn record_operation_observation(
+        &mut self,
+        _operation_id: &str,
+        _generation: u64,
+        _observation: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn commit_operation(
+        &mut self,
+        _operation_id: &str,
+        _generation: u64,
+        _result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn commit_browser_open(
+        &mut self,
+        _operation_id: &str,
+        _generation: u64,
+        _expected_base_state: &BrowserSessionState,
+        _state: &BrowserSessionState,
+        _handoff: &RemoteViewHandoff,
+        _result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+
+    fn commit_browser_navigation(
+        &mut self,
+        _operation: &BrowserRuntimeOperation,
+        _expected_base_state: &BrowserSessionState,
+        _state: &BrowserSessionState,
+        _handoff: &RemoteViewHandoff,
+        _result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        Ok(None)
+    }
+}
+
+impl BrowserSessionPersistence for BrowserSessionJsonStore {
+    fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        BrowserSessionJsonStore::load_session_state(self)
+    }
+
+    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+        BrowserSessionJsonStore::save_session_state(self, state)
+    }
+
+    fn load_or_import_profile_catalog(
+        &self,
+        legacy_service_state_path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String> {
+        BrowserSessionJsonStore::load_or_import_profile_catalog(self, legacy_service_state_path)
+    }
+
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
+        BrowserSessionJsonStore::save_profile_catalog(self, catalog)
+    }
+}
+
+impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
+    fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        BrowserRuntimeSqliteStore::load_session_state(self)
+    }
+
+    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_session_state(self, state)
+    }
+
+    fn load_or_import_profile_catalog(
+        &self,
+        _legacy_service_state_path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String> {
+        Ok(BrowserProfileCatalogLoad {
+            catalog: BrowserRuntimeSqliteStore::load_profile_catalog(self)?,
+            diagnostics: Vec::new(),
+            imported_legacy_profiles: false,
+        })
+    }
+
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_profile_catalog(self, catalog)
+    }
+
+    fn load_manager_handoffs(&self) -> Result<BTreeMap<String, RemoteViewHandoff>, String> {
+        BrowserRuntimeSqliteStore::load_handoff_registry(self)
+            .map(|registry: BrowserManagerHandoffRegistry| registry.handoffs)
+    }
+
+    fn save_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::save_manager_handoff(self, handoff)
+    }
+
+    fn publish_manager_handoff(
+        &mut self,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+    ) -> Result<(), String> {
+        BrowserRuntimeSqliteStore::publish_manager_handoff(self, state, handoff)
+    }
+
+    fn publish_session_state_and_terminal_handoffs(
+        &mut self,
+        state: &BrowserSessionState,
+    ) -> Result<Vec<RemoteViewHandoff>, String> {
+        BrowserRuntimeSqliteStore::publish_session_state_and_terminal_handoffs(self, state)
+    }
+
+    fn transfer_desktop_control(
+        &mut self,
+        request: &DesktopControlTransferRequest,
+    ) -> Result<DesktopControlLease, String> {
+        BrowserRuntimeSqliteStore::transfer_desktop_control(self, request)
+    }
+
+    fn activate_desktop_control<T>(
+        &mut self,
+        request: &DesktopControlTransferRequest,
+        expected_state: &BrowserSessionState,
+        effect: impl FnOnce(&DesktopControlLease) -> Result<(T, BrowserSessionState), String>,
+    ) -> Result<(T, DesktopControlLease), String> {
+        BrowserRuntimeSqliteStore::activate_desktop_control(self, request, expected_state, effect)
+    }
+
+    fn with_current_desktop_control<T>(
+        &mut self,
+        lease: &DesktopControlLease,
+        expected_state: &BrowserSessionState,
+        effect: impl FnOnce(&DesktopControlLease) -> Result<T, String>,
+    ) -> Result<T, String> {
+        BrowserRuntimeSqliteStore::with_current_desktop_control(
+            self,
+            &lease.handoff_id,
+            &lease.controller_client_connection_id,
+            lease.epoch,
+            expected_state,
+            effect,
+        )
+    }
+
+    fn reserve_operation(
+        &mut self,
+        operation_id: &str,
+        owner_key: &str,
+        request: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::reserve_operation(self, operation_id, owner_key, request)
+            .map(Some)
+    }
+
+    fn find_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::find_operation(self, operation_id)
+    }
+
+    fn record_operation_observation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        observation: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::record_operation_observation(
+            self,
+            operation_id,
+            generation,
+            observation,
+        )
+        .map(Some)
+    }
+
+    fn commit_operation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::commit_operation(self, operation_id, generation, result)
+            .map(Some)
+    }
+
+    fn commit_browser_open(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        expected_base_state: &BrowserSessionState,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+        result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::commit_browser_open(
+            self,
+            operation_id,
+            generation,
+            expected_base_state,
+            state,
+            handoff,
+            result,
+        )
+        .map(Some)
+    }
+
+    fn commit_browser_navigation(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        expected_base_state: &BrowserSessionState,
+        state: &BrowserSessionState,
+        handoff: &RemoteViewHandoff,
+        result: serde_json::Value,
+    ) -> Result<Option<BrowserRuntimeOperation>, String> {
+        BrowserRuntimeSqliteStore::commit_browser_navigation(
+            self,
+            operation,
+            expected_base_state,
+            state,
+            handoff,
+            result,
+        )
+        .map(Some)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct BrowserSessionHostConfig {
+    pub(crate) session_idle_timeout_ms: u64,
+    pub(crate) remote_desktop_routes: Vec<BrowserDesktopRoute>,
+    pub(crate) default_disposable_policy: Option<BrowserDisposableProfilePolicy>,
+}
+
+#[derive(Clone, Copy)]
+enum ManagerHandoffAuthority<'a> {
+    Legacy {
+        service: &'a ServiceState,
+        inventory: &'a StaticRouteInventory,
+    },
+    Keeper(&'a RouteKeeperAuthority),
+}
+
+pub(crate) struct BrowserSessionHost<P, E> {
+    persistence: P,
+    effects: E,
+    catalog: BrowserProfileCatalog,
+    state: BrowserSessionState,
+    handoffs: BTreeMap<String, RemoteViewHandoff>,
+    manager_config: BrowserSessionManagerConfig,
+    desktop_capacity: Option<(u32, u32)>,
+}
+
+impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
+    pub(crate) fn load(
+        persistence: P,
+        effects: E,
+        legacy_service_state_path: &Path,
+        config: BrowserSessionHostConfig,
+    ) -> Result<Self, String> {
+        let mut state = persistence.load_session_state()?;
+        let handoffs = persistence.load_manager_handoffs()?;
+        if bind_legacy_manager_handoffs(&mut state, &handoffs) {
+            persistence.save_session_state(&state)?;
+        }
+        let mut catalog_load =
+            persistence.load_or_import_profile_catalog(legacy_service_state_path)?;
+        let mut catalog_changed = false;
+        if let Some(policy) = config.default_disposable_policy {
+            if !catalog_load
+                .catalog
+                .disposable_policies
+                .contains_key(&policy.id)
+            {
+                catalog_load
+                    .catalog
+                    .disposable_policies
+                    .insert(policy.id.clone(), policy);
+                catalog_changed = true;
+            }
+        }
+        if catalog_changed {
+            persistence.save_profile_catalog(&catalog_load.catalog)?;
+        }
+        Ok(Self {
+            persistence,
+            effects,
+            catalog: catalog_load.catalog,
+            state,
+            handoffs,
+            desktop_capacity: None,
+            manager_config: BrowserSessionManagerConfig {
+                session_idle_timeout_ms: config.session_idle_timeout_ms,
+                remote_desktop_routes: config.remote_desktop_routes,
+            },
+        })
+    }
+
+    /// Replace route choices for future browser launches without changing any
+    /// persisted browser desktop assignment or existing session custody.
+    pub(crate) fn replace_remote_desktop_routes(&mut self, routes: Vec<BrowserDesktopRoute>) {
+        self.manager_config.remote_desktop_routes = routes;
+    }
+
+    /// Refresh new-allocation limits without changing existing browser bindings.
+    pub(crate) fn set_desktop_capacity(
+        &mut self,
+        maximum_displays: u32,
+        maximum_browsers_per_display: u32,
+    ) {
+        self.desktop_capacity = Some((maximum_displays, maximum_browsers_per_display));
+    }
+
+    fn select_desktop(
+        &self,
+        live_display_names: &[String],
+    ) -> Result<agent_browser_service_model::BrowserDesktopAssignment, String> {
+        match self.desktop_capacity {
+            Some((maximum, density)) => {
+                agent_browser_service_model::select_browser_desktop_with_capacity(
+                    &self.manager_config.remote_desktop_routes,
+                    live_display_names,
+                    maximum,
+                    density,
+                )
+            }
+            None => agent_browser_service_model::select_least_crowded_browser_desktop(
+                &self.manager_config.remote_desktop_routes,
+                live_display_names,
+            ),
+        }
+    }
+
+    pub(crate) fn open(
+        &mut self,
+        request: OpenBrowserSession,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        let result = self.manager().open(request)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn record_navigation(
+        &mut self,
+        session_id: &str,
+        url: &str,
+        visited_at_ms: u64,
+    ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
+        let result = self
+            .manager()
+            .record_navigation(session_id, url, visited_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn navigate(
+        &mut self,
+        session_id: &str,
+        url: &str,
+        activity_at_ms: u64,
+    ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
+        let result = self.manager().navigate(session_id, url, activity_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn focus_browser(
+        &mut self,
+        browser_id: &str,
+        target_id: Option<&str>,
+        activity_at_ms: u64,
+    ) -> Result<agent_browser_service_model::FocusBrowserResult, String> {
+        let result = self
+            .manager()
+            .focus_browser(browser_id, target_id, activity_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    /// Resolve one manager-owned opaque handoff while this host has exclusive
+    /// custody of the manager state and its browser effects.
+    pub(crate) fn resolve_manager_handoff(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        service: &ServiceState,
+        inventory: &StaticRouteInventory,
+        activity_at_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        if !super::browser_session_handoff::is_manager_handoff(handoff) {
+            return Err("browser_session_handoff_not_manager_owned".to_string());
+        }
+        if handoff.state != "ready" {
+            return Err("browser_session_handoff_not_ready".to_string());
+        }
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
+        if session.expires_at_ms < activity_at_ms {
+            return Err("browser_session_handoff_session_expired".to_string());
+        }
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_browser_missing".to_string())?;
+        let tab_id = handoff
+            .tab_id
+            .as_deref()
+            .ok_or_else(|| "browser_session_handoff_tab_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_tab_closed".to_string())?;
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(browser.id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || tab.browser_id != browser.id
+            || tab.session_id != session.id
+        {
+            return Err("browser_session_handoff_identity_changed".to_string());
+        }
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or_else(|| "browser_session_handoff_desktop_missing".to_string())?;
+        let binding = super::browser_session_handoff::manager_route_binding(
+            service,
+            inventory,
+            &browser.id,
+            &desktop.route_id,
+            &desktop.display_name,
+        )?;
+        let control_input = service
+            .remote_view_routes
+            .get(&binding.route_id)
+            .and_then(|route| route.control_input)
+            .ok_or_else(|| "browser_session_handoff_control_input_unavailable".to_string())?;
+        if handoff
+            .view_stream_provider
+            .is_some_and(|provider| provider != binding.provider)
+            || handoff
+                .control_input
+                .is_some_and(|provider| provider != control_input)
+        {
+            return Err("browser_session_handoff_presentation_identity_changed".to_string());
+        }
+        let handoff_url =
+            super::remote_view_handoff::durable_remote_view_handoff_url(&binding, &handoff.id)
+                .ok_or_else(|| "browser_session_handoff_public_operator_url_missing".to_string())?;
+        if handoff.handoff_url.as_deref() != Some(handoff_url.as_str()) {
+            return Err("browser_session_handoff_opaque_url_changed".to_string());
+        }
+
+        let focused = self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?;
+        if focused.tab_id.as_deref() != Some(tab.id.as_str())
+            || focused.target_id.as_deref() != Some(tab.target_id.as_str())
+        {
+            return Err("browser_session_handoff_focus_identity_changed".to_string());
+        }
+        self.refresh_resolved_manager_handoff(session_id, &handoff.id, activity_at_ms)?;
+        let presentation_generation = 1_u64;
+        let presentation_receipt = serde_json::json!({
+            "generation": presentation_generation,
+            "logicalBrowserId": browser.id,
+            "targetId": tab.target_id,
+            "requiredStreamProvider": binding.provider,
+            "observedStreamProvider": binding.provider,
+            "state": "ready",
+            "browserSessionManager": true,
+        });
+        Ok(serde_json::json!({
+            "status": "ready",
+            "resolved": true,
+            "browserSessionManager": true,
+            "handoffId": handoff.id,
+            "handoffUrl": handoff_url,
+            "browserId": browser.id,
+            "sessionName": session.name,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "viewStreamProvider": binding.provider,
+            "requiredViewStreamProvider": binding.provider,
+            "controlInput": control_input,
+            "operatorVisible": { "state": "ready" },
+            "presentationGeneration": presentation_generation,
+            "presentationReceipt": presentation_receipt,
+        }))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn resolve_manager_handoff_with_keeper(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        authority: &RouteKeeperAuthority,
+        activity_at_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        self.resolve_keeper_handoff(handoff, authority, activity_at_ms, None)
+    }
+
+    fn resolve_keeper_handoff(
+        &mut self,
+        handoff: &RemoteViewHandoff,
+        authority: &RouteKeeperAuthority,
+        activity_at_ms: u64,
+        activation: Option<&handoff_control::HandoffControlActivation<'_>>,
+    ) -> Result<serde_json::Value, String> {
+        if !super::browser_session_handoff::is_manager_handoff(handoff) {
+            return Err("browser_session_handoff_not_manager_owned".to_string());
+        }
+        if handoff.state != "ready" {
+            return Err("browser_session_handoff_not_ready".to_string());
+        }
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+        if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
+            return Err("browser_session_handoff_session_identity_changed".to_string());
+        }
+        if session.expires_at_ms < activity_at_ms {
+            return Err("browser_session_handoff_session_expired".to_string());
+        }
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_browser_missing".to_string())?;
+        let tab_id = handoff
+            .tab_id
+            .as_deref()
+            .ok_or_else(|| "browser_session_handoff_tab_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_handoff_tab_closed".to_string())?;
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(browser.id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || tab.browser_id != browser.id
+            || tab.session_id != session.id
+        {
+            return Err("browser_session_handoff_identity_changed".to_string());
+        }
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or_else(|| "browser_session_handoff_desktop_missing".to_string())?;
+        let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
+        if handoff
+            .intent
+            .get("presentationSlotId")
+            .and_then(serde_json::Value::as_str)
+            != Some(binding.slot_id.as_str())
+            || handoff.last_route_id.as_deref() != Some(binding.slot_id.as_str())
+            || handoff.view_stream_provider != Some(ViewStreamProvider::RdpGateway)
+            || handoff.control_input != Some(ControlInputProvider::ManualAttachedDesktop)
+        {
+            return Err("browser_session_handoff_presentation_identity_changed".to_string());
+        }
+        let handoff_url =
+            super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+                &binding.public_operator_url,
+                &handoff.id,
+            )
+            .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+        if handoff.handoff_url.as_deref() != Some(handoff_url.as_str()) {
+            return Err("browser_session_handoff_opaque_url_changed".to_string());
+        }
+
+        let (focused, control) = if let Some(activation) = activation {
+            let (focused, lease) =
+                self.focus_controlled_handoff(handoff, &binding, activation, activity_at_ms)?;
+            (
+                focused,
+                Some(serde_json::json!({
+                    "epoch": lease.epoch,
+                    "hostGeneration": lease.host_generation,
+                    "operationId": lease.operation_id,
+                    "clientConnectionId": lease.controller_client_connection_id,
+                    "presentationSlotId": lease.route_binding.slot_id,
+                    "state": "focus_authorized",
+                })),
+            )
+        } else {
+            (
+                self.focus_browser(&browser.id, Some(&tab.target_id), activity_at_ms)?,
+                None,
+            )
+        };
+
+        if focused.tab_id.as_deref() != Some(tab.id.as_str())
+            || focused.target_id.as_deref() != Some(tab.target_id.as_str())
+        {
+            return Err("browser_session_handoff_focus_identity_changed".to_string());
+        }
+        self.refresh_resolved_manager_handoff(session_id, &handoff.id, activity_at_ms)?;
+        let presentation_generation = binding.fence.operation_generation;
+        let presentation_receipt = serde_json::json!({
+            "generation": presentation_generation,
+            "logicalBrowserId": browser.id,
+            "targetId": tab.target_id,
+            "requiredStreamProvider": ViewStreamProvider::RdpGateway,
+            "observedStreamProvider": ViewStreamProvider::RdpGateway,
+            "state": "ready",
+            "browserSessionManager": true,
+            "presentationSlotId": binding.slot_id,
+            "keeperId": binding.keeper_id,
+            "hostGeneration": binding.fence.host_generation,
+            "operationId": binding.fence.operation_id,
+            "catalogDigest": binding.fence.connection_catalog_digest,
+        });
+        Ok(serde_json::json!({
+            "status": "ready",
+            "resolved": true,
+            "browserSessionManager": true,
+            "handoffId": handoff.id,
+            "handoffUrl": handoff_url,
+            "browserId": browser.id,
+            "sessionName": session.name,
+            "tabId": tab.id,
+            "targetId": tab.target_id,
+            "viewStreamProvider": ViewStreamProvider::RdpGateway,
+            "requiredViewStreamProvider": ViewStreamProvider::RdpGateway,
+            "controlInput": ControlInputProvider::ManualAttachedDesktop,
+            "operatorVisible": { "state": "ready" },
+            "presentationGeneration": presentation_generation,
+            "presentationReceipt": presentation_receipt,
+            "desktopControl": control,
+        }))
+    }
+
+    pub(crate) fn new_tab(
+        &mut self,
+        session_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<agent_browser_service_model::BrowserTabAcquisition, String> {
+        let result = self.manager().new_tab(session_id, activity_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn close_current_tab(
+        &mut self,
+        session_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<CloseBrowserTabResult, String> {
+        let result = self
+            .manager()
+            .close_current_tab(session_id, activity_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn close_session(
+        &mut self,
+        session_id: &str,
+        reason: SessionEndReason,
+        ended_at_ms: u64,
+    ) -> Result<CloseBrowserSessionResult, String> {
+        let result = self
+            .manager()
+            .close_session(session_id, reason, ended_at_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+        let result = self.manager().reap(now_ms)?;
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    pub(crate) fn state(&self) -> &BrowserSessionState {
+        &self.state
+    }
+
+    pub(crate) fn manager_handoff(&self, handoff_id: &str) -> Option<&RemoteViewHandoff> {
+        self.handoffs.get(handoff_id)
+    }
+
+    pub(crate) fn attach_keeper_manager_handoff(
+        &mut self,
+        response: &mut serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> Result<(), String> {
+        if response.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+            return Ok(());
+        }
+        let prepared = super::browser_session_handoff::prepare_keeper_manager_handoff(
+            response,
+            &self.state,
+            authority,
+            &self.handoffs,
+        )?;
+        let mut next_state = self.state.clone();
+        let session_id = prepared
+            .handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        next_state.bind_manager_handoff(session_id, &prepared.handoff.id)?;
+        self.persistence
+            .publish_manager_handoff(&next_state, &prepared.handoff)?;
+        self.state = next_state;
+        self.handoffs
+            .insert(prepared.handoff.id.clone(), prepared.handoff);
+        if let (Some(data), Some(projection)) = (
+            response
+                .get_mut("data")
+                .and_then(serde_json::Value::as_object_mut),
+            prepared.projection.as_json().as_object(),
+        ) {
+            for (key, value) in projection {
+                data.insert(key.clone(), value.clone());
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn has_operation(&self, operation_id: &str) -> Result<bool, String> {
+        self.persistence
+            .find_operation(operation_id)
+            .map(|operation| operation.is_some())
+    }
+
+    pub(crate) fn reap_current(&mut self) -> Result<ReapBrowserSessionsResult, String> {
+        self.reap(current_unix_ms())
+    }
+
+    pub(crate) fn reconcile_liveness_current(&mut self) -> Result<Vec<String>, String> {
+        let retired = self.manager().reconcile_liveness(current_unix_ms())?;
+        if !retired.is_empty() {
+            self.commit_state()?;
+        }
+        Ok(retired)
+    }
+
+    pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let result = self.handle_command_result(command);
+        match result {
+            Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
+            Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
+        }
+    }
+
+    /// Execute one fresh browser open through the SQLite operation journal.
+    ///
+    /// The operation reserves its logical session, browser, desktop, and
+    /// handoff intent before browser effects. Browser and tab observations are
+    /// checkpointed for restart recovery, while the ready manager state and
+    /// logical handoff publish in one fenced SQLite transaction.
+    pub(crate) fn handle_journaled_open_with_handoff(
+        &mut self,
+        command: &serde_json::Value,
+        service: &ServiceState,
+        inventory: &StaticRouteInventory,
+    ) -> serde_json::Value
+    where
+        E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
+    {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let baseline_state = self.state.clone();
+        let result = self.journaled_open_with_handoff_result(
+            command,
+            ManagerHandoffAuthority::Legacy { service, inventory },
+        );
+        match result {
+            Ok(response) => response,
+            Err(error) => {
+                self.state = self
+                    .persistence
+                    .load_session_state()
+                    .unwrap_or(baseline_state);
+                serde_json::json!({ "id": id, "success": false, "error": error })
+            }
+        }
+    }
+
+    pub(crate) fn handle_journaled_open_with_keeper_handoff(
+        &mut self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> serde_json::Value
+    where
+        E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
+    {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let baseline_state = self.state.clone();
+        let result = self.journaled_open_with_handoff_result(
+            command,
+            ManagerHandoffAuthority::Keeper(authority),
+        );
+        match result {
+            Ok(response) => response,
+            Err(error) => {
+                self.state = self
+                    .persistence
+                    .load_session_state()
+                    .unwrap_or(baseline_state);
+                serde_json::json!({ "id": id, "success": false, "error": error })
+            }
+        }
+    }
+
+    fn journaled_open_with_handoff_result(
+        &mut self,
+        command: &serde_json::Value,
+        handoff_authority: ManagerHandoffAuthority<'_>,
+    ) -> Result<serde_json::Value, String>
+    where
+        E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
+    {
+        if command.get("action").and_then(serde_json::Value::as_str) != Some("browser_session_open")
+        {
+            return Err("browser_runtime_open_action_invalid".to_string());
+        }
+        let operation_id = required_string(command, "id")?;
+        let session_name = required_string(command, "sessionName")?;
+        let existing_operation = self.persistence.find_operation(operation_id)?;
+        let profile_id = if let Some(existing) = &existing_operation {
+            existing.request["intent"]["session"]["profileId"]
+                .as_str()
+                .ok_or("browser_runtime_operation_profile_id_missing")?
+                .to_string()
+        } else {
+            self.profile_id_for_journaled_open(command, session_name)?
+        };
+        let activity_at_ms = command
+            .get("activityAtMs")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("activityAtMs"))
+            })
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let owner_key = "browser-runtime-open";
+        let request = if let Some(existing) = &existing_operation {
+            if existing.request.get("command") != Some(command) {
+                return Err(format!(
+                    "browser_runtime_operation_replay_mismatch:{operation_id}"
+                ));
+            }
+            existing.request.clone()
+        } else {
+            let matching_session = self.state.sessions.values().find(|session| {
+                session.name == session_name
+                    && session.profile_id == profile_id
+                    && activity_at_ms < session.expires_at_ms
+            });
+            let selected_browser_id = optional_string(command, "browserId");
+            if matching_session.is_some_and(|session| {
+                selected_browser_id
+                    .is_some_and(|browser_id| browser_id != session.browser_id.as_str())
+            }) {
+                return Err("browser_session_selected_browser_session_mismatch".to_string());
+            }
+            let reusable_browser = if let Some(browser_id) = selected_browser_id {
+                let browser = self.state.browsers.get(browser_id).ok_or_else(|| {
+                    format!("browser_session_selected_browser_not_found:{browser_id}")
+                })?;
+                if !self.effects.browser_is_live(browser)? {
+                    return Err("browser_session_selected_browser_not_live".to_string());
+                }
+                Some(browser)
+            } else {
+                matching_session
+                    .and_then(|session| self.state.browsers.get(&session.browser_id))
+                    .or_else(|| {
+                        self.state
+                            .browsers
+                            .values()
+                            .find(|browser| browser.profile_id == profile_id)
+                    })
+            };
+            let live_display_names = self
+                .state
+                .browsers
+                .values()
+                .filter_map(|browser| {
+                    browser
+                        .desktop
+                        .as_ref()
+                        .map(|desktop| desktop.display_name.clone())
+                })
+                .collect::<Vec<_>>();
+            let desktop_intent = if let Some(browser) = reusable_browser {
+                browser
+                    .desktop
+                    .clone()
+                    .ok_or_else(|| "browser_session_open_desktop_missing".to_string())?
+            } else {
+                self.select_desktop(&live_display_names)?
+            };
+            let session_id = matching_session
+                .map(|session| session.id.clone())
+                .unwrap_or_else(|| {
+                    format!(
+                        "session:{session_name}:{profile_id}:{}",
+                        self.state.next_session_sequence.saturating_add(1)
+                    )
+                });
+            let browser_id = reusable_browser
+                .map(|browser| browser.id.clone())
+                .unwrap_or_else(|| deterministic_manager_browser_id(operation_id, &profile_id));
+            let handoff_id = deterministic_manager_handoff_id(operation_id);
+            serde_json::json!({
+                "schemaVersion": "agent-browser.browser-open-operation.v1",
+                "command": command,
+                "baseSessionState": &self.state,
+                "intent": {
+                    "session": {"id": session_id, "name": session_name, "profileId": profile_id},
+                    "browser": {"id": browser_id, "profileId": profile_id, "disposition": "reuse_or_launch"},
+                    "slot": {
+                        "routeId": desktop_intent.route_id,
+                        "displayName": desktop_intent.display_name,
+                        "liveBrowserCount": desktop_intent.live_browser_count,
+                    },
+                    "handoff": {"id": handoff_id, "state": "pending"},
+                }
+            })
+        };
+        let base_session_state: BrowserSessionState = serde_json::from_value(
+            request
+                .get("baseSessionState")
+                .cloned()
+                .ok_or_else(|| "browser_runtime_operation_base_state_missing".to_string())?,
+        )
+        .map_err(|error| format!("browser_runtime_operation_base_state_invalid:{error}"))?;
+        if existing_operation
+            .as_ref()
+            .is_some_and(|operation| operation.state != BrowserRuntimeOperationState::Committed)
+            && self.state != base_session_state
+        {
+            return Err("browser_runtime_operation_base_state_conflict".to_string());
+        }
+        let handoff_id = request["intent"]["handoff"]["id"]
+            .as_str()
+            .ok_or_else(|| "browser_runtime_operation_handoff_id_missing".to_string())?
+            .to_string();
+        let mut operation = self
+            .persistence
+            .reserve_operation(operation_id, owner_key, request)?
+            .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())?;
+        if operation.state != BrowserRuntimeOperationState::Committed {
+            if let ManagerHandoffAuthority::Keeper(authority) = handoff_authority {
+                preflight_keeper_handoff_intent(&operation.request, authority)?;
+                require_current_desktop_route(
+                    &self.manager_config.remote_desktop_routes,
+                    operation.request["intent"]["slot"]["routeId"]
+                        .as_str()
+                        .unwrap_or_default(),
+                    operation.request["intent"]["slot"]["displayName"]
+                        .as_str()
+                        .unwrap_or_default(),
+                )?;
+            }
+        }
+        let mut launch_authorized = existing_operation
+            .as_ref()
+            .is_none_or(|operation| operation.state == BrowserRuntimeOperationState::Prepared);
+
+        loop {
+            match operation.state {
+                BrowserRuntimeOperationState::Committed => {
+                    return observation_response(operation.result.as_ref().ok_or_else(|| {
+                        "browser_runtime_operation_committed_result_missing".to_string()
+                    })?);
+                }
+                BrowserRuntimeOperationState::Prepared => {
+                    let response = serde_json::json!({
+                        "id": command.get("id").cloned().unwrap_or_default(),
+                        "success": true,
+                        "data": {
+                            "sessionId": operation.request["intent"]["session"]["id"],
+                            "sessionName": session_name,
+                            "profileId": profile_id,
+                            "browserId": operation.request["intent"]["browser"]["id"],
+                            "handoffId": handoff_id,
+                        }
+                    });
+                    operation =
+                        self.record_open_observation(&operation, "launch_started", response, None)?;
+                }
+                BrowserRuntimeOperationState::Observed => {
+                    let observation = operation.result.as_ref().ok_or_else(|| {
+                        "browser_runtime_operation_observation_missing".to_string()
+                    })?;
+                    self.state = serde_json::from_value(
+                        observation.get("sessionState").cloned().ok_or_else(|| {
+                            "browser_runtime_operation_session_state_missing".to_string()
+                        })?,
+                    )
+                    .map_err(|error| {
+                        format!("browser_runtime_operation_session_state_invalid:{error}")
+                    })?;
+                    let phase = observation
+                        .get("phase")
+                        .and_then(serde_json::Value::as_str)
+                        .ok_or_else(|| {
+                            "browser_runtime_operation_observation_phase_missing".to_string()
+                        })?;
+                    let response = observation_response(observation)?;
+                    match phase {
+                        "launch_started" => {
+                            let reservation = BrowserOpenReservation {
+                                session_id: operation.request["intent"]["session"]["id"]
+                                    .as_str()
+                                    .ok_or_else(|| {
+                                        "browser_runtime_operation_session_id_missing".to_string()
+                                    })?
+                                    .to_string(),
+                                browser_id: operation.request["intent"]["browser"]["id"]
+                                    .as_str()
+                                    .ok_or_else(|| {
+                                        "browser_runtime_operation_browser_id_missing".to_string()
+                                    })?
+                                    .to_string(),
+                                desktop: serde_json::from_value(
+                                    operation.request["intent"]["slot"].clone(),
+                                )
+                                .map_err(|error| {
+                                    format!(
+                                        "browser_runtime_operation_desktop_intent_invalid:{error}"
+                                    )
+                                })?,
+                            };
+                            let opened = if launch_authorized {
+                                self.open_request_from_command_reserved(
+                                    command,
+                                    activity_at_ms,
+                                    reservation,
+                                )?
+                            } else {
+                                let profile = self
+                                    .catalog
+                                    .profiles
+                                    .get(&profile_id)
+                                    .cloned()
+                                    .or_else(|| {
+                                        self.state
+                                            .disposable_profiles
+                                            .get(&profile_id)
+                                            .map(|allocation| allocation.profile.clone())
+                                    })
+                                    .ok_or_else(|| {
+                                        format!("browser_profile_not_found:{profile_id}")
+                                    })?;
+                                match self.effects.recover_browser_reserved(
+                                    &profile,
+                                    &reservation.desktop,
+                                    &reservation.browser_id,
+                                ) {
+                                    Ok(ReservedBrowserRecovery::Recovered(launch)) => {
+                                        let open_request = self.open_request_for_journaled_command(
+                                            command,
+                                            session_name,
+                                            &profile_id,
+                                            activity_at_ms,
+                                        );
+                                        match self.manager().open_reserved_observed(
+                                            open_request,
+                                            reservation,
+                                            launch,
+                                        ) {
+                                            Ok(opened) => opened,
+                                            Err(error) => {
+                                                self.retain_reserved_browser_cleanup(
+                                                    &operation,
+                                                    response,
+                                                    &operation.request,
+                                                    format!("recovered_launch_rejected:{error}"),
+                                                )?;
+                                                return Err("browser_runtime_open_reserved_browser_recovery_unproven".to_string());
+                                            }
+                                        }
+                                    }
+                                    Ok(ReservedBrowserRecovery::Unproven { reason }) => {
+                                        self.retain_reserved_browser_cleanup(
+                                            &operation,
+                                            response,
+                                            &operation.request,
+                                            reason,
+                                        )?;
+                                        return Err("browser_runtime_open_reserved_browser_recovery_unproven".to_string());
+                                    }
+                                    Err(error) => {
+                                        self.retain_reserved_browser_cleanup(
+                                            &operation,
+                                            response,
+                                            &operation.request,
+                                            format!("recovery_probe_failed:{error}"),
+                                        )?;
+                                        return Err("browser_runtime_open_reserved_browser_recovery_unproven".to_string());
+                                    }
+                                }
+                            };
+                            let mut response = response;
+                            response["data"]["browserDisposition"] =
+                                serde_json::json!(
+                                    format!("{:?}", opened.disposition).to_lowercase()
+                                );
+                            response["data"]["sessionDisposition"] =
+                                serde_json::json!(
+                                    format!("{:?}", opened.session_disposition).to_lowercase()
+                                );
+                            operation = self.record_open_observation(
+                                &operation,
+                                "browser_opened",
+                                response,
+                                None,
+                            )?;
+                            launch_authorized = false;
+                        }
+                        "launch_cleanup_required" => {
+                            return Err("browser_runtime_open_reserved_browser_recovery_unproven"
+                                .to_string());
+                        }
+                        "browser_opened" => {
+                            let now_ms = command
+                                .get("activityAtMs")
+                                .and_then(serde_json::Value::as_u64)
+                                .unwrap_or_else(current_unix_ms);
+                            self.manager().reconcile_liveness(now_ms)?;
+                            let session_id =
+                                response["data"]["sessionId"].as_str().ok_or_else(|| {
+                                    "browser_runtime_operation_session_id_missing".to_string()
+                                })?;
+                            // Tab attribution is durable before handoff
+                            // publication, but it is not a session heartbeat.
+                            let tab = self.manager().tab_for_command(session_id, now_ms)?;
+                            let mut response = response;
+                            response["data"]["tabId"] = serde_json::json!(tab.tab_id);
+                            response["data"]["targetId"] = serde_json::json!(tab.target_id);
+                            operation = self.record_open_observation(
+                                &operation,
+                                "tab_acquired",
+                                response,
+                                None,
+                            )?;
+                        }
+                        "tab_acquired" => {
+                            if let Some(url) = optional_string(command, "url") {
+                                // A URL can have server-side effects. Fence the
+                                // issue before sending it so restart cannot
+                                // silently repeat an uncertain navigation.
+                                operation = self.record_open_observation(
+                                    &operation,
+                                    "navigation_issued",
+                                    response.clone(),
+                                    None,
+                                )?;
+                                let session_id =
+                                    response["data"]["sessionId"].as_str().ok_or_else(|| {
+                                        "browser_runtime_operation_session_id_missing".to_string()
+                                    })?;
+                                let now_ms = command
+                                    .get("activityAtMs")
+                                    .and_then(serde_json::Value::as_u64)
+                                    .unwrap_or_else(current_unix_ms);
+                                match self.manager().navigate(session_id, url, now_ms) {
+                                    Ok(navigation) => {
+                                        let mut response = response;
+                                        response["data"]["url"] = serde_json::json!(navigation.url);
+                                        response["data"]["tabId"] =
+                                            serde_json::json!(navigation.tab_id);
+                                        response["data"]["targetId"] =
+                                            serde_json::json!(navigation.target_id);
+                                        operation = self.record_open_observation(
+                                            &operation,
+                                            "navigation_completed",
+                                            response,
+                                            None,
+                                        )?;
+                                        continue;
+                                    }
+                                    Err(error) => {
+                                        self.record_open_effect_failure(
+                                            &operation,
+                                            &response,
+                                            "navigation_failed",
+                                            &error,
+                                        )?;
+                                        return Err(error);
+                                    }
+                                }
+                            }
+                            operation = self.record_open_observation(
+                                &operation,
+                                "navigation_completed",
+                                response,
+                                None,
+                            )?;
+                        }
+                        "navigation_issued" => {
+                            let error = "browser_runtime_open_navigation_outcome_unproven";
+                            self.record_open_effect_failure(
+                                &operation,
+                                &response,
+                                "navigation_outcome_unproven",
+                                error,
+                            )?;
+                            return Err(error.to_string());
+                        }
+                        "navigation_completed" => {
+                            let browser_id =
+                                response["data"]["browserId"].as_str().ok_or_else(|| {
+                                    "browser_runtime_operation_browser_id_missing".to_string()
+                                })?;
+                            let target_id =
+                                response["data"]["targetId"].as_str().ok_or_else(|| {
+                                    "browser_runtime_operation_target_id_missing".to_string()
+                                })?;
+                            if let Err(error) = self.manager().focus_browser(
+                                browser_id,
+                                Some(target_id),
+                                activity_at_ms,
+                            ) {
+                                self.record_open_effect_failure(
+                                    &operation,
+                                    &response,
+                                    "presentation_focus_failed",
+                                    &error,
+                                )?;
+                                return Err(error);
+                            }
+                            let browser =
+                                self.state
+                                    .browsers
+                                    .get(browser_id)
+                                    .cloned()
+                                    .ok_or_else(|| {
+                                        format!(
+                                        "browser_runtime_operation_browser_missing:{browser_id}"
+                                    )
+                                    })?;
+                            let proof = match self.effects.observe_visible_browser(&browser) {
+                                Ok(proof) if proof["state"] == "ready" => proof,
+                                Ok(_) => {
+                                    let error = "browser_runtime_operator_presentation_not_ready"
+                                        .to_string();
+                                    self.record_open_effect_failure(
+                                        &operation,
+                                        &response,
+                                        "presentation_failed",
+                                        &error,
+                                    )?;
+                                    return Err(error);
+                                }
+                                Err(error) => {
+                                    self.record_open_effect_failure(
+                                        &operation,
+                                        &response,
+                                        "presentation_failed",
+                                        &error,
+                                    )?;
+                                    return Err(error);
+                                }
+                            };
+                            let mut response = response;
+                            response["data"]["operatorVisible"] = proof;
+                            operation = self.record_open_observation(
+                                &operation,
+                                "presentation_observed",
+                                response,
+                                None,
+                            )?;
+                        }
+                        "presentation_observed" => {
+                            let prepared = match handoff_authority {
+                                ManagerHandoffAuthority::Legacy { service, inventory } => {
+                                    super::browser_session_handoff::prepare_manager_handoff(
+                                        &response,
+                                        &self.state,
+                                        service,
+                                        inventory,
+                                        &self.handoffs,
+                                    )?
+                                }
+                                ManagerHandoffAuthority::Keeper(authority) => {
+                                    super::browser_session_handoff::prepare_keeper_manager_handoff(
+                                        &response,
+                                        &self.state,
+                                        authority,
+                                        &self.handoffs,
+                                    )?
+                                }
+                            };
+                            self.bind_manager_handoff(&prepared.handoff)?;
+                            let mut response = response;
+                            if let (Some(data), Some(projection)) = (
+                                response
+                                    .get_mut("data")
+                                    .and_then(serde_json::Value::as_object_mut),
+                                prepared.projection.as_json().as_object(),
+                            ) {
+                                for (key, value) in projection {
+                                    data.insert(key.clone(), value.clone());
+                                }
+                            }
+                            response["data"]["operatorVisible"] =
+                                observation["response"]["data"]["operatorVisible"].clone();
+                            operation = self.record_open_observation(
+                                &operation,
+                                "ready",
+                                response,
+                                Some(&prepared.handoff),
+                            )?;
+                        }
+                        "ready" => {
+                            let handoff: RemoteViewHandoff = serde_json::from_value(
+                                observation.get("handoff").cloned().ok_or_else(|| {
+                                    "browser_runtime_operation_handoff_missing".to_string()
+                                })?,
+                            )
+                            .map_err(|error| {
+                                format!("browser_runtime_operation_handoff_invalid:{error}")
+                            })?;
+                            let committed = self
+                                .persistence
+                                .commit_browser_open(
+                                    &operation.operation_id,
+                                    operation.generation,
+                                    &base_session_state,
+                                    &self.state,
+                                    &handoff,
+                                    observation.clone(),
+                                )?
+                                .ok_or_else(|| {
+                                    "browser_runtime_operation_persistence_unsupported".to_string()
+                                })?;
+                            self.handoffs.insert(handoff.id.clone(), handoff);
+                            operation = committed;
+                        }
+                        "effect_failed" => {
+                            return Err(observation
+                                .get("error")
+                                .and_then(serde_json::Value::as_str)
+                                .unwrap_or("browser_runtime_open_effect_failed")
+                                .to_string());
+                        }
+                        other => {
+                            return Err(format!(
+                                "browser_runtime_operation_observation_phase_invalid:{other}"
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn open_request_from_command_reserved(
+        &mut self,
+        command: &serde_json::Value,
+        activity_at_ms: u64,
+        reservation: BrowserOpenReservation,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        let session_name = required_string(command, "sessionName")?;
+        let profile_id = self.profile_id_for_journaled_open(command, session_name)?;
+        let request = self.open_request_for_journaled_command(
+            command,
+            session_name,
+            &profile_id,
+            activity_at_ms,
+        );
+        self.manager().open_reserved(request, reservation)
+    }
+
+    /// Resolve the profile identity without allocating a disposable directory.
+    /// The journal records this identity before the allocation effect begins.
+    fn profile_id_for_journaled_open(
+        &self,
+        command: &serde_json::Value,
+        session_name: &str,
+    ) -> Result<String, String> {
+        if let Some(browser_id) = optional_string(command, "browserId") {
+            let browser = self.state.browsers.get(browser_id).ok_or_else(|| {
+                format!("browser_session_selected_browser_not_found:{browser_id}")
+            })?;
+            if optional_string(command, "profileId")
+                .is_some_and(|profile_id| profile_id != browser.profile_id)
+            {
+                return Err("browser_session_selected_browser_profile_mismatch".to_string());
+            }
+            if let Some(allocation) = self.state.disposable_profiles.get(&browser.profile_id) {
+                if allocation.session_name != session_name
+                    || optional_string(command, "disposablePolicyId")
+                        .is_some_and(|policy_id| policy_id != allocation.policy_id)
+                {
+                    return Err("browser_session_selected_browser_profile_mismatch".to_string());
+                }
+            } else if !self.catalog.profiles.contains_key(&browser.profile_id) {
+                return Err(format!("browser_profile_not_found:{}", browser.profile_id));
+            }
+            return Ok(browser.profile_id.clone());
+        }
+        if let Some(profile_id) = optional_string(command, "profileId") {
+            return Ok(profile_id.to_string());
+        }
+        let policy_id =
+            optional_string(command, "disposablePolicyId").unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID);
+        if !self.catalog.disposable_policies.contains_key(policy_id) {
+            return Err(format!("browser_disposable_policy_not_found:{policy_id}"));
+        }
+        if let Some(allocation) = self.state.disposable_profiles.values().find(|allocation| {
+            allocation.policy_id == policy_id && allocation.session_name == session_name
+        }) {
+            return Ok(allocation.profile.id.clone());
+        }
+        let next_sequence = self
+            .state
+            .next_disposable_sequence
+            .checked_add(1)
+            .ok_or_else(|| "browser_disposable_sequence_exhausted".to_string())?;
+        Ok(format!("disposable:{policy_id}:{next_sequence}"))
+    }
+
+    fn open_request_for_journaled_command(
+        &self,
+        command: &serde_json::Value,
+        session_name: &str,
+        profile_id: &str,
+        activity_at_ms: u64,
+    ) -> OpenBrowserSession {
+        let request = if let Some(allocation) = self.state.disposable_profiles.get(profile_id) {
+            OpenBrowserSession::disposable(session_name, &allocation.policy_id, activity_at_ms)
+        } else if optional_string(command, "profileId").is_some()
+            || optional_string(command, "browserId").is_some()
+        {
+            OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
+        } else {
+            OpenBrowserSession::disposable(
+                session_name,
+                optional_string(command, "disposablePolicyId")
+                    .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
+                activity_at_ms,
+            )
+        };
+        if let Some(browser_id) = optional_string(command, "browserId") {
+            request.with_browser_id(browser_id)
+        } else {
+            request
+        }
+    }
+
+    fn record_open_observation(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        phase: &str,
+        response: serde_json::Value,
+        handoff: Option<&RemoteViewHandoff>,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let observation = serde_json::json!({
+            "phase": phase,
+            "sessionState": &self.state,
+            "handoff": handoff,
+            "response": response,
+        });
+        self.persistence
+            .record_operation_observation(
+                &operation.operation_id,
+                operation.generation,
+                observation,
+            )?
+            .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())
+    }
+
+    fn record_open_cleanup_observation(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        response: serde_json::Value,
+        obligation: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let observation = serde_json::json!({
+            "phase": "launch_cleanup_required",
+            "sessionState": &self.state,
+            "handoff": null,
+            "cleanupObligation": obligation,
+            "response": response,
+        });
+        self.persistence
+            .record_operation_observation(
+                &operation.operation_id,
+                operation.generation,
+                observation,
+            )?
+            .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())
+    }
+
+    /// Keep a failed effect attributable to the exact reserved operation.
+    /// The failed operation publishes neither session state nor a ready handoff.
+    fn record_open_effect_failure(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        response: &serde_json::Value,
+        phase: &str,
+        error: &str,
+    ) -> Result<(), String> {
+        let observation = serde_json::json!({
+            "phase": "effect_failed",
+            "failedPhase": phase,
+            "error": error,
+            "sessionState": &self.state,
+            "response": response,
+            "cleanupObligation": {
+                "kind": "reserved_browser_reconciliation",
+                "state": "pending",
+                "operationId": operation.operation_id,
+                "generation": operation.generation,
+                "browserId": operation.request["intent"]["browser"]["id"],
+                "profileId": operation.request["intent"]["browser"]["profileId"],
+                "routeId": operation.request["intent"]["slot"]["routeId"],
+                "displayName": operation.request["intent"]["slot"]["displayName"],
+                "reason": phase,
+            },
+        });
+        self.persistence
+            .record_operation_observation(
+                &operation.operation_id,
+                operation.generation,
+                observation,
+            )?
+            .ok_or_else(|| "browser_runtime_operation_persistence_unsupported".to_string())?;
+        Ok(())
+    }
+
+    fn retain_reserved_browser_cleanup(
+        &mut self,
+        operation: &BrowserRuntimeOperation,
+        response: serde_json::Value,
+        request: &serde_json::Value,
+        reason: String,
+    ) -> Result<(), String> {
+        let obligation = serde_json::json!({
+            "kind": "reserved_browser_reconciliation",
+            "state": "pending",
+            "operationId": operation.operation_id,
+            "generation": operation.generation,
+            "browserId": request["intent"]["browser"]["id"],
+            "profileId": request["intent"]["browser"]["profileId"],
+            "routeId": request["intent"]["slot"]["routeId"],
+            "displayName": request["intent"]["slot"]["displayName"],
+            "reason": reason,
+        });
+        self.record_open_cleanup_observation(operation, response, obligation)?;
+        Ok(())
+    }
+
+    fn handle_command_result(
+        &mut self,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let action = command
+            .get("action")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        let now_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        match action {
+            "browser_session_open" => {
+                let opened = self.open_request_from_command(command, now_ms, true)?;
+                Ok(serde_json::json!({
+                    "sessionId": opened.session_id,
+                    "sessionName": opened.session_name,
+                    "profileId": opened.profile_id,
+                    "browserId": opened.browser_id,
+                    "browserDisposition": format!("{:?}", opened.disposition).to_lowercase(),
+                    "sessionDisposition": format!("{:?}", opened.session_disposition).to_lowercase(),
+                }))
+            }
+            "browser_session_close" => {
+                let session_id = self.session_id_from_command(command)?;
+                let closed =
+                    self.close_session(&session_id, SessionEndReason::ExplicitClose, now_ms)?;
+                Ok(serde_json::json!({
+                    "closed": true,
+                    "sessionId": closed.session_id,
+                    "browserId": closed.browser_id,
+                    "disposition": session_close_disposition_name(closed.disposition),
+                }))
+            }
+            "browser_session_navigate" => {
+                let opened = if optional_string(command, "sessionId").is_none() {
+                    Some(self.open_request_from_command(command, now_ms, false)?)
+                } else {
+                    None
+                };
+                let session_id = optional_string(command, "sessionId")
+                    .map(str::to_string)
+                    .or_else(|| opened.as_ref().map(|result| result.session_id.clone()))
+                    .ok_or_else(|| "browser_session_field_missing:sessionId".to_string())?;
+                let url = required_string(command, "url")?;
+                let navigation = self.navigate(&session_id, url, now_ms)?;
+                Ok(serde_json::json!({
+                    "sessionId": session_id,
+                    "profileId": navigation.profile_id,
+                    "browserId": navigation.browser_id,
+                    "tabId": navigation.tab_id,
+                    "targetId": navigation.target_id,
+                    "url": navigation.url,
+                    "visitedAtMs": navigation.visited_at_ms,
+                }))
+            }
+            "browser_session_tab_new" => {
+                let session_id = self.session_id_from_command(command)?;
+                let tab = self.new_tab(&session_id, now_ms)?;
+                let navigation = optional_string(command, "url")
+                    .map(|url| self.navigate(&session_id, url, now_ms))
+                    .transpose()?;
+                Ok(serde_json::json!({
+                    "sessionId": session_id,
+                    "tabId": tab.tab_id,
+                    "targetId": tab.target_id,
+                    "source": "explicit_new",
+                    "url": navigation.map(|record| record.url),
+                }))
+            }
+            "browser_session_tab_close" => {
+                let session_id = self.session_id_from_command(command)?;
+                let closed = self.close_current_tab(&session_id, now_ms)?;
+                Ok(serde_json::json!({
+                    "sessionId": session_id,
+                    "closed": true,
+                    "closedTabId": closed.closed_tab_id,
+                    "currentTabId": closed.current_tab_id,
+                }))
+            }
+            "browser_session_focus" => {
+                let browser_id = required_string(command, "browserId")?;
+                let focused =
+                    self.focus_browser(browser_id, optional_string(command, "targetId"), now_ms)?;
+                Ok(serde_json::json!({
+                    "browserId": focused.browser_id,
+                    "tabId": focused.tab_id,
+                    "targetId": focused.target_id,
+                    "focused": true,
+                    "maximized": true,
+                }))
+            }
+            "browser_session_reap" => {
+                let reaped = self.reap(now_ms)?;
+                Ok(serde_json::json!({
+                    "expiredSessionIds": reaped.expired_session_ids,
+                    "closedBrowserIds": reaped.closed_browser_ids,
+                    "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
+                }))
+            }
+            "browser_session_status" => serde_json::to_value(self.state())
+                .map_err(|error| format!("browser_session_status_serialize_failed:{error}")),
+            _ => Err(format!("browser_session_action_unsupported:{action}")),
+        }
+    }
+
+    fn manager(&mut self) -> BrowserSessionManager<'_, E> {
+        let manager = BrowserSessionManager::new(
+            &mut self.state,
+            &self.catalog,
+            &mut self.effects,
+            self.manager_config.clone(),
+        );
+        match self.desktop_capacity {
+            Some((maximum, density)) => manager.with_desktop_capacity(maximum, density),
+            None => manager,
+        }
+    }
+
+    fn commit_state(&mut self) -> Result<(), String> {
+        let terminal = self
+            .persistence
+            .publish_session_state_and_terminal_handoffs(&self.state)?;
+        for handoff in terminal {
+            self.handoffs.insert(handoff.id.clone(), handoff);
+        }
+        Ok(())
+    }
+
+    fn bind_manager_handoff(&mut self, handoff: &RemoteViewHandoff) -> Result<(), String> {
+        let session_id = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+        self.state.bind_manager_handoff(session_id, &handoff.id)
+    }
+
+    fn refresh_resolved_manager_handoff(
+        &mut self,
+        session_id: &str,
+        handoff_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<(), String> {
+        self.state.refresh_manager_handoff_activity(
+            session_id,
+            handoff_id,
+            activity_at_ms,
+            self.manager_config.session_idle_timeout_ms,
+        )?;
+        self.commit_state()
+    }
+
+    fn open_request_from_command(
+        &mut self,
+        command: &serde_json::Value,
+        activity_at_ms: u64,
+        refresh_activity_on_reuse: bool,
+    ) -> Result<OpenBrowserSessionResult, String> {
+        let session_name = required_string(command, "sessionName")?;
+        let request = if let Some(profile_id) = optional_string(command, "profileId") {
+            OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
+        } else {
+            OpenBrowserSession::disposable(
+                session_name,
+                optional_string(command, "disposablePolicyId")
+                    .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
+                activity_at_ms,
+            )
+        };
+        let result = if refresh_activity_on_reuse {
+            self.manager().open(request)?
+        } else {
+            self.manager().open_for_command(request)?
+        };
+        self.commit_state()?;
+        Ok(result)
+    }
+
+    fn session_id_from_command(&self, command: &serde_json::Value) -> Result<String, String> {
+        if let Some(session_id) = optional_string(command, "sessionId") {
+            return Ok(session_id.to_string());
+        }
+        let session_name = required_string(command, "sessionName")?;
+        let profile_id = optional_string(command, "profileId");
+        let matching_ids: Vec<&str> = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                session.name == session_name
+                    && profile_id.is_none_or(|profile_id| session.profile_id == profile_id)
+            })
+            .map(|session| session.id.as_str())
+            .collect();
+        match matching_ids.as_slice() {
+            [session_id] => Ok((*session_id).to_string()),
+            [] => Err(format!("browser_session_not_found_by_name:{session_name}")),
+            _ => Err(format!("browser_session_name_ambiguous:{session_name}")),
+        }
+    }
+}
+
+/// Backfill session membership for handoffs written before sessions recorded IDs.
+/// Only an active, fully attributed record may acquire session ownership.
+fn bind_legacy_manager_handoffs(
+    state: &mut BrowserSessionState,
+    handoffs: &BTreeMap<String, RemoteViewHandoff>,
+) -> bool {
+    let mut changed = false;
+    for (id, handoff) in handoffs {
+        if id != &handoff.id
+            || handoff.state != "ready"
+            || !super::browser_session_handoff::is_manager_handoff(handoff)
+        {
+            continue;
+        }
+        let Some(session_id) = handoff
+            .intent
+            .get("sessionId")
+            .and_then(serde_json::Value::as_str)
+        else {
+            continue;
+        };
+        let Some(session) = state.sessions.get(session_id) else {
+            continue;
+        };
+        let Some(browser) = state.browsers.get(&session.browser_id) else {
+            continue;
+        };
+        let Some(tab) = handoff.tab_id.as_deref().and_then(|id| state.tabs.get(id)) else {
+            continue;
+        };
+        if handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+            || handoff.browser_id.as_deref() != Some(session.browser_id.as_str())
+            || handoff.session_name.as_deref() != Some(session.name.as_str())
+            || handoff.target_id.as_deref() != Some(tab.target_id.as_str())
+            || browser.id != session.browser_id
+            || !browser.active_session_ids.contains(&session.id)
+            || tab.session_id != session.id
+            || tab.browser_id != browser.id
+            || [
+                ("profileId", session.profile_id.as_str()),
+                ("sessionName", session.name.as_str()),
+                ("browserId", browser.id.as_str()),
+                ("tabId", tab.id.as_str()),
+                ("targetId", tab.target_id.as_str()),
+            ]
+            .into_iter()
+            .any(|(key, expected)| {
+                handoff
+                    .intent
+                    .get(key)
+                    .is_some_and(|value| value.as_str() != Some(expected))
+            })
+            || state.sessions.values().any(|other| {
+                other.id != session.id && other.handoff_ids.iter().any(|owned| owned == id)
+            })
+            || session.handoff_ids.iter().any(|owned| owned == id)
+        {
+            continue;
+        }
+        if state.bind_manager_handoff(session_id, id).is_ok() {
+            changed = true;
+        }
+    }
+    changed
+}
+
+impl<P, E> BrowserSessionHost<P, E>
+where
+    P: BrowserSessionPersistence,
+    E: BrowserSessionEffects + ManagedBrowserCommandEffects,
+{
+    /// Open or reuse a managed session, then run a header-bearing navigation
+    /// through the ordinary command executor bound to the manager-owned tab.
+    /// Reuse and tab attribution leave the heartbeat unchanged until success.
+    pub(crate) fn handle_managed_navigation_command(
+        &mut self,
+        command: &serde_json::Value,
+    ) -> serde_json::Value {
+        self.handle_managed_navigation_command_with_authority(command, None)
+    }
+
+    pub(crate) fn handle_managed_navigation_command_with_keeper(
+        &mut self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> serde_json::Value {
+        self.handle_managed_navigation_command_with_authority(command, Some(authority))
+    }
+
+    fn handle_managed_navigation_command_with_authority(
+        &mut self,
+        command: &serde_json::Value,
+        authority: Option<&RouteKeeperAuthority>,
+    ) -> serde_json::Value {
+        let id = command
+            .get("id")
+            .cloned()
+            .unwrap_or(serde_json::Value::Null);
+        let result = (|| -> Result<serde_json::Value, String> {
+            let now_ms = command
+                .get("activityAtMs")
+                .and_then(serde_json::Value::as_u64)
+                .unwrap_or_else(current_unix_ms);
+            if let Some(authority) = authority {
+                self.preflight_keeper_navigation_command(command, authority)?;
+            }
+            let opened = self.open_request_from_command(command, now_ms, false)?;
+            let tab = self.manager().tab_for_command(&opened.session_id, now_ms)?;
+            self.commit_state()?;
+            let session = self
+                .state
+                .sessions
+                .get(&opened.session_id)
+                .cloned()
+                .ok_or_else(|| format!("browser_session_not_found:{}", opened.session_id))?;
+            let browser = self
+                .state
+                .browsers
+                .get(&session.browser_id)
+                .cloned()
+                .ok_or_else(|| "browser_session_browser_missing".to_string())?;
+            let tab = self
+                .state
+                .tabs
+                .get(&tab.tab_id)
+                .cloned()
+                .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+            let url = required_string(command, "url")?;
+            let mut navigate_command = command.clone();
+            navigate_command["action"] = serde_json::json!("navigate");
+            let response = self.effects.execute_command(
+                &browser,
+                &tab,
+                &session.id,
+                &session.name,
+                &navigate_command,
+            )?;
+            if response.get("success").and_then(serde_json::Value::as_bool) != Some(true) {
+                return Err(response
+                    .get("error")
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or("browser_session_navigation_failed")
+                    .to_string());
+            }
+            let navigation = self.record_navigation(&session.id, url, now_ms)?;
+            Ok(serde_json::json!({
+                "sessionId": session.id,
+                "profileId": navigation.profile_id,
+                "browserId": navigation.browser_id,
+                "tabId": navigation.tab_id,
+                "targetId": navigation.target_id,
+                "url": navigation.url,
+                "visitedAtMs": navigation.visited_at_ms,
+            }))
+        })();
+        match result {
+            Ok(data) => serde_json::json!({ "id": id, "success": true, "data": data }),
+            Err(error) => serde_json::json!({ "id": id, "success": false, "error": error }),
+        }
+    }
+
+    pub(crate) fn preflight_keeper_navigation_command(
+        &self,
+        command: &serde_json::Value,
+        authority: &RouteKeeperAuthority,
+    ) -> Result<(), String> {
+        let activity_at_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let reusable_browser = if let Some(session_id) = optional_string(command, "sessionId") {
+            let session = self
+                .state
+                .sessions
+                .get(session_id)
+                .filter(|session| activity_at_ms < session.expires_at_ms)
+                .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+            Some(
+                self.state
+                    .browsers
+                    .get(&session.browser_id)
+                    .ok_or_else(|| "browser_session_browser_missing".to_string())?,
+            )
+        } else {
+            let session_name = required_string(command, "sessionName")?;
+            let profile_id = required_string(command, "profileId")?;
+            let matching_session = self.state.sessions.values().find(|session| {
+                session.name == session_name
+                    && session.profile_id == profile_id
+                    && activity_at_ms < session.expires_at_ms
+            });
+            matching_session
+                .and_then(|session| self.state.browsers.get(&session.browser_id))
+                .or_else(|| {
+                    self.state
+                        .browsers
+                        .values()
+                        .find(|browser| browser.profile_id == profile_id)
+                })
+        };
+        let live_display_names = self
+            .state
+            .browsers
+            .values()
+            .filter_map(|browser| {
+                browser
+                    .desktop
+                    .as_ref()
+                    .map(|desktop| desktop.display_name.clone())
+            })
+            .collect::<Vec<_>>();
+        let desktop = if let Some(browser) = reusable_browser {
+            browser
+                .desktop
+                .clone()
+                .ok_or_else(|| "browser_session_open_desktop_missing".to_string())?
+        } else {
+            self.select_desktop(&live_display_names)?
+        };
+        let binding = authority.ready_handoff_binding(&desktop.route_id, &desktop.display_name)?;
+        let preflight_id = command
+            .get("id")
+            .and_then(serde_json::Value::as_str)
+            .filter(|id| !id.is_empty())
+            .unwrap_or("preflight");
+        super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+            &binding.public_operator_url,
+            preflight_id,
+        )
+        .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+        require_current_desktop_route(
+            &self.manager_config.remote_desktop_routes,
+            &desktop.route_id,
+            &desktop.display_name,
+        )?;
+        Ok(())
+    }
+
+    /// Route an ordinary browser command through an already active managed
+    /// session. `Ok(None)` means this lane has no manager-owned session and the
+    /// caller may continue through the legacy lane.
+    pub(crate) fn execute_managed_command(
+        &mut self,
+        session_name: &str,
+        command: &serde_json::Value,
+    ) -> Result<Option<serde_json::Value>, String> {
+        let profile_id = optional_string(command, "profileId")
+            .or_else(|| optional_string(command, "runtimeProfile"));
+        let matching_ids = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                session.name == session_name
+                    && profile_id.is_none_or(|profile_id| session.profile_id == profile_id)
+            })
+            .map(|session| session.id.clone())
+            .collect::<Vec<_>>();
+        let session_id = match matching_ids.as_slice() {
+            [] => return Ok(None),
+            [session_id] => session_id.clone(),
+            _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
+        };
+        let now_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let tab = self.manager().tab_for_command(&session_id, now_ms)?;
+        if tab.source != agent_browser_service_model::BrowserTabSource::Current {
+            // A newly acquired browser tab must remain attributed even when
+            // the command effect fails. This does not refresh the session.
+            self.commit_state()?;
+        }
+        let session = self
+            .state
+            .sessions
+            .get(&session_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_browser_missing".to_string())?;
+        let tab = self
+            .state
+            .tabs
+            .get(&tab.tab_id)
+            .cloned()
+            .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        let response =
+            self.effects
+                .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if response.get("success").and_then(serde_json::Value::as_bool) == Some(true) {
+            self.manager()
+                .record_successful_command(&session.id, &tab.id, now_ms)?;
+            self.commit_state()?;
+        }
+        Ok(Some(response))
+    }
+}
+
+fn session_close_disposition_name(
+    disposition: agent_browser_service_model::SessionCloseDisposition,
+) -> &'static str {
+    match disposition {
+        agent_browser_service_model::SessionCloseDisposition::BrowserPreserved => {
+            "browser_preserved"
+        }
+        agent_browser_service_model::SessionCloseDisposition::BrowserClosed => "browser_closed",
+    }
+}
+
+fn required_string<'a>(command: &'a serde_json::Value, field: &str) -> Result<&'a str, String> {
+    optional_string(command, field).ok_or_else(|| format!("browser_session_field_missing:{field}"))
+}
+
+fn optional_string<'a>(command: &'a serde_json::Value, field: &str) -> Option<&'a str> {
+    command
+        .get(field)
+        .or_else(|| command.get("params").and_then(|params| params.get(field)))
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn deterministic_manager_handoff_id(operation_id: &str) -> String {
+    let digest = Sha256::digest(operation_id.as_bytes());
+    let suffix = digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("manager-{suffix}")
+}
+
+fn deterministic_manager_browser_id(operation_id: &str, profile_id: &str) -> String {
+    let digest = Sha256::digest(format!("{operation_id}\0{profile_id}").as_bytes());
+    let suffix = digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("browser:{profile_id}:operation:{suffix}")
+}
+
+fn require_current_desktop_route(
+    routes: &[BrowserDesktopRoute],
+    route_id: &str,
+    display_name: &str,
+) -> Result<(), String> {
+    if routes
+        .iter()
+        .any(|route| route.healthy && route.id == route_id && route.display_name == display_name)
+    {
+        Ok(())
+    } else {
+        Err("presentation_keeper_route_unavailable".to_string())
+    }
+}
+
+fn preflight_keeper_handoff_intent(
+    request: &serde_json::Value,
+    authority: &RouteKeeperAuthority,
+) -> Result<(), String> {
+    let route_id = request["intent"]["slot"]["routeId"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_route_id_missing".to_string())?;
+    let display_name = request["intent"]["slot"]["displayName"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_display_name_missing".to_string())?;
+    let handoff_id = request["intent"]["handoff"]["id"]
+        .as_str()
+        .ok_or_else(|| "browser_runtime_operation_handoff_id_missing".to_string())?;
+    let binding = authority.ready_handoff_binding(route_id, display_name)?;
+    super::remote_view_handoff::durable_remote_view_handoff_url_from_public_operator_url(
+        &binding.public_operator_url,
+        handoff_id,
+    )
+    .ok_or_else(|| "browser_session_handoff_public_operator_url_invalid".to_string())?;
+    Ok(())
+}
+
+fn observation_response(observation: &serde_json::Value) -> Result<serde_json::Value, String> {
+    observation
+        .get("response")
+        .cloned()
+        .ok_or_else(|| "browser_runtime_operation_response_missing".to_string())
+}
+
+fn current_unix_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::native::browser_session_runtime::{
+        BrowserRuntimeDriver, BrowserSessionEffectAdapter, ReservedBrowserRecovery,
+    };
+    use crate::native::browser_session_store::{
+        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
+    };
+    use crate::native::presentation_request_admission::{
+        now_ms, PresentationAdmission, PresentationAdmissionRequest,
+    };
+    use agent_browser_service_model::{
+        BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, ControlInputProvider,
+        DisplayAllocation, ManagedBrowserInstance, ManagedBrowserTab, PresentationRequestState,
+        RecordedProcessIdentity, RemoteViewHandoff, RemoteViewRoute, RouteKeeperConnectionBinding,
+        RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim, RouteKeeperReconcileAction,
+        RouteKeeperStartPriority, RoutePoolEntry, ServiceState,
+    };
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    fn register_fixture_host_process(authority: &mut RouteKeeperAuthority, host_generation: u64) {
+        authority
+            .register_host_process_claim(RouteKeeperHostProcessClaim {
+                host_generation,
+                boot_epoch: format!("linux:boot:{host_generation}"),
+                process_identity: RecordedProcessIdentity {
+                    pid: u32::try_from(4_000 + host_generation).unwrap(),
+                    start_token: format!("linux:start:{host_generation}"),
+                    executable_path: Some("/opt/agent-browser".to_string()),
+                    browser_family: None,
+                },
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn legacy_internal_presentation_bootstrap_is_removed() {
+        let legacy = serde_json::json!({
+            "action": "browser_session_navigate",
+            "sessionName": "development-presentation-provider-v5-1",
+            "profileId": "development-presentation-provider-v5-1",
+            "internalPresentationBootstrap": true
+        });
+        assert_eq!(
+            browser_session_navigation_requires_handoff(&legacy, Some("development")),
+            Err("internal_presentation_bootstrap_removed".to_string())
+        );
+        assert_eq!(
+            browser_session_navigation_requires_handoff(
+                &serde_json::json!({"action": "browser_session_navigate"}),
+                Some("development")
+            ),
+            Ok(false)
+        );
+        assert_eq!(
+            browser_session_navigation_requires_handoff(
+                &serde_json::json!({
+                    "action": "browser_session_navigate",
+                    "profileId": "named-profile"
+                }),
+                Some("development")
+            ),
+            Ok(true)
+        );
+    }
+
+    #[test]
+    fn desktop_route_projection_uses_only_ready_sqlite_keeper_receipts() {
+        let mut authority = RouteKeeperAuthority::new(4).unwrap();
+        register_fixture_host_process(&mut authority, 4);
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::with_provider_urls(
+                    "http://127.0.0.1:8193/guacamole/",
+                    "https://dashboard.example/operator",
+                    [RouteKeeperConnectionBinding {
+                        slot_id: "route-slot-01".to_string(),
+                        connection_key: "route-01".to_string(),
+                        connection_name: "Agent Browser Route 01".to_string(),
+                        route_user: "agent-browser-rdp-1".to_string(),
+                        guacamole_connection_id: 1,
+                    }],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                priority: RouteKeeperStartPriority::Minimum,
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected minimum start, got {other:?}"),
+        };
+        authority
+            .record_protocol_ready(
+                agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+                    slot_id: slot_id.clone(),
+                    keeper_id,
+                    fence,
+                    guacamole_connection_uuid: "guacamole-01".to_string(),
+                    xrdp_session_id: "xrdp-01".to_string(),
+                    display_name: ":10".to_string(),
+                    xrdp_ownership: Some(
+                        agent_browser_service_model::RouteKeeperXrdpOwnershipWitness {
+                            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1"
+                                .to_string(),
+                            boot_id: "boot-fixture".to_string(),
+                            route_user: "agent-browser-rdp-1".to_string(),
+                            route_uid: 2001,
+                            session_id: "xrdp-01".to_string(),
+                            session_service: "xrdp-sesman".to_string(),
+                            session_scope: "session-xrdp-01.scope".to_string(),
+                            scope_invocation_id: "invocation-fixture".to_string(),
+                            cgroup_path: "/user.slice/user-2001.slice/session-xrdp-01.scope"
+                                .to_string(),
+                            cgroup_device: 28,
+                            cgroup_inode: 1001,
+                            leader_pid: 4101,
+                            leader_start_ticks: 5101,
+                            x_server_pid: 4102,
+                            x_server_start_ticks: 5102,
+                            display_name: ":10".to_string(),
+                            x11_socket_inode: 6101,
+                        },
+                    ),
+                    observed_at: "2026-09-19T22:00:00Z".to_string(),
+                },
+            )
+            .unwrap();
+
+        assert_eq!(
+            route_keeper_desktop_routes(&authority).unwrap(),
+            vec![BrowserDesktopRoute {
+                id: slot_id,
+                display_name: ":10".to_string(),
+                healthy: true,
+            }]
+        );
+        assert_eq!(
+            route_keeper_desktop_routes(&keeper_authority_for_handoff("not a public URL")),
+            Err("browser_session_handoff_public_operator_url_invalid".to_string())
+        );
+    }
+
+    fn keeper_authority_for_handoff(public_operator_url: &str) -> RouteKeeperAuthority {
+        let mut authority = RouteKeeperAuthority::new(7).unwrap();
+        register_fixture_host_process(&mut authority, 7);
+        authority
+            .replace_connection_catalog(
+                RouteKeeperConnectionCatalog::with_provider_urls(
+                    "http://127.0.0.1:8193/guacamole/",
+                    public_operator_url,
+                    [RouteKeeperConnectionBinding {
+                        slot_id: "route-slot-01".to_string(),
+                        connection_key: "route-01".to_string(),
+                        connection_name: "Agent Browser Route 01".to_string(),
+                        route_user: "agent-browser-rdp-1".to_string(),
+                        guacamole_connection_id: 1,
+                    }],
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        let (slot_id, keeper_id, fence) = match authority.next_reconcile_action().unwrap() {
+            RouteKeeperReconcileAction::Start {
+                slot_id,
+                keeper_id,
+                fence,
+                priority: RouteKeeperStartPriority::Minimum,
+            } => (slot_id, keeper_id, fence),
+            other => panic!("expected minimum start, got {other:?}"),
+        };
+        authority
+            .record_protocol_ready(
+                agent_browser_service_model::RouteKeeperProtocolReadyReceipt {
+                    slot_id,
+                    keeper_id,
+                    fence,
+                    guacamole_connection_uuid: "guacamole-01".to_string(),
+                    xrdp_session_id: "xrdp-01".to_string(),
+                    display_name: ":10".to_string(),
+                    xrdp_ownership: Some(
+                        agent_browser_service_model::RouteKeeperXrdpOwnershipWitness {
+                            schema_version: "agent-browser.route-keeper-xrdp-ownership.v1"
+                                .to_string(),
+                            boot_id: "boot-fixture".to_string(),
+                            route_user: "agent-browser-rdp-1".to_string(),
+                            route_uid: 2001,
+                            session_id: "xrdp-01".to_string(),
+                            session_service: "xrdp-sesman".to_string(),
+                            session_scope: "session-xrdp-01.scope".to_string(),
+                            scope_invocation_id: "invocation-fixture".to_string(),
+                            cgroup_path: "/user.slice/user-2001.slice/session-xrdp-01.scope"
+                                .to_string(),
+                            cgroup_device: 28,
+                            cgroup_inode: 1001,
+                            leader_pid: 4101,
+                            leader_start_ticks: 5101,
+                            x_server_pid: 4102,
+                            x_server_start_ticks: 5102,
+                            display_name: ":10".to_string(),
+                            x11_socket_inode: 6101,
+                        },
+                    ),
+                    observed_at: "2026-09-19T22:00:00Z".to_string(),
+                },
+            )
+            .unwrap();
+        authority
+    }
+
+    pub(super) fn ready_keeper_authority_for_handoff() -> RouteKeeperAuthority {
+        keeper_authority_for_handoff("https://dashboard.example/operator")
+    }
+
+    #[test]
+    fn presentation_readiness_requires_live_supervisor_and_current_generation() {
+        use crate::native::presentation_runtime_status::keeper_status;
+        use crate::native::stream::RouteKeeperSupervisorHealth as Health;
+
+        let authority = ready_keeper_authority_for_handoff();
+        let persisted = authority.clone();
+        for health in [
+            Health::Recovering,
+            Health::Failed {
+                code: "provider_failed".to_string(),
+            },
+            Health::Unavailable {
+                code: "owner_missing".to_string(),
+            },
+            Health::Stopping,
+            Health::Stopped,
+        ] {
+            let status = keeper_status(&authority, health, Some(7)).unwrap();
+            assert_eq!(status.ready_route_count, 0);
+            assert!(!status.minimum_satisfied);
+            assert!(status.usable_routes(&authority).is_err());
+        }
+        for generation in [None, Some(8)] {
+            let status = keeper_status(&authority, Health::Supervising, generation).unwrap();
+            assert_eq!(status.ready_route_count, 0);
+            assert!(status.require_ready().is_err());
+        }
+        let ready = keeper_status(&authority, Health::Supervising, Some(7)).unwrap();
+        assert_eq!(ready.state, "ready");
+        assert_eq!(ready.ready_route_count, 1);
+        assert!(ready.minimum_satisfied);
+        assert!(!ready.warm_target_satisfied);
+        assert_eq!(ready.usable_routes(&authority).unwrap().len(), 1);
+        let mut growing = ready.clone();
+        growing.apply_runtime_config(&super::super::browser_session_store::BrowserRuntimeConfig {
+            minimum_ready: 7,
+            warm_target: 7,
+            maximum_displays: 7,
+            ..Default::default()
+        });
+        assert_eq!(growing.minimum_ready, 7);
+        assert!(!growing.minimum_satisfied);
+        assert!(!growing.warm_target_satisfied);
+        assert!(growing.require_ready().is_err());
+
+        assert_eq!(
+            authority, persisted,
+            "readiness must preserve retained evidence"
+        );
+        assert!(keeper_status(
+            &keeper_authority_for_handoff("not a public URL"),
+            Health::Supervising,
+            Some(7),
+        )
+        .is_err());
+
+        let mut quarantined = authority.clone();
+        let record = quarantined.records["route-slot-01"].clone();
+        quarantined
+            .begin_stop(&record.slot_id, &record.fence)
+            .unwrap();
+        quarantined
+            .quarantine_unproven_stop(
+                &record.slot_id,
+                &record.fence,
+                "conflicting-owner".to_string(),
+            )
+            .unwrap();
+        let status = keeper_status(&quarantined, Health::Supervising, Some(7)).unwrap();
+        assert_eq!(status.state, "quarantined");
+        assert_eq!(status.ready_route_count, 0);
+        assert!(status.require_ready().is_err());
+    }
+
+    #[derive(Default)]
+    pub(super) struct FixtureRuntime {
+        pub(super) launches: usize,
+        pub(super) live: bool,
+        pub(super) next_tab: usize,
+        pub(super) navigation_error: Option<String>,
+        pub(super) presentation_error: Option<String>,
+        pub(super) navigations: Option<Arc<AtomicUsize>>,
+        pub(super) focuses: Option<Arc<AtomicUsize>>,
+        pub(super) browser_closes: Option<Arc<AtomicUsize>>,
+        pub(super) tab_closes: Option<Arc<Mutex<Vec<String>>>>,
+    }
+
+    impl BrowserRuntimeDriver for FixtureRuntime {
+        fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
+            Ok(self.live)
+        }
+
+        fn launch_browser(
+            &mut self,
+            profile: &BrowserProfileCatalogEntry,
+            desktop: Option<&agent_browser_service_model::BrowserDesktopAssignment>,
+        ) -> Result<BrowserLaunch, String> {
+            self.launches += 1;
+            Ok(BrowserLaunch {
+                browser_id: format!("browser:{}:{}", profile.id, self.launches),
+                pid: 4242,
+                cdp_endpoint: "ws://127.0.0.1:9422/devtools/browser/test".to_string(),
+                process_identity: None,
+                desktop: desktop.cloned(),
+            })
+        }
+
+        fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+            if let Some(closes) = &self.browser_closes {
+                closes.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+
+        fn acquire_initial_tab(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _attributed_target_ids: &[String],
+        ) -> Result<BrowserTabAcquisition, String> {
+            self.next_tab += 1;
+            Ok(BrowserTabAcquisition {
+                tab_id: format!("tab-{}", self.next_tab),
+                target_id: format!("target-{}", self.next_tab),
+                source: agent_browser_service_model::BrowserTabSource::Bootstrap,
+            })
+        }
+
+        fn create_tab(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+        ) -> Result<BrowserTabAcquisition, String> {
+            self.next_tab += 1;
+            Ok(BrowserTabAcquisition {
+                tab_id: format!("tab-{}", self.next_tab),
+                target_id: format!("target-{}", self.next_tab),
+                source: agent_browser_service_model::BrowserTabSource::ExplicitNew,
+            })
+        }
+
+        fn close_tab(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            tab: &ManagedBrowserTab,
+        ) -> Result<(), String> {
+            if let Some(closes) = &self.tab_closes {
+                closes.lock().unwrap().push(tab.id.clone());
+            }
+            Ok(())
+        }
+
+        fn navigate(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _tab: &ManagedBrowserTab,
+            _url: &str,
+        ) -> Result<(), String> {
+            if let Some(navigations) = &self.navigations {
+                navigations.fetch_add(1, Ordering::SeqCst);
+            }
+            if let Some(error) = &self.navigation_error {
+                return Err(error.clone());
+            }
+            Ok(())
+        }
+
+        fn focus_browser(
+            &mut self,
+            _browser: &ManagedBrowserInstance,
+            _tab: Option<&ManagedBrowserTab>,
+        ) -> Result<(), String> {
+            if let Some(focuses) = &self.focuses {
+                focuses.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(())
+        }
+
+        fn execute_command(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            tab: &ManagedBrowserTab,
+            session_id: &str,
+            session_name: &str,
+            command: &serde_json::Value,
+        ) -> Result<serde_json::Value, String> {
+            if command.get("id").and_then(serde_json::Value::as_str) == Some("command-error") {
+                return Err("injected_command_error".to_string());
+            }
+            if command.get("id").and_then(serde_json::Value::as_str) == Some("command-failed") {
+                return Ok(serde_json::json!({
+                    "id": "command-failed",
+                    "success": false,
+                    "error": "injected_command_failure",
+                }));
+            }
+            if command.get("id").and_then(serde_json::Value::as_str)
+                == Some("navigate-with-headers")
+                && command.get("headers") != Some(&serde_json::json!({"Remote-User": "operator"}))
+            {
+                return Err("fixture_navigation_headers_missing".to_string());
+            }
+            Ok(serde_json::json!({
+                "id": command.get("id").cloned().unwrap_or_default(),
+                "success": true,
+                "data": {
+                    "browserId": browser.id,
+                    "tabId": tab.id,
+                    "targetId": tab.target_id,
+                    "sessionId": session_id,
+                    "sessionName": session_name,
+                    "action": command.get("action").cloned().unwrap_or_default(),
+                }
+            }))
+        }
+    }
+
+    struct JournalFixtureRuntime {
+        database_path: PathBuf,
+        launches: Arc<AtomicUsize>,
+        reserved_launches: Arc<Mutex<BTreeMap<String, BrowserLaunch>>>,
+        recovery_probes: Arc<AtomicUsize>,
+        recover_reserved_browser: bool,
+        inner: FixtureRuntime,
+        fail_reserved_launch_once: bool,
+        fail_initial_tab_once: bool,
+    }
+
+    impl BrowserRuntimeDriver for JournalFixtureRuntime {
+        fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
+            self.inner.browser_is_live(browser)
+        }
+
+        fn launch_browser(
+            &mut self,
+            profile: &BrowserProfileCatalogEntry,
+            desktop: Option<&agent_browser_service_model::BrowserDesktopAssignment>,
+        ) -> Result<BrowserLaunch, String> {
+            let store = BrowserRuntimeSqliteStore::open(&self.database_path)?;
+            let operation = store.load_operation("journal-open-1")?;
+            assert_eq!(operation.state, BrowserRuntimeOperationState::Observed);
+            assert_eq!(
+                operation.result.as_ref().unwrap()["phase"],
+                "launch_started"
+            );
+            assert_eq!(operation.request["intent"]["session"]["name"], "alice");
+            assert_eq!(
+                operation.request["intent"]["session"]["id"],
+                format!("session:alice:{}:1", profile.id)
+            );
+            assert_eq!(
+                operation.request["intent"]["browser"]["profileId"],
+                profile.id
+            );
+            assert_eq!(
+                operation.request["intent"]["browser"]["id"],
+                deterministic_manager_browser_id("journal-open-1", &profile.id)
+            );
+            let reserved_desktop =
+                desktop.expect("journaled opens reserve a desktop before launch");
+            assert_eq!(
+                operation.request["intent"]["slot"]["routeId"],
+                reserved_desktop.route_id
+            );
+            assert_eq!(
+                operation.request["intent"]["slot"]["displayName"],
+                reserved_desktop.display_name
+            );
+            assert_eq!(operation.request["intent"]["handoff"]["state"], "pending");
+            assert!(store.load_session_state()?.sessions.is_empty());
+            self.launches.fetch_add(1, Ordering::SeqCst);
+            self.inner.launch_browser(profile, desktop)
+        }
+
+        fn launch_browser_reserved(
+            &mut self,
+            profile: &BrowserProfileCatalogEntry,
+            desktop: Option<&agent_browser_service_model::BrowserDesktopAssignment>,
+            browser_id: &str,
+        ) -> Result<BrowserLaunch, String> {
+            let mut launch = self.launch_browser(profile, desktop)?;
+            launch.browser_id = browser_id.to_string();
+            self.reserved_launches
+                .lock()
+                .map_err(|_| "journal_fixture_reserved_launches_poisoned".to_string())?
+                .insert(browser_id.to_string(), launch.clone());
+            if self.fail_reserved_launch_once {
+                self.fail_reserved_launch_once = false;
+                return Err("injected_uncertain_launch_outcome".to_string());
+            }
+            Ok(launch)
+        }
+
+        fn recover_browser_reserved(
+            &mut self,
+            _profile: &BrowserProfileCatalogEntry,
+            _desktop: &agent_browser_service_model::BrowserDesktopAssignment,
+            browser_id: &str,
+        ) -> Result<ReservedBrowserRecovery, String> {
+            self.recovery_probes.fetch_add(1, Ordering::SeqCst);
+            if self.recover_reserved_browser {
+                if let Some(launch) = self
+                    .reserved_launches
+                    .lock()
+                    .map_err(|_| "journal_fixture_reserved_launches_poisoned".to_string())?
+                    .get(browser_id)
+                    .cloned()
+                {
+                    return Ok(ReservedBrowserRecovery::Recovered(launch));
+                }
+            }
+            Ok(ReservedBrowserRecovery::Unproven {
+                reason: "adoption_unproven".to_string(),
+            })
+        }
+
+        fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
+            self.inner.close_browser(browser)
+        }
+
+        fn acquire_initial_tab(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            attributed_target_ids: &[String],
+        ) -> Result<BrowserTabAcquisition, String> {
+            if self.fail_initial_tab_once {
+                self.fail_initial_tab_once = false;
+                return Err("injected_initial_tab_interruption".to_string());
+            }
+            self.inner
+                .acquire_initial_tab(browser, attributed_target_ids)
+        }
+
+        fn create_tab(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+        ) -> Result<BrowserTabAcquisition, String> {
+            self.inner.create_tab(browser)
+        }
+
+        fn close_tab(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            tab: &ManagedBrowserTab,
+        ) -> Result<(), String> {
+            self.inner.close_tab(browser, tab)
+        }
+
+        fn navigate(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            tab: &ManagedBrowserTab,
+            url: &str,
+        ) -> Result<(), String> {
+            let operation = BrowserRuntimeSqliteStore::open(&self.database_path)?
+                .load_operation("journal-open-1")?;
+            assert_eq!(
+                operation.result.as_ref().unwrap()["phase"],
+                "navigation_issued"
+            );
+            if self.inner.navigation_error.as_deref() == Some("panic_after_issue") {
+                panic!("injected_navigation_process_interruption");
+            }
+            self.inner.navigate(browser, tab, url)
+        }
+
+        fn focus_browser(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+            tab: Option<&ManagedBrowserTab>,
+        ) -> Result<(), String> {
+            self.inner.focus_browser(browser, tab)
+        }
+
+        fn observe_visible_browser(
+            &mut self,
+            browser: &ManagedBrowserInstance,
+        ) -> Result<serde_json::Value, String> {
+            if let Some(error) = &self.inner.presentation_error {
+                return Err(error.clone());
+            }
+            let desktop = browser
+                .desktop
+                .as_ref()
+                .ok_or_else(|| "journal_fixture_browser_desktop_missing".to_string())?;
+            Ok(serde_json::json!({
+                "state": "ready",
+                "routeId": desktop.route_id,
+                "displayName": desktop.display_name,
+                "browserPid": browser.pid,
+                "displayContent": {"state": "browser_window_visible"},
+            }))
+        }
+    }
+
+    fn ready_handoff_service_state() -> ServiceState {
+        let mut service = ServiceState::default();
+        service.route_pool.insert(
+            "slot-a".to_string(),
+            RoutePoolEntry {
+                id: "slot-a".to_string(),
+                route_id: "route-a".to_string(),
+                target: serde_json::json!({
+                    "displayName": ":10",
+                    "displayAllocationId": "display-a"
+                }),
+                state: "available".to_string(),
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..RoutePoolEntry::default()
+            },
+        );
+        service.remote_view_routes.insert(
+            "route-a".to_string(),
+            RemoteViewRoute {
+                id: "route-a".to_string(),
+                display_allocation_id: Some("display-a".to_string()),
+                route_descriptor: Some(serde_json::json!({
+                    "publicOperatorUrl": "https://dashboard.example/operator"
+                })),
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                state: "ready".to_string(),
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..RemoteViewRoute::default()
+            },
+        );
+        service.display_allocations.insert(
+            "display-a".to_string(),
+            DisplayAllocation {
+                id: "display-a".to_string(),
+                display_name: Some(":10".to_string()),
+                owner_browser_id: Some(deterministic_manager_browser_id("journal-open-1", "work")),
+                state: "ready".to_string(),
+                route_ids: vec!["route-a".to_string()],
+                readiness: Some(serde_json::json!({"state": "ready"})),
+                ..DisplayAllocation::default()
+            },
+        );
+        service
+    }
+
+    #[test]
+    fn managed_navigation_executes_headers_on_the_manager_owned_tab() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let response = host.handle_managed_navigation_command(&serde_json::json!({
+            "id": "navigate-with-headers",
+            "action": "browser_session_navigate",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://guacamole.example.test/guacamole/",
+            "headers": {"Remote-User": "operator"},
+            "activityAtMs": 1_000
+        }));
+
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["profileId"], "work");
+        assert_eq!(
+            response["data"]["url"],
+            "https://guacamole.example.test/guacamole/"
+        );
+        assert_eq!(host.state().sessions.len(), 1);
+        assert_eq!(host.state().tabs.len(), 1);
+        assert_eq!(host.state().navigation_history.len(), 1);
+
+        let failed = host.handle_managed_navigation_command(&serde_json::json!({
+            "id": "command-failed",
+            "action": "browser_session_navigate",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/fail",
+            "headers": {"Remote-User": "operator"},
+            "activityAtMs": 2_000
+        }));
+        assert_eq!(failed["success"], false);
+        let session = host.state().sessions.values().next().unwrap();
+        assert_eq!(session.last_activity_at_ms, 1_000);
+        assert_eq!(session.expires_at_ms, 301_000);
+        assert_eq!(host.state().navigation_history.len(), 1);
+    }
+
+    #[test]
+    fn keeper_navigation_rejects_invalid_public_origin_before_open_or_navigation() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let authority = keeper_authority_for_handoff("not a public URL");
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: vec![BrowserDesktopRoute {
+                    id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let response = host.handle_managed_navigation_command_with_keeper(
+            &serde_json::json!({
+                "id": "navigate-with-invalid-origin",
+                "action": "browser_session_navigate",
+                "sessionName": "alice",
+                "profileId": "work",
+                "url": "https://example.test/",
+                "headers": {"Remote-User": "operator"},
+                "activityAtMs": 1_000
+            }),
+            &authority,
+        );
+
+        assert_eq!(response["success"], false);
+        assert_eq!(
+            response["error"],
+            "browser_session_handoff_public_operator_url_invalid"
+        );
+        assert!(host.state().sessions.is_empty());
+        assert!(host.state().browsers.is_empty());
+        assert!(host.state().tabs.is_empty());
+        assert!(host.state().navigation_history.is_empty());
+    }
+
+    pub(super) struct TempDirectory(pub(super) PathBuf);
+
+    impl TempDirectory {
+        pub(super) fn new() -> Self {
+            let path = std::env::temp_dir().join(format!(
+                "agent-browser-session-host-{}-{}",
+                std::process::id(),
+                uuid::Uuid::new_v4()
+            ));
+            fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDirectory {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn restart_loads_independent_state_and_reuses_healthy_session() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                },
+                "sessions": "ignored legacy contradiction"
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+            default_disposable_policy: None,
+        };
+        let first = {
+            let store = BrowserSessionJsonStore::new(&directory.0);
+            let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap()
+        };
+
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            launches: 0,
+            live: true,
+            next_tab: 0,
+            focuses: None,
+            ..FixtureRuntime::default()
+        });
+        let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
+        let resumed = restarted
+            .open(OpenBrowserSession::exact_profile("alice", "work", 2_000))
+            .unwrap();
+
+        assert_eq!(resumed.session_id, first.session_id);
+        assert_eq!(resumed.browser_id, first.browser_id);
+        assert_eq!(restarted.state().sessions.len(), 1);
+
+        let new_tab = restarted.handle_command(&serde_json::json!({
+            "id": "new-alice-tab",
+            "action": "browser_session_tab_new",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/next",
+            "activityAtMs": 2_500
+        }));
+        assert_eq!(new_tab["success"], true);
+        assert_eq!(new_tab["data"]["source"], "explicit_new");
+        assert_eq!(new_tab["data"]["url"], "https://example.test/next");
+        assert_eq!(restarted.state().tabs.len(), 1);
+        assert_eq!(restarted.state().navigation_history.len(), 1);
+
+        let focus = restarted.handle_command(&serde_json::json!({
+            "id": "focus-alice-browser",
+            "action": "browser_session_focus",
+            "browserId": resumed.browser_id,
+            "targetId": "target-1",
+            "activityAtMs": 2_600
+        }));
+        assert_eq!(focus["success"], true);
+        assert_eq!(focus["data"]["focused"], true);
+        assert_eq!(focus["data"]["maximized"], true);
+        assert_eq!(focus["data"]["targetId"], "target-1");
+
+        let snapshot = restarted
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({
+                    "id": "snapshot-alice",
+                    "action": "snapshot",
+                    "activityAtMs": 2_700
+                }),
+            )
+            .unwrap()
+            .expect("alice's active manager session should own the command");
+        assert_eq!(snapshot["success"], true);
+        assert_eq!(snapshot["data"]["browserId"], resumed.browser_id);
+        assert_eq!(snapshot["data"]["tabId"], "tab-1");
+        assert_eq!(snapshot["data"]["targetId"], "target-1");
+        assert_eq!(snapshot["data"]["sessionId"], first.session_id);
+        assert_eq!(snapshot["data"]["sessionName"], "alice");
+        assert_eq!(snapshot["data"]["action"], "snapshot");
+        assert_eq!(
+            restarted
+                .state()
+                .sessions
+                .get(&first.session_id)
+                .unwrap()
+                .last_activity_at_ms,
+            2_700
+        );
+        assert!(restarted
+            .execute_managed_command("bob", &serde_json::json!({ "action": "snapshot" }))
+            .unwrap()
+            .is_none());
+
+        let close_tab = restarted.handle_command(&serde_json::json!({
+            "id": "close-alice-tab",
+            "action": "browser_session_tab_close",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 2_750
+        }));
+        assert_eq!(close_tab["success"], true);
+        assert_eq!(close_tab["data"]["closedTabId"], "tab-1");
+        assert!(restarted.state().tabs.is_empty());
+
+        let response = restarted.handle_command(&serde_json::json!({
+            "id": "close-alice",
+            "action": "browser_session_close",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 3_000
+        }));
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["sessionId"], first.session_id);
+        assert_eq!(response["data"]["disposition"], "browser_closed");
+        assert!(restarted.state().sessions.is_empty());
+    }
+
+    #[test]
+    fn sqlite_authority_loads_and_persists_browser_session_host_state() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        drop(host);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            reopened.load_session_state().unwrap().sessions[&opened.session_id].name,
+            "alice"
+        );
+        assert!(reopened
+            .load_profile_catalog()
+            .unwrap()
+            .profiles
+            .contains_key("work"));
+    }
+
+    #[test]
+    fn managed_command_heartbeat_is_persisted_only_after_success() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work",
+                "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_100))
+            .unwrap();
+        assert_eq!(alice.browser_id, bob.browser_id);
+
+        let failed = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"command-failed","action":"snapshot","activityAtMs":2_000}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(failed["success"], false);
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(persisted.sessions[&alice.session_id]
+            .current_tab_id
+            .is_some());
+        assert_eq!(persisted.tabs.len(), 1);
+        assert_eq!(
+            persisted.sessions[&alice.session_id].last_activity_at_ms,
+            1_000
+        );
+        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 301_000);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_100
+        );
+
+        let succeeded = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"command-succeeded","action":"snapshot","activityAtMs":3_000}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(succeeded["success"], true);
+        let error = host.execute_managed_command(
+            "alice",
+            &serde_json::json!({"id":"command-error","action":"snapshot","activityAtMs":4_000}),
+        );
+        assert_eq!(error, Err("injected_command_error".to_string()));
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            persisted.sessions[&alice.session_id].last_activity_at_ms,
+            3_000
+        );
+        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 303_000);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_100
+        );
+    }
+
+    #[test]
+    fn shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work",
+                "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let browser_closes = Arc::new(AtomicUsize::new(0));
+        let tab_closes = Arc::new(Mutex::new(Vec::new()));
+        let authority = ready_keeper_authority_for_handoff();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            browser_closes: Some(browser_closes.clone()),
+            tab_closes: Some(tab_closes.clone()),
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_100))
+            .unwrap();
+        assert_eq!(alice.browser_id, bob.browser_id);
+        assert_ne!(alice.session_id, bob.session_id);
+
+        let alice_command = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"alice-snapshot","action":"snapshot","activityAtMs":2_000}),
+            )
+            .unwrap()
+            .unwrap();
+        let bob_command = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-snapshot","action":"snapshot","activityAtMs":2_100}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_command["data"]["sessionId"], alice.session_id);
+        assert_eq!(bob_command["data"]["sessionId"], bob.session_id);
+        assert_ne!(alice_command["data"]["tabId"], bob_command["data"]["tabId"]);
+        assert_ne!(
+            alice_command["data"]["targetId"],
+            bob_command["data"]["targetId"]
+        );
+        let alice_tab = alice_command["data"]["tabId"].as_str().unwrap().to_string();
+        let bob_tab = bob_command["data"]["tabId"].as_str().unwrap().to_string();
+
+        let mut alice_open = serde_json::json!({"success":true,"data": {
+            "sessionId": alice.session_id,
+            "browserId": alice.browser_id,
+            "tabId": alice_tab,
+            "targetId": alice_command["data"]["targetId"]
+        }});
+        let mut bob_open = serde_json::json!({"success":true,"data": {
+            "sessionId": bob.session_id,
+            "browserId": bob.browser_id,
+            "tabId": bob_tab,
+            "targetId": bob_command["data"]["targetId"]
+        }});
+        host.attach_keeper_manager_handoff(&mut alice_open, &authority)
+            .unwrap();
+        host.attach_keeper_manager_handoff(&mut bob_open, &authority)
+            .unwrap();
+        let alice_handoff_id = alice_open["data"]["handoffId"].as_str().unwrap();
+        let bob_handoff_id = bob_open["data"]["handoffId"].as_str().unwrap();
+        assert_ne!(alice_handoff_id, bob_handoff_id);
+        let registry = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        let alice_handoff = registry.handoffs[alice_handoff_id].clone();
+        let bob_handoff = registry.handoffs[bob_handoff_id].clone();
+        let resolved_alice = host
+            .resolve_manager_handoff_with_keeper(&alice_handoff, &authority, 2_200)
+            .unwrap();
+        assert_eq!(resolved_alice["tabId"], alice_tab);
+        let after_alice_handoff = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_alice_handoff.sessions[&alice.session_id].last_activity_at_ms,
+            2_200
+        );
+        assert_eq!(
+            after_alice_handoff.sessions[&bob.session_id].last_activity_at_ms,
+            2_100
+        );
+
+        let reopened_alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 2_300))
+            .unwrap();
+        assert_eq!(reopened_alice.session_id, alice.session_id);
+        assert_eq!(reopened_alice.browser_id, alice.browser_id);
+        let reused = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            reused.sessions[&alice.session_id].current_tab_id.as_deref(),
+            Some(alice_tab.as_str())
+        );
+        assert_eq!(
+            reused.sessions[&alice.session_id].handoff_ids,
+            [alice_handoff_id]
+        );
+        assert_eq!(reused.sessions[&bob.session_id].last_activity_at_ms, 2_100);
+        assert_eq!(reused.tabs.len(), 2);
+
+        let alice_click = host
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({"id":"alice-click","action":"click","activityAtMs":2_400}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice_click["data"]["tabId"], alice_tab);
+        let alice_navigation = host
+            .navigate(&alice.session_id, "https://example.test/alice", 2_500)
+            .unwrap();
+        assert_eq!(alice_navigation.tab_id, alice_tab);
+        let bob_click = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-click","action":"click","activityAtMs":2_600}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(bob_click["data"]["tabId"], bob_tab);
+        let after_actions = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_actions.sessions[&alice.session_id].last_activity_at_ms,
+            2_500
+        );
+        assert_eq!(
+            after_actions.sessions[&alice.session_id].expires_at_ms,
+            302_500
+        );
+        assert_eq!(
+            after_actions.sessions[&bob.session_id].last_activity_at_ms,
+            2_600
+        );
+        assert_eq!(
+            after_actions.sessions[&bob.session_id].expires_at_ms,
+            302_600
+        );
+        assert_eq!(after_actions.navigation_history.len(), 1);
+        assert_eq!(
+            after_actions.navigation_history[0].session_id,
+            alice.session_id
+        );
+
+        let closed_alice = host.handle_command(&serde_json::json!({
+            "id":"close-alice", "action":"browser_session_close",
+            "sessionId":alice.session_id, "activityAtMs":3_000
+        }));
+        assert_eq!(closed_alice["success"], true);
+        let after_alice = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(!after_alice.sessions.contains_key(&alice.session_id));
+        assert!(after_alice.sessions.contains_key(&bob.session_id));
+        assert!(!after_alice.tabs.contains_key(&alice_tab));
+        assert!(after_alice.tabs.contains_key(&bob_tab));
+        let handoffs_after_alice = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        assert_eq!(
+            handoffs_after_alice.handoffs[alice_handoff_id].state,
+            "closed"
+        );
+        assert_eq!(handoffs_after_alice.handoffs[bob_handoff_id].state, "ready");
+        assert_eq!(
+            host.manager_handoff(alice_handoff_id).unwrap().state,
+            "closed"
+        );
+        assert_eq!(*tab_closes.lock().unwrap(), vec![alice_tab]);
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&alice_handoff, &authority, 3_100),
+            Err("browser_session_handoff_session_ended".to_string())
+        );
+        let resolved_bob = host
+            .resolve_manager_handoff_with_keeper(&bob_handoff, &authority, 3_100)
+            .unwrap();
+        assert_eq!(resolved_bob["tabId"], bob_tab);
+
+        let bob_after_alice = host
+            .execute_managed_command(
+                "bob",
+                &serde_json::json!({"id":"bob-after-alice","action":"snapshot","activityAtMs":3_100}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(bob_after_alice["success"], true);
+        assert_eq!(bob_after_alice["data"]["tabId"], bob_tab);
+        let after_bob_command = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            after_bob_command.sessions[&bob.session_id].last_activity_at_ms,
+            3_100
+        );
+
+        let closed_bob_tab = host.handle_command(&serde_json::json!({
+            "id":"close-bob-tab", "action":"browser_session_tab_close",
+            "sessionId":bob.session_id, "activityAtMs":3_150
+        }));
+        assert_eq!(closed_bob_tab["success"], true);
+        assert_eq!(closed_bob_tab["data"]["closedTabId"], bob_tab);
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 0);
+        let handoffs_after_bob_tab = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        assert_eq!(
+            handoffs_after_bob_tab.handoffs[bob_handoff_id].state,
+            "closed"
+        );
+
+        let closed_bob = host.handle_command(&serde_json::json!({
+            "id":"close-bob", "action":"browser_session_close",
+            "sessionId":bob.session_id, "activityAtMs":3_200
+        }));
+        assert_eq!(closed_bob["success"], true);
+        let after_bob = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert!(after_bob.sessions.is_empty());
+        assert!(after_bob.tabs.is_empty());
+        assert!(after_bob.browsers.is_empty());
+        let handoffs_after_bob = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap();
+        assert_eq!(handoffs_after_bob.handoffs[bob_handoff_id].state, "closed");
+        assert_eq!(
+            host.manager_handoff(bob_handoff_id).unwrap().state,
+            "closed"
+        );
+        assert_eq!(browser_closes.load(Ordering::SeqCst), 1);
+        assert_eq!(*tab_closes.lock().unwrap(), vec!["tab-1", "tab-2"]);
+
+        // A browser loss may still be recoverable; only explicit close or
+        // heartbeat expiry makes the old logical handoff terminal.
+        let mut recovery_state = after_bob;
+        let alice_history = recovery_state
+            .session_history
+            .iter_mut()
+            .find(|ended| ended.id == alice.session_id)
+            .unwrap();
+        alice_history.reason = SessionEndReason::BrowserUnresponsive;
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store.save_manager_handoff(&alice_handoff).unwrap();
+        assert!(store
+            .publish_session_state_and_terminal_handoffs(&recovery_state)
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            store.load_handoff_registry().unwrap().handoffs[alice_handoff_id].state,
+            "ready"
+        );
+        recovery_state
+            .session_history
+            .iter_mut()
+            .find(|ended| ended.id == alice.session_id)
+            .unwrap()
+            .reason = SessionEndReason::HeartbeatExpired;
+        let terminal = store
+            .publish_session_state_and_terminal_handoffs(&recovery_state)
+            .unwrap();
+        assert_eq!(terminal.len(), 1);
+        assert_eq!(terminal[0].id, alice_handoff_id);
+        assert_eq!(
+            store.load_handoff_registry().unwrap().handoffs[alice_handoff_id].state,
+            "closed"
+        );
+    }
+
+    #[test]
+    fn journaled_open_navigation_failure_retains_exact_observation_without_ready_handoff() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/alice",
+            "activityAtMs": 1_000
+        });
+        let navigations = Arc::new(AtomicUsize::new(0));
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: Arc::new(AtomicUsize::new(0)),
+            reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
+            recovery_probes: Arc::new(AtomicUsize::new(0)),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                navigation_error: Some("injected_navigation_failure".to_string()),
+                navigations: Some(navigations.clone()),
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let failed = host.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        assert_eq!(failed["success"], false);
+        assert_eq!(failed["error"], "injected_navigation_failure");
+        assert_eq!(navigations.load(Ordering::SeqCst), 1);
+        let replay = host.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        assert_eq!(replay, failed);
+        assert_eq!(navigations.load(Ordering::SeqCst), 1);
+        drop(host);
+
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(persisted.load_session_state().unwrap().sessions.is_empty());
+        assert!(persisted
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+        let operation = persisted.load_operation("journal-open-1").unwrap();
+        assert_eq!(operation.state, BrowserRuntimeOperationState::Observed);
+        let observation = operation.result.unwrap();
+        assert_eq!(observation["phase"], "effect_failed");
+        assert_eq!(observation["failedPhase"], "navigation_failed");
+        assert_eq!(
+            observation["cleanupObligation"]["operationId"],
+            "journal-open-1"
+        );
+        assert_eq!(
+            observation["cleanupObligation"]["browserId"],
+            deterministic_manager_browser_id("journal-open-1", "work")
+        );
+    }
+
+    #[test]
+    fn journaled_open_does_not_repeat_navigation_after_issued_restart() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/uncertain",
+            "activityAtMs": 1_000
+        });
+        let host_config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+            default_disposable_policy: None,
+        };
+        let make_effects = |navigation_error| {
+            BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: Arc::new(AtomicUsize::new(0)),
+                reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
+                recovery_probes: Arc::new(AtomicUsize::new(0)),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    navigation_error,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: false,
+                fail_initial_tab_once: false,
+            })
+        };
+        let interrupted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut host = BrowserSessionHost::load(
+                BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+                make_effects(Some("panic_after_issue".to_string())),
+                &legacy_path,
+                host_config.clone(),
+            )
+            .unwrap();
+            host.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        }));
+        assert!(interrupted.is_err());
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_operation("journal-open-1")
+                .unwrap()
+                .result
+                .unwrap()["phase"],
+            "navigation_issued"
+        );
+        let mut restarted = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            make_effects(None),
+            &legacy_path,
+            host_config,
+        )
+        .unwrap();
+        let result = restarted.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        assert_eq!(result["success"], false);
+        assert_eq!(
+            result["error"],
+            "browser_runtime_open_navigation_outcome_unproven"
+        );
+        drop(restarted);
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store.load_session_state().unwrap().sessions.is_empty());
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let observation = store
+            .load_operation("journal-open-1")
+            .unwrap()
+            .result
+            .unwrap();
+        assert_eq!(observation["phase"], "effect_failed");
+        assert_eq!(observation["failedPhase"], "navigation_outcome_unproven");
+    }
+
+    #[test]
+    fn journaled_open_requires_visible_process_proof_before_ready_handoff() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: Arc::new(AtomicUsize::new(0)),
+            reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
+            recovery_probes: Arc::new(AtomicUsize::new(0)),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                presentation_error: Some("injected_presentation_unproven".to_string()),
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 1_000
+        });
+        let failed = host.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        assert_eq!(failed["success"], false);
+        assert_eq!(failed["error"], "injected_presentation_unproven");
+        assert_eq!(
+            host.handle_journaled_open_with_keeper_handoff(&command, &authority),
+            failed
+        );
+        drop(host);
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store.load_session_state().unwrap().sessions.is_empty());
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        let observation = store
+            .load_operation("journal-open-1")
+            .unwrap()
+            .result
+            .unwrap();
+        assert_eq!(observation["phase"], "effect_failed");
+        assert_eq!(observation["failedPhase"], "presentation_failed");
+        assert_eq!(
+            observation["cleanupObligation"]["browserId"],
+            deterministic_manager_browser_id("journal-open-1", "work")
+        );
+    }
+
+    #[test]
+    fn journaled_open_reserves_disposable_identity_before_profile_allocation() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(&legacy_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let launches = Arc::new(AtomicUsize::new(0));
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: launches.clone(),
+            reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
+            recovery_probes: Arc::new(AtomicUsize::new(0)),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: Some(BrowserDisposableProfilePolicy {
+                    id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
+                    user_data_root: directory
+                        .0
+                        .join("disposable")
+                        .to_string_lossy()
+                        .into_owned(),
+                    cleanup_delay_ms: 86_400_000,
+                }),
+            },
+        )
+        .unwrap();
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "url": "https://example.test/disposable",
+            "activityAtMs": 1_000
+        });
+        let opened = host.handle_journaled_open_with_keeper_handoff(&command, &authority);
+        assert_eq!(opened["success"], true, "{opened}");
+        assert_eq!(opened["data"]["profileId"], "disposable:default:1");
+        assert_eq!(opened["data"]["url"], "https://example.test/disposable");
+        let browser_id = opened["data"]["browserId"].as_str().unwrap();
+        let selected = host.handle_journaled_open_with_keeper_handoff(
+            &serde_json::json!({
+                "id": "journal-open-selected",
+                "action": "browser_session_open",
+                "sessionName": "alice",
+                "browserId": browser_id,
+                "activityAtMs": 2_000
+            }),
+            &authority,
+        );
+        assert_eq!(selected["success"], true, "{selected}");
+        assert_eq!(selected["data"]["browserId"], browser_id);
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        let missing = host.handle_journaled_open_with_keeper_handoff(
+            &serde_json::json!({
+                "id": "journal-open-missing",
+                "action": "browser_session_open",
+                "sessionName": "alice",
+                "browserId": "browser-missing",
+                "activityAtMs": 3_000
+            }),
+            &authority,
+        );
+        assert_eq!(missing["success"], false);
+        assert_eq!(
+            missing["error"],
+            "browser_session_selected_browser_not_found:browser-missing"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        drop(host);
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let operation = persisted.load_operation("journal-open-1").unwrap();
+        assert_eq!(operation.state, BrowserRuntimeOperationState::Committed);
+        assert!(persisted
+            .find_operation("journal-open-missing")
+            .unwrap()
+            .is_none());
+        assert_eq!(
+            operation.request["intent"]["browser"]["profileId"],
+            "disposable:default:1"
+        );
+        let state = persisted.load_session_state().unwrap();
+        assert_eq!(state.sessions.len(), 1);
+        assert_eq!(state.disposable_profiles.len(), 1);
+        assert_eq!(state.navigation_history.len(), 1);
+        assert!(!persisted
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+    }
+
+    #[test]
+    fn journaled_open_recovers_observed_browser_and_publishes_ready_handoff_atomically() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let launches = Arc::new(AtomicUsize::new(0));
+        let reserved_launches = Arc::new(Mutex::new(BTreeMap::new()));
+        let recovery_probes = Arc::new(AtomicUsize::new(0));
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![
+                BrowserDesktopRoute {
+                    id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                },
+                BrowserDesktopRoute {
+                    id: "slot-b".to_string(),
+                    display_name: ":11".to_string(),
+                    healthy: true,
+                },
+            ],
+            default_disposable_policy: None,
+        };
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "url": "https://example.test/alice",
+            "activityAtMs": 1_000
+        });
+        let service = ready_handoff_service_state();
+        let inventory =
+            StaticRouteInventory::from_json(r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#)
+                .unwrap();
+
+        let mut prepared_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let base_session_state = prepared_store.load_session_state().unwrap();
+        let prepared = prepared_store
+            .reserve_operation(
+                "journal-open-1",
+                "browser-runtime-open",
+                serde_json::json!({
+                    "schemaVersion": "agent-browser.browser-open-operation.v1",
+                    "command": &command,
+                    "baseSessionState": &base_session_state,
+                    "intent": {
+                        "session": {"id": "session:alice:work:1", "name": "alice", "profileId": "work"},
+                        "browser": {
+                            "id": deterministic_manager_browser_id("journal-open-1", "work"),
+                            "profileId": "work",
+                            "disposition": "reuse_or_launch"
+                        },
+                        "slot": {"routeId": "route-slot-01", "displayName": ":10", "liveBrowserCount": 0},
+                        "handoff": {
+                            "id": deterministic_manager_handoff_id("journal-open-1"),
+                            "state": "pending"
+                        }
+                    }
+                }),
+            )
+            .unwrap();
+        assert_eq!(prepared.state, BrowserRuntimeOperationState::Prepared);
+        drop(prepared_store);
+
+        let malformed_public_origin = keeper_authority_for_handoff("not a public URL");
+        let rejected_before_launch = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: launches.clone(),
+                reserved_launches: reserved_launches.clone(),
+                recovery_probes: recovery_probes.clone(),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: false,
+                fail_initial_tab_once: false,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_keeper_handoff(&command, &malformed_public_origin)
+        };
+        assert_eq!(rejected_before_launch["success"], false);
+        assert_eq!(
+            rejected_before_launch["error"],
+            "browser_session_handoff_public_operator_url_invalid"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 0);
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_operation("journal-open-1")
+                .unwrap()
+                .state,
+            BrowserRuntimeOperationState::Prepared
+        );
+
+        let queue_now = now_ms();
+        let admitted_request = PresentationAdmissionRequest::enqueue_at(
+            database_path.clone(),
+            &command,
+            1,
+            false,
+            queue_now,
+        )
+        .unwrap();
+        let mut permit = match admitted_request.poll(Some(true)).unwrap() {
+            Some(PresentationAdmission::Execute(permit)) => permit,
+            _ => panic!("expected admitted presentation request"),
+        };
+        permit.require_current().unwrap();
+
+        let first = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: launches.clone(),
+                reserved_launches: reserved_launches.clone(),
+                recovery_probes: recovery_probes.clone(),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: false,
+                fail_initial_tab_once: true,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_handoff(&command, &service, &inventory)
+        };
+        assert_eq!(first["success"], false);
+        assert_eq!(first["error"], "injected_initial_tab_interruption");
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        let interrupted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let persisted_base_state = interrupted.load_session_state().unwrap();
+        assert!(persisted_base_state.sessions.is_empty());
+        let pending = interrupted.load_operation("journal-open-1").unwrap();
+        assert_eq!(pending.state, BrowserRuntimeOperationState::Observed);
+        assert_eq!(pending.result.as_ref().unwrap()["phase"], "browser_opened");
+        drop(interrupted);
+
+        BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .mutate_presentation_queue(|queue| queue.advance_generation(2))
+            .unwrap();
+        let interrupted_queue = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_presentation_queue()
+            .unwrap();
+        assert!(matches!(
+            interrupted_queue.entries["browser:journal-open-1"].state,
+            PresentationRequestState::Retryable {
+                recovery_required: true
+            }
+        ));
+        let recovered_request = PresentationAdmissionRequest::enqueue_at(
+            database_path.clone(),
+            &command,
+            2,
+            false,
+            now_ms(),
+        )
+        .unwrap();
+        let mut recovered_permit = match recovered_request.poll(Some(true)).unwrap() {
+            Some(PresentationAdmission::Execute(permit)) => permit,
+            _ => panic!("expected journal recovery admission"),
+        };
+        recovered_permit.require_current().unwrap();
+
+        let intervening_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut intervening_state = persisted_base_state.clone();
+        intervening_state.next_disposable_sequence = 9;
+        intervening_store
+            .save_session_state(&intervening_state)
+            .unwrap();
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: launches.clone(),
+            reserved_launches: reserved_launches.clone(),
+            recovery_probes: recovery_probes.clone(),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let mut conflicted =
+            BrowserSessionHost::load(intervening_store, effects, &legacy_path, config.clone())
+                .unwrap();
+        let conflict =
+            conflicted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+        assert_eq!(conflict["success"], false);
+        assert_eq!(
+            conflict["error"],
+            "browser_runtime_operation_base_state_conflict"
+        );
+        drop(conflicted);
+        let restore_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            restore_store.load_session_state().unwrap(),
+            intervening_state
+        );
+        restore_store
+            .save_session_state(&persisted_base_state)
+            .unwrap();
+        drop(restore_store);
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: launches.clone(),
+            reserved_launches: reserved_launches.clone(),
+            recovery_probes: recovery_probes.clone(),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
+        let keeper_authority = ready_keeper_authority_for_handoff();
+        restarted.replace_remote_desktop_routes(Vec::new());
+        let unavailable =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
+        assert_eq!(unavailable["success"], false);
+        assert_eq!(
+            unavailable["error"],
+            "presentation_keeper_route_unavailable"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        restarted
+            .replace_remote_desktop_routes(route_keeper_desktop_routes(&keeper_authority).unwrap());
+        let ready =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
+
+        assert_eq!(ready["success"], true);
+        assert_eq!(ready["data"]["operatorVisible"]["state"], "ready");
+        assert_eq!(ready["data"]["operatorVisible"]["browserPid"], 4242);
+        assert_eq!(ready["data"]["operatorVisible"]["routeId"], "route-slot-01");
+        assert_eq!(
+            ready["data"]["browserId"],
+            deterministic_manager_browser_id("journal-open-1", "work")
+        );
+        assert_eq!(ready["data"]["tabId"], "tab-1");
+        assert_eq!(ready["data"]["url"], "https://example.test/alice");
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        recovered_permit.finish(Ok(ready.clone())).unwrap();
+        let handoff_id = ready["data"]["handoffId"].as_str().unwrap();
+        assert!(restarted.manager_handoff(handoff_id).is_some());
+
+        let replay =
+            restarted.handle_journaled_open_with_keeper_handoff(&command, &keeper_authority);
+        assert_eq!(replay, ready);
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        drop(restarted);
+
+        let published = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            published.load_operation("journal-open-1").unwrap().state,
+            BrowserRuntimeOperationState::Committed
+        );
+        let state = published.load_session_state().unwrap();
+        assert_eq!(state.sessions.len(), 1);
+        assert_eq!(state.tabs.len(), 1);
+        assert_eq!(state.navigation_history.len(), 1);
+        assert_eq!(
+            state.navigation_history[0].url,
+            "https://example.test/alice"
+        );
+        assert_eq!(state.sessions["session:alice:work:1"].name, "alice");
+        assert_eq!(
+            published
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get(handoff_id)
+                .map(|handoff| handoff.state.as_str()),
+            Some("ready")
+        );
+        assert!(matches!(
+            published.load_presentation_queue().unwrap().entries["browser:journal-open-1"].state,
+            PresentationRequestState::Completed { .. }
+        ));
+    }
+
+    #[test]
+    fn journaled_open_retains_one_cleanup_obligation_for_unproven_reserved_launch() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {"work": {
+                    "id": "work",
+                    "name": "Work",
+                    "userDataDir": directory.0.join("work"),
+                    "profileClass": "durable_named"
+                }}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let launches = Arc::new(AtomicUsize::new(0));
+        let reserved_launches = Arc::new(Mutex::new(BTreeMap::new()));
+        let recovery_probes = Arc::new(AtomicUsize::new(0));
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![BrowserDesktopRoute {
+                id: "slot-a".to_string(),
+                display_name: ":10".to_string(),
+                healthy: true,
+            }],
+            default_disposable_policy: None,
+        };
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 1_000
+        });
+        let service = ready_handoff_service_state();
+        let inventory =
+            StaticRouteInventory::from_json(r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#)
+                .unwrap();
+
+        let first = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: launches.clone(),
+                reserved_launches: reserved_launches.clone(),
+                recovery_probes: recovery_probes.clone(),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: true,
+                fail_initial_tab_once: false,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_handoff(&command, &service, &inventory)
+        };
+        assert_eq!(first["success"], false);
+        assert_eq!(first["error"], "injected_uncertain_launch_outcome");
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        let pending = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_operation("journal-open-1")
+            .unwrap();
+        assert_eq!(pending.state, BrowserRuntimeOperationState::Observed);
+        assert_eq!(pending.result.as_ref().unwrap()["phase"], "launch_started");
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: launches.clone(),
+            reserved_launches: reserved_launches.clone(),
+            recovery_probes: recovery_probes.clone(),
+            recover_reserved_browser: false,
+            inner: FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
+        let retry = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+
+        assert_eq!(retry["success"], false);
+        assert_eq!(
+            retry["error"],
+            "browser_runtime_open_reserved_browser_recovery_unproven"
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        assert_eq!(recovery_probes.load(Ordering::SeqCst), 1);
+        let cleanup_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let cleanup = cleanup_store.load_operation("journal-open-1").unwrap();
+        assert_eq!(cleanup.state, BrowserRuntimeOperationState::Observed);
+        let cleanup_result = cleanup.result.as_ref().unwrap();
+        assert_eq!(cleanup_result["phase"], "launch_cleanup_required");
+        assert_eq!(
+            cleanup_result["cleanupObligation"]["kind"],
+            "reserved_browser_reconciliation"
+        );
+        assert_eq!(cleanup_result["cleanupObligation"]["state"], "pending");
+        assert_eq!(
+            cleanup_result["cleanupObligation"]["browserId"],
+            deterministic_manager_browser_id("journal-open-1", "work")
+        );
+        assert_eq!(cleanup_result["cleanupObligation"]["profileId"], "work");
+        assert_eq!(cleanup_result["cleanupObligation"]["routeId"], "slot-a");
+        assert_eq!(cleanup_result["cleanupObligation"]["displayName"], ":10");
+        assert_eq!(
+            cleanup_result["cleanupObligation"]["reason"],
+            "adoption_unproven"
+        );
+        let state = cleanup_store.load_session_state().unwrap();
+        assert!(state.sessions.is_empty());
+        assert!(state.browsers.is_empty());
+        assert!(state.tabs.is_empty());
+        assert!(cleanup_store
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+        drop(cleanup_store);
+
+        let repeated = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+        assert_eq!(repeated, retry);
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        assert_eq!(recovery_probes.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn journaled_open_adopts_exact_reserved_browser_after_ambiguous_launch_restart() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {"work": {
+                    "id": "work",
+                    "name": "Work",
+                    "userDataDir": directory.0.join("work"),
+                    "profileClass": "durable_named"
+                }}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let launches = Arc::new(AtomicUsize::new(0));
+        let reserved_launches = Arc::new(Mutex::new(BTreeMap::new()));
+        let recovery_probes = Arc::new(AtomicUsize::new(0));
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![BrowserDesktopRoute {
+                id: "slot-a".to_string(),
+                display_name: ":10".to_string(),
+                healthy: true,
+            }],
+            default_disposable_policy: None,
+        };
+        let command = serde_json::json!({
+            "id": "journal-open-1",
+            "action": "browser_session_open",
+            "sessionName": "alice",
+            "profileId": "work",
+            "activityAtMs": 1_000
+        });
+        let service = ready_handoff_service_state();
+        let inventory =
+            StaticRouteInventory::from_json(r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#)
+                .unwrap();
+
+        let first = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: launches.clone(),
+                reserved_launches: reserved_launches.clone(),
+                recovery_probes: recovery_probes.clone(),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: true,
+                fail_initial_tab_once: false,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_handoff(&command, &service, &inventory)
+        };
+        assert_eq!(first["error"], "injected_uncertain_launch_outcome");
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+            database_path: database_path.clone(),
+            launches: launches.clone(),
+            reserved_launches,
+            recovery_probes: recovery_probes.clone(),
+            recover_reserved_browser: true,
+            inner: FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            },
+            fail_reserved_launch_once: false,
+            fail_initial_tab_once: false,
+        });
+        let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
+        let ready = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+
+        assert_eq!(ready["success"], true);
+        assert_eq!(
+            ready["data"]["browserId"],
+            deterministic_manager_browser_id("journal-open-1", "work")
+        );
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        assert_eq!(recovery_probes.load(Ordering::SeqCst), 1);
+        let replay = restarted.handle_journaled_open_with_handoff(&command, &service, &inventory);
+        assert_eq!(replay, ready);
+        assert_eq!(launches.load(Ordering::SeqCst), 1);
+        assert_eq!(recovery_probes.load(Ordering::SeqCst), 1);
+        drop(restarted);
+
+        let published = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let operation = published.load_operation("journal-open-1").unwrap();
+        assert_eq!(operation.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(operation.result.as_ref().unwrap()["phase"], "ready");
+        let state = published.load_session_state().unwrap();
+        assert_eq!(state.sessions.len(), 1);
+        assert_eq!(state.browsers.len(), 1);
+        assert_eq!(state.tabs.len(), 1);
+        assert_eq!(published.load_handoff_registry().unwrap().handoffs.len(), 1);
+    }
+
+    #[test]
+    fn hosted_reaper_deletes_only_the_recorded_disposable_directory() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(&legacy_path, r#"{"profiles":{}}"#).unwrap();
+        let disposable_root = directory.0.join("disposable-profiles");
+        let foreign_directory = disposable_root.join("foreign-directory");
+        fs::create_dir_all(&foreign_directory).unwrap();
+        let foreign_marker = foreign_directory.join("keep");
+        fs::write(&foreign_marker, b"foreign").unwrap();
+
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: Some(BrowserDisposableProfilePolicy {
+                    id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
+                    user_data_root: disposable_root.to_string_lossy().into_owned(),
+                    cleanup_delay_ms: 0,
+                }),
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::disposable(
+                "alice",
+                DEFAULT_DISPOSABLE_POLICY_ID,
+                1_000,
+            ))
+            .unwrap();
+        let allocation = host
+            .state()
+            .disposable_profiles
+            .get(&opened.profile_id)
+            .cloned()
+            .expect("hosted disposable allocation");
+        let allocated_directory = PathBuf::from(&allocation.profile.user_data_dir);
+        assert!(allocated_directory.is_dir());
+        fs::write(allocated_directory.join("owned-marker"), b"owned").unwrap();
+
+        host.close_session(&opened.session_id, SessionEndReason::ExplicitClose, 1_100)
+            .unwrap();
+        assert!(allocated_directory.is_dir());
+
+        let reaped = host.reap(1_100).unwrap();
+
+        assert_eq!(
+            reaped.deleted_disposable_profile_ids,
+            vec![opened.profile_id.clone()]
+        );
+        assert!(!allocated_directory.exists());
+        assert_eq!(fs::read(&foreign_marker).unwrap(), b"foreign");
+        assert!(host.state().disposable_profiles.is_empty());
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        assert!(persisted.disposable_profiles.is_empty());
+    }
+
+    #[test]
+    fn hosted_multi_display_selection_persists_without_legacy_authority() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let legacy_state = serde_json::json!({
+            "profiles": {
+                "work": {
+                    "id": "work",
+                    "name": "Work",
+                    "userDataDir": directory.0.join("work"),
+                    "profileClass": "durable_named"
+                },
+                "personal": {
+                    "id": "personal",
+                    "name": "Personal",
+                    "userDataDir": directory.0.join("personal"),
+                    "profileClass": "durable_named"
+                }
+            },
+            "sessions": "contradictory legacy session state",
+            "runtimeOwners": ["contradictory legacy owner state"],
+            "displayAllocations": "contradictory legacy display state"
+        });
+        fs::write(
+            &legacy_path,
+            serde_json::to_vec_pretty(&legacy_state).unwrap(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: vec![
+                BrowserDesktopRoute {
+                    id: "slot-a".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                },
+                BrowserDesktopRoute {
+                    id: "slot-b".to_string(),
+                    display_name: ":11".to_string(),
+                    healthy: true,
+                },
+            ],
+            default_disposable_policy: None,
+        };
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+
+        let alice = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "personal", 1_100))
+            .unwrap();
+        let alice_desktop = host.state().browsers[&alice.browser_id]
+            .desktop
+            .as_ref()
+            .expect("Alice desktop assignment");
+        let bob_desktop = host.state().browsers[&bob.browser_id]
+            .desktop
+            .as_ref()
+            .expect("Bob desktop assignment");
+        assert_eq!(alice_desktop.route_id, "slot-a");
+        assert_eq!(alice_desktop.display_name, ":10");
+        assert_eq!(alice_desktop.live_browser_count, 0);
+        assert_eq!(bob_desktop.route_id, "slot-b");
+        assert_eq!(bob_desktop.display_name, ":11");
+        assert_eq!(bob_desktop.live_browser_count, 0);
+        drop(host);
+
+        let restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        assert_eq!(
+            restarted.state().browsers[&alice.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":10")
+        );
+        assert_eq!(
+            restarted.state().browsers[&bob.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":11")
+        );
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(&fs::read(&legacy_path).unwrap()).unwrap(),
+            legacy_state
+        );
+    }
+
+    #[test]
+    fn route_choices_can_refresh_after_provider_bootstrap_without_rebinding_existing_browsers() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "viewer": {
+                        "id": "viewer",
+                        "name": "Viewer",
+                        "userDataDir": directory.0.join("viewer"),
+                        "profileClass": "durable_named"
+                    },
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+
+        let viewer = host
+            .open(OpenBrowserSession::exact_profile("viewer", "viewer", 1_000))
+            .unwrap();
+        assert!(host.state().browsers[&viewer.browser_id].desktop.is_none());
+
+        host.replace_remote_desktop_routes(vec![BrowserDesktopRoute {
+            id: "development-route-1".to_string(),
+            display_name: ":13".to_string(),
+            healthy: true,
+        }]);
+        let work = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_100))
+            .unwrap();
+        assert!(host.state().browsers[&viewer.browser_id].desktop.is_none());
+        assert_eq!(
+            host.state().browsers[&work.browser_id]
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.as_str()),
+            Some(":13")
+        );
+    }
+
+    #[test]
+    fn handoff_resolution_focuses_and_persists_the_exact_session_heartbeat() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: vec![BrowserDesktopRoute {
+                    id: "slot-a".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let tab = host.new_tab(&opened.session_id, 1_100).unwrap();
+        let bob = host
+            .open(OpenBrowserSession::exact_profile("bob", "work", 1_200))
+            .unwrap();
+        let bob_tab = host.new_tab(&bob.session_id, 1_200).unwrap();
+        let handoff = RemoteViewHandoff {
+            id: "opaque-a".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": opened.session_id,
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/opaque-a".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some(opened.browser_id.clone()),
+            session_name: Some("alice".to_string()),
+            tab_id: Some(tab.tab_id.clone()),
+            target_id: Some(tab.target_id.clone()),
+            ..RemoteViewHandoff::default()
+        };
+        let bob_handoff = RemoteViewHandoff {
+            id: "opaque-b".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": bob.session_id,
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/opaque-b".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some(bob.browser_id.clone()),
+            session_name: Some("bob".to_string()),
+            tab_id: Some(bob_tab.tab_id.clone()),
+            target_id: Some(bob_tab.target_id.clone()),
+            ..RemoteViewHandoff::default()
+        };
+        host.bind_manager_handoff(&handoff).unwrap();
+        host.bind_manager_handoff(&bob_handoff).unwrap();
+        host.commit_state().unwrap();
+        let mut service = ServiceState::default();
+        service.display_allocations.insert(
+            "display-a".to_string(),
+            DisplayAllocation {
+                id: "display-a".to_string(),
+                display_name: Some(":10".to_string()),
+                owner_browser_id: Some(opened.browser_id.clone()),
+                state: "ready".to_string(),
+                route_ids: vec!["route-a".to_string()],
+                readiness: Some(serde_json::json!({"state":"ready"})),
+                ..DisplayAllocation::default()
+            },
+        );
+        service.remote_view_routes.insert(
+            "route-a".to_string(),
+            RemoteViewRoute {
+                id: "route-a".to_string(),
+                display_allocation_id: Some("display-a".to_string()),
+                browser_id: Some(opened.browser_id.clone()),
+                route_descriptor: Some(serde_json::json!({
+                    "publicOperatorUrl":"https://dashboard.example/operator"
+                })),
+                control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+                state: "ready".to_string(),
+                readiness: Some(serde_json::json!({"state":"ready"})),
+                ..RemoteViewRoute::default()
+            },
+        );
+        let inventory = super::super::presentation_inventory::StaticRouteInventory::from_json(
+            r#"[{"id":"slot-a","target":{"displayName":":10"}}]"#,
+        )
+        .unwrap();
+
+        let resolved = host
+            .resolve_manager_handoff(&handoff, &service, &inventory, 2_000)
+            .unwrap();
+
+        assert_eq!(resolved["status"], "ready");
+        assert_eq!(resolved["resolved"], true);
+        assert_eq!(resolved["handoffUrl"], handoff.handoff_url.unwrap());
+        assert_eq!(resolved["browserId"], opened.browser_id);
+        assert_eq!(resolved["tabId"], tab.tab_id);
+        assert_eq!(resolved["targetId"], tab.target_id);
+        assert_eq!(resolved["operatorVisible"]["state"], "ready");
+        assert_eq!(resolved["presentationGeneration"], 1);
+        assert_eq!(resolved["presentationReceipt"]["generation"], 1);
+        assert_eq!(
+            resolved["presentationReceipt"]["logicalBrowserId"],
+            opened.browser_id
+        );
+        assert_eq!(resolved["presentationReceipt"]["targetId"], tab.target_id);
+        assert_eq!(
+            resolved["presentationReceipt"]["requiredStreamProvider"],
+            resolved["viewStreamProvider"]
+        );
+        assert_eq!(
+            resolved["presentationReceipt"]["observedStreamProvider"],
+            resolved["viewStreamProvider"]
+        );
+        assert_eq!(resolved["presentationReceipt"]["state"], "ready");
+        assert_eq!(
+            resolved["presentationReceipt"]["browserSessionManager"],
+            true
+        );
+        assert!(resolved.get("externalUrl").is_none());
+        assert!(resolved.get("providerExternalUrl").is_none());
+
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        let persisted_session = persisted.sessions.get(&opened.session_id).unwrap();
+        assert_eq!(persisted_session.last_activity_at_ms, 2_000);
+        assert_eq!(persisted_session.expires_at_ms, 302_000);
+        assert_eq!(persisted_session.handoff_ids, ["opaque-a"]);
+        assert_eq!(
+            persisted.sessions[&bob.session_id].handoff_ids,
+            ["opaque-b"]
+        );
+        assert_eq!(
+            persisted.sessions[&bob.session_id].last_activity_at_ms,
+            1_200
+        );
+        assert_eq!(persisted.sessions[&bob.session_id].expires_at_ms, 301_200);
+        assert_eq!(
+            persisted_session.current_tab_id.as_deref(),
+            Some(tab.tab_id.as_str())
+        );
+    }
+
+    #[test]
+    fn keeper_handoff_persists_in_sqlite_and_fails_before_focus_when_keeper_is_not_ready() {
+        let directory = TempDirectory::new();
+        let session_path = directory.0.join("browser-session-state.json");
+        let catalog_path = directory.0.join("browser-profile-catalog.json");
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_path,
+                profile_catalog_path: &catalog_path,
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let tab = host.new_tab(&opened.session_id, 1_100).unwrap();
+        let mut response = serde_json::json!({"success": true, "data": {
+            "sessionId": opened.session_id,
+            "browserId": opened.browser_id,
+            "tabId": tab.tab_id,
+            "targetId": tab.target_id,
+            "url": "https://example.test/login"
+        }});
+        host.attach_keeper_manager_handoff(&mut response, &authority)
+            .unwrap();
+        let handoff_id = response["data"]["handoffId"].as_str().unwrap().to_string();
+        let handoff = host.manager_handoff(&handoff_id).unwrap().clone();
+        assert_eq!(
+            response["data"]["handoffUrl"],
+            format!("https://dashboard.example/remote-view/{handoff_id}")
+        );
+        assert!(BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .contains_key(&handoff_id));
+
+        let mut legacy = host.state().clone();
+        legacy
+            .sessions
+            .get_mut(&opened.session_id)
+            .unwrap()
+            .handoff_ids
+            .clear();
+        let mut mismatched = handoff.clone();
+        mismatched.id = "opaque-mismatched".to_string();
+        mismatched.tab_id = Some("wrong-tab".to_string());
+        let mut candidates = host.handoffs.clone();
+        candidates.insert(mismatched.id.clone(), mismatched);
+        assert!(bind_legacy_manager_handoffs(&mut legacy, &candidates));
+        assert_eq!(
+            legacy.sessions[&opened.session_id].handoff_ids,
+            [handoff_id.as_str()]
+        );
+
+        let mut persisted_legacy = host.state().clone();
+        persisted_legacy
+            .sessions
+            .get_mut(&opened.session_id)
+            .unwrap()
+            .handoff_ids
+            .clear();
+        BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .save_session_state(&persisted_legacy)
+            .unwrap();
+        drop(host);
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            host.state().sessions[&opened.session_id].handoff_ids,
+            [handoff_id.as_str()]
+        );
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_session_state()
+                .unwrap()
+                .sessions[&opened.session_id]
+                .handoff_ids,
+            [handoff_id.as_str()]
+        );
+
+        let activity_before = host.state().sessions[&opened.session_id].last_activity_at_ms;
+        let navigation = serde_json::json!({
+            "sessionId": opened.session_id, "activityAtMs": 2_000,
+        });
+        host.replace_remote_desktop_routes(Vec::new());
+        assert_eq!(
+            host.preflight_keeper_navigation_command(&navigation, &authority),
+            Err("presentation_keeper_route_unavailable".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+        host.replace_remote_desktop_routes(route_keeper_desktop_routes(&authority).unwrap());
+        let mut pending_handoff = handoff.clone();
+        pending_handoff.state = "pending".to_string();
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&pending_handoff, &authority, 2_000),
+            Err("browser_session_handoff_not_ready".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+        let mut failed_authority = authority.clone();
+        failed_authority
+            .records
+            .get_mut("route-slot-01")
+            .unwrap()
+            .phase = RouteKeeperPhase::Degraded;
+        assert_eq!(
+            host.resolve_manager_handoff_with_keeper(&handoff, &failed_authority, 2_000),
+            Err("route_keeper_handoff_not_ready".to_string())
+        );
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            activity_before
+        );
+
+        let resolved = host
+            .resolve_manager_handoff_with_keeper(&handoff, &authority, 2_000)
+            .unwrap();
+        assert_eq!(resolved["status"], "ready");
+        assert_eq!(resolved["presentationGeneration"], 1);
+        assert_eq!(
+            resolved["presentationReceipt"]["presentationSlotId"],
+            "route-slot-01"
+        );
+        assert!(resolved.get("providerExternalUrl").is_none());
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            2_000
+        );
+    }
+
+    #[test]
+    fn status_liveness_reconciliation_retires_dead_persisted_browsers() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+            default_disposable_policy: None,
+        };
+        let opened = {
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                }),
+                &legacy_path,
+                config.clone(),
+            )
+            .unwrap();
+            host.open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap()
+        };
+        let mut restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: false,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+
+        let retired = restarted.reconcile_liveness_current().unwrap();
+
+        assert_eq!(retired, vec![opened.browser_id]);
+        assert!(restarted.state().browsers.is_empty());
+        assert!(restarted.state().sessions.is_empty());
+        assert_eq!(restarted.state().session_history.len(), 1);
+        assert_eq!(
+            restarted.state().session_history[0].reason,
+            SessionEndReason::BrowserUnresponsive
+        );
+    }
+}

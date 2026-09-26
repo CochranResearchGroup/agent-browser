@@ -5,6 +5,8 @@
 //! commits that backend here. Normal clients then resolve the selected backend
 //! without requiring the old and candidate hosts to share mutable socket files.
 
+#![allow(dead_code)]
+
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;

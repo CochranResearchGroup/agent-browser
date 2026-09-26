@@ -1,9 +1,9 @@
 //! Backend-scoped primary ownership. Failed attempts remain sticky until an
 //! explicit recovery names the terminal occurrence and revalidates its binding.
 
-use super::guacamole_primary_binding::{PrimaryBinding, PrimaryGuard};
+use super::guacamole_primary_binding::PrimaryBinding;
 use super::guacamole_primary_provider;
-use super::guacamole_primary_transport::{PrimaryStatus, PrimaryTask};
+use super::guacamole_primary_transport::{PrimaryGuard, PrimaryStatus, PrimaryTask};
 use crate::native::service_store::{JsonServiceStateStore, LockedServiceStateRepository};
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};

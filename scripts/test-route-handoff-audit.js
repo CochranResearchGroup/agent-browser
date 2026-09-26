@@ -236,13 +236,6 @@ const fixture = {
             connectionId: '5',
           },
         },
-        viewerLeases: {
-          'viewer:guacamole:3:default': {
-            id: 'viewer:guacamole:3:default',
-            routeId: 'guacamole:3',
-            browserId: 'session:facebook',
-          },
-        },
       },
     },
   },

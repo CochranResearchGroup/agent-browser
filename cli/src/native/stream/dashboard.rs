@@ -14,6 +14,8 @@ use tokio::time::{timeout, Duration, Instant};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::connection::get_socket_dir;
+use crate::native::browser_session_handoff::is_manager_handoff;
+use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::remote_view_handoff::remote_view_handoff_ready_owner_session;
 #[cfg(test)]
 use crate::native::service_failure_journal::{append_service_failure_at, read_service_failures_at};
@@ -22,8 +24,13 @@ use crate::native::service_failure_journal::{
     record_client_failure_observation, ServiceFailureCategory, ServiceFailureRecord,
     ServiceFailureReferences,
 };
+use crate::native::service_model::RemoteViewHandoff;
 use crate::native::service_model::ServiceState;
+use crate::native::service_request::{
+    ServiceRequestIssue, ServiceRequestIssueKind, ServiceRequestRejection,
+};
 use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+use agent_browser_service_model::BrowserSessionState;
 
 #[cfg(test)]
 use super::super::remote_view::{display_content_from_xwininfo, should_probe_route_display};
@@ -1311,6 +1318,42 @@ fn service_request_handoff_proxy_command_body(
     body: &str,
     authenticated_dashboard_user: &str,
 ) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
+    let handoff_id = service_request_handoff_id(path, body)?;
+    match BrowserRuntimeSqliteStore::default_sqlite() {
+        Ok(store) => {
+            let manager = store.load_handoff_registry().and_then(|registry| {
+                let Some(handoff) = registry.handoffs.get(&handoff_id) else {
+                    return Ok(None);
+                };
+                if !is_manager_handoff(handoff) {
+                    return Err("browser_session_handoff_registry_kind_invalid".to_string());
+                }
+                let sessions = store.load_session_state()?;
+                manager_handoff_target_session_name(handoff, &sessions).map(Some)
+            });
+            match manager {
+                Ok(Some(session_name)) => {
+                    let state = load_service_state();
+                    return Some(
+                        service_request_command_with_dashboard_generation(
+                            body,
+                            Some(&state),
+                            authenticated_dashboard_user,
+                            &session_name,
+                            std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+                                .ok()
+                                .as_deref(),
+                        )
+                        .map(|command| (session_name, command.to_string())),
+                    );
+                }
+                Ok(None) => {}
+                Err(error) => return Some(Err(handoff_proxy_route_rejection(&error))),
+            }
+        }
+        Err(error) if error.starts_with("browser_runtime_database_missing:") => {}
+        Err(error) => return Some(Err(handoff_proxy_route_rejection(&error))),
+    }
     let state_path = JsonServiceStateStore::default_path().ok()?;
     let state = JsonServiceStateStore::new(state_path).load().ok()?;
     service_request_handoff_proxy_command_body_from_state(
@@ -1324,6 +1367,64 @@ fn service_request_handoff_proxy_command_body(
     )
 }
 
+/// A manager handoff routes through the exact SQLite session that owns it.
+/// The daemon revalidates the same identity immediately before browser focus.
+fn manager_handoff_target_session_name(
+    handoff: &RemoteViewHandoff,
+    state: &BrowserSessionState,
+) -> Result<String, String> {
+    let session_id = handoff
+        .intent
+        .get("sessionId")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "browser_session_handoff_session_id_missing".to_string())?;
+    let session = state
+        .sessions
+        .get(session_id)
+        .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
+    if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
+        return Err("browser_session_handoff_session_identity_changed".to_string());
+    }
+    if handoff.session_name.as_deref() != Some(session.name.as_str())
+        || handoff.profile_id.as_deref() != Some(session.profile_id.as_str())
+        || handoff.browser_id.as_deref() != Some(session.browser_id.as_str())
+    {
+        return Err("browser_session_handoff_identity_changed".to_string());
+    }
+    normalize_service_request_session_name(&session.name)
+        .ok_or_else(|| "browser_session_handoff_session_name_invalid".to_string())
+}
+
+fn handoff_proxy_route_rejection(error: &str) -> ServiceRequestRejection {
+    let request_id = format!("dashboard-handoff-route-{}", uuid::Uuid::new_v4());
+    ServiceRequestRejection::record(
+        "dashboard_service_gateway",
+        Some("service_remote_view_handoff_resolve"),
+        &request_id,
+        DASHBOARD_SERVICE_BACKEND_SESSION,
+        ServiceRequestIssue::new(ServiceRequestIssueKind::RouteHintFailure, error),
+    )
+}
+
+fn service_request_handoff_id(path: &str, body: &str) -> Option<String> {
+    let (path, _) = split_path_query(path);
+    if path != "/api/service/request" {
+        return None;
+    }
+    let request: Value = serde_json::from_str(body).ok()?;
+    if request.get("action").and_then(Value::as_str) != Some("service_remote_view_handoff_resolve")
+    {
+        return None;
+    }
+    request
+        .pointer("/params/handoffId")
+        .or_else(|| request.get("handoffId"))
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|id| !id.is_empty())
+        .map(str::to_string)
+}
+
 fn service_request_handoff_proxy_command_body_from_state(
     path: &str,
     body: &str,
@@ -1331,6 +1432,14 @@ fn service_request_handoff_proxy_command_body_from_state(
     state: &ServiceState,
     dashboard_deployment_generation: Option<&str>,
 ) -> Option<Result<(String, String), crate::native::service_request::ServiceRequestRejection>> {
+    if service_request_handoff_id(path, body)
+        .and_then(|id| state.remote_view_handoffs.get(&id))
+        .is_some_and(is_manager_handoff)
+    {
+        return Some(Err(handoff_proxy_route_rejection(
+            "browser_session_handoff_sqlite_authority_required",
+        )));
+    }
     let session_name = service_request_handoff_target_session_name_from_state(path, body, state)?;
     Some(
         service_request_command_with_dashboard_generation(
@@ -1422,10 +1531,6 @@ fn is_remote_view_service_action(action: &str) -> bool {
             | "service_remote_view_route_checkout"
             | "service_remote_view_route_release"
             | "service_route_pool_repair"
-            | "service_viewer_lease_request"
-            | "service_viewer_lease_heartbeat"
-            | "service_viewer_lease_release"
-            | "service_controller_lease_takeover"
             | "view_focus"
             | "view_takeover"
     )
@@ -3773,6 +3878,89 @@ pub(super) async fn spawn_session(body: &str) -> Result<String, String> {
 }
 
 #[cfg(test)]
+mod p218_handoff_routing_tests {
+    use super::*;
+    use agent_browser_service_model::ManagedBrowserSession;
+
+    #[test]
+    fn dashboard_manager_handoff_routes_only_to_its_sqlite_session() {
+        let session = |id: &str, name: &str, handoff_ids: Vec<String>| ManagedBrowserSession {
+            id: id.to_string(),
+            name: name.to_string(),
+            profile_id: "shared-profile".to_string(),
+            browser_id: "shared-browser".to_string(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+            expires_at_ms: 10_000,
+            current_tab_id: None,
+            handoff_ids,
+        };
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "alice-session".to_string(),
+            session("alice-session", "alice", vec!["opaque-alice".to_string()]),
+        );
+        state.sessions.insert(
+            "bob-session".to_string(),
+            session("bob-session", "bob", vec!["opaque-bob".to_string()]),
+        );
+        let handoff = RemoteViewHandoff {
+            id: "opaque-bob".to_string(),
+            intent: json!({"browserSessionManager": true, "sessionId": "bob-session"}),
+            session_name: Some("bob".to_string()),
+            profile_id: Some("shared-profile".to_string()),
+            browser_id: Some("shared-browser".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        assert_eq!(
+            manager_handoff_target_session_name(&handoff, &state).unwrap(),
+            "bob"
+        );
+
+        state
+            .sessions
+            .get_mut("bob-session")
+            .unwrap()
+            .handoff_ids
+            .clear();
+        assert_eq!(
+            manager_handoff_target_session_name(&handoff, &state).unwrap_err(),
+            "browser_session_handoff_session_identity_changed"
+        );
+        assert_eq!(
+            state.sessions["alice-session"].handoff_ids,
+            ["opaque-alice"]
+        );
+    }
+
+    #[test]
+    fn dashboard_rejects_stale_json_manager_handoff_projection() {
+        let state = ServiceState {
+            remote_view_handoffs: std::collections::BTreeMap::from([(
+                "opaque-bob".to_string(),
+                RemoteViewHandoff {
+                    id: "opaque-bob".to_string(),
+                    intent: json!({"browserSessionManager": true, "sessionId": "bob-session"}),
+                    session_name: Some("bob".to_string()),
+                    ..RemoteViewHandoff::default()
+                },
+            )]),
+            ..ServiceState::default()
+        };
+        let body = r##"{"action":"service_remote_view_handoff_resolve","params":{"handoffId":"opaque-bob"}}"##;
+        assert!(service_request_handoff_proxy_command_body_from_state(
+            "/api/service/request",
+            body,
+            "operator",
+            &state,
+            None,
+        )
+        .unwrap()
+        .is_err());
+    }
+}
+
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
@@ -4960,10 +5148,6 @@ mod tests {
             "service_remote_view_route_checkout",
             "service_remote_view_route_release",
             "service_route_pool_repair",
-            "service_viewer_lease_request",
-            "service_viewer_lease_heartbeat",
-            "service_viewer_lease_release",
-            "service_controller_lease_takeover",
             "view_takeover",
         ] {
             let body = serde_json::json!({ "action": action }).to_string();

@@ -3,7 +3,6 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::DateTime;
 use sha2::{Digest, Sha256};
 
 use super::desktop_capture::{
@@ -70,13 +69,7 @@ impl ClosedX11Sink for ConfiguredX11Sink {
     }
 }
 
-pub(crate) struct ConfiguredControllerAuthorityRepository {
-    request: DesktopInteractionRequest,
-    route_id: String,
-    stream_id: String,
-    display_allocation_id: String,
-    machine_input: String,
-}
+pub(crate) struct ConfiguredControllerAuthorityRepository;
 
 pub(crate) struct SystemInteractionClock;
 
@@ -173,13 +166,7 @@ impl ControlledX11Provider {
             sink,
         )
         .map_err(|error| provider_error(error.code()))?;
-        let authority = ConfiguredControllerAuthorityRepository {
-            request: request.clone(),
-            route_id: capture_binding.route_id.clone(),
-            stream_id: stream.id.clone(),
-            display_allocation_id: capture_binding.display_allocation_id.clone(),
-            machine_input: provider_id.clone(),
-        };
+        let authority = ConfiguredControllerAuthorityRepository;
         Ok((
             Self {
                 admission,
@@ -537,56 +524,11 @@ impl DesktopInteractionProvider for ControlledX11Provider {
 impl ConfiguredControllerAuthorityRepository {
     fn resolve(
         &self,
-        state: &ServiceState,
+        _state: &ServiceState,
     ) -> Result<ControllerAuthority, DesktopInteractionError> {
-        let browser = state
-            .browsers
-            .get(&self.request.browser_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let stream = browser
-            .view_streams
-            .iter()
-            .find(|stream| stream.id == self.stream_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let route = state
-            .remote_view_routes
-            .get(&self.route_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let lease = state
-            .viewer_leases
-            .get(&self.request.controller_lease_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let expires = lease
-            .expires_at
-            .as_deref()
-            .and_then(parse_timestamp_ms)
-            .unwrap_or(u64::MAX);
-        Ok(ControllerAuthority {
-            browser_id: self.request.browser_id.clone(),
-            display_allocation_id: self.display_allocation_id.clone(),
-            stream_id: self.stream_id.clone(),
-            route_id: self.route_id.clone(),
-            route_controller_lease_id: route.controller_lease_id.clone().unwrap_or_default(),
-            stream_controller_lease_id: stream.controller_lease_id.clone().unwrap_or_default(),
-            lease_id: lease.id.clone(),
-            lease_record_id: lease.id.clone(),
-            lease_route_id: lease.route_id.clone().unwrap_or_default(),
-            lease_browser_id: lease.browser_id.clone().unwrap_or_default(),
-            lease_viewer_id: lease.viewer_id.clone().unwrap_or_default(),
-            lease_role: lease.viewer_role.clone(),
-            lease_state: lease.state.clone(),
-            lease_updated_at: lease.updated_at.clone().unwrap_or_default(),
-            lease_expires_at_ms: expires,
-            controller_epoch: route.controller_epoch,
-            route_controller_epoch: route.controller_epoch,
-            stream_controller_epoch: stream.controller_epoch,
-            route_contains_lease: route.viewer_lease_ids.contains(&lease.id),
-            stream_contains_lease: stream.viewer_lease_ids.contains(&lease.id),
-            route_writable: !route.read_only,
-            stream_writable: !stream.read_only,
-            route_machine_input: Some(self.machine_input.clone()),
-            stream_machine_input: Some(self.machine_input.clone()),
-        })
+        Err(provider_error(
+            "authenticated_live_viewer_authority_unavailable",
+        ))
     }
 }
 
@@ -637,12 +579,6 @@ fn locate_unique_color(bytes: &[u8], rgb: [u8; 3]) -> Result<PixelBounds, Deskto
         width,
         height,
     })
-}
-
-fn parse_timestamp_ms(value: &str) -> Option<u64> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .and_then(|value| u64::try_from(value.timestamp_millis()).ok())
 }
 
 fn now_ms() -> u64 {

@@ -22,6 +22,73 @@ import {
 
 export const DEVELOPMENT_PRESENTATION_DEPLOYMENT_SCHEMA =
   'agent-browser.development-presentation-provider-deployment.v1';
+export const ROUTE_KEEPER_CONNECTION_CATALOG_PUBLICATION_SCHEMA =
+  'agent-browser.route-keeper-connection-catalog-publication.v1';
+
+function positiveCanonicalSafeInteger(value, label) {
+  if (typeof value !== 'string' || !/^[1-9][0-9]*$/.test(value)) {
+    throw new Error(`${label} must be a positive canonical safe integer`);
+  }
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed)) {
+    throw new Error(`${label} must be a positive canonical safe integer`);
+  }
+  return parsed;
+}
+
+/** Resolve reviewed stable route names against one exact provider readback. */
+export function resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, databaseRoutes) {
+  if (
+    descriptor.routes.length !== descriptor.hardMaxSlots ||
+    databaseRoutes.length !== descriptor.hardMaxSlots
+  ) {
+    throw new Error('Development Guacamole catalog requires the complete hard maximum route set');
+  }
+  const expectedNames = new Set(descriptor.routes.map((route) => route.connectionName));
+  const byName = new Map();
+  for (const route of databaseRoutes) {
+    if (!expectedNames.has(route.connectionName)) {
+      throw new Error(
+        `Development Guacamole route has an unexpected stable name: ${route.connectionName}`,
+      );
+    }
+    if (byName.has(route.connectionName)) {
+      throw new Error(
+        `Development Guacamole route has a duplicate stable name: ${route.connectionName}`,
+      );
+    }
+    byName.set(route.connectionName, route);
+  }
+  const bindings = descriptor.routes.map((route, index) => {
+    const observed = byName.get(route.connectionName);
+    if (!observed) {
+      throw new Error(`Development Guacamole route is missing: ${route.connectionName}`);
+    }
+    if (observed.user !== route.user) {
+      throw new Error(`Development Guacamole route user mismatch: ${route.connectionName}`);
+    }
+    return {
+      slotId: `route-slot-${String(index + 1).padStart(2, '0')}`,
+      connectionKey: route.connectionKey,
+      connectionName: route.connectionName,
+      routeUser: route.user,
+      guacamoleConnectionId: positiveCanonicalSafeInteger(
+        observed.connectionId,
+        `Development Guacamole connection ID for ${route.connectionName}`,
+      ),
+    };
+  });
+  if (new Set(bindings.map((binding) => binding.guacamoleConnectionId)).size !== bindings.length) {
+    throw new Error('Development Guacamole routes have a duplicate numeric ID');
+  }
+  return {
+    schemaVersion: ROUTE_KEEPER_CONNECTION_CATALOG_PUBLICATION_SCHEMA,
+    providerBase: `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
+    publicOperatorUrl: descriptor.publicOperatorUrl,
+    provisioning: descriptor.provisioning,
+    bindings,
+  };
+}
 
 /**
  * Mirrors the workstation installer's two-entry extension JAR. Fixed metadata
@@ -70,6 +137,7 @@ export function developmentPresentationProviderDeploymentPlan(descriptor) {
       step('verify-schema', false),
       step('ensure-route-users', true),
       step('sync-connections', false),
+      step('publish-route-keeper-catalog', false),
       step('start-provider', false),
       step('grant-operator-route-access', false),
       step('open-warm-route-sessions', false),
@@ -115,6 +183,7 @@ export function renderDevelopmentPresentationProviderBundle(descriptor) {
       ports: descriptor.ports,
       rdpTarget: descriptor.rdpTarget,
       connectionLimits: descriptor.connectionLimits,
+      provisioning: descriptor.provisioning,
       warmSlots: descriptor.warmSlots,
       hardMaxSlots: descriptor.hardMaxSlots,
       routes: descriptor.routes,
@@ -243,6 +312,20 @@ export function prepareDevelopmentPresentationProviderSecrets({ env = process.en
   return { success: true, environment: 'development', created: true, path, sha256: sha256(path) };
 }
 
+function publishDevelopmentRouteKeeperConnectionCatalog(descriptor, effects) {
+  if (
+    typeof effects.readRouteKeeperConnections !== 'function' ||
+    typeof effects.publishRouteKeeperConnectionCatalog !== 'function'
+  ) {
+    throw new Error('Development provider effects require route-keeper catalog publication');
+  }
+  const publication = resolveDevelopmentRouteKeeperConnectionCatalog(
+    descriptor,
+    effects.readRouteKeeperConnections(descriptor),
+  );
+  return effects.publishRouteKeeperConnectionCatalog(publication, descriptor);
+}
+
 /**
  * Executes the reviewed development provider transaction through injected
  * effect adapters. No production fallback exists, and failures are handed to
@@ -258,10 +341,19 @@ export function applyDevelopmentPresentationProvider({
     throw new Error('Development presentation provider apply requires explicit effect authority');
   }
   if (!effects) throw new Error('Development presentation provider effect adapter is required');
+  if (effects.routeKeeperRuntimeReady === false) {
+    throw new Error('Development provider apply requires runtime-host route-keeper integration');
+  }
   const descriptor = developmentPresentationProviderDescriptor(env);
   validateDevelopmentPresentationProviderIsolation(descriptor);
   if (descriptor.externalIngress.configured !== true) {
     throw new Error('Development provider apply requires a reviewed public HTTPS external-ingress binding');
+  }
+  if (
+    typeof effects.readRouteKeeperConnections !== 'function' ||
+    typeof effects.publishRouteKeeperConnectionCatalog !== 'function'
+  ) {
+    throw new Error('Development provider effects require route-keeper catalog publication');
   }
   if (existsSync(descriptor.manifest)) {
     const manifest = JSON.parse(readFileSync(descriptor.manifest, 'utf8'));
@@ -294,6 +386,8 @@ export function applyDevelopmentPresentationProvider({
       }
       effects.syncConnections(descriptor, routeSecrets);
       completedSteps.push('sync-connections');
+      publishDevelopmentRouteKeeperConnectionCatalog(descriptor, effects);
+      completedSteps.push('publish-route-keeper-catalog');
       effects.startProvider(descriptor);
       completedSteps.push('start-provider');
       effects.grantOperatorRouteAccess(descriptor);
@@ -315,6 +409,9 @@ export function applyDevelopmentPresentationProvider({
         descriptor,
         observation,
       );
+    } else {
+      publishDevelopmentRouteKeeperConnectionCatalog(descriptor, effects);
+      completedSteps.push('publish-route-keeper-catalog');
     }
     assertChecks(readinessChecks, 'Configured development provider reconciliation failed');
     writeProviderAuthority(descriptor, observation);
@@ -386,6 +483,8 @@ export function applyDevelopmentPresentationProvider({
     }
     effects.syncConnections(descriptor, routeSecrets);
     completedSteps.push('sync-connections');
+    publishDevelopmentRouteKeeperConnectionCatalog(descriptor, effects);
+    completedSteps.push('publish-route-keeper-catalog');
     effects.startProvider(descriptor);
     completedSteps.push('start-provider');
     effects.grantOperatorRouteAccess(descriptor);
@@ -521,35 +620,7 @@ where table_schema = 'public' and table_name in
  'guacamole_sharing_profile','guacamole_sharing_profile_parameter',
  'guacamole_sharing_profile_permission');`;
   const schemaResult = postgresQuery(descriptor, schemaSql, run);
-  // Match the descriptor's exact connections, including parallel namespaces.
-  // Explicit escape strings keep quotes and backslashes literal in PostgreSQL.
-  const connectionNamesSql = descriptor.routes.map((route) =>
-    `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
-  const routeSql = `select coalesce(json_agg(row_to_json(t)), '[]'::json)
-from (
-  select c.connection_id::text as "connectionId",
-         c.connection_name as "connectionName",
-         c.max_connections as "maxConnections",
-         c.max_connections_per_user as "maxConnectionsPerUser",
-         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user",
-         max(sp.sharing_profile_id)::text as "sharingProfileId",
-         max(sp.sharing_profile_name) as "sharingProfileName",
-         max(case when spp.parameter_name = 'read-only' then spp.parameter_value end) as "sharingProfileReadOnly",
-         count(distinct spermission.entity_id) as "sharingProfilePermissionCount"
-  from guacamole_connection c
-  left join guacamole_connection_parameter p on p.connection_id = c.connection_id
-  left join guacamole_sharing_profile sp
-    on sp.primary_connection_id = c.connection_id
-   and sp.sharing_profile_name like 'Agent Browser Shared Session %'
-  left join guacamole_sharing_profile_parameter spp
-    on spp.sharing_profile_id = sp.sharing_profile_id
-  left join guacamole_sharing_profile_permission spermission
-    on spermission.sharing_profile_id = sp.sharing_profile_id
-  where c.connection_name in (${connectionNamesSql || 'NULL'})
-  group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
-  order by c.connection_id
-) t;`;
-  const routesResult = postgresQuery(descriptor, routeSql, run);
+  const routesResult = postgresQuery(descriptor, developmentRouteConnectionsSql(descriptor), run);
   let databaseRoutes = [];
   try {
     databaseRoutes = routesResult.status === 0
@@ -621,6 +692,58 @@ from (
   };
 }
 
+/** Exact post-sync readback used to populate the SQLite keeper catalog. */
+export function readDevelopmentRouteKeeperConnections(
+  descriptor,
+  { run = commandResult } = {},
+) {
+  const result = postgresQuery(descriptor, developmentRouteConnectionsSql(descriptor), run);
+  if (result.status !== 0) {
+    throw new Error(`Development Guacamole route readback failed: ${commandError(result)}`);
+  }
+  let routes;
+  try {
+    routes = JSON.parse(result.stdout.trim() || '[]');
+  } catch {
+    throw new Error('Development Guacamole route readback returned invalid JSON');
+  }
+  if (!Array.isArray(routes)) {
+    throw new Error('Development Guacamole route readback returned a non-array document');
+  }
+  return routes;
+}
+
+function developmentRouteConnectionsSql(descriptor) {
+  // Match the descriptor's exact connections, including parallel namespaces.
+  // Explicit escape strings keep quotes and backslashes literal in PostgreSQL.
+  const connectionNamesSql = descriptor.routes.map((route) =>
+    `E'${route.connectionName.replaceAll('\\', '\\\\').replaceAll("'", "''")}'`).join(', ');
+  return `select coalesce(json_agg(row_to_json(t)), '[]'::json)
+from (
+  select c.connection_id::text as "connectionId",
+         c.connection_name as "connectionName",
+         c.max_connections as "maxConnections",
+         c.max_connections_per_user as "maxConnectionsPerUser",
+         max(case when p.parameter_name = 'username' then p.parameter_value end) as "user",
+         max(sp.sharing_profile_id)::text as "sharingProfileId",
+         max(sp.sharing_profile_name) as "sharingProfileName",
+         max(case when spp.parameter_name = 'read-only' then spp.parameter_value end) as "sharingProfileReadOnly",
+         count(distinct spermission.entity_id) as "sharingProfilePermissionCount"
+  from guacamole_connection c
+  left join guacamole_connection_parameter p on p.connection_id = c.connection_id
+  left join guacamole_sharing_profile sp
+    on sp.primary_connection_id = c.connection_id
+   and sp.sharing_profile_name like 'Agent Browser Shared Session %'
+  left join guacamole_sharing_profile_parameter spp
+    on spp.sharing_profile_id = sp.sharing_profile_id
+  left join guacamole_sharing_profile_permission spermission
+    on spermission.sharing_profile_id = sp.sharing_profile_id
+  where c.connection_name in (${connectionNamesSql || 'NULL'})
+  group by c.connection_id, c.connection_name, c.max_connections, c.max_connections_per_user
+  order by c.connection_id
+) t;`;
+}
+
 function step(id, privileged) {
   return { id, privileged, state: 'planned' };
 }
@@ -650,6 +773,8 @@ services:
     image: postgres:16-alpine@sha256:20edbde7749f822887a1a022ad526fde0a47d6b2be9a8364433605cf65099416
     platform: linux/amd64
     container_name: ${descriptor.services.postgres}
+    labels:
+      agent-browser.environment: ${descriptor.environment}
     restart: unless-stopped
     stop_grace_period: 30s
     command: [postgres, -c, fsync=on, -c, synchronous_commit=on, -c, full_page_writes=on]

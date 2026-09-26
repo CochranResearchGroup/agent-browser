@@ -60,8 +60,6 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceTabAccessPlan} ServiceTabAccessPlan
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestHttpOptions} ServiceCdpFreeLaunchRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceCdpFreeLaunchRequestOptions} ServiceCdpFreeLaunchRequestOptions
- * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverHttpOptions} ServiceControllerLeaseTakeoverHttpOptions
- * @typedef {import('./service-request.generated.js').ServiceControllerLeaseTakeoverOptions} ServiceControllerLeaseTakeoverOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutHttpOptions} ServiceRemoteViewRouteCheckoutHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewRouteCheckoutOptions} ServiceRemoteViewRouteCheckoutOptions
  * @typedef {import('./service-request.generated.js').ServiceRemoteViewOpenHttpOptions} ServiceRemoteViewOpenHttpOptions
@@ -91,12 +89,6 @@ const displayIsolationSet = new Set([
  * @typedef {import('./service-request.generated.js').ServiceTabHandle} ServiceTabHandle
  * @typedef {import('./service-request.generated.js').ServiceTabRequestHttpOptions} ServiceTabRequestHttpOptions
  * @typedef {import('./service-request.generated.js').ServiceTabRequestOptions} ServiceTabRequestOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseHeartbeatHttpOptions} ServiceViewerLeaseHeartbeatHttpOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseHeartbeatOptions} ServiceViewerLeaseHeartbeatOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseReleaseHttpOptions} ServiceViewerLeaseReleaseHttpOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseReleaseOptions} ServiceViewerLeaseReleaseOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestHttpOptions} ServiceViewerLeaseRequestHttpOptions
- * @typedef {import('./service-request.generated.js').ServiceViewerLeaseRequestOptions} ServiceViewerLeaseRequestOptions
  */
 
 export class ServiceRequestHttpError extends Error {
@@ -1649,81 +1641,6 @@ export function createServiceBrowserRetirementApplyRequest(input) {
 }
 
 /**
- * @param {ServiceViewerLeaseRequestOptions} input
- * @returns {ServiceRequest}
- */
-export function createServiceViewerLeaseRequest(input) {
-  assertPlainObject(input, 'viewer lease request');
-  const { params, ...request } = input;
-  return createServiceRequest({
-    ...request,
-    action: 'service_viewer_lease_request',
-    params: mergeParams(params, request, [
-      'routeId',
-      'viewerId',
-      'viewerName',
-      'viewerRole',
-      'openMode',
-      'browserId',
-      'expiresAt',
-    ]),
-  });
-}
-
-/**
- * @param {ServiceViewerLeaseHeartbeatOptions} input
- * @returns {ServiceRequest}
- */
-export function createServiceViewerLeaseHeartbeatRequest(input) {
-  assertPlainObject(input, 'viewer lease heartbeat request');
-  const { params, ...request } = input;
-  return createServiceRequest({
-    ...request,
-    action: 'service_viewer_lease_heartbeat',
-    params: mergeParams(params, request, ['viewerLeaseId', 'expiresAt']),
-  });
-}
-
-/**
- * @param {ServiceViewerLeaseReleaseOptions} input
- * @returns {ServiceRequest}
- */
-export function createServiceViewerLeaseReleaseRequest(input) {
-  assertPlainObject(input, 'viewer lease release request');
-  const { params, ...request } = input;
-  return createServiceRequest({
-    ...request,
-    action: 'service_viewer_lease_release',
-    params: mergeParams(params, request, ['viewerLeaseId']),
-  });
-}
-
-/**
- * Route and viewer convenience fields are action params only; browser/session
- * identity remains in the service envelope for routing and provenance.
- * @param {ServiceControllerLeaseTakeoverOptions} input
- * @returns {ServiceRequest}
- */
-export function createServiceControllerLeaseTakeoverRequest(input) {
-  assertPlainObject(input, 'controller lease takeover request');
-  const { params, routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt, ...request } = input;
-  return createServiceRequest({
-    ...request,
-    action: 'service_controller_lease_takeover',
-    params: mergeParams(params, { routeId, viewerLeaseId, viewerId, viewerName, openMode, expiresAt,
-      browserId: request.browserId }, [
-      'routeId',
-      'viewerLeaseId',
-      'viewerId',
-      'viewerName',
-      'openMode',
-      'browserId',
-      'expiresAt',
-    ]),
-  });
-}
-
-/**
  * @param {ServiceRequestHttpOptions} options
  * @returns {Promise<ServiceRequestResponse>}
  */
@@ -2640,54 +2557,6 @@ export async function requestServiceBrowserRetirementApply({ baseUrl, fetch = gl
     fetch,
     signal,
     request: createServiceBrowserRetirementApplyRequest(request),
-  });
-}
-
-/**
- * @param {ServiceViewerLeaseRequestHttpOptions} options
- */
-export async function requestServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
-  return postServiceRequest({
-    baseUrl,
-    fetch,
-    signal,
-    request: createServiceViewerLeaseRequest(request),
-  });
-}
-
-/**
- * @param {ServiceViewerLeaseHeartbeatHttpOptions} options
- */
-export async function heartbeatServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
-  return postServiceRequest({
-    baseUrl,
-    fetch,
-    signal,
-    request: createServiceViewerLeaseHeartbeatRequest(request),
-  });
-}
-
-/**
- * @param {ServiceViewerLeaseReleaseHttpOptions} options
- */
-export async function releaseServiceViewerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
-  return postServiceRequest({
-    baseUrl,
-    fetch,
-    signal,
-    request: createServiceViewerLeaseReleaseRequest(request),
-  });
-}
-
-/**
- * @param {ServiceControllerLeaseTakeoverHttpOptions} options
- */
-export async function takeoverServiceControllerLease({ baseUrl, fetch = globalThis.fetch, signal, ...request }) {
-  return postServiceRequest({
-    baseUrl,
-    fetch,
-    signal,
-    request: createServiceControllerLeaseTakeoverRequest(request),
   });
 }
 

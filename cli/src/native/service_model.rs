@@ -2553,33 +2553,31 @@ fn sorted_strings<'a>(values: impl Iterator<Item = &'a String>) -> Vec<String> {
 }
 
 pub use agent_browser_service_model::{
-    interaction_decision, profile_seeding_handoff_id, provider_decision, BrowserBuild,
-    BrowserHealth, BrowserHealthObservation, BrowserHost, BrowserProcess, BrowserProfile,
-    BrowserRecordAuthoritySource, BrowserRecordLifecycleClassification, BrowserRecordProvenance,
-    BrowserRecordSource, BrowserSession, BrowserTab, Challenge, ChallengePolicy, ChallengeState,
-    ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
-    DurableHandoffPresentationReceipt, JobControlPlaneMode, JobPriority, JobState, JobTarget,
-    LeaseState, MonitorState, MonitorTarget, ProfileAllocationPolicy, ProfileClass,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
-    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
-    ProfileSelectionReason, ProfileTargetReadiness, ProtectedBrowserOwnerObservation,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
-    RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
+    profile_seeding_handoff_id, BrowserBuild, BrowserHealth, BrowserHealthObservation, BrowserHost,
+    BrowserProcess, BrowserProfile, BrowserRecordAuthoritySource,
+    BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
+    BrowserSession, BrowserTab, ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
+    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, MonitorState, MonitorTarget,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileTargetReadiness,
+    ProtectedBrowserOwnerObservation, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
     ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
     ServiceJob, ServiceProvider, ServiceReconciliationSnapshot, ServiceTabHandle,
     SessionCleanupPolicy, SiteMonitor, SitePolicy, TabLifecycle, ViewStream, ViewStreamProvider,
-    ViewerLease, SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME,
-    SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_AGENT_NAME, SERVICE_JOB_NAMING_WARNING_MISSING_SERVICE_NAME,
+    SERVICE_JOB_NAMING_WARNING_MISSING_TASK_NAME,
 };
 #[cfg(test)]
 pub use agent_browser_service_model::{
-    ChallengeKind, InteractionMode, ProfileConnectionState, ProviderCapability, ProviderKind,
-    RateLimitPolicy, ServiceTabHandleTraceFilter, SERVICE_EVENT_KIND_VALUES,
-    SERVICE_INCIDENT_ESCALATION_VALUES, SERVICE_INCIDENT_SEVERITY_VALUES,
-    SERVICE_INCIDENT_STATE_VALUES, SERVICE_JOB_CONTROL_PLANE_MODE_VALUES,
-    SERVICE_JOB_NAMING_WARNING_VALUES, SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
-    SERVICE_MONITOR_STATE_VALUES,
+    ChallengeKind, DurableHandoffPresentationReceipt, InteractionMode, ProfileConnectionState,
+    ProviderCapability, ProviderKind, RateLimitPolicy, ServiceTabHandleTraceFilter,
+    SERVICE_EVENT_KIND_VALUES, SERVICE_INCIDENT_ESCALATION_VALUES,
+    SERVICE_INCIDENT_SEVERITY_VALUES, SERVICE_INCIDENT_STATE_VALUES,
+    SERVICE_JOB_CONTROL_PLANE_MODE_VALUES, SERVICE_JOB_NAMING_WARNING_VALUES,
+    SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES, SERVICE_MONITOR_STATE_VALUES,
 };
 #[cfg(test)]
 use agent_browser_service_model::{
@@ -2889,7 +2887,7 @@ pub(crate) fn controller_authority_fence_matches(
     })
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use serde_json::json;

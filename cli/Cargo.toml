@@ -16,7 +16,6 @@ agent-browser-candidate = { path = "../crates/agent-browser-candidate" }
 agent-browser-cdp = { path = "../crates/agent-browser-cdp" }
 agent-browser-challenge-control = { path = "../crates/agent-browser-challenge-control" }
 agent-browser-desktop-services = { path = "../crates/agent-browser-desktop-services" }
-agent-browser-lease-authority = { path = "../crates/agent-browser-lease-authority" }
 agent-browser-service-model = { path = "../crates/agent-browser-service-model" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
@@ -43,6 +42,7 @@ hex = "0.4"
 chrono = "0.4"
 urlencoding = "2"
 rust-embed = "8"
+rusqlite = { version = "0.40.2", features = ["backup", "bundled"] }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"

@@ -6776,96 +6776,6 @@
       "finalDisposition": "move"
     },
     {
-      "id": "ari:function:native::actions:handle_service_viewer_lease_request:466abf473db624ab",
-      "fullDigest": "466abf473db624ab2cd393463e6e205b7849b3d90e9601245bab1dddd6b4fc15",
-      "itemKind": "function",
-      "owner": "native::actions",
-      "name": "handle_service_viewer_lease_request",
-      "normalizedSignature": "asyncfnhandle_service_viewer_lease_request(_:&Value,_:&DaemonState,)->Result<Value,String>",
-      "baselineStartLine": 15869,
-      "baselineEndLine": 15874,
-      "associatedTestIds": [],
-      "packet": "P0101-F03",
-      "responsibility": "remote-view viewer lease",
-      "targetModule": "native::remote_view::viewer_lease",
-      "movementStatus": "moved",
-      "wrapperOwner": null,
-      "deletionPacket": "P0101-F03",
-      "finalDisposition": "move"
-    },
-    {
-      "id": "ari:function:native::actions:handle_service_controller_lease_takeover:1ce3d3d74db10f4d",
-      "fullDigest": "1ce3d3d74db10f4d4c2cc0a94bf655be9ad14ca02d0e3eef233d63184d3b2310",
-      "itemKind": "function",
-      "owner": "native::actions",
-      "name": "handle_service_controller_lease_takeover",
-      "normalizedSignature": "asyncfnhandle_service_controller_lease_takeover(_:&Value,_:&DaemonState,)->Result<Value,String>",
-      "baselineStartLine": 15876,
-      "baselineEndLine": 15881,
-      "associatedTestIds": [],
-      "packet": "P0101-F03",
-      "responsibility": "remote-view viewer lease",
-      "targetModule": "native::remote_view::viewer_lease",
-      "movementStatus": "moved",
-      "wrapperOwner": null,
-      "deletionPacket": "P0101-F03",
-      "finalDisposition": "move"
-    },
-    {
-      "id": "ari:function:native::actions:mutate_service_viewer_lease:12cd47a49bc53da9",
-      "fullDigest": "12cd47a49bc53da981b0022e54ea86933cb6d6e7d65319a2b365e33e95995ea4",
-      "itemKind": "function",
-      "owner": "native::actions",
-      "name": "mutate_service_viewer_lease",
-      "normalizedSignature": "fnmutate_service_viewer_lease(_:&Value,_:&DaemonState,_:bool,)->Result<Value,String>",
-      "baselineStartLine": 15883,
-      "baselineEndLine": 16125,
-      "associatedTestIds": [],
-      "packet": "P0101-F03",
-      "responsibility": "remote-view viewer lease",
-      "targetModule": "native::remote_view::viewer_lease",
-      "movementStatus": "moved",
-      "wrapperOwner": null,
-      "deletionPacket": "P0101-F03",
-      "finalDisposition": "move"
-    },
-    {
-      "id": "ari:function:native::actions:handle_service_viewer_lease_heartbeat:22234b64229a99dc",
-      "fullDigest": "22234b64229a99dca90b12ded65c0ede4bff698968effe4e6eac9e5c0781e493",
-      "itemKind": "function",
-      "owner": "native::actions",
-      "name": "handle_service_viewer_lease_heartbeat",
-      "normalizedSignature": "asyncfnhandle_service_viewer_lease_heartbeat(_:&Value,_:&DaemonState,)->Result<Value,String>",
-      "baselineStartLine": 16127,
-      "baselineEndLine": 16162,
-      "associatedTestIds": [],
-      "packet": "P0101-F03",
-      "responsibility": "remote-view viewer lease",
-      "targetModule": "native::remote_view::viewer_lease",
-      "movementStatus": "moved",
-      "wrapperOwner": null,
-      "deletionPacket": "P0101-F03",
-      "finalDisposition": "move"
-    },
-    {
-      "id": "ari:function:native::actions:handle_service_viewer_lease_release:82bc49c591ab95a7",
-      "fullDigest": "82bc49c591ab95a7a4788b33dd68627da3acc34d1b603b98695dfd3587c5ed72",
-      "itemKind": "function",
-      "owner": "native::actions",
-      "name": "handle_service_viewer_lease_release",
-      "normalizedSignature": "asyncfnhandle_service_viewer_lease_release(_:&Value,_:&DaemonState,)->Result<Value,String>",
-      "baselineStartLine": 16164,
-      "baselineEndLine": 16221,
-      "associatedTestIds": [],
-      "packet": "P0101-F03",
-      "responsibility": "remote-view viewer lease",
-      "targetModule": "native::remote_view::viewer_lease",
-      "movementStatus": "moved",
-      "wrapperOwner": null,
-      "deletionPacket": "P0101-F03",
-      "finalDisposition": "move"
-    },
-    {
       "id": "ari:function:native::actions:required_remote_view_route_id:331e7b1731817e9f",
       "fullDigest": "331e7b1731817e9ffadc10c2b71377a81bbc4673c38948c2f3f036f88d23cb76",
       "itemKind": "function",
@@ -11830,21 +11740,6 @@
         "native::action_dispatch"
       ],
       "deletionTest": "Deleting native::remote_view::route_lifecycle would force dispatch or its callers to reproduce the ordered remote-view route lifecycle decisions and safety checks"
-    },
-    {
-      "targetModule": "native::remote_view::viewer_lease",
-      "ownedInvariant": "remote-view viewer lease",
-      "interfaceOperations": [
-        "handle_service_viewer_lease_request",
-        "handle_service_controller_lease_takeover",
-        "mutate_service_viewer_lease",
-        "handle_service_viewer_lease_heartbeat",
-        "handle_service_viewer_lease_release"
-      ],
-      "productionCallers": [
-        "native::action_dispatch"
-      ],
-      "deletionTest": "Deleting native::remote_view::viewer_lease would force dispatch or its callers to reproduce the ordered remote-view viewer lease decisions and safety checks"
     },
     {
       "targetModule": "native::service_access",

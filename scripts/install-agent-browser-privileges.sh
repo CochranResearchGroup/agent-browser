@@ -536,15 +536,21 @@ helper_contract_ready() {
     '"keepsSessionAlive":true' \
     '"routeSessionTermination":{' \
     '"supported":true' \
-    '"exactRouteUser":true' \
-    '"idempotentWhenAbsent":true' \
+    '"routeSessionObservation":{' \
+    '"exactCgroupV2Identity":true' \
+    '"xServerProcessIdentity":true' \
+    '"x11SocketOwnership":true' \
+    '"retainedDirectoryIdentity":true' \
+    '"usesCgroupKill":true' \
+    '"broadUserTermination":false' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
     '"boundedXhostTimeoutSeconds":2' \
     '"routeUserCredentialUpdate":{' \
     '"pamBypassed":true' \
     '"cryptMethod":"SHA512"' \
-    '"shaRounds":100000'; do
+    '"shaRounds":100000' \
+    '"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true}'; do
     [[ "$compact_status" == *"$required"* ]] || return 1
   done
 }

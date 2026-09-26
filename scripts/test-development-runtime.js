@@ -42,6 +42,10 @@ writeFileSync(
   `#!/bin/sh
 if [ "\${1:-}" = "--version" ]; then
   echo "agent-browser 0.28.0-fixture"
+elif [ "\${1:-}" = "install" ] && [ "\${2:-}" = "development-runtime-migrate" ]; then
+  mkdir -p "$HOME/.agent-browser/service"
+  touch "$HOME/.agent-browser/service/runtime.sqlite3"
+  echo '{"success":true}'
 else
   printf '%s|%s|%s|%s|%s|%s|%s|%s\\n' "$HOME" "$AGENT_BROWSER_RUNTIME_ENVIRONMENT" "$AGENT_BROWSER_RUNTIME_HOST" "$AGENT_BROWSER_SOCKET_DIR" "$AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE" "$AGENT_BROWSER_DASHBOARD_AUTH_DIR" "$AGENT_BROWSER_EXECUTABLE_PATH" "$AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY"
 fi
@@ -259,6 +263,8 @@ try {
     assert.match(source, /AGENT_BROWSER_GUACAMOLE_HEADER_USER=fixture-provider-operator/);
     assert.doesNotMatch(source, /\.local\/bin\/agent-browser\n/);
   }
+  assert.match(units[descriptor.unitNames.runtimeHost], /^NoNewPrivileges=false$/m);
+  assert.match(units[descriptor.unitNames.runtimeHost], /^PrivateTmp=false$/m);
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
@@ -332,6 +338,10 @@ try {
     readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
   );
   assert.equal(generationManifest.externalBrowserDiscovery, 'disabled');
+  assert.equal(
+    readFileSync(join(descriptor.stateDir, 'service', 'runtime.sqlite3'), 'utf8'),
+    '',
+  );
   assert.equal(installed.status.externalBrowserDiscovery, 'disabled');
   assert.equal(installed.status.generationMetadata.externalBrowserDiscovery, 'disabled');
   assert.deepEqual(generationManifest.desktopInputProvider, {
@@ -344,6 +354,17 @@ try {
   const launcherEnvironment = execFileSync(descriptor.executable, ['print-env'], {
     encoding: 'utf8',
   }).trim();
+  const launcherSource = readFileSync(descriptor.executable, 'utf8');
+  assert(
+    launcherSource.includes(
+      `export AGENT_BROWSER_SHUTDOWN_USER_UNITS='${Object.values(descriptor.unitNames).join(',')}'`,
+    ),
+  );
+  assert(
+    launcherSource.includes(
+      `export AGENT_BROWSER_SHUTDOWN_PRESENTATION_CONTAINERS='${Object.values(descriptor.presentationProvider.services).join(',')}'`,
+    ),
+  );
   assert.equal(
     launcherEnvironment,
     `${descriptor.pseudoHome}|development|1|${descriptor.socketDir}|${descriptor.runtimeHostIngressState}|${descriptor.authDir}|${fakeBrowser}|disabled`,

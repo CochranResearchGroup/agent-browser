@@ -1023,19 +1023,8 @@ fn resolve_scene_authority(
     } else {
         ControllerPosture::Uncontrolled
     };
-    let passive_viewer_present = route
-        .viewer_lease_ids
-        .iter()
-        .filter_map(|lease_id| state.viewer_leases.get(lease_id))
-        .any(|lease| {
-            lease.viewer_role != "controller"
-                && matches!(lease.state.as_str(), "requested" | "active" | "ready")
-        });
-    let viewer_posture = if passive_viewer_present {
-        ViewerPosture::Passive
-    } else {
-        ViewerPosture::None
-    };
+    // Stored route state cannot establish an authenticated live viewer.
+    let viewer_posture = ViewerPosture::None;
     Ok(SceneAuthority {
         binding,
         pid,
@@ -1281,7 +1270,7 @@ mod tests {
     };
     use crate::native::service_model::{
         BrowserHealth, BrowserHost, BrowserProcess, DisplayAllocation, RemoteViewRoute,
-        ServiceBrowserProcessIdentity, ServiceState, ViewStream, ViewStreamProvider, ViewerLease,
+        ServiceBrowserProcessIdentity, ServiceState, ViewStream, ViewStreamProvider,
     };
     use crate::process_identity::RecordedProcessIdentity;
     use serde_json::json;
@@ -1355,7 +1344,7 @@ mod tests {
     }
 
     fn state(slot_count: usize) -> ServiceState {
-        let mut state = configured_scene_state(false, false);
+        let mut state = configured_scene_state(false);
         let slots = (0..slot_count)
             .map(|index| {
                 if index == 0 {
@@ -1450,7 +1439,7 @@ mod tests {
         }
     }
 
-    fn configured_scene_state(passive_viewer: bool, human_controller: bool) -> ServiceState {
+    fn configured_scene_state(human_controller: bool) -> ServiceState {
         let stream = ViewStream {
             id: "stream-1".to_string(),
             provider: ViewStreamProvider::RdpGateway,
@@ -1488,9 +1477,6 @@ mod tests {
             readiness: Some(json!({ "state": "ready" })),
             ..DisplayAllocation::default()
         };
-        let viewer_lease_ids = passive_viewer
-            .then(|| vec!["viewer-1".to_string()])
-            .unwrap_or_default();
         let route = RemoteViewRoute {
             id: "route-1".to_string(),
             provider: ViewStreamProvider::RdpGateway,
@@ -1498,26 +1484,10 @@ mod tests {
             browser_id: Some("browser-1".to_string()),
             session_id: Some("session-1".to_string()),
             state: "ready".to_string(),
-            viewer_lease_ids: viewer_lease_ids.clone(),
             controller_lease_id: human_controller.then(|| "controller-1".to_string()),
             readiness: Some(json!({ "state": "ready" })),
             ..RemoteViewRoute::default()
         };
-        let viewer_leases = passive_viewer
-            .then(|| {
-                BTreeMap::from([(
-                    "viewer-1".to_string(),
-                    ViewerLease {
-                        id: "viewer-1".to_string(),
-                        route_id: Some("route-1".to_string()),
-                        browser_id: Some("browser-1".to_string()),
-                        viewer_role: "observer".to_string(),
-                        state: "active".to_string(),
-                        ..ViewerLease::default()
-                    },
-                )])
-            })
-            .unwrap_or_default();
         let mut slot = PresentationSlot::warm_idle("slot-1").with_binding("route-1", "display-1");
         slot.state = PresentationSlotState::Reserved;
         slot.lease_request_id = Some("episode-1".to_string());
@@ -1540,7 +1510,6 @@ mod tests {
             )]),
             display_allocations: BTreeMap::from([("display-1".to_string(), display)]),
             remote_view_routes: BTreeMap::from([("route-1".to_string(), route)]),
-            viewer_leases,
             presentation_capacity: Some(
                 PresentationCapacityAuthority::new(
                     PresentationCapacityConfig {
@@ -1650,7 +1619,7 @@ mod tests {
 
     #[test]
     fn configured_adapter_leases_and_releases_active_presentation_without_parking_browser() {
-        let mut state = configured_scene_state(true, false);
+        let mut state = configured_scene_state(false);
         let capacity = state.presentation_capacity.as_ref().unwrap();
         let config = *capacity.config();
         let mut slot = capacity.slots()[0].clone();
@@ -1683,8 +1652,8 @@ mod tests {
     }
 
     #[test]
-    fn passive_viewer_allows_only_an_already_ready_unstaged_scene() {
-        let repository = MemoryRepository::new(configured_scene_state(true, false));
+    fn configured_scene_does_not_infer_viewer_without_authenticated_observer() {
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
             repository,
             "episode-1",
@@ -1699,13 +1668,13 @@ mod tests {
         let staged = adapter.scene_admission("browser-1", true).unwrap();
         assert_eq!(
             DesktopEvidenceCoordinator::admit_scene(staged),
-            SceneAdmission::WaitForViewer
+            SceneAdmission::StagingAllowed
         );
     }
 
     #[test]
     fn active_human_controller_blocks_before_capacity_or_scene_mutation() {
-        let repository = MemoryRepository::new(configured_scene_state(false, true));
+        let repository = MemoryRepository::new(configured_scene_state(true));
         let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
             repository,
             "episode-1",
@@ -1721,7 +1690,7 @@ mod tests {
 
     #[test]
     fn configured_capture_ready_proof_binds_process_route_display_slot_and_geometry() {
-        let repository = MemoryRepository::new(configured_scene_state(true, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
             repository,
             "episode-1",
@@ -1740,13 +1709,13 @@ mod tests {
         assert_eq!(proof.frame_width, 1280);
         assert_eq!(proof.frame_height, 720);
         assert_eq!(proof.scale_factor_millis, 1000);
-        assert_eq!(proof.viewer_posture, ViewerPosture::Passive);
+        assert_eq!(proof.viewer_posture, ViewerPosture::None);
         assert_eq!(proof.controller_posture, ControllerPosture::Uncontrolled);
     }
 
     #[test]
     fn configured_capture_ready_rejects_a_slot_bound_to_another_route() {
-        let mut state = configured_scene_state(false, false);
+        let mut state = configured_scene_state(false);
         let capacity = state.presentation_capacity.as_ref().unwrap();
         let config = *capacity.config();
         let mut slot = capacity.slots()[0].clone();
@@ -1767,7 +1736,7 @@ mod tests {
 
     #[test]
     fn configured_frame_validation_rejects_geometry_drift() {
-        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut adapter = ConfiguredWindowSemanticAdapter::with_probe(
             repository,
             "episode-1",
@@ -1827,7 +1796,7 @@ mod tests {
 
     #[test]
     fn configured_unstaged_scene_restoration_is_an_authority_checked_noop() {
-        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut adapter = ConfiguredSceneStagingAdapter::new(repository.clone(), "episode-1");
 
         let (before_generation, recorded) = adapter.snapshot("browser-1", false).unwrap();
@@ -1848,7 +1817,7 @@ mod tests {
 
     #[test]
     fn configured_staging_snapshots_stages_and_restores_the_exact_slot() {
-        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let stager = FakeSceneStager::ready();
         let calls = stager.calls.clone();
         let mut adapter =
@@ -1886,7 +1855,7 @@ mod tests {
 
     #[test]
     fn configured_staging_refuses_to_rearrange_a_shared_display() {
-        let mut state = configured_scene_state(false, false);
+        let mut state = configured_scene_state(false);
         state
             .display_allocations
             .get_mut("display-1")
@@ -1915,7 +1884,7 @@ mod tests {
 
     #[test]
     fn unverified_native_restoration_quarantines_the_exact_slot() {
-        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut stager = FakeSceneStager::ready();
         stager.restore_failure = Some("restore did not converge".to_string());
         let mut adapter =
@@ -1938,7 +1907,7 @@ mod tests {
 
     #[test]
     fn configured_verification_rechecks_the_reserved_scene_generation() {
-        let repository = MemoryRepository::new(configured_scene_state(false, false));
+        let repository = MemoryRepository::new(configured_scene_state(false));
         let mut adapter = ConfiguredEpisodeVerificationAdapter::new(repository, "episode-1");
 
         let (receipt_id, scene_generation) = adapter.verify("browser-1").unwrap();

@@ -10,9 +10,6 @@ use super::daemon::{
     TrackedRequest,
 };
 use super::launch::browser_recovery_policy_config_from_env;
-use super::profile_lease::{
-    allow_duplicate_profile_lane_from_command, service_browser_health_counts_as_live,
-};
 use crate::native::browser::{
     should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
     WaitUntil,
@@ -53,7 +50,7 @@ use crate::native::service_model::{
     ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease, RemoteViewHandoff,
     RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle, ViewStream,
-    ViewStreamProvider, ViewerLease,
+    ViewStreamProvider,
 };
 use crate::native::service_renderer_crash::{
     correlate_renderer_crash, persist_renderer_crash_in_repository, renderer_crash_targets_context,
@@ -197,16 +194,11 @@ pub(crate) struct DaemonState {
     /// Launch-time shared-profile acquisition evidence to attach to the next
     /// command response that consumes the auto-launched tab.
     pub(crate) pending_shared_profile_acquisition: Option<Value>,
-    /// Present only while this daemon participates in a generation-bound
-    /// browser owner transfer. Browser effects then fail closed against the
-    /// locked service-state owner generation.
-    pub(crate) runtime_owner_binding: Option<crate::runtime_owner_transfer::RuntimeOwnerBinding>,
-    /// In-memory custody for a browser committed by the protected lease
-    /// authority. The capability is secret and is never projected to Service
-    /// State, command JSON, logs, or responses.
-    #[cfg(target_os = "linux")]
-    pub(crate) protected_browser_owner:
-        Option<agent_browser_lease_authority::ProtectedBrowserOwnerLease>,
+    /// True when the ordinary Browser Session Manager owns the browser
+    /// lifecycle and target attribution for this command state. Manager-owned
+    /// commands bypass the legacy runtime-owner registry and must never fall
+    /// back to the legacy auto-launch path.
+    pub(crate) browser_session_manager_owned: bool,
     /// Storage mutations made through agent-browser storage commands, keyed by origin.
     /// This preserves cross-origin storage for state saves even after navigation.
     pub(crate) tracked_origin_storage: HashMap<String, state::OriginStorage>,
@@ -268,9 +260,7 @@ impl DaemonState {
             browser_recovery_policy_config: browser_recovery_policy_config_from_env(),
             current_cancellation: None,
             pending_shared_profile_acquisition: None,
-            runtime_owner_binding: None,
-            #[cfg(target_os = "linux")]
-            protected_browser_owner: None,
+            browser_session_manager_owned: false,
             tracked_origin_storage: HashMap::new(),
         }
     }
@@ -1343,6 +1333,16 @@ pub(crate) fn managed_runtime_attach_target(
 pub(crate) fn can_attach_managed_runtime_for_launch(options: &LaunchOptions) -> bool {
     options.headless && !options.remote_headed
 }
+
+fn browser_health_counts_as_live(health: ServiceBrowserHealth) -> bool {
+    !matches!(
+        health,
+        ServiceBrowserHealth::NotStarted
+            | ServiceBrowserHealth::ProcessExited
+            | ServiceBrowserHealth::Closing
+            | ServiceBrowserHealth::Faulted
+    )
+}
 /// Resolve a compatible retained shared-profile browser. Complete service
 /// route hints constrain selection to that exact browser and owning session;
 /// they do not force a second profile launch.
@@ -1360,9 +1360,6 @@ pub(crate) fn shared_profile_attach_target_for_auto_launch(
     if requested_browser_id.is_some() != requested_session_name.is_some() {
         return None;
     }
-    if allow_duplicate_profile_lane_from_command(command) {
-        return None;
-    }
     let profile_id = metadata.profile_id.as_deref()?;
     let repository = LockedServiceStateRepository::default_json().ok()?;
     let service_state = repository.load_snapshot().ok()?;
@@ -1373,7 +1370,7 @@ pub(crate) fn shared_profile_attach_target_for_auto_launch(
         .browsers
         .values()
         .filter(|browser| browser.profile_id.as_deref() == Some(profile_id))
-        .filter(|browser| service_browser_health_counts_as_live(browser.health))
+        .filter(|browser| browser_health_counts_as_live(browser.health))
         .filter(|browser| {
             requested_browser_id
                 .as_deref()
@@ -1468,7 +1465,7 @@ pub(crate) fn retained_session_attach_target_for_auto_launch(
     let mut candidates = service_state
         .browsers
         .values()
-        .filter(|browser| service_browser_health_counts_as_live(browser.health))
+        .filter(|browser| browser_health_counts_as_live(browser.health))
         .filter(|browser| {
             expected_profile_id.is_none_or(|expected_profile_id| {
                 browser.profile_id.as_deref().map(str::trim) == Some(expected_profile_id)

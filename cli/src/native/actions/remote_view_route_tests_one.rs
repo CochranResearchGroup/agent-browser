@@ -88,7 +88,6 @@ use crate::native::service_model::{
     assert_service_trace_summary_record_contract, service_job_naming_warning_values,
     BrowserCapabilityRegistry, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     DisplayAllocation, ProfileSeedingHandoffState, RemoteViewRoute, RoutePoolEntry, ViewStream,
-    ViewerLease,
 };
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
@@ -126,7 +125,7 @@ fn unique_socket_dir(label: &str) -> PathBuf {
 }
 
 #[tokio::test]
-async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
+async fn test_remote_view_route_actions_mutate_service_state() {
     let guard = EnvGuard::new(&["HOME"]);
     let home = unique_socket_dir("remote-view-route-lease-home");
     fs::create_dir_all(&home).unwrap();
@@ -311,49 +310,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
         checked_out_slot.browser_id.as_deref(),
         Some("session:rdp-a")
     );
-    let viewer = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_request", "routeId" : "route-a",
-            "viewerId" : "viewer-a", "viewerName" : "Operator A", "openMode" : "tile"
-            }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(viewer["success"], true);
-    let viewer_lease_id = viewer["data"]["viewerLeaseId"]
-        .as_str()
-        .unwrap()
-        .to_string();
-    let heartbeat = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_heartbeat", "viewerLeaseId" :
-            viewer_lease_id, "expiresAt" : "2026-05-28T04:00:00Z" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(heartbeat["success"], true);
-    assert_eq!(heartbeat["data"]["status"], "viewer_heartbeat");
-    let controller = execute_command(
-        &json!(
-            { "action" : "service_controller_lease_takeover", "routeId" : "route-a",
-            "viewerLeaseId" : viewer_lease_id, "viewerId" : "viewer-a" }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(controller["success"], true);
-    assert_eq!(controller["data"]["controllerLeaseId"], viewer_lease_id);
-    let release_viewer = execute_command(
-        &json!(
-            { "action" : "service_viewer_lease_release", "viewerLeaseId" :
-            viewer_lease_id }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(release_viewer["success"], true);
     let release_route = execute_command(
         &json!(
             { "action" : "service_remote_view_route_release", "routeId" : "route-a" }
@@ -364,7 +320,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
     assert_eq!(release_route["success"], true);
     assert_eq!(release_route["data"]["status"], "released");
     assert_eq!(release_route["data"]["routeId"], "route-a");
-    assert!(release_route["data"]["releasedViewerLeaseIds"].is_array());
     assert_eq!(
         release_route["data"]["remoteViewRoute"]["lastProviderEvent"],
         "route_released"
@@ -398,26 +353,6 @@ async fn test_remote_view_route_and_lease_actions_mutate_service_state() {
             .and_then(Value::as_str),
         Some("ready")
     );
-    assert_eq!(
-        persisted.viewer_leases[&viewer_lease_id].state,
-        "disconnected"
-    );
-    assert!(persisted.events.iter().any(|event| {
-        event.kind == ServiceEventKind::ViewerConnected
-            && event.details.as_ref().unwrap()["viewerLeaseId"] == viewer_lease_id
-    }));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ControllerRequested));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ControllerGranted));
-    assert!(persisted
-        .events
-        .iter()
-        .any(|event| event.kind == ServiceEventKind::ViewerDisconnected));
     assert!(persisted
         .events
         .iter()
@@ -1297,23 +1232,11 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
                         external_url: Some("https://guac.example/#/client/route-c".to_string()),
                         provider_mode: "simultaneous_view".to_string(),
                         state: "ready".to_string(),
-                        viewer_lease_ids: vec!["viewer-c".to_string()],
                         readiness: Some(json!({ "state" : "ready" })),
                         ..RemoteViewRoute::default()
                     },
                 ),
             ]),
-            viewer_leases: BTreeMap::from([(
-                "viewer-c".to_string(),
-                ViewerLease {
-                    id: "viewer-c".to_string(),
-                    state: "observing".to_string(),
-                    route_id: Some("route-c".to_string()),
-                    browser_id: Some("session:rdp-c".to_string()),
-                    last_heartbeat_at: Some("2026-07-05T00:01:00Z".to_string()),
-                    ..ViewerLease::default()
-                },
-            )]),
             browsers: BTreeMap::from([
                 (
                     "session:rdp-a".to_string(),
@@ -1362,7 +1285,6 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
                             route_id: Some("route-c".to_string()),
                             display_allocation_id: Some("display-c".to_string()),
                             provider_mode: Some("simultaneous_view".to_string()),
-                            viewer_lease_ids: vec!["viewer-c".to_string()],
                             remote_readiness: Some(json!({ "state" :
                                 "ready", "displayContent" : { "state" :
                                 "browser_window_visible", "displayName" : ":23" } })),
@@ -1445,298 +1367,5 @@ async fn test_remote_view_route_switch_parks_occupied_route_when_no_route_availa
     assert_eq!(slots[0].lease_request_id, None);
     assert_eq!(slots[1].state, PresentationSlotState::Active);
     assert_eq!(slots[1].browser_id.as_deref(), Some("session:rdp-c"));
-    let _ = fs::remove_dir_all(&home);
-}
-#[tokio::test]
-async fn test_remote_view_open_dry_run_plans_route_bound_launch_without_existing_display() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("remote-view-open-dry-run-home");
-    fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store
-        .save(&ServiceState {
-            route_pool: BTreeMap::from([(
-                "pool-a".to_string(),
-                RoutePoolEntry {
-                    id: "pool-a".to_string(),
-                    route_id: "route-a".to_string(),
-                    frame_url: Some(
-                        "https://dashboard.example/guacamole/#/client/route-a".to_string(),
-                    ),
-                    external_url: Some("https://guac.example/#/client/route-a".to_string()),
-                    route_descriptor: Some(json!(
-                        { "localEmbedUrl" :
-                        "http://127.0.0.1:8092/guacamole/#/client/route-a",
-                        "dashboardEmbedUrl" :
-                        "https://dashboard.example/guacamole/#/client/route-a",
-                        "publicOperatorUrl" :
-                        "https://guac.example/#/client/route-a", "healthUrl" :
-                        "http://127.0.0.1:8092/guacamole/#/client/route-a",
-                        "externalUrl" : "https://guac.example/#/client/route-a" }
-                    )),
-                    target: json!(
-                        { "displayName" : ":31", "displayIsolation" :
-                        "shared_display", "routeUser" : "agent-browser-rdp-a",
-                        "displayAccess" : { "state" : "ready" } }
-                    ),
-                    provider_mode: "single_controller".to_string(),
-                    state: "available".to_string(),
-                    ..RoutePoolEntry::default()
-                },
-            )]),
-            ..ServiceState::default()
-        })
-        .unwrap();
-    let mut state = DaemonState::new();
-    state.session_id = "rdp-open-a".to_string();
-    let result = execute_command(
-        &json!(
-            { "action" : "remote_view_open", "routePoolEntryId" : "pool-a",
-            "provider" : "rdp_gateway", "runtimeProfile" : "stealthcdp-default",
-            "url" : "https://www.linkedin.com/", "dryRun" : true }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_eq!(result["data"]["status"], "planned");
-    assert_eq!(result["data"]["dryRun"], true);
-    assert_eq!(result["data"]["routeId"], "route-a");
-    assert_eq!(result["data"]["operatorVisible"]["state"], "not_checked");
-    assert_eq!(
-        result["data"]["operatorVisible"]["browserId"],
-        "session:rdp-open-a"
-    );
-    assert_eq!(
-        result["data"]["operatorVisible"]["sessionName"],
-        "rdp-open-a"
-    );
-    assert_eq!(result["data"]["operatorVisible"]["displayName"], ":31");
-    assert_eq!(result["data"]["routeBoundHandoff"]["state"], "planned");
-    assert_eq!(
-        result["data"]["routeBoundHandoff"]["profile"]["id"],
-        "stealthcdp-default"
-    );
-    assert_eq!(
-        result["data"]["routeBoundHandoff"]["browser"]["browserId"],
-        "session:rdp-open-a"
-    );
-    assert_eq!(
-        result["data"]["routeBoundHandoff"]["route"]["routeId"],
-        "route-a"
-    );
-    assert_eq!(
-        result["data"]["routeBoundHandoff"]["display"]["displayAllocationId"],
-        "remote-view-display:route-a"
-    );
-    assert_eq!(
-        result["data"]["routeBoundHandoff"]["operatorVisible"]["state"],
-        "not_checked"
-    );
-    assert_eq!(
-        result["data"]["displayAllocationId"],
-        "remote-view-display:route-a"
-    );
-    assert_eq!(
-        result["data"]["acquisitionPlan"]["mode"],
-        "strict_operator_open"
-    );
-    assert_eq!(
-        result["data"]["acquisitionPlan"]["selectedRoutePoolEntryId"],
-        "pool-a"
-    );
-    assert_eq!(
-        result["data"]["acquisitionPlan"]["selectedRouteId"],
-        "route-a"
-    );
-    assert!(result["data"]["acquisitionPlan"]["decisions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|decision| decision["step"] == "route_pool_entry"
-            && decision["reason"] == "available_or_explicit_route_pool_entry"));
-    assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":31");
-    assert_eq!(
-        result["data"]["launchCommand"]["browserHost"],
-        "remote_headed"
-    );
-    assert_eq!(
-        result["data"]["launchCommand"]["remoteHeadedDisplay"],
-        ":31"
-    );
-    assert_eq!(
-        result["data"]["launchCommand"]["displayIsolation"],
-        "shared_display"
-    );
-    assert!(result["data"]["launchCommand"]["provider"].is_null());
-    assert_eq!(
-        result["data"]["launchCommand"]["viewStreamProvider"],
-        "rdp_gateway"
-    );
-    assert_eq!(
-        result["data"]["launchCommand"]["routeDescriptor"]["dashboardEmbedUrl"],
-        "https://dashboard.example/guacamole/#/client/route-a"
-    );
-    assert_eq!(
-        result["data"]["tabCommand"]["url"],
-        "https://www.linkedin.com/"
-    );
-    assert_eq!(
-        result["data"]["checkoutCommand"]["displayAllocationId"],
-        "remote-view-display:route-a"
-    );
-    assert!(state.browser.is_none());
-    assert_eq!(
-        store.load().unwrap().route_pool["pool-a"].state,
-        "available"
-    );
-    let _ = fs::remove_dir_all(&home);
-}
-#[tokio::test]
-async fn test_remote_view_open_dry_run_accepts_inline_route_pool_entry_and_display() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("remote-view-open-inline-route-home");
-    fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store.save(&ServiceState::default()).unwrap();
-    let mut state = DaemonState::new();
-    state.session_id = "rdp-open-inline".to_string();
-    let result = execute_command(
-        &json!(
-            { "action" : "remote_view_open", "runtimeProfile" : "stealthcdp-default",
-            "url" : "https://www.linkedin.com/", "remoteHeadedDisplay" : ":10",
-            "displayIsolation" : "shared_display", "dryRun" : true, "routePoolEntry"
-            : { "id" : "guacamole-rdp-a", "routeId" : "guacamole:1", "connectionId" :
-            "1", "connectionName" : "Agent Browser RDP Existing User Route A",
-            "frameUrl" : "http://127.0.0.1:8092/guacamole/#/client/route-a",
-            "externalUrl" :
-            "https://agent-browser.example/guacamole/#/client/route-a",
-            "routeDescriptor" : { "dashboardEmbedUrl" :
-            "http://127.0.0.1:8092/guacamole/#/client/route-a", "publicOperatorUrl" :
-            "https://agent-browser.example/guacamole/#/client/route-a" },
-            "providerMode" : "simultaneous_view", "readiness" : { "state" : "ready"
-            }, "target" : { "hostname" : "host.docker.internal", "port" : "3389" } }
-            }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true);
-    assert_eq!(result["data"]["status"], "planned");
-    assert_eq!(result["data"]["routePoolEntryId"], "guacamole-rdp-a");
-    assert_eq!(result["data"]["operatorVisible"]["state"], "not_checked");
-    assert_eq!(result["data"]["operatorVisible"]["routeId"], "guacamole:1");
-    assert_eq!(result["data"]["operatorVisible"]["displayName"], ":10");
-    assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":10");
-    assert_eq!(
-        result["data"]["routeBinding"]["displayIsolation"],
-        "shared_display"
-    );
-    assert_eq!(
-        result["data"]["launchCommand"]["remoteHeadedDisplay"],
-        ":10"
-    );
-    assert!(store.load().unwrap().route_pool.is_empty());
-    let _ = fs::remove_dir_all(&home);
-}
-#[tokio::test]
-async fn test_remote_view_open_dry_run_reuses_checked_out_same_route() {
-    let guard = EnvGuard::new(&["HOME"]);
-    let home = unique_socket_dir("remote-view-open-reuse-route-home");
-    fs::create_dir_all(&home).unwrap();
-    guard.set("HOME", home.to_str().unwrap());
-    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
-    store
-        .save(&ServiceState {
-            route_pool: BTreeMap::from([(
-                "guacamole-rdp-a".to_string(),
-                RoutePoolEntry {
-                    id: "guacamole-rdp-a".to_string(),
-                    route_id: "guacamole:1".to_string(),
-                    frame_url: Some("http://127.0.0.1:8092/guacamole/#/client/route-a".to_string()),
-                    external_url: Some(
-                        "https://agent-browser.example/guacamole/#/client/route-a".to_string(),
-                    ),
-                    route_descriptor: Some(json!(
-                        { "dashboardEmbedUrl" :
-                        "http://127.0.0.1:8092/guacamole/#/client/route-a",
-                        "publicOperatorUrl" :
-                        "https://agent-browser.example/guacamole/#/client/route-a" }
-                    )),
-                    target: json!(
-                        { "displayName" : ":10", "displayIsolation" :
-                        "shared_display" }
-                    ),
-                    provider_mode: "simultaneous_view".to_string(),
-                    state: "checked_out".to_string(),
-                    current_route_allocation_id: Some("guacamole:1".to_string()),
-                    readiness: Some(json!({ "state" : "ready" })),
-                    ..RoutePoolEntry::default()
-                },
-            )]),
-            remote_view_routes: BTreeMap::from([(
-                "guacamole:1".to_string(),
-                RemoteViewRoute {
-                    id: "guacamole:1".to_string(),
-                    display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
-                    browser_id: Some("session:default".to_string()),
-                    session_id: Some("default".to_string()),
-                    state: "ready".to_string(),
-                    ..RemoteViewRoute::default()
-                },
-            )]),
-            display_allocations: BTreeMap::from([(
-                "remote-view-display:guacamole-1".to_string(),
-                DisplayAllocation {
-                    id: "remote-view-display:guacamole-1".to_string(),
-                    display_name: Some(":10".to_string()),
-                    display_isolation: "shared_display".to_string(),
-                    owner_browser_id: Some("session:default".to_string()),
-                    owner_session_id: Some("default".to_string()),
-                    state: "ready".to_string(),
-                    ..DisplayAllocation::default()
-                },
-            )]),
-            browsers: BTreeMap::from([(
-                "session:default".to_string(),
-                BrowserProcess {
-                    id: "session:default".to_string(),
-                    display_allocation_id: Some("remote-view-display:guacamole-1".to_string()),
-                    ..BrowserProcess::default()
-                },
-            )]),
-            ..ServiceState::default()
-        })
-        .unwrap();
-    let mut state = DaemonState::new();
-    state.session_id = "default".to_string();
-    let result = execute_command(
-        &json!(
-            { "action" : "remote_view_open", "routePoolEntryId" : "guacamole-rdp-a",
-            "runtimeProfile" : "stealthcdp-default", "url" :
-            "https://www.linkedin.com/", "dryRun" : true }
-        ),
-        &mut state,
-    )
-    .await;
-    assert_eq!(result["success"], true, "{}", result);
-    assert_eq!(result["data"]["routeId"], "guacamole:1");
-    assert_eq!(result["data"]["routeBinding"]["launchDisplayName"], ":10");
-    assert_eq!(
-        result["data"]["displayAllocationId"],
-        "remote-view-display:guacamole-1"
-    );
-    assert_eq!(
-        result["data"]["acquisitionPlan"]["selectedRoutePoolEntryId"],
-        "guacamole-rdp-a"
-    );
-    assert!(result["data"]["acquisitionPlan"]["decisions"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|decision| decision["step"] == "route_pool_entry"
-            && decision["reason"] == "same_owner_checked_out_route"));
     let _ = fs::remove_dir_all(&home);
 }

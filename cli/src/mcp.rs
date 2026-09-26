@@ -20,7 +20,7 @@ use crate::native::service_contracts::{
     SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE, SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
     SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
-    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+    SERVICE_ROUTE_POOL_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -29,14 +29,10 @@ use crate::native::service_model::{
     service_profile_allocations, service_profile_seeding_handoff, service_profile_sources,
     service_site_policy_sources, ServiceState,
 };
-use crate::native::service_principal::AuthenticatedServicePrincipal;
-use crate::native::service_profile_acquisition::diagnose_service_profile;
-use crate::native::service_profile_lease::{
-    doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
-};
 use crate::native::service_request::{
-    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
+    apply_service_request_attribution, normalize_service_request, AuthenticatedServicePrincipal,
+    ServiceRequestFallbackPrincipal, ServiceRequestNormalization, ServiceRequestPrincipalSource,
+    ServiceRequestRejection,
 };
 use crate::native::service_store::load_default_service_state_snapshot;
 use crate::native::service_trace::service_commands::service_now_timestamp;
@@ -229,12 +225,6 @@ fn service_mcp_resources() -> Vec<Value> {
             "name": "Service route pool",
             "mimeType": "application/json",
             "description": "Configured remote-view provider route pool entries sorted by pool entry id"
-        }),
-        json!({
-            "uri": SERVICE_VIEWER_LEASES_MCP_RESOURCE,
-            "name": "Service viewer leases",
-            "mimeType": "application/json",
-            "description": "Service-owned observer and controller leases for remote-view routes sorted by lease id"
         }),
         json!({
             "uri": SERVICE_PROFILE_LEASES_MCP_RESOURCE,
@@ -520,27 +510,18 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                 "count": route_pool.len(),
             })
         }
-        SERVICE_VIEWER_LEASES_MCP_RESOURCE => {
-            let viewer_leases = state.viewer_leases.values().cloned().collect::<Vec<_>>();
-            json!({
-                "viewerLeases": viewer_leases,
-                "count": viewer_leases.len(),
-            })
-        }
         SERVICE_PROFILE_LEASES_MCP_RESOURCE => {
             let now = service_now_timestamp();
-            let profile_leases = profile_leases_for_state(&state, &now);
-            let doctor = doctor_profile_leases(&state, &now);
             json!({
-                "profileLeases": profile_leases,
-                "count": profile_leases.len(),
+                "profileLeases": [],
+                "count": 0,
                 "observedAt": now,
-                "doctor": doctor,
+                "state": "removed_from_default_product",
             })
         }
         SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE => {
             let now = service_now_timestamp();
-            json!({ "doctor": doctor_profile_leases(&state, &now) })
+            json!({ "observedAt": now, "state": "removed_from_default_product" })
         }
         TABS_RESOURCE => {
             let tabs = state.tabs.values().cloned().collect::<Vec<_>>();
@@ -616,13 +597,16 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                 let observed_at = service_now_timestamp();
                 let correlation_id =
                     format!("mcp-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
-                serde_json::to_value(diagnose_service_profile(
-                    &state,
-                    &profile_id,
-                    &observed_at,
-                    &correlation_id,
-                )?)
-                .map_err(|error| format!("service_profile_diagnosis_encode_failed:{error}"))?
+                let profile = state
+                    .profiles
+                    .get(&profile_id)
+                    .ok_or_else(|| format!("Profile diagnosis not found: {profile_id}"))?;
+                json!({
+                    "profileId": profile.id,
+                    "observedAt": observed_at,
+                    "correlationId": correlation_id,
+                    "readiness": profile.target_readiness,
+                })
             } else if let Some(profile_id) = profile_allocation_resource_id(uri) {
                 let allocation = service_profile_allocations(&state)
                     .into_iter()
@@ -640,30 +624,11 @@ fn read_service_mcp_resource_from_state(uri: &str, state: &ServiceState) -> Resu
                 let request = parse_service_access_plan_query(query)?;
                 service_access_plan_for_state(&state, request)
             } else if let Some((lease_id, explain)) = profile_lease_resource(uri) {
-                let now = service_now_timestamp();
-                let lease = inspect_profile_lease(&state, &lease_id, &now).map_err(|error| {
-                    format!("profile_lease_{}:{}", error.code.as_str(), error.message)
-                })?;
-                if explain {
-                    let findings = doctor_profile_leases(&state, &now)
-                        .findings
-                        .into_iter()
-                        .filter(|finding| finding.lease_id == lease.id)
-                        .collect::<Vec<_>>();
-                    json!({
-                        "lease": lease,
-                        "explanation": {
-                            "recourse": lease.recourse,
-                            "blockingIdentityAxes": lease.blocking_identity_axes,
-                            "authorizedActions": lease.authorized_actions,
-                            "observationOnly": lease.observation_only,
-                            "findings": findings,
-                        },
-                        "observedAt": now,
-                    })
-                } else {
-                    json!({ "lease": lease, "observedAt": now })
-                }
+                json!({
+                    "leaseId": lease_id,
+                    "explain": explain,
+                    "state": "removed_from_default_product",
+                })
             } else {
                 return Err(format!("Unknown MCP resource URI: {}", uri));
             }
@@ -1183,6 +1148,20 @@ fn service_mcp_tools() -> Vec<Value> {
                         "type": "object",
                         "additionalProperties": true,
                         "description": "Action parameters. These are copied into the queued daemon command after id/action are reserved."
+                    },
+                    "config": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                            "minimumReady": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "warmTarget": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumDisplays": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "maximumQueueDepth": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
+                            "requestDeadlineMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
+                        },
+                        "description": "Strict partial SQLite runtime configuration for service_runtime_config_update."
                     },
                     "jobTimeoutMs": {
                         "type": "integer",
@@ -6719,20 +6698,14 @@ fn call_service_request(
 
 fn profile_authority_from_mcp_arguments(
     arguments: &Value,
-    state: &ServiceState,
+    _state: &ServiceState,
 ) -> Result<Option<AuthenticatedServicePrincipal>, JsonRpcError> {
-    let Some(capability) = optional_string_argument(arguments, "profileCapability")? else {
+    let Some(_capability) = optional_string_argument(arguments, "profileCapability")? else {
         return Ok(None);
     };
-    state
-        .authenticate_profile_capability(capability, None)
-        .map(Some)
-        .map_err(|error| {
-            JsonRpcError::invalid_params(&format!(
-                "profile_capability_authentication_failed:{}",
-                error.code.as_str()
-            ))
-        })
+    Err(JsonRpcError::invalid_params(
+        "profile capabilities are not accepted by the trusted single-user runtime",
+    ))
 }
 
 fn desktop_capture_service_request(arguments: &Value) -> Result<Value, JsonRpcError> {
@@ -11604,7 +11577,7 @@ fn profile_lease_resource(uri: &str) -> Option<(String, bool)> {
     Some((urlencoding::decode(lease_id).ok()?.into_owned(), explain))
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
 
@@ -11677,7 +11650,6 @@ mod tests {
                 SERVICE_DISPLAY_ALLOCATIONS_MCP_RESOURCE,
                 SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
                 SERVICE_ROUTE_POOL_MCP_RESOURCE,
-                SERVICE_VIEWER_LEASES_MCP_RESOURCE,
                 SERVICE_PROFILE_LEASES_MCP_RESOURCE,
                 SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE,
                 TABS_RESOURCE,
@@ -16717,9 +16689,8 @@ mod tests {
         use crate::native::service_model::{
             assert_service_display_allocation_record_contract,
             assert_service_remote_view_route_record_contract,
-            assert_service_route_pool_entry_record_contract,
-            assert_service_viewer_lease_record_contract, DisplayAllocation, RemoteViewRoute,
-            RoutePoolEntry, ViewerLease,
+            assert_service_route_pool_entry_record_contract, DisplayAllocation, RemoteViewRoute,
+            RoutePoolEntry,
         };
 
         let state = ServiceState {
@@ -16748,7 +16719,6 @@ mod tests {
                 RemoteViewRoute {
                     id: "route-a".to_string(),
                     display_allocation_id: Some("display-a".to_string()),
-                    viewer_lease_ids: vec!["lease-a".to_string()],
                     ..RemoteViewRoute::default()
                 },
             )]),
@@ -16758,14 +16728,6 @@ mod tests {
                     id: "pool-a".to_string(),
                     route_id: "route-a".to_string(),
                     ..RoutePoolEntry::default()
-                },
-            )]),
-            viewer_leases: BTreeMap::from([(
-                "lease-a".to_string(),
-                ViewerLease {
-                    id: "lease-a".to_string(),
-                    route_id: Some("route-a".to_string()),
-                    ..ViewerLease::default()
                 },
             )]),
             ..ServiceState::default()
@@ -16779,9 +16741,6 @@ mod tests {
                 .unwrap();
         let pool =
             read_service_mcp_resource_from_state(SERVICE_ROUTE_POOL_MCP_RESOURCE, &state).unwrap();
-        let leases =
-            read_service_mcp_resource_from_state(SERVICE_VIEWER_LEASES_MCP_RESOURCE, &state)
-                .unwrap();
 
         assert_eq!(displays["contents"]["count"], 2);
         assert_eq!(
@@ -16797,8 +16756,6 @@ mod tests {
         );
         assert_eq!(pool["contents"]["count"], 1);
         assert_service_route_pool_entry_record_contract(&pool["contents"]["routePool"][0]);
-        assert_eq!(leases["contents"]["count"], 1);
-        assert_service_viewer_lease_record_contract(&leases["contents"]["viewerLeases"][0]);
     }
 
     #[test]

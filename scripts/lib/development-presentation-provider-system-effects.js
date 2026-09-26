@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   accessSync,
   constants as fsConstants,
@@ -18,6 +19,7 @@ import {
 } from './development-presentation-provider.js';
 import {
   probeDevelopmentPresentationProvider,
+  readDevelopmentRouteKeeperConnections,
   renderDevelopmentPresentationProviderBundle,
 } from './development-presentation-provider-deployment.js';
 import {
@@ -47,6 +49,11 @@ export function developmentPresentationProviderSystemPreflight({
     'external-ingress',
     descriptor.externalIngress.configured === true,
     descriptor.externalIngress,
+  ));
+  checks.push(check(
+    'route-keeper-runtime',
+    false,
+    'provider mutation is deferred until the runtime-host route keeper is integrated',
   ));
   const docker = run('docker', ['info', '--format', '{{.ServerVersion}}']);
   checks.push(check('docker', docker.status === 0, docker.status === 0 ? docker.stdout.trim() : commandError(docker)));
@@ -176,6 +183,7 @@ export function createDevelopmentPresentationProviderSystemEffects({
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
   return {
+    routeKeeperRuntimeReady: false,
     snapshotProduction: () => namespaced ? {
       production: productionSnapshot(env),
       defaultDevelopment: defaultDevelopmentSnapshot(env),
@@ -266,6 +274,62 @@ export function createDevelopmentPresentationProviderSystemEffects({
         'CHECKPOINT;',
       ], {}, 'checkpoint development Guacamole database');
     },
+    readRouteKeeperConnections(descriptor) {
+      return readDevelopmentRouteKeeperConnections(descriptor, { run });
+    },
+    publishRouteKeeperConnectionCatalog(publication, descriptor) {
+      const canonicalBindings = Object.fromEntries(
+        [...publication.bindings]
+          .sort((left, right) => left.slotId.localeCompare(right.slotId))
+          .map((binding) => [binding.slotId, binding]),
+      );
+      const expectedDigest = createHash('sha256')
+        .update(JSON.stringify({
+          providerBase: publication.providerBase,
+          ...(publication.publicOperatorUrl == null
+            ? {}
+            : { publicOperatorUrl: publication.publicOperatorUrl }),
+          bindings: canonicalBindings,
+        }))
+        .digest('hex');
+      const command = join(
+        descriptor.userHome,
+        '.local',
+        'bin',
+        `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`,
+      );
+      const result = runRequired(
+        run,
+        command,
+        ['--internal-route-keeper-connection-catalog-publish'],
+        {
+          input: JSON.stringify(publication),
+          env: {
+            ...env,
+            HOME: descriptor.pseudoHome,
+            AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+          },
+          timeout: 30000,
+        },
+        'publish development route-keeper connection catalog',
+      );
+      let receipt;
+      try {
+        receipt = JSON.parse(result.stdout);
+      } catch {
+        throw new Error('Development route-keeper catalog publisher returned invalid JSON');
+      }
+      if (
+        receipt.schemaVersion !==
+          'agent-browser.route-keeper-connection-catalog-publication-receipt.v1' ||
+        !['published', 'unchanged'].includes(receipt.outcome) ||
+        receipt.catalogDigest !== expectedDigest ||
+        receipt.bindingCount !== descriptor.hardMaxSlots
+      ) {
+        throw new Error('Development route-keeper catalog publisher returned an invalid receipt');
+      }
+      return receipt;
+    },
     startProvider(descriptor) {
       composeRequired(run, descriptor, [
         'up',
@@ -352,50 +416,8 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         throw new Error('development Guacamole operator route grant count drifted');
       }
     },
-    openWarmRoutes(descriptor) {
-      const observation = probeDevelopmentPresentationProvider(descriptor, { run });
-      const databaseRoutes = new Map(
-        observation.database.routes.map((route) => [route.connectionName, route]),
-      );
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const routes = descriptor.routes.slice(0, descriptor.warmSlots).map((route) => {
-        const connectionId = databaseRoutes.get(route.connectionName)?.connectionId;
-        if (!connectionId) throw new Error(`Development Guacamole connection is missing: ${route.routeId}`);
-        const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-        const frameUrl = `${baseUrl}#/client/${clientId}`;
-        return {
-          id: route.routeId,
-          routeId: `guacamole:${connectionId}`,
-          connectionId,
-          connectionName: route.connectionName,
-          frameUrl,
-          externalUrl: frameUrl,
-          viewerSession: route.viewerSession,
-          viewerProfile: route.viewerProfile,
-          target: {
-            routeUser: route.user,
-            displayReservationId: route.displayReservationId,
-          },
-        };
-      });
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(routes),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, 'open development warm route sessions');
+    openWarmRoutes() {
+      throw new Error('development hidden-viewer bootstrap removed; route-keeper runtime required');
     },
     observe: (descriptor) => probeDevelopmentPresentationProvider(descriptor, { run }),
     grantDisplayAccess(display) {
@@ -448,10 +470,6 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const base = createDevelopmentPresentationProviderSystemEffects({ ...options, env, run });
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
-  const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
-  const reclaimTimeoutMs = Number(options.reclaimTimeoutMs ??
-    env.AGENT_BROWSER_DEV_PRESENTATION_RECLAIM_TIMEOUT_MS ?? 5000);
-  const reclaimPollMs = Number(options.reclaimPollMs ?? 100);
   const pressureSnapshot = options.pressureSnapshot || sampleDevelopmentPresentationPressure;
   const reclaimCapability = () => {
     const result = run(helper, ['status-json']);
@@ -469,12 +487,14 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       return { ready: false, reason: 'helper_status_json_invalid', helper };
     }
     const termination = status.routeSessionTermination;
-    const ready = termination?.supported === true &&
-      termination?.exactRouteUser === true &&
-      termination?.idempotentWhenAbsent === true;
+    const exactHelper = termination?.supported === true &&
+      termination?.exactCgroupV2Identity === true &&
+      termination?.retainedDirectoryIdentity === true &&
+      termination?.usesCgroupKill === true &&
+      termination?.broadUserTermination === false;
     return {
-      ready,
-      reason: ready ? null : 'helper_contract_missing',
+      ready: false,
+      reason: exactHelper ? 'route_keeper_stop_integration_required' : 'helper_contract_missing',
       helper,
       helperVersion: status.helperVersion || null,
     };
@@ -485,46 +505,8 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
     pressureAdmission(descriptor) {
       return evaluateDevelopmentPresentationPressure(descriptor, pressureSnapshot());
     },
-    provisionRoute(route, descriptor) {
-      const observation = base.observe(descriptor);
-      const connectionId = observation.database.routes
-        .find((candidate) => candidate.connectionName === route.connectionName)?.connectionId;
-      if (!connectionId) throw new Error(`Development route connection is missing: ${route.routeId}`);
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-      const inventory = [{
-        id: route.routeId,
-        routeId: `guacamole:${connectionId}`,
-        connectionId,
-        connectionName: route.connectionName,
-        frameUrl: `${baseUrl}#/client/${clientId}`,
-        externalUrl: `${baseUrl}#/client/${clientId}`,
-        viewerSession: route.viewerSession,
-        viewerProfile: route.viewerProfile,
-        target: {
-          routeUser: route.user,
-          displayReservationId: route.displayReservationId,
-        },
-      }];
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-        '--allow-single-route',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(inventory),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, `provision ${route.routeId}`);
+    provisionRoute() {
+      throw new Error('development hidden-viewer scale-out removed; route-keeper runtime required');
     },
     cooldownStatus(_route, descriptor) {
       const requiredMs = Number(env.AGENT_BROWSER_DEV_PRESENTATION_COOLDOWN_MS || 5000);
@@ -557,42 +539,9 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       }
       return exactRouteReferences(status?.data?.service_state || status?.data?.serviceState || {}, route);
     },
-    reclaimRoute(route, descriptor) {
+    reclaimRoute() {
       const capability = reclaimCapability();
-      if (capability.ready !== true) {
-        throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
-      }
-      const command = join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`);
-      const close = run(command, [
-        '--json',
-        '--session', route.viewerSession,
-        '--runtime-profile', route.viewerProfile,
-        'close',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-        },
-        timeout: 30000,
-      });
-      if (close.error || (close.status !== 0 && !/not found|no browser|not running/i.test(`${close.stdout}${close.stderr}`))) {
-        throw new Error(`close ${route.viewerSession} failed: ${commandError(close) || close.status}`);
-      }
-      const termination = run('sudo', [
-        '-n', helper, 'terminate-rdp-route-session', '--user', route.user,
-      ]);
-      try {
-        waitFor(run, () => {
-          const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
-          return processes.status !== 0 || !processes.stdout.trim();
-        }, reclaimTimeoutMs, `reclaim ${route.routeId}`, reclaimPollMs);
-      } catch {
-        if (termination.error || termination.status !== 0) {
-          throw new Error(`terminate ${route.routeId} failed: ${commandError(termination) || termination.status}`);
-        }
-        throw new Error(`Development route processes remain after reclaim: ${route.routeId}`);
-      }
+      throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
     },
   };
 }
@@ -606,18 +555,12 @@ function exactRouteReferences(serviceState, route) {
   if (!remoteRoute || !display || !pool) ambiguities.push('service_binding_missing');
   if (remoteRoute?.browserId) blockers.push(`browser:${remoteRoute.browserId}`);
   if (remoteRoute?.sessionId) blockers.push(`session:${remoteRoute.sessionId}`);
-  for (const leaseId of remoteRoute?.viewerLeaseIds || []) blockers.push(`viewer_lease:${leaseId}`);
   if (remoteRoute?.controllerLeaseId) blockers.push(`controller_lease:${remoteRoute.controllerLeaseId}`);
   if (display?.ownerBrowserId) blockers.push(`display_browser:${display.ownerBrowserId}`);
   if (display?.ownerSessionId) blockers.push(`display_session:${display.ownerSessionId}`);
   for (const [id, lease] of Object.entries(serviceState.remoteViewAcquisitionLeases || {})) {
     if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
       blockers.push(`acquisition_lease:${id}`);
-    }
-  }
-  for (const [id, lease] of Object.entries(serviceState.viewerLeases || {})) {
-    if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
-      blockers.push(`viewer_lease:${id}`);
     }
   }
   for (const [id, handoff] of Object.entries(serviceState.remoteViewHandoffs || {})) {

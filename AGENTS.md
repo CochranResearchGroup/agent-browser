@@ -527,7 +527,14 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 ## Policy Loading Contract
 
 - `AGENTS.md` is a routing surface, not a one-time pointer.
-- Re-read the relevant policy files under `docs/dev/policies/` at the start of any non-trivial turn.
+- When a task has a checked-in profile under `docs/dev/policy-capsules/`, run
+  its deterministic `--check` command and use the generated capsule as the
+  operative admission read. Reuse it while its policy hashes and listed
+  re-read triggers remain unchanged. Read the canonical policy files when the
+  check fails, a trigger fires, or the capsule does not resolve an ambiguity.
+  A capsule is derived guidance and never overrides canonical policy.
+- When no current capsule applies, re-read the relevant policy files under
+  `docs/dev/policies/` at the start of any non-trivial turn.
 - Re-read the relevant policy files when task scope changes mid-session.
 - When behavior is ambiguous, prefer re-reading policy over improvising from stale assumptions.
 

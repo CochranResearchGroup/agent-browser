@@ -33,7 +33,6 @@ import {
   planAutomaticWorkspaceConnection,
   resolveWorkspaceViewSources,
   workspaceConnectionReadinessGeneration,
-  workspaceViewerRouteIsAttached,
   type WorkspaceViewSource,
 } from "@/lib/workspace-view-connection";
 import { activePortAtom, activeSessionNameAtom, sessionsAtom } from "@/store/sessions";
@@ -139,9 +138,7 @@ type ServiceRequestAction =
   | "service_remote_view_browser_reattach"
   | "service_remote_view_route_switch"
   | "service_remote_view_route_checkout"
-  | "service_viewer_lease_request"
-  | "service_viewer_lease_release"
-  | "service_controller_lease_takeover";
+  ;
 
 type WorkspaceViewportSelection = {
   mode: WorkspaceViewportMode;
@@ -1346,9 +1343,6 @@ export function WorkspaceRemoteViewport({
   const [error, setError] = useState("");
   const [focusMessage, setFocusMessage] = useState("");
   const [focusPending, setFocusPending] = useState(false);
-  const [operatorController, setOperatorController] = useState<{
-    browserId: string; routeId: string; leaseId: string;
-  } | null>(null);
   const [takeoverPending, setTakeoverPending] = useState(false);
   const [recoveryPending, setRecoveryPending] = useState<string | null>(null);
   const [foreignBorrow, setForeignBorrow] = useState<ForeignCdpBorrowStatus | null>(null);
@@ -1975,12 +1969,13 @@ export function WorkspaceRemoteViewport({
     if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream) return;
     if (!browser || !stream || !canControl) return;
     const operatorFocus = stream.provider === "rdp_gateway";
-    if (operatorFocus && (!operatorController
-      || operatorController.browserId !== browser.id
-      || operatorController.routeId !== stream.routeId)) return;
+    if (operatorFocus) {
+      setFocusMessage("Remote desktop control awaits authenticated live-viewer authority.");
+      return;
+    }
     const tabIndex = tabSelection.tabIndex;
     const targetId = tabSelection.tab?.targetId?.trim();
-    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? "", operatorController?.leaseId ?? ""].join("|");
+    const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? ""].join("|");
     if (focusedKeyRef.current === focusKey) return;
     focusedKeyRef.current = focusKey;
     const browserForFocus = browser;
@@ -2011,11 +2006,7 @@ export function WorkspaceRemoteViewport({
             serviceName: "agent-browser-dashboard",
             agentName: activeSessionName || "operator",
             taskName: "workspace-viewport-control",
-            params: { ...params, ...(operatorFocus && operatorController ? {
-              operatorFocus: true,
-              routeId: operatorController.routeId,
-              controllerLeaseId: operatorController.leaseId,
-            } : {}) },
+            params,
             jobTimeoutMs: 5000,
           }),
         });
@@ -2037,7 +2028,7 @@ export function WorkspaceRemoteViewport({
     }
 
     void queueFocus();
-  }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
+  }, [activePort, activeSessionName, browser, canControl, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {
     if (!frameUrl || !canRenderFrame || !canControl) return;
@@ -2154,11 +2145,6 @@ export function WorkspaceRemoteViewport({
     [snapshotStream, stream, streamChoices],
   );
   const workspaceRouteId = workspaceViewerRoute?.routeId?.trim() || null;
-  const workspaceViewerLeaseIds = useMemo(() => Array.from(new Set([
-    ...(workspaceViewerRoute?.viewerLeaseIds ?? []),
-    ...(workspaceViewerRoute?.controllerLeaseId ? [workspaceViewerRoute.controllerLeaseId] : []),
-  ].filter((id): id is string => Boolean(id?.trim())))), [workspaceViewerRoute?.controllerLeaseId, workspaceViewerRoute?.viewerLeaseIds]);
-  const workspaceViewerId = activeSessionName || "operator";
   const routeRecoveryAction = selectedProjection?.readiness.recoveryAction ?? null;
   const connectionReadinessGeneration = workspaceConnectionReadinessGeneration(
     workspaceViewerRoute ?? stream,
@@ -2173,8 +2159,6 @@ export function WorkspaceRemoteViewport({
     routeRecoveryAction,
     readinessGeneration: connectionReadinessGeneration,
     viewerRoute: workspaceViewerRoute,
-    viewerRouteReady: workspaceViewerRouteIsAttached(workspaceViewerRoute),
-    viewerLeaseIds: workspaceViewerLeaseIds,
     attemptedActionKeys: automaticAttemptKeys,
   });
   const connectionInProgress = Boolean(recoveryPending)
@@ -2233,93 +2217,6 @@ export function WorkspaceRemoteViewport({
     }
   }, [postWorkspaceRecoveryRequest, projection.candidates, refreshProjection, viewportSelection?.selection]);
 
-  const reconnectWorkspaceViewer = useCallback(async () => {
-    if (!browser || !workspaceRouteId) return;
-    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
-    setRecoveryPending("viewer-reconnect");
-    setFocusMessage("Requesting a fresh observer lease for this workspace route.");
-    try {
-      await postWorkspaceRecoveryRequest("service_viewer_lease_request", "workspace-viewport-viewer-reconnect", {
-        routeId: workspaceRouteId,
-        browserId: browser.id,
-        ...(sessionName ? { sessionName } : {}),
-        viewerId: workspaceViewerId,
-        viewerName: workspaceViewerId,
-        viewerRole: "observer",
-        openMode: "embedded",
-      });
-      streamFrameRetryRef.current = 0;
-      setFrameIssue(null);
-      // Observer admission does not change the desktop transport. Remounting
-      // here can disconnect an in-flight primary or discard a redeemed share
-      // key while its lease request is completing.
-      setFocusMessage("Reconnected the service-owned observer lease.");
-      void refreshProjection();
-    } catch (err) {
-      setFocusMessage(err instanceof Error ? `Viewer reconnect failed: ${err.message}` : "Viewer reconnect failed.");
-    } finally {
-      setRecoveryPending(null);
-    }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
-
-  const takeoverWorkspaceController = useCallback(async () => {
-    if (!browser || !workspaceRouteId) return;
-    const sessionName = daemonSessionNameForBrowser(browser, viewportSelection?.selection);
-    setRecoveryPending("controller-takeover");
-    setFrameIssue(null);
-    setFocusMessage("Requesting explicit controller takeover for this workspace route.");
-    try {
-      const response = await postWorkspaceRecoveryRequest("service_controller_lease_takeover", "workspace-viewport-controller-takeover", {
-        routeId: workspaceRouteId,
-        browserId: browser.id,
-        ...(sessionName ? { sessionName } : {}),
-        viewerId: workspaceViewerId,
-        viewerName: workspaceViewerId,
-        viewerRole: "controller",
-        openMode: "embedded",
-      });
-      const lease = (response.data as { viewerLease?: { id?: string; state?: string; viewerRole?: string } } | undefined)?.viewerLease;
-      if (!lease?.id || lease.state !== "controlling" || lease.viewerRole !== "controller") {
-        throw new Error("Controller takeover did not return a current controlling lease.");
-      }
-      setOperatorController({ browserId: browser.id, routeId: workspaceRouteId, leaseId: lease.id });
-      streamFrameRetryRef.current = 0;
-      setStreamRefreshNonce(Date.now());
-      setFocusMessage("Controller lease takeover was accepted and the viewport is reconnecting.");
-      void refreshProjection();
-    } catch (err) {
-      setFocusMessage(err instanceof Error ? `Controller takeover failed: ${err.message}` : "Controller takeover failed.");
-    } finally {
-      setRecoveryPending(null);
-    }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceRouteId, workspaceViewerId]);
-
-  const releaseWorkspaceViewers = useCallback(async () => {
-    if (workspaceViewerLeaseIds.length === 0) {
-      setFocusMessage("No retained viewer leases are attached to this workspace route.");
-      return;
-    }
-    setRecoveryPending("viewer-release");
-    setFocusMessage(`Releasing ${workspaceViewerLeaseIds.length} retained viewer lease${workspaceViewerLeaseIds.length === 1 ? "" : "s"}.`);
-    const sessionName = browser ? daemonSessionNameForBrowser(browser, viewportSelection?.selection) : null;
-    try {
-      for (const viewerLeaseId of workspaceViewerLeaseIds) {
-        await postWorkspaceRecoveryRequest("service_viewer_lease_release", "workspace-viewport-viewer-release", {
-          viewerLeaseId,
-          ...(sessionName ? { sessionName } : {}),
-        });
-      }
-      setFrameIssue(null);
-      setStreamRefreshNonce(Date.now());
-      setFocusMessage("Released retained viewer leases for this workspace route.");
-      void refreshProjection();
-    } catch (err) {
-      setFocusMessage(err instanceof Error ? `Viewer release failed: ${err.message}` : "Viewer release failed.");
-    } finally {
-      setRecoveryPending(null);
-    }
-  }, [browser, postWorkspaceRecoveryRequest, refreshProjection, viewportSelection?.selection, workspaceViewerLeaseIds]);
-
   const retryWorkspaceConnection = useCallback(async () => {
     if (recoveryPending) return;
     setRecoveryPending("viewer-reconnect");
@@ -2364,13 +2261,12 @@ export function WorkspaceRemoteViewport({
       void recoverWorkspaceBrowser(browser, workspaceViewerRoute ?? stream);
       return;
     }
-    void reconnectWorkspaceViewer();
+    setConnectionRetryNonce((current) => current + 1);
   }, [
     browser,
     connectionPlan.action,
     connectionRetryNonce,
     loading,
-    reconnectWorkspaceViewer,
     recoverWorkspaceBrowser,
     recoveryPending,
     selectWorkspaceStream,
@@ -2741,33 +2637,6 @@ export function WorkspaceRemoteViewport({
                 >
                   <PlugZap className="size-3.5" />
                   Reattach desktop route
-                </DropdownMenuItem>
-              )}
-              {workspaceRouteId && (
-                <DropdownMenuItem
-                  disabled={Boolean(recoveryPending)}
-                  onSelect={() => { void reconnectWorkspaceViewer(); }}
-                >
-                  <RefreshCw className="size-3.5" />
-                  Reconnect viewer
-                </DropdownMenuItem>
-              )}
-              {workspaceRouteId && (
-                <DropdownMenuItem
-                  disabled={Boolean(recoveryPending)}
-                  onSelect={() => { void takeoverWorkspaceController(); }}
-                >
-                  <MousePointer2 className="size-3.5" />
-                  Take control
-                </DropdownMenuItem>
-              )}
-              {workspaceViewerLeaseIds.length > 0 && (
-                <DropdownMenuItem
-                  disabled={Boolean(recoveryPending)}
-                  onSelect={() => { void releaseWorkspaceViewers(); }}
-                >
-                  <Unplug className="size-3.5" />
-                  Release viewer
                 </DropdownMenuItem>
               )}
               {stream?.provider === "rdp_gateway" && (

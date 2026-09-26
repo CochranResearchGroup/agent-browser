@@ -24,6 +24,443 @@ const DAEMON_AUTH_TOKEN_ENV: &str = "AGENT_BROWSER_DAEMON_AUTH_TOKEN";
 const DAEMON_AUTH_FIELD: &str = "_agentBrowserAuthToken";
 const CONNECTION_READ_AHEAD_CAPACITY: usize = 8;
 
+fn should_journal_browser_open(
+    action_is_open: bool,
+    has_named_profile: bool,
+    has_remote_desktop_routes: bool,
+    existing_operation: bool,
+) -> bool {
+    existing_operation || (action_is_open && has_named_profile && has_remote_desktop_routes)
+}
+
+fn command_has_named_profile(command: &Value) -> bool {
+    command
+        .get("profileId")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("profileId"))
+        })
+        .and_then(Value::as_str)
+        .is_some_and(|profile_id| !profile_id.trim().is_empty())
+}
+
+/// Adapt an authenticated ordinary remote-view request to the manager's one
+/// SQLite journaled open. Route and display placement stay with the keeper.
+fn manager_command_from_remote_view_open(
+    command: &Value,
+    daemon_session: &str,
+) -> Result<Value, String> {
+    manager_command_from_remote_view_open_with_mode(command, daemon_session, false)
+}
+
+fn manager_command_from_remote_view_open_with_mode(
+    command: &Value,
+    daemon_session: &str,
+    allow_dry_run: bool,
+) -> Result<Value, String> {
+    let intent = super::remote_view::normalize_remote_view_open_intent(command)?;
+    if intent.dry_run && !allow_dry_run {
+        return Err("remote_view_open_dry_run_sqlite_plan_pending".to_string());
+    }
+    if intent.view_stream_provider != agent_browser_service_model::ViewStreamProvider::RdpGateway
+        || intent.browser_host != "remote_headed"
+    {
+        return Err("remote_view_open_presentation_mode_unsupported".to_string());
+    }
+    if intent.route_id.is_some()
+        || intent.route_pool_entry_id.is_some()
+        || intent.display_allocation_id.is_some()
+        || intent.remote_headed_display.is_some()
+        || intent.display_isolation.is_some()
+        || ["routePoolEntry", "routePool", "routePoolEntryJson"]
+            .iter()
+            .any(|key| {
+                command.get(*key).is_some()
+                    || command
+                        .get("params")
+                        .and_then(|params| params.get(*key))
+                        .is_some()
+            })
+    {
+        return Err("remote_view_open_provider_owned_route_required".to_string());
+    }
+    if command
+        .get("manualSeeding")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("manualSeeding"))
+        })
+        .and_then(Value::as_bool)
+        .unwrap_or(false)
+        || intent.manual_login_launch
+    {
+        return Err("remote_view_open_manual_seeding_sqlite_path_pending".to_string());
+    }
+    if intent.browser_build.is_some() {
+        return Err("remote_view_open_browser_selector_sqlite_path_pending".to_string());
+    }
+    if intent.control_input != "manual_attached_desktop" {
+        return Err("remote_view_open_control_input_unsupported".to_string());
+    }
+    if intent.service_name.is_some() || intent.agent_name.is_some() || intent.task_name.is_some() {
+        return Err("remote_view_open_attribution_sqlite_path_pending".to_string());
+    }
+    let explicit_profile = command
+        .get("profileId")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("profileId"))
+        })
+        .and_then(Value::as_str)
+        .filter(|profile| !profile.trim().is_empty());
+    let profiles = [
+        explicit_profile,
+        intent.runtime_profile.as_deref(),
+        intent.profile.as_deref(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<std::collections::BTreeSet<_>>();
+    if profiles.len() > 1 {
+        return Err("remote_view_open_profile_conflict".to_string());
+    }
+    let session_name = intent.session_name.as_deref().unwrap_or(daemon_session);
+    let operation_id = command
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|id| !id.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let mut manager_command = serde_json::json!({
+        "id": operation_id,
+        "action": "browser_session_open",
+        "sessionName": session_name,
+    });
+    if let Some(profile_id) = profiles.into_iter().next() {
+        manager_command["profileId"] = Value::String(profile_id.to_string());
+    }
+    if let Some(browser_id) = intent.browser_id {
+        manager_command["browserId"] = Value::String(browser_id);
+    }
+    if let Some(url) = intent.url {
+        manager_command["url"] = Value::String(url);
+    }
+    if let Some(activity_at_ms) = command
+        .get("activityAtMs")
+        .or_else(|| {
+            command
+                .get("params")
+                .and_then(|params| params.get("activityAtMs"))
+        })
+        .and_then(Value::as_u64)
+    {
+        manager_command["activityAtMs"] = serde_json::json!(activity_at_ms);
+    }
+    if let Some(job_timeout) = command.get("jobTimeoutMs").or_else(|| {
+        command
+            .get("params")
+            .and_then(|params| params.get("jobTimeoutMs"))
+    }) {
+        let timeout_ms = job_timeout
+            .as_u64()
+            .filter(|timeout_ms| *timeout_ms > 0)
+            .ok_or_else(|| "remote_view_open_job_timeout_invalid".to_string())?;
+        manager_command["jobTimeoutMs"] = serde_json::json!(timeout_ms);
+    }
+    Ok(manager_command)
+}
+
+/// Project an ordinary open without reserving capacity, a browser, or a
+/// handoff. Keeper status and manager state are observations at one instant;
+/// the effectful request must recheck them under its own admission fence.
+fn sqlite_remote_view_open_plan(
+    manager_command: &Value,
+    keeper: &super::presentation_runtime_status::PresentationKeeperStatus,
+    sessions: &agent_browser_service_model::BrowserSessionState,
+) -> Value {
+    let session_name = manager_command["sessionName"].as_str().unwrap_or_default();
+    let profile_id = manager_command["profileId"].as_str();
+    let selected_browser_id = manager_command["browserId"].as_str();
+    let observed_at_ms = super::presentation_request_admission::now_ms();
+    let reusable = selected_browser_id
+        .is_some_and(|browser_id| sessions.browsers.contains_key(browser_id))
+        || profile_id.is_some_and(|profile_id| {
+            sessions.sessions.values().any(|session| {
+                session.name == session_name
+                    && session.profile_id == profile_id
+                    && session.expires_at_ms > observed_at_ms
+                    && sessions.browsers.contains_key(&session.browser_id)
+            })
+        });
+    let resolved_profile_id = selected_browser_id
+        .and_then(|browser_id| sessions.browsers.get(browser_id))
+        .map(|browser| browser.profile_id.as_str())
+        .or(profile_id);
+    let disposable_policy_id = resolved_profile_id
+        .and_then(|profile_id| sessions.disposable_profiles.get(profile_id))
+        .map(|allocation| allocation.policy_id.as_str())
+        .or_else(|| resolved_profile_id.is_none().then_some("default"));
+    serde_json::json!({
+        "schemaVersion": "agent-browser.remote-view-open-plan.v1",
+        "status": "planned",
+        "dryRun": true,
+        "browserSessionManager": true,
+        "sessionName": session_name,
+        "profileId": resolved_profile_id,
+        "browserId": selected_browser_id,
+        "disposablePolicyId": disposable_policy_id,
+        "url": manager_command.get("url"),
+        "browserAcquisition": if reusable { "reuse_candidate" } else { "launch_candidate" },
+        "browserLiveness": "not_checked",
+        "observedAtMs": observed_at_ms,
+        "presentationKeeper": keeper,
+        "presentationCapacity": keeper.allocation,
+        "operatorVisible": { "state": "not_checked" },
+        "handoffUrl": null,
+        "effects": [],
+    })
+}
+
+fn sqlite_remote_view_open_plan_from_store(
+    command: &Value,
+    daemon_session: &str,
+    keeper: &super::presentation_runtime_status::PresentationKeeperStatus,
+    store: &super::browser_session_store::BrowserRuntimeSqliteStore,
+) -> Result<Value, String> {
+    if !super::remote_view::normalize_remote_view_open_intent(command)?.dry_run {
+        return Err("remote_view_open_dry_run_required".to_string());
+    }
+    let manager_command =
+        manager_command_from_remote_view_open_with_mode(command, daemon_session, true)?;
+    validate_remote_view_open_profile(&manager_command, store)?;
+    let sessions = store.load_session_state()?;
+    Ok(serde_json::json!({
+        "id": command.get("id").cloned().unwrap_or(Value::Null),
+        "success": true,
+        "data": sqlite_remote_view_open_plan(&manager_command, keeper, &sessions),
+    }))
+}
+
+/// Reject an unavailable profile before a remote-view request waits for
+/// presentation capacity. The same SQLite catalog governs dry-run and launch.
+fn validate_remote_view_open_profile(
+    manager_command: &Value,
+    store: &super::browser_session_store::BrowserRuntimeSqliteStore,
+) -> Result<(), String> {
+    let catalog = store.load_profile_catalog()?;
+    if let Some(browser_id) = manager_command["browserId"].as_str() {
+        let state = store.load_session_state()?;
+        let browser = state
+            .browsers
+            .get(browser_id)
+            .ok_or_else(|| format!("browser_session_selected_browser_not_found:{browser_id}"))?;
+        if manager_command["profileId"]
+            .as_str()
+            .is_some_and(|profile_id| profile_id != browser.profile_id)
+        {
+            return Err("browser_session_selected_browser_profile_mismatch".to_string());
+        }
+        if let Some(allocation) = state.disposable_profiles.get(&browser.profile_id) {
+            if manager_command["sessionName"].as_str() != Some(allocation.session_name.as_str()) {
+                return Err("browser_session_selected_browser_profile_mismatch".to_string());
+            }
+            if !catalog
+                .disposable_policies
+                .contains_key(&allocation.policy_id)
+            {
+                return Err(format!(
+                    "browser_disposable_policy_not_found:{}",
+                    allocation.policy_id
+                ));
+            }
+        } else if !catalog.profiles.contains_key(&browser.profile_id) {
+            return Err(format!("browser_profile_not_found:{}", browser.profile_id));
+        }
+        let activity_at_ms = manager_command["activityAtMs"]
+            .as_u64()
+            .unwrap_or_else(super::presentation_request_admission::now_ms);
+        if state.sessions.values().any(|session| {
+            session.name == manager_command["sessionName"].as_str().unwrap_or_default()
+                && session.profile_id == browser.profile_id
+                && activity_at_ms < session.expires_at_ms
+                && session.browser_id.as_str() != browser_id
+        }) {
+            return Err("browser_session_selected_browser_session_mismatch".to_string());
+        }
+        return Ok(());
+    }
+    if let Some(profile_id) = manager_command["profileId"].as_str() {
+        if !catalog.profiles.contains_key(profile_id) {
+            return Err(format!("browser_profile_not_found:{profile_id}"));
+        }
+    } else if !catalog.disposable_policies.contains_key("default") {
+        return Err("browser_disposable_policy_not_found:default".to_string());
+    }
+    Ok(())
+}
+
+fn require_keeper_handoff_resolution(
+    required: bool,
+    routes: &[agent_browser_service_model::BrowserDesktopRoute],
+) -> Result<(), &'static str> {
+    if !required {
+        return Ok(());
+    }
+    if routes.is_empty() {
+        return Err("browser_session_presentation_route_unavailable");
+    }
+    Ok(())
+}
+
+fn presentation_keeper_status(
+    authority: &agent_browser_service_model::RouteKeeperAuthority,
+    probe: &super::stream::RouteKeeperSupervisorProbe,
+    config: &super::browser_session_store::BrowserRuntimeConfig,
+) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
+    let mut status = super::presentation_runtime_status::keeper_status(
+        authority,
+        probe.health(),
+        Some(probe.host_generation()),
+    )?;
+    status.apply_runtime_config(config);
+    Ok(status)
+}
+
+fn current_presentation_keeper_status(
+    probe: Option<&super::stream::RouteKeeperSupervisorProbe>,
+) -> Result<super::presentation_runtime_status::PresentationKeeperStatus, String> {
+    let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    let authority = store.load_route_keeper_authority()?;
+    let mut status = match probe {
+        Some(probe) => presentation_keeper_status(&authority, probe, &store.load_runtime_config()?),
+        None => super::presentation_runtime_status::keeper_status(
+            &authority,
+            super::stream::RouteKeeperSupervisorHealth::Unavailable {
+                code: "presentation_keeper_unavailable".to_string(),
+            },
+            None,
+        ),
+    }?;
+    status.apply_runtime_config(&store.load_runtime_config()?);
+    let routes = if status.require_ready().is_ok() {
+        status.usable_routes(&authority)?
+    } else {
+        Vec::new()
+    };
+    let mut allocation = super::presentation_runtime_capacity::allocation_status(
+        &store.load_session_state()?,
+        &store.load_runtime_config()?,
+        &routes,
+    )?;
+    if status.require_ready().is_err() {
+        allocation.state = "unavailable";
+    }
+    status.allocation = Some(allocation);
+    status.queue = Some(super::presentation_request_admission::queue_status(&store)?);
+    Ok(status)
+}
+
+enum PresentationKeeperObservation<T> {
+    Ready(T),
+    Pending,
+    Terminal(String),
+}
+
+/// Bounds readiness and capacity waiting. A cancelled blocking observation may
+/// finish publishing route demand afterward; browser effects happen only after
+/// this wait succeeds and the host revalidates admission.
+async fn wait_for_presentation_keeper_observation<T, F, Fut>(
+    deadline: Instant,
+    mut observe: F,
+) -> Result<T, String>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<PresentationKeeperObservation<T>, String>>,
+{
+    loop {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return Err("presentation_keeper_deadline_exceeded".to_string());
+        }
+        let observation = tokio::time::timeout(remaining, observe())
+            .await
+            .map_err(|_| "presentation_keeper_deadline_exceeded".to_string())??;
+        match observation {
+            PresentationKeeperObservation::Ready(value) => return Ok(value),
+            PresentationKeeperObservation::Terminal(error) => return Err(error),
+            PresentationKeeperObservation::Pending => {
+                tokio::time::sleep(
+                    Duration::from_millis(25)
+                        .min(deadline.saturating_duration_since(Instant::now())),
+                )
+                .await;
+            }
+        }
+    }
+}
+
+async fn observe_presentation_keeper(
+    route_keeper: Arc<Mutex<Option<super::stream::ConfiguredRouteKeeperSupervisorHandle>>>,
+    command: Option<Value>,
+) -> Result<PresentationKeeperObservation<(super::stream::RouteKeeperSupervisorProbe, bool)>, String>
+{
+    let probe = route_keeper
+        .lock()
+        .await
+        .as_ref()
+        .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
+        .ok_or_else(|| "presentation_keeper_unavailable".to_string())?;
+    let probe_for_status = probe.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        current_presentation_keeper_status(Some(&probe_for_status))
+    })
+    .await
+    .map_err(|error| format!("presentation_keeper_status_join_failed:{error}"))??;
+    match status.require_ready() {
+        Ok(()) => {
+            let capacity_available = status
+                .allocation
+                .as_ref()
+                .is_some_and(|allocation| allocation.state == "available");
+            if let Some(command) = command {
+                if status
+                    .allocation
+                    .as_ref()
+                    .is_some_and(|allocation| allocation.state == "pending")
+                {
+                    tokio::task::spawn_blocking(move || -> Result<(), String> {
+                        let mut store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                        let state = store.load_session_state()?;
+                        if !super::presentation_runtime_capacity::command_reuses_browser(&command, &state) {
+                            let config = store.load_runtime_config()?;
+                            let count = status.allocation.as_ref().map(|allocation| allocation.occupied_display_count).unwrap_or_default();
+                            super::presentation_runtime_capacity::request_additional_route(&mut store, count, config.maximum_displays)?;
+                        }
+                        Ok(())
+                    }).await.map_err(|_| "presentation_capacity_observation_failed".to_string())??;
+                }
+            }
+            Ok(PresentationKeeperObservation::Ready((
+                probe,
+                capacity_available,
+            )))
+        }
+        Err(_)
+            if matches!(
+                probe.health(),
+                super::stream::RouteKeeperSupervisorHealth::Recovering
+                    | super::stream::RouteKeeperSupervisorHealth::Supervising
+            ) && matches!(status.state, "recovering" | "degraded") =>
+        {
+            Ok(PresentationKeeperObservation::Pending)
+        }
+        Err(error) => Ok(PresentationKeeperObservation::Terminal(error)),
+    }
+}
+
 /// Build the runtime host on the same bounded stack used for Service State
 /// serialization. Commands may own large parsed snapshots until dispatch
 /// finishes, so both decoding and value destruction need this stack budget.
@@ -408,11 +845,15 @@ struct RuntimeLane {
 #[derive(Clone)]
 struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
+    browser_sessions:
+        Arc<std::sync::Mutex<Option<super::browser_session_host::DefaultBrowserSessionHost>>>,
+    route_keeper: Arc<Mutex<Option<super::stream::ConfiguredRouteKeeperSupervisorHandle>>>,
     creation_lock: Arc<Mutex<()>>,
     socket_dir: PathBuf,
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
     service_monitor_interval_ms: Option<u64>,
+    browser_session_reap_interval_ms: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -474,11 +915,16 @@ impl RuntimeHostRouter {
         )?;
         Ok(Self {
             lanes,
+            browser_sessions: Arc::new(std::sync::Mutex::new(None)),
+            route_keeper: Arc::new(Mutex::new(None)),
             creation_lock: Arc::new(Mutex::new(())),
             socket_dir,
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
             service_job_timeout_ms: options.service_job_timeout_ms,
             service_monitor_interval_ms: options.service_monitor_interval_ms,
+            browser_session_reap_interval_ms: browser_session_reap_interval_ms(
+                options.service_reconcile_interval_ms,
+            ),
         })
     }
 
@@ -492,6 +938,57 @@ impl RuntimeHostRouter {
                 self.lane(&session, Some(config)).await?;
             }
         }
+        Ok(())
+    }
+
+    async fn install_configured_route_keeper(&self) -> Result<(), String> {
+        if !crate::runtime_host::admission_enabled() {
+            return Ok(());
+        }
+        #[cfg(not(unix))]
+        return Ok(());
+        #[cfg(unix)]
+        {
+            let keeper = match super::stream::ConfiguredRouteKeeperSupervisorHandle::start_default()
+            {
+                Ok(keeper) => keeper,
+                Err(error) if error == "route_keeper_primary_provider_unconfigured" => {
+                    return Ok(())
+                }
+                Err(error) => return Err(error),
+            };
+            self.install_route_keeper_owner(keeper).await
+        }
+    }
+
+    async fn initialize_runtime_host(&self, session: &str) -> Result<(), String> {
+        let result = async {
+            self.preload_supervised_lanes(session).await?;
+            self.install_configured_route_keeper().await
+        }
+        .await;
+        let Err(error) = result else {
+            return Ok(());
+        };
+        match self.shutdown().await {
+            Ok(()) => Err(error),
+            Err(cleanup) => Err(format!(
+                "runtime_host_initialization_cleanup_failed:{error}:{cleanup}"
+            )),
+        }
+    }
+
+    async fn install_route_keeper_owner(
+        &self,
+        mut keeper: super::stream::ConfiguredRouteKeeperSupervisorHandle,
+    ) -> Result<(), String> {
+        let mut installed = self.route_keeper.lock().await;
+        if installed.is_some() {
+            drop(installed);
+            keeper.shutdown().await?;
+            return Err("runtime_host_route_keeper_already_installed".to_string());
+        }
+        *installed = Some(keeper);
         Ok(())
     }
 
@@ -606,7 +1103,11 @@ impl RuntimeHostRouter {
         }
     }
 
-    async fn shutdown(&self) {
+    async fn shutdown(&self) -> Result<(), String> {
+        let keeper_result = match self.route_keeper.lock().await.take() {
+            Some(mut keeper) => keeper.shutdown().await,
+            None => Ok(()),
+        };
         for lane in self.lanes.take_all() {
             lane.control_plane.shutdown().await;
             if let Some(server) = lane.stream_server {
@@ -616,7 +1117,717 @@ impl RuntimeHostRouter {
                 let _ = fs::remove_file(path);
             }
         }
+        let browser_sessions = self.browser_sessions.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(mut host) = browser_sessions.lock() {
+                host.take();
+            }
+        })
+        .await;
+        keeper_result
     }
+
+    async fn route_keeper_probe(&self) -> Option<super::stream::RouteKeeperSupervisorProbe> {
+        self.route_keeper
+            .lock()
+            .await
+            .as_ref()
+            .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
+    }
+
+    async fn plan_remote_view_open(&self, command: Value, daemon_session: &str) -> Value {
+        let probe = self.route_keeper_probe().await;
+        let result = (|| -> Result<Value, String> {
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            sqlite_remote_view_open_plan_from_store(
+                &command,
+                daemon_session,
+                &current_presentation_keeper_status(probe.as_ref())?,
+                &store,
+            )
+        })();
+        match result {
+            Ok(response) => response,
+            Err(error) => serde_json::json!({ "success": false, "error": error }),
+        }
+    }
+
+    async fn wait_for_presentation_keeper(
+        &self,
+        command: Value,
+        existing_handoff: bool,
+    ) -> Result<
+        (
+            super::stream::RouteKeeperSupervisorProbe,
+            super::presentation_request_admission::PresentationAdmission,
+        ),
+        String,
+    > {
+        let probe = self
+            .route_keeper_probe()
+            .await
+            .ok_or_else(|| "presentation_keeper_unavailable".to_string())?;
+        let generation = probe.host_generation();
+        let queued_command = command.clone();
+        let request = tokio::task::spawn_blocking(move || {
+            super::presentation_request_admission::PresentationAdmissionRequest::enqueue(
+                &queued_command,
+                generation,
+                existing_handoff,
+            )
+        })
+        .await
+        .map_err(|_| "presentation_queue_enqueue_failed".to_string())??;
+        let deadline = Instant::now()
+            + Duration::from_millis(
+                request
+                    .deadline_at_ms
+                    .saturating_sub(super::presentation_request_admission::now_ms()),
+            );
+        let request = Arc::new(request);
+        let replay_request = request.clone();
+        if let Some(admission) = tokio::task::spawn_blocking(move || replay_request.poll(None))
+            .await
+            .map_err(|_| "presentation_queue_poll_failed".to_string())??
+        {
+            return Ok((probe, admission));
+        }
+        let route_keeper = self.route_keeper.clone();
+        let result = wait_for_presentation_keeper_observation(deadline, || {
+            let request = request.clone();
+            let route_keeper = route_keeper.clone();
+            let command = if existing_handoff {
+                None
+            } else {
+                Some(command.clone())
+            };
+            async move {
+                let observation = observe_presentation_keeper(route_keeper, command).await?;
+                let readiness = match observation {
+                    PresentationKeeperObservation::Ready((observed_probe, capacity)) => {
+                        if observed_probe.host_generation() != generation {
+                            return Ok(PresentationKeeperObservation::Terminal(
+                                "presentation_queue_generation_stale".to_string(),
+                            ));
+                        }
+                        Some(capacity)
+                    }
+                    PresentationKeeperObservation::Pending => None,
+                    PresentationKeeperObservation::Terminal(error) => {
+                        return Ok(PresentationKeeperObservation::Terminal(error))
+                    }
+                };
+                let admission = tokio::task::spawn_blocking(move || request.poll(readiness))
+                    .await
+                    .map_err(|_| "presentation_queue_poll_failed".to_string())??;
+                Ok(match admission {
+                    Some(admission) => PresentationKeeperObservation::Ready(admission),
+                    None => PresentationKeeperObservation::Pending,
+                })
+            }
+        })
+        .await?;
+        Ok((probe, result))
+    }
+
+    async fn handle_browser_session_command(
+        &self,
+        mut command: Value,
+        daemon_session: &str,
+    ) -> Value {
+        let remote_view_open =
+            command.get("action").and_then(Value::as_str) == Some("remote_view_open");
+        if remote_view_open {
+            command = match manager_command_from_remote_view_open(&command, daemon_session) {
+                Ok(command) => command,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            };
+            let preflight_command = command.clone();
+            let profile_check = tokio::task::spawn_blocking(move || -> Result<(), String> {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                validate_remote_view_open_profile(&preflight_command, &store)
+            })
+            .await
+            .map_err(|error| format!("remote_view_open_profile_preflight_join_failed:{error}"))
+            .and_then(|result| result);
+            if let Err(error) = profile_check {
+                return serde_json::json!({ "success": false, "error": error });
+            }
+        }
+        let runtime_environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").ok();
+        let publish_manager_handoff =
+            match super::browser_session_host::browser_session_navigation_requires_handoff(
+                &command,
+                runtime_environment.as_deref(),
+            ) {
+                Ok(required) => required,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            };
+        let action = command.get("action").and_then(Value::as_str);
+        let action_is_open = action == Some("browser_session_open");
+        let has_named_profile = command_has_named_profile(&command);
+        let remote_open_candidate = action_is_open && (has_named_profile || remote_view_open);
+        let keeper_handoff_required = publish_manager_handoff;
+        let keeper_required = keeper_handoff_required || remote_open_candidate;
+        if keeper_required && command.get("id").and_then(Value::as_str).is_none() {
+            command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
+        }
+        let (probe, mut permit) = if keeper_required {
+            match self
+                .wait_for_presentation_keeper(command.clone(), false)
+                .await
+            {
+                Ok((
+                    probe,
+                    super::presentation_request_admission::PresentationAdmission::Execute(permit),
+                )) => (Some(probe), Some(permit)),
+                Ok((
+                    _,
+                    super::presentation_request_admission::PresentationAdmission::Replay(response),
+                )) => return response,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            }
+        } else {
+            (None, None)
+        };
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+            let result = (|| -> Result<Value, String> {
+                let action = command.get("action").and_then(Value::as_str);
+                let mut host = browser_sessions
+                    .lock()
+                    .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+                if let Some(permit) = permit.as_mut() {
+                    permit.require_current()?;
+                }
+                // This is deliberately after taking the host lock. A queued command must
+                // revalidate the live supervisor and durable route state immediately before
+                // it can create a browser or publish a manager handoff.
+                let (keeper_authority, routes) = if let Some(probe) = probe.as_ref() {
+                    let store =
+                        super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                    let authority = store.load_route_keeper_authority()?;
+                    let status = presentation_keeper_status(
+                        &authority,
+                        probe,
+                        &store.load_runtime_config()?,
+                    )?;
+                    status.require_ready()?;
+                    let routes = status.usable_routes(&authority)?;
+                    (Some(authority), routes)
+                } else {
+                    (None, Vec::new())
+                };
+                require_keeper_handoff_resolution(keeper_required, &routes)
+                    .map_err(str::to_string)?;
+                if host.is_none() {
+                    *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+                }
+                let host = host
+                    .as_mut()
+                    .ok_or_else(|| "browser_session_host_missing".to_string())?;
+                if keeper_required {
+                    let config =
+                        super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                            .load_runtime_config()?;
+                    host.set_desktop_capacity(
+                        config.maximum_displays,
+                        config.maximum_browsers_per_display,
+                    );
+                }
+                let operation_id = command.get("id").and_then(Value::as_str);
+                let existing_open_operation = operation_id
+                    .map(|operation_id| host.has_operation(operation_id))
+                    .transpose()?
+                    .unwrap_or(false);
+                let has_remote_desktop_routes = !routes.is_empty();
+                let journaled_open = should_journal_browser_open(
+                    action_is_open,
+                    has_named_profile || remote_view_open,
+                    has_remote_desktop_routes,
+                    existing_open_operation,
+                );
+                if action == Some("browser_session_navigate") || journaled_open {
+                    host.replace_remote_desktop_routes(routes);
+                }
+                if keeper_handoff_required {
+                    let authority = keeper_authority.as_ref().ok_or_else(|| {
+                        "browser_session_keeper_handoff_authority_missing".to_string()
+                    })?;
+                    host.preflight_keeper_navigation_command(&command, authority)?;
+                }
+                let mut response = if journaled_open {
+                    let authority = keeper_authority.as_ref().ok_or_else(|| {
+                        "browser_session_keeper_handoff_authority_missing".to_string()
+                    })?;
+                    host.handle_journaled_open_with_keeper_handoff(&command, authority)
+                } else if action == Some("browser_session_navigate") && keeper_handoff_required {
+                    let authority = keeper_authority.as_ref().ok_or_else(|| {
+                        "browser_session_keeper_handoff_authority_missing".to_string()
+                    })?;
+                    host.handle_journaled_navigation_with_keeper(&command, authority)
+                } else if action == Some("browser_session_navigate")
+                    && command.get("headers").is_some()
+                {
+                    host.handle_managed_navigation_command(&command)
+                } else {
+                    host.handle_command(&command)
+                };
+                // Journaled open already published membership and the handoff
+                // together. A second attach would bypass that operation fence
+                // and overwrite its process-bound visibility observation.
+                if keeper_handoff_required
+                    && action != Some("browser_session_navigate")
+                    && !journaled_open
+                {
+                    let authority = keeper_authority.as_ref().ok_or_else(|| {
+                        "browser_session_keeper_handoff_authority_missing".to_string()
+                    })?;
+                    if let Err(error) = host.attach_keeper_manager_handoff(&mut response, authority)
+                    {
+                        response["success"] = Value::Bool(false);
+                        response["error"] = Value::String(error.clone());
+                        response["data"]["operatorVisible"] = serde_json::json!({
+                            "state": "unavailable",
+                            "reason": error,
+                        });
+                    }
+                }
+                if remote_view_open
+                    && response.get("success").and_then(Value::as_bool) == Some(true)
+                {
+                    let data = response
+                        .get_mut("data")
+                        .and_then(Value::as_object_mut)
+                        .ok_or_else(|| "remote_view_open_manager_response_missing".to_string())?;
+                    let handoff_url = data
+                        .get("handoffUrl")
+                        .and_then(Value::as_str)
+                        .ok_or_else(|| "remote_view_open_manager_handoff_missing".to_string())?
+                        .to_string();
+                    if data
+                        .get("operatorVisible")
+                        .and_then(|visible| visible.get("state"))
+                        .and_then(Value::as_str)
+                        != Some("ready")
+                    {
+                        return Err("remote_view_open_manager_visibility_unproven".to_string());
+                    }
+                    data.insert("status".to_string(), Value::String("ready".to_string()));
+                    data.insert("externalUrl".to_string(), Value::String(handoff_url));
+                    data.insert("browserSessionManager".to_string(), Value::Bool(true));
+                }
+                Ok(response)
+            })();
+            match permit {
+                Some(permit) => permit.finish(result),
+                None => result,
+            }
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => serde_json::json!({ "success": false, "error": error }),
+            Err(error) => serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            }),
+        }
+    }
+
+    async fn try_handle_managed_browser_command(
+        &self,
+        session_name: &str,
+        command: Value,
+    ) -> Option<Value> {
+        let browser_sessions = self.browser_sessions.clone();
+        let session_name = session_name.to_string();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                let state = store.load_session_state()?;
+                let has_session = state
+                    .sessions
+                    .values()
+                    .any(|session| session.name == session_name);
+                if !has_session {
+                    return Ok(None);
+                }
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            host.as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?
+                .execute_managed_command(&session_name, &command)
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => Some(serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            })),
+        }
+    }
+
+    async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                let state = store.load_session_state()?;
+                if browser_session_focus_command(&command, &state).is_none() {
+                    return Ok(None);
+                }
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            } else if host
+                .as_ref()
+                .is_none_or(|host| browser_session_focus_command(&command, host.state()).is_none())
+            {
+                return Ok(None);
+            }
+            let command = browser_session_focus_command(
+                &command,
+                host.as_ref()
+                    .ok_or_else(|| "browser_session_host_missing".to_string())?
+                    .state(),
+            )
+            .ok_or_else(|| "browser_session_focus_route_lost".to_string())?;
+            Ok(host.as_mut().map(|host| host.handle_command(&command)))
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => Some(serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            })),
+        }
+    }
+
+    /// Resolve only a SQLite manager handoff. An absent identifier does not
+    /// fall through to the legacy JSON handoff repository.
+    async fn try_resolve_manager_handoff(&self, mut command: Value) -> Option<Value> {
+        let handoff_id = match command
+            .get("handoffId")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("handoffId"))
+            })
+            .or_else(|| command.get("remoteViewHandoffId"))
+            .and_then(Value::as_str)
+        {
+            Some(handoff_id) => handoff_id.to_string(),
+            None => {
+                return Some(serde_json::json!({
+                    "success": false,
+                    "error": "service_remote_view_handoff_resolve requires handoffId",
+                }))
+            }
+        };
+        let lookup_id = handoff_id.clone();
+        let handoff_kind =
+            match tokio::task::spawn_blocking(move || -> Result<&'static str, String> {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                let registry = store.load_handoff_registry()?;
+                Ok(match registry.handoffs.get(&lookup_id) {
+                    Some(handoff)
+                        if super::browser_session_handoff::is_manager_handoff(handoff) =>
+                    {
+                        "manager"
+                    }
+                    Some(handoff)
+                        if handoff.intent.get("manualSeeding").and_then(Value::as_bool)
+                            == Some(true) =>
+                    {
+                        "manual_seeding"
+                    }
+                    _ => "missing",
+                })
+            })
+            .await
+            {
+                Ok(Ok(handoff_kind)) => handoff_kind,
+                Ok(Err(error)) => {
+                    return Some(serde_json::json!({ "success": false, "error": error }))
+                }
+                Err(error) => {
+                    return Some(serde_json::json!({
+                        "success": false,
+                        "error": format!("browser_session_host_join_failed:{error}"),
+                    }))
+                }
+            };
+        if handoff_kind == "manual_seeding" {
+            return Some(
+                match super::remote_view::open::resolve_sqlite_manual_seeding_handoff(&handoff_id)
+                    .await
+                {
+                    Ok(result) => serde_json::json!({
+                        "id": command.get("id").cloned().unwrap_or(Value::Null),
+                        "success": true,
+                        "data": result,
+                    }),
+                    Err(error) => serde_json::json!({ "success": false, "error": error }),
+                },
+            );
+        }
+        if handoff_kind != "manager" {
+            return Some(serde_json::json!({
+                "success": true,
+                "data": {
+                    "status": "not_found",
+                    "resolved": false,
+                    "handoffId": handoff_id,
+                    "message": "Remote-view handoff was not found in the SQLite session authority",
+                }
+            }));
+        }
+        if command.get("id").and_then(Value::as_str).is_none() {
+            command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
+        }
+        let (probe, mut permit) = match self
+            .wait_for_presentation_keeper(command.clone(), true)
+            .await
+        {
+            Ok((
+                probe,
+                super::presentation_request_admission::PresentationAdmission::Execute(permit),
+            )) => (probe, permit),
+            Ok((
+                _,
+                super::presentation_request_admission::PresentationAdmission::Replay(response),
+            )) => return Some(response),
+            Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
+        };
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let result = (|| -> Result<Option<Value>, String> {
+            let handoff_id = command
+                .get("handoffId")
+                .or_else(|| {
+                    command
+                        .get("params")
+                        .and_then(|params| params.get("handoffId"))
+                })
+                .or_else(|| command.get("remoteViewHandoffId"))
+                .and_then(Value::as_str)
+                .ok_or_else(|| {
+                    "service_remote_view_handoff_resolve requires handoffId".to_string()
+                })?;
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            let registry = store.load_handoff_registry()?;
+            let Some(handoff) = registry.handoffs.get(handoff_id).cloned() else {
+                return Ok(Some(serde_json::json!({
+                    "success": true,
+                    "data": {
+                        "status": "not_found",
+                        "resolved": false,
+                        "handoffId": handoff_id,
+                    }
+                })));
+            };
+            if !super::browser_session_handoff::is_manager_handoff(&handoff) {
+                return Err("browser_session_handoff_not_manager_owned".to_string());
+            }
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            permit.require_current()?;
+            // The handoff may have waited behind an earlier browser operation, so
+            // validate the durable authority and live probe after acquiring the lock.
+            let authority = store.load_route_keeper_authority()?;
+            let status = presentation_keeper_status(&authority, &probe, &store.load_runtime_config()?)?;
+            status.require_ready()?;
+            let routes = status.usable_routes(&authority)?;
+            let route_id = handoff
+                .last_route_id
+                .as_deref()
+                .ok_or_else(|| "presentation_keeper_route_unavailable".to_string())?;
+            let route = authority
+                .records
+                .get(route_id)
+                .ok_or_else(|| "presentation_keeper_route_unavailable".to_string())?;
+            if route.fence.host_generation != probe.host_generation() {
+                return Err("presentation_keeper_route_stale".to_string());
+            }
+            if !routes.iter().any(|route| route.id == route_id) {
+                return Err("presentation_keeper_route_unavailable".to_string());
+            }
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            let host = host
+                .as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?;
+            let activity_at_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+                .unwrap_or_default();
+            let resolved =
+                host.resolve_journaled_manager_handoff_with_keeper(&command, &handoff, &authority, activity_at_ms)?;
+            let id = command.get("id").cloned().unwrap_or(Value::Null);
+            Ok(Some(serde_json::json!({
+                "id": id,
+                "success": true,
+                "data": resolved,
+            })))
+            })();
+            permit.finish(result.map(|value| value.unwrap_or_else(|| serde_json::json!({"success":false,"error":"browser_session_handoff_missing"})))).map(Some)
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => Some(serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            })),
+        }
+    }
+
+    async fn attach_browser_session_state(&self, response: Value) -> Value {
+        let browser_sessions = self.browser_sessions.clone();
+        let keeper_probe = self.route_keeper_probe().await;
+        let keeper_status = tokio::task::spawn_blocking(move || {
+            current_presentation_keeper_status(keeper_probe.as_ref()).unwrap_or_else(|_| {
+                super::presentation_runtime_status::unavailable_status(
+                    "presentation_keeper_status_unavailable",
+                )
+            })
+        })
+        .await
+        .unwrap_or_else(|_| {
+            super::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_status_unavailable",
+            )
+        });
+        let snapshot = tokio::task::spawn_blocking(move || {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            let host = host
+                .as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())?;
+            host.reconcile_liveness_current()?;
+            serde_json::to_value(host.state())
+                .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))
+        })
+        .await
+        .map_err(|error| format!("browser_session_status_join_failed:{error}"))
+        .and_then(|snapshot| snapshot);
+        attach_presentation_keeper_status(
+            attach_browser_session_state_to_status(response, snapshot),
+            keeper_status,
+        )
+    }
+
+    async fn reap_browser_sessions_if_loaded(&self) -> Result<(), String> {
+        let browser_sessions = self.browser_sessions.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if let Some(host) = host.as_mut() {
+                host.reap_current()?;
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
+    }
+}
+
+fn browser_session_focus_command(
+    command: &Value,
+    state: &agent_browser_service_model::BrowserSessionState,
+) -> Option<Value> {
+    if command.get("action").and_then(Value::as_str) != Some("view_focus") {
+        return None;
+    }
+    let browser_id = command.get("browserId").and_then(Value::as_str)?;
+    if !state.browsers.contains_key(browser_id) {
+        return None;
+    }
+    let mut routed = command.clone();
+    routed["action"] = Value::String("browser_session_focus".to_string());
+    Some(routed)
+}
+
+fn browser_session_reap_interval_ms(service_reconcile_interval_ms: Option<u64>) -> u64 {
+    const DEFAULT_REAP_INTERVAL_MS: u64 = 30_000;
+    service_reconcile_interval_ms
+        .unwrap_or(DEFAULT_REAP_INTERVAL_MS)
+        .max(1)
+}
+
+fn spawn_browser_session_reaper(router: RuntimeHostRouter) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(
+            router.browser_session_reap_interval_ms,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if let Err(error) = router.reap_browser_sessions_if_loaded().await {
+                let _ = writeln!(std::io::stderr(), "Browser session reaper error: {error}");
+            }
+        }
+    })
+}
+
+fn attach_browser_session_state_to_status(
+    mut response: Value,
+    snapshot: Result<Value, String>,
+) -> Value {
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return response;
+    };
+    match snapshot {
+        Ok(snapshot) => {
+            data.insert("browserSessionState".to_string(), snapshot);
+        }
+        Err(error) => {
+            data.insert("browserSessionState".to_string(), Value::Null);
+            data.insert("browserSessionStateError".to_string(), Value::String(error));
+        }
+    }
+    response
+}
+
+fn attach_presentation_keeper_status(
+    mut response: Value,
+    status: super::presentation_runtime_status::PresentationKeeperStatus,
+) -> Value {
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return response;
+    };
+    data.insert(
+        "presentationKeeper".to_string(),
+        serde_json::to_value(status).unwrap_or_else(|_| {
+            serde_json::to_value(super::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_status_unavailable",
+            ))
+            .expect("presentation keeper unavailable status must serialize")
+        }),
+    );
+    response
 }
 
 #[cfg(unix)]
@@ -655,7 +1866,8 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
-    router.preload_supervised_lanes(session).await?;
+    router.initialize_runtime_host(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -694,7 +1906,6 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                router.shutdown().await;
                 break;
             }
             _ = reset_rx.recv(), if idle_timeout_ms.is_some() => {
@@ -706,15 +1917,18 @@ async fn run_socket_server(
                 // "close" command was handled; browser already closed by
                 // handle_close(). Break to run cleanup and exit gracefully
                 // so destructors fire.
-                router.shutdown().await;
                 break;
             }
             _ = shutdown_signal() => {
-                router.shutdown().await;
                 break;
             }
         }
     }
+
+    let shutdown_result = router.shutdown().await;
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
+    shutdown_result?;
 
     Ok(())
 }
@@ -771,7 +1985,8 @@ async fn run_socket_server(
             service_monitor_interval_ms,
         },
     )?;
-    router.preload_supervised_lanes(session).await?;
+    router.initialize_runtime_host(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -807,7 +2022,6 @@ async fn run_socket_server(
                     None => std::future::pending::<()>().await,
                 }
             }, if idle_timeout_ms.is_some() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
@@ -817,17 +2031,20 @@ async fn run_socket_server(
                 continue;
             }
             _ = close_notify.notified() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
             _ = shutdown_signal() => {
-                router.shutdown().await;
                 let _ = fs::remove_file(&port_path);
                 break;
             }
         }
     }
+
+    let shutdown_result = router.shutdown().await;
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
+    shutdown_result?;
 
     Ok(())
 }
@@ -936,6 +2153,85 @@ async fn handle_connection<S>(
                         continue;
                     }
                 };
+                let action = cmd
+                    .get("action")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned);
+                if action.as_deref() == Some("remote_view_open")
+                    && super::remote_view::normalize_remote_view_open_intent(&cmd)
+                        .is_ok_and(|intent| intent.dry_run)
+                {
+                    let response = router.plan_remote_view_open(cmd, &lane_session).await;
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                if action.as_deref() == Some("service_remote_view_handoff_resolve") {
+                    if let Some(response) = router.try_resolve_manager_handoff(cmd.clone()).await {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if action.as_deref() == Some("view_focus") {
+                    if let Some(response) =
+                        router.try_handle_browser_session_focus(cmd.clone()).await
+                    {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if action.as_deref().is_some_and(|action| {
+                    action.starts_with("browser_session_") || action == "remote_view_open"
+                }) {
+                    if let Some(ref tx) = idle_reset_tx {
+                        let _ = tx.try_send(());
+                    }
+                    let response = router
+                        .handle_browser_session_command(cmd, &lane_session)
+                        .await;
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                if action.as_deref().is_some_and(|action| {
+                    !super::actions::action_skips_browser_launch(action)
+                        && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+                }) {
+                    if let Some(response) = router
+                        .try_handle_managed_browser_command(&lane_session, cmd.clone())
+                        .await
+                    {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
                 let lane = match router.lane(&lane_session, lane_config).await {
                     Ok(lane) => lane,
                     Err(error) => {
@@ -967,10 +2263,6 @@ async fn handle_connection<S>(
                     let _ = tx.try_send(());
                 }
 
-                let action = cmd
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned);
                 let exits_daemon = matches!(
                     action.as_deref(),
                     Some("close" | "runtime_handoff_finalize" | "runtime_handoff_rollback")
@@ -1019,7 +2311,7 @@ async fn handle_connection<S>(
                     }
                 };
                 tokio::pin!(response_future);
-                let response = if exits_daemon {
+                let mut response = if exits_daemon {
                     response_future.await
                 } else {
                     tokio::select! {
@@ -1032,6 +2324,9 @@ async fn handle_connection<S>(
                         } => break 'connection,
                     }
                 };
+                if action.as_deref() == Some("service_status") {
+                    response = router.attach_browser_session_state(response).await;
+                }
 
                 let mut resp = serialize_daemon_response(response).await;
                 resp.push('\n');
@@ -1166,9 +2461,694 @@ fn get_port_for_session(session: &str) -> u16 {
 
 #[cfg(test)]
 mod tests {
+    use super::super::browser_session_store::{
+        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
+    };
     use super::super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     #[allow(unused_imports)]
     use super::*;
+    use agent_browser_service_model::{
+        BrowserDesktopAssignment, BrowserSessionState, ControlInputProvider,
+        ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, RemoteViewHandoff,
+        ViewStreamProvider,
+    };
+
+    #[test]
+    fn journaled_open_routing_requires_named_profile_route_or_existing_replay() {
+        assert!(should_journal_browser_open(true, true, true, false));
+        assert!(!should_journal_browser_open(true, false, true, false));
+        assert!(!should_journal_browser_open(true, true, false, false));
+        assert!(should_journal_browser_open(true, true, false, true));
+    }
+
+    #[test]
+    fn named_profile_routing_rejects_empty_wire_values() {
+        assert!(!command_has_named_profile(
+            &serde_json::json!({"profileId": ""})
+        ));
+        assert!(!command_has_named_profile(
+            &serde_json::json!({"params": {"profileId": "  "}})
+        ));
+        assert!(command_has_named_profile(
+            &serde_json::json!({"profileId": "review-profile"})
+        ));
+    }
+
+    #[test]
+    fn ordinary_remote_view_open_maps_to_one_manager_journal_command() {
+        let named = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "id": "open-alice",
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "sessionName": "alice",
+                "url": "https://example.test/alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(named["action"], "browser_session_open");
+        assert_eq!(named["id"], "open-alice");
+        assert_eq!(named["profileId"], "work");
+        assert_eq!(named["sessionName"], "alice");
+        assert_eq!(named["url"], "https://example.test/alice");
+
+        let selected = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "browserId": "browser:work",
+                "sessionName": "alice"
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(selected["browserId"], "browser:work");
+        assert!(selected.get("profileId").is_none());
+
+        let disposable = manager_command_from_remote_view_open(
+            &serde_json::json!({"action":"remote_view_open"}),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(disposable["action"], "browser_session_open");
+        assert_eq!(disposable["sessionName"], "daemon-lane");
+        assert!(disposable.get("profileId").is_none());
+        assert!(disposable["id"].as_str().is_some_and(|id| !id.is_empty()));
+
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","runtimeProfile":"work","profile":"other"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_profile_conflict".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","routeId":"operator-slot"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","params":{"manualSeeding":true}}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_manual_seeding_sqlite_path_pending".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open(
+                &serde_json::json!({"action":"remote_view_open","browserBuild":"stock_chrome"}),
+                "daemon-lane"
+            ),
+            Err("remote_view_open_browser_selector_sqlite_path_pending".to_string())
+        );
+        let timed = manager_command_from_remote_view_open(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "runtimeProfile": "work",
+                "jobTimeoutMs": 120_000
+            }),
+            "daemon-lane",
+        )
+        .unwrap();
+        assert_eq!(timed["jobTimeoutMs"], 120_000);
+    }
+
+    #[test]
+    fn remote_view_dry_run_projects_sqlite_manager_intent_without_effects() {
+        let command = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "sessionName": "alice",
+            "runtimeProfile": "work",
+            "url": "https://example.test/alice"
+        });
+        let manager_command =
+            manager_command_from_remote_view_open_with_mode(&command, "daemon-lane", true).unwrap();
+        let keeper = super::super::presentation_runtime_status::unavailable_status(
+            "presentation_keeper_unavailable",
+        );
+        let plan = sqlite_remote_view_open_plan(
+            &manager_command,
+            &keeper,
+            &agent_browser_service_model::BrowserSessionState::default(),
+        );
+        assert_eq!(
+            plan["schemaVersion"],
+            "agent-browser.remote-view-open-plan.v1"
+        );
+        assert_eq!(plan["profileId"], "work");
+        assert_eq!(plan["sessionName"], "alice");
+        assert_eq!(plan["presentationKeeper"]["state"], "unavailable");
+        assert_eq!(plan["operatorVisible"]["state"], "not_checked");
+        assert!(plan["effects"].as_array().unwrap().is_empty());
+        assert!(plan["handoffUrl"].is_null());
+        let mut selected_state = agent_browser_service_model::BrowserSessionState::default();
+        selected_state.browsers.insert(
+            "browser-work".to_string(),
+            agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser-work".to_string(),
+                profile_id: "work".to_string(),
+                pid: 42,
+                cdp_endpoint: "http://127.0.0.1:9222".to_string(),
+                process_identity: None,
+                desktop: None,
+                active_session_ids: Vec::new(),
+            },
+        );
+        let selected_command = manager_command_from_remote_view_open_with_mode(
+            &serde_json::json!({
+                "action": "remote_view_open",
+                "dryRun": true,
+                "browserId": "browser-work",
+                "sessionName": "bob"
+            }),
+            "daemon-lane",
+            true,
+        )
+        .unwrap();
+        let selected_plan =
+            sqlite_remote_view_open_plan(&selected_command, &keeper, &selected_state);
+        assert_eq!(selected_plan["browserId"], "browser-work");
+        assert_eq!(selected_plan["profileId"], "work");
+        assert_eq!(selected_plan["browserAcquisition"], "reuse_candidate");
+        assert_eq!(
+            manager_command_from_remote_view_open_with_mode(
+                &serde_json::json!({"action":"remote_view_open","dryRun":true,"routeId":"operator-route"}),
+                "daemon-lane",
+                true,
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+        assert_eq!(
+            manager_command_from_remote_view_open_with_mode(
+                &serde_json::json!({"action":"remote_view_open","dryRun":true,"routePool":[]}),
+                "daemon-lane",
+                true,
+            ),
+            Err("remote_view_open_provider_owned_route_required".to_string())
+        );
+
+        let directory = std::env::temp_dir().join(format!(
+            "ab-sqlite-remote-view-plan-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&directory).unwrap();
+        let legacy_path = directory.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let database_path = directory.join("runtime.sqlite3");
+        let migration = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.join("browser-session-state.json"),
+                profile_catalog_path: &directory.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        fs::remove_file(&legacy_path).unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let result =
+            sqlite_remote_view_open_plan_from_store(&command, "daemon-lane", &keeper, &store)
+                .unwrap();
+        assert_eq!(result["success"], true);
+        assert_eq!(result["data"]["profileId"], "work");
+        assert_eq!(result["data"]["handoffUrl"], Value::Null);
+        store.save_session_state(&selected_state).unwrap();
+        let selected_dry_run = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "browserId": "browser-work",
+            "sessionName": "bob"
+        });
+        let selected_result = sqlite_remote_view_open_plan_from_store(
+            &selected_dry_run,
+            "daemon-lane",
+            &keeper,
+            &store,
+        )
+        .unwrap();
+        assert_eq!(selected_result["data"]["browserId"], "browser-work");
+        assert_eq!(selected_result["data"]["profileId"], "work");
+        assert_eq!(
+            selected_result["data"]["browserAcquisition"],
+            "reuse_candidate"
+        );
+        let conflicting = serde_json::json!({
+            "action": "remote_view_open",
+            "dryRun": true,
+            "browserId": "browser-work",
+            "runtimeProfile": "other",
+            "sessionName": "bob"
+        });
+        assert_eq!(
+            sqlite_remote_view_open_plan_from_store(&conflicting, "daemon-lane", &keeper, &store),
+            Err("browser_session_selected_browser_profile_mismatch".to_string())
+        );
+        let mut permissions = fs::metadata(&migration.archive_directory)
+            .unwrap()
+            .permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&migration.archive_directory, permissions).unwrap();
+        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[tokio::test]
+    async fn remote_view_dry_run_router_uses_sqlite_after_legacy_source_removal() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-remote-view-plan-router-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(
+            &service_state_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": home.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let database_path = BrowserRuntimeSqliteStore::default_sqlite_path().unwrap();
+        let migration = BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+        fs::remove_file(&service_state_path).unwrap();
+
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .plan_remote_view_open(
+                serde_json::json!({
+                    "id": "plan-work",
+                    "action": "remote_view_open",
+                    "dryRun": true,
+                    "runtimeProfile": "work",
+                    "url": "https://example.test/work"
+                }),
+                "alice",
+            )
+            .await;
+        assert_eq!(response["id"], "plan-work");
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["status"], "planned");
+        assert_eq!(response["data"]["sessionName"], "alice");
+        assert_eq!(response["data"]["profileId"], "work");
+        assert_eq!(response["data"]["operatorVisible"]["state"], "not_checked");
+        assert!(response["data"]["effects"].as_array().unwrap().is_empty());
+        assert!(BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+
+        let rejected = router
+            .handle_browser_session_command(
+                serde_json::json!({
+                    "id": "open-missing-profile",
+                    "action": "remote_view_open",
+                    "runtimeProfile": "missing",
+                    "url": "https://example.test/work"
+                }),
+                "alice",
+            )
+            .await;
+        assert_eq!(rejected["success"], false);
+        assert_eq!(rejected["error"], "browser_profile_not_found:missing");
+        let store_after_rejection = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert!(store_after_rejection
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+        assert!(store_after_rejection
+            .load_presentation_queue()
+            .unwrap()
+            .entries
+            .is_empty());
+
+        router.shutdown().await.unwrap();
+        let mut permissions = fs::metadata(&migration.archive_directory)
+            .unwrap()
+            .permissions();
+        permissions.set_readonly(false);
+        fs::set_permissions(&migration.archive_directory, permissions).unwrap();
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn remote_open_requires_at_least_one_ready_keeper_route() {
+        assert_eq!(
+            require_keeper_handoff_resolution(true, &[]),
+            Err("browser_session_presentation_route_unavailable")
+        );
+        assert_eq!(
+            require_keeper_handoff_resolution(
+                true,
+                &[agent_browser_service_model::BrowserDesktopRoute {
+                    id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    healthy: true,
+                }],
+            ),
+            Ok(())
+        );
+        assert_eq!(require_keeper_handoff_resolution(false, &[]), Ok(()));
+    }
+
+    #[tokio::test]
+    async fn presentation_keeper_wait_retries_recovery_until_ready() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_secs(1),
+            move || {
+                let index = observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async move {
+                    Ok(if index == 0 {
+                        PresentationKeeperObservation::Pending
+                    } else {
+                        PresentationKeeperObservation::Ready("ready")
+                    })
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result, Ok("ready"));
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 2);
+    }
+
+    #[tokio::test]
+    async fn presentation_keeper_wait_returns_terminal_failure_without_retry() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_secs(1),
+            move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async {
+                    Ok(PresentationKeeperObservation::Terminal(
+                        "presentation_keeper_failed".to_string(),
+                    ))
+                }
+            },
+        )
+        .await;
+
+        assert_eq!(result, Err("presentation_keeper_failed".to_string()));
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 1);
+    }
+
+    #[tokio::test]
+    async fn presentation_keeper_wait_deadline_starts_no_observation() {
+        let observations = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let observed = observations.clone();
+
+        let result: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() - Duration::from_millis(1),
+            move || {
+                observed.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async { Ok(PresentationKeeperObservation::Ready(())) }
+            },
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Err("presentation_keeper_deadline_exceeded".to_string())
+        );
+        assert_eq!(observations.load(std::sync::atomic::Ordering::SeqCst), 0);
+
+        let stalled: Result<(), String> = wait_for_presentation_keeper_observation(
+            Instant::now() + Duration::from_millis(10),
+            || std::future::pending(),
+        )
+        .await;
+        assert_eq!(
+            stalled,
+            Err("presentation_keeper_deadline_exceeded".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn manager_handoff_resolution_loads_sqlite_keeper_authority_before_focus() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-manager-handoff-daemon-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(
+            &service_state_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": home.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let session_state_path = service_directory.join("browser-session-state.json");
+        let profile_catalog_path = service_directory.join("browser-profile-catalog.json");
+        let database_path = BrowserRuntimeSqliteStore::default_sqlite_path().unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &session_state_path,
+                profile_catalog_path: &profile_catalog_path,
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+
+        let mut state = BrowserSessionState::default();
+        state.sessions.insert(
+            "session-a".to_string(),
+            ManagedBrowserSession {
+                id: "session-a".to_string(),
+                name: "alice".to_string(),
+                profile_id: "work".to_string(),
+                browser_id: "browser-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: u64::MAX,
+                current_tab_id: Some("tab-a".to_string()),
+                handoff_ids: Vec::new(),
+            },
+        );
+        state.browsers.insert(
+            "browser-a".to_string(),
+            ManagedBrowserInstance {
+                id: "browser-a".to_string(),
+                profile_id: "work".to_string(),
+                pid: std::process::id(),
+                cdp_endpoint: "http://127.0.0.1:1".to_string(),
+                process_identity: None,
+                desktop: Some(BrowserDesktopAssignment {
+                    route_id: "route-slot-01".to_string(),
+                    display_name: ":10".to_string(),
+                    live_browser_count: 0,
+                }),
+                active_session_ids: vec!["session-a".to_string()],
+            },
+        );
+        state.tabs.insert(
+            "tab-a".to_string(),
+            ManagedBrowserTab {
+                id: "tab-a".to_string(),
+                target_id: "target-a".to_string(),
+                browser_id: "browser-a".to_string(),
+                session_id: "session-a".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+            },
+        );
+        let handoff = RemoteViewHandoff {
+            id: "handoff-a".to_string(),
+            state: "ready".to_string(),
+            intent: serde_json::json!({
+                "browserSessionManager": true,
+                "sessionId": "session-a",
+                "presentationSlotId": "route-slot-01"
+            }),
+            handoff_url: Some("https://dashboard.example/remote-view/handoff-a".to_string()),
+            profile_id: Some("work".to_string()),
+            browser_id: Some("browser-a".to_string()),
+            session_name: Some("alice".to_string()),
+            tab_id: Some("tab-a".to_string()),
+            target_id: Some("target-a".to_string()),
+            view_stream_provider: Some(ViewStreamProvider::RdpGateway),
+            control_input: Some(ControlInputProvider::ManualAttachedDesktop),
+            last_route_id: Some("route-slot-01".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store.save_session_state(&state).unwrap();
+        store.save_manager_handoff(&handoff).unwrap();
+
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .try_resolve_manager_handoff(serde_json::json!({
+                "id": "resolve-a",
+                "action": "service_remote_view_handoff_resolve",
+                "params": { "handoffId": "handoff-a" }
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(response["success"], false);
+        assert_eq!(response["error"], "presentation_keeper_unavailable");
+        assert_eq!(
+            BrowserRuntimeSqliteStore::open(&database_path)
+                .unwrap()
+                .load_session_state()
+                .unwrap()
+                .sessions["session-a"]
+                .last_activity_at_ms,
+            1
+        );
+
+        router.shutdown().await.unwrap();
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[tokio::test]
+    async fn missing_sqlite_handoff_never_resolves_from_legacy_json_state() {
+        let guard =
+            crate::test_utils::EnvGuard::new(&["HOME", "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME"]);
+        let home =
+            std::env::temp_dir().join(format!("ab-sqlite-handoff-only-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let service_state_path = super::super::service_store::default_service_state_path().unwrap();
+        let service_directory = service_state_path.parent().unwrap();
+        fs::create_dir_all(service_directory).unwrap();
+        fs::write(&service_state_path, "{}").unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &BrowserRuntimeSqliteStore::default_sqlite_path().unwrap(),
+            LegacyBrowserRuntimeSources {
+                session_state_path: &service_directory.join("browser-session-state.json"),
+                profile_catalog_path: &service_directory.join("browser-profile-catalog.json"),
+                service_state_path: &service_state_path,
+            },
+        )
+        .unwrap();
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|state| {
+                state.remote_view_handoffs.insert(
+                    "legacy-only".to_string(),
+                    RemoteViewHandoff {
+                        id: "legacy-only".to_string(),
+                        state: "ready".to_string(),
+                        ..RemoteViewHandoff::default()
+                    },
+                );
+                Ok(())
+            })
+            .unwrap();
+        let router = RuntimeHostRouter::new(
+            home.join("socket"),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+        let response = router
+            .try_resolve_manager_handoff(serde_json::json!({
+                "id": "resolve-legacy-only",
+                "action": "service_remote_view_handoff_resolve",
+                "params": {"handoffId": "legacy-only"}
+            }))
+            .await
+            .unwrap();
+        assert_eq!(response["success"], true);
+        assert_eq!(response["data"]["status"], "not_found");
+        assert_eq!(response["data"]["resolved"], false);
+        router.shutdown().await.unwrap();
+        let _ = fs::remove_dir_all(&home);
+    }
 
     #[tokio::test]
     async fn closing_last_runtime_lane_does_not_stop_shared_host() {
@@ -1233,7 +3213,76 @@ mod tests {
                 .is_err(),
             "closing the last lane must not stop the shared host"
         );
-        router.shutdown().await;
+        let (keeper, keeper_shutdowns) =
+            crate::native::stream::configured_route_keeper_supervisor_fixture();
+        router.install_route_keeper_owner(keeper).await.unwrap();
+        let (duplicate, duplicate_shutdowns) =
+            crate::native::stream::configured_route_keeper_supervisor_fixture();
+        assert_eq!(
+            router.install_route_keeper_owner(duplicate).await,
+            Err("runtime_host_route_keeper_already_installed".to_string())
+        );
+        assert_eq!(
+            duplicate_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        router.shutdown().await.unwrap();
+        assert_eq!(
+            keeper_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        router.shutdown().await.unwrap();
+        assert_eq!(
+            keeper_shutdowns.load(std::sync::atomic::Ordering::SeqCst),
+            1
+        );
+        fs::remove_dir_all(home).unwrap();
+    }
+
+    #[tokio::test]
+    async fn route_keeper_initialization_failure_shuts_down_preloaded_lanes() {
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_RUNTIME_HOST",
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+        ]);
+        let home = std::env::temp_dir().join(format!(
+            "ab-route-keeper-initialization-failure-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&home).unwrap();
+        guard.set("HOME", home.to_str().unwrap());
+        guard.set(
+            "AGENT_BROWSER_HOME",
+            home.join("agent-home").to_str().unwrap(),
+        );
+        guard.set("AGENT_BROWSER_RUNTIME_HOST", "1");
+        guard.set(
+            "AGENT_BROWSER_SESSION_SUPERVISOR_ROOT",
+            home.join("supervisor").to_str().unwrap(),
+        );
+        let router = RuntimeHostRouter::new(
+            home.clone(),
+            "cold",
+            None,
+            None,
+            None,
+            RuntimeHostWorkerOptions {
+                service_reconcile_interval_ms: None,
+                service_job_timeout_ms: None,
+                service_monitor_interval_ms: None,
+            },
+        )
+        .unwrap();
+
+        let error = router.initialize_runtime_host("cold").await.unwrap_err();
+        assert!(
+            error.starts_with("browser_runtime_database_missing:"),
+            "unexpected initialization error: {error}"
+        );
+        assert!(router.lanes.is_empty());
+        assert!(router.route_keeper.lock().await.is_none());
         fs::remove_dir_all(home).unwrap();
     }
 
@@ -1304,7 +3353,7 @@ mod tests {
             .expect("client EOF must release its connection before the command finishes")
             .unwrap();
 
-        router.shutdown().await;
+        router.shutdown().await.unwrap();
         let snapshot = LockedServiceStateRepository::default_json()
             .unwrap()
             .load_snapshot()
@@ -1585,5 +3634,104 @@ mod tests {
             heartbeat_count.load(Ordering::Relaxed) > 100,
             "the two-worker runtime must continue scheduling unrelated work"
         );
+    }
+
+    #[test]
+    fn service_status_adds_browser_session_state_without_replacing_legacy_state() {
+        let response = serde_json::json!({
+            "id": "status-1",
+            "success": true,
+            "data": {
+                "service_state": { "browsers": { "legacy": { "id": "legacy" } } }
+            }
+        });
+        let state = serde_json::json!({
+            "schemaVersion": "agent-browser.browser-session-state.v1",
+            "browsers": { "browser:work:1": { "id": "browser:work:1" } }
+        });
+
+        let joined = attach_browser_session_state_to_status(response, Ok(state));
+
+        assert_eq!(
+            joined["data"]["service_state"]["browsers"]["legacy"]["id"],
+            "legacy"
+        );
+        assert_eq!(
+            joined["data"]["browserSessionState"]["browsers"]["browser:work:1"]["id"],
+            "browser:work:1"
+        );
+    }
+
+    #[test]
+    fn service_status_reports_nonblocking_browser_session_projection_failure() {
+        let response = serde_json::json!({ "success": true, "data": {} });
+
+        let joined = attach_browser_session_state_to_status(
+            response,
+            Err("browser-session-state unreadable".to_string()),
+        );
+
+        assert_eq!(joined["success"], true);
+        assert!(joined["data"]["browserSessionState"].is_null());
+        assert_eq!(
+            joined["data"]["browserSessionStateError"],
+            "browser-session-state unreadable"
+        );
+    }
+
+    #[test]
+    fn service_status_adds_presentation_keeper_diagnostics() {
+        let response = serde_json::json!({ "success": true, "data": {} });
+        let joined = attach_presentation_keeper_status(
+            response,
+            crate::native::presentation_runtime_status::unavailable_status(
+                "presentation_keeper_unavailable",
+            ),
+        );
+
+        assert_eq!(joined["success"], true);
+        assert_eq!(joined["data"]["presentationKeeper"]["state"], "unavailable");
+        assert_eq!(
+            joined["data"]["presentationKeeper"]["supervisor"]["code"],
+            "presentation_keeper_unavailable"
+        );
+    }
+
+    #[test]
+    fn browser_session_reaper_uses_service_reconcile_interval() {
+        assert_eq!(browser_session_reap_interval_ms(None), 30_000);
+        assert_eq!(browser_session_reap_interval_ms(Some(1_250)), 1_250);
+        assert_eq!(browser_session_reap_interval_ms(Some(0)), 1);
+    }
+
+    #[test]
+    fn view_focus_routes_only_manager_owned_browser_ids() {
+        let mut state = agent_browser_service_model::BrowserSessionState::default();
+        state.browsers.insert(
+            "browser-work".to_string(),
+            agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser-work".to_string(),
+                profile_id: "work".to_string(),
+                pid: 4242,
+                cdp_endpoint: "ws://127.0.0.1:9422/devtools/browser/test".to_string(),
+                process_identity: None,
+                desktop: None,
+                active_session_ids: Vec::new(),
+            },
+        );
+        let owned = serde_json::json!({
+            "action": "view_focus",
+            "browserId": "browser-work",
+            "targetId": "target-1"
+        });
+        let foreign = serde_json::json!({
+            "action": "view_focus",
+            "browserId": "legacy-browser"
+        });
+
+        let routed = browser_session_focus_command(&owned, &state).unwrap();
+        assert_eq!(routed["action"], "browser_session_focus");
+        assert_eq!(routed["targetId"], "target-1");
+        assert!(browser_session_focus_command(&foreign, &state).is_none());
     }
 }

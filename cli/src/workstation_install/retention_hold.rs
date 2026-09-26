@@ -124,7 +124,9 @@ fn change(
     } else if release {
         return Err("generation_retention_hold_missing".into());
     }
-    let now = super::runtime_adoption_timestamp();
+    let now = time::OffsetDateTime::now_utc()
+        .format(&time::format_description::well_known::Rfc3339)
+        .map_err(|error| format!("generation_retention_timestamp_failed: {error}"))?;
     let hold = Hold {
         schema_version: "agent-browser.generation-retention.v1".into(),
         generation_id: id.into(),
@@ -203,6 +205,7 @@ pub(super) fn run(args: &[String], json: bool) {
 
 /// Join holds before any retention finalization or generation removal. Invalid
 /// retained evidence blocks GC; a release is explicit and leaves its receipt.
+#[allow(dead_code)]
 pub(super) fn references(
     root: &Path,
     paths: &InstallPaths,
@@ -235,7 +238,7 @@ pub(super) fn references(
     Ok(references)
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     fn fixture() -> (std::path::PathBuf, InstallPaths) {

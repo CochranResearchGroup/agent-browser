@@ -41,10 +41,6 @@ export const SERVICE_REQUEST_ACTIONS = [
   "service_remote_view_route_checkout",
   "service_remote_view_route_release",
   "service_route_pool_repair",
-  "service_viewer_lease_request",
-  "service_viewer_lease_heartbeat",
-  "service_viewer_lease_release",
-  "service_controller_lease_takeover",
   "service_authentication_run_start",
   "service_authentication_run_status",
   "service_authentication_run_resume",
@@ -115,6 +111,8 @@ export const SERVICE_REQUEST_ACTIONS = [
   "clear",
   "service_browser_close",
   "service_browser_repair",
+  "service_runtime_config_get",
+  "service_runtime_config_update",
   "service_browser_contamination_report",
   "service_browser_retirement_plan",
   "service_browser_retirement_apply",
@@ -231,6 +229,7 @@ export const SERVICE_REQUEST_BOOLEAN_FIELDS = [
 ];
 
 export const SERVICE_REQUEST_OBJECT_FIELDS = [
+  "config",
   "monitorRunDueSummary",
   "serviceTabHandle",
   "probe",

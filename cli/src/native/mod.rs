@@ -30,6 +30,14 @@ pub mod browser_navigation;
 #[allow(dead_code)]
 pub mod browser_session_authority;
 #[allow(dead_code)]
+pub(crate) mod browser_session_handoff;
+#[allow(dead_code)]
+pub(crate) mod browser_session_host;
+#[allow(dead_code)]
+pub(crate) mod browser_session_runtime;
+#[allow(dead_code)]
+pub(crate) mod browser_session_store;
+#[allow(dead_code)]
 pub mod browser_tabs;
 #[allow(dead_code)]
 pub mod browser_wait;
@@ -101,6 +109,15 @@ pub(crate) mod presentation_capacity;
 pub(crate) mod presentation_inventory;
 #[allow(dead_code)]
 pub(crate) mod presentation_lifecycle;
+mod presentation_provisioning;
+mod presentation_provisioning_sql;
+#[cfg(test)]
+mod presentation_provisioning_tests;
+mod presentation_request_admission;
+#[allow(dead_code)]
+pub(crate) mod presentation_route_keeper;
+pub(crate) mod presentation_runtime_capacity;
+pub(crate) mod presentation_runtime_status;
 #[allow(dead_code)]
 pub mod providers;
 #[allow(dead_code)]
@@ -117,19 +134,13 @@ pub mod remote_view_handoff;
 pub mod remote_view_lease;
 #[allow(dead_code)]
 pub mod remote_view_proof;
-#[allow(dead_code)]
-pub(crate) mod runtime_lifecycle;
-#[allow(dead_code)]
-pub(crate) mod runtime_reconciliation;
+pub(crate) mod route_keeper_connection_catalog;
 #[allow(dead_code)]
 pub mod screenshot;
-pub(crate) mod service_abandoned_browser_retirement;
 #[allow(dead_code)]
 pub mod service_access;
 #[allow(dead_code)]
 pub mod service_activity;
-mod service_boot_epoch;
-pub(crate) mod service_browser_retirement;
 #[allow(dead_code)]
 pub mod service_config;
 #[allow(dead_code)]
@@ -154,10 +165,6 @@ pub mod service_inventory;
 #[allow(dead_code)]
 pub mod service_jobs;
 #[allow(dead_code)]
-pub(crate) mod service_lease_authority_adapter;
-#[allow(dead_code)]
-pub(crate) mod service_lease_mode;
-#[allow(dead_code)]
 pub mod service_lifecycle;
 #[allow(dead_code)]
 pub mod service_model;
@@ -166,14 +173,8 @@ pub mod service_monitors;
 #[allow(dead_code)]
 pub mod service_network_capture;
 #[allow(dead_code)]
-pub(crate) mod service_principal;
-#[allow(dead_code)]
 pub mod service_probe;
 pub(crate) mod service_profile_access_policy;
-#[allow(dead_code)]
-pub(crate) mod service_profile_acquisition;
-#[allow(dead_code)]
-pub(crate) mod service_profile_lease;
 pub(crate) mod service_profile_lifecycle;
 #[allow(dead_code)]
 pub mod service_renderer_crash;
@@ -184,8 +185,6 @@ pub(crate) mod service_request_provenance;
 #[allow(dead_code)]
 pub mod service_resources;
 #[allow(dead_code)]
-pub mod service_retained_state;
-pub(crate) mod service_state_migration;
 pub(crate) mod service_state_validation;
 #[allow(dead_code)]
 pub mod service_status_projection;

@@ -5,8 +5,6 @@ use super::service_model::{
     ServiceState, ViewStream, ViewStreamProvider,
 };
 
-const ACTIVE_VIEWER_LEASE_STATES: [&str; 2] = ["observing", "controlling"];
-
 pub fn refresh_remote_view_attachability(state: &mut ServiceState) {
     let snapshot = state.clone();
     for browser in state.browsers.values_mut() {
@@ -64,16 +62,6 @@ pub fn derive_stream_attachability(
         .and_then(|route| route.browser_id.as_deref())
         .map(|route_browser| route_browser == browser.id)
         .unwrap_or(true);
-    let has_active_viewer = stream
-        .viewer_lease_ids
-        .iter()
-        .chain(stream.controller_lease_id.iter())
-        .any(|id| {
-            state
-                .viewer_leases
-                .get(id)
-                .is_some_and(|lease| ACTIVE_VIEWER_LEASE_STATES.contains(&lease.state.as_str()))
-        });
     let (attachability_state, recommended_action, reason) =
         if is_terminal_browser_health(browser.health) {
             (
@@ -104,19 +92,11 @@ pub fn derive_stream_attachability(
                 "route or route-pool state is not attached-ready",
             )
         } else if route_state == "ready" && proof_state == "ready" {
-            if has_active_viewer || stream.viewer_lease_ids.is_empty() {
-                (
-                    "attached_ready",
-                    "open_existing_remote_view_route",
-                    "route, browser, display, and proof agree",
-                )
-            } else {
-                (
-                    "reattachable_viewer_disconnected",
-                    "service_viewer_lease_request",
-                    "route is ready but retained viewer leases are disconnected",
-                )
-            }
+            (
+                "attached_ready",
+                "open_existing_remote_view_route",
+                "route, browser, display, and proof agree; viewer presence is not inferred",
+            )
         } else {
             (
                 "reattachable_stale_route",
@@ -146,7 +126,7 @@ pub fn derive_stream_attachability(
         "displayContentState": display_content_state,
         "displayAgrees": display_agrees,
         "browserAgrees": browser_agrees,
-        "hasActiveViewer": has_active_viewer,
+        "hasActiveViewer": false,
     })
 }
 
@@ -320,7 +300,7 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::native::service_model::{ControlInputProvider, ViewerLease};
+    use crate::native::service_model::ControlInputProvider;
 
     #[test]
     fn attachability_reports_attached_ready_from_stream_display_proof() {
@@ -409,9 +389,8 @@ mod tests {
     }
 
     #[test]
-    fn attachability_reports_viewer_disconnected_for_ready_route_without_active_viewer() {
-        let mut browser = ready_browser("browser-1");
-        browser.view_streams[0].viewer_lease_ids = vec!["viewer-1".to_string()];
+    fn attachability_does_not_infer_viewer_presence_for_ready_route() {
+        let browser = ready_browser("browser-1");
         let mut state = ServiceState {
             browsers: BTreeMap::from([("browser-1".to_string(), browser)]),
             display_allocations: BTreeMap::from([(
@@ -433,16 +412,6 @@ mod tests {
                     ..RemoteViewRoute::default()
                 },
             )]),
-            viewer_leases: BTreeMap::from([(
-                "viewer-1".to_string(),
-                ViewerLease {
-                    id: "viewer-1".to_string(),
-                    state: "disconnected".to_string(),
-                    route_id: Some("route-1".to_string()),
-                    browser_id: Some("browser-1".to_string()),
-                    ..ViewerLease::default()
-                },
-            )]),
             ..ServiceState::default()
         };
 
@@ -450,7 +419,11 @@ mod tests {
 
         assert_eq!(
             state.browsers["browser-1"].attachability.as_ref().unwrap()["state"],
-            "reattachable_viewer_disconnected"
+            "attached_ready"
+        );
+        assert_eq!(
+            state.browsers["browser-1"].attachability.as_ref().unwrap()["hasActiveViewer"],
+            false
         );
     }
 

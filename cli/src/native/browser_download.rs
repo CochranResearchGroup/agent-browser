@@ -57,19 +57,8 @@ pub(crate) mod action_commands {
             .browser_pid()
             .or(state.attached_browser_pid)
             .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
-        let owner = crate::process_identity::capture_process_identity(pid, None, None)
+        let process = crate::process_identity::capture_process_identity(pid, None, None)
             .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
-        let binding = state
-            .runtime_owner_binding
-            .as_ref()
-            .ok_or("download_source_identity_unproven: current owner binding unavailable")?;
-        if crate::native::runtime_lifecycle::digest_json(&owner)?
-            != binding.claim.process_instance_digest
-        {
-            return Err(
-                "download_source_identity_unproven: process differs from current owner".into(),
-            );
-        }
         let tree = mgr
             .client
             .send_command("Page.getFrameTree", None, Some(&session_id))
@@ -87,7 +76,7 @@ pub(crate) mod action_commands {
         )
         .await
         .map_err(|_| "download_subscription_failed: setup deadline elapsed")??;
-        crate::native::service_download_artifact::verify_process(&owner)?;
+        crate::native::service_download_artifact::verify_process(&process)?;
         let mut rx = observer.subscribe();
         tokio::time::timeout(
             deadline.saturating_duration_since(tokio::time::Instant::now()),
@@ -129,7 +118,12 @@ pub(crate) mod action_commands {
             .path
             .as_deref()
             .ok_or("download_completion_path_missing: no completed path")?;
-        crate::native::service_download_artifact::deliver(&owner, Path::new(source), &dest, None)?;
+        crate::native::service_download_artifact::deliver(
+            &process,
+            Path::new(source),
+            &dest,
+            None,
+        )?;
         let dest_str = dest.to_string_lossy().to_string();
         Ok(json!({ "path" : dest_str }))
     }
