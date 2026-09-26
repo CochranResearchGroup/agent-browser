@@ -479,7 +479,9 @@ route remains available for another browser.
 If the launch returned a PID without an exact process identity, acquisition
 keeps the profile reserved while that PID exists. Once the PID is absent, the
 next acquire returns <code>retryRequiresNewOperation: true</code> and does not
-launch a browser. Submit a new request ID before retrying.
+launch a browser. Acquiring or resolving a previously ready browser that has
+exited also closes its exact handoff and returns that retry marker. Submit a
+new request ID before retrying.
 
 Dashboard reconnect selects the browser's service-owned RDP stream for viewer
 lease authority, even when a CDP stream is currently selected for presentation.

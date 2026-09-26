@@ -168,8 +168,39 @@ fn prepare_sqlite_manual_seeding_acquisition(
                     .process_identity
                     .as_ref()
                     .ok_or_else(|| "manual_seeding_ready_process_identity_missing".to_string())?;
-                if !crate::process_identity::recorded_process_is_running(process)? {
-                    return Err("manual_seeding_ready_process_missing".to_string());
+                let assessment = crate::process_identity::assess_process_ownership(
+                    Some(process),
+                    crate::process_identity::observe_process(process.pid),
+                    crate::process_identity::LegacyProfileProof::Unproven,
+                );
+                if assessment.authorizes_cleanup() {
+                    let closed_at =
+                        chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+                    store.close_manual_seeding_after_process_exit(
+                        &profile_id,
+                        &record.target_service_id,
+                        &record.handoff_id,
+                        process,
+                        &closed_at,
+                    )?;
+                    return Ok(ManualSeedingAcquisition::Existing(json!({
+                        "status": "manual_seeding_process_exited",
+                        "resolved": false,
+                        "profileId": profile_id,
+                        "handoffId": record.handoff_id,
+                        "pid": process.pid,
+                        "retryRequiresNewOperation": true,
+                        "operatorVisible": {
+                            "state": "not_checked",
+                            "reason": "manual_seeding_browser_exited",
+                        },
+                    })));
+                }
+                if !assessment.authorizes_adoption() {
+                    return Err(format!(
+                        "manual_seeding_ready_process_ambiguous:{}",
+                        assessment.reason
+                    ));
                 }
                 let handoff = store
                     .load_handoff_registry()?
@@ -523,7 +554,7 @@ pub(crate) async fn handle_sqlite_manual_seeding_close(command: &Value) -> Resul
 pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
     handoff_id: &str,
 ) -> Result<Value, String> {
-    let (handoff, record, binding) = {
+    let (handoff, record) = {
         let store = BrowserRuntimeSqliteStore::default_sqlite()?;
         let handoff = store
             .load_handoff_registry()?
@@ -558,29 +589,57 @@ pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
         if record.state != ManualSeedingState::Ready || handoff.state != "ready" {
             return Err("manual_seeding_handoff_recovery_required".to_string());
         }
-        let slot_id = record
-            .route_slot_id
-            .as_deref()
-            .ok_or_else(|| "manual_seeding_handoff_slot_missing".to_string())?;
-        let display_name = record
-            .display_name
-            .as_deref()
-            .ok_or_else(|| "manual_seeding_handoff_display_missing".to_string())?;
-        let binding = store
-            .load_route_keeper_authority()?
-            .ready_handoff_binding(slot_id, display_name)?;
-        if record.route_fence.as_ref() != Some(&binding.fence)
-            || handoff.last_route_id.as_deref() != Some(slot_id)
-            || handoff.last_display_allocation_id.as_deref() != Some(display_name)
-        {
-            return Err("manual_seeding_handoff_route_changed_recovery_required".to_string());
-        }
-        (handoff, record, binding)
+        (handoff, record)
     };
     let process = record
         .process_identity
         .as_ref()
         .ok_or_else(|| "manual_seeding_handoff_process_identity_missing".to_string())?;
+    let assessment = crate::process_identity::assess_process_ownership(
+        Some(process),
+        crate::process_identity::observe_process(process.pid),
+        crate::process_identity::LegacyProfileProof::Unproven,
+    );
+    if assessment.authorizes_cleanup() {
+        let closed_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        BrowserRuntimeSqliteStore::default_sqlite()?.close_manual_seeding_after_process_exit(
+            &record.profile_id,
+            &record.target_service_id,
+            handoff_id,
+            process,
+            &closed_at,
+        )?;
+        return Ok(json!({
+            "status": "manual_seeding_process_exited",
+            "resolved": false,
+            "handoffId": handoff_id,
+            "profileId": record.profile_id,
+            "retryRequiresNewOperation": true,
+        }));
+    }
+    if !assessment.authorizes_adoption() {
+        return Err(format!(
+            "manual_seeding_handoff_process_ambiguous:{}",
+            assessment.reason
+        ));
+    }
+    let slot_id = record
+        .route_slot_id
+        .as_deref()
+        .ok_or_else(|| "manual_seeding_handoff_slot_missing".to_string())?;
+    let display_name = record
+        .display_name
+        .as_deref()
+        .ok_or_else(|| "manual_seeding_handoff_display_missing".to_string())?;
+    let binding = BrowserRuntimeSqliteStore::default_sqlite()?
+        .load_route_keeper_authority()?
+        .ready_handoff_binding(slot_id, display_name)?;
+    if record.route_fence.as_ref() != Some(&binding.fence)
+        || handoff.last_route_id.as_deref() != Some(slot_id)
+        || handoff.last_display_allocation_id.as_deref() != Some(display_name)
+    {
+        return Err("manual_seeding_handoff_route_changed_recovery_required".to_string());
+    }
     let browser_id = handoff
         .browser_id
         .as_deref()
@@ -594,7 +653,7 @@ pub(crate) async fn resolve_sqlite_manual_seeding_handoff(
     let current_binding = store
         .load_route_keeper_authority()?
         .ready_handoff_binding(&binding.slot_id, &binding.display_name)?;
-    if current != record || current_binding.fence != binding.fence {
+    if current != record || current_binding != binding {
         return Err("manual_seeding_handoff_changed_during_proof".to_string());
     }
     let mut result = handoff

@@ -4573,7 +4573,7 @@ mod tests {
             Err("manual_seeding_abort_after_launch_forbidden".to_string())
         );
         let process = RecordedProcessIdentity {
-            pid: 4_242,
+            pid: i32::MAX as u32,
             start_token: "linux:start:4242".to_string(),
             executable_path: Some("/opt/chrome".to_string()),
             browser_family: Some("chrome".to_string()),
@@ -4701,6 +4701,37 @@ mod tests {
                 )
                 .unwrap(),
             published
+        );
+        let closed = store
+            .close_manual_seeding_after_process_exit(
+                "work",
+                "service-a",
+                "seed-handoff",
+                &process,
+                "2026-09-25T00:01:00Z",
+            )
+            .unwrap();
+        assert_eq!(closed.0.state, ManualSeedingState::Closed);
+        assert_eq!(closed.1.as_ref().unwrap().state, "closed");
+        assert_eq!(
+            store
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("seed-handoff"),
+            closed.1.as_ref()
+        );
+        assert_eq!(
+            store
+                .close_manual_seeding_after_process_exit(
+                    "work",
+                    "service-a",
+                    "seed-handoff",
+                    &process,
+                    "2026-09-25T00:01:00Z",
+                )
+                .unwrap(),
+            closed
         );
     }
 
