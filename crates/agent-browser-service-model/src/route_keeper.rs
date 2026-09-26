@@ -263,6 +263,23 @@ pub struct RouteKeeperStopReceipt {
     pub stopped_at: String,
 }
 
+/// Bounded diagnostic evidence from the most recent owned primary occurrence.
+///
+/// This deliberately retains only stable transport classification and exact
+/// occurrence identity. Provider frames, credentials, and free-form errors do
+/// not belong in durable route authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RouteKeeperTerminalReceipt {
+    pub slot_id: String,
+    pub keeper_id: String,
+    pub fence: RouteKeeperFence,
+    pub occurrence_id: String,
+    pub guacamole_connection_uuid: Option<String>,
+    pub code: String,
+    pub elapsed_ms: u64,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "disposition")]
 pub enum RouteKeeperStopDisposition {
@@ -292,6 +309,8 @@ pub struct RouteKeeperRecord {
     pub protocol_ready: Option<RouteKeeperProtocolReadyReceipt>,
     pub adoption: Option<RouteKeeperAdoptionReceipt>,
     pub last_stop: Option<RouteKeeperStopReceipt>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_terminal: Option<RouteKeeperTerminalReceipt>,
     pub cleanup_obligation: Option<RouteKeeperCleanupObligation>,
 }
 
@@ -410,6 +429,7 @@ impl RouteKeeperAuthority {
                         protocol_ready: None,
                         adoption: None,
                         last_stop: None,
+                        last_terminal: None,
                         cleanup_obligation: None,
                     },
                 )
@@ -605,6 +625,7 @@ impl RouteKeeperAuthority {
                     protocol_ready: None,
                     adoption: None,
                     last_stop: None,
+                    last_terminal: None,
                     cleanup_obligation: None,
                 },
             );
@@ -1169,6 +1190,30 @@ impl RouteKeeperAuthority {
         Ok(())
     }
 
+    pub fn record_terminal(&mut self, receipt: RouteKeeperTerminalReceipt) -> Result<(), String> {
+        if receipt.occurrence_id.is_empty()
+            || receipt.occurrence_id.len() > 128
+            || receipt.code.is_empty()
+            || receipt.code.len() > 128
+            || !receipt
+                .code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || receipt
+                .guacamole_connection_uuid
+                .as_ref()
+                .is_some_and(String::is_empty)
+        {
+            return Err("route_keeper_terminal_receipt_invalid".to_string());
+        }
+        let record = self.record_for_fence_mut(&receipt.slot_id, &receipt.fence)?;
+        if record.keeper_id != receipt.keeper_id {
+            return Err("route_keeper_terminal_receipt_identity_mismatch".to_string());
+        }
+        record.last_terminal = Some(receipt);
+        Ok(())
+    }
+
     /// A protocol task that terminates before publishing readiness owns no
     /// usable keeper. Return the exact slot to `Absent` so reconciliation can
     /// reserve a newly fenced attempt instead of polling a dead task forever.
@@ -1644,6 +1689,28 @@ fn validate_record(
             return Err("route_keeper_adoption_receipt_invalid".to_string());
         }
     }
+    if let Some(terminal) = &record.last_terminal {
+        if terminal.slot_id != record.slot_id
+            || terminal.keeper_id != record.keeper_id
+            || terminal.fence.host_generation > record.fence.host_generation
+            || terminal.fence.operation_generation > record.fence.operation_generation
+            || terminal.fence.connection_catalog_digest != record.fence.connection_catalog_digest
+            || terminal.occurrence_id.is_empty()
+            || terminal.occurrence_id.len() > 128
+            || terminal.code.is_empty()
+            || terminal.code.len() > 128
+            || !terminal
+                .code
+                .bytes()
+                .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'_')
+            || terminal
+                .guacamole_connection_uuid
+                .as_ref()
+                .is_some_and(String::is_empty)
+        {
+            return Err("route_keeper_terminal_receipt_invalid".to_string());
+        }
+    }
     match record.phase {
         RouteKeeperPhase::Absent => {
             if record.protocol_ready.is_some()
@@ -1730,6 +1797,9 @@ fn set_record_catalog_digest(record: &mut RouteKeeperRecord, digest: &str) {
     }
     if let Some(stop) = record.last_stop.as_mut() {
         stop.fence.connection_catalog_digest = digest.to_string();
+    }
+    if let Some(terminal) = record.last_terminal.as_mut() {
+        terminal.fence.connection_catalog_digest = digest.to_string();
     }
     if let Some(obligation) = record.cleanup_obligation.as_mut() {
         obligation.fence.connection_catalog_digest = digest.to_string();

@@ -175,9 +175,10 @@ pub use route_keeper::{
     RouteKeeperHandoffBinding, RouteKeeperHostProcessClaim, RouteKeeperPhase, RouteKeeperPolicy,
     RouteKeeperProjection, RouteKeeperProtocolReadyReceipt, RouteKeeperProviderState,
     RouteKeeperReconcileAction, RouteKeeperRecord, RouteKeeperStartPriority,
-    RouteKeeperStopDisposition, RouteKeeperStopReceipt, RouteKeeperXrdpOwnershipWitness,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    RouteKeeperStopDisposition, RouteKeeperStopReceipt, RouteKeeperTerminalReceipt,
+    RouteKeeperXrdpOwnershipWitness, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 pub use service_authentication_run::{
     authentication_run_map_is_empty, cancel_authentication_run,

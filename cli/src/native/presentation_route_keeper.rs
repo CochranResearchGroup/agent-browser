@@ -473,6 +473,15 @@ fn record_terminal_event(
         return expected.projection();
     }
     let mut next = expected.clone();
+    next.record_terminal(agent_browser_service_model::RouteKeeperTerminalReceipt {
+        slot_id: event.slot_id.clone(),
+        keeper_id: event.keeper_id.clone(),
+        fence: event.fence.clone(),
+        occurrence_id: event.occurrence_id.clone(),
+        guacamole_connection_uuid: event.guacamole_connection_uuid.clone(),
+        code: event.code.to_string(),
+        elapsed_ms: event.elapsed_ms,
+    })?;
     match record.phase {
         agent_browser_service_model::RouteKeeperPhase::Starting
         | agent_browser_service_model::RouteKeeperPhase::Observing => {
@@ -3890,6 +3899,14 @@ mod tests {
                 .operation_generation
                 > ready.records["route-slot-01"].fence.operation_generation
         );
+        let terminal = recovered.records["route-slot-01"]
+            .last_terminal
+            .as_ref()
+            .expect("terminal receipt");
+        assert_eq!(terminal.occurrence_id, "occurrence-ready");
+        assert_eq!(terminal.code, "fixture_primary_closed");
+        assert_eq!(terminal.elapsed_ms, 7);
+        assert_eq!(terminal.fence, ready.records["route-slot-01"].fence);
 
         let before_stale = recovered.clone();
         connector.terminal_events.push(terminal_event(
