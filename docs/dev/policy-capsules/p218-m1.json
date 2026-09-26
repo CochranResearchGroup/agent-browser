@@ -16,6 +16,7 @@
   ],
   "operativeRules": [
     "Keep one primary owner for Service State, Cargo manifests, architecture decisions, and acceptance.",
+    "Keep at most one primary worktree for each active top-level development lane; any additional checkout needs explicit admission and must not give a worker independent Git custody.",
     "Batch one coherent causal group before invoking Cargo and retain compact compiler evidence.",
     "Preserve the frozen replacement contract and do not restore, rename, or relocate legacy authority.",
     "Treat commits as custody checkpoints rather than turn boundaries.",
