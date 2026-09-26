@@ -164,7 +164,8 @@ fn test_remote_view_helper_status_contract_accepts_current_capabilities() {
         "staleDisplayLockReclamation" : { "supported" : true, "exactRouteUser" : true,
         "requiresSessionAbsent" : true, "requiresSocketAbsent" : true,
         "requiresPidAbsent" : true, "retainsInodeIdentity" : true,
-        "integratedWithAbsenceVerification" : true }, "displayAccess" : {
+        "integratedWithAbsenceVerification" : true, "reclaimsXrdpChannelSockets" : true,
+        "requiresInactiveSocketPaths" : true }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : true,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 },
@@ -186,7 +187,8 @@ fn test_remote_view_helper_status_contract_rejects_missing_abstract_socket_suppo
         "staleDisplayLockReclamation" : { "supported" : true, "exactRouteUser" : true,
         "requiresSessionAbsent" : true, "requiresSocketAbsent" : true,
         "requiresPidAbsent" : true, "retainsInodeIdentity" : true,
-        "integratedWithAbsenceVerification" : true }, "displayAccess" : {
+        "integratedWithAbsenceVerification" : true, "reclaimsXrdpChannelSockets" : true,
+        "requiresInactiveSocketPaths" : true }, "displayAccess" : {
         "supportsFilesystemX11Socket" : true, "supportsAbstractX11Socket" : false,
         "boundedXhostTimeoutSeconds" : 2 }, "routeUserCredentialUpdate" : {
         "pamBypassed" : true, "cryptMethod" : "SHA512", "shaRounds" : 100000 },

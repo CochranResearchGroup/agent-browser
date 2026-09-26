@@ -89,6 +89,14 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .and_then(Value::as_bool)
             == Some(true)
         && report
+            .pointer("/parsed/staleDisplayLockReclamation/reclaimsXrdpChannelSockets")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/requiresInactiveSocketPaths")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
             .pointer("/parsed/schemaVersion")
             .and_then(Value::as_i64)
             == Some(1)
@@ -280,7 +288,7 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-26.p219-route-desktop-v8",
+                "helperVersion": "2026-09-26.p219-route-desktop-v9",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -307,7 +315,9 @@ mod tests {
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
                     "retainsInodeIdentity": true,
-                    "integratedWithAbsenceVerification": true
+                    "integratedWithAbsenceVerification": true,
+                    "reclaimsXrdpChannelSockets": true,
+                    "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,

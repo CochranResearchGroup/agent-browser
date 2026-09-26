@@ -4035,7 +4035,9 @@ EOF
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
                     "retainsInodeIdentity": true,
-                    "integratedWithAbsenceVerification": true
+                    "integratedWithAbsenceVerification": true,
+                    "reclaimsXrdpChannelSockets": true,
+                    "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
@@ -4089,7 +4091,9 @@ EOF
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
                     "retainsInodeIdentity": true,
-                    "integratedWithAbsenceVerification": true
+                    "integratedWithAbsenceVerification": true,
+                    "reclaimsXrdpChannelSockets": true,
+                    "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,

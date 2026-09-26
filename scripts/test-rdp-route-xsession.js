@@ -129,6 +129,8 @@ for (const file of files) {
     assert.equal(report.staleDisplayLockReclamation?.requiresPidAbsent, true);
     assert.equal(report.staleDisplayLockReclamation?.retainsInodeIdentity, true);
     assert.equal(report.staleDisplayLockReclamation?.integratedWithAbsenceVerification, true);
+    assert.equal(report.staleDisplayLockReclamation?.reclaimsXrdpChannelSockets, true);
+    assert.equal(report.staleDisplayLockReclamation?.requiresInactiveSocketPaths, true);
     assert.equal(report.displayAccess?.supportsFilesystemX11Socket, true);
     assert.equal(report.displayAccess?.supportsAbstractX11Socket, true);
     assert.equal(report.displayAccess?.boundedXhostTimeoutSeconds, 2);
@@ -232,6 +234,7 @@ mkdir -p "$target"
     const proc = join(fixture, 'proc');
     const cgroup = join(fixture, 'cgroup');
     const fixtureTmp = join(fixture, 'tmp');
+    const xrdpSockdir = join(fixture, 'xrdp-sockdir');
     const scope = join(cgroup, 'user.slice', 'user-2001.slice', 'session-c42.scope');
     const commandLog = join(fixture, 'commands.log');
     try {
@@ -240,10 +243,22 @@ mkdir -p "$target"
       mkdirSync(join(proc, '41003', 'fd'), { recursive: true });
       mkdirSync(scope, { recursive: true });
       mkdirSync(join(fixtureTmp, '.X11-unix'), { recursive: true });
+      mkdirSync(xrdpSockdir, { recursive: true, mode: 0o3777 });
+      chmodSync(xrdpSockdir, 0o3777);
       writeFileSync(join(bin, 'id'), '#!/bin/sh\nprintf "0\\n"\n', { mode: 0o755 });
       writeFileSync(
         join(bin, 'getent'),
-        '#!/bin/sh\nprintf "%s:x:2001:2001:%s:/home/%s:/bin/bash\\n" "$2" "${FIXTURE_GECOS:-agent-browser route-pool RDP session}" "$2"\n',
+        `#!/bin/sh
+if [ "$1" = "passwd" ] && [ "$2" = "xrdp" ]; then
+  printf 'xrdp:x:110:117:xrdp:/run/xrdp:/usr/sbin/nologin\\n'
+elif [ "$1" = "passwd" ]; then
+  printf '%s:x:2001:2001:%s:/home/%s:/bin/bash\\n' "$2" "\${FIXTURE_GECOS:-agent-browser route-pool RDP session}" "$2"
+elif [ "$1" = "group" ] && [ "$2" = "xrdp" ]; then
+  printf 'xrdp:x:117:\\n'
+else
+  exit 2
+fi
+`,
         { mode: 0o755 },
       );
       writeFileSync(
@@ -338,6 +353,30 @@ fi
         AGENT_BROWSER_HELPER_TEST_BOOT_ID_PATH: join(proc, 'boot-id'),
         AGENT_BROWSER_HELPER_TEST_PROC_NET_UNIX_PATH: join(proc, 'net-unix'),
         AGENT_BROWSER_HELPER_TEST_TMP_ROOT: fixtureTmp,
+        AGENT_BROWSER_HELPER_TEST_XRDP_SOCKDIR: xrdpSockdir,
+      };
+      const channelSocketBasenames = [
+        'xrdp_display_21',
+        'xrdp_disconnect_display_21',
+        'xrdpapi_21',
+        'xrdp_chansrv_audio_in_socket_21',
+        'xrdp_chansrv_audio_out_socket_21',
+      ];
+      const createStaleChannelSockets = () => {
+        for (const basename of channelSocketBasenames) {
+          const socketPath = join(xrdpSockdir, basename);
+          const created = spawnSync(
+            process.execPath,
+            [
+              '-e',
+              'const net=require("node:net");net.createServer().listen(process.argv[1],()=>process.exit(0))',
+              socketPath,
+            ],
+            { encoding: 'utf8' },
+          );
+          assert.equal(created.status, 0, created.stderr);
+          chmodSync(socketPath, 0o660);
+        }
       };
       const observed = spawnSync('bash', [file, 'observe-rdp-route-session', '--user', 'agent-browser-rdp-dev-6'], {
         encoding: 'utf8',
@@ -607,6 +646,7 @@ fi
       const displayLock = join(fixtureTmp, '.X21-lock');
       writeFileSync(displayLock, '      41003\n', { mode: 0o444 });
       chmodSync(displayLock, 0o444);
+      createStaleChannelSockets();
       const reclaimArgs = [
         file, 'reclaim-rdp-route-display-lock-exact',
         '--user', witness.routeUser,
@@ -624,6 +664,30 @@ fi
         code: 'rdp_route_display_socket_live',
       });
       assert.equal(existsSync(displayLock), true);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), true);
+      }
+
+      writeFileSync(
+        join(proc, 'net-unix'),
+        `Num RefCount Protocol Flags Type St Inode Path
+000: 2 0 10000 1 01 7101 ${join(xrdpSockdir, 'xrdp_display_21')}
+`,
+      );
+      const liveChannelSocketAbsence = spawnSync('bash', absentArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(liveChannelSocketAbsence.status, 0, liveChannelSocketAbsence.stderr);
+      assert.deepEqual(JSON.parse(liveChannelSocketAbsence.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_channel_socket_live',
+      });
+      assert.equal(existsSync(displayLock), false);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), true);
+      }
 
       writeFileSync(
         join(proc, 'net-unix'),
@@ -643,9 +707,13 @@ fi
         ownedScopeEmptyOrAbsent: true,
       });
       assert.equal(existsSync(displayLock), false);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), false);
+      }
 
       writeFileSync(displayLock, '      99999\n', { mode: 0o444 });
       chmodSync(displayLock, 0o444);
+      createStaleChannelSockets();
       const mismatchedLockReclaim = spawnSync('bash', reclaimArgs, {
         encoding: 'utf8',
         env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
@@ -657,6 +725,9 @@ fi
         code: 'rdp_route_display_lock_pid_mismatch',
       });
       assert.equal(existsSync(displayLock), true);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), true);
+      }
 
       chmodSync(displayLock, 0o644);
       writeFileSync(displayLock, '      41003\n');
@@ -672,8 +743,12 @@ fi
         display: ':21',
         xServerPid: 41003,
         lockRemoved: true,
+        xrdpSocketCount: 5,
       });
       assert.equal(existsSync(displayLock), false);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), false);
+      }
 
       const rejected = spawnSync('bash', [file, 'observe-rdp-route-session', '--user', 'ecochran76'], {
         encoding: 'utf8',

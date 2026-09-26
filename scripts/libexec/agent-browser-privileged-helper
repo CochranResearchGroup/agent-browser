@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-09-26.p219-route-desktop-v8"
+HELPER_VERSION="2026-09-26.p219-route-desktop-v9"
 ROUTE_USER_LEGACY_COMMENT="agent-browser route-pool RDP session"
 ROUTE_USER_OWNED_COMMENT_PREFIX="agent-browser route-pool RDP session; operation-id="
 
@@ -206,7 +206,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"requiresInactiveSocketPaths":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -333,10 +333,12 @@ helper_observation_roots() {
   CGROUP_ROOT="${AGENT_BROWSER_HELPER_TEST_CGROUP_ROOT:-/sys/fs/cgroup}"
   BOOT_ID_PATH="${AGENT_BROWSER_HELPER_TEST_BOOT_ID_PATH:-/proc/sys/kernel/random/boot_id}"
   PROC_NET_UNIX_PATH="${AGENT_BROWSER_HELPER_TEST_PROC_NET_UNIX_PATH:-/proc/net/unix}"
+  XRDP_SOCKDIR="${AGENT_BROWSER_HELPER_TEST_XRDP_SOCKDIR:-/run/xrdp/sockdir}"
   if [[ "$EUID" == "0" && ( "$PROC_ROOT" != "/proc" \
     || "$CGROUP_ROOT" != "/sys/fs/cgroup" \
     || "$BOOT_ID_PATH" != "/proc/sys/kernel/random/boot_id" \
-    || "$PROC_NET_UNIX_PATH" != "/proc/net/unix" ) ]]; then
+    || "$PROC_NET_UNIX_PATH" != "/proc/net/unix" \
+    || "$XRDP_SOCKDIR" != "/run/xrdp/sockdir" ) ]]; then
     echo "test observation roots are forbidden for a root helper" >&2
     exit 2
   fi
@@ -783,7 +785,7 @@ verify_rdp_route_session_absent() {
   W_X_SERVER_START_TICKS="$x_server_start_ticks"
   W_DISPLAY_NAME="$display_name"
   W_X11_SOCKET_INODE="$x11_socket_inode"
-  reclaim_route_display_lock_identity "$display_name" "$x_server_pid"
+  reclaim_route_display_artifacts_identity "$display_name" "$x_server_pid"
   if [[ "$W_LOCK_RECLAIM_STATE" != "absent" && "$W_LOCK_RECLAIM_STATE" != "reclaimed" ]]; then
     emit_route_session_state "$W_LOCK_RECLAIM_STATE" "$W_LOCK_RECLAIM_CODE"
     return 0
@@ -793,7 +795,7 @@ verify_rdp_route_session_absent() {
   printf '{"schemaVersion":1,"state":"absent","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
 }
 
-reclaim_route_display_lock_identity() {
+reclaim_route_display_lock_file_identity() {
   local display_name="$1"
   local x_server_pid="$2"
   W_LOCK_RECLAIM_STATE="ownership_unproven"
@@ -873,6 +875,157 @@ reclaim_route_display_lock_identity() {
   W_LOCK_RECLAIM_CODE=""
 }
 
+unix_socket_path_active() {
+  local socket_path="$1"
+  [[ -r "$PROC_NET_UNIX_PATH" ]] || return 2
+  awk -v path="$socket_path" \
+    '$NF == path || $NF == "@" path { found = 1; exit } END { exit !found }' \
+    "$PROC_NET_UNIX_PATH"
+}
+
+reclaim_route_display_channel_sockets_identity() {
+  local display_name="$1"
+  local display_number="${display_name#:}"
+  display_number="${display_number%%.*}"
+  W_CHANNEL_RECLAIM_STATE="ownership_unproven"
+  W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_identity_invalid"
+  W_CHANNEL_RECLAIM_COUNT=0
+
+  if [[ ! -d "$XRDP_SOCKDIR" || -L "$XRDP_SOCKDIR" ]]; then
+    W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_directory_invalid"
+    return 0
+  fi
+  local xrdp_entry xrdp_uid xrdp_gid
+  xrdp_entry="$(timeout --signal=KILL 2s getent passwd xrdp || true)"
+  IFS=: read -r _ _ xrdp_uid xrdp_gid _ _ _ <<<"$xrdp_entry"
+  if [[ ! "$xrdp_uid" =~ ^[1-9][0-9]*$ || ! "$xrdp_gid" =~ ^[1-9][0-9]*$ ]]; then
+    W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_xrdp_identity_invalid"
+    return 0
+  fi
+
+  local sockdir_fd
+  exec {sockdir_fd}<"$XRDP_SOCKDIR"
+  local directory_identity directory_type directory_uid directory_gid directory_mode
+  directory_identity="$(stat -Lc '%d:%i' "/proc/self/fd/$sockdir_fd" 2>/dev/null || true)"
+  IFS=: read -r directory_type directory_uid directory_gid directory_mode < <(
+    stat -Lc '%F:%u:%g:%a' "/proc/self/fd/$sockdir_fd" 2>/dev/null || true
+  )
+  if [[ "$directory_type" != "directory" || ! "$directory_identity" =~ ^[1-9][0-9]*:[1-9][0-9]*$ ]]; then
+    exec {sockdir_fd}<&-
+    W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_directory_identity_invalid"
+    return 0
+  fi
+  if [[ "$XRDP_SOCKDIR" == "/run/xrdp/sockdir" ]]; then
+    if [[ "$directory_uid" != "$xrdp_uid" || "$directory_gid" != "$xrdp_gid" \
+      || "$directory_mode" != "3777" ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_directory_contract_invalid"
+      return 0
+    fi
+  fi
+
+  local expected_uid="$W_ROUTE_UID"
+  local expected_gid="$xrdp_gid"
+  if [[ "$XRDP_SOCKDIR" != "/run/xrdp/sockdir" && "$EUID" != "0" ]]; then
+    expected_uid="$(stat -Lc '%u' "$XRDP_SOCKDIR")"
+    expected_gid="$(stat -Lc '%g' "$XRDP_SOCKDIR")"
+  fi
+  local basenames=(
+    "xrdp_display_$display_number"
+    "xrdp_disconnect_display_$display_number"
+    "xrdpapi_$display_number"
+    "xrdp_chansrv_audio_in_socket_$display_number"
+    "xrdp_chansrv_audio_out_socket_$display_number"
+  )
+  local identities=() basename target file_type socket_uid socket_gid link_count device inode mode
+  for basename in "${basenames[@]}"; do
+    target="/proc/self/fd/$sockdir_fd/$basename"
+    [[ -e "$target" ]] || continue
+    IFS=: read -r file_type socket_uid socket_gid link_count device inode mode < <(
+      stat -Lc '%F:%u:%g:%h:%d:%i:%a' "$target" 2>/dev/null || true
+    )
+    if [[ "$file_type" != "socket" || "$socket_uid" != "$expected_uid" \
+      || "$socket_gid" != "$expected_gid" || "$link_count" != "1" \
+      || "$mode" != "660" || ! "$device" =~ ^[1-9][0-9]*$ \
+      || ! "$inode" =~ ^[1-9][0-9]*$ ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_identity_invalid"
+      return 0
+    fi
+    if unix_socket_path_active "$XRDP_SOCKDIR/$basename"; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_live"
+      return 0
+    elif [[ "$?" == "2" ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_table_unreadable"
+      return 0
+    fi
+    identities+=("$basename:$socket_uid:$socket_gid:$device:$inode:$mode")
+  done
+
+  local identity current_identity retained_directory_identity
+  for identity in "${identities[@]}"; do
+    IFS=: read -r basename socket_uid socket_gid device inode mode <<<"$identity"
+    target="/proc/self/fd/$sockdir_fd/$basename"
+    retained_directory_identity="$(stat -Lc '%d:%i' "/proc/self/fd/$sockdir_fd" 2>/dev/null || true)"
+    current_identity="$(stat -Lc '%F:%u:%g:%h:%d:%i:%a' "$target" 2>/dev/null || true)"
+    if [[ "$retained_directory_identity" != "$directory_identity" \
+      || "$current_identity" != "socket:$socket_uid:$socket_gid:1:$device:$inode:$mode" ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_identity_changed"
+      return 0
+    fi
+    if unix_socket_path_active "$XRDP_SOCKDIR/$basename"; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_became_live"
+      return 0
+    elif [[ "$?" == "2" ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_table_unreadable"
+      return 0
+    fi
+    find -H "/proc/self/fd/$sockdir_fd" -maxdepth 1 -xdev -type s \
+      -uid "$socket_uid" -gid "$socket_gid" -links 1 -inum "$inode" \
+      -name "$basename" -delete
+    if [[ -e "$target" ]]; then
+      exec {sockdir_fd}<&-
+      W_CHANNEL_RECLAIM_STATE="incomplete"
+      W_CHANNEL_RECLAIM_CODE="rdp_route_channel_socket_reclaim_failed"
+      return 0
+    fi
+    W_CHANNEL_RECLAIM_COUNT=$((W_CHANNEL_RECLAIM_COUNT + 1))
+  done
+  exec {sockdir_fd}<&-
+  W_CHANNEL_RECLAIM_STATE="absent"
+  [[ "$W_CHANNEL_RECLAIM_COUNT" == "0" ]] || W_CHANNEL_RECLAIM_STATE="reclaimed"
+  W_CHANNEL_RECLAIM_CODE=""
+}
+
+reclaim_route_display_artifacts_identity() {
+  local display_name="$1"
+  local x_server_pid="$2"
+  reclaim_route_display_lock_file_identity "$display_name" "$x_server_pid"
+  local lock_state="$W_LOCK_RECLAIM_STATE"
+  local lock_code="$W_LOCK_RECLAIM_CODE"
+  W_DISPLAY_LOCK_REMOVED=false
+  [[ "$lock_state" != "reclaimed" ]] || W_DISPLAY_LOCK_REMOVED=true
+  if [[ "$lock_state" != "absent" && "$lock_state" != "reclaimed" ]]; then
+    return 0
+  fi
+  reclaim_route_display_channel_sockets_identity "$display_name"
+  if [[ "$W_CHANNEL_RECLAIM_STATE" != "absent" && "$W_CHANNEL_RECLAIM_STATE" != "reclaimed" ]]; then
+    W_LOCK_RECLAIM_STATE="$W_CHANNEL_RECLAIM_STATE"
+    W_LOCK_RECLAIM_CODE="$W_CHANNEL_RECLAIM_CODE"
+    return 0
+  fi
+  W_LOCK_RECLAIM_STATE="absent"
+  if [[ "$lock_state" == "reclaimed" || "$W_CHANNEL_RECLAIM_STATE" == "reclaimed" ]]; then
+    W_LOCK_RECLAIM_STATE="reclaimed"
+  fi
+  W_LOCK_RECLAIM_CODE="$lock_code"
+}
+
 reclaim_rdp_route_display_lock_exact() {
   require_root
   local user_name="" display_name="" x_server_pid=""
@@ -903,9 +1056,9 @@ reclaim_rdp_route_display_lock_exact() {
     emit_route_session_state "ownership_unproven" "rdp_route_session_live_or_ambiguous"
     return 0
   fi
-  reclaim_route_display_lock_identity "$display_name" "$x_server_pid"
+  reclaim_route_display_artifacts_identity "$display_name" "$x_server_pid"
   if [[ "$W_LOCK_RECLAIM_STATE" == "absent" ]]; then
-    printf '{"schemaVersion":1,"state":"absent","display":"%s","xServerPid":%s,"lockRemoved":false}\n' \
+    printf '{"schemaVersion":1,"state":"absent","display":"%s","xServerPid":%s,"lockRemoved":false,"xrdpSocketCount":0}\n' \
       "$display_name" "$x_server_pid"
     return 0
   fi
@@ -913,8 +1066,8 @@ reclaim_rdp_route_display_lock_exact() {
     emit_route_session_state "$W_LOCK_RECLAIM_STATE" "$W_LOCK_RECLAIM_CODE"
     return 0
   fi
-  printf '{"schemaVersion":1,"state":"reclaimed","display":"%s","xServerPid":%s,"lockRemoved":true}\n' \
-    "$display_name" "$x_server_pid"
+  printf '{"schemaVersion":1,"state":"reclaimed","display":"%s","xServerPid":%s,"lockRemoved":%s,"xrdpSocketCount":%s}\n' \
+    "$display_name" "$x_server_pid" "$W_DISPLAY_LOCK_REMOVED" "$W_CHANNEL_RECLAIM_COUNT"
 }
 
 process_instance_gone_or_replaced() {
