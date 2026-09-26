@@ -207,6 +207,56 @@ impl RemoteViewRoute {
     }
 }
 
+/// Short-lived evidence that an authenticated dashboard viewer still owns a
+/// live Guacamole sharing tunnel. This record is a bounded observation cache,
+/// never admission authority: every renewal must re-observe the provider and
+/// records from another host boot are invalid.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct LiveViewerAuthority {
+    pub id: String,
+    pub boot_epoch: Option<String>,
+    pub provider_route_id: String,
+    pub desktop_route_id: String,
+    pub connection_id: String,
+    pub browser_id: String,
+    pub display_allocation_id: String,
+    pub stream_id: String,
+    pub viewer_id: String,
+    pub authenticated_principal: String,
+    pub role: String,
+    pub state: String,
+    pub controller_epoch: u64,
+    pub observed_shared_connection_count: u64,
+    pub created_at: Option<String>,
+    pub updated_at: Option<String>,
+    pub expires_at_ms: u64,
+}
+
+impl Default for LiveViewerAuthority {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            boot_epoch: None,
+            provider_route_id: String::new(),
+            desktop_route_id: String::new(),
+            connection_id: String::new(),
+            browser_id: String::new(),
+            display_allocation_id: String::new(),
+            stream_id: String::new(),
+            viewer_id: String::new(),
+            authenticated_principal: String::new(),
+            role: "observer".to_string(),
+            state: "disconnected".to_string(),
+            controller_epoch: 0,
+            observed_shared_connection_count: 0,
+            created_at: None,
+            updated_at: None,
+            expires_at_ms: 0,
+        }
+    }
+}
+
 /// Configured provider route pool entry for remote-view allocation.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]

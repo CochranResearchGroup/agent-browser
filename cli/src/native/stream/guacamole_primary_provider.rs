@@ -59,6 +59,84 @@ impl GuacamolePrimaryConnectSpec {
     }
 }
 
+/// Observe current restricted sharing tunnels through the reviewed loopback
+/// Guacamole API. The authentication token remains transient in this module.
+/// A positive count is live provider evidence, not a durable viewer grant.
+pub(super) async fn observe_shared_connection_count(
+    spec: GuacamolePrimaryConnectSpec,
+) -> Result<u64, &'static str> {
+    let principal = std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("guacamole_live_viewer_principal_missing")?;
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|_| "guacamole_live_viewer_client_failed")?;
+    let auth = client
+        .post(
+            spec.provider_base
+                .join("api/tokens")
+                .map_err(|_| "guacamole_live_viewer_provider_invalid")?,
+        )
+        .header("Remote-User", &principal)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body("")
+        .send()
+        .await
+        .map_err(|_| "guacamole_live_viewer_auth_failed")?;
+    if !auth.status().is_success() {
+        return Err("guacamole_live_viewer_auth_failed");
+    }
+    let auth: serde_json::Value = auth
+        .json()
+        .await
+        .map_err(|_| "guacamole_live_viewer_auth_invalid")?;
+    if auth["username"].as_str() != Some(principal.as_str())
+        || !auth["availableDataSources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source == "postgresql"))
+    {
+        return Err("guacamole_live_viewer_auth_identity_mismatch");
+    }
+    let token = auth["authToken"]
+        .as_str()
+        .filter(|value| !value.is_empty() && value.len() <= 8192)
+        .ok_or("guacamole_live_viewer_auth_invalid")?;
+    let response = client
+        .get(
+            spec.provider_base
+                .join("api/session/data/postgresql/activeConnections")
+                .map_err(|_| "guacamole_live_viewer_provider_invalid")?,
+        )
+        .header("Guacamole-Token", token)
+        .send()
+        .await
+        .map_err(|_| "guacamole_live_viewer_observation_failed")?;
+    if !response.status().is_success() {
+        return Err("guacamole_live_viewer_observation_failed");
+    }
+    let connections: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|_| "guacamole_live_viewer_observation_invalid")?;
+    let count = connections
+        .as_object()
+        .ok_or("guacamole_live_viewer_observation_invalid")?
+        .values()
+        .filter(|connection| {
+            connection["connectionIdentifier"].as_str() == Some(spec.connection_id.as_str())
+                && connection["connectable"].as_bool() == Some(true)
+                && connection["sharingProfileIdentifier"]
+                    .as_str()
+                    .is_some_and(|value| !value.is_empty())
+        })
+        .count();
+    u64::try_from(count).map_err(|_| "guacamole_live_viewer_observation_invalid")
+}
+
 pub(super) async fn connect(
     binding: PrimaryBinding,
     is_current: PrimaryGuard,
@@ -211,6 +289,68 @@ mod tests {
         handshake::server::{Request, Response},
         Message,
     };
+
+    #[tokio::test]
+    async fn live_viewer_observation_counts_only_exact_restricted_tunnels() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let provider = format!("http://{}/guacamole/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for response_body in [
+                serde_json::json!({
+                    "authToken": "synthetic-token",
+                    "availableDataSources": ["postgresql"],
+                    "username": "synthetic-operator"
+                }),
+                serde_json::json!({
+                    "shared-exact": {
+                        "connectionIdentifier": "41",
+                        "connectable": true,
+                        "sharingProfileIdentifier": "sharing-41"
+                    },
+                    "primary-excluded": {
+                        "connectionIdentifier": "41",
+                        "connectable": true,
+                        "sharingProfileIdentifier": null
+                    },
+                    "foreign-excluded": {
+                        "connectionIdentifier": "42",
+                        "connectable": true,
+                        "sharingProfileIdentifier": "sharing-42"
+                    }
+                }),
+            ] {
+                let (mut http, _) = listener.accept().await.unwrap();
+                let mut request = Vec::new();
+                while !request.ends_with(b"\r\n\r\n") {
+                    request.push(http.read_u8().await.unwrap());
+                }
+                if request.starts_with(b"GET ") {
+                    let text = String::from_utf8(request).unwrap();
+                    assert!(text
+                        .contains("GET /guacamole/api/session/data/postgresql/activeConnections "));
+                    assert!(text
+                        .to_ascii_lowercase()
+                        .contains("guacamole-token: synthetic-token\r\n"));
+                }
+                let body = response_body.to_string();
+                http.write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(), body
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+            }
+        });
+        let spec = GuacamolePrimaryConnectSpec::from_local_embed(&provider, "41").unwrap();
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_GUACAMOLE_HEADER_USER"]);
+        guard.set("AGENT_BROWSER_GUACAMOLE_HEADER_USER", "synthetic-operator");
+        let count = observe_shared_connection_count(spec).await.unwrap();
+        assert_eq!(count, 1);
+        server.await.unwrap();
+    }
 
     #[tokio::test]
     async fn header_authentication_binds_the_exact_websocket_and_rejects_foreign_principal() {

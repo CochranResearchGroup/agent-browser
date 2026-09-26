@@ -121,6 +121,12 @@ pub struct ServiceState {
     pub route_pool: BTreeMap<String, RoutePoolEntry>,
     pub remote_view_acquisition_leases: BTreeMap<String, RemoteViewAcquisitionLease>,
     pub remote_view_handoffs: BTreeMap<String, RemoteViewHandoff>,
+    /// Bounded provider-observed viewer evidence. Entries are useful only on
+    /// their recorded boot and before `expiresAtMs`; stored URLs or stale
+    /// records can never establish viewer or controller authority.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    #[doc(hidden)]
+    pub live_viewer_authorities: BTreeMap<String, crate::LiveViewerAuthority>,
     /// Durable scarce presentation-slot inventory and admission authority.
     /// Logical browsers remain separate and survive slot release or parking.
     #[serde(default, skip_serializing_if = "Option::is_none")]

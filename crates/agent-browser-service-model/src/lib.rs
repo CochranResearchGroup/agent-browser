@@ -110,10 +110,10 @@ pub use monitor::{MonitorState, MonitorTarget, SiteMonitor, SERVICE_MONITOR_STAT
 pub use operational_snapshot::{ControlPlaneSnapshot, ServiceReconciliationSnapshot};
 pub use presentation::{
     route_pool_entry_matches_display, route_pool_target_string, ControlInputProvider,
-    DisplayAllocation, DurableHandoffPresentationReceipt, RemoteViewAcquisitionLease,
-    RemoteViewHandoff, RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry,
-    ViewStream, ViewStreamProvider, SERVICE_CONTROL_INPUT_PROVIDER_VALUES,
-    SERVICE_VIEW_STREAM_PROVIDER_VALUES,
+    DisplayAllocation, DurableHandoffPresentationReceipt, LiveViewerAuthority,
+    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
+    RetainedDisplayAllocationCandidate, RoutePoolEntry, ViewStream, ViewStreamProvider,
+    SERVICE_CONTROL_INPUT_PROVIDER_VALUES, SERVICE_VIEW_STREAM_PROVIDER_VALUES,
 };
 pub use presentation_capacity::{
     CapacityDecision, CapacityLimitingResource, CapacityNextSafeAction,
