@@ -90,6 +90,10 @@ export function evaluate(root = defaultRoot) {
     add('P03', finding('manual_seeding_json_repository', 'cli/src/native/remote_view/open/coordinator.rs', 'manual seeding still acquires its browser and handoff through legacy JSON Service State'));
     add('P05', finding('manual_seeding_parallel_handoff', 'cli/src/native/remote_view/open/coordinator.rs', 'manual-seeding handoff publication remains outside the SQLite authority used by durable resolution'));
   }
+  if (/"service_remote_view_handoff_resolve"\s*=>[\s\S]{0,400}handle_service_remote_view_handoff_resolve\(/.test(actions)) {
+    add('P03', finding('generic_handoff_json_fallback', 'cli/src/native/actions.rs', 'generic action dispatch can resolve a handoff through the legacy JSON coordinator'));
+    add('P05', finding('generic_handoff_parallel_authority', 'cli/src/native/actions.rs', 'generic action dispatch can publish a competing handoff resolution outside the SQLite session host'));
+  }
   const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
   if (credentialVariables.length > 0) {
     add('P09', finding('persistent_route_credential_environment', 'cli/src/workstation_install.rs', `${new Set(credentialVariables).size} route credential environment keys remain in installation projection`));

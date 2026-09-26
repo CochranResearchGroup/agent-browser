@@ -12,8 +12,6 @@ mod coordinator;
 pub(crate) use coordinator::*;
 mod planner;
 pub(crate) use planner::*;
-mod compensation;
-pub(crate) use compensation::*;
 mod operator_route;
 pub(crate) use operator_route::*;
 mod proof;
@@ -30,9 +28,5 @@ mod manual_seeding_sqlite;
 pub(crate) use manual_seeding_sqlite::*;
 mod shared;
 
-#[cfg(any())]
-mod route_action_helper_tests;
-#[cfg(any())]
-mod tests;
 #[cfg(test)]
 mod visibility_action_tests;

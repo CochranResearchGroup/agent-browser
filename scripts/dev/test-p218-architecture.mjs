@@ -18,6 +18,12 @@ try {
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\nagent-browser-lease-authority = { path = "../agent-browser-lease-authority" }\n');
   write(root, 'cli/src/native/browser_session_host.rs', 'std::env::var("AGENT_BROWSER_SESSION_DISPLAY"); default_service_state_path(); load_or_import_profile_catalog();\n');
   write(root, 'cli/src/native/remote_view_handoff.rs', 'LockedServiceStateRepository<JsonServiceStateStore> service_profile_lease runtime_owner_binding_for_session cleanup_obligation\n');
+
+  write(root, 'cli/src/native/actions.rs', '"service_remote_view_handoff_resolve" => { handle_service_remote_view_handoff_resolve(cmd, state, attribution).await }\n');
+  const fallback = evaluate(root);
+  assert.ok(fallback.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'generic_handoff_json_fallback'));
+  assert.ok(fallback.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'generic_handoff_parallel_authority'));
+  write(root, 'cli/src/native/actions.rs', 'service_viewer_lease_request service_viewer_lease_heartbeat service_viewer_lease_release\n');
   write(root, 'cli/src/native/remote_view/open/runtime.rs', 'LockedServiceStateRepository::default_json()\n');
   write(root, 'cli/src/native/remote_view/open/coordinator.rs', 'begin_route_bound_handoff_plan_acquisition(); complete_route_bound_handoff_open();\nfn handle_service_profile_manual_seeding_acquire() { LockedServiceStateRepository::default_json(); }\n');
   write(root, 'crates/agent-browser-service-model/src/service_state.rs', 'agent_browser_lease_authority viewer_leases runtime_owner_registry\n');

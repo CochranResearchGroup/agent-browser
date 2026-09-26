@@ -42,23 +42,17 @@ use crate::native::network::{self, DomainFilter, EventTracker};
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
 use crate::native::providers;
 use crate::native::remote_view_handoff::{
-    apply_retained_remote_view_route, begin_route_bound_handoff_failure_recovery,
-    begin_route_bound_handoff_plan_acquisition, complete_route_bound_handoff_failure_cleanup,
-    complete_route_bound_handoff_open, planned_route_bound_handoff_response,
+    apply_retained_remote_view_route, planned_route_bound_handoff_response,
     remote_view_handoff_resolution_command, remote_view_handoff_was_explicitly_closed,
     route_bound_handoff_checkout_command_with_visible_window_proof,
     route_bound_handoff_checkout_failure, route_bound_handoff_failure_cleanup_task_result,
     route_bound_handoff_focus_command, route_bound_handoff_focus_failure,
-    route_bound_handoff_immediate_failure, route_bound_handoff_launch_failure_cleanup,
-    route_bound_handoff_operator_visible,
+    route_bound_handoff_launch_failure_cleanup, route_bound_handoff_operator_visible,
     route_bound_handoff_operator_visible_failure_if_not_ready, route_bound_handoff_plan,
     route_bound_handoff_post_checkout_proof, route_bound_handoff_pre_launch_failure_cleanup,
     route_bound_handoff_reused_browser_launch_result, route_bound_handoff_tab_open_failure,
     route_bound_handoff_target_url_readiness, route_bound_handoff_visible_window_proof_failure,
-    shared_profile_acquisition_result, CompleteRouteBoundHandoffOpenInput,
-    RouteBoundHandoffFailureCleanupInput, RouteBoundHandoffFailureCleanupSummary,
-    RouteBoundHandoffFailureCleanupTask, RouteBoundHandoffFailureRecoveryInput,
-    RouteBoundHandoffImmediateFailureInput, RouteBoundHandoffPlan,
+    shared_profile_acquisition_result, RouteBoundHandoffFailureCleanupTask, RouteBoundHandoffPlan,
     RouteBoundHandoffPlannedResponseInput, RouteBoundHandoffPostCheckoutProofInput,
     SharedProfileAcquisitionResultInput,
 };

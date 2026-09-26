@@ -117,9 +117,8 @@ use super::recording::{
 };
 use super::remote_view::open::{
     handle_service_profile_manual_seeding_acquire, handle_service_profile_manual_seeding_close,
-    handle_service_remote_view_browser_reattach, handle_service_remote_view_handoff_resolve,
-    handle_service_remote_view_route_checkout, handle_service_remote_view_route_preflight,
-    handle_service_remote_view_route_release,
+    handle_service_remote_view_browser_reattach, handle_service_remote_view_route_checkout,
+    handle_service_remote_view_route_preflight, handle_service_remote_view_route_release,
     route_bound_open_attribution_from_authenticated_dispatch,
 };
 use super::service_access::{
@@ -860,8 +859,9 @@ async fn execute_command_after_navigation_admission(
                 handle_service_profile_manual_seeding_close(cmd, state).await
             }
             "service_remote_view_handoff_resolve" => {
-                let attribution = route_bound_open_attribution_from_authenticated_dispatch(cmd);
-                handle_service_remote_view_handoff_resolve(cmd, state, attribution).await
+                // Authenticated daemon routing owns SQLite handoff resolution.
+                // The generic action dispatcher has no legacy JSON fallback.
+                Err("service_remote_view_handoff_resolve_requires_sqlite_session_host".to_string())
             }
             "service_remote_view_route_preflight" => {
                 handle_service_remote_view_route_preflight(cmd, state).await

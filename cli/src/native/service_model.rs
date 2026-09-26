@@ -2557,13 +2557,12 @@ pub use agent_browser_service_model::{
     BrowserProcess, BrowserProfile, BrowserRecordAuthoritySource,
     BrowserRecordLifecycleClassification, BrowserRecordProvenance, BrowserRecordSource,
     BrowserSession, BrowserTab, ControlInputProvider, ControlPlaneSnapshot, DisplayAllocation,
-    DurableHandoffPresentationReceipt, JobControlPlaneMode, JobPriority, JobState, JobTarget,
-    LeaseState, MonitorState, MonitorTarget, ProfileAllocationPolicy, ProfileClass,
-    ProfileKeyringPolicy, ProfileLeaseDisposition, ProfileOrigin, ProfileReadinessState,
-    ProfileSeedingHandoffRecord, ProfileSeedingHandoffState, ProfileSeedingMode,
-    ProfileSelectionReason, ProfileTargetReadiness, ProtectedBrowserOwnerObservation,
-    RemoteViewAcquisitionLease, RemoteViewHandoff, RemoteViewRoute,
-    RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
+    JobControlPlaneMode, JobPriority, JobState, JobTarget, LeaseState, MonitorState, MonitorTarget,
+    ProfileAllocationPolicy, ProfileClass, ProfileKeyringPolicy, ProfileLeaseDisposition,
+    ProfileOrigin, ProfileReadinessState, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
+    ProfileSeedingMode, ProfileSelectionReason, ProfileTargetReadiness,
+    ProtectedBrowserOwnerObservation, RemoteViewAcquisitionLease, RemoteViewHandoff,
+    RemoteViewRoute, RetainedDisplayAllocationCandidate, RoutePoolEntry, ServiceActor,
     ServiceBrowserProcessIdentity, ServiceEntitySource, ServiceEvent, ServiceEventKind,
     ServiceIncident, ServiceIncidentEscalation, ServiceIncidentSeverity, ServiceIncidentState,
     ServiceJob, ServiceProvider, ServiceReconciliationSnapshot, ServiceTabHandle,
@@ -2573,12 +2572,12 @@ pub use agent_browser_service_model::{
 };
 #[cfg(test)]
 pub use agent_browser_service_model::{
-    ChallengeKind, InteractionMode, ProfileConnectionState, ProviderCapability, ProviderKind,
-    RateLimitPolicy, ServiceTabHandleTraceFilter, SERVICE_EVENT_KIND_VALUES,
-    SERVICE_INCIDENT_ESCALATION_VALUES, SERVICE_INCIDENT_SEVERITY_VALUES,
-    SERVICE_INCIDENT_STATE_VALUES, SERVICE_JOB_CONTROL_PLANE_MODE_VALUES,
-    SERVICE_JOB_NAMING_WARNING_VALUES, SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES,
-    SERVICE_MONITOR_STATE_VALUES,
+    ChallengeKind, DurableHandoffPresentationReceipt, InteractionMode, ProfileConnectionState,
+    ProviderCapability, ProviderKind, RateLimitPolicy, ServiceTabHandleTraceFilter,
+    SERVICE_EVENT_KIND_VALUES, SERVICE_INCIDENT_ESCALATION_VALUES,
+    SERVICE_INCIDENT_SEVERITY_VALUES, SERVICE_INCIDENT_STATE_VALUES,
+    SERVICE_JOB_CONTROL_PLANE_MODE_VALUES, SERVICE_JOB_NAMING_WARNING_VALUES,
+    SERVICE_JOB_PRIORITY_VALUES, SERVICE_JOB_STATE_VALUES, SERVICE_MONITOR_STATE_VALUES,
 };
 #[cfg(test)]
 use agent_browser_service_model::{

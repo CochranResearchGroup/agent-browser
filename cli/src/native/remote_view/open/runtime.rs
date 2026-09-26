@@ -8,7 +8,6 @@ use super::route_lifecycle::handle_service_remote_view_route_checkout;
 pub(crate) use super::runtime_model::*;
 use super::shared::*;
 use crate::native::action_runtime::runtime::{handle_cdp_free_launch, terminate_runtime_browser};
-use crate::native::service_store::JsonServiceStateStore;
 
 const X11_SCENE_READY_ATTEMPTS: usize = 30;
 const X11_SCENE_READY_INTERVAL: Duration = Duration::from_millis(100);
@@ -183,69 +182,6 @@ pub(crate) trait RouteBoundOpenRuntime {
     ) -> RouteBoundOpenFuture<'_, Option<OperatorAccessResult>>;
 }
 
-/// Deadline-supervised repository work used by route-bound coordination.
-/// The future is owned by the coordinator and is never detached, so dropping
-/// the coordinator at the total deadline leaves no repository task behind.
-pub(crate) trait RouteBoundOpenRepository {
-    fn snapshot(&self, lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState>;
-
-    fn execute<'a, T, F>(
-        &'a self,
-        operation: &'static str,
-        lock_timeout: Duration,
-        work: F,
-    ) -> RouteBoundOpenFuture<'a, T>
-    where
-        T: Send + 'a,
-        F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
-            + Send
-            + 'a;
-}
-
-pub(crate) struct DaemonRouteBoundOpenRepository {
-    repository: LockedServiceStateRepository<JsonServiceStateStore>,
-}
-
-impl DaemonRouteBoundOpenRepository {
-    pub(crate) fn new() -> Result<Self, String> {
-        Ok(Self {
-            repository: LockedServiceStateRepository::default_json()?,
-        })
-    }
-}
-
-impl RouteBoundOpenRepository for DaemonRouteBoundOpenRepository {
-    fn snapshot(&self, lock_timeout: Duration) -> RouteBoundOpenFuture<'_, ServiceState> {
-        Box::pin(async move {
-            self.repository
-                .load_snapshot_with_lock_timeout(lock_timeout)
-                .map_err(|message| RouteBoundRuntimeIssue::EffectFailed {
-                    operation: "repository_load_snapshot",
-                    message,
-                })
-        })
-    }
-
-    fn execute<'a, T, F>(
-        &'a self,
-        operation: &'static str,
-        lock_timeout: Duration,
-        work: F,
-    ) -> RouteBoundOpenFuture<'a, T>
-    where
-        T: Send + 'a,
-        F: FnOnce(&LockedServiceStateRepository<JsonServiceStateStore>) -> Result<T, String>
-            + Send
-            + 'a,
-    {
-        Box::pin(async move {
-            let repository = self.repository.with_lock_timeout(lock_timeout);
-            work(&repository)
-                .map_err(|message| RouteBoundRuntimeIssue::EffectFailed { operation, message })
-        })
-    }
-}
-
 /// Permanent daemon and browser effect adapter. Route selection, reuse,
 /// proof classification, and compensation ownership stay in the coordinator.
 pub(crate) struct DaemonRouteBoundOpenRuntime<'a> {
@@ -332,53 +268,12 @@ impl RouteBoundOpenRuntime for DaemonRouteBoundOpenRuntime<'_> {
     }
     fn adopt_retained_browser(
         &mut self,
-        request: AdoptRetainedBrowserRequest,
+        _request: AdoptRetainedBrowserRequest,
     ) -> RouteBoundOpenFuture<'_, RouteBoundBrowserObservation> {
-        Box::pin(async move {
-            // A restarted lane retains its Ready owner. Reconnect that exact
-            // handoff target without attempting an orphan ownership transfer.
-            let repository = LockedServiceStateRepository::default_json().map_err(|message| {
-                route_bound_runtime_issue("adopt_retained_browser", message, None)
-            })?;
-            let snapshot = repository.load_snapshot().map_err(|message| {
-                route_bound_runtime_issue("adopt_retained_browser", message, None)
-            })?;
-            if let Some(handoff) = snapshot.remote_view_handoffs.get(&request.handoff_id) {
-                if remote_view_handoff_ready_owner_session(&snapshot, handoff).as_deref()
-                    == Some(self.state.session_id.as_str())
-                    && request.source_session == self.state.session_id
-                    && handoff.browser_id.as_deref() == Some(request.logical_browser_id.as_str())
-                    && !remote_view_handoff_was_explicitly_closed(&snapshot, handoff)
-                {
-                    let browser = &snapshot.browsers[&request.logical_browser_id];
-                    let profile = browser.profile_id.as_deref().ok_or_else(|| {
-                        route_bound_runtime_issue(
-                            "adopt_retained_browser",
-                            "service_tab_recovery_identity_mismatch: profile record missing".into(),
-                            None,
-                        )
-                    })?;
-                    let target = handoff
-                        .target_id
-                        .as_deref()
-                        .expect("Ready handoff has exact target");
-                    crate::native::service_probe::reattach_verified_retained_target(
-                        &request.logical_browser_id,
-                        profile,
-                        target,
-                        self.state,
-                    )
-                    .await
-                    .map_err(|message| {
-                        route_bound_runtime_issue("adopt_retained_browser", message, None)
-                    })?;
-                    return observe_daemon_browser(self.state).await;
-                }
-            }
+        Box::pin(async {
             Err(route_bound_runtime_issue(
                 "adopt_retained_browser",
-                "retained browser is not available through the current Browser Session Host"
-                    .to_string(),
+                "retained browser adoption requires the SQLite Browser Session Host".to_string(),
                 None,
             ))
         })
