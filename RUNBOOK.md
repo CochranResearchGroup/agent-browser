@@ -11,18 +11,17 @@ Current index. [Turns 369 through 417](RUNBOOK-history-2026-09-16-turn369-throug
 
 ## Current P218 status | 2026-09-25
 
-Plan 0218 version 40 remains open on `platform/p211-simple-cold-upgrade`.
-Source checkpoint `bd1af167` refreshes a ready SQLite manual-seeding handoff
-after same-slot, same-display, same-user keeper adoption, with fresh process
-and presentation proof and one transaction for the fence, receipt, and result.
-The opaque URL and browser identity remain unchanged; provider URLs are
-redacted. Legacy records without a stored route user can resolve on the old
-fence but cannot be refenced. Five focused Rust cases, strict Clippy, format,
-route-confusion, selected workstation no-launch, handoff docs, and docs build
-checks pass. Installed visual and input evidence, ordinary handoff authority,
-and live viewer control remain open. P03, P05, and P09 remain violated; five
-detector gaps and 11 unverified rows remain. Coverage is zero pass, 27 partial,
-seven fail, and 11 missing.
+Plan 0218 version 41 remains open on `platform/p211-simple-cold-upgrade`.
+Source checkpoint `541d7346` removes the obsolete JSON ordinary-open
+coordinator and generic JSON handoff resolver. Authenticated daemon open and
+resolution use the SQLite session host. Focused handoff and daemon fixtures,
+strict Clippy, formatting, route-confusion gates, architecture self-test, and
+coverage validation pass. The source detector now reports P09 violated,
+P03/P05 plus five other detector gaps, and 11 unverified rows. P03/P05 are not
+accepted: selector coverage, exact-session heartbeat, installed visual/input
+evidence, live viewer control, and the full G01–G45 audit remain open. Coverage
+is zero pass, 27 partial, seven fail, and 11 missing. The next packet should
+address a concrete ordinary-open selector or heartbeat gap in the SQLite host.
 
 ### Earlier P218 source checkpoints
 

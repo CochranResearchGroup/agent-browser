@@ -2,7 +2,7 @@
 
 Date: 2026-09-23
 
-Plan version: 40
+Plan version: 41
 
 State: OPEN
 
@@ -86,9 +86,10 @@ an architecture guard against restoring that coupling.
 
 The complete grilling contract is not implemented or accepted.
 `BrowserSessionHost` commits its manager state through
-`BrowserRuntimeSqliteStore`, but adjacent ordinary remote-view and dashboard
-handoff resolution, browser lifecycle, monitor, desktop, and Service request
-paths still consume JSON Service State. Runtime route and provider inventory
+`BrowserRuntimeSqliteStore`, and authenticated ordinary remote-view open and
+handoff resolution use that host. Adjacent browser lifecycle, monitor, desktop,
+dashboard, and Service request paths still consume JSON Service State. Runtime
+route and provider inventory
 environment variables remain live, the development provider keeps the
 route-keeper readiness interlock hard-coded false, history budgets are
 configuration without enforced compaction, verified database backup and
@@ -1040,6 +1041,22 @@ fixtures. The reproducible checks are the focused CLI test filter
 is retained by `cargo-signal` under the user-scoped run directory; its compact
 receipts reported zero compiler errors. This source-only fixture does not
 change the architecture gate verdict or authorize runtime publication.
+
+Source checkpoint `541d7346` removes the obsolete JSON ordinary-open
+coordinator, its acquisition repository, and the generic JSON handoff-resolve
+fallback. The authenticated daemon still routes ordinary open and durable
+resolution through the journaled SQLite Browser Session Host. Historical JSON
+acquisition and finalization helpers remain only in a test module; an active
+quarantine fixture now retains its state rather than assuming automatic
+convergence. The source detector reports P09 violated, P03/P05 plus five other
+detector gaps, and eleven unverified rows. That is a reduction in known source
+violations, not P03/P05 acceptance: valid selector coverage, exact-session
+heartbeat publication, browser-backed behavior, installed pixels and input,
+and the full G01–G45 audit remain open. Focused handoff tests pass 48 cases;
+the ordinary-open and durable-resolve daemon fixtures pass one case each.
+Strict workspace Clippy, format, route-confusion gates, architecture detector
+self-test, and coverage-manifest validation pass. The coverage inventory stays
+zero pass, 27 partial, seven fail, and eleven missing. Plan 0218 remains OPEN.
 
 ## Grilling Contract Ledger
 
