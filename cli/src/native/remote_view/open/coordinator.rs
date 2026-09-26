@@ -28,14 +28,8 @@ use super::runtime::{
 use super::runtime_model::*;
 use super::shared::*;
 use super::target::route_bound_open_acquire_target;
-use crate::native::action_runtime::runtime::terminate_runtime_browser;
 use crate::native::remote_view::RemoteViewOpenIntent;
-use crate::native::service_config::{
-    record_profile_seeding_handoff_launch, update_profile_seeding_handoff,
-    ProfileSeedingHandoffUpdate,
-};
-use crate::native::service_model::{profile_seeding_handoff_id, ProfileSeedingHandoffState};
-use crate::native::service_store::ServiceStateRepository;
+use crate::native::service_config::record_profile_seeding_handoff_launch;
 /// Transport-neutral attribution supplied after the ingress has authorized a
 /// route-bound open. Cookies, headers, and transport sessions never cross this
 /// seam.
@@ -378,38 +372,6 @@ pub(crate) fn rolled_back_outcome(
         compatibility_error: failure.compatibility_error,
     })
 }
-async fn handle_manual_seeding_route_open(
-    cmd: &Value,
-    state: &mut DaemonState,
-    attribution: RouteBoundOpenAttribution,
-) -> Result<Value, String> {
-    if cmd.get("manualSeeding").and_then(Value::as_bool) != Some(true) {
-        return Err("manual_seeding_route_open_requires_explicit_intent".to_string());
-    }
-    handle_route_bound_compatibility_open(cmd, state, attribution).await
-}
-
-async fn handle_route_bound_compatibility_open(
-    cmd: &Value,
-    state: &mut DaemonState,
-    attribution: RouteBoundOpenAttribution,
-) -> Result<Value, String> {
-    let invocation =
-        RouteBoundOpenInvocation::direct(RouteBoundDirectOpenRequest::from_compatibility_command(
-            cmd.clone(),
-            optional_command_string(cmd, "remoteViewHandoffId")
-                .or_else(|| optional_command_string(cmd, "serviceJobId")),
-            attribution,
-        )?);
-    let supervisor =
-        RouteBoundOpenSupervisor::system_for_command(cmd, state.current_cancellation.clone());
-    let repository = DaemonRouteBoundOpenRepository::new()?;
-    let mut runtime = DaemonRouteBoundOpenRuntime::new(state);
-    RouteBoundOpenCoordinator::open(invocation, &mut runtime, &repository, &supervisor)
-        .await?
-        .into_compatibility_result()
-}
-
 /// Acquire one route-bound, CDP-free manual-seeding browser. The opaque
 /// handoff id is server generated when the authenticated ingress did not
 /// already bind one to a service job.
@@ -418,184 +380,17 @@ pub(crate) async fn handle_service_profile_manual_seeding_acquire(
     state: &mut DaemonState,
     attribution: RouteBoundOpenAttribution,
 ) -> Result<Value, String> {
-    let profile_id = optional_command_string(cmd, "profileId")
-        .or_else(|| optional_command_string(cmd, "runtimeProfile"))
-        .ok_or_else(|| "service_profile_manual_seeding_acquire requires profileId".to_string())?;
-    let target_service_id = optional_command_string(cmd, "targetServiceId").ok_or_else(|| {
-        "service_profile_manual_seeding_acquire requires targetServiceId".to_string()
-    })?;
-    let repository = LockedServiceStateRepository::default_json()?;
-    let snapshot = repository.load_snapshot()?;
-    if !snapshot.profiles.contains_key(&profile_id) {
-        return Err(format!(
-            "manual_seeding_profile_not_registered: register managed profile '{profile_id}' before route acquisition"
-        ));
-    }
-    let lifecycle_id = profile_seeding_handoff_id(&profile_id, &target_service_id);
-    if let Some(lifecycle) = snapshot.profile_seeding_handoffs.get(&lifecycle_id) {
-        let process_is_current = lifecycle.pid.is_some_and(|pid| {
-            crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), pid)
-                .preserves_evidence()
-        });
-        if lifecycle.state.blocks_profile_lease() && process_is_current {
-            let handoff = snapshot
-                .remote_view_handoffs
-                .values()
-                .filter(|handoff| handoff.profile_id.as_deref() == Some(profile_id.as_str()))
-                .max_by(|left, right| left.updated_at.cmp(&right.updated_at));
-            return Ok(json!({
-                "status": "manual_seeding_in_progress",
-                "reused": true,
-                "profileId": profile_id,
-                "targetServiceId": target_service_id,
-                "pid": lifecycle.pid,
-                "handoffId": handoff.map(|handoff| handoff.id.as_str()),
-                "handoffUrl": handoff.and_then(|handoff| handoff.handoff_url.as_deref()),
-                "operatorVisible": {
-                    "state": "not_checked",
-                    "reason": "reopen_the_existing_opaque_handoff_for_current_visibility",
-                },
-                "authentication": {
-                    "state": "not_probed",
-                    "reason": "visibility_is_not_authentication_evidence",
-                },
-                "nextAction": "reopen_existing_manual_seeding_handoff",
-            }));
-        }
-    }
-    let mut command = cmd.clone();
-    command["manualSeeding"] = Value::Bool(true);
-    command["runtimeProfile"] = Value::String(profile_id);
-    command["targetServiceId"] = Value::String(target_service_id);
-    if optional_command_string(&command, "remoteViewHandoffId").is_none()
-        && optional_command_string(&command, "serviceJobId").is_none()
-    {
-        command["remoteViewHandoffId"] =
-            Value::String(format!("manual-seeding-{}", uuid::Uuid::new_v4().simple()));
-    }
-    handle_manual_seeding_route_open(&command, state, attribution).await
+    super::manual_seeding_sqlite::handle_sqlite_manual_seeding_acquire(cmd, state, attribution)
+        .await
 }
 
-/// Close the exact detached manual-seeding process, release only the route
-/// graph owned by its opaque handoff, and advance the profile lease to the
-/// post-close verification boundary. Replays converge when either the process
-/// or route was already released by an interrupted first attempt.
+/// Close the exact SQLite-owned detached process and its opaque handoff.
+/// The provider-owned keeper route remains ready for another acquisition.
 pub(crate) async fn handle_service_profile_manual_seeding_close(
     cmd: &Value,
-    state: &DaemonState,
+    _state: &DaemonState,
 ) -> Result<Value, String> {
-    let profile_id = optional_command_string(cmd, "profileId")
-        .or_else(|| optional_command_string(cmd, "runtimeProfile"))
-        .ok_or_else(|| "service_profile_manual_seeding_close requires profileId".to_string())?;
-    let target_service_id = optional_command_string(cmd, "targetServiceId").ok_or_else(|| {
-        "service_profile_manual_seeding_close requires targetServiceId".to_string()
-    })?;
-    let handoff_id = optional_command_string(cmd, "handoffId")
-        .or_else(|| optional_command_string(cmd, "remoteViewHandoffId"))
-        .ok_or_else(|| "service_profile_manual_seeding_close requires handoffId".to_string())?;
-    let expected_pid = cmd
-        .get("pid")
-        .and_then(Value::as_u64)
-        .and_then(|pid| u32::try_from(pid).ok())
-        .ok_or_else(|| "service_profile_manual_seeding_close requires pid".to_string())?;
-    let repository = LockedServiceStateRepository::default_json()?;
-    let snapshot = repository.load_snapshot()?;
-    let lifecycle_id = profile_seeding_handoff_id(&profile_id, &target_service_id);
-    let lifecycle = snapshot
-        .profile_seeding_handoffs
-        .get(&lifecycle_id)
-        .cloned()
-        .ok_or_else(|| format!("manual seeding lifecycle not found: {lifecycle_id}"))?;
-    if lifecycle.pid != Some(expected_pid) {
-        return Err("manual_seeding_close_pid_mismatch".to_string());
-    }
-    let handoff = snapshot
-        .remote_view_handoffs
-        .get(&handoff_id)
-        .cloned()
-        .ok_or_else(|| format!("manual seeding handoff not found: {handoff_id}"))?;
-    if handoff.profile_id.as_deref() != Some(profile_id.as_str()) {
-        return Err("manual_seeding_close_profile_mismatch".to_string());
-    }
-    let route_id = handoff
-        .last_route_id
-        .clone()
-        .ok_or_else(|| "manual_seeding_close_route_missing".to_string())?;
-
-    let before =
-        crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), expected_pid);
-    let shutdown = if before.preserves_evidence() {
-        terminate_runtime_browser(Some(profile_id.clone()), expected_pid).await
-    } else {
-        BrowserShutdownOutcome::default()
-    };
-    let after =
-        crate::runtime_profile::runtime_process_assessment(Some(profile_id.as_str()), expected_pid);
-    if after.preserves_evidence() {
-        return Err(format!(
-            "manual_seeding_close_process_survived:pid={expected_pid}:reason={}",
-            after.reason
-        ));
-    }
-
-    let route_release = if snapshot
-        .remote_view_routes
-        .get(&route_id)
-        .is_some_and(|route| route.state == "released")
-    {
-        json!({ "status": "released", "routeId": route_id, "replayed": true })
-    } else {
-        handle_service_remote_view_route_release(
-            &json!({
-                "action": "service_remote_view_route_release",
-                "routeId": route_id,
-                "releaseDisplayAllocation": true,
-            }),
-            state,
-        )
-        .await?
-    };
-    let closed_at = service_remote_view_timestamp();
-    let lifecycle = repository.mutate(|service_state| {
-        update_profile_seeding_handoff(
-            service_state,
-            &profile_id,
-            ProfileSeedingHandoffUpdate {
-                target_service_id: Some(target_service_id.clone()),
-                state: Some(ProfileSeedingHandoffState::SeedingClosedUnverified),
-                closed_at: Some(closed_at.clone()),
-                actor: Some("agent-browser".to_string()),
-                note: Some("exact_manual_seeding_browser_closed".to_string()),
-                ..ProfileSeedingHandoffUpdate::default()
-            },
-        )
-    })?;
-    Ok(json!({
-        "closed": true,
-        "profileId": profile_id,
-        "targetServiceId": target_service_id,
-        "handoffId": handoff_id,
-        "pid": expected_pid,
-        "shutdown": {
-            "politeCloseAttempted": shutdown.polite_close_attempted,
-            "politeCloseSucceeded": shutdown.polite_close_succeeded,
-            "forceKillAttempted": shutdown.force_kill_attempted,
-            "forceKillSucceeded": shutdown.force_kill_succeeded,
-            "errors": shutdown.errors,
-        },
-        "routeRelease": route_release,
-        "lifecycle": lifecycle,
-        "attachableRelaunch": {
-            "action": "service_profile_acquire",
-            "profileId": profile_id,
-            "targetServiceIds": [target_service_id],
-        },
-        "authenticationProbe": {
-            "action": "service_profile_freshness_update",
-            "state": "separate_required_probe",
-            "visibilityAcceptedAsAuthentication": false,
-        },
-    }))
+    super::manual_seeding_sqlite::handle_sqlite_manual_seeding_close(cmd).await
 }
 pub(crate) async fn handle_service_remote_view_handoff_resolve(
     cmd: &Value,
@@ -605,6 +400,21 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
     let handoff_id = optional_command_or_params_string(cmd, "handoffId")
         .or_else(|| optional_command_or_params_string(cmd, "remoteViewHandoffId"))
         .ok_or_else(|| "service_remote_view_handoff_resolve requires handoffId".to_string())?;
+    if !attribution.authorization.is_authorized() {
+        return Err("remote_view_handoff_authorization_required".to_string());
+    }
+    let sqlite_handoff =
+        crate::native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+            .load_handoff_registry()?
+            .handoffs
+            .get(&handoff_id)
+            .cloned();
+    if sqlite_handoff.as_ref().is_some_and(|handoff| {
+        handoff.intent.get("manualSeeding").and_then(Value::as_bool) == Some(true)
+    }) {
+        return super::manual_seeding_sqlite::resolve_sqlite_manual_seeding_handoff(&handoff_id)
+            .await;
+    }
     let allow_reopen_closed =
         optional_command_or_params_bool(cmd, "allowReopenClosed").unwrap_or(false);
     if attribution.dashboard_deployment_generation.is_none() {

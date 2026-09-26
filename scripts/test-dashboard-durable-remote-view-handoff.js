@@ -88,6 +88,11 @@ assert.match(
   /durableHandoffPresentationReady\([\s\S]*presentationGeneration[\s\S]*dashboardDeploymentGeneration[\s\S]*logicalBrowserId[\s\S]*daemonOwnerGeneration[\s\S]*processInstanceDigest[\s\S]*requiredStreamProvider[\s\S]*observedStreamProvider[\s\S]*state === "ready"/,
   'the dashboard must require a matching authenticated presentation generation before rendering',
 );
+assert.match(
+  dashboardPage,
+  /resolution\.manualSeeding === true[\s\S]*receipt\.processInstanceDigest[\s\S]*resolution\.viewStreamProvider === "rdp_gateway"[\s\S]*receipt\.state === "ready"/,
+  'manual seeding must use its exact process receipt without claiming a daemon owner generation',
+);
 
 assert.doesNotMatch(
   dashboardPage,

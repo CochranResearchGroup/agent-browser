@@ -33,7 +33,10 @@ use crate::native::browser::{
 use crate::native::browser_navigation::{
     add_manual_login_hint_warning, persist_service_owned_navigate_tab,
 };
-use crate::native::cdp::chrome::{launch_chrome_detached, LaunchOptions, ManualChromeLaunch};
+use crate::native::cdp::chrome::{
+    launch_chrome_detached, launch_chrome_detached_without_runtime_state, LaunchOptions,
+    ManualChromeLaunch,
+};
 use crate::native::network::resolve_fetch_paused;
 use crate::native::network::{self, DomainFilter, EventTracker};
 use crate::native::network_archive::{har_cdp_protocol_to_http_version, har_extract_headers};
@@ -1152,7 +1155,7 @@ pub(crate) fn launch_cdp_free_from_sqlite_profile(
 ) -> Result<SqliteCdpFreeLaunchOutcome, String> {
     let plan = build_cdp_free_launch_plan_for_sqlite_profile(cmd, profile)?;
     validate_cdp_free_launch_plan(&plan)?;
-    let launch = launch_chrome_detached(&plan.launch_options)?;
+    let launch = launch_chrome_detached_without_runtime_state(&plan.launch_options)?;
     let process_identity = crate::process_identity::capture_process_identity(
         launch.pid,
         plan.launch_options

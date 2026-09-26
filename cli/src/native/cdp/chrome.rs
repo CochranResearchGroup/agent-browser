@@ -995,6 +995,22 @@ fn retain_manual_child_for_reaping(child: Child, pid: u32) -> Result<(), String>
 }
 
 pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLaunch, String> {
+    launch_chrome_detached_inner(options, true)
+}
+
+/// Launch a detached browser whose process and profile custody is journaled
+/// by Browser Runtime SQLite. This path must not write a parallel runtime
+/// profile state file.
+pub(crate) fn launch_chrome_detached_without_runtime_state(
+    options: &LaunchOptions,
+) -> Result<ManualChromeLaunch, String> {
+    launch_chrome_detached_inner(options, false)
+}
+
+fn launch_chrome_detached_inner(
+    options: &LaunchOptions,
+    persist_runtime_state: bool,
+) -> Result<ManualChromeLaunch, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
         None => find_chrome().ok_or_else(|| {
@@ -1112,7 +1128,7 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     } else {
         None
     };
-    if let Some(ref runtime_profile_name) = runtime_profile {
+    if let Some(runtime_profile_name) = runtime_profile.as_ref().filter(|_| persist_runtime_state) {
         let state = RuntimeState {
             runtime_profile: runtime_profile_name.clone(),
             user_data_dir: user_data_dir.display().to_string(),
@@ -1147,7 +1163,9 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
         }
     }
     if let Err(error) = retain_manual_child_for_reaping(child, pid) {
-        if let Some(runtime_profile_name) = runtime_profile.as_deref() {
+        if let Some(runtime_profile_name) =
+            runtime_profile.as_deref().filter(|_| persist_runtime_state)
+        {
             let _ = crate::runtime_profile::clear_runtime_state(runtime_profile_name);
         }
         return Err(error);

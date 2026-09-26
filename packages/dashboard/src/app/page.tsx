@@ -92,6 +92,7 @@ type RemoteViewHandoffResolution = {
   tabId?: string | null;
   targetId?: string | null;
   browserSessionManager?: boolean;
+  manualSeeding?: boolean;
   viewStreamProvider?: string | null;
   requiredViewStreamProvider?: string | null;
   presentationGeneration?: number | null;
@@ -125,6 +126,22 @@ function durableHandoffPresentationReady(resolution: RemoteViewHandoffResolution
       && Boolean(resolution.targetId)
       && receipt.targetId === resolution.targetId
       && Boolean(resolution.viewStreamProvider)
+      && receipt.requiredStreamProvider === resolution.viewStreamProvider
+      && receipt.observedStreamProvider === receipt.requiredStreamProvider
+      && receipt.state === "ready";
+  }
+  if (resolution.manualSeeding === true) {
+    return resolution.resolved === true
+      && resolution.status === "ready"
+      && Number.isInteger(resolution.presentationGeneration)
+      && Number(resolution.presentationGeneration) > 0
+      && receipt.generation === resolution.presentationGeneration
+      && Boolean(receipt.dashboardDeploymentGeneration)
+      && receipt.logicalBrowserId === resolution.browserId
+      && Boolean(receipt.processInstanceDigest)
+      && Boolean(resolution.targetId)
+      && receipt.targetId === resolution.targetId
+      && resolution.viewStreamProvider === "rdp_gateway"
       && receipt.requiredStreamProvider === resolution.viewStreamProvider
       && receipt.observedStreamProvider === receipt.requiredStreamProvider
       && receipt.state === "ready";

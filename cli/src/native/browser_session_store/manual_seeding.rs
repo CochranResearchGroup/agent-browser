@@ -28,6 +28,7 @@ const MANUAL_SEEDING_SCHEMA_V1: &str = "agent-browser.manual-seeding-registry.v1
 #[serde(rename_all = "snake_case")]
 pub(crate) enum ManualSeedingState {
     Reserved,
+    LaunchIssued,
     LaunchObserved,
     Ready,
     RecoveryRequired,
@@ -42,6 +43,8 @@ pub(crate) struct ManualSeedingReservation {
     pub(crate) target_service_id: String,
     pub(crate) handoff_id: String,
     pub(crate) requested_url: Option<String>,
+    #[serde(default)]
+    pub(crate) executable_path: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +57,8 @@ pub(crate) struct ManualSeedingRecord {
     pub(crate) handoff_id: String,
     pub(crate) user_data_dir: String,
     pub(crate) requested_url: Option<String>,
+    #[serde(default)]
+    pub(crate) executable_path: String,
     pub(crate) state: ManualSeedingState,
     pub(crate) route_slot_id: Option<String>,
     pub(crate) display_name: Option<String>,
@@ -82,6 +87,21 @@ pub(super) fn route_slot_reserved_by_manual_seeding(
         record.state != ManualSeedingState::Closed
             && record.route_slot_id.as_deref() == Some(slot_id)
     }))
+}
+
+pub(super) fn profile_reserved_by_manual_seeding(
+    connection: &Connection,
+    profile_id: &str,
+) -> Result<bool, String> {
+    let registry: ManualSeedingRegistry = load_optional_document(
+        connection,
+        MANUAL_SEEDING_DOCUMENT,
+        MANUAL_SEEDING_SCHEMA_V1,
+    )?;
+    Ok(registry
+        .records
+        .get(profile_id)
+        .is_some_and(|record| record.state != ManualSeedingState::Closed))
 }
 
 impl BrowserRuntimeSqliteStore {
@@ -213,6 +233,7 @@ impl BrowserRuntimeSqliteStore {
             request.profile_id.as_str(),
             request.target_service_id.as_str(),
             request.handoff_id.as_str(),
+            request.executable_path.as_str(),
         ]
         .iter()
         .any(|value| value.trim().is_empty())
@@ -246,6 +267,51 @@ impl BrowserRuntimeSqliteStore {
                 request.profile_id
             ));
         }
+        if !Path::new(&request.executable_path).is_absolute() {
+            return Err("manual_seeding_executable_path_invalid".to_string());
+        }
+        let session_state: BrowserSessionState = load_optional_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        if session_state
+            .browsers
+            .values()
+            .any(|browser| browser.profile_id == request.profile_id)
+        {
+            return Err(format!(
+                "manual_seeding_profile_busy:{}",
+                request.profile_id
+            ));
+        }
+        let mut pending = transaction
+            .prepare(
+                "SELECT request_json FROM operation_records
+                 WHERE owner_key = 'browser-runtime-open' AND state IN ('prepared', 'observed')",
+            )
+            .map_err(|error| format!("manual_seeding_profile_operations_read_failed:{error}"))?;
+        let requests = pending
+            .query_map([], |row| row.get::<_, String>(0))
+            .map_err(|error| format!("manual_seeding_profile_operations_read_failed:{error}"))?;
+        for request_json in requests {
+            let request_json = request_json.map_err(|error| {
+                format!("manual_seeding_profile_operations_read_failed:{error}")
+            })?;
+            let pending_request: serde_json::Value = serde_json::from_str(&request_json)
+                .map_err(|error| format!("manual_seeding_profile_operation_invalid:{error}"))?;
+            if pending_request
+                .pointer("/intent/browser/profileId")
+                .and_then(serde_json::Value::as_str)
+                == Some(request.profile_id.as_str())
+            {
+                return Err(format!(
+                    "manual_seeding_profile_busy:{}",
+                    request.profile_id
+                ));
+            }
+        }
+        drop(pending);
         let mut registry: ManualSeedingRegistry = load_optional_document(
             &transaction,
             MANUAL_SEEDING_DOCUMENT,
@@ -257,6 +323,7 @@ impl BrowserRuntimeSqliteStore {
                     && existing.target_service_id == request.target_service_id
                     && existing.handoff_id == request.handoff_id
                     && existing.requested_url == request.requested_url
+                    && existing.executable_path == request.executable_path
                     && existing.user_data_dir == profile.user_data_dir
                 {
                     let operation =
@@ -299,6 +366,7 @@ impl BrowserRuntimeSqliteStore {
             handoff_id: request.handoff_id.clone(),
             user_data_dir: profile.user_data_dir.clone(),
             requested_url: request.requested_url.clone(),
+            executable_path: request.executable_path.clone(),
             state: ManualSeedingState::Reserved,
             route_slot_id: None,
             display_name: None,
@@ -319,6 +387,157 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("manual_seeding_reservation_commit_failed:{error}"))?;
         Ok((record, operation))
+    }
+
+    /// Release only an acquisition that has not launched a process. The
+    /// caller may use this after validation or a launch error whose child has
+    /// been reaped; an observed or uncertain process cannot take this path.
+    #[allow(dead_code)]
+    pub(crate) fn abort_manual_seeding_before_launch(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        reason: &str,
+    ) -> Result<(ManualSeedingRecord, BrowserRuntimeOperation), String> {
+        if reason.trim().is_empty() {
+            return Err("manual_seeding_abort_reason_missing".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_abort_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id || record.generation != generation {
+            return Err("manual_seeding_operation_identity_mismatch".to_string());
+        }
+        let mut operation = super::load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}")
+            || operation.generation != generation
+            || super::load_owner_generation(&transaction, &operation.owner_key)? != generation
+        {
+            return Err("manual_seeding_abort_operation_stale".to_string());
+        }
+        let result = serde_json::json!({
+            "status": "failed_before_launch",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "reason": reason,
+        });
+        if record.state == ManualSeedingState::Closed
+            && operation.state == BrowserRuntimeOperationState::Committed
+            && operation.result.as_ref() == Some(&result)
+        {
+            return Ok((record.clone(), operation));
+        }
+        if record.state != ManualSeedingState::Reserved
+            || record.process_identity.is_some()
+            || record.uncertain_launch_pid.is_some()
+            || operation.state != BrowserRuntimeOperationState::Prepared
+        {
+            return Err("manual_seeding_abort_after_launch_forbidden".to_string());
+        }
+        record.state = ManualSeedingState::Closed;
+        let updated = record.clone();
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .execute(
+                "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                params![
+                    operation_id,
+                    BrowserRuntimeOperationState::Committed.as_str(),
+                    serde_json::to_string(&result)
+                        .map_err(|error| format!("manual_seeding_abort_result_invalid:{error}"))?
+                ],
+            )
+            .map_err(|error| format!("manual_seeding_abort_operation_save_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_abort_commit_failed:{error}"))?;
+        operation.state = BrowserRuntimeOperationState::Committed;
+        operation.result = Some(result);
+        Ok((updated, operation))
+    }
+
+    /// Fence a launch attempt before spawning Chrome. If the daemon stops
+    /// after this commit, replay must reconcile the exact profile and route;
+    /// it cannot launch a second browser on the assumption that no effect ran.
+    #[allow(dead_code)]
+    pub(crate) fn mark_manual_seeding_launch_issued(
+        &mut self,
+        profile_id: &str,
+        operation_id: &str,
+        generation: u64,
+        binding: &RouteKeeperHandoffBinding,
+    ) -> Result<(ManualSeedingRecord, BrowserRuntimeOperation), String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_launch_issue_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.operation_id != operation_id || record.generation != generation {
+            return Err("manual_seeding_operation_identity_mismatch".to_string());
+        }
+        if record.route_slot_id.as_deref() != Some(binding.slot_id.as_str())
+            || record.display_name.as_deref() != Some(binding.display_name.as_str())
+            || record.route_fence.as_ref() != Some(&binding.fence)
+        {
+            return Err("manual_seeding_route_not_reserved".to_string());
+        }
+        if record.state != ManualSeedingState::Reserved {
+            return Err("manual_seeding_launch_issue_state_invalid".to_string());
+        }
+        let authority = load_route_keeper_authority_document(&transaction)?;
+        if authority.ready_handoff_binding(&binding.slot_id, &binding.display_name)? != *binding {
+            return Err("manual_seeding_route_binding_changed".to_string());
+        }
+        let observation = serde_json::json!({
+            "phase": "manual_seeding_launch_issued",
+            "profileId": profile_id,
+            "handoffId": record.handoff_id,
+            "routeSlotId": binding.slot_id,
+            "displayName": binding.display_name,
+            "routeFence": binding.fence,
+        });
+        let operation =
+            observe_operation_in_transaction(&transaction, operation_id, generation, observation)?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}") {
+            return Err("manual_seeding_operation_owner_mismatch".to_string());
+        }
+        record.state = ManualSeedingState::LaunchIssued;
+        let updated = record.clone();
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_launch_issue_commit_failed:{error}"))?;
+        Ok((updated, operation))
     }
 
     /// Retain an uncertain detached launch before any retry. A PID alone is
@@ -366,7 +585,7 @@ impl BrowserRuntimeSqliteStore {
                 .ok_or_else(|| "manual_seeding_reservation_operation_missing".to_string())?;
             return Ok((record.clone(), operation));
         }
-        if record.state != ManualSeedingState::Reserved {
+        if record.state != ManualSeedingState::LaunchIssued {
             return Err("manual_seeding_uncertain_state_invalid".to_string());
         }
         let observation = serde_json::json!({
@@ -428,7 +647,7 @@ impl BrowserRuntimeSqliteStore {
         if record.operation_id != operation_id || record.generation != generation {
             return Err("manual_seeding_operation_identity_mismatch".to_string());
         }
-        if record.state != ManualSeedingState::Reserved
+        if record.state != ManualSeedingState::LaunchIssued
             && record.state != ManualSeedingState::LaunchObserved
         {
             return Err("manual_seeding_observation_state_invalid".to_string());
@@ -440,20 +659,24 @@ impl BrowserRuntimeSqliteStore {
             return Err("manual_seeding_route_not_reserved".to_string());
         }
         let authority = load_route_keeper_authority_document(&transaction)?;
-        let current = authority.ready_handoff_binding(&binding.slot_id, &binding.display_name)?;
-        if current != *binding {
-            return Err("manual_seeding_route_binding_changed".to_string());
-        }
+        let route_is_current = authority
+            .ready_handoff_binding(&binding.slot_id, &binding.display_name)
+            .is_ok_and(|current| current == *binding);
         if record.state == ManualSeedingState::LaunchObserved
             && (record.route_slot_id.as_deref() != Some(binding.slot_id.as_str())
                 || record.display_name.as_deref() != Some(binding.display_name.as_str())
                 || record.route_fence.as_ref() != Some(&binding.fence)
-                || record.process_identity.as_ref() != Some(process_identity))
+                || record.process_identity.as_ref() != Some(process_identity)
+                || !route_is_current)
         {
-            return Err("manual_seeding_launch_observation_changed".to_string());
+            return Err("manual_seeding_route_binding_changed".to_string());
         }
         let observation = serde_json::json!({
-            "phase": "manual_seeding_launch_observed",
+            "phase": if route_is_current {
+                "manual_seeding_launch_observed"
+            } else {
+                "manual_seeding_launch_route_lost"
+            },
             "profileId": profile_id,
             "handoffId": record.handoff_id,
             "routeSlotId": binding.slot_id,
@@ -466,7 +689,11 @@ impl BrowserRuntimeSqliteStore {
         if operation.owner_key != format!("manual-seeding-profile:{profile_id}") {
             return Err("manual_seeding_operation_owner_mismatch".to_string());
         }
-        record.state = ManualSeedingState::LaunchObserved;
+        record.state = if route_is_current {
+            ManualSeedingState::LaunchObserved
+        } else {
+            ManualSeedingState::RecoveryRequired
+        };
         record.route_slot_id = Some(binding.slot_id.clone());
         record.display_name = Some(binding.display_name.clone());
         record.route_fence = Some(binding.fence.clone());
@@ -730,6 +957,142 @@ impl BrowserRuntimeSqliteStore {
         Ok((handoff, operation))
     }
 
+    /// Close only the exact detached process after its recorded identity has
+    /// exited. The seeding record, durable handoff, and pending operation are
+    /// terminalized together; the provider-owned keeper remains available.
+    #[allow(dead_code)]
+    pub(crate) fn close_manual_seeding_after_process_exit(
+        &mut self,
+        profile_id: &str,
+        target_service_id: &str,
+        handoff_id: &str,
+        process_identity: &RecordedProcessIdentity,
+        closed_at: &str,
+    ) -> Result<(ManualSeedingRecord, Option<RemoteViewHandoff>), String> {
+        if closed_at.trim().is_empty() {
+            return Err("manual_seeding_close_timestamp_missing".to_string());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("manual_seeding_close_begin_failed:{error}"))?;
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )?;
+        let record = registry
+            .records
+            .get_mut(profile_id)
+            .ok_or_else(|| format!("manual_seeding_reservation_missing:{profile_id}"))?;
+        if record.target_service_id != target_service_id
+            || record.handoff_id != handoff_id
+            || record.process_identity.as_ref() != Some(process_identity)
+        {
+            return Err("manual_seeding_close_identity_mismatch".to_string());
+        }
+        let mut handoffs: BrowserManagerHandoffRegistry = load_optional_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+        )?;
+        if record.state == ManualSeedingState::Closed {
+            return Ok((record.clone(), handoffs.handoffs.get(handoff_id).cloned()));
+        }
+        if !matches!(
+            record.state,
+            ManualSeedingState::LaunchObserved
+                | ManualSeedingState::Ready
+                | ManualSeedingState::RecoveryRequired
+        ) {
+            return Err("manual_seeding_close_state_invalid".to_string());
+        }
+        let process = crate::process_identity::assess_process_ownership(
+            Some(process_identity),
+            crate::process_identity::observe_process(process_identity.pid),
+            crate::process_identity::LegacyProfileProof::Unproven,
+        );
+        if !process.authorizes_cleanup() {
+            return Err(format!(
+                "manual_seeding_close_process_not_absent:{}",
+                process.reason
+            ));
+        }
+        let previous_state = record.state;
+        record.state = ManualSeedingState::Closed;
+        let updated = record.clone();
+        let handoff = if let Some(handoff) = handoffs.handoffs.get_mut(handoff_id) {
+            if handoff.profile_id.as_deref() != Some(profile_id)
+                || handoff
+                    .intent
+                    .get("manualSeeding")
+                    .and_then(serde_json::Value::as_bool)
+                    != Some(true)
+            {
+                return Err("manual_seeding_close_handoff_mismatch".to_string());
+            }
+            handoff.state = "closed".to_string();
+            handoff.updated_at = Some(closed_at.to_string());
+            handoff.last_resolution = Some(serde_json::json!({
+                "status": "explicitly_closed",
+                "resolved": false,
+                "handoffId": handoff_id,
+                "profileId": profile_id,
+            }));
+            if let Some(receipt) = handoff.presentation_receipt.as_mut() {
+                receipt.state = "closed".to_string();
+            }
+            Some(handoff.clone())
+        } else {
+            if previous_state == ManualSeedingState::Ready {
+                return Err("manual_seeding_close_ready_handoff_missing".to_string());
+            }
+            None
+        };
+        save_document(
+            &transaction,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )?;
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &handoffs,
+        )?;
+        let operation = super::load_optional_operation(&transaction, &updated.operation_id)?
+            .ok_or_else(|| "manual_seeding_close_operation_missing".to_string())?;
+        if operation.owner_key != format!("manual-seeding-profile:{profile_id}")
+            || operation.generation != updated.generation
+        {
+            return Err("manual_seeding_close_operation_mismatch".to_string());
+        }
+        if operation.state != BrowserRuntimeOperationState::Committed {
+            let result = serde_json::json!({
+                "status": "closed_without_ready_handoff",
+                "profileId": profile_id,
+                "handoffId": handoff_id,
+            });
+            transaction
+                .execute(
+                    "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
+                    params![
+                        updated.operation_id,
+                        BrowserRuntimeOperationState::Committed.as_str(),
+                        serde_json::to_string(&result).map_err(|error| format!(
+                            "manual_seeding_close_result_invalid:{error}"
+                        ))?
+                    ],
+                )
+                .map_err(|error| format!("manual_seeding_close_operation_save_failed:{error}"))?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("manual_seeding_close_commit_failed:{error}"))?;
+        Ok((updated, handoff))
+    }
+
     #[allow(dead_code)]
     pub(crate) fn load_manual_seeding_record(
         &self,
@@ -847,7 +1210,26 @@ mod tests {
             target_service_id: "service-a".to_string(),
             handoff_id: "seed-handoff-a".to_string(),
             requested_url: Some("https://example.test/login".to_string()),
+            executable_path: "/opt/chrome".to_string(),
         };
+        let pending_open = store
+            .reserve_operation(
+                "open-before-seeding-profile",
+                "browser-runtime-open",
+                serde_json::json!({"intent":{"browser":{"profileId":"work"}}}),
+            )
+            .unwrap();
+        assert_eq!(
+            store.reserve_manual_seeding(&request),
+            Err("manual_seeding_profile_busy:work".to_string())
+        );
+        store
+            .commit_operation(
+                &pending_open.operation_id,
+                pending_open.generation,
+                serde_json::json!({"cancelledBeforeEffect":true}),
+            )
+            .unwrap();
         let first = store.reserve_manual_seeding(&request).unwrap();
         assert_eq!(first.0.state, ManualSeedingState::Reserved);
         assert_eq!(first.0.generation, 1);
@@ -877,12 +1259,131 @@ mod tests {
             Err("manual_seeding_profile_not_registered:unknown".to_string())
         );
         drop(store);
-        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(
             reopened.load_manual_seeding_record("work").unwrap(),
-            Some(first.0)
+            Some(first.0.clone())
         );
         assert_eq!(reopened.list_pending_operations().unwrap(), vec![first.1]);
+        let aborted = reopened
+            .abort_manual_seeding_before_launch(
+                "work",
+                "seed-operation-a",
+                first.0.generation,
+                "launch_validation_failed",
+            )
+            .unwrap();
+        assert_eq!(aborted.0.state, ManualSeedingState::Closed);
+        assert_eq!(
+            aborted.1.state,
+            super::super::BrowserRuntimeOperationState::Committed
+        );
+        assert_eq!(
+            reopened
+                .abort_manual_seeding_before_launch(
+                    "work",
+                    "seed-operation-a",
+                    first.0.generation,
+                    "launch_validation_failed",
+                )
+                .unwrap(),
+            aborted
+        );
+        assert!(reopened.list_pending_operations().unwrap().is_empty());
+        assert!(reopened
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .is_empty());
+        let next = reopened
+            .reserve_manual_seeding(&ManualSeedingReservation {
+                operation_id: "seed-operation-c".to_string(),
+                profile_id: "work".to_string(),
+                target_service_id: "service-b".to_string(),
+                handoff_id: "seed-handoff-c".to_string(),
+                requested_url: None,
+                executable_path: "/opt/chrome".to_string(),
+            })
+            .unwrap();
+        assert_eq!(next.0.generation, first.0.generation + 1);
+        let mut registry: ManualSeedingRegistry = load_optional_document(
+            &reopened.connection,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+        )
+        .unwrap();
+        let current_process =
+            crate::process_identity::capture_process_identity(std::process::id(), None, None)
+                .unwrap();
+        let record = registry.records.get_mut("work").unwrap();
+        record.state = ManualSeedingState::LaunchObserved;
+        record.process_identity = Some(current_process.clone());
+        save_document(
+            &reopened.connection,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )
+        .unwrap();
+        assert!(matches!(
+            reopened.close_manual_seeding_after_process_exit(
+                "work",
+                "service-b",
+                "seed-handoff-c",
+                &current_process,
+                "2026-09-25T00:00:00Z",
+            ),
+            Err(error) if error.starts_with("manual_seeding_close_process_not_absent:")
+        ));
+        assert_eq!(
+            reopened
+                .load_manual_seeding_record("work")
+                .unwrap()
+                .unwrap()
+                .state,
+            ManualSeedingState::LaunchObserved
+        );
+        let mut absent_process = current_process;
+        absent_process.pid = u32::MAX;
+        registry.records.get_mut("work").unwrap().process_identity = Some(absent_process.clone());
+        save_document(
+            &reopened.connection,
+            MANUAL_SEEDING_DOCUMENT,
+            MANUAL_SEEDING_SCHEMA_V1,
+            &registry,
+        )
+        .unwrap();
+        let closed = reopened
+            .close_manual_seeding_after_process_exit(
+                "work",
+                "service-b",
+                "seed-handoff-c",
+                &absent_process,
+                "2026-09-25T00:00:00Z",
+            )
+            .unwrap();
+        assert_eq!(closed.0.state, ManualSeedingState::Closed);
+        assert!(closed.1.is_none());
+        assert_eq!(
+            reopened
+                .find_operation("seed-operation-c")
+                .unwrap()
+                .unwrap()
+                .state,
+            super::super::BrowserRuntimeOperationState::Committed
+        );
+        assert_eq!(
+            reopened
+                .close_manual_seeding_after_process_exit(
+                    "work",
+                    "service-b",
+                    "seed-handoff-c",
+                    &absent_process,
+                    "2026-09-25T00:00:00Z",
+                )
+                .unwrap(),
+            closed
+        );
         fs::remove_dir_all(root).unwrap();
     }
 }

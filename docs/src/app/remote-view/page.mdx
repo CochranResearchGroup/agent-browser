@@ -467,6 +467,16 @@ closes the opaque handoff in the same SQLite commit. Repeating an open for the
 same live tab reuses its link; a new tab receives a new link. The closed link
 does not reconnect.
 
+For a registered profile that needs manual sign-in, the
+<code>service_profile_manual_seeding_acquire</code> request reserves the profile
+and a ready keeper slot in SQLite. It returns an opaque handoff only after the
+headed browser is visible through the public route. Opening that handoff
+rechecks the exact browser process and current route visibility. Use
+<code>service_profile_manual_seeding_close</code> with the returned profile,
+target service, handoff ID, and PID when finished. Close stops only that
+verified process instance and closes the handoff. The provider-owned keeper
+route remains available for another browser.
+
 Dashboard reconnect selects the browser's service-owned RDP stream for viewer
 lease authority, even when a CDP stream is currently selected for presentation.
 Synthetic daemon stream identifiers are never sent as remote-view route IDs.

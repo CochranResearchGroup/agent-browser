@@ -26,6 +26,7 @@ mod desktop_control;
 mod manual_seeding;
 mod provisioning;
 pub(crate) use desktop_control::{DesktopControlLease, DesktopControlTransferRequest};
+pub(crate) use manual_seeding::{ManualSeedingReservation, ManualSeedingState};
 pub(crate) use provisioning::{PresentationProvisioningConfig, PresentationProvisioningOperation};
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
@@ -1986,6 +1987,16 @@ fn reserve_operation_in_transaction(
         ));
     }
     if owner_key == "browser-runtime-open" {
+        if let Some(profile_id) = request
+            .pointer("/intent/browser/profileId")
+            .and_then(serde_json::Value::as_str)
+        {
+            if manual_seeding::profile_reserved_by_manual_seeding(connection, profile_id)? {
+                return Err(format!(
+                    "browser_runtime_open_profile_reserved_by_manual_seeding:{profile_id}"
+                ));
+            }
+        }
         if let Some(slot_id) = request
             .pointer("/intent/slot/routeId")
             .and_then(serde_json::Value::as_str)
@@ -4418,6 +4429,7 @@ mod tests {
             target_service_id: "service-a".to_string(),
             handoff_id: "seed-handoff".to_string(),
             requested_url: Some("https://example.test/login".to_string()),
+            executable_path: "/opt/chrome".to_string(),
         };
         let (reserved, operation) = store.reserve_manual_seeding(&request).unwrap();
         assert_eq!(reserved.state, ManualSeedingState::Reserved);
@@ -4524,6 +4536,42 @@ mod tests {
             ))
         );
         assert!(store.find_operation("open-collision").unwrap().is_none());
+        assert_eq!(
+            store.reserve_operation(
+                "open-profile-collision",
+                "browser-runtime-open",
+                serde_json::json!({
+                    "intent": {
+                        "browser": {"profileId": "work"},
+                        "slot": {"routeId": "different-slot"}
+                    }
+                }),
+            ),
+            Err("browser_runtime_open_profile_reserved_by_manual_seeding:work".to_string())
+        );
+        let issued = store
+            .mark_manual_seeding_launch_issued("work", "seed-op", operation.generation, &binding)
+            .unwrap();
+        assert_eq!(issued.0.state, ManualSeedingState::LaunchIssued);
+        assert_eq!(issued.1.state, BrowserRuntimeOperationState::Observed);
+        assert_eq!(
+            store.mark_manual_seeding_launch_issued(
+                "work",
+                "seed-op",
+                operation.generation,
+                &binding
+            ),
+            Err("manual_seeding_launch_issue_state_invalid".to_string())
+        );
+        assert_eq!(
+            store.abort_manual_seeding_before_launch(
+                "work",
+                "seed-op",
+                operation.generation,
+                "late_abort",
+            ),
+            Err("manual_seeding_abort_after_launch_forbidden".to_string())
+        );
         let process = RecordedProcessIdentity {
             pid: 4_242,
             start_token: "linux:start:4242".to_string(),
@@ -4676,6 +4724,7 @@ mod tests {
             target_service_id: "service-a".to_string(),
             handoff_id: "seed-uncertain-handoff".to_string(),
             requested_url: None,
+            executable_path: "/opt/chrome".to_string(),
         };
         let (_, operation) = store.reserve_manual_seeding(&request).unwrap();
         let expected = store.load_route_keeper_authority().unwrap();
@@ -4710,6 +4759,14 @@ mod tests {
         let binding = authority.ready_handoff_binding(&slot_id, ":1").unwrap();
         store
             .bind_manual_seeding_route("work", "seed-uncertain", operation.generation, &binding)
+            .unwrap();
+        store
+            .mark_manual_seeding_launch_issued(
+                "work",
+                "seed-uncertain",
+                operation.generation,
+                &binding,
+            )
             .unwrap();
         assert_eq!(
             store.observe_uncertain_manual_seeding_launch(

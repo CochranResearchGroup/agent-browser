@@ -1481,26 +1481,54 @@ impl RuntimeHostRouter {
             }
         };
         let lookup_id = handoff_id.clone();
-        let manager_owned = match tokio::task::spawn_blocking(move || -> Result<bool, String> {
-            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-            let registry = store.load_handoff_registry()?;
-            Ok(registry
-                .handoffs
-                .get(&lookup_id)
-                .is_some_and(super::browser_session_handoff::is_manager_handoff))
-        })
-        .await
-        {
-            Ok(Ok(manager_owned)) => manager_owned,
-            Ok(Err(error)) => return Some(serde_json::json!({ "success": false, "error": error })),
-            Err(error) => {
-                return Some(serde_json::json!({
-                    "success": false,
-                    "error": format!("browser_session_host_join_failed:{error}"),
-                }))
-            }
-        };
-        if !manager_owned {
+        let handoff_kind =
+            match tokio::task::spawn_blocking(move || -> Result<&'static str, String> {
+                let store =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+                let registry = store.load_handoff_registry()?;
+                Ok(match registry.handoffs.get(&lookup_id) {
+                    Some(handoff)
+                        if super::browser_session_handoff::is_manager_handoff(handoff) =>
+                    {
+                        "manager"
+                    }
+                    Some(handoff)
+                        if handoff.intent.get("manualSeeding").and_then(Value::as_bool)
+                            == Some(true) =>
+                    {
+                        "manual_seeding"
+                    }
+                    _ => "missing",
+                })
+            })
+            .await
+            {
+                Ok(Ok(handoff_kind)) => handoff_kind,
+                Ok(Err(error)) => {
+                    return Some(serde_json::json!({ "success": false, "error": error }))
+                }
+                Err(error) => {
+                    return Some(serde_json::json!({
+                        "success": false,
+                        "error": format!("browser_session_host_join_failed:{error}"),
+                    }))
+                }
+            };
+        if handoff_kind == "manual_seeding" {
+            return Some(
+                match super::remote_view::open::resolve_sqlite_manual_seeding_handoff(&handoff_id)
+                    .await
+                {
+                    Ok(result) => serde_json::json!({
+                        "id": command.get("id").cloned().unwrap_or(Value::Null),
+                        "success": true,
+                        "data": result,
+                    }),
+                    Err(error) => serde_json::json!({ "success": false, "error": error }),
+                },
+            );
+        }
+        if handoff_kind != "manager" {
             return Some(serde_json::json!({
                 "success": true,
                 "data": {
