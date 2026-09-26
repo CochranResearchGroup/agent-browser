@@ -63,6 +63,15 @@ generation-checked terminal response for replay. The focused fixture passes in
 `job-20260926T183230Z-655f5a76034c`. Lifecycle effects including close, tab
 close, reap and focus still need an equivalent fence that does not make cleanup
 depend on live provider readiness.
+That lifecycle follow-up now introduces a provider-independent
+`wait_for_current_generation` permit. Every effectful `browser_session_*`
+action, managed page command, view focus and periodic reap requires the exact
+current generation and attempt before effects and at terminal publication;
+read-only status is excluded. Two focused fixtures pass in
+`job-20260926T183758Z-d93fb704e698`, and strict Clippy passes in
+`job-20260926T183842Z-e73e88231e49`. B05 now narrows to liveness
+reconciliation, provider callbacks, asynchronous completion and recovery
+commits plus joined daemon-restart qualification.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

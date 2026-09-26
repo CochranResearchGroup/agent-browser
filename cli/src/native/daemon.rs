@@ -1230,6 +1230,67 @@ impl RuntimeHostRouter {
         Ok((probe, result))
     }
 
+    /// Serialize an existing-session browser effect against the current runtime
+    /// host generation without requiring the presentation provider to be ready.
+    async fn wait_for_current_generation(
+        &self,
+        command: Value,
+    ) -> Result<super::presentation_request_admission::PresentationAdmission, String> {
+        let probe = self
+            .route_keeper_probe()
+            .await
+            .ok_or_else(|| "presentation_keeper_unavailable".to_string())?;
+        let generation = probe.host_generation();
+        let request = tokio::task::spawn_blocking(move || {
+            super::presentation_request_admission::PresentationAdmissionRequest::enqueue(
+                &command, generation, true,
+            )
+        })
+        .await
+        .map_err(|_| "presentation_queue_enqueue_failed".to_string())??;
+        let deadline = Instant::now()
+            + Duration::from_millis(
+                request
+                    .deadline_at_ms
+                    .saturating_sub(super::presentation_request_admission::now_ms()),
+            );
+        let request = Arc::new(request);
+        let replay_request = request.clone();
+        if let Some(admission) = tokio::task::spawn_blocking(move || replay_request.poll(None))
+            .await
+            .map_err(|_| "presentation_queue_poll_failed".to_string())??
+        {
+            return Ok(admission);
+        }
+        let route_keeper = self.route_keeper.clone();
+        wait_for_presentation_keeper_observation(deadline, || {
+            let request = request.clone();
+            let route_keeper = route_keeper.clone();
+            async move {
+                let current_generation = route_keeper
+                    .lock()
+                    .await
+                    .as_ref()
+                    .map(super::stream::ConfiguredRouteKeeperSupervisorHandle::probe)
+                    .map(|probe| probe.host_generation())
+                    .ok_or_else(|| "presentation_keeper_unavailable".to_string())?;
+                if current_generation != generation {
+                    return Ok(PresentationKeeperObservation::Terminal(
+                        "presentation_queue_generation_stale".to_string(),
+                    ));
+                }
+                let admission = tokio::task::spawn_blocking(move || request.poll(Some(false)))
+                    .await
+                    .map_err(|_| "presentation_queue_poll_failed".to_string())??;
+                Ok(match admission {
+                    Some(admission) => PresentationKeeperObservation::Ready(admission),
+                    None => PresentationKeeperObservation::Pending,
+                })
+            }
+        })
+        .await
+    }
+
     async fn handle_browser_session_command(
         &self,
         mut command: Value,
@@ -1270,7 +1331,11 @@ impl RuntimeHostRouter {
         let remote_open_candidate = action_is_open && (has_named_profile || remote_view_open);
         let keeper_handoff_required = publish_manager_handoff;
         let keeper_required = keeper_handoff_required || remote_open_candidate;
-        if keeper_required && command.get("id").and_then(Value::as_str).is_none() {
+        let generation_fence_required =
+            action.is_some_and(browser_session_action_requires_generation_fence);
+        if (keeper_required || generation_fence_required)
+            && command.get("id").and_then(Value::as_str).is_none()
+        {
             command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
         }
         let (probe, mut permit) = if keeper_required {
@@ -1285,6 +1350,16 @@ impl RuntimeHostRouter {
                 Ok((
                     _,
                     super::presentation_request_admission::PresentationAdmission::Replay(response),
+                )) => return response,
+                Err(error) => return serde_json::json!({ "success": false, "error": error }),
+            }
+        } else if generation_fence_required {
+            match self.wait_for_current_generation(command.clone()).await {
+                Ok(super::presentation_request_admission::PresentationAdmission::Execute(
+                    permit,
+                )) => (None, Some(permit)),
+                Ok(super::presentation_request_admission::PresentationAdmission::Replay(
+                    response,
                 )) => return response,
                 Err(error) => return serde_json::json!({ "success": false, "error": error }),
             }
@@ -1479,18 +1554,13 @@ impl RuntimeHostRouter {
         if command.get("id").and_then(Value::as_str).is_none() {
             command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
         }
-        let mut permit = match self
-            .wait_for_presentation_keeper(command.clone(), true)
-            .await
-        {
-            Ok((
-                _,
-                super::presentation_request_admission::PresentationAdmission::Execute(permit),
-            )) => permit,
-            Ok((
-                _,
-                super::presentation_request_admission::PresentationAdmission::Replay(response),
-            )) => return Some(response),
+        let mut permit = match self.wait_for_current_generation(command.clone()).await {
+            Ok(super::presentation_request_admission::PresentationAdmission::Execute(permit)) => {
+                permit
+            }
+            Ok(super::presentation_request_admission::PresentationAdmission::Replay(response)) => {
+                return Some(response)
+            }
             Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
         };
         let browser_sessions = self.browser_sessions.clone();
@@ -1523,37 +1593,65 @@ impl RuntimeHostRouter {
     }
 
     async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
-        let browser_sessions = self.browser_sessions.clone();
-        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
-            let mut host = browser_sessions
-                .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if host.is_none() {
+        let preflight_command = command.clone();
+        let mut routed =
+            match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
                 let store =
                     super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-                let state = store.load_session_state()?;
-                if browser_session_focus_command(&command, &state).is_none() {
-                    return Ok(None);
-                }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
-            } else if host
-                .as_ref()
-                .is_none_or(|host| browser_session_focus_command(&command, host.state()).is_none())
+                Ok(browser_session_focus_command(
+                    &preflight_command,
+                    &store.load_session_state()?,
+                ))
+            })
+            .await
             {
-                return Ok(None);
+                Ok(Ok(Some(routed))) => routed,
+                Ok(Ok(None)) => return None,
+                Ok(Err(error)) => {
+                    return Some(serde_json::json!({ "success": false, "error": error }))
+                }
+                Err(error) => {
+                    return Some(serde_json::json!({
+                        "success": false,
+                        "error": format!("browser_session_focus_preflight_join_failed:{error}"),
+                    }))
+                }
+            };
+        if routed.get("id").and_then(Value::as_str).is_none() {
+            routed["id"] = Value::String(uuid::Uuid::new_v4().to_string());
+        }
+        let mut permit = match self.wait_for_current_generation(routed.clone()).await {
+            Ok(super::presentation_request_admission::PresentationAdmission::Execute(permit)) => {
+                permit
             }
-            let command = browser_session_focus_command(
-                &command,
-                host.as_ref()
-                    .ok_or_else(|| "browser_session_host_missing".to_string())?
-                    .state(),
-            )
-            .ok_or_else(|| "browser_session_focus_route_lost".to_string())?;
-            Ok(host.as_mut().map(|host| host.handle_command(&command)))
+            Ok(super::presentation_request_admission::PresentationAdmission::Replay(response)) => {
+                return Some(response)
+            }
+            Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
+        };
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+            let result = (|| -> Result<Value, String> {
+                let mut host = browser_sessions
+                    .lock()
+                    .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+                permit.require_current()?;
+                if host.is_none() {
+                    *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+                }
+                let host = host
+                    .as_mut()
+                    .ok_or_else(|| "browser_session_host_missing".to_string())?;
+                if browser_session_focus_command(&command, host.state()).is_none() {
+                    return Err("browser_session_focus_route_lost".to_string());
+                }
+                Ok(host.handle_command(&routed))
+            })();
+            permit.finish(result)
         })
         .await
         {
-            Ok(Ok(response)) => response,
+            Ok(Ok(response)) => Some(response),
             Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
             Err(error) => Some(serde_json::json!({
                 "success": false,
@@ -1786,14 +1884,44 @@ impl RuntimeHostRouter {
 
     async fn reap_browser_sessions_if_loaded(&self) -> Result<(), String> {
         let browser_sessions = self.browser_sessions.clone();
-        tokio::task::spawn_blocking(move || {
-            let mut host = browser_sessions
+        let loaded = tokio::task::spawn_blocking(move || {
+            browser_sessions
                 .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if let Some(host) = host.as_mut() {
-                host.reap_current()?;
+                .map(|host| host.is_some())
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())
+        })
+        .await
+        .map_err(|error| format!("browser_session_reap_join_failed:{error}"))??;
+        if !loaded {
+            return Ok(());
+        }
+        let command = serde_json::json!({
+            "id": uuid::Uuid::new_v4().to_string(),
+            "action": "browser_session_reap"
+        });
+        let mut permit = match self.wait_for_current_generation(command.clone()).await? {
+            super::presentation_request_admission::PresentationAdmission::Execute(permit) => permit,
+            super::presentation_request_admission::PresentationAdmission::Replay(_) => {
+                return Ok(())
             }
-            Ok(())
+        };
+        let browser_sessions = self.browser_sessions.clone();
+        tokio::task::spawn_blocking(move || {
+            let result = (|| -> Result<Value, String> {
+                let mut host = browser_sessions
+                    .lock()
+                    .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+                permit.require_current()?;
+                if let Some(host) = host.as_mut() {
+                    host.reap_current()?;
+                }
+                Ok(serde_json::json!({
+                    "id": command["id"],
+                    "success": true,
+                    "data": {"reaped": true}
+                }))
+            })();
+            permit.finish(result).map(|_| ())
         })
         .await
         .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
@@ -1814,6 +1942,10 @@ fn browser_session_focus_command(
     let mut routed = command.clone();
     routed["action"] = Value::String("browser_session_focus".to_string());
     Some(routed)
+}
+
+fn browser_session_action_requires_generation_fence(action: &str) -> bool {
+    action.starts_with("browser_session_") && action != "browser_session_status"
 }
 
 fn browser_session_reap_interval_ms(service_reconcile_interval_ms: Option<u64>) -> u64 {
@@ -2984,6 +3116,30 @@ mod tests {
             Ok(())
         );
         assert_eq!(require_keeper_handoff_resolution(false, &[]), Ok(()));
+    }
+
+    #[test]
+    fn every_effectful_browser_session_action_requires_a_generation_fence() {
+        for action in [
+            "browser_session_open",
+            "browser_session_close",
+            "browser_session_navigate",
+            "browser_session_tab_new",
+            "browser_session_tab_close",
+            "browser_session_focus",
+            "browser_session_reap",
+        ] {
+            assert!(
+                browser_session_action_requires_generation_fence(action),
+                "{action} must not bypass the current runtime generation"
+            );
+        }
+        assert!(!browser_session_action_requires_generation_fence(
+            "browser_session_status"
+        ));
+        assert!(!browser_session_action_requires_generation_fence(
+            "snapshot"
+        ));
     }
 
     #[tokio::test]
