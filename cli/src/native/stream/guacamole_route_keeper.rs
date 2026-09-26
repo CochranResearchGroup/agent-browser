@@ -776,7 +776,14 @@ where
         match self.helper.observe(&binding.route_user).await? {
             XrdpHelperObservation::Pending => Ok(None),
             XrdpHelperObservation::OwnershipUnproven(code)
-                if code == "rdp_route_session_evidence_invalid" =>
+                if matches!(
+                    code.as_str(),
+                    "rdp_route_session_evidence_invalid"
+                        | "rdp_route_session_properties_mismatch"
+                        | "rdp_route_xserver_ambiguous"
+                        | "rdp_route_x11_socket_invalid"
+                        | "rdp_route_x11_socket_owner_mismatch"
+                ) =>
             {
                 // XRDP publishes the session and its exact process evidence in
                 // separate steps. Keep this one incomplete-evidence state
@@ -2023,7 +2030,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn configured_xrdp_observer_keeps_incomplete_session_evidence_pending() {
+    async fn configured_xrdp_observer_keeps_partial_session_evidence_pending() {
         let (_directory, database_path) = database();
         let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         let original = store.load_route_keeper_authority().unwrap();
@@ -2042,25 +2049,52 @@ mod tests {
             .unwrap();
         let observe_action = observing.next_reconcile_action().unwrap();
         let calls = Arc::new(std::sync::Mutex::new(Vec::new()));
+        for code in [
+            "rdp_route_session_evidence_invalid",
+            "rdp_route_session_properties_mismatch",
+            "rdp_route_xserver_ambiguous",
+            "rdp_route_x11_socket_invalid",
+            "rdp_route_x11_socket_owner_mismatch",
+        ] {
+            let helper = FakeXrdpHelperTransport {
+                calls: calls.clone(),
+                observation: XrdpHelperObservation::OwnershipUnproven(code.to_string()),
+                stop: XrdpHelperStop::Stopped,
+            };
+            let mut observer =
+                ConfiguredXrdpRouteKeeperObserver::new(database_path.clone(), helper);
+            assert_eq!(
+                observer
+                    .observe_xrdp(&observe_action, "guacamole-connection-43")
+                    .await
+                    .unwrap(),
+                None
+            );
+        }
+        assert_eq!(
+            calls.lock().unwrap().as_slice(),
+            [
+                "observe:agent-browser-rdp-1",
+                "observe:agent-browser-rdp-1",
+                "observe:agent-browser-rdp-1",
+                "observe:agent-browser-rdp-1",
+                "observe:agent-browser-rdp-1"
+            ]
+        );
+
         let helper = FakeXrdpHelperTransport {
-            calls: calls.clone(),
+            calls,
             observation: XrdpHelperObservation::OwnershipUnproven(
-                "rdp_route_session_evidence_invalid".to_string(),
+                "rdp_route_session_ambiguous".to_string(),
             ),
             stop: XrdpHelperStop::Stopped,
         };
         let mut observer = ConfiguredXrdpRouteKeeperObserver::new(database_path, helper);
-
         assert_eq!(
             observer
                 .observe_xrdp(&observe_action, "guacamole-connection-43")
-                .await
-                .unwrap(),
-            None
-        );
-        assert_eq!(
-            calls.lock().unwrap().as_slice(),
-            ["observe:agent-browser-rdp-1"]
+                .await,
+            Err("route_keeper_xrdp_ownership_unproven:rdp_route_session_ambiguous".to_string())
         );
     }
 
