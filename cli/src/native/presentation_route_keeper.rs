@@ -319,6 +319,11 @@ async fn shutdown_and_persist(
     connector: &mut impl SupervisedPresentationRouteConnector,
     stop_ready: bool,
 ) -> Result<(), String> {
+    let observe_result = if stop_ready {
+        observe_inflight_routes_before_shutdown(repository, connector).await
+    } else {
+        Ok(())
+    };
     let stop_result = if stop_ready {
         stop_ready_routes(repository, connector).await
     } else {
@@ -326,14 +331,68 @@ async fn shutdown_and_persist(
     };
     connector.shutdown_primaries().await;
     let terminal_result = process_terminal_events(repository, connector);
-    match (stop_result, terminal_result) {
+    let cleanup_result = match (stop_result, terminal_result) {
         (Ok(()), Ok(())) => Ok(()),
         (Err(stop), Ok(())) => Err(stop),
         (Ok(()), Err(terminal)) => Err(terminal),
         (Err(stop), Err(terminal)) => Err(format!(
             "route_keeper_supervisor_cleanup_failed:{stop}:{terminal}"
         )),
+    };
+    match (observe_result, cleanup_result) {
+        (Ok(()), result) => result,
+        (Err(observe), Ok(())) => Err(observe),
+        (Err(observe), Err(cleanup)) => Err(format!(
+            "route_keeper_supervisor_cleanup_failed:{observe}:{cleanup}"
+        )),
     }
+}
+
+/// Give every in-flight primary one final ownership observation before
+/// configured shutdown. A Guacamole websocket can establish its XRDP session
+/// between ordinary supervisor ticks. Promoting that exact witness first lets
+/// the existing stop path terminate the owned session instead of closing the
+/// websocket and incorrectly recording the route as absent.
+async fn observe_inflight_routes_before_shutdown(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+) -> Result<(), String> {
+    let candidates = repository
+        .load_route_keeper_authority()?
+        .records
+        .values()
+        .filter(|record| {
+            matches!(
+                record.phase,
+                RouteKeeperPhase::Starting | RouteKeeperPhase::Observing
+            )
+        })
+        .map(|record| record.slot_id.clone())
+        .collect::<Vec<_>>();
+
+    for slot_id in candidates {
+        let expected = repository.load_route_keeper_authority()?;
+        let Some(record) = expected.records.get(&slot_id) else {
+            continue;
+        };
+        if !matches!(
+            record.phase,
+            RouteKeeperPhase::Starting | RouteKeeperPhase::Observing
+        ) {
+            continue;
+        }
+        let action = RouteKeeperReconcileAction::Observe {
+            slot_id: record.slot_id.clone(),
+            keeper_id: record.keeper_id.clone(),
+            fence: record.fence.clone(),
+        };
+        let observation = connector.observe(&action).await?;
+        if let RouteKeeperConnectorObservation::Ready(receipt) = &observation {
+            require_ready_matches_action(&action, receipt)?;
+        }
+        apply_ready_observation(repository, expected, observation)?;
+    }
+    Ok(())
 }
 
 async fn stop_ready_routes(
@@ -4159,6 +4218,38 @@ mod tests {
         .await
         .unwrap();
 
+        assert_eq!(connector.stops.len(), 1);
+        assert_eq!(connector.shutdowns, 1);
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Absent
+        );
+    }
+
+    #[tokio::test]
+    async fn configured_shutdown_promotes_and_stops_inflight_owned_route() {
+        let directory = TempDirectory::new("route-keeper-configured-inflight-shutdown");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Observing
+        );
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        shutdown_tx.send(true).unwrap();
+
+        run_configured_route_keeper_supervisor(
+            &repository,
+            &mut connector,
+            &mut ticks,
+            &mut shutdown,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(connector.observes.len(), 1);
         assert_eq!(connector.stops.len(), 1);
         assert_eq!(connector.shutdowns, 1);
         assert_eq!(
