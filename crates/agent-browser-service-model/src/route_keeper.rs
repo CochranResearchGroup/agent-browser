@@ -1308,10 +1308,12 @@ impl RouteKeeperAuthority {
         if previous.fence.host_generation != receipt.previous_host_generation
             || receipt.previous_guacamole_connection_uuid != previous.guacamole_connection_uuid
             || receipt.previous_guacamole_connection_uuid.is_empty()
-            || previous.xrdp_session_id != receipt.ready.xrdp_session_id
-            || previous.display_name != receipt.ready.display_name
-            || previous.xrdp_ownership != receipt.ready.xrdp_ownership
             || previous
+                .xrdp_ownership
+                .as_ref()
+                .is_none_or(|ownership| ownership.route_user != binding.route_user)
+            || receipt
+                .ready
                 .xrdp_ownership
                 .as_ref()
                 .is_none_or(|ownership| ownership.route_user != binding.route_user)
@@ -2052,7 +2054,7 @@ mod tests {
     }
 
     #[test]
-    fn adoption_fences_transport_occurrences_and_requires_exact_xrdp_witness() {
+    fn adoption_fences_transport_occurrences_and_attributes_replacement_xrdp_witness() {
         let mut authority = RouteKeeperAuthority::new(1).unwrap();
         assert_eq!(authority.schema_version, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4);
         authority
@@ -2107,14 +2109,15 @@ mod tests {
             observed_at: "2026-09-21T12:01:00Z".to_string(),
             ..original.clone()
         };
-        let mut witness_drift = successor.clone();
-        witness_drift.xrdp_ownership.as_mut().unwrap().cgroup_inode += 1;
-        let mut drift_authority = authority.clone();
+        let mut foreign_route = successor.clone();
+        foreign_route.xrdp_ownership.as_mut().unwrap().route_user =
+            "agent-browser-rdp-foreign".to_string();
+        let mut foreign_route_authority = authority.clone();
         assert_eq!(
-            drift_authority.adopt(RouteKeeperAdoptionReceipt {
+            foreign_route_authority.adopt(RouteKeeperAdoptionReceipt {
                 previous_host_generation: 1,
                 previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
-                ready: witness_drift,
+                ready: foreign_route,
                 adopted_at: "2026-09-21T12:01:01Z".to_string(),
             }),
             Err("route_keeper_adoption_observation_mismatch".to_string())
@@ -2142,11 +2145,27 @@ mod tests {
             Err("route_keeper_adoption_observation_mismatch".to_string())
         );
 
+        let mut replacement = successor.clone();
+        replacement.xrdp_session_id = "xrdp-replacement".to_string();
+        replacement.display_name = ":42".to_string();
+        let replacement_ownership = replacement.xrdp_ownership.as_mut().unwrap();
+        replacement_ownership.session_id = replacement.xrdp_session_id.clone();
+        replacement_ownership.session_scope = "session-xrdp-replacement.scope".to_string();
+        replacement_ownership.scope_invocation_id = "fedcba9876543210fedcba9876543210".to_string();
+        replacement_ownership.cgroup_path =
+            "/user.slice/user-2001.slice/session-xrdp-replacement.scope".to_string();
+        replacement_ownership.cgroup_inode += 1;
+        replacement_ownership.leader_pid += 10;
+        replacement_ownership.leader_start_ticks += 10;
+        replacement_ownership.x_server_pid += 10;
+        replacement_ownership.x_server_start_ticks += 10;
+        replacement_ownership.display_name = replacement.display_name.clone();
+        replacement_ownership.x11_socket_inode += 1;
         authority
             .adopt(RouteKeeperAdoptionReceipt {
                 previous_host_generation: 1,
                 previous_guacamole_connection_uuid: original.guacamole_connection_uuid.clone(),
-                ready: successor.clone(),
+                ready: replacement.clone(),
                 adopted_at: "2026-09-21T12:01:01Z".to_string(),
             })
             .unwrap();
@@ -2160,6 +2179,7 @@ mod tests {
             adoption.ready.guacamole_connection_uuid,
             "successor-occurrence"
         );
+        assert_eq!(adoption.ready.xrdp_session_id, "xrdp-replacement");
         assert_eq!(
             authority.record_disconnect(
                 &slot_id,
@@ -2172,7 +2192,7 @@ mod tests {
         assert_eq!(
             authority.record_disconnect(
                 &slot_id,
-                &successor.fence,
+                &replacement.fence,
                 &original.guacamole_connection_uuid,
             ),
             Err("route_keeper_connection_identity_mismatch".to_string())
