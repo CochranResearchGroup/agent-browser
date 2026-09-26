@@ -581,7 +581,7 @@ mod tests {
     };
     use agent_browser_service_model::{
         BrowserLaunch, BrowserProfileCatalogEntry, BrowserTabAcquisition, BrowserTabSource,
-        ManagedBrowserInstance, ManagedBrowserTab, PresentationRequestState,
+        ManagedBrowserInstance, ManagedBrowserTab, OpenBrowserSession, PresentationRequestState,
     };
     use std::fs;
     use std::path::PathBuf;
@@ -894,6 +894,86 @@ mod tests {
             store.load_presentation_queue().unwrap().entries["browser:navigation-replay-1"].state,
             PresentationRequestState::Completed { .. }
         ));
+    }
+
+    #[test]
+    fn journaled_navigation_refreshes_heartbeat_only_after_committed_success() {
+        let (_directory, legacy_path, database_path) = navigation_fixture();
+        let authority = ready_keeper_authority_for_handoff();
+        let mut command = navigation_command("navigation-heartbeat-1");
+        command["activityAtMs"] = json!(2_000);
+        let executes = Arc::new(AtomicUsize::new(0));
+        let target = Arc::new(Mutex::new((
+            "target-fixture".to_string(),
+            "about:blank".to_string(),
+        )));
+        let mut host = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            BrowserSessionEffectAdapter::new(NavigationFixtureRuntime {
+                executes: executes.clone(),
+                target: target.clone(),
+                fail_after_effect: true,
+            }),
+            &legacy_path,
+            navigation_config(&authority),
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        host.manager()
+            .tab_for_command(&opened.session_id, 1_000)
+            .unwrap();
+        host.commit_state().unwrap();
+        assert_eq!(
+            host.state().sessions[&opened.session_id].last_activity_at_ms,
+            1_000
+        );
+        assert_eq!(
+            host.handle_journaled_navigation_with_keeper(&command, &authority)["error"],
+            "injected_navigation_interruption"
+        );
+        assert_eq!(executes.load(Ordering::SeqCst), 1);
+        let interrupted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            interrupted.sessions[&opened.session_id].last_activity_at_ms,
+            1_000
+        );
+        assert_eq!(
+            interrupted.sessions[&opened.session_id].expires_at_ms,
+            301_000
+        );
+        drop(host);
+
+        let mut restarted = BrowserSessionHost::load(
+            BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+            BrowserSessionEffectAdapter::new(NavigationFixtureRuntime {
+                executes: executes.clone(),
+                target,
+                fail_after_effect: false,
+            }),
+            &legacy_path,
+            navigation_config(&authority),
+        )
+        .unwrap();
+        let recovered = restarted.handle_journaled_navigation_with_keeper(&command, &authority);
+        assert_eq!(recovered["success"], true, "{recovered}");
+        assert_eq!(executes.load(Ordering::SeqCst), 1);
+        let committed = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            committed.sessions[&opened.session_id].last_activity_at_ms,
+            2_000
+        );
+        assert_eq!(
+            committed.sessions[&opened.session_id].expires_at_ms,
+            302_000
+        );
     }
 
     #[test]
