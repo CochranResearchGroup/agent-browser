@@ -55,6 +55,14 @@ execution-error, success and exact Alice/Bob isolation pass in
 `job-20260926T180401Z-b2578ab7c2d2`; shared-browser command and cleanup
 isolation passes in `job-20260926T180405Z-5f6a121c50fc`. B05 remains open for
 generation-plus-operation fencing and browser-backed qualification.
+The renewed B05 cut routes ordinary existing-session page effects through the
+SQLite presentation queue. Each effect now requires the exact current host
+generation and attempt immediately before execution, then publishes one
+generation-checked terminal response for replay. The focused fixture passes in
+`job-20260926T183131Z-ac68ca4b6eae`; strict workspace Clippy passes in
+`job-20260926T183230Z-655f5a76034c`. Lifecycle effects including close, tab
+close, reap and focus still need an equivalent fence that does not make cleanup
+depend on live provider readiness.
 
 Source evidence carried forward: `44961424` exact browser selection,
 `680eb2df` synthetic navigation proof repair, and `1884c407` journaled

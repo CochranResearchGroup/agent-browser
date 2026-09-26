@@ -842,4 +842,59 @@ mod tests {
             }
         ));
     }
+
+    #[test]
+    fn ordinary_managed_command_is_generation_fenced_and_exactly_replayed() {
+        let fixture = Fixture::new();
+        let path = fixture.0.join("runtime.sqlite3");
+        let command = serde_json::json!({
+            "id": "alice-click",
+            "action": "click",
+            "selector": "#submit"
+        });
+        let request =
+            PresentationAdmissionRequest::enqueue_at(path.clone(), &command, 1, true, now_ms())
+                .unwrap();
+        let Some(PresentationAdmission::Execute(mut permit)) = request.poll(Some(false)).unwrap()
+        else {
+            panic!("an existing managed session command must not wait for new capacity")
+        };
+        permit.require_current().unwrap();
+        let response = serde_json::json!({
+            "id": "alice-click",
+            "success": true,
+            "data": {"clicked": true}
+        });
+        assert_eq!(permit.finish(Ok(response.clone())).unwrap(), response);
+        let Some(PresentationAdmission::Replay(replayed)) = request.poll(None).unwrap() else {
+            panic!("the exact managed command must replay its terminal response")
+        };
+        assert_eq!(replayed, response);
+
+        let stale_command = serde_json::json!({
+            "id": "alice-snapshot",
+            "action": "snapshot"
+        });
+        let stale = PresentationAdmissionRequest::enqueue_at(
+            path.clone(),
+            &stale_command,
+            1,
+            true,
+            now_ms(),
+        )
+        .unwrap();
+        let Some(PresentationAdmission::Execute(mut stale_permit)) =
+            stale.poll(Some(false)).unwrap()
+        else {
+            panic!("the managed command must initially receive its exact permit")
+        };
+        BrowserRuntimeSqliteStore::open(&path)
+            .unwrap()
+            .mutate_presentation_queue(|queue| queue.advance_generation(2))
+            .unwrap();
+        assert_eq!(
+            stale_permit.require_current(),
+            Err("presentation_queue_generation_stale".to_string())
+        );
+    }
 }

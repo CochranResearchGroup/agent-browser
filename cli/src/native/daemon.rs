@@ -1439,34 +1439,81 @@ impl RuntimeHostRouter {
     async fn try_handle_managed_browser_command(
         &self,
         session_name: &str,
-        command: Value,
+        mut command: Value,
     ) -> Option<Value> {
-        let browser_sessions = self.browser_sessions.clone();
-        let session_name = session_name.to_string();
-        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
-            let mut host = browser_sessions
-                .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if host.is_none() {
-                let store =
-                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
-                let state = store.load_session_state()?;
-                let has_session = state
+        let profile_id = command
+            .get("profileId")
+            .or_else(|| command.get("runtimeProfile"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let session_name_for_preflight = session_name.to_string();
+        let managed_session_exists = match tokio::task::spawn_blocking(move || {
+            let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+            Ok::<_, String>(
+                store
+                    .load_session_state()?
                     .sessions
                     .values()
-                    .any(|session| session.name == session_name);
-                if !has_session {
-                    return Ok(None);
-                }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
-            }
-            host.as_mut()
-                .ok_or_else(|| "browser_session_host_missing".to_string())?
-                .execute_managed_command(&session_name, &command)
+                    .any(|session| {
+                        session.name == session_name_for_preflight
+                            && profile_id
+                                .as_deref()
+                                .is_none_or(|profile_id| session.profile_id == profile_id)
+                    }),
+            )
         })
         .await
         {
-            Ok(Ok(response)) => response,
+            Ok(Ok(exists)) => exists,
+            Ok(Err(error)) => return Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => {
+                return Some(serde_json::json!({
+                    "success": false,
+                    "error": format!("browser_session_preflight_join_failed:{error}"),
+                }))
+            }
+        };
+        if !managed_session_exists {
+            return None;
+        }
+        if command.get("id").and_then(Value::as_str).is_none() {
+            command["id"] = Value::String(uuid::Uuid::new_v4().to_string());
+        }
+        let mut permit = match self
+            .wait_for_presentation_keeper(command.clone(), true)
+            .await
+        {
+            Ok((
+                _,
+                super::presentation_request_admission::PresentationAdmission::Execute(permit),
+            )) => permit,
+            Ok((
+                _,
+                super::presentation_request_admission::PresentationAdmission::Replay(response),
+            )) => return Some(response),
+            Err(error) => return Some(serde_json::json!({ "success": false, "error": error })),
+        };
+        let browser_sessions = self.browser_sessions.clone();
+        let session_name = session_name.to_string();
+        match tokio::task::spawn_blocking(move || -> Result<Value, String> {
+            let result = (|| -> Result<Value, String> {
+                let mut host = browser_sessions
+                    .lock()
+                    .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+                permit.require_current()?;
+                if host.is_none() {
+                    *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+                }
+                host.as_mut()
+                    .ok_or_else(|| "browser_session_host_missing".to_string())?
+                    .execute_managed_command(&session_name, &command)?
+                    .ok_or_else(|| "browser_session_disappeared_after_admission".to_string())
+            })();
+            permit.finish(result)
+        })
+        .await
+        {
+            Ok(Ok(response)) => Some(response),
             Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
             Err(error) => Some(serde_json::json!({
                 "success": false,

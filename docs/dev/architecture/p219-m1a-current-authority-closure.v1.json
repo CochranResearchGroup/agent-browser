@@ -58,7 +58,7 @@
       "symbols": ["BrowserSessionHost::execute_managed_command", "BrowserRuntimeSqliteStore::commit_browser_navigation", "BrowserSessionManager::close_session"],
       "writeSurfaces": ["cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_host/navigation_recovery.rs", "crates/agent-browser-service-model/src/browser_session_manager.rs"],
       "existingTests": ["shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite", "journaled navigation tests"],
-      "nextCheck": "The centralized managed-command success-only heartbeat and Alice/Bob isolation fixtures pass. Next freeze and repair generation-plus-operation fencing for browser effects, callbacks, completion and recovery commits before browser-backed qualification."
+      "nextCheck": "Existing-session page effects now use an exact current-generation presentation permit and terminal replay. Next fence close, tab close, reap and focus without coupling cleanup to provider readiness, then close callback, completion and recovery commits before browser-backed qualification."
     },
     {
       "id": "M1A-B06",
