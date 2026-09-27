@@ -50,7 +50,7 @@ Acceptance remains partial:
 | M2A provider and viewer | Three ready RDP routes, authenticated Guacamole, opaque handoff, real pixels | partial | Four-route target readiness and retained exact ownership for the unavailable slot. |
 | M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
 | G12/G36 retention | Source regressions prove retained named handoffs, bounded disposable expiry, and restart normalization at `d7ec8d2f` | partial | Installed retention and same-handoff replay on a frozen candidate. |
-| Goal control row | Objective is correct | stale | Goal service still says `blocked`, `tokensUsed=595442`, `timeUsedSeconds=1647`; no resume transition exists. |
+| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; checkpoint usage was `tokensUsed=218445`, `timeUsedSeconds=1163`. |
 
 The bounded source repair is complete. Its red regression and green focused
 receipts, the complete 271-test Service Model lane, 32 host/navigation tests,

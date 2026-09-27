@@ -530,13 +530,12 @@ Next gate: decide whether to freeze and publish a new development candidate for
 installed retention and M2B replay. This source packet does not authorize that
 runtime effect and promotes no G-row to installed pass.
 
-Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` still reports
-the correct objective, `resume p219 with a 1 mm token cap`, but its control row
-is stale at `blocked`, `tokensUsed=595442`, and `timeUsedSeconds=1647`. The goal
-API exposes no resume transition and rejected creation of a replacement while
-that unfinished row exists. The operator's explicit resume direction and this
-plan remain execution authority; the stale goal status is not presented as a
-current stop or counter.
+Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`
+with objective `contimue plan 211 with an additional 1 mm token cap.` The
+objective names the cancelled predecessor, so execution follows its unmet
+outcome through active successor Plan 0219 rather than reopening Plan 0211.
+The latest control readback at this checkpoint reported `tokensUsed=218445`
+and `timeUsedSeconds=1163`; those usage counters continue to advance.
 
 Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
 the Guacamole interaction reference, and make warning banners compact and
