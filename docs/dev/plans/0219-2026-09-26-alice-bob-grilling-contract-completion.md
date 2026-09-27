@@ -75,8 +75,10 @@ preserve history. Keep new execution narratives in the runbook.
 ## Current State
 
 Version 9 records M2B as installed and accepted on isolated development
-generation `0.28.0-ac3c1daed8ab`, built from the working tree based on
-`1d940440eeb3e0aae93faba739ed6c89e0af5f96`. The root-owned privileged helper
+generation `0.28.0-ac3c1daed8ab`, with implementation custody committed at
+`45a76907`. The accepted binary was built from the same M2B implementation
+surfaces before the documentation and service-reconcile compatibility closeout.
+The root-owned privileged helper
 is version 11, all development doctor checks pass, four warm provider displays
 are ready, and production remains selected at
 `0.28.0-b589b318c530-c0c0977896a8`. M3, M4, and M5 remain unstarted. The
