@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 24
+Plan version: 25
 
 State: OPEN
 
@@ -77,6 +77,14 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 25 reconciles the version 24 authority correction through every older
+forward-looking M3 section. Historical M3-P1 evidence remains recorded, but its
+browser-keyed baseline case is explicitly non-acceptance evidence and supplies
+no launch authority. Future delivery, host integration, and acceptance text now
+routes baseline presentation recovery through Route Keeper and limits browser
+replacement demand to an exact current viewer or exact client resume. No source
+code, runtime state, ledger count, or installed claim changed.
 
 Version 24 records the read-only M3-P2D demand-authority audit and corrects an
 overbroad recovery abstraction before implementation. Normative G14 uses
@@ -167,10 +175,12 @@ this early checkpoint does not reset either counter. The worktree is clean and
 the branch is 59 commits ahead of its unchanged remote. Nothing was pushed,
 published, installed, merged, or applied to a runtime.
 
-Version 15 source-qualifies M3-P1. A strict provider-free decision contract now
-distinguishes eager baseline, authenticated-active-viewer, and exact-client
-resume demand from lazy dormant demand; unknown old-browser usability refuses
-admission. Browser Runtime SQLite serializes the retained logical browser's
+Version 15 source-qualifies the M3-P1 admission mechanics. A strict
+provider-free decision contract distinguishes authenticated-active-viewer and
+exact-client resume demand from lazy dormant demand; unknown old-browser
+usability refuses admission. Its browser-keyed baseline case was later rejected
+by version 24 as acceptance evidence and supplies no browser-launch authority.
+Browser Runtime SQLite serializes the retained logical browser's
 generation, attempt, deadline, and capped retry time in one immediate
 transaction. Four independent connections produce one admission winner. The
 complete 276-test service-model suite and 37 browser-session-store tests pass.
@@ -179,10 +189,12 @@ to partial and G15 gains bounded-retry and concurrency evidence; host effect
 consumption and joined installed recovery remain open.
 
 Version 14 starts M3 with one bounded provider-free packet, M3-P1. The packet
-owns only recovery admission and scheduling semantics for G14/G15: eager
-baseline or authenticated-active-viewer demand, lazy dormant demand until an
-exact client resumes, exact old-browser unusability proof, one SQLite-serialized
-replacement winner, and typed bounded retry/backoff with a terminal deadline.
+owns only browser recovery admission and scheduling mechanics for G14/G15:
+authenticated-active-viewer demand, lazy dormant demand until an exact client
+resumes, exact old-browser unusability proof, one SQLite-serialized replacement
+winner, and typed bounded retry/backoff with a terminal deadline. Its historical
+browser-keyed baseline fixture is not G14 acceptance evidence; baseline
+presentation capacity belongs to the separate Route Keeper path.
 It preserves every logical browser, session, profile, tab, target, handoff, and
 navigation identity and performs no browser, provider, route, display, viewer,
 publication, or production effect. The primary agent owns the service-model
@@ -521,7 +533,8 @@ first installed outcome checkpoint, before broad stress or storage work.
 
 Extend the proven workflow across provider, Guacamole, route, display, browser,
 tab, and viewer-disconnect failures. Prove bounded singular recovery, eager
-baseline/active-viewer recovery and lazy dormant recovery, committed top-level
+baseline presentation recovery without browser launch, eager exact active-viewer
+browser recovery, lazy dormant browser recovery, committed top-level
 operator navigation including bounded redirects, and waiting-only restart
 behavior that launches nothing until exact client resumption.
 
@@ -753,9 +766,11 @@ SQLite work remains in the full objective; assigning it is not accepting it.
    repair. Any installed requalification is limited to the changed dependency
    and requires a later explicit candidate decision within execution authority.
 5. After this checkpoint, derive the first M3 G14/G15 provider-free packet:
-   eager baseline/active-viewer versus lazy dormant scheduling, old-browser
-   unusability proof, singular concurrent replacement, and typed bounded
-   retry/backoff. Preserve G12/G13 handoffs, logical identities, committed URLs,
+   browser admission mechanics for exact active-viewer and exact-client demand,
+   lazy dormant scheduling, old-browser unusability proof, singular concurrent
+   replacement, and typed bounded retry/backoff. Baseline presentation capacity
+   remains a separate Route Keeper concern and supplies no browser-launch
+   authority. Preserve G12/G13 handoffs, logical identities, committed URLs,
    terminal closed/expired sessions, and no page-effect replay. The closure
    owner must resolve concrete SQLite dependencies before accepting affected
    recovery behavior; unrelated cleanup and UI work stay outside this packet.
@@ -766,9 +781,11 @@ M3-P1 is started under version 14. Reuse the existing recovery budget and
 backoff defaults rather than creating a competing policy. Add one strict pure
 decision contract and one Browser Runtime SQLite transaction boundary. An
 eligible replacement requires an exact observation that the retained browser
-is unusable. Baseline-capacity deficit and an authenticated active viewer are
-eager demand. A dormant retained browser waits without admission until an exact
-handoff or named-session client resumes. Unknown liveness fails closed.
+is unusable. An authenticated active viewer is eager browser demand. A dormant
+retained browser waits without admission until an exact handoff or named-session
+client resumes. Unknown liveness fails closed. The historical baseline fixture
+tests only generic admission mechanics; it cannot authorize browser replacement
+and must be removed or constrained before host wiring.
 
 The SQLite transaction must serialize competing callers for the same logical
 browser and return one admission generation. A failed attempt records its
@@ -784,8 +801,10 @@ causal integration cut within the remaining implementation allowance.
 ### M3-P1 Source Checkpoint
 
 The packet is source-qualified without browser or provider effects. The pure
-contract passes eager/lazy demand, unknown-liveness refusal, capped exponential
-backoff, deadline exhaustion, and strict wire tests. The SQLite adapter passes
+contract passes active-viewer/exact-client versus dormant demand,
+unknown-liveness refusal, capped exponential backoff, deadline exhaustion, and
+strict wire tests. Its baseline case is excluded from acceptance by version 24.
+The SQLite adapter passes
 restart persistence, generation fencing, exact retry timing, and a four-client
 race with one admission winner. The complete service-model suite passes 276
 tests and the browser-session-store surface passes 37 tests. Coverage validation
@@ -809,8 +828,9 @@ transition that preserves monotonic recovery generation while resetting the
 attempt window only after a proven usable replacement. Translate the existing
 runtime recovery configuration into `BrowserRecoveryAdmissionPolicy`; do not
 introduce another default source. At the exact retained-browser recovery seam,
-derive demand from baseline deficit, authenticated active viewer, dormant
-state, or exact handoff/named-session resume. Bind old-browser
+derive demand from authenticated active viewer, dormant state, or exact
+handoff/named-session resume. A presentation-capacity deficit never enters this
+per-browser path. Bind old-browser
 `ProvenUnusable` only to a fresh process/CDP observation for that exact browser.
 Call `admit_browser_recovery` before any replacement effect, launch only for
 `AdmitReplacement`, and fence success or failure to its generation.

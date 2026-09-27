@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v24 retains the continuation checkpoint; M3-P2B has an exact policy-migration inventory, M3-P2C requires a durable observed-live phase plus one atomic open/handoff/recovery-success commit, and M3-P2D must separate Route Keeper baseline presentation recovery from exact current-viewer browser recovery while keeping dormant browsers lazy; no executable work resumes under the exhausted implementation allocation
+    blocker: P219 v25 retains the reconciled continuation checkpoint; M3-P2B has an exact policy-migration inventory, M3-P2C requires a durable observed-live phase plus one atomic open/handoff/recovery-success commit, and M3-P2D must separate Route Keeper baseline presentation recovery from exact current-viewer browser recovery while keeping dormant browsers lazy; no executable work resumes under the exhausted implementation allocation
     updated_at: 2026-09-27

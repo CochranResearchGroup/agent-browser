@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P2D authority audited
+## Current P219 status | 2026-09-27 M3-P2D authority reconciled
 
-[Plan 0219 version 24](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 25](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -73,6 +73,10 @@ and route, deduplicated by browser ID and passed through the M3-P2C admission
 and effect fence. Dormant dead named browsers remain effect-free until exact
 handoff or named-session access. The browser-keyed `BaselineCapacity` model
 case must be removed or constrained before scheduler wiring.
+Version 25 reconciles this correction through the older M3-P1, M3 delivery,
+and M3-P2 host-integration text. The historical baseline fixture remains a test
+of generic mechanics only and is explicitly excluded from G14 acceptance and
+all future browser-launch authority.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
