@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 17
+Plan version: 18
 
 State: OPEN
 
@@ -77,6 +77,18 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 18 records the read-only M3-P2 host-seam audit after the implementation
+stop. The default Browser Session Host reads SQLite `BrowserRuntimeConfig`, but
+retry budget and backoff still enter the separate daemon `ServiceState` recovery
+path through environment-derived `BrowserRecoveryPolicyConfig`. The host config
+contains no recovery policy. Journaled exact-client open performs retained
+replacement after the durable `launch_started` observation, while scheduled
+reap only preserves dead named records and never schedules eager replacement.
+Therefore direct host wiring would create a competing policy source and would
+not close G14. M3-P2 is split below into configuration-authority consolidation,
+exact-client effect fencing, and eager scheduling. This audit changes execution
+order without changing code, ledger status, or installed claims.
 
 Version 17 source-qualifies M3-P2A at commit `53c66ce9`. Recovery success is
 fenced to the exact admitted generation, persists as a recovered phase, resets
@@ -741,6 +753,60 @@ suites pass 277 and 38 tests. The G15 ledger row now records the success fence
 while remaining partial. The next implementation must translate existing
 runtime recovery settings into the admission policy and make the host consume
 admission, failure, and success fences around exactly one replacement effect.
+
+### M3-P2 Host-Seam Audit And Ordered Successors
+
+The current exact-client effect seam is
+`BrowserSessionHost::journaled_open_with_handoff_result`. A prepared operation
+first persists `launch_started`. On restart, the observed branch calls
+`recover_browser_reserved`; on the original attempt it calls the manager's
+reserved launch. Both reach the retained replacement and publication path. The
+daemon holds the in-process host mutex, but different journaled opens and
+process successors still require the SQLite per-browser admission fence.
+`reconcile_liveness_current` runs from scheduled reap and calls
+`reconcile_liveness_preserving_named_sessions`; it retains a dead named browser
+record without admitting or launching recovery.
+
+Execute the remaining source work in this order:
+
+1. **M3-P2B | One recovery policy authority.** Extend the existing SQLite
+   `BrowserRuntimeConfig` with retry budget, base backoff, and maximum backoff;
+   use its existing request deadline as the recovery deadline. Preserve the
+   current 3 / 1,000 ms / 30,000 ms / 90,000 ms values as migration defaults,
+   validate nonzero budget and base, maximum at least base, and safe integer
+   conversion. Project one `BrowserRecoveryAdmissionPolicy` from that row into
+   `BrowserSessionHostConfig`. Reconcile the environment-derived daemon policy
+   so it consumes the same SQLite values or is explicitly retired from ordinary
+   manager recovery. Update every required configuration, help, README, skill,
+   docs-site, and generated contract surface if these settings are exposed.
+   Stop if two writable policy sources remain.
+2. **M3-P2C | Exact-client replacement fence.** In the journaled-open observed
+   and first-attempt branches, bind a fresh exact `browser_is_live` observation
+   to `OldBrowserUsability`. Derive `ExactClientResume` only from the exact
+   handoff or named-session request. Call SQLite admission before either
+   reserved launch effect; only `AdmitReplacement` may call it. Record failure
+   for launch, adoption, publication, target reacquisition, or handoff-ready
+   failure, and record success only after the replacement state and same opaque
+   handoff are atomically publishable. Prove two distinct operation IDs for the
+   same browser yield one launch, stale generations cannot publish, committed
+   navigation is restored without page-effect replay, and restart respects the
+   persisted delay and deadline.
+3. **M3-P2D | Eager scheduler.** Keep dormant named records effect-free during
+   scheduled reap. Derive authenticated-active-viewer demand only from current
+   SQLite viewer authority, not handoff history. Define the exact baseline
+   capacity signal from current presentation/browser policy before coding; a
+   route-only warm slot cannot imply which profile browser to launch. Schedule
+   recovery through the same SQLite admission and host effect path, never a
+   second launcher. Prove active-viewer demand recovers eagerly, dormant demand
+   waits, unknown liveness launches nothing, and process restart cannot create a
+   competing replacement.
+
+Primary write ownership remains with P219 for
+`browser_session_store.rs`, `browser_session_host.rs`, the recovery contract,
+configuration projection, and provider-free fixtures. P214 retains Desktop
+Services candidate-event source. No provider or installed-runtime effect is
+authorized by these source packets. Run the complete changed-surface gates once
+after the final coherent source batch; focused tests govern intermediate work.
 
 ### A01 Source Checkpoint
 

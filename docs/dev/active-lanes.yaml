@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v17 source-qualifies M3-P2A at 53c66ce9 and stops implementation at 753,564 tokens; existing recovery-configuration translation, actual host fence consumption, wider G04/P03/P05 product closure, installed G14/G15 recovery, and the inherited runtime-database blocker remain open
+    blocker: P219 v18 preserves checkpoint 53c66ce9 and records the read-only host audit after the implementation stop; M3-P2B must consolidate environment-derived retry policy into SQLite authority before M3-P2C exact-client effect fencing and M3-P2D eager scheduling; wider G04/P03/P05 closure, installed G14/G15 recovery, and the inherited runtime-database blocker remain open
     updated_at: 2026-09-27
