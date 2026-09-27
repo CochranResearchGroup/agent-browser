@@ -4573,6 +4573,7 @@ mod tests {
                         "retainsInodeIdentity": true,
                         "integratedWithAbsenceVerification": true,
                         "reclaimsXrdpChannelSockets": true,
+                        "reclaimsPrimaryChansrvSocket": true,
                         "requiresInactiveSocketPaths": true
                     }
                 }
@@ -6035,6 +6036,7 @@ EOF
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,
+                    "reclaimsPrimaryChansrvSocket": true,
                     "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
@@ -6089,6 +6091,7 @@ EOF
                 "retainsInodeIdentity": true,
                 "integratedWithAbsenceVerification": true,
                 "reclaimsXrdpChannelSockets": true,
+                "reclaimsPrimaryChansrvSocket": true,
                 "requiresInactiveSocketPaths": true
             },
             "displayAccess": {
@@ -6175,6 +6178,7 @@ EOF
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,
+                    "reclaimsPrimaryChansrvSocket": true,
                     "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {

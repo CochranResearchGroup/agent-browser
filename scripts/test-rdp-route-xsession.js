@@ -130,6 +130,7 @@ for (const file of files) {
     assert.equal(report.staleDisplayLockReclamation?.retainsInodeIdentity, true);
     assert.equal(report.staleDisplayLockReclamation?.integratedWithAbsenceVerification, true);
     assert.equal(report.staleDisplayLockReclamation?.reclaimsXrdpChannelSockets, true);
+    assert.equal(report.staleDisplayLockReclamation?.reclaimsPrimaryChansrvSocket, true);
     assert.equal(report.staleDisplayLockReclamation?.requiresInactiveSocketPaths, true);
     assert.equal(report.displayAccess?.supportsFilesystemX11Socket, true);
     assert.equal(report.displayAccess?.supportsAbstractX11Socket, true);

@@ -93,6 +93,10 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .and_then(Value::as_bool)
             == Some(true)
         && report
+            .pointer("/parsed/staleDisplayLockReclamation/reclaimsPrimaryChansrvSocket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
             .pointer("/parsed/staleDisplayLockReclamation/requiresInactiveSocketPaths")
             .and_then(Value::as_bool)
             == Some(true)
@@ -317,6 +321,7 @@ mod tests {
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,
+                    "reclaimsPrimaryChansrvSocket": true,
                     "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
