@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 continuation checkpointed
+## Current P219 status | 2026-09-27 M3-P2B surface inventoried
 
-[Plan 0219 version 21](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 22](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -53,6 +53,11 @@ The version 21 checkpoint readback was 817,438. Executable work stopped at
 753,564; later usage was closeout-only. Remaining capacity under the ceiling
 does not renew implementation. Resume at M3-P2B with all counters and evidence
 carried forward.
+The read-only M3-P2B inventory identifies every required store, startup,
+consumer, schema, generated-client, CLI/help, README, skill, docs-site,
+architecture, and ledger surface. Startup defaults must preserve existing
+SQLite configuration; explicit config/env/CLI values become atomic bootstrap
+updates before host construction; daemon and host then consume the same row.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

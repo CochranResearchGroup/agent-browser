@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 21
+Plan version: 22
 
 State: OPEN
 
@@ -77,6 +77,17 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 22 records the read-only M3-P2B surface inventory. SQLite runtime
+configuration already has atomic get/update, strict patches, generated client
+types, service-request schema, CLI commands, and documentation. Recovery retry
+values remain outside it: the launcher always exports resolved values plus
+`default`, `config`, `env`, or `cli` provenance into daemon environment, and
+`DaemonState` reconstructs its own policy. The safe compatibility rule is now
+fixed: default-sourced startup values must not overwrite an existing SQLite
+row; explicitly sourced values are configuration inputs committed atomically
+before host construction; both daemon and host then read the committed row and
+report `config` provenance. This inventory changes no runtime state or code.
 
 Version 21 is the final checkpoint for this continuation. The goal service
 reports 817,438 cumulative tokens used. Executable implementation stopped at
@@ -857,6 +868,24 @@ configuration projection, and provider-free fixtures. P214 retains Desktop
 Services candidate-event source. No provider or installed-runtime effect is
 authorized by these source packets. Run the complete changed-surface gates once
 after the final coherent source batch; focused tests govern intermediate work.
+
+#### M3-P2B Exact Write And Validation Inventory
+
+| Surface | Required change | Required evidence |
+| --- | --- | --- |
+| `browser_session_store.rs` runtime config | Add retry budget, base backoff, and maximum backoff under a forward runtime-config schema revision; migrate v1 rows atomically to the current 3/1,000/30,000 defaults; add strict validation and patch application. Keep `requestDeadlineMs` as the single deadline. | Red v1 fixture, exact v2 migration, durable reopen, atomic patch, stale revision, invalid budget/base/max, and no-mutation failure tests. |
+| Startup source reconciliation | Use launcher provenance labels to distinguish defaults from explicit config/env/CLI input. Defaults leave an existing SQLite row unchanged. Explicit values update the row before `load_default_browser_session_host`; failure prevents startup rather than falling back. | Table tests for default preservation and each explicit source; restart proves SQLite wins after bootstrap; malformed and conflicting inputs fail closed. |
+| Host and daemon consumers | Add the committed policy to `BrowserSessionHostConfig`; derive `BrowserRecoveryAdmissionPolicy` with checked `u64` to `u32` conversion. Replace daemon environment reconstruction with the same committed row and project policy source as `config`. | Host/daemon equality fixture, overflow rejection, and a compiled-path detector forbidding ordinary recovery reads from the three legacy environment variables. |
+| Typed request contract | Extend `BrowserRuntimeConfigPatch`, `service-request.v1.schema.json`, the service-request client generator, generated JavaScript declarations, and type coverage. Preserve strict unknown-field rejection. | Schema negative fixtures, request normalization, generated-file check, API/MCP parity, client contract, and client type checks. |
+| User-facing configuration | Reconcile CLI flags and legacy environment variables as explicit bootstrap inputs or deprecate them with a typed error and migration guidance. Update `cli/src/output.rs`, README options/config sections, `skills/agent-browser/SKILL.md`, and the docs-site configuration and remote-view pages together. | Help snapshot/parser tests, documentation links/build, and exact examples proving readback through `service runtime-config get`. |
+| Architecture and ledger | Extend P03/P05/P12 or the appropriate deterministic detectors so direct ordinary recovery-policy environment authority fails. Update G04, G15, and G22 only to the proof actually obtained. | Detector red/green fixtures, architecture check, coverage validator, formatting, affected store/config tests, and strict workspace Clippy. |
+
+Do not bump the database `PRAGMA user_version` merely for JSON-row evolution
+unless table shape changes. The runtime-config value carries its own schema and
+must migrate inside one immediate transaction. Do not silently treat missing
+new fields as a current-schema row: a legacy schema must be recognized,
+upgraded once, revisioned, and written before ordinary consumption. Do not let
+startup defaults overwrite an operator-mutated row on every daemon restart.
 
 ### A01 Source Checkpoint
 
