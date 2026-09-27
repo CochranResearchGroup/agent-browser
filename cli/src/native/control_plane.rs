@@ -2121,6 +2121,125 @@ async fn send_response_before_follow_up<F>(
     follow_up.await;
 }
 
+#[cfg(test)]
+mod desktop_interaction_terminal_tests {
+    use super::*;
+    use crate::native::service_store::{JsonServiceStateStore, ServiceStateStore};
+    use crate::test_utils::EnvGuard;
+
+    fn desktop_interaction_request() -> ControlRequest {
+        let command = json!({ "action": "desktop_interact" });
+        let (response_tx, _response_rx) = oneshot::channel();
+        let provenance = capture_service_request_provenance(
+            &command,
+            "desktop-interaction-failed-1",
+            "desktop-interaction-failed-1",
+            "connection-test",
+            "test-lane",
+        );
+        ControlRequest {
+            id: "desktop-interaction-failed-1".into(),
+            job_id: "desktop-interaction-failed-1".into(),
+            action: "desktop_interact".into(),
+            provenance,
+            service_name: Some("test-service".into()),
+            agent_name: Some("test-agent".into()),
+            task_name: Some("test-task".into()),
+            naming_warnings: Vec::new(),
+            command,
+            priority: ControlPriority::Normal,
+            timeout_ms: None,
+            cancellation: RunningJobCancel::new(),
+            submitted_at_wall: current_timestamp(),
+            submitted_at_mono: Instant::now(),
+            profile_lease_wait_started_at: None,
+            profile_lease_wait_profile_id: None,
+            profile_lease_wait_conflict_session_ids: Vec::new(),
+            profile_lease_wait_retry_after_ms: None,
+            response_tx,
+        }
+    }
+
+    #[test]
+    fn failed_desktop_interaction_preserves_uncertain_receipt_in_terminal_surfaces() {
+        let home = std::env::temp_dir().join(format!(
+            "agent-browser-control-plane-desktop-interaction-failure-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&home).unwrap();
+        let guard = EnvGuard::new(&["HOME"]);
+        guard.set("HOME", home.to_str().unwrap());
+        let request = desktop_interaction_request();
+        let response = finalize_service_request(
+            &request,
+            json!({
+                "id": request.id,
+                "success": false,
+                "error": "desktop_interaction_authority_changed",
+                "data": {
+                    "status": "failed",
+                    "error": "desktop_interaction_authority_changed",
+                    "receipt": {
+                        "transactionId": "transaction-failed-1",
+                        "effectState": "effect_uncertain",
+                        "verificationState": "not_verified",
+                        "replayState": "replayed_terminal",
+                        "text": "private text"
+                    }
+                }
+            }),
+            ServiceTerminalState::Failed,
+            ServiceTerminalPhase::Execution,
+        );
+
+        assert_eq!(response["success"], false);
+        assert_eq!(response["terminalOutcome"]["state"], "failed");
+        assert_eq!(
+            response["terminalOutcome"]["effectState"],
+            "effect_uncertain"
+        );
+        assert_eq!(
+            response["failure"]["code"],
+            "desktop_interaction_authority_changed"
+        );
+        let persisted = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap())
+            .load()
+            .unwrap();
+        let job = &persisted.jobs["desktop-interaction-failed-1"];
+        assert_eq!(job.state, JobState::Failed);
+        assert_eq!(job.result.as_ref().unwrap()["success"], false);
+        assert_eq!(
+            job.result.as_ref().unwrap()["data"]["effectState"],
+            "effect_uncertain"
+        );
+        assert_eq!(
+            job.result.as_ref().unwrap()["data"]["interactionReceipt"]["replayState"],
+            "replayed_terminal"
+        );
+        assert!(!job
+            .result
+            .as_ref()
+            .unwrap()
+            .to_string()
+            .contains("private text"));
+        assert_eq!(
+            serde_json::to_value(job.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        let event = persisted
+            .events
+            .iter()
+            .find(|event| event.kind == ServiceEventKind::JobTerminal)
+            .unwrap();
+        assert_eq!(
+            serde_json::to_value(event.terminal_outcome.as_ref().unwrap()).unwrap(),
+            response["terminalOutcome"]
+        );
+        let _ = std::fs::remove_dir_all(&home);
+    }
+}
+
 #[cfg(any())]
 mod tests {
     use super::super::service_jobs::{

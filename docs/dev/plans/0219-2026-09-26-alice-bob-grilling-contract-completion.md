@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 10
+Plan version: 12
 
 State: OPEN
 
@@ -28,7 +28,11 @@ Execution owner: the primary agent assigned by the operator to this inherited la
 
 Authority: the operator directed execution of Plan 0219 on 2026-09-26; ordinary in-scope implementation, validation, isolated development runtime effects, and bounded repair are authorized under this plan's controls and non-goals
 
-Renewed effort ceiling: 2,000,000 tokens for the active continuation after the operator's 1,500,000-token renewal and later 500,000-token addition; reserve 200,000 tokens for final reconciliation, validation, evidence, and closeout; the prior 545,502-token P219 window and every predecessor attempt, review, failure, and receipt carry forward
+Active effort ceiling: 1,000,000 cumulative tokens for the operator-resumed
+continuation; stop sustained implementation at 800,000 and reserve 200,000 for
+reconciliation, validation, evidence, and checkpoint custody. Earlier P219
+windows and every predecessor attempt, review, failure, and receipt remain
+historical evidence and do not increase this ceiling.
 
 Policy capsule: [P219 M1B through M2B](../policy-capsules/p219-m1b-m2b.md) is historical and exhausted at the M2B outcome stop; the continuation below requires a reconciled policy basis before implementation
 
@@ -74,7 +78,28 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 10 records the September 27 fresh-context audit and the
+Version 12 records the qualified A01 source repair. Ordinary dispatch now
+projects a receipt-bearing desktop failure as outer failure, the shared failure
+classifier retains `effect_uncertain` and inspect-before-retry recourse, stream
+redaction preserves the safe diagnostic receipt, and terminal job/event/outcome
+surfaces agree. Provider-free validation passed 40 desktop-interaction tests,
+273 service-model tests, 18 Desktop Services tests, focused dispatch,
+redaction, and terminal regressions, formatting, and strict workspace Clippy.
+The pre-repair retained synthetic receipt is the red observation; the active
+fixtures are the deterministic green proof. A02 and the A03–A06 evidence
+reconciliation remain open before M3.
+
+Version 11 records the operator's resumed continuation with a cumulative
+1,000,000-token ceiling before stop and checkpoint. Reserve 200,000 tokens for
+reconciliation, validation, evidence, and custody; sustained implementation
+stops at 800,000 tokens. Goal-service thread
+`01a0e3f7-adbb-7312-b748-ce5a462ccd90` records this objective as active and
+reported 141,869 tokens used at startup, but exposed no remaining-token field.
+Use the explicit ceiling and reserve as the controlling bounds, retain the
+service counter as an observed lower-bound readback, and checkpoint early if
+the service cannot prove remaining budget.
+
+Version 10 recorded the September 27 fresh-context audit and the
 [continuation packet](#fresh-context-continuation-after-m2b). This revision
 records work only; it does not start implementation, renew a token budget, or
 authorize runtime effects. P219 remains OPEN with the same objective and
@@ -528,7 +553,7 @@ September 19 specification. The primary performed the audit without delegation.
 
 | Finding | Evidence and consequence | Disposition and acceptance |
 | --- | --- | --- |
-| A01: desktop failure reported as success | `run_configured_interaction` in `cli/src/native/desktop_interaction.rs` returns an error with a receipt as `Ok({status: failed, ...})`; the `desktop_interact` branch in `cli/src/native/actions.rs` wraps it in `success_response`. `finalize_service_request` in `cli/src/native/control_plane.rs` normalizes nested recipe failure only for file transfer. Retained synthetic receipt `/tmp/p219-bob-current-interact.json` reports `desktop_interaction_authority_changed`, `effect_uncertain`, and `not_verified`, but outer success and terminal `succeeded / verified_effect`. | Blocking for desktop failure-outcome qualification. Add a deterministic provider-free regression through ordinary dispatch and terminalization; preserve the receipt and uncertain-effect semantics in the failed outer response, job, and replay result. Establish whether the defect is inherited rather than claiming this commit introduced it. |
+| A01: desktop failure reported as success | `run_configured_interaction` in `cli/src/native/desktop_interaction.rs` returns an error with a receipt as `Ok({status: failed, ...})`; the former `desktop_interact` branch in `cli/src/native/actions.rs` wrapped it in `success_response`. Retained synthetic receipt `/tmp/p219-bob-current-interact.json` reports `desktop_interaction_authority_changed`, `effect_uncertain`, and `not_verified`, but outer success and terminal `succeeded / verified_effect`. | Source repair qualified in version 12. Dispatch now emits outer failure while retaining `data`; stream persistence redacts private fields while preserving the safe receipt; the exact classifier returns uncertain effect and inspect-before-retry; terminal job, event, and outcome agree. The retained receipt establishes the inherited red observation and provider-free regressions establish green behavior. Installed requalification remains deferred to a later candidate decision. |
 | A02: ordinary desktop JSON dependency | `run_configured_interaction` loads `LockedServiceStateRepository::default_json()` and persists `desktop-input/operations.json`. `ManagedDesktopStateSource::snapshot` in `cli/src/native/desktop_capture.rs` loads configured Service State; `project_managed_desktop` requires its route and display records. | Blocking for complete G04/P03/P05 closure, not grounds to discard successful pixels/input evidence. Record the exact dependency and its completion owner; implement the coherent SQLite closure and deterministic compiled-path detector before final qualification. Do not label the completed manager-open cut whole-product closure. |
 | A03: exhausted renewal and stale policy/budget | Delivery Sequence And Budget stops the renewal at M2B. The capsule repeats that stop and retains older numeric thresholds. This audit's goal-service readback returned no active goal or remaining-token counter. | Blocking for sustained continuation until the active instruction, execution window, usable allowance, reserve, and policy basis are reconciled. No subtraction from stale counters and no implied renewal from this revision. |
 | A04: requirement evidence drift | G12 still describes older competing persistence paths; G13 says joined recovery/no-effect proof is absent; G15 has no source references despite the replacement implementation. The M2B checkpoint proves narrower explicit-reopen cases, not eager recovery or the full failure matrix. | Reconcile the existing rows with preserved subproofs and precise gaps. Do not promote rows merely from the checkpoint narrative. Keep the 9/26/3/7 tally historical until row adjudication justifies a change. |
@@ -586,11 +611,30 @@ SQLite work remains in the full objective; assigning it is not accepting it.
    owner must resolve concrete SQLite dependencies before accepting affected
    recovery behavior; unrelated cleanup and UI work stay outside this packet.
 
-No new numeric implementation budget is granted here. Before starting each
-batch, record its allowance, required validation cost, and at least 20 percent
-closeout reserve within the reconciled overall ceiling. The M2B outcome stop
-remains historical fact. A new packet name does not reset attempts or justify
-automatic replay after a second causal failure.
+### A01 Source Checkpoint
+
+The repair batch is source-qualified without publication or provider effects.
+Focused Cargo receipts executed one dispatch regression, one stream-redaction
+regression, one terminal propagation regression, and one exact classifier
+regression. The broader filtered desktop-interaction suite passed 40 tests, the
+complete service-model crate passed 273 tests, and the Desktop Services crate
+passed 18 tests. Strict workspace Clippy, Rust formatting, architecture
+ownership, route-confusion gates, and patch hygiene pass.
+
+The selector-recommended CDP streaming live smoke failed twice before browser
+launch. A preserved debug rerun reports
+`browser_runtime_database_missing:<temporary-home>/.agent-browser/service/runtime.sqlite3`
+from the runtime host. The similarly named Rust filter selected zero tests and
+is not counted as evidence. These receipts remain visible as an inherited
+runtime-database readiness blocker; they neither invalidate the provider-free
+A01 proof nor qualify CDP live streaming. No automatic retry or runtime repair
+is authorized by this checkpoint.
+
+The operator resumed this amended plan with a 1,000,000-token cumulative
+ceiling before stop and checkpoint. Reserve 200,000 tokens for closeout and
+stop sustained implementation at 800,000. The M2B outcome stop remains
+historical fact. A new packet name does not reset attempts or justify automatic
+replay after a second causal failure.
 
 ### Worker Assignments
 

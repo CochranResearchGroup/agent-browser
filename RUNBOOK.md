@@ -1,16 +1,29 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 audit continuation recorded
+## Current P219 status | 2026-09-27 A01 source-qualified
 
-[Plan 0219 version 10](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
-is OPEN. The read-only audit preserved successful M2B subproofs and found a
+[Plan 0219 version 12](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+is OPEN. The operator resumed the amended continuation with a cumulative
+1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
+closeout reserve and an 800,000-token implementation stop. Goal-service thread
+`01a0e3f7-adbb-7312-b748-ce5a462ccd90` reported 141,869 tokens used at startup
+but no remaining-token field. The read-only audit preserved successful M2B subproofs and found a
 desktop error receipt reported as outer success, remaining ordinary desktop
 JSON dependencies, and policy/budget, ledger, shared-helper, candidate and retry
 provenance gaps. The linked continuation owns findings A01–A06 and their exits.
-The operator authorized durable recording only; source repair and M3 remain
-unstarted. Next execution must reconcile the exhausted M2B renewal and usable
-budget, then qualify the bounded provider-free desktop failure-reporting repair
-before the G14/G15 recovery packet. No new numeric budget is inferred.
+A01 is source-qualified: failed desktop receipts now produce truthful outer,
+job, event, and terminal failures with uncertain-effect recourse and redacted
+diagnostic preservation. A02 and A03–A06 reconciliation remain open. M3 remains
+unstarted.
+
+A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
+18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
+formatting, strict workspace Clippy, architecture ownership, route-confusion
+gates, and diff hygiene. The selected CDP live smoke remains unqualified: two
+attempts failed before browser launch and a preserved debug receipt reports a
+missing temporary-home runtime SQLite database. The Rust command selected zero
+tests and is not evidence. No candidate was published and no provider effect
+was attempted.
 
 Audit baseline: clean `00935477`, 55 commits ahead of the unchanged remote
 `8bb9518e`; development binary digest `ac3c1daed8ab` matches its recorded full

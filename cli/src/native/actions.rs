@@ -552,10 +552,7 @@ async fn execute_command_after_navigation_admission(
         };
     }
     if action == "desktop_interact" {
-        return match handle_desktop_interact(cmd).await {
-            Ok(data) => success_response(&id, data),
-            Err(error) => error_response(&id, &error),
-        };
+        return desktop_interaction_response(&id, handle_desktop_interact(cmd).await);
     }
     if action == "challenge_control_evaluate" {
         return match handle_challenge_control_evaluate(cmd) {
@@ -1178,4 +1175,47 @@ pub(crate) fn success_response(id: &str, data: Value) -> Value {
 
 pub(crate) fn error_response(id: &str, error: &str) -> Value {
     json!({ "id" : id, "success" : false, "error" : error, })
+}
+
+fn desktop_interaction_response(id: &str, result: Result<Value, String>) -> Value {
+    match result {
+        Ok(data) if data.get("status").and_then(Value::as_str) == Some("failed") => {
+            let error = data
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("desktop_interaction_failed");
+            json!({ "id": id, "success": false, "error": error, "data": data })
+        }
+        Ok(data) => success_response(id, data),
+        Err(error) => error_response(id, &error),
+    }
+}
+
+#[cfg(test)]
+mod desktop_interaction_response_tests {
+    use super::*;
+
+    #[test]
+    fn desktop_interaction_receipt_failure_is_not_transport_success() {
+        let data = json!({
+            "status": "failed",
+            "error": "desktop_interaction_authority_changed",
+            "receipt": {
+                "transactionId": "transaction-failed-1",
+                "effectState": "effect_uncertain",
+                "verificationState": "not_verified",
+                "replayState": "replayed_terminal"
+            }
+        });
+
+        let first = desktop_interaction_response("interaction-1", Ok(data.clone()));
+        let replay = desktop_interaction_response("interaction-1", Ok(data));
+
+        assert_eq!(first, replay);
+        assert_eq!(first["success"], false);
+        assert_eq!(first["error"], "desktop_interaction_authority_changed");
+        assert_eq!(first["data"]["status"], "failed");
+        assert_eq!(first["data"]["receipt"]["effectState"], "effect_uncertain");
+        assert_eq!(first["data"]["receipt"]["replayState"], "replayed_terminal");
+    }
 }

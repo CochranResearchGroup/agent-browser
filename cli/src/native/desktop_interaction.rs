@@ -429,6 +429,18 @@ pub(crate) fn redact_desktop_interaction_stream_result(result: &Value) -> Value 
     let Some(record) = result.as_object() else {
         return Value::Null;
     };
+    if record.get("status").and_then(Value::as_str) == Some("failed") {
+        let receipt = record.get("receipt").unwrap_or(&Value::Null);
+        let normalized = serde_json::json!({
+            "ok": false,
+            "action": "desktop_interact",
+            "errorCode": record.get("error").cloned().unwrap_or(Value::Null),
+            "effectState": receipt.get("effectState").cloned().unwrap_or(Value::Null),
+            "stopReason": receipt.get("stopReason").cloned().unwrap_or(Value::Null),
+            "interactionReceipt": receipt,
+        });
+        return redact_desktop_interaction_stream_result(&normalized);
+    }
     let mut redacted = serde_json::Map::new();
     for key in TOP_LEVEL {
         let Some(value) = record.get(*key) else {
@@ -1474,6 +1486,38 @@ mod tests {
         ] {
             assert!(!serialized.contains(private));
         }
+    }
+
+    #[test]
+    fn stream_redactor_preserves_failed_receipt_without_private_fields() {
+        let redacted = redact_desktop_interaction_stream_result(&json!({
+            "status": "failed",
+            "error": "desktop_interaction_authority_changed",
+            "receipt": {
+                "transactionId": "transaction-failed-1",
+                "effectState": "effect_uncertain",
+                "verificationState": "not_verified",
+                "replayState": "replayed_terminal",
+                "text": "private text",
+                "imageBase64": "private pixels"
+            }
+        }));
+
+        assert_eq!(redacted["ok"], false);
+        assert_eq!(
+            redacted["errorCode"],
+            "desktop_interaction_authority_changed"
+        );
+        assert_eq!(redacted["effectState"], "effect_uncertain");
+        assert_eq!(
+            redacted["interactionReceipt"]["verificationState"],
+            "not_verified"
+        );
+        assert_eq!(
+            redacted["interactionReceipt"]["replayState"],
+            "replayed_terminal"
+        );
+        assert!(!redacted.to_string().contains("private"));
     }
 
     #[tokio::test]

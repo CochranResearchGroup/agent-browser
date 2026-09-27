@@ -135,6 +135,24 @@ pub fn operator_focus_failure_code(error: &str) -> Option<&str> {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    if error.split(':').next() == Some("desktop_interaction_authority_changed") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "desktop_interaction_authority_changed".to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::Finalize,
+            effect_state: ServiceEffectState::EffectUncertain,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_desktop_interaction_receipt".to_string(),
+            reuse_allowed: false,
+            safe_next_actions: vec![
+                "inspect_service_trace".to_string(),
+                "compare_controller_viewer_and_interaction_agent".to_string(),
+            ],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     // Desktop interaction validates controller authority before it can emit an
     // input event. Preserve that native certainty instead of projecting the
     // conservative generic operation-failure fallback.
@@ -962,6 +980,22 @@ mod tests {
 
     #[test]
     fn known_no_effect_and_uncertain_failures_preserve_recourse() {
+        let changed = classify_service_failure(
+            "desktop_interaction_authority_changed: current viewer changed during input",
+        );
+        assert_eq!(changed.code, "desktop_interaction_authority_changed");
+        assert_eq!(changed.axis, ServiceFailureAxis::ProfileAccess);
+        assert_eq!(changed.phase, ServiceFailurePhase::Finalize);
+        assert_eq!(changed.effect_state, ServiceEffectState::EffectUncertain);
+        assert_eq!(
+            changed.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+        assert_eq!(
+            changed.recommended_action,
+            "inspect_desktop_interaction_receipt"
+        );
+
         let denied = classify_service_failure(
             "desktop_interaction_authority_required: controller authority was not proven",
         );
