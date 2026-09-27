@@ -5706,6 +5706,9 @@ become recovery history.
 An interrupted navigation to a URL already present before its effect remains
 unproven on replay and is never repeated automatically.
 Omitting a profile gives the named session a session-scoped disposable profile.
+Exact named-profile sessions have no default idle expiry. The configured
+session inactivity deadline applies only to manager-allocated disposable
+sessions; explicit close remains terminal for both.
 Closing one session preserves a shared browser until its final session closes.
 
 Supervisor rebinds target the accepted selected generation. A clean candidate
@@ -6440,6 +6443,9 @@ Use --session for the logical session and --runtime-profile for an exact named
 profile. Omitting the profile creates a session-scoped disposable profile.
 Sessions using the same profile may share a healthy browser while retaining
 separate tabs, targets, handoffs, and activity timestamps.
+Exact named-profile sessions and their opaque handoffs have no default idle
+expiry. Only manager-allocated disposable sessions use the configured session
+inactivity deadline; explicit close remains terminal for both.
 
 The runtime selects a current ready presentation route from its SQLite-backed
 provider authority. The caller does not select a route or display. A successful

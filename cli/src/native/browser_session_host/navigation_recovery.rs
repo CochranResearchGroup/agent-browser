@@ -411,7 +411,7 @@ where
             match self.state.sessions.values().find(|session| {
                 session.name == session_name
                     && session.profile_id == profile_id
-                    && activity_at_ms < session.expires_at_ms
+                    && !self.state.session_is_expired(&session.id, activity_at_ms)
             }) {
                 Some(session) => session.id.clone(),
                 None => return Ok(None),
@@ -960,7 +960,7 @@ mod tests {
         );
         assert_eq!(
             interrupted.sessions[&opened.session_id].expires_at_ms,
-            301_000
+            u64::MAX
         );
         drop(host);
 
@@ -988,7 +988,7 @@ mod tests {
         );
         assert_eq!(
             committed.sessions[&opened.session_id].expires_at_ms,
-            302_000
+            u64::MAX
         );
     }
 

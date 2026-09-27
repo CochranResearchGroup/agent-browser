@@ -469,7 +469,9 @@ that may open and navigate a replacement target.
 For a Browser Session Manager handoff, closing the named session or its tab
 closes the opaque handoff in the same SQLite commit. Repeating an open for the
 same live tab reuses its link; a new tab receives a new link. The closed link
-does not reconnect.
+does not reconnect. An exact named-profile session and its handoff have no
+default idle expiry. The configured inactivity deadline applies only to
+manager-allocated disposable sessions.
 
 For a registered profile that needs manual sign-in, the
 <code>service_profile_manual_seeding_acquire</code> request reserves the profile

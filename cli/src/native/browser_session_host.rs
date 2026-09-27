@@ -457,7 +457,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     ) -> Result<Self, String> {
         let mut state = persistence.load_session_state()?;
         let handoffs = persistence.load_manager_handoffs()?;
-        if bind_legacy_manager_handoffs(&mut state, &handoffs) {
+        let handoffs_changed = bind_legacy_manager_handoffs(&mut state, &handoffs);
+        let named_expiry_changed = state.sessions.values().any(|session| {
+            !state.disposable_profiles.contains_key(&session.profile_id)
+                && session.expires_at_ms != u64::MAX
+        });
+        state.normalize_named_session_expiry();
+        if handoffs_changed || named_expiry_changed {
             persistence.save_session_state(&state)?;
         }
         let mut catalog_load =
@@ -603,7 +609,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
             return Err("browser_session_handoff_session_identity_changed".to_string());
         }
-        if session.expires_at_ms < activity_at_ms {
+        if self.state.session_is_expired(session_id, activity_at_ms) {
             return Err("browser_session_handoff_session_expired".to_string());
         }
         let browser = self
@@ -736,7 +742,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if !session.handoff_ids.iter().any(|id| id == &handoff.id) {
             return Err("browser_session_handoff_session_identity_changed".to_string());
         }
-        if session.expires_at_ms < activity_at_ms {
+        if self.state.session_is_expired(session_id, activity_at_ms) {
             return Err("browser_session_handoff_session_expired".to_string());
         }
         let browser = self
@@ -1054,7 +1060,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             let matching_session = self.state.sessions.values().find(|session| {
                 session.name == session_name
                     && session.profile_id == profile_id
-                    && activity_at_ms < session.expires_at_ms
+                    && !self.state.session_is_expired(&session.id, activity_at_ms)
             });
             let selected_browser_id = optional_string(command, "browserId");
             if matching_session.is_some_and(|session| {
@@ -2134,7 +2140,7 @@ where
                 .state
                 .sessions
                 .get(session_id)
-                .filter(|session| activity_at_ms < session.expires_at_ms)
+                .filter(|session| !self.state.session_is_expired(&session.id, activity_at_ms))
                 .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
             Some(
                 self.state
@@ -2148,7 +2154,7 @@ where
             let matching_session = self.state.sessions.values().find(|session| {
                 session.name == session_name
                     && session.profile_id == profile_id
-                    && activity_at_ms < session.expires_at_ms
+                    && !self.state.session_is_expired(&session.id, activity_at_ms)
             });
             matching_session
                 .and_then(|session| self.state.browsers.get(&session.browser_id))
@@ -3083,7 +3089,7 @@ mod tests {
         assert_eq!(failed["success"], false);
         let session = host.state().sessions.values().next().unwrap();
         assert_eq!(session.last_activity_at_ms, 1_000);
-        assert_eq!(session.expires_at_ms, 301_000);
+        assert_eq!(session.expires_at_ms, u64::MAX);
         assert_eq!(host.state().navigation_history.len(), 1);
     }
 
@@ -3167,6 +3173,64 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn restart_normalizes_legacy_named_session_expiry_and_persists_it() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {
+                    "work": {
+                        "id": "work",
+                        "name": "Work",
+                        "userDataDir": directory.0.join("work"),
+                        "profileClass": "durable_named"
+                    }
+                }
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+            default_disposable_policy: None,
+        };
+        let opened = {
+            let store = BrowserSessionJsonStore::new(&directory.0);
+            let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap()
+        };
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let mut legacy_state = store.load_session_state().unwrap();
+        legacy_state
+            .sessions
+            .get_mut(&opened.session_id)
+            .unwrap()
+            .expires_at_ms = 301_000;
+        store.save_session_state(&legacy_state).unwrap();
+
+        let store = BrowserSessionJsonStore::new(&directory.0);
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime::default());
+        let restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
+
+        assert_eq!(
+            restarted.state().sessions[&opened.session_id].expires_at_ms,
+            u64::MAX
+        );
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        assert_eq!(
+            persisted.sessions[&opened.session_id].expires_at_ms,
+            u64::MAX
+        );
     }
 
     #[test]
@@ -3433,7 +3497,10 @@ mod tests {
             persisted.sessions[&alice.session_id].last_activity_at_ms,
             1_000
         );
-        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 301_000);
+        assert_eq!(
+            persisted.sessions[&alice.session_id].expires_at_ms,
+            u64::MAX
+        );
         assert_eq!(
             persisted.sessions[&bob.session_id].last_activity_at_ms,
             1_100
@@ -3460,7 +3527,10 @@ mod tests {
             persisted.sessions[&alice.session_id].last_activity_at_ms,
             3_000
         );
-        assert_eq!(persisted.sessions[&alice.session_id].expires_at_ms, 303_000);
+        assert_eq!(
+            persisted.sessions[&alice.session_id].expires_at_ms,
+            u64::MAX
+        );
         assert_eq!(
             persisted.sessions[&bob.session_id].last_activity_at_ms,
             1_100
@@ -3638,7 +3708,7 @@ mod tests {
         );
         assert_eq!(
             after_actions.sessions[&alice.session_id].expires_at_ms,
-            302_500
+            u64::MAX
         );
         assert_eq!(
             after_actions.sessions[&bob.session_id].last_activity_at_ms,
@@ -3646,7 +3716,7 @@ mod tests {
         );
         assert_eq!(
             after_actions.sessions[&bob.session_id].expires_at_ms,
-            302_600
+            u64::MAX
         );
         assert_eq!(after_actions.navigation_history.len(), 1);
         assert_eq!(
@@ -5141,7 +5211,7 @@ mod tests {
             .unwrap();
         let persisted_session = persisted.sessions.get(&opened.session_id).unwrap();
         assert_eq!(persisted_session.last_activity_at_ms, 2_000);
-        assert_eq!(persisted_session.expires_at_ms, 302_000);
+        assert_eq!(persisted_session.expires_at_ms, u64::MAX);
         assert_eq!(persisted_session.handoff_ids, ["opaque-a"]);
         assert_eq!(
             persisted.sessions[&bob.session_id].handoff_ids,
@@ -5151,7 +5221,7 @@ mod tests {
             persisted.sessions[&bob.session_id].last_activity_at_ms,
             1_200
         );
-        assert_eq!(persisted.sessions[&bob.session_id].expires_at_ms, 301_200);
+        assert_eq!(persisted.sessions[&bob.session_id].expires_at_ms, u64::MAX);
         assert_eq!(
             persisted_session.current_tab_id.as_deref(),
             Some(tab.tab_id.as_str())

@@ -760,7 +760,10 @@ agent-browser --json --session alice \
 Two named sessions that select `operator-review` share one healthy browser and
 retain separate current tabs and command state. If you omit
 `--runtime-profile`, the session receives a disposable profile that Agent
-Browser can reap after the session ends. The ordinary path selects a healthy
+Browser can expire after configured inactivity and reap after the session ends.
+An exact named-profile session and its opaque handoff have no default idle
+expiry; they remain valid until explicit close or a typed unrecoverable
+condition. The ordinary path selects a healthy
 current SQLite `Ready` route-keeper binding, including its exact desktop and
 provider route, without route, display, lease, hash, or recovery-token input.
 
@@ -1882,7 +1885,9 @@ The user-scoped runtime host serializes several named sessions. Each session
 owns its current tab, command state, and heartbeat. Sessions that select the
 same exact named profile reuse one healthy browser. Closing one session leaves
 that browser running while another session still uses it. The final close ends
-the browser. Disposable profiles are session-scoped and are deleted only after
+the browser. Exact named-profile sessions do not inherit the disposable idle
+timeout. Their durable handoffs remain reconnectable until explicit close or a
+typed unrecoverable condition. Disposable profiles are session-scoped and are deleted only after
 their exact cleanup delay and ownership checks pass.
 For commands routed through an active managed session, only a successful
 command extends that session's heartbeat. A failed command retains any newly

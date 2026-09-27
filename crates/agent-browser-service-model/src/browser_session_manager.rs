@@ -360,6 +360,38 @@ impl Default for BrowserSessionState {
 }
 
 impl BrowserSessionState {
+    /// Exact named profiles are retained until an explicit lifecycle event.
+    /// Only manager-allocated disposable profiles use the inactivity deadline.
+    pub fn normalize_named_session_expiry(&mut self) {
+        let disposable_profiles = &self.disposable_profiles;
+        for session in self.sessions.values_mut() {
+            if !disposable_profiles.contains_key(&session.profile_id) {
+                session.expires_at_ms = u64::MAX;
+            }
+        }
+    }
+
+    pub fn session_is_expired(&self, session_id: &str, at_ms: u64) -> bool {
+        self.sessions.get(session_id).is_some_and(|session| {
+            self.disposable_profiles.contains_key(&session.profile_id)
+                && session.expires_at_ms <= at_ms
+        })
+    }
+
+    fn expiry_after_activity(
+        &self,
+        profile_id: &str,
+        activity_at_ms: u64,
+        idle_timeout_ms: u64,
+    ) -> Result<u64, String> {
+        if !self.disposable_profiles.contains_key(profile_id) {
+            return Ok(u64::MAX);
+        }
+        activity_at_ms
+            .checked_add(idle_timeout_ms)
+            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())
+    }
+
     /// Bind a durable manager handoff to the logical session that prepared it.
     pub fn bind_manager_handoff(
         &mut self,
@@ -394,17 +426,20 @@ impl BrowserSessionState {
     ) -> Result<(), String> {
         let session = self
             .sessions
-            .get_mut(session_id)
+            .get(session_id)
             .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
         if !session.handoff_ids.iter().any(|id| id == handoff_id) {
             return Err("browser_session_handoff_session_identity_changed".to_string());
         }
-        if session.expires_at_ms < activity_at_ms {
+        if self.session_is_expired(session_id, activity_at_ms) {
             return Err("browser_session_handoff_session_expired".to_string());
         }
-        let expires_at_ms = activity_at_ms
-            .checked_add(idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms =
+            self.expiry_after_activity(&session.profile_id, activity_at_ms, idle_timeout_ms)?;
+        let session = self
+            .sessions
+            .get_mut(session_id)
+            .ok_or_else(|| "browser_session_handoff_session_ended".to_string())?;
         session.last_activity_at_ms = session.last_activity_at_ms.max(activity_at_ms);
         session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
         Ok(())
@@ -482,6 +517,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         effects: &'a mut E,
         config: BrowserSessionManagerConfig,
     ) -> Self {
+        state.normalize_named_session_expiry();
         Self {
             state,
             catalog,
@@ -596,7 +632,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|session| {
                 session.name == request.session_name
                     && session.profile_id == profile.id
-                    && session.expires_at_ms <= request.activity_at_ms
+                    && self
+                        .state
+                        .session_is_expired(&session.id, request.activity_at_ms)
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
@@ -614,7 +652,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .find(|session| {
                 session.name == request.session_name
                     && session.profile_id == profile.id
-                    && request.activity_at_ms < session.expires_at_ms
+                    && !self
+                        .state
+                        .session_is_expired(&session.id, request.activity_at_ms)
             })
             .cloned();
         if let Some(session) = existing_session {
@@ -643,10 +683,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     return Err("browser_session_observed_launch_unexpected_on_reuse".to_string());
                 }
                 if refresh_activity_on_reuse {
-                    let expires_at_ms = request
-                        .activity_at_ms
-                        .checked_add(self.config.session_idle_timeout_ms)
-                        .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+                    let expires_at_ms = self.state.expiry_after_activity(
+                        &session.profile_id,
+                        request.activity_at_ms,
+                        self.config.session_idle_timeout_ms,
+                    )?;
                     let stored = self
                         .state
                         .sessions
@@ -757,10 +798,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         {
             return Err("browser_session_reserved_browser_identity_mismatch".to_string());
         }
-        let expires_at_ms = request
-            .activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = self.state.expiry_after_activity(
+            &profile.id,
+            request.activity_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
 
         if let Some(launch) = launched {
             self.state.browsers.insert(
@@ -1139,9 +1181,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         if tab.session_id != session_id || tab.browser_id != session.browser_id {
             return Err("browser_session_tab_attribution_mismatch".to_string());
         }
-        let expires_at_ms = activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = self.state.expiry_after_activity(
+            &session.profile_id,
+            activity_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
         let tab = self
             .state
             .tabs
@@ -1245,9 +1289,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(&session.browser_id)
             .cloned()
             .ok_or_else(|| "browser_session_browser_missing".to_string())?;
-        let expires_at_ms = activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = self.state.expiry_after_activity(
+            &session.profile_id,
+            activity_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
         let acquisition = self.effects.create_tab(&browser)?;
         if acquisition.source != BrowserTabSource::ExplicitNew {
             return Err("browser_tab_new_source_invalid".to_string());
@@ -1307,9 +1353,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(&session.browser_id)
             .cloned()
             .ok_or_else(|| "browser_session_browser_missing".to_string())?;
-        let expires_at_ms = activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = self.state.expiry_after_activity(
+            &session.profile_id,
+            activity_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
         self.effects.close_tab(&browser, &tab)?;
         self.state.tabs.remove(&tab.id);
         self.state.tab_history.push(TerminalBrowserTab {
@@ -1379,9 +1427,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         if tab.session_id != session.id {
             return Err("browser_tab_session_attribution_mismatch".to_string());
         }
-        let expires_at_ms = visited_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = self.state.expiry_after_activity(
+            &session.profile_id,
+            visited_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
         let record = BrowserNavigationRecord {
             profile_id: session.profile_id,
             session_id: session.id,
@@ -1470,16 +1520,27 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         };
         self.effects.focus_browser(&browser, tab.as_ref())?;
         if let Some(tab) = tab.as_ref() {
+            let expires_at_ms = self
+                .state
+                .sessions
+                .get(&tab.session_id)
+                .map(|session| {
+                    self.state.expiry_after_activity(
+                        &session.profile_id,
+                        activity_at_ms,
+                        self.config.session_idle_timeout_ms,
+                    )
+                })
+                .transpose()?;
             if let Some(current) = self.state.tabs.get_mut(&tab.id) {
                 current.last_activity_at_ms = current.last_activity_at_ms.max(activity_at_ms);
             }
             if let Some(session) = self.state.sessions.get_mut(&tab.session_id) {
                 session.current_tab_id = Some(tab.id.clone());
                 session.last_activity_at_ms = session.last_activity_at_ms.max(activity_at_ms);
-                let expires_at_ms = activity_at_ms
-                    .checked_add(self.config.session_idle_timeout_ms)
-                    .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
-                session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
+                if let Some(expires_at_ms) = expires_at_ms {
+                    session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
+                }
             }
         }
         Ok(FocusBrowserResult {
@@ -1494,7 +1555,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .state
             .sessions
             .values()
-            .filter(|session| session.expires_at_ms <= now_ms)
+            .filter(|session| self.state.session_is_expired(&session.id, now_ms))
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         let mut result = ReapBrowserSessionsResult::default();

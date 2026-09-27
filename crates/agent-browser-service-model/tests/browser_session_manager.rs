@@ -189,7 +189,7 @@ fn repeated_command_reuses_and_refreshes_named_session() {
     assert_eq!(effects.launches, ["profile-a"]);
     assert_eq!(state.sessions.len(), 1);
     assert_eq!(state.sessions[&first.session_id].last_activity_at_ms, 2_000);
-    assert_eq!(state.sessions[&first.session_id].expires_at_ms, 302_000);
+    assert_eq!(state.sessions[&first.session_id].expires_at_ms, u64::MAX);
 }
 
 #[test]
@@ -247,9 +247,9 @@ fn manager_handoff_membership_and_activity_are_session_scoped() {
         .refresh_manager_handoff_activity(&alice.session_id, "opaque-alice", 2_000, 300_000)
         .unwrap();
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 2_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 302_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
     assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
-    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, u64::MAX);
 
     let mut legacy = serde_json::to_value(&state.sessions[&alice.session_id]).unwrap();
     legacy.as_object_mut().unwrap().remove("handoffIds");
@@ -312,9 +312,9 @@ fn failed_navigation_keeps_alice_heartbeat_and_bob_untouched() {
     );
     drop(manager);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
     assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
-    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&bob.session_id].expires_at_ms, u64::MAX);
     assert_eq!(
         state.sessions[&alice.session_id].current_tab_id.as_deref(),
         Some("tab-alice")
@@ -408,8 +408,8 @@ fn bounded_desktop_admission_grows_before_sharing_and_preserves_existing_browser
 }
 
 #[test]
-fn open_after_expiry_ends_old_session_before_new_epoch() {
-    let catalog = catalog_with_named_profile();
+fn disposable_open_after_expiry_ends_old_session_before_new_epoch() {
+    let catalog = catalog_with_disposable_policy();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
         browser_live: true,
@@ -425,19 +425,11 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
         },
     );
     let first = manager
-        .open(OpenBrowserSession::exact_profile(
-            "alice",
-            "profile-a",
-            1_000,
-        ))
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
         .unwrap();
 
     let replacement = manager
-        .open(OpenBrowserSession::exact_profile(
-            "alice",
-            "profile-a",
-            2_000,
-        ))
+        .open(OpenBrowserSession::disposable("alice", "default", 2_000))
         .unwrap();
     drop(manager);
 
@@ -912,7 +904,7 @@ fn first_target_selection_adopts_bootstrap_tab_without_refreshing_session() {
         Some("tab-bootstrap")
     );
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
 }
 
 #[test]
@@ -954,7 +946,7 @@ fn repeated_target_selection_reuses_tab_without_refreshing_activity() {
     assert_eq!(state.tabs.len(), 1);
     assert_eq!(state.tabs["tab-bootstrap"].last_activity_at_ms, 2_000);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 1_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 301_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
 }
 
 #[test]
@@ -997,7 +989,7 @@ fn older_navigation_observation_does_not_move_session_heartbeat_backward() {
     assert_eq!(navigation.visited_at_ms, 2_000);
     assert_eq!(state.tabs[&tab.tab_id].last_activity_at_ms, 3_000);
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 303_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
 }
 
 #[test]
@@ -1047,7 +1039,7 @@ fn dashboard_focus_selects_attributed_target_and_refreshes_its_session() {
         )]
     );
     assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 3_000);
-    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, 303_000);
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
 }
 
 #[test]
@@ -1423,10 +1415,13 @@ fn navigation_history_remains_queryable_after_session_close() {
 }
 
 #[test]
-fn reaper_expires_idle_session_and_closes_sessionless_browser() {
+fn named_profile_session_and_handoff_do_not_expire_at_disposable_idle_timeout() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
-    let mut effects = FixtureEffects::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
     let mut manager = BrowserSessionManager::new(
         &mut state,
         &catalog,
@@ -1442,6 +1437,54 @@ fn reaper_expires_idle_session_and_closes_sessionless_browser() {
             "profile-a",
             1_000,
         ))
+        .unwrap();
+    drop(manager);
+    state
+        .bind_manager_handoff(&alice.session_id, "opaque-alice")
+        .unwrap();
+
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let reaped = manager.reap(301_000).unwrap();
+    drop(manager);
+
+    assert!(reaped.expired_session_ids.is_empty());
+    assert!(reaped.closed_browser_ids.is_empty());
+    state
+        .refresh_manager_handoff_activity(&alice.session_id, "opaque-alice", 600_000, 300_000)
+        .unwrap();
+    assert_eq!(
+        state.sessions[&alice.session_id].last_activity_at_ms,
+        600_000
+    );
+    assert_eq!(state.sessions[&alice.session_id].expires_at_ms, u64::MAX);
+    assert!(state.session_history.is_empty());
+    assert!(effects.closes.is_empty());
+}
+
+#[test]
+fn reaper_expires_idle_disposable_session_and_closes_sessionless_browser() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects::default();
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
         .unwrap();
 
     let reaped = manager.reap(301_000).unwrap();

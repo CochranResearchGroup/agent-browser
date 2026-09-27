@@ -201,7 +201,7 @@ fn sqlite_remote_view_open_plan(
             sessions.sessions.values().any(|session| {
                 session.name == session_name
                     && session.profile_id == profile_id
-                    && session.expires_at_ms > observed_at_ms
+                    && !sessions.session_is_expired(&session.id, observed_at_ms)
                     && sessions.browsers.contains_key(&session.browser_id)
             })
         });
@@ -295,7 +295,7 @@ fn validate_remote_view_open_profile(
         if state.sessions.values().any(|session| {
             session.name == manager_command["sessionName"].as_str().unwrap_or_default()
                 && session.profile_id == browser.profile_id
-                && activity_at_ms < session.expires_at_ms
+                && !state.session_is_expired(&session.id, activity_at_ms)
                 && session.browser_id.as_str() != browser_id
         }) {
             return Err("browser_session_selected_browser_session_mismatch".to_string());

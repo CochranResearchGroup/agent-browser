@@ -601,6 +601,9 @@ limits. Ordinary remote opens and manager handoff resolution use durable SQLite
 queue admission with a default depth of 32 and a 90-second deadline. Manager
 handoff links route through the SQLite handoff and session records;
 missing or mismatched membership is rejected before the dashboard relays focus.
+Exact named-profile sessions and their opaque handoffs have no default idle
+expiry. Only manager-allocated disposable sessions use the configured session
+inactivity deadline; explicit close still makes either kind terminal.
 Legacy handoffs retain their separate Service State resolution path. Exact
 request IDs coalesce only when the complete payload fingerprint matches;
 anonymous requests receive new IDs and cannot retry-coalesce. Recovery runs
