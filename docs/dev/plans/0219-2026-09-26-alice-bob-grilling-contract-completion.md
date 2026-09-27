@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 19
+Plan version: 20
 
 State: OPEN
 
@@ -77,6 +77,13 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 20 records the matching P01–P19 prohibition audit. The deterministic
+architecture checker reports only P09, P15, P16, and P19 as pass; P02, P03,
+P05, and P12 have detector gaps; the other 11 prohibitions are unverified. All
+checks report zero current findings, but zero findings without a detector is not
+acceptance. Final qualification therefore remains blocked by architecture-gate
+coverage independently of the open G rows.
 
 Version 19 records the closeout completion audit against the authoritative
 45-row ledger. Only G11, G23, G24, G31, G35, G41, G43, G44, and G45 pass. G03,
@@ -620,6 +627,14 @@ M3-P2D supplies G14 eager-demand behavior. Remaining M3 retention work owns
 G21, G36, G37, and G38. M4 owns the operational and storage gaps listed in the
 Requirement Mapping table. Only after those source and installed gates pass may
 M5 freeze one candidate and re-adjudicate all 45 rows plus P01–P19.
+
+The prohibition audit is 4 pass / 4 detector gap / 11 unverified. Pass rows are
+P09, P15, P16, and P19. Detector gaps are P02, P03, P05, and P12. P01, P04,
+P06–P08, P10, P11, P13, P14, P17, and P18 remain unverified. Every row currently
+reports zero findings, which proves no violation only for the four implemented
+detectors marked pass. Each owning source packet must add or identify a fixture
+that makes its prohibition detector fail before M5 may count a zero-finding
+result as deterministic enforcement.
 
 The M2B milestone is an intermediate outcome. P218's cancellation is
 supersession, not acceptance. A partial pass keeps this plan open after
