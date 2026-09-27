@@ -36,7 +36,7 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 22 preserves the installed M2B subproofs and source-qualifies truthful
+Version 23 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
@@ -62,6 +62,9 @@ stopped at 753,564 and M3-P2B remains the next implementation packet.
 M3-P2B now has an exact surface inventory and compatibility rule: defaults do
 not overwrite SQLite; explicit startup sources update it before both host and
 daemon consume one committed policy.
+M3-P2C also requires an observed-live resumable recovery phase and one combined
+SQLite commit for recovery success plus final open/handoff publication; separate
+transactions cannot satisfy crash consistency.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

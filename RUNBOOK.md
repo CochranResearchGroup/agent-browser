@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P2B surface inventoried
+## Current P219 status | 2026-09-27 M3-P2C transaction audited
 
-[Plan 0219 version 22](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 23](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -58,6 +58,12 @@ consumer, schema, generated-client, CLI/help, README, skill, docs-site,
 architecture, and ledger surface. Startup defaults must preserve existing
 SQLite configuration; explicit config/env/CLI values become atomic bootstrap
 updates before host construction; daemon and host then consume the same row.
+The M3-P2C audit found that recovery and open publication currently have
+separate transactions. The open journal can prove `browser_opened` before later
+navigation/presentation failure, leaving a usable browser while recovery stays
+`admitted`. Add an observed-live resumable phase and commit final recovery
+success with open/session/handoff publication in one SQLite transaction before
+wiring any replacement effect.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

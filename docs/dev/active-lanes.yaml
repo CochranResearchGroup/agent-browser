@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v22 retains the continuation checkpoint and exact M3-P2B surface inventory; default startup recovery values must preserve SQLite while explicit config/env/CLI inputs commit before host construction, then host and daemon consume one row; no executable work resumes under the exhausted implementation allocation
+    blocker: P219 v23 retains the continuation checkpoint; M3-P2B has an exact policy-migration inventory, and M3-P2C requires a durable observed-live phase plus one atomic open/handoff/recovery-success commit before effects are wired; no executable work resumes under the exhausted implementation allocation
     updated_at: 2026-09-27

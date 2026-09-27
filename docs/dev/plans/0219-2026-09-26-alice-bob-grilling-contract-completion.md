@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 22
+Plan version: 23
 
 State: OPEN
 
@@ -77,6 +77,17 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 23 records the read-only M3-P2C transaction audit. Recovery state and
+the browser-open journal currently commit in separate SQLite transactions.
+`commit_browser_open` atomically publishes operation, session state, and
+handoff, but not recovery success. The open journal can durably reach
+`browser_opened` before navigation, presentation, or handoff completion; a
+later failure may therefore leave a proven usable replacement while recovery
+remains `admitted`. Marking that attempt failed could authorize another launch,
+while marking it recovered before handoff publication would weaken G13/G15.
+M3-P2C must first define and persist an observed-live resumable phase, or prove
+an equivalent atomic transition, before host effects are wired.
 
 Version 22 records the read-only M3-P2B surface inventory. SQLite runtime
 configuration already has atomic get/update, strict patches, generated client
@@ -886,6 +897,42 @@ must migrate inside one immediate transaction. Do not silently treat missing
 new fields as a current-schema row: a legacy schema must be recognized,
 upgraded once, revisioned, and written before ordinary consumption. Do not let
 startup defaults overwrite an operator-mutated row on every daemon restart.
+
+#### M3-P2C Transaction Matrix And Stop Rule
+
+The exact-client path has these authoritative phases:
+
+| Open/recovery point | Current durable evidence | Required recovery behavior |
+| --- | --- | --- |
+| Before `launch_started` | Prepared browser-open operation | No recovery effect or admission. |
+| `launch_started`, before effect | Observed open operation with reserved logical browser/desktop | Atomically reserve one per-browser recovery generation and bind it into the observation before launch. A crash here must probe only; it must not infer a second launch. |
+| Launch returned, before `browser_opened` | Process effect may exist; open journal still says `launch_started` | Restart uses read-only `recover_browser_reserved`. Exact adoption advances the same generation; absent/unproven evidence records bounded failure and cleanup obligation without launching. |
+| `browser_opened` through tab/navigation/presentation | Open observation contains replacement session state and may prove the browser live | Persist a typed observed-live/resumable recovery phase. Subsequent open phases may resume without launch. Navigation or presentation failure cannot convert a proven live browser into permission for another replacement. |
+| `ready` commit | Session state, tab/target, opaque handoff, visibility proof, and operation result are publishable | One immediate transaction must commit open publication and recovery success together, fencing both operation generation and recovery generation. |
+| Replay after committed ready | Exact committed operation and recovered generation | Return the prior result with no new observation, admission, launch, or success event. |
+
+The `BrowserSessionPersistence` trait must expose typed admission, failure,
+observed-live, and final publication operations. Product SQLite implements them;
+test-only legacy stores may return an explicit unsupported result and cannot be
+used as acceptance evidence. Extend `BrowserRuntimeSqliteStore` with one
+combined `commit_browser_open_with_recovery_success` transaction rather than
+calling `record_browser_recovery_success` and `commit_browser_open` separately.
+The recovery generation must be present in the durable `launch_started`
+observation so a successor cannot guess it.
+
+Two different open operation IDs targeting one dead logical browser are the
+required concurrency fixture. Exactly one may receive `AdmitReplacement`; the
+other receives an in-progress/backoff result and launches nothing. After the
+winner records observed-live, either request may resume only the non-effect
+open phases, but one exact operation owns final handoff publication. A new
+retry after a proven failed generation must use a new operation ID or an
+explicitly specified journal transition; do not silently reinterpret an old
+`launch_started` observation as fresh launch authority.
+
+Stop M3-P2C implementation if the state machine cannot distinguish a proven
+live replacement from a ready published handoff, if success and final open
+publication are not one transaction, or if operation replay can bypass the
+per-browser recovery generation.
 
 ### A01 Source Checkpoint
 
