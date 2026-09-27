@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -30,7 +30,7 @@ Authority: the operator directed execution of Plan 0219 on 2026-09-26; ordinary 
 
 Renewed effort ceiling: 2,000,000 tokens for the active continuation after the operator's 1,500,000-token renewal and later 500,000-token addition; reserve 200,000 tokens for final reconciliation, validation, evidence, and closeout; the prior 545,502-token P219 window and every predecessor attempt, review, failure, and receipt carry forward
 
-Policy capsule: [P219 M1B through M2B](../policy-capsules/p219-m1b-m2b.md); use this verified capsule instead of broad policy rereads until one of its explicit triggers fires
+Policy capsule: [P219 M1B through M2B](../policy-capsules/p219-m1b-m2b.md) is historical and exhausted at the M2B outcome stop; the continuation below requires a reconciled policy basis before implementation
 
 ## Objective
 
@@ -74,7 +74,14 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 9 records M2B as installed and accepted on isolated development
+Version 10 records the September 27 fresh-context audit and the
+[continuation packet](#fresh-context-continuation-after-m2b). This revision
+records work only; it does not start implementation, renew a token budget, or
+authorize runtime effects. P219 remains OPEN with the same objective and
+custody. Preserve the successful M2B subproofs while reopening desktop failure
+reporting and reconciling evidence scope. RUNBOOK.md owns current execution.
+
+Version 9 recorded M2B as installed and accepted on isolated development
 generation `0.28.0-ac3c1daed8ab`, with implementation custody committed at
 `45a76907`. The accepted binary was built from the same M2B implementation
 surfaces before the documentation and service-reconcile compatibility closeout.
@@ -269,11 +276,10 @@ restart plus durable-handoff recovery without page-effect replay. Stop after
 reconciling its evidence and custody; M3, M4 and M5 remain open for a successor
 window.
 
-Use the verified [P219 capsule](../policy-capsules/p219-m1b-m2b.md) as the
-policy entrypoint. Its hashes match the adopted policy sources at renewal. Do
-not reread the broad policy set unless the capsule's scope, effect class,
-branch, worktree, owner, validation contract or policy hash changes, or a
-failure exposes an ambiguity the capsule does not resolve.
+The [P219 capsule](../policy-capsules/p219-m1b-m2b.md) was the policy entrypoint
+for the completed M2B renewal. Its historical hash verification and numeric
+thresholds do not cover the continuation. That scope transition triggers
+applicable policy rereads and a new scoped policy basis before implementation.
 
 Sequence: M1A → M1B → M2A → M2B → M3/M4 → M5. Read-only environment
 readiness checks may accompany M1. M3 and independent M4 work may overlap only
@@ -501,8 +507,125 @@ source identities, plan, roadmap, runbook, catalog, and PR must agree.
 
 The M2B milestone is an intermediate outcome. P218's cancellation is
 supersession, not acceptance. A partial pass keeps this plan open after
-execution starts. M1B source closure is complete; the current action is the
-minimum M2A provider/live-viewer join followed by a frozen M2B candidate.
+execution starts. The completed M1B manager-open source cut is not whole-product
+SQLite closure: ordinary desktop capture and interaction still consume JSON
+Service State and the desktop interaction operation ledger remains JSON.
+The next planned work is the continuation packet below; M3 is not started.
+
+## Fresh-Context Continuation After M2B
+
+Recorded: 2026-09-27, from the operator-requested read-only audit of source
+checkpoint `00935477d57d60d57394d9653ae4e24ccc0d9dc5` and selected development
+generation `0.28.0-ac3c1daed8ab`. The operator then requested durable recording
+of the continuation plan. That request authorizes this documentation packet,
+not source repair, publication, provider effects, or M3 execution.
+
+### Audit Findings And Dispositions
+
+These findings belong to P219 and the inherited G01–G45 ledger. They are not a
+second requirement ledger, a new discovery allowance, or a replacement of the
+September 19 specification. The primary performed the audit without delegation.
+
+| Finding | Evidence and consequence | Disposition and acceptance |
+| --- | --- | --- |
+| A01: desktop failure reported as success | `run_configured_interaction` in `cli/src/native/desktop_interaction.rs` returns an error with a receipt as `Ok({status: failed, ...})`; the `desktop_interact` branch in `cli/src/native/actions.rs` wraps it in `success_response`. `finalize_service_request` in `cli/src/native/control_plane.rs` normalizes nested recipe failure only for file transfer. Retained synthetic receipt `/tmp/p219-bob-current-interact.json` reports `desktop_interaction_authority_changed`, `effect_uncertain`, and `not_verified`, but outer success and terminal `succeeded / verified_effect`. | Blocking for desktop failure-outcome qualification. Add a deterministic provider-free regression through ordinary dispatch and terminalization; preserve the receipt and uncertain-effect semantics in the failed outer response, job, and replay result. Establish whether the defect is inherited rather than claiming this commit introduced it. |
+| A02: ordinary desktop JSON dependency | `run_configured_interaction` loads `LockedServiceStateRepository::default_json()` and persists `desktop-input/operations.json`. `ManagedDesktopStateSource::snapshot` in `cli/src/native/desktop_capture.rs` loads configured Service State; `project_managed_desktop` requires its route and display records. | Blocking for complete G04/P03/P05 closure, not grounds to discard successful pixels/input evidence. Record the exact dependency and its completion owner; implement the coherent SQLite closure and deterministic compiled-path detector before final qualification. Do not label the completed manager-open cut whole-product closure. |
+| A03: exhausted renewal and stale policy/budget | Delivery Sequence And Budget stops the renewal at M2B. The capsule repeats that stop and retains older numeric thresholds. This audit's goal-service readback returned no active goal or remaining-token counter. | Blocking for sustained continuation until the active instruction, execution window, usable allowance, reserve, and policy basis are reconciled. No subtraction from stale counters and no implied renewal from this revision. |
+| A04: requirement evidence drift | G12 still describes older competing persistence paths; G13 says joined recovery/no-effect proof is absent; G15 has no source references despite the replacement implementation. The M2B checkpoint proves narrower explicit-reopen cases, not eager recovery or the full failure matrix. | Reconcile the existing rows with preserved subproofs and precise gaps. Do not promote rows merely from the checkpoint narrative. Keep the 9/26/3/7 tally historical until row adjudication justifies a change. |
+| A05: shared-helper boundary | The selected production generation was unchanged, but the operator installed host-wide helper v11 at the path used by production diagnostics. The handoff reports production helper-contract drift. | Narrow the claim to unchanged production binary selection. Record shared-helper change and compatibility separately. No finding of unauthorized installation or attribution of every production warning is established. Production repair remains outside P219 execution scope. |
+| A06: candidate and retry provenance | The accepted binary predates the service-reconcile compatibility closeout, as recorded above. The Lease Authority compartment passed after a first timing failure and reruns. | Bind installed proof to its actual binary and source-only gates to their source checkpoint. Give the first failure an explicit flake disposition under policy 0042; a green rerun does not erase it. Preserve the dependency rationale for reused gates. |
+
+The later synthetic receipt `/tmp/p219-bob-final-current-interact.json` records
+41 attempted and acknowledged effect keys, `verified_success`, and verification
+passed. It supports successful input independently of A01. The restart and
+handoff readbacks also support the narrower M2B subproofs. These temporary
+locators are supplementary: retain the source mechanism and sanitized findings
+above durably, and reproduce A01 with a hermetic fixture if its receipt is gone.
+Do not copy credentials, viewer artifacts, or private runtime state into Git.
+
+### Consolidated Batch
+
+Keep P219, PL-PLATFORM, the inherited branch, worktree, PR #191, and work items
+#181/#183/#195. A wholesale successor would duplicate the objective and is not
+warranted by this audit. The bounded pre-M3 outcome is trustworthy desktop
+failure reporting plus reconciled evidence, authority, and ownership of the
+remaining SQLite work. It does not require replaying all M2B acceptance.
+
+The packet excludes live failure drills, runtime publication, shared-helper
+replacement, production repair, provider cleanup, pressure/density experiments,
+quota cleanup, compaction, backup/restore, and deferred viewer polish. Required
+SQLite work remains in the full objective; assigning it is not accepting it.
+
+### Delivery Sequence And Budget
+
+1. Re-anchor the existing worktree and current instruction. Read applicable
+   planning, validation, documentation, branch-custody, and effect-boundary
+   policies from that checkout. The exhausted M2B capsule is not M3 authority.
+   Reconcile the usable continuation allowance and closeout reserve before
+   sustained implementation. Carry all prior usage, failures, retry counts,
+   accepted findings, and the completed discovery pass forward.
+2. Reconcile A03–A06 in the canonical plan/runbook/ledger surfaces. Bind each
+   retained proof to its source or installed artifact and scope. Record the
+   desktop SQLite dependencies under A02 with one owner and a bounded closure
+   packet. No runtime effect is needed for this reconciliation.
+3. Repair A01 in one provider-free causal batch through desktop interaction,
+   ordinary dispatch, terminal outcomes, and existing replay boundaries. First
+   preserve a failing regression for an error carrying an uncertain-effect
+   receipt, then prove truthful failure plus retained diagnostic content and
+   successful-receipt compatibility. Inspect impact on session activity rather
+   than assuming an outer-response repair alone establishes G42.
+4. Stop at a qualified source checkpoint. Record exact validation and remaining
+   gaps. Do not publish a development candidate merely for this intermediate
+   repair. Any installed requalification is limited to the changed dependency
+   and requires a later explicit candidate decision within execution authority.
+5. After this checkpoint, derive the first M3 G14/G15 provider-free packet:
+   eager baseline/active-viewer versus lazy dormant scheduling, old-browser
+   unusability proof, singular concurrent replacement, and typed bounded
+   retry/backoff. Preserve G12/G13 handoffs, logical identities, committed URLs,
+   terminal closed/expired sessions, and no page-effect replay. The closure
+   owner must resolve concrete SQLite dependencies before accepting affected
+   recovery behavior; unrelated cleanup and UI work stay outside this packet.
+
+No new numeric implementation budget is granted here. Before starting each
+batch, record its allowance, required validation cost, and at least 20 percent
+closeout reserve within the reconciled overall ceiling. The M2B outcome stop
+remains historical fact. A new packet name does not reset attempts or justify
+automatic replay after a second causal failure.
+
+### Worker Assignments
+
+One primary owns this serialized packet, findings disposition, source changes,
+ledger, and validation. No worker or new worktree is assigned. Shared write
+surfaces are the desktop interaction/dispatch/terminal adapters, relevant
+fixtures, and P219 planning authorities. P214 retains candidate-event source
+ownership; coordinate an explicit overlap before touching its crate surfaces.
+Documentation or pure fixtures may be independently assignable later, only
+after shared interfaces and exact file ownership are fixed.
+
+### Evidence And Exit
+
+The planning record is complete when this revision, RUNBOOK.md, ROADMAP.md,
+and P219's catalog projection agree and documentation checks pass. That is
+separate from the unstarted repair packet's exit:
+
+- A01 has red-then-green provider-free evidence through dispatch, terminal
+  classification, and replay, preserving uncertain effects and success cases.
+- A02 has exact dependency evidence, a named completion packet, and explicit
+  G04/P03/P05 gaps; whole-product SQLite acceptance stays open until closed.
+- A03–A06 have scoped dispositions, usable execution accounting, reconciled
+  evidence locators, and explicit flake/candidate attribution.
+- Changed Rust passes formatting and strict workspace Clippy through
+  `scripts/ci/cargo-safe.sh`, plus affected Rust/Service/client contract gates
+  selected from the complete repair baseline. Run documentation, coverage,
+  and architecture checks; a detector gap remains incomplete evidence.
+- Verify only this accepted finding set and critical regressions in its fixes.
+  Do not restart broad drift discovery or erase unaffected M2B evidence.
+
+Use an independently bounded successor only if shared-helper production
+compatibility is separately commissioned, or a proven dependency changes the
+delivery outcome enough that P219 cannot contain it coherently. Such a successor
+inherits controls and evidence; it does not close P219 or grant production
+authority. Otherwise continue through revisions and packets of P219.
 
 Execution checkpoint on September 26: M1B-B02 is complete. The trusted product
 no longer deserializes or replays legacy runtime-owner transaction sidecars and

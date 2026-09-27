@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M2B has no remaining blocker; M3 recovery and retention is the next bounded milestone and is not started
+    blocker: P219 v10 records audit findings A01–A06; preserve successful M2B subproofs but reconcile exhausted renewal and budget, desktop failure reporting, SQLite closure ownership, and evidence provenance before M3; continuation is recorded only and implementation remains unstarted
     updated_at: 2026-09-27

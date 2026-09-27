@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-26
+Updated: 2026-09-27
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -36,8 +36,10 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Execution resumed on September 26 with a 600,000-token ceiling; M1A
-current-source reconciliation is active.
+Version 10 preserves the installed M2B subproofs and records a bounded
+fresh-context continuation for desktop failure reporting and evidence
+reconciliation before M3. The completed M2B renewal is exhausted; recording
+this continuation does not start implementation or grant a new budget.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

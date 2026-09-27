@@ -1,6 +1,27 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M2B accepted
+## Current P219 status | 2026-09-27 audit continuation recorded
+
+[Plan 0219 version 10](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+is OPEN. The read-only audit preserved successful M2B subproofs and found a
+desktop error receipt reported as outer success, remaining ordinary desktop
+JSON dependencies, and policy/budget, ledger, shared-helper, candidate and retry
+provenance gaps. The linked continuation owns findings A01–A06 and their exits.
+The operator authorized durable recording only; source repair and M3 remain
+unstarted. Next execution must reconcile the exhausted M2B renewal and usable
+budget, then qualify the bounded provider-free desktop failure-reporting repair
+before the G14/G15 recovery packet. No new numeric budget is inferred.
+
+Audit baseline: clean `00935477`, 55 commits ahead of the unchanged remote
+`8bb9518e`; development binary digest `ac3c1daed8ab` matches its recorded full
+identity. Coverage checks pass at 9/26/3/7; architecture reports four pass, four
+detector gaps, eleven unverified. No production repair, runtime publication,
+push, merge, or release is part of this documentation continuation.
+Documentation validation: policy wiring, all three changed Markdown files'
+local links, selector, and diff hygiene pass. Planning audit reports 287
+findings on other plan files, none on P219; no repository-wide clean claim.
+
+## Prior P219 status | 2026-09-27 M2B accepted
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 version 9 is `OPEN`: M2B is installed and accepted, while M3 through M5 remain
