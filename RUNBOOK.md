@@ -3,27 +3,34 @@
 ## Current P219 status | 2026-09-27
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
-version 5 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
+version 6 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
 renewal; production, staging, public ingress, merge, release, and worktree
 removal remain excluded. Custody stays on
 `platform/p211-simple-cold-upgrade`, draft PR #191, work items #181/#183/#195.
-The named-retention source checkpoint is `d7ec8d2f`; the branch is 40 commits
-ahead of its remote and was clean after that custody commit.
+The frozen candidate source checkpoint is `d26a25b9`; the named-retention repair
+is `d7ec8d2f`. Reconcile the live branch divergence at turn closeout.
 
 Current installed development identity is generation
-`0.28.0-2423cfb064f2`, executable SHA-256
-`2423cfb064f2f3ce4a110f197b5202b64535cfc6c674aabf6484027047fbd2e2`.
-Commits `5cf1c10f` and `67a17375` added exact stale X lock and XRDP channel
-socket reclamation. Privileged helper contract version 9 is installed. Focused
-helper, installer, Rust, route, formatting, and strict workspace Clippy checks
-for that repair batch passed. Production remained unchanged.
+`0.28.0-9502ef082e45`, executable SHA-256
+`9502ef082e45862674821af690af2a5f033c0109f529c534664d1fbc925422b0`.
+The optimized build passed in `job-20260927T015043Z-0ed4e4be3483`, development
+installation passed, and the three-iteration browser-launch smoke passed.
+Production remained unchanged and the development skill is current.
 
-Three development routes are ready on displays `:58`, `:59`, and `:60`.
-The fourth configured warm display is unavailable because older artifacts
-outside exact repair custody still saturate the remaining allocation range.
-Fresh read-only status therefore reports the development runtime ready but the
-four-route presentation provider not ready. Do not broaden cleanup to foreign
-or uncertain artifacts.
+Provider plan, stage, and preflight passed with the exact validated ingress
+binding. Apply receipt `apply-1790473069666-74987.json` then quarantined after
+runtime-owned warm routes timed out. Fresh readback found only route one live on
+`:58`; routes two through four were absent. The installed helper version 9
+omitted the primary `xrdp_chansrv_socket_<display>` from exact reclamation,
+leaving stale runtime-owned artifacts that saturated allocation.
+
+The omission is repaired at `e79aa713`, the explicit
+`reclaimsPrimaryChansrvSocket` contract at `4da14475`, and installer convergence
+at `d26a25b9`. The red-then-green helper test and selector-required workstation
+fixtures pass. Focused Rust contract tests, formatting, and strict workspace
+Clippy pass. The shared helper remains version 9 because its replacement needs
+interactive sudo; one attempt using the operator-designated credential file
+was rejected and was not retried. The provider remains quarantined and stopped.
 
 Authenticated access through an opaque `/remote-view/<handoff-id>` URL and real
 synthetic browser pixels passed. The development admin credential was aligned
@@ -46,11 +53,11 @@ Acceptance remains partial:
 
 | Requirement | Source or installed evidence | Current state | Missing proof |
 | --- | --- | --- | --- |
-| M1B authority closure | Source cuts and focused gates through `67a17375` | complete for this checkpoint | Final-candidate qualification remains later. |
-| M2A provider and viewer | Three ready RDP routes, authenticated Guacamole, opaque handoff, real pixels | partial | Four-route target readiness and retained exact ownership for the unavailable slot. |
+| M1B authority closure | Source cuts and focused gates through `d7ec8d2f`; candidate `d26a25b9` installed | complete for this checkpoint | Installed lifecycle acceptance remains in M2B. |
+| M2A provider and viewer | Historical authenticated Guacamole, opaque handoff, and real pixels; current apply quarantined | partial | Install helper version 10, recover four routes, and revalidate pixels and input. |
 | M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
 | G12/G36 retention | Source regressions prove retained named handoffs, bounded disposable expiry, and restart normalization at `d7ec8d2f` | partial | Installed retention and same-handoff replay on a frozen candidate. |
-| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; checkpoint usage was `tokensUsed=218445`, `timeUsedSeconds=1163`. |
+| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; checkpoint usage was `tokensUsed=471417`, `timeUsedSeconds=2712`. |
 
 The bounded source repair is complete. Its red regression and green focused
 receipts, the complete 271-test Service Model lane, 32 host/navigation tests,
@@ -59,20 +66,22 @@ selector-required workstation and Guacamole fixtures, docs build,
 remote-view documentation contract, architecture report, and coverage-ledger
 validator also pass. Four unrelated `browser_session_authority` failures remain
 in a broader name-filtered Rust run and do not invalidate the independently
-green changed surfaces. The repository skill remains intentionally ahead of
-the shared installed skill until candidate publication.
+green changed surfaces. The development skill is synchronized with the
+candidate; the shared production skill and production runtime remain unchanged.
 
-Next gate: decide whether to freeze and publish a new development candidate,
-then replay installed named retention and the remaining M2B Alice/Bob workflow.
-Do not publish or mutate the development runtime without that separate freeze
-decision. Do not start M3, M4, or M5.
+Next gate: install the version 10 privileged helper through interactive sudo,
+verify `reclaimsPrimaryChansrvSocket=true`, and rerun the exact development
+provider recovery sequence. Do not retry the rejected credential file or
+broaden cleanup. After four-route readiness, replay installed named retention
+and the remaining M2B Alice/Bob workflow. Do not start M3, M4, or M5.
 
 Nonblocking future UI direction: adopt the Guacamole interaction approach from
 the sibling `../remote-view` project and make warning banners compact and
 dismissible. This does not expand the retention repair packet.
 
-Progress classification: source blocker removal. M2A and M2B remain incomplete;
-no G-row is promoted to installed pass by this source-only packet.
+Progress classification: frozen development candidate plus exact provider
+blocker removal in source. M2A and M2B remain incomplete; no G-row is promoted
+to installed pass by this checkpoint.
 
 ## Active Plan Locator Index
 

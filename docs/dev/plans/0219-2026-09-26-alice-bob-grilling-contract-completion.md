@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -74,28 +74,40 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 5 records the source-qualified named-profile retention repair at
-`d7ec8d2f`. The service model now applies the configured inactivity deadline
-only to manager-allocated disposable profiles. Exact named-profile sessions
-and their opaque handoffs use no default idle expiry, and the SQLite host
-normalizes and persists legacy finite named-session deadlines on restart.
-Explicit close and typed unrecoverable termination remain unchanged.
+Version 6 records the frozen development candidate at `d26a25b9`. The installed
+development generation is `0.28.0-9502ef082e45`, with executable SHA-256
+`9502ef082e45862674821af690af2a5f033c0109f529c534664d1fbc925422b0`.
+The three-iteration development browser-launch smoke passed and the production
+identity remained unchanged. The source-qualified named-profile retention
+repair remains at `d7ec8d2f`: the service model applies the configured
+inactivity deadline only to manager-allocated disposable profiles, while exact
+named-profile sessions and their opaque handoffs use no default idle expiry.
 
-The installed September 26 result still runs development generation
-`0.28.0-2423cfb064f2` and binds executable SHA-256
-`2423cfb064f2f3ce4a110f197b5202b64535cfc6c674aabf6484027047fbd2e2`.
-The exact stale-display and XRDP-channel reclamation repairs are committed at
-`5cf1c10f` and `67a17375`; privileged helper contract version 9 is installed.
-The focused helper, installer, Rust, route, formatting, and strict workspace
-Clippy checks recorded for that batch pass. Production was not changed.
+The provider apply during candidate qualification quarantined in receipt
+`apply-1790473069666-74987.json` after runtime-owned warm routes timed out. A
+fresh process and display census found one live route on `:58`; routes two
+through four were absent. Exact runtime-owned stale X locks and channel sockets
+occupied the remaining display range. The installed version 9 privileged helper
+could reclaim the selected route artifacts but omitted the primary
+`xrdp_chansrv_socket_<display>` socket, so exact termination left that artifact
+behind.
 
-The repairs recovered three development RDP routes on displays `:58`, `:59`,
-and `:60`. The configured fourth warm route remains unavailable because older
-display artifacts outside the exact repair custody still occupy the allocation
-range. Current read-only status therefore reports three ready displays and a
-blocking presentation-provider readiness result for the four-route target.
-This is sufficient to retain the minimum two-party evidence already observed,
-but it is not full provider readiness.
+Commit `e79aa713` adds the primary socket to the helper's exact allowlist and
+bumps its contract to version 10. Commit `4da14475` makes the capability
+explicit as `reclaimsPrimaryChansrvSocket` in the helper contract. Commit
+`d26a25b9` requires the installer to replace an otherwise compatible helper
+that lacks the capability. The red-then-green helper regression, workstation
+install and host-provision fixtures, fresh-VM, Guacamole assets, PostgreSQL
+durability, route-user synchronization, formatting, focused Rust contract
+tests, and strict workspace Clippy pass for this repair.
+
+The shared installed helper is still version 9 and does not report
+`reclaimsPrimaryChansrvSocket`. Candidate installation correctly classified it
+as stale, but replacement requires interactive sudo. One bounded attempt using
+the operator-designated credential file was rejected; the credential was not
+read, logged, or retried. The presentation provider therefore remains
+quarantined and stopped, with the retained `:58` route as the only live display.
+This exact environment gate blocks a safe provider replay and M2B acceptance.
 
 Authenticated operator access and real synthetic browser pixels passed through
 an opaque `/remote-view/<handoff-id>` URL. At the operator's direction, the
@@ -104,11 +116,13 @@ without recording the secret; the live auth file remained byte-identical.
 Automated pointer, keyboard, and scroll effects were not established, so input
 acceptance remains incomplete.
 
-Named-profile sessions 94 through 97 in the installed generation ended with
+Named-profile sessions 94 through 97 in the preceding installed generation
+ended with
 `heartbeat_expired` about five minutes after their last activity. Source commit
-`d7ec8d2f` repairs that defect without changing the installed generation. G12
-and G36 therefore have source and provider-free regression evidence but remain
-unaccepted at the installed boundary. G42 and G45 still require installed
+`d7ec8d2f` repairs that defect and is present in the new installed candidate.
+G12 and G36 therefore have source and installed-code identity evidence but
+remain unaccepted because the quarantined provider prevented the installed
+same-handoff retention replay. G42 and G45 still require installed
 exact-session activity refresh and separation of session heartbeat from viewer
 heartbeat. A temporary keepalive was removed because it masked the defect. One
 operator report of
@@ -119,9 +133,10 @@ cause.
 
 M2A has meaningful partial evidence for provider recovery, authenticated access,
 and pixels, but remains incomplete because the configured provider target is
-not ready. M2B remains incomplete because input, Alice/Bob joined lifecycle,
-installed restart recovery, cleanup, and named-session retention have not all
-passed on one frozen candidate. Do not start M3, M4, or M5.
+quarantined until helper version 10 is installed. M2B remains incomplete
+because input, Alice/Bob joined lifecycle, installed restart recovery, cleanup,
+and named-session retention have not all passed on the frozen candidate. Do not
+start M3, M4, or M5.
 
 At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
@@ -523,19 +538,43 @@ build, remote-view documentation contract, policy wiring, architecture report,
 coverage-ledger validator, and diff checks passed. A broader name-filtered Rust
 run retained four unrelated `browser_session_authority` failures; the changed
 session-manager, host, navigation, and daemon regressions pass independently.
-The repository skill intentionally differs from the shared installed skill
-until a separately authorized development candidate publication.
+The development skill was synchronized during candidate publication. The
+shared production skill and production runtime remained unchanged.
 
-Next gate: decide whether to freeze and publish a new development candidate for
-installed retention and M2B replay. This source packet does not authorize that
-runtime effect and promotes no G-row to installed pass.
+### Frozen candidate and provider quarantine checkpoint
+
+Candidate publication is complete at `d26a25b9`. The optimized candidate build
+passed without warnings in cargo-signal job
+`job-20260927T015043Z-0ed4e4be3483`, producing SHA-256
+`9502ef082e45862674821af690af2a5f033c0109f529c534664d1fbc925422b0`.
+Development installation selected generation `0.28.0-9502ef082e45`, kept the
+production identity unchanged, synchronized the development skill, and passed
+three disposable open, URL-read, close, and residue checks.
+
+Provider plan, stage, and preflight passed with the exact validated public
+operator binding. The apply then quarantined with receipt
+`apply-1790473069666-74987.json`. The retained evidence showed one live route on
+`:58` and exact runtime-owned stale artifacts for absent routes. A red helper
+regression reproduced survival of the primary channel socket; the green repair
+is committed at `e79aa713`. Focused helper-contract Rust tests passed in
+`20260927T014643Z-72914e6cb696`, formatting passed in
+`20260927T014717Z-9ce8b4fcd884`, and strict workspace Clippy passed without
+warnings in `job-20260927T014717Z-9bda3f5b681b`. Installer convergence is
+committed at `4da14475` and `d26a25b9`.
+
+Next gate: install the source version 10 privileged helper through an
+interactive sudo path, verify the exact capability readback, then rerun the
+development provider plan, stage, preflight, and one apply. Do not retry the
+rejected credential file or broaden cleanup. Only after four-route readiness
+may the frozen candidate proceed to installed named-retention and the remaining
+M2B Alice/Bob workflow. This checkpoint promotes no additional G-row to pass.
 
 Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`
 with objective `contimue plan 211 with an additional 1 mm token cap.` The
 objective names the cancelled predecessor, so execution follows its unmet
 outcome through active successor Plan 0219 rather than reopening Plan 0211.
-The latest control readback at this checkpoint reported `tokensUsed=218445`
-and `timeUsedSeconds=1163`; those usage counters continue to advance.
+The latest control readback at this checkpoint reported `tokensUsed=471417`
+and `timeUsedSeconds=2712`; those usage counters continue to advance.
 
 Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
 the Guacamole interaction reference, and make warning banners compact and
