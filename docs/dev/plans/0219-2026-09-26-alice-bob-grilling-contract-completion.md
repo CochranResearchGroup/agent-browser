@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -28,7 +28,7 @@ Execution owner: the primary agent assigned by the operator to this inherited la
 
 Authority: the operator directed execution of Plan 0219 on 2026-09-26; ordinary in-scope implementation, validation, isolated development runtime effects, and bounded repair are authorized under this plan's controls and non-goals
 
-Renewed effort ceiling: 1,000,000 additional tokens from the operator's 2026-09-26 resume direction; reserve 200,000 tokens for final reconciliation, validation, evidence, and closeout; the prior 545,502-token P219 window and every predecessor attempt, review, failure, and receipt carry forward
+Renewed effort ceiling: 2,000,000 tokens for the active continuation after the operator's 1,500,000-token renewal and later 500,000-token addition; reserve 200,000 tokens for final reconciliation, validation, evidence, and closeout; the prior 545,502-token P219 window and every predecessor attempt, review, failure, and receipt carry forward
 
 Policy capsule: [P219 M1B through M2B](../policy-capsules/p219-m1b-m2b.md); use this verified capsule instead of broad policy rereads until one of its explicit triggers fires
 
@@ -74,42 +74,45 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 7 records the current frozen development candidate at `bdf695db`. The
-installed development generation is `0.28.0-ede5cf223fe4`, with executable
-SHA-256
-`ede5cf223fe457e5e3301b58c2aa348873ae454a8eb3d002f1fc6cc794132821`.
-The optimized build and three-iteration development browser-launch smoke
-passed, and the production identity remained unchanged. The source-qualified
-named-profile retention repair remains at `d7ec8d2f`: the service model applies
-the configured inactivity deadline only to manager-allocated disposable
-profiles, while exact named-profile sessions and their opaque handoffs use no
-default idle expiry.
+Version 8 records source checkpoint `375cdfbe` and installed development
+generation `0.28.0-57c51d356866`, with executable SHA-256
+`57c51d3568663fe9f50bd14bab69bc183c71b37b819decd22d64ee62c8f35cf2`.
+The optimized build, development publication, and three-iteration browser
+launch smoke passed. Production remained selected at generation
+`0.28.0-b589b318c530-c0c0977896a8`. The source-qualified named-profile retention
+repair remains at `d7ec8d2f`: only manager-allocated disposable profiles use
+the configured inactivity deadline; exact named-profile sessions and their
+opaque handoffs use no default idle expiry.
 
-The provider apply during candidate qualification quarantined in receipt
-`apply-1790473069666-74987.json` after runtime-owned warm routes timed out. A
-fresh process and display census found one live route on `:58`; routes two
-through four were absent. Exact runtime-owned stale X locks and channel sockets
-occupied the remaining display range. The installed version 9 privileged helper
-could reclaim the selected route artifacts but omitted the primary
-`xrdp_chansrv_socket_<display>` socket, so exact termination left that artifact
-behind.
+The operator installed helper version 10. Fresh provider plan, stage, and
+preflight then passed, but receipt `apply-1790478847005-74899.json` quarantined
+after historical X locks and XRDP channel sockets exhausted displays 10 through
+60. Commit `662ab5d2` added a bounded exact stale-display sweep. Receipt
+`apply-1790479449908-49709.json` then proved the sweep must first resume a
+retained quarantined `dev-2` stop. Commit `d4e75b70` added that SQLite-read-only
+recovery gate. Receipt `apply-1790479918735-97420.json` advanced through the
+retained stop but exposed a short teardown race; commit `a11be934` waits for the
+exact route-user X-server PID identity to leave before reclamation.
 
-Commit `e79aa713` adds the primary socket to the helper's exact allowlist and
-bumps its contract to version 10. Commit `4da14475` makes the capability
-explicit as `reclaimsPrimaryChansrvSocket` in the helper contract. Commit
-`d26a25b9` requires the installer to replace an otherwise compatible helper
-that lacks the capability. The red-then-green helper regression, workstation
-install and host-provision fixtures, fresh-VM, Guacamole assets, PostgreSQL
-durability, route-user synchronization, formatting, focused Rust contract
-tests, and strict workspace Clippy pass for this repair.
+Receipt `apply-1790480067753-19562.json` advanced through displays 10 through
+19 and then failed closed at `.X20-lock`. That route-owned lock records numeric
+PID 88087, which the kernel has reused as a Chrome thread under UID 1000 rather
+than route UID 1004. Commit `375cdfbe` introduces helper version 11: the helper
+still requires an absent XRDP session, absent display socket, exact route-owned
+lock inode, mode and content, and inactive channel sockets; it accepts a live
+numeric PID only when `/proc/<pid>/status` proves a different UID from the exact
+route user, and repeats that proof immediately before deletion. Same-route UID
+or unreadable evidence remains `rdp_route_display_lock_pid_live`.
 
-The shared installed helper is still version 9 and does not report
-`reclaimsPrimaryChansrvSocket`. Candidate installation correctly classified it
-as stale, but replacement requires interactive sudo. One bounded attempt using
-the operator-designated credential file was rejected; the credential was not
-read, logged, or retried. The presentation provider therefore remains
-quarantined and stopped, with the retained `:58` route as the only live display.
-This exact environment gate blocks a safe provider replay and M2B acceptance.
+The v11 helper, installer convergence, provider preflight capability gate,
+red-then-green helper and provider regressions, focused Rust contracts,
+workstation install and host-provision fixtures, fresh-VM harness, Guacamole
+assets, PostgreSQL durability, route-user synchronization, formatting, and
+strict workspace Clippy pass. The user-scoped candidate is installed, but the
+root-owned helper still reads version 10. Interactive sudo is now the only gate
+before another provider recovery. The provider remains quarantined and stopped;
+all six route-keeper records are durably absent and no development XRDP route
+process remains.
 
 Authenticated operator access and real synthetic browser pixels passed through
 an opaque `/remote-view/<handoff-id>` URL. At the operator's direction, the
@@ -139,7 +142,7 @@ cause.
 
 M2A has meaningful partial evidence for provider recovery, authenticated access,
 and pixels, but remains incomplete because the configured provider target is
-quarantined until helper version 10 is installed. M2B remains incomplete
+quarantined until helper version 11 is installed. M2B remains incomplete
 because input, Alice/Bob joined lifecycle, installed restart recovery, cleanup,
 and named-session retention have not all passed on the frozen candidate. Do not
 start M3, M4, or M5.
@@ -232,14 +235,13 @@ all preceding windows. Do not sum overlapping counters or treat a new thread
 with no goal as renewed authority.
 
 The first Plan 0219 execution window stopped at 545,502 tokens after M1A and a
-partial M1B. The operator renewed execution with 1,000,000 additional tokens.
-This is a new bounded allowance, not erasure of the earlier usage. Reserve
-200,000 tokens for final reconciliation, validation, evidence and custody.
-At 700,000 renewed tokens, require direct evidence that the source is candidate
-capable and that remaining environment work can reach M2B within the 100,000
-implementation tokens still available before the reserve. If not, stop
-implementation and preserve the exact blocker. In all cases, implementation
-stops at 800,000 renewed tokens and the final 200,000 are closeout-only.
+partial M1B. The operator first renewed execution with 1,500,000 tokens and
+then added 500,000, establishing a 2,000,000-token active continuation ceiling.
+This is a new bounded allowance, not erasure of earlier usage. Reserve 200,000
+tokens for final reconciliation, validation, evidence and custody.
+Implementation stops at 1,800,000 continuation tokens; the final 200,000 are
+closeout-only. If current evidence no longer supports reaching M2B within that
+implementation allowance, stop implementation and preserve the exact blocker.
 
 The reasonable accomplishment for this renewal is the first installed outcome
 checkpoint: complete M1B, complete the minimum M2A provider/live-viewer join,
@@ -611,21 +613,20 @@ advanced to the correct `presentation_keeper_unavailable` boundary in receipt
 restore the legacy JSON route inventory fallback; current browser-backed proof
 requires SQLite keeper authority.
 
-The refreshed optimized development candidate at `bdf695db` installed as
-generation `0.28.0-ede5cf223fe4`, executable SHA-256
-`ede5cf223fe457e5e3301b58c2aa348873ae454a8eb3d002f1fc6cc794132821`, and
+The refreshed optimized development candidate at `375cdfbe` installed as
+generation `0.28.0-57c51d356866`, executable SHA-256
+`57c51d3568663fe9f50bd14bab69bc183c71b37b819decd22d64ee62c8f35cf2`, and
 passed all three disposable browser-launch smoke iterations. Production stayed
 on its prior generation. The presentation provider remains stopped and not
-ready with only display `:58`; no provider replay occurred. The shared helper
-still needs the interactive version 10 upgrade before provider recovery and
-installed Alice/Bob acceptance.
+ready, all six keeper records are absent, and no development XRDP route process
+remains. The root-owned helper needs the interactive version 11 upgrade before
+provider recovery and installed Alice/Bob acceptance.
 
-Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`
-with objective `contimue plan 211 with an additional 1 mm token cap.` The
-objective names the cancelled predecessor, so execution follows its unmet
-outcome through active successor Plan 0219 rather than reopening Plan 0211.
-The latest control readback at this checkpoint reported `tokensUsed=745054`
-and `timeUsedSeconds=4030`; those usage counters continue to advance.
+Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`.
+Its Plan 211 wording names the cancelled predecessor, so execution follows the
+unmet outcome through active successor Plan 0219 rather than reopening Plan
+0211. The operator expanded the active continuation ceiling to 2,000,000
+tokens; transient service usage counters are not acceptance evidence.
 
 Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
 the Guacamole interaction reference, and make warning banners compact and

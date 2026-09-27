@@ -3,34 +3,46 @@
 ## Current P219 status | 2026-09-27
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
-version 7 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
-renewal; production, staging, public ingress, merge, release, and worktree
+version 8 is `OPEN`. The operator expanded the active continuation ceiling to
+2,000,000 tokens; production, staging, public ingress, merge, release, and worktree
 removal remain excluded. Custody stays on
 `platform/p211-simple-cold-upgrade`, draft PR #191, work items #181/#183/#195.
-The frozen candidate source checkpoint is `bdf695db`; the named-retention
-repair is `d7ec8d2f`. Reconcile the live branch divergence at turn closeout.
+The current source checkpoint is `375cdfbe`; the named-retention repair is
+`d7ec8d2f`. The branch is 52 commits ahead and zero behind its remote.
 
 Current installed development identity is generation
-`0.28.0-ede5cf223fe4`, executable SHA-256
-`ede5cf223fe457e5e3301b58c2aa348873ae454a8eb3d002f1fc6cc794132821`.
+`0.28.0-57c51d356866`, executable SHA-256
+`57c51d3568663fe9f50bd14bab69bc183c71b37b819decd22d64ee62c8f35cf2`.
 The optimized build, development installation, and the three-iteration
 browser-launch smoke passed.
 Production remained unchanged and the development skill is current.
 
-Provider plan, stage, and preflight passed with the exact validated ingress
-binding. Apply receipt `apply-1790473069666-74987.json` then quarantined after
-runtime-owned warm routes timed out. Fresh readback found only route one live on
-`:58`; routes two through four were absent. The installed helper version 9
-omitted the primary `xrdp_chansrv_socket_<display>` from exact reclamation,
-leaving stale runtime-owned artifacts that saturated allocation.
+The operator installed helper version 10, including exact primary channel
+socket reclamation. Four subsequent applies failed closed and retained
+production identity: `apply-1790478847005-74899.json` exposed the historical
+display backlog; `apply-1790479449908-49709.json` exposed a quarantined `dev-2`
+stop that had to resume before sweeping; `apply-1790479918735-97420.json`
+exposed the short X-server teardown race; and
+`apply-1790480067753-19562.json` advanced through displays 10 through 19 before
+`.X20-lock` named a live numeric PID.
 
-The omission is repaired at `e79aa713`, the explicit
-`reclaimsPrimaryChansrvSocket` contract at `4da14475`, and installer convergence
-at `d26a25b9`. The red-then-green helper test and selector-required workstation
-fixtures pass. Focused Rust contract tests, formatting, and strict workspace
-Clippy pass. The shared helper remains version 9 because its replacement needs
-interactive sudo; one attempt using the operator-designated credential file
-was rejected and was not retried. The provider remains quarantined and stopped.
+The `:20` PID is not the old route X server. Kernel readback proves PID 88087
+is now a Chrome thread under UID 1000, while the exact lock inode is owned by
+route UID 1004. Commits `662ab5d2`, `d4e75b70`, and `a11be934` add the bounded
+sweep, retained-stop recovery, and exact PID teardown wait. Commit `375cdfbe`
+adds helper version 11, which accepts numeric PID reuse only when the kernel
+proves a different UID from the route user and rechecks that fact immediately
+before exact inode deletion. Same-route UID, unreadable identity, a live XRDP
+session, a live display socket, or an active channel socket still fails closed.
+
+The v11 helper and provider regressions, focused Rust contracts, formatting,
+strict workspace Clippy, source-free installer, host provisioning, fresh-VM,
+Guacamole asset, PostgreSQL durability, and route-user synchronization fixtures
+pass. The new user-scoped candidate is installed. The root-owned helper remains
+version 10, so provider preflight now fails the explicit
+`privileged-helper-foreign-pid-reuse` capability gate until one interactive
+sudo installation. The provider is quarantined and stopped; all six keeper
+records are absent and no development XRDP route process remains.
 
 Authenticated access through an opaque `/remote-view/<handoff-id>` URL and real
 synthetic browser pixels passed. The development admin credential was aligned
@@ -57,12 +69,12 @@ Acceptance remains partial:
 
 | Requirement | Source or installed evidence | Current state | Missing proof |
 | --- | --- | --- | --- |
-| M1B authority closure | Source cuts and focused gates through `bdf695db`; candidate `0.28.0-ede5cf223fe4` installed | complete for this checkpoint | Installed lifecycle acceptance remains in M2B. |
-| M2A provider and viewer | Historical authenticated Guacamole, opaque handoff, and real pixels; current apply quarantined | partial | Install helper version 10, recover four routes, and revalidate pixels and input. |
+| M1B authority closure | Source cuts and focused gates through `bdf695db`; candidate `0.28.0-57c51d356866` installed | complete for this checkpoint | Installed lifecycle acceptance remains in M2B. |
+| M2A provider and viewer | Historical authenticated Guacamole, opaque handoff, and real pixels; four exact recovery receipts retained | partial | Install helper version 11, recover four routes, and revalidate pixels and input. |
 | M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
 | G12/G36 retention | Source regressions prove retained named handoffs, bounded disposable expiry, and restart normalization at `d7ec8d2f` | partial | Installed retention and same-handoff replay on a frozen candidate. |
 | G35/G45 viewer authority | Exact-primary observation, bounded viewer TTL, inclusive expiry, disconnect, current-control revalidation, and session/viewer separation pass at `bdf695db` | partial | Installed viewer lifecycle, control transfer, eager recovery, and session retention after provider recovery. |
-| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; checkpoint usage was `tokensUsed=745054`, `timeUsedSeconds=4030`. |
+| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; the operator set a 2,000,000-token continuation cap. |
 
 The bounded retention repair is complete. Its red regression and green focused
 receipts, the complete 271-test Service Model lane, 32 host/navigation tests,
@@ -92,10 +104,11 @@ correct `presentation_keeper_unavailable` boundary in
 `20260927T020645Z-3f7e82c03caa`. The temporary fixture change was reverted. Do
 not restore a JSON route fallback.
 
-Next gate: install the version 10 privileged helper through interactive sudo,
-verify `reclaimsPrimaryChansrvSocket=true`, and rerun the exact development
-provider recovery sequence. Do not retry the rejected credential file or
-broaden cleanup. After four-route readiness, replay installed named retention
+Next gate: install the version 11 privileged helper through interactive sudo,
+verify `acceptsProvablyForeignPidReuse=true`, and rerun the exact development
+provider plan, stage, preflight, and one deferred-ingress recovery apply. Do not
+retry the rejected credential file or broaden cleanup. After four-route readiness,
+replay installed named retention
 and the remaining M2B Alice/Bob workflow. Do not start M3, M4, or M5.
 
 Nonblocking future UI direction: adopt the Guacamole interaction approach from
