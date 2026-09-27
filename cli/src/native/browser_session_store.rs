@@ -6,17 +6,17 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    decide_browser_recovery, record_browser_recovery_failure, BrowserNavigationRecord,
-    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserRecoveryAdmissionPolicy,
-    BrowserRecoveryDecision, BrowserRecoveryDemand, BrowserRecoveryState, BrowserSessionState,
-    BrowserTabEndReason, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
-    ManagedDisposableProfile, OldBrowserUsability, PresentationRequestQueue,
-    PresentationRequestState, PresentationScaleInState, RemoteViewHandoff, RouteKeeperAuthority,
-    RouteKeeperConnectionCatalog, RouteKeeperReconcileAction, SessionEndReason,
-    TerminalBrowserSession, TerminalBrowserTab, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
-    BROWSER_SESSION_STATE_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V1,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V2, ROUTE_KEEPER_AUTHORITY_SCHEMA_V3,
-    ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+    decide_browser_recovery, record_browser_recovery_failure, record_browser_recovery_success,
+    BrowserNavigationRecord, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
+    BrowserRecoveryAdmissionPolicy, BrowserRecoveryDecision, BrowserRecoveryDemand,
+    BrowserRecoveryState, BrowserSessionState, BrowserTabEndReason, ManagedBrowserInstance,
+    ManagedBrowserSession, ManagedBrowserTab, ManagedDisposableProfile, OldBrowserUsability,
+    PresentationRequestQueue, PresentationRequestState, PresentationScaleInState,
+    RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperConnectionCatalog,
+    RouteKeeperReconcileAction, SessionEndReason, TerminalBrowserSession, TerminalBrowserTab,
+    BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
+    ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
 use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -1332,6 +1332,39 @@ impl BrowserRuntimeSqliteStore {
             .get(browser_id)
             .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
         let next = record_browser_recovery_failure(current, generation, failed_at_ms, policy)?;
+        registry.states.insert(browser_id.to_string(), next.clone());
+        save_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(next)
+    }
+
+    pub(crate) fn record_browser_recovery_success(
+        &mut self,
+        browser_id: &str,
+        generation: u64,
+        recovered_at_ms: u64,
+    ) -> Result<BrowserRecoveryState, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let current = registry
+            .states
+            .get(browser_id)
+            .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+        let next = record_browser_recovery_success(current, generation, recovered_at_ms)?;
         registry.states.insert(browser_id.to_string(), next.clone());
         save_document(
             &transaction,
@@ -5330,6 +5363,67 @@ mod tests {
                 .state,
             ManualSeedingState::RecoveryRequired
         );
+    }
+
+    #[test]
+    fn browser_recovery_success_resets_attempts_without_reusing_generation() {
+        let directory = TempDirectory::new("browser-recovery-success");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let policy = BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: 3,
+            base_backoff_ms: 1_000,
+            maximum_backoff_ms: 30_000,
+            deadline_ms: 90_000,
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store
+            .admit_browser_recovery(
+                "browser-retained",
+                BrowserRecoveryDemand::ExactClientResume,
+                OldBrowserUsability::ProvenUnusable,
+                10,
+                policy,
+            )
+            .unwrap();
+        assert_eq!(
+            store.record_browser_recovery_success("browser-retained", 2, 20),
+            Err("browser_recovery_success_fence_mismatch".to_string())
+        );
+        let recovered = store
+            .record_browser_recovery_success("browser-retained", 1, 20)
+            .unwrap();
+        assert_eq!(recovered.attempts, 0);
+        drop(store);
+
+        let mut restarted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let next = restarted
+            .admit_browser_recovery(
+                "browser-retained",
+                BrowserRecoveryDemand::BaselineCapacity,
+                OldBrowserUsability::ProvenUnusable,
+                100,
+                policy,
+            )
+            .unwrap();
+        assert!(matches!(
+            next,
+            BrowserRecoveryDecision::AdmitReplacement {
+                state: BrowserRecoveryState {
+                    generation: 2,
+                    attempts: 1,
+                    ..
+                }
+            }
+        ));
     }
 
     #[test]

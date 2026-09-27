@@ -69,9 +69,10 @@ pub use browser_profile_catalog::{
     BROWSER_PROFILE_CATALOG_SCHEMA_V1,
 };
 pub use browser_recovery::{
-    decide_browser_recovery, record_browser_recovery_failure, BrowserRecoveryAdmissionPolicy,
-    BrowserRecoveryDecision, BrowserRecoveryDemand, BrowserRecoveryPhase, BrowserRecoveryState,
-    OldBrowserUsability, BROWSER_RECOVERY_STATE_SCHEMA_V1,
+    decide_browser_recovery, record_browser_recovery_failure, record_browser_recovery_success,
+    BrowserRecoveryAdmissionPolicy, BrowserRecoveryDecision, BrowserRecoveryDemand,
+    BrowserRecoveryPhase, BrowserRecoveryState, OldBrowserUsability,
+    BROWSER_RECOVERY_STATE_SCHEMA_V1,
 };
 pub use browser_retirement::{
     BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,

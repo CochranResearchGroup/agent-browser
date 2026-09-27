@@ -36,6 +36,7 @@ pub enum BrowserRecoveryPhase {
     Admitted,
     RetryWait,
     Terminal,
+    Recovered,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,8 +137,11 @@ pub fn decide_browser_recovery(
                 })
             }
             BrowserRecoveryPhase::RetryWait => {}
+            BrowserRecoveryPhase::Recovered => {}
         }
-        if now_ms >= state.deadline_at_ms || state.attempts >= policy.maximum_attempts {
+        if state.phase != BrowserRecoveryPhase::Recovered
+            && (now_ms >= state.deadline_at_ms || state.attempts >= policy.maximum_attempts)
+        {
             let mut exhausted = state.clone();
             exhausted.phase = BrowserRecoveryPhase::Terminal;
             return Ok(BrowserRecoveryDecision::Exhausted { state: exhausted });
@@ -145,6 +149,15 @@ pub fn decide_browser_recovery(
     }
 
     let (generation, attempts, started_at_ms, deadline_at_ms) = match current {
+        Some(state) if state.phase == BrowserRecoveryPhase::Recovered => (
+            state
+                .generation
+                .checked_add(1)
+                .ok_or_else(|| "browser_recovery_generation_exhausted".to_string())?,
+            1,
+            now_ms,
+            now_ms.saturating_add(policy.deadline_ms),
+        ),
         Some(state) => (
             state
                 .generation
@@ -171,6 +184,24 @@ pub fn decide_browser_recovery(
             phase: BrowserRecoveryPhase::Admitted,
         },
     })
+}
+
+pub fn record_browser_recovery_success(
+    current: &BrowserRecoveryState,
+    generation: u64,
+    recovered_at_ms: u64,
+) -> Result<BrowserRecoveryState, String> {
+    validate_state(current, &current.browser_id)?;
+    if current.phase != BrowserRecoveryPhase::Admitted || current.generation != generation {
+        return Err("browser_recovery_success_fence_mismatch".to_string());
+    }
+    let mut next = current.clone();
+    next.attempts = 0;
+    next.started_at_ms = recovered_at_ms;
+    next.deadline_at_ms = recovered_at_ms;
+    next.next_eligible_at_ms = recovered_at_ms;
+    next.phase = BrowserRecoveryPhase::Recovered;
+    Ok(next)
 }
 
 pub fn record_browser_recovery_failure(
@@ -202,7 +233,8 @@ fn validate_state(state: &BrowserRecoveryState, browser_id: &str) -> Result<(), 
         || state.browser_id != browser_id
         || state.browser_id.is_empty()
         || state.generation == 0
-        || state.attempts == 0
+        || (state.attempts == 0 && state.phase != BrowserRecoveryPhase::Recovered)
+        || (state.attempts > 0 && state.phase == BrowserRecoveryPhase::Recovered)
         || state.deadline_at_ms < state.started_at_ms
         || state.next_eligible_at_ms > state.deadline_at_ms
     {
@@ -360,5 +392,43 @@ mod tests {
         );
         value["unexpected"] = serde_json::json!(true);
         assert!(serde_json::from_value::<BrowserRecoveryState>(value).is_err());
+    }
+
+    #[test]
+    fn success_is_generation_fenced_and_starts_a_fresh_attempt_window() {
+        let policy = policy();
+        let first = admitted(
+            decide_browser_recovery(
+                None,
+                "browser",
+                BrowserRecoveryDemand::ExactClientResume,
+                OldBrowserUsability::ProvenUnusable,
+                10,
+                policy,
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            record_browser_recovery_success(&first, 2, 20),
+            Err("browser_recovery_success_fence_mismatch".to_string())
+        );
+        let recovered = record_browser_recovery_success(&first, 1, 20).unwrap();
+        assert_eq!(recovered.phase, BrowserRecoveryPhase::Recovered);
+        assert_eq!(recovered.attempts, 0);
+        let next = admitted(
+            decide_browser_recovery(
+                Some(&recovered),
+                "browser",
+                BrowserRecoveryDemand::BaselineCapacity,
+                OldBrowserUsability::ProvenUnusable,
+                100,
+                policy,
+            )
+            .unwrap(),
+        );
+        assert_eq!(next.generation, 2);
+        assert_eq!(next.attempts, 1);
+        assert_eq!(next.started_at_ms, 100);
+        assert_eq!(next.deadline_at_ms, 90_100);
     }
 }
