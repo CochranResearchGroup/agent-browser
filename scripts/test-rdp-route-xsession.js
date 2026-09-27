@@ -11,7 +11,14 @@ const files = ['scripts/libexec/agent-browser-privileged-helper'];
 
 const routePoolSource = readFileSync('scripts/setup-rdp-guac-route-pool.sh', 'utf8');
 const displayAccessSource = readFileSync('scripts/grant-rdp-route-display-access.sh', 'utf8');
+const privilegeInstallerSource = readFileSync('scripts/install-agent-browser-privileges.sh', 'utf8');
 const workstationInstallSource = readFileSync('cli/src/workstation_install.rs', 'utf8');
+
+assert.match(
+  privilegeInstallerSource,
+  /"reclaimsPrimaryChansrvSocket":true/,
+  'privilege installation must replace helpers that cannot reclaim the primary chansrv socket',
+);
 
 assert.doesNotMatch(
   routePoolSource,
