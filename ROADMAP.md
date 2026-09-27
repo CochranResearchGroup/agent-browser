@@ -36,10 +36,12 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 10 preserves the installed M2B subproofs and records a bounded
-fresh-context continuation for desktop failure reporting and evidence
-reconciliation before M3. The completed M2B renewal is exhausted; recording
-this continuation does not start implementation or grant a new budget.
+Version 13 preserves the installed M2B subproofs and source-qualifies truthful
+desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
+operator resumed the continuation with a 1,000,000-token cumulative ceiling,
+an 800,000-token implementation stop, and a 200,000-token closeout reserve.
+The reconciled ledger is 9/27/3/6; M3 remains unstarted while wider G04/P03/P05
+closure, evidence provenance, and G14/G15 recovery gaps remain open.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

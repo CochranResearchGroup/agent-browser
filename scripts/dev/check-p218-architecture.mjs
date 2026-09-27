@@ -56,6 +56,8 @@ export function evaluate(root = defaultRoot) {
   const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
   const guacamoleLiveViewer = read(root, 'cli/src/native/stream/guacamole_live_viewer.rs');
   const desktopControl = read(root, 'cli/src/native/browser_session_store/desktop_control.rs');
+  const desktopCapture = beforeDisabledLegacyTests(read(root, 'cli/src/native/desktop_capture.rs'));
+  const desktopInteraction = beforeDisabledLegacyTests(read(root, 'cli/src/native/desktop_interaction.rs'));
   const browserSessionManager = beforeDisabledLegacyTests(read(root, 'crates/agent-browser-service-model/src/browser_session_manager.rs'));
   const presentationAdmission = beforeDisabledLegacyTests(read(root, 'cli/src/native/presentation_request_admission.rs'));
   const workstationInstall = read(root, 'cli/src/workstation_install.rs');
@@ -118,6 +120,19 @@ export function evaluate(root = defaultRoot) {
   if (/"service_remote_view_handoff_resolve"\s*=>[\s\S]{0,400}handle_service_remote_view_handoff_resolve\(/.test(actions)) {
     add('P03', finding('generic_handoff_json_fallback', 'cli/src/native/actions.rs', 'generic action dispatch can resolve a handoff through the legacy JSON coordinator'));
     add('P05', finding('generic_handoff_parallel_authority', 'cli/src/native/actions.rs', 'generic action dispatch can publish a competing handoff resolution outside the SQLite session host'));
+  }
+  const configuredInteraction = desktopInteraction.match(
+    /fn run_configured_interaction\([\s\S]*?\n\}\n\n\/\/\/ Dispatch the controlled provider/u,
+  )?.[0] || '';
+  if (/LockedServiceStateRepository::default_json\(\)|operations\.json/u.test(configuredInteraction)) {
+    add('P03', finding('desktop_interaction_json_authority', 'cli/src/native/desktop_interaction.rs', 'ordinary configured desktop interaction retains a JSON state or operation-ledger dependency'));
+    add('P05', finding('desktop_interaction_parallel_operation_authority', 'cli/src/native/desktop_interaction.rs', 'ordinary desktop effects retain an operation authority outside Browser Runtime SQLite'));
+  }
+  const managedDesktopSnapshot = desktopCapture.match(
+    /impl StateSource for ManagedDesktopStateSource[\s\S]*?\n\}\n/u,
+  )?.[0] || '';
+  if (/load_configured_service_state\(|load_default_service_state_snapshot\(/u.test(managedDesktopSnapshot)) {
+    add('P03', finding('managed_desktop_json_snapshot', 'cli/src/native/desktop_capture.rs', 'managed desktop capture still reads JSON Service State before projecting SQLite authority'));
   }
   const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
   if (credentialVariables.length > 0) {

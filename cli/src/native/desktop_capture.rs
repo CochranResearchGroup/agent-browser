@@ -796,11 +796,23 @@ impl StateSource for ManagedDesktopStateSource {
                 "failed to load Browser Session Manager state",
             )
         })?;
-        let mut state = load_configured_service_state()?;
+        let mut state = load_static_configured_service_state()?;
         project_managed_desktop(&mut state, &manager, &authority)?;
         state.refresh_derived_views();
         Ok(state)
     }
+}
+
+fn load_static_configured_service_state() -> Result<ServiceState, DesktopCaptureError> {
+    let configured = load_config(&[]).map_err(|_| {
+        DesktopCaptureError::new(
+            "desktop_capture_failed",
+            "failed to load configured service state",
+        )
+    })?;
+    let mut state = configured.service_state_snapshot();
+    state.refresh_derived_views();
+    Ok(state)
 }
 
 fn load_configured_service_state() -> Result<ServiceState, DesktopCaptureError> {

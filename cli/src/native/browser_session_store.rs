@@ -1548,6 +1548,43 @@ impl BrowserRuntimeSqliteStore {
     ) -> Result<Option<BrowserRuntimeOperation>, String> {
         load_optional_operation(&self.connection, operation_id)
     }
+
+    pub(crate) fn abort_prepared_operation(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+    ) -> Result<(), String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_runtime_operation_begin_failed:{error}"))?;
+        let operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if operation.generation != generation
+            || operation.state != BrowserRuntimeOperationState::Prepared
+        {
+            return Err(format!(
+                "browser_runtime_operation_abort_mismatch:{operation_id}"
+            ));
+        }
+        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        if current_generation != generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
+            ));
+        }
+        transaction
+            .execute(
+                "DELETE FROM operation_records WHERE operation_id = ?1 AND generation = ?2 AND state = 'prepared'",
+                params![operation_id, i64::try_from(generation).map_err(|_| {
+                    "browser_runtime_operation_generation_invalid".to_string()
+                })?],
+            )
+            .map_err(|error| format!("browser_runtime_operation_abort_failed:{error}"))?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))
+    }
 }
 
 /// Reads manager state while stopping either side of the one-time cold

@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 12
+Plan version: 13
 
 State: OPEN
 
@@ -77,6 +77,16 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 13 records the qualified A02 ordinary-desktop SQLite cut and completes
+the bounded A03–A06 reconciliation. Managed capture no longer overlays JSON Service
+State, ready handoff lookup reads the Browser Runtime SQLite registry, and
+interaction idempotency uses the SQLite operation journal. A one-time
+fail-closed importer preserves and archives the prior JSON ledger. Compiled-path
+detectors cover both retired dependencies. The adjudicated ledger is now nine
+pass, 27 partial, three fail, and six missing: G15 moves from missing to partial
+for its existing singular restart/adoption subproof, while bounded backoff,
+old-browser unusability, and concurrent replacement remain open.
 
 Version 12 records the qualified A01 source repair. Ordinary dispatch now
 projects a receipt-bearing desktop failure as outer failure, the shared failure
@@ -554,11 +564,11 @@ September 19 specification. The primary performed the audit without delegation.
 | Finding | Evidence and consequence | Disposition and acceptance |
 | --- | --- | --- |
 | A01: desktop failure reported as success | `run_configured_interaction` in `cli/src/native/desktop_interaction.rs` returns an error with a receipt as `Ok({status: failed, ...})`; the former `desktop_interact` branch in `cli/src/native/actions.rs` wrapped it in `success_response`. Retained synthetic receipt `/tmp/p219-bob-current-interact.json` reports `desktop_interaction_authority_changed`, `effect_uncertain`, and `not_verified`, but outer success and terminal `succeeded / verified_effect`. | Source repair qualified in version 12. Dispatch now emits outer failure while retaining `data`; stream persistence redacts private fields while preserving the safe receipt; the exact classifier returns uncertain effect and inspect-before-retry; terminal job, event, and outcome agree. The retained receipt establishes the inherited red observation and provider-free regressions establish green behavior. Installed requalification remains deferred to a later candidate decision. |
-| A02: ordinary desktop JSON dependency | `run_configured_interaction` loads `LockedServiceStateRepository::default_json()` and persists `desktop-input/operations.json`. `ManagedDesktopStateSource::snapshot` in `cli/src/native/desktop_capture.rs` loads configured Service State; `project_managed_desktop` requires its route and display records. | Blocking for complete G04/P03/P05 closure, not grounds to discard successful pixels/input evidence. Record the exact dependency and its completion owner; implement the coherent SQLite closure and deterministic compiled-path detector before final qualification. Do not label the completed manager-open cut whole-product closure. |
-| A03: exhausted renewal and stale policy/budget | Delivery Sequence And Budget stops the renewal at M2B. The capsule repeats that stop and retains older numeric thresholds. This audit's goal-service readback returned no active goal or remaining-token counter. | Blocking for sustained continuation until the active instruction, execution window, usable allowance, reserve, and policy basis are reconciled. No subtraction from stale counters and no implied renewal from this revision. |
-| A04: requirement evidence drift | G12 still describes older competing persistence paths; G13 says joined recovery/no-effect proof is absent; G15 has no source references despite the replacement implementation. The M2B checkpoint proves narrower explicit-reopen cases, not eager recovery or the full failure matrix. | Reconcile the existing rows with preserved subproofs and precise gaps. Do not promote rows merely from the checkpoint narrative. Keep the 9/26/3/7 tally historical until row adjudication justifies a change. |
-| A05: shared-helper boundary | The selected production generation was unchanged, but the operator installed host-wide helper v11 at the path used by production diagnostics. The handoff reports production helper-contract drift. | Narrow the claim to unchanged production binary selection. Record shared-helper change and compatibility separately. No finding of unauthorized installation or attribution of every production warning is established. Production repair remains outside P219 execution scope. |
-| A06: candidate and retry provenance | The accepted binary predates the service-reconcile compatibility closeout, as recorded above. The Lease Authority compartment passed after a first timing failure and reruns. | Bind installed proof to its actual binary and source-only gates to their source checkpoint. Give the first failure an explicit flake disposition under policy 0042; a green rerun does not erase it. Preserve the dependency rationale for reused gates. |
+| A02: ordinary desktop JSON dependency | Before version 13, `run_configured_interaction` loaded `LockedServiceStateRepository::default_json()` and persisted `desktop-input/operations.json`; `ManagedDesktopStateSource::snapshot` overlaid configured JSON Service State before projecting SQLite browser and viewer authority. | Source-qualified in version 13. P219 owns this bounded cut: managed capture now begins from static configuration plus SQLite authority, handoff lookup uses the SQLite registry, and interaction replay uses the SQLite operation journal. A one-time importer archives the old ledger after idempotent import. Detector fixtures fail on either retired compiled path and pass on the replacement. G04 and wider P03/P05 product closure remain open for unrelated JSON, configuration, credential, history, and cleanup edges. |
+| A03: exhausted renewal and stale policy/budget | Delivery Sequence And Budget stopped the prior renewal at M2B, and the historical capsule retained older thresholds. | Reconciled by the operator's resumed instruction and version 11. The active continuation has a 1,000,000-token cumulative ceiling, an 800,000-token implementation stop, and a 200,000-token closeout reserve. Goal thread `01a0e3f7-adbb-7312-b748-ce5a462ccd90` reported 141,869 used at startup but no remaining field, so the explicit ceiling governs and the service value remains an observed lower-bound readback. |
+| A04: requirement evidence drift | G12 described older competing persistence paths; G13 omitted the narrower M2B replacement/no-effect proof; G15 had no source references despite singular restart/adoption fixtures. The M2B checkpoint proves explicit reopen cases, not eager recovery or the full failure matrix. | First reconciliation completed in version 13. G12 now records one SQLite handoff registry and retains its incomplete recovery matrix; G13 names the explicit replacement/no-effect subproof and its automatic joined-recovery gap; G15 is partial with exact journal/adoption fixtures and explicit bounded-backoff, old-browser, and concurrency gaps. The ledger is 9/27/3/6. G14 remains missing. |
+| A05: shared-helper boundary | The selected production generation was unchanged, but the operator installed host-wide helper v11 at the path used by production diagnostics. | Reconciled as two facts: production binary selection remained `0.28.0-b589b318c530-c0c0977896a8`, while the shared diagnostic helper changed to v11 and may expose a compatibility warning against that binary. No production compatibility repair, publication, or attribution of unrelated warnings is claimed by P219. |
+| A06: candidate and retry provenance | Installed M2B proof belongs to development generation `0.28.0-ac3c1daed8ab`, whose binary predates the later source-only service-reconcile compatibility closeout. The comprehensive Lease Authority compartment had one process-timing assertion failure, then passed immediately in isolation and passed all 118 tests on rerun without a source change for that assertion. | Reconciled under policies 0042/0072. The first failure remains retained and is classified as a process-timing flake because the exact assertion and complete compartment passed without a causal source repair; the green reruns do not erase it. Installed claims stay bound to `0.28.0-ac3c1daed8ab`; later source-only A01/A02 gates stay bound to their commits and are not projected into that installed binary. Reuse of unaffected M2B gates is allowed because A01/A02 do not change the installed manager, provider, or viewer subproofs. |
 
 The later synthetic receipt `/tmp/p219-bob-final-current-interact.json` records
 41 attempted and acknowledged effect keys, `verified_success`, and verification
@@ -629,6 +639,23 @@ is not counted as evidence. These receipts remain visible as an inherited
 runtime-database readiness blocker; they neither invalidate the provider-free
 A01 proof nor qualify CDP live streaming. No automatic retry or runtime repair
 is authorized by this checkpoint.
+
+### A02 SQLite And Ledger Checkpoint
+
+The ordinary managed-desktop path no longer depends on JSON state or a parallel
+JSON idempotency ledger. Browser, session, tab, route, display, viewer-control,
+handoff, and interaction-operation authority now resolve from Browser Runtime
+SQLite. Legacy `operations.json` is parsed strictly, replayed idempotently into
+the SQLite journal, renamed to a read-only archive, and never used for ordinary
+effects afterward. A crash between journal commit and rename is safe because
+the next import must match the exact operation request and terminal result.
+
+Provider-free validation passes 43 desktop-interaction tests, 21 desktop-capture
+tests, 50 browser-session-store tests, two direct SQLite replay/import tests,
+the architecture detector self-test, formatting, and strict workspace Clippy.
+The Desktop Services crate remains unchanged and its 18 tests pass. This closes
+A02's named dependency packet, not G04 or whole-product P03/P05. No development
+candidate or provider effect was used.
 
 The operator resumed this amended plan with a 1,000,000-token cumulative
 ceiling before stop and checkpoint. Reserve 200,000 tokens for closeout and

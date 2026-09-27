@@ -57,7 +57,7 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance and closeout pass on isolated development generation 0.28.0-ac3c1daed8ab; exact shared-profile Alice and Bob identities, addressed activity, disposable expiry isolation, viewer authority and control transfer, final cleanup, two runtime-host replacement cycles, original opaque handoff rebinding, public Guacamole pixels, and no page-effect replay are proven; the reconciled ledger is nine pass, 26 partial, three fail, and seven missing; changed-surface Rust, dashboard, docs, service, installer, provider-boundary, policy, and hygiene gates pass
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; source checkpoint 17c30aaf qualifies A01, and the current A02 slice qualifies managed capture, ready-handoff lookup, and interaction replay on Browser Runtime SQLite with legacy-ledger import and archival; the reconciled ledger is nine pass, 27 partial, three fail, and six missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v12 source-qualifies A01 desktop failure reporting under the 1,000,000-token ceiling; A02 ordinary-desktop SQLite closure ownership, A03-A06 evidence reconciliation, and the inherited runtime-database blocker for the CDP live smoke remain open before M3
+    blocker: P219 v13 source-qualifies A01 and the bounded A02 ordinary-desktop SQLite cut and reconciles A03-A06 under the 1,000,000-token ceiling; wider G04/P03/P05 product closure, G14/G15 recovery gaps, and the inherited runtime-database blocker for the CDP live smoke remain open before M3
     updated_at: 2026-09-27

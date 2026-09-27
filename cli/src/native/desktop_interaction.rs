@@ -7,24 +7,316 @@
 #[cfg(test)]
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::fs::{self, OpenOptions};
+use std::fs;
+#[cfg(test)]
+use std::fs::OpenOptions;
+#[cfg(test)]
 use std::io::Write;
+#[cfg(test)]
 use std::path::{Path, PathBuf};
 
+use super::browser_session_store::{BrowserRuntimeOperationState, BrowserRuntimeSqliteStore};
+#[cfg(test)]
 use super::service_model::ServiceState;
 
 pub(crate) use agent_browser_desktop_services::*;
 
+#[cfg(test)]
 pub(crate) struct ServiceStateHandoffRepository<'a> {
     state: &'a ServiceState,
 }
 
+pub(crate) struct SqliteHandoffRepository {
+    handoffs: super::browser_session_store::BrowserManagerHandoffRegistry,
+}
+
+impl SqliteHandoffRepository {
+    pub(crate) fn open() -> Result<Self, String> {
+        let store = BrowserRuntimeSqliteStore::default_sqlite()?;
+        Ok(Self {
+            handoffs: store.load_handoff_registry()?,
+        })
+    }
+}
+
+impl ServiceOwnedHandoffRepository for SqliteHandoffRepository {
+    fn resolve_ready(
+        &mut self,
+        browser_id: &str,
+        session_name: &str,
+        route_id: &str,
+        display_allocation_id: &str,
+        reason: &str,
+    ) -> Result<Option<HumanHandoffSummary>, DesktopInteractionError> {
+        let Some(handoff) = self.handoffs.handoffs.values().find(|handoff| {
+            handoff.state == "ready"
+                && handoff.browser_id.as_deref() == Some(browser_id)
+                && handoff.session_name.as_deref() == Some(session_name)
+                && handoff.last_route_id.as_deref() == Some(route_id)
+                && handoff.last_display_allocation_id.as_deref() == Some(display_allocation_id)
+                && handoff
+                    .last_resolution
+                    .as_ref()
+                    .and_then(|value| value.get("operatorVisible"))
+                    .and_then(|value| value.get("state"))
+                    .and_then(Value::as_str)
+                    == Some("ready")
+        }) else {
+            return Ok(None);
+        };
+        let handoff_url = handoff.handoff_url.clone().ok_or_else(|| {
+            DesktopInteractionError::new(
+                "desktop_interaction_handoff_invalid",
+                "service-owned ready handoff has no authenticated URL",
+            )
+        })?;
+        validate_service_handoff_url(&handoff.id, &handoff_url)?;
+        Ok(Some(HumanHandoffSummary {
+            state: "ready".to_string(),
+            reason: reason.to_string(),
+            handoff_id: handoff.id.clone(),
+            handoff_url,
+        }))
+    }
+}
+
+struct SqliteInteractionOperationLedger {
+    store: BrowserRuntimeSqliteStore,
+}
+
+impl SqliteInteractionOperationLedger {
+    fn open() -> Result<Self, DesktopInteractionError> {
+        let mut store = BrowserRuntimeSqliteStore::default_sqlite()
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        Self::migrate_legacy_json(&mut store)?;
+        Ok(Self { store })
+    }
+
+    fn migrate_legacy_json(
+        store: &mut BrowserRuntimeSqliteStore,
+    ) -> Result<(), DesktopInteractionError> {
+        let state_path = super::service_store::default_service_state_path()
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        let service_directory = state_path
+            .parent()
+            .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        let path = service_directory
+            .join("desktop-input")
+            .join("operations.json");
+        let serialized = match fs::read_to_string(&path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(_) => {
+                return Err(ledger_error(
+                    "desktop_interaction_operation_ledger_load_failed",
+                ))
+            }
+        };
+        let snapshot: Value = serde_json::from_str(&serialized)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_invalid"))?;
+        if snapshot.get("schemaVersion").and_then(Value::as_str)
+            != Some("p110-interaction-operation-ledger.v1")
+        {
+            return Err(ledger_error("desktop_interaction_operation_ledger_invalid"));
+        }
+        let records = snapshot
+            .get("records")
+            .and_then(Value::as_object)
+            .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_invalid"))?;
+        for (scope_sha256, value) in records {
+            if scope_sha256.len() != 64
+                || !scope_sha256.bytes().all(|value| value.is_ascii_hexdigit())
+            {
+                return Err(ledger_error("desktop_interaction_operation_ledger_invalid"));
+            }
+            let record: InteractionOperationRecord = serde_json::from_value(value.clone())
+                .map_err(|_| ledger_error("desktop_interaction_operation_ledger_invalid"))?;
+            let request_sha256 = match &record {
+                InteractionOperationRecord::InProgress { request_sha256 }
+                | InteractionOperationRecord::Complete { request_sha256, .. }
+                | InteractionOperationRecord::Uncertain { request_sha256, .. } => request_sha256,
+            };
+            let record_id = format!("desktop-interaction:{scope_sha256}");
+            let operation = store
+                .reserve_operation(
+                    &record_id,
+                    "desktop-interaction",
+                    serde_json::json!({ "requestSha256": request_sha256 }),
+                )
+                .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+            if !matches!(record, InteractionOperationRecord::InProgress { .. }) {
+                store
+                    .commit_operation(
+                        &record_id,
+                        operation.generation,
+                        serde_json::json!({ "record": record }),
+                    )
+                    .map_err(|_| {
+                        ledger_error("desktop_interaction_operation_ledger_save_failed")
+                    })?;
+            }
+        }
+        let archive = path.with_extension("json.migrated-to-runtime-sqlite");
+        let mut permissions = fs::metadata(&path)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?
+            .permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        fs::rename(&path, &archive)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        #[cfg(unix)]
+        {
+            fs::File::open(
+                archive.parent().ok_or_else(|| {
+                    ledger_error("desktop_interaction_operation_ledger_save_failed")
+                })?,
+            )
+            .and_then(|directory| directory.sync_all())
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))?;
+        }
+        Ok(())
+    }
+
+    fn record_id(caller_id: &str, operation_id: &str) -> String {
+        format!(
+            "desktop-interaction:{}",
+            digest_text(&format!("{caller_id}\0{operation_id}"))
+        )
+    }
+
+    fn decode_record(
+        result: Option<Value>,
+    ) -> Result<InteractionOperationRecord, DesktopInteractionError> {
+        result
+            .and_then(|value| value.get("record").cloned())
+            .ok_or_else(|| ledger_error("desktop_interaction_operation_ledger_invalid"))
+            .and_then(|value| {
+                serde_json::from_value(value)
+                    .map_err(|_| ledger_error("desktop_interaction_operation_ledger_invalid"))
+            })
+    }
+}
+
+impl InteractionOperationLedger for SqliteInteractionOperationLedger {
+    fn lookup(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<Option<InteractionOperationRecord>, DesktopInteractionError> {
+        let record_id = Self::record_id(caller_id, operation_id);
+        let operation = self
+            .store
+            .find_operation(&record_id)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        operation
+            .map(|operation| match operation.state {
+                BrowserRuntimeOperationState::Prepared => {
+                    Ok(InteractionOperationRecord::InProgress {
+                        request_sha256: operation
+                            .request
+                            .get("requestSha256")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| {
+                                ledger_error("desktop_interaction_operation_ledger_invalid")
+                            })?
+                            .to_string(),
+                    })
+                }
+                BrowserRuntimeOperationState::Committed => Self::decode_record(operation.result),
+                BrowserRuntimeOperationState::Observed => {
+                    Err(ledger_error("desktop_interaction_operation_ledger_invalid"))
+                }
+            })
+            .transpose()
+    }
+
+    fn begin(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+    ) -> Result<(), DesktopInteractionError> {
+        self.store
+            .reserve_operation(
+                &Self::record_id(caller_id, operation_id),
+                "desktop-interaction",
+                serde_json::json!({ "requestSha256": request_sha256 }),
+            )
+            .map(|_| ())
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))
+    }
+
+    fn complete(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+        request_sha256: &str,
+        receipt: &InteractionReceipt,
+    ) -> Result<(), DesktopInteractionError> {
+        let record_id = Self::record_id(caller_id, operation_id);
+        let operation = self
+            .store
+            .load_operation(&record_id)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        let mut durable_receipt = receipt.clone();
+        durable_receipt.operation_id = digest_text(operation_id);
+        if durable_receipt.recipe_id == FOUNDATION_STRESS_RECIPE_ID {
+            durable_receipt.route_id = digest_text(&durable_receipt.route_id);
+            durable_receipt.display_allocation_id =
+                digest_text(&durable_receipt.display_allocation_id);
+            durable_receipt.stream_id = digest_text(&durable_receipt.stream_id);
+            if let Some(handoff) = durable_receipt.human_handoff.as_mut() {
+                handoff.handoff_url.clear();
+            }
+        }
+        let record = if receipt.effect_state == "effect_uncertain"
+            || receipt.effect_state == "cancelled_after_effect"
+        {
+            InteractionOperationRecord::Uncertain {
+                request_sha256: request_sha256.to_string(),
+                receipt: Box::new(durable_receipt),
+            }
+        } else {
+            InteractionOperationRecord::Complete {
+                request_sha256: request_sha256.to_string(),
+                receipt: Box::new(durable_receipt),
+            }
+        };
+        self.store
+            .commit_operation(
+                &record_id,
+                operation.generation,
+                serde_json::json!({ "record": record }),
+            )
+            .map(|_| ())
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))
+    }
+
+    fn abort(
+        &mut self,
+        caller_id: &str,
+        operation_id: &str,
+    ) -> Result<(), DesktopInteractionError> {
+        let record_id = Self::record_id(caller_id, operation_id);
+        let operation = self
+            .store
+            .load_operation(&record_id)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_load_failed"))?;
+        self.store
+            .abort_prepared_operation(&record_id, operation.generation)
+            .map_err(|_| ledger_error("desktop_interaction_operation_ledger_save_failed"))
+    }
+}
+
+#[cfg(test)]
 impl<'a> ServiceStateHandoffRepository<'a> {
     pub(crate) fn new(state: &'a ServiceState) -> Self {
         Self { state }
     }
 }
 
+#[cfg(test)]
 impl ServiceOwnedHandoffRepository for ServiceStateHandoffRepository<'_> {
     fn resolve_ready(
         &mut self,
@@ -96,11 +388,13 @@ fn validate_service_handoff_url(
 /// Dedicated service-owned file adapter. Each transition is persisted by a
 /// same-directory temporary file, file sync, atomic rename, and directory sync.
 #[derive(Debug)]
+#[cfg(test)]
 pub(crate) struct PersistedInteractionOperationLedger {
     path: PathBuf,
     inner: SerializedInteractionOperationLedger,
 }
 
+#[cfg(test)]
 impl PersistedInteractionOperationLedger {
     pub(crate) fn open(path: impl AsRef<Path>) -> Result<Self, DesktopInteractionError> {
         let path = path.as_ref().to_path_buf();
@@ -177,6 +471,7 @@ impl PersistedInteractionOperationLedger {
     }
 }
 
+#[cfg(test)]
 impl InteractionOperationLedger for PersistedInteractionOperationLedger {
     fn lookup(
         &mut self,
@@ -301,33 +596,12 @@ fn run_configured_interaction(
 ) -> Result<Value, String> {
     use super::controlled_x11_provider::{ControlledX11Provider, SystemInteractionClock};
     use super::desktop_control_coordinator::global_desktop_control_coordinator;
-    use super::service_store::{
-        default_service_state_path, LockedServiceStateRepository, ServiceStateRepository,
-    };
 
-    let state = LockedServiceStateRepository::default_json()?.load_snapshot()?;
-    let mut handoffs = ServiceStateHandoffRepository::new(&state);
+    let mut handoffs = SqliteHandoffRepository::open()?;
     let (mut provider, mut authority) = ControlledX11Provider::open(request.clone(), admission)
         .map_err(|error| error.to_string())?;
-    let state_path = default_service_state_path()?;
-    let ledger_path = state_path
-        .parent()
-        .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?
-        .join("desktop-input")
-        .join("operations.json");
-    let ledger_directory = ledger_path
-        .parent()
-        .ok_or_else(|| "desktop_interaction_operation_ledger_unavailable".to_string())?;
-    fs::create_dir_all(ledger_directory)
-        .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        fs::set_permissions(ledger_directory, fs::Permissions::from_mode(0o700))
-            .map_err(|_| "desktop_interaction_operation_ledger_unavailable".to_string())?;
-    }
-    let mut idempotency = PersistedInteractionOperationLedger::open(ledger_path)
-        .map_err(|error| error.to_string())?;
+    let mut idempotency =
+        SqliteInteractionOperationLedger::open().map_err(|error| error.to_string())?;
     let mut clock = SystemInteractionClock;
     match run_desktop_interaction(
         request,
@@ -1018,6 +1292,153 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_operation_ledger_replays_terminal_receipt_and_releases_aborts() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-desktop-interaction-sqlite-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let database_path = root.join("runtime.sqlite3");
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            crate::native::browser_session_store::LegacyBrowserRuntimeSources {
+                session_state_path: &root.join("browser-sessions.json"),
+                profile_catalog_path: &root.join("browser-profiles.json"),
+                service_state_path: &root.join("state.json"),
+            },
+        )
+        .unwrap();
+
+        let mut aborted = SqliteInteractionOperationLedger {
+            store: BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+        };
+        aborted
+            .begin("caller-abort", "operation-abort", "request-a")
+            .unwrap();
+        assert!(matches!(
+            aborted.lookup("caller-abort", "operation-abort").unwrap(),
+            Some(InteractionOperationRecord::InProgress { .. })
+        ));
+        aborted.abort("caller-abort", "operation-abort").unwrap();
+        assert_eq!(
+            aborted.lookup("caller-abort", "operation-abort").unwrap(),
+            None
+        );
+        aborted
+            .begin("caller-abort", "operation-abort", "request-b")
+            .unwrap();
+        aborted.abort("caller-abort", "operation-abort").unwrap();
+
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authority = ScriptedAuthority::stable(fixture.authority());
+        let mut coordinator = SyntheticCoordinator::default();
+        let mut ledger = SqliteInteractionOperationLedger {
+            store: BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+        };
+        let mut clock = FixedClock::new(1_000);
+        let first = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut ledger,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        let emitted = fixture.events.len();
+        drop(ledger);
+
+        let mut reopened = SqliteInteractionOperationLedger {
+            store: BrowserRuntimeSqliteStore::open(&database_path).unwrap(),
+        };
+        let replay = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &mut coordinator,
+                idempotency: &mut reopened,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        assert_eq!(first.replay_state, "first_execution");
+        assert_eq!(replay.replay_state, "replayed_terminal");
+        assert_eq!(fixture.events.len(), emitted);
+        assert_eq!(replay.operation_id, request().operation_id);
+        let durable = reopened
+            .store
+            .load_operation(&SqliteInteractionOperationLedger::record_id(
+                &request().operation_principal_id,
+                &request().operation_id,
+            ))
+            .unwrap();
+        assert!(!durable.result.unwrap().to_string().contains("operation-1"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn sqlite_operation_ledger_imports_and_archives_legacy_json_once() {
+        let root = std::env::temp_dir().join(format!(
+            "agent-browser-desktop-interaction-import-{}-{}",
+            std::process::id(),
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+        let guard = crate::test_utils::EnvGuard::new(&[
+            "HOME",
+            "AGENT_BROWSER_HOME",
+            "AGENT_BROWSER_TEST_ALLOW_LIVE_HOME",
+        ]);
+        guard.set("HOME", root.to_str().unwrap());
+        guard.remove("AGENT_BROWSER_HOME");
+        guard.set("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME", "1");
+        let service_directory = root.join(".agent-browser").join("service");
+        let ledger_directory = service_directory.join("desktop-input");
+        std::fs::create_dir_all(&ledger_directory).unwrap();
+        let scope = digest_text("caller-import\0operation-import");
+        let record = InteractionOperationRecord::InProgress {
+            request_sha256: "request-import".to_string(),
+        };
+        let legacy_path = ledger_directory.join("operations.json");
+        std::fs::write(
+            &legacy_path,
+            serde_json::to_vec(&serde_json::json!({
+                "schemaVersion": "p110-interaction-operation-ledger.v1",
+                "records": { (scope): record }
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_default_from_legacy().unwrap();
+
+        let mut ledger = SqliteInteractionOperationLedger::open().unwrap();
+        assert!(matches!(
+            ledger
+                .lookup("caller-import", "operation-import")
+                .unwrap(),
+            Some(InteractionOperationRecord::InProgress { request_sha256 })
+                if request_sha256 == "request-import"
+        ));
+        assert!(!legacy_path.exists());
+        let archive = ledger_directory.join("operations.json.migrated-to-runtime-sqlite");
+        assert!(archive.is_file());
+        assert!(std::fs::metadata(&archive)
+            .unwrap()
+            .permissions()
+            .readonly());
+        ledger.abort("caller-import", "operation-import").unwrap();
+        drop(ledger);
+        SqliteInteractionOperationLedger::open().unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn foundation_stress_replays_after_ledger_reload_and_conflicts_fail_closed() {
         let mut stress = request();
         stress.recipe_id = FOUNDATION_STRESS_RECIPE_ID.to_string();
@@ -1279,6 +1700,41 @@ mod tests {
                 .unwrap_err();
             assert_eq!(error.code(), "desktop_interaction_handoff_invalid");
         }
+    }
+
+    #[test]
+    fn sqlite_handoff_repository_resolves_only_the_exact_ready_binding() {
+        let binding = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 }).binding();
+        let state = ready_handoff_state(&binding);
+        let mut repository = SqliteHandoffRepository {
+            handoffs: crate::native::browser_session_store::BrowserManagerHandoffRegistry {
+                handoffs: state.remote_view_handoffs,
+            },
+        };
+        assert_eq!(
+            repository
+                .resolve_ready(
+                    &binding.browser_id,
+                    &binding.session_name,
+                    &binding.route_id,
+                    &binding.display_allocation_id,
+                    "effect_uncertain",
+                )
+                .unwrap(),
+            Some(existing_handoff())
+        );
+        assert_eq!(
+            repository
+                .resolve_ready(
+                    &binding.browser_id,
+                    &binding.session_name,
+                    "route-other",
+                    &binding.display_allocation_id,
+                    "effect_uncertain",
+                )
+                .unwrap(),
+            None
+        );
     }
 
     #[test]

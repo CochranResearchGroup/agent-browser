@@ -49,6 +49,38 @@ try {
     ['parallel_manager_handoff_authority', 'competing_handoff_authority', 'manager_handoff_competing_authority', 'ordinary_open_parallel_acquisition', 'manual_seeding_parallel_handoff'],
   );
 
+  write(root, 'cli/src/native/desktop_interaction.rs', `
+fn run_configured_interaction() {
+  LockedServiceStateRepository::default_json();
+  let path = "desktop-input/operations.json";
+}
+
+/// Dispatch the controlled provider.
+`);
+  write(root, 'cli/src/native/desktop_capture.rs', `
+impl StateSource for ManagedDesktopStateSource {
+  fn snapshot() { load_configured_service_state(); }
+}
+`);
+  const desktopJsonCut = evaluate(root);
+  assert.ok(desktopJsonCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'desktop_interaction_json_authority'));
+  assert.ok(desktopJsonCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'managed_desktop_json_snapshot'));
+  assert.ok(desktopJsonCut.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'desktop_interaction_parallel_operation_authority'));
+  write(root, 'cli/src/native/desktop_interaction.rs', `
+fn run_configured_interaction() { BrowserRuntimeSqliteStore::default_sqlite(); }
+
+/// Dispatch the controlled provider.
+`);
+  write(root, 'cli/src/native/desktop_capture.rs', `
+impl StateSource for ManagedDesktopStateSource {
+  fn snapshot() { load_static_configured_service_state(); }
+}
+`);
+  const desktopSqliteCut = evaluate(root);
+  assert.ok(!desktopSqliteCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'desktop_interaction_json_authority'));
+  assert.ok(!desktopSqliteCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'managed_desktop_json_snapshot'));
+  assert.ok(!desktopSqliteCut.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'desktop_interaction_parallel_operation_authority'));
+
   write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');
   const finalizerOnlyCut = evaluate(root);
   assert.equal(finalizerOnlyCut.rows.find((row) => row.id === 'P03').status, 'violated');
