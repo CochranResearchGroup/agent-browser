@@ -79,7 +79,7 @@ preserve history. Keep new execution narratives in the runbook.
 ## Current State
 
 Version 26 is the terminal budget checkpoint for this execution window. The
-goal service reported 931,884 cumulative tokens used, leaving 68,116 below the
+pre-commit goal-service readback reported 931,884 cumulative tokens used, leaving 68,116 below the
 operator's 1,000,000-token ceiling. Executable implementation had already
 stopped at 753,564. Subsequent work was limited to audit, plan correction,
 validation, and durable custody. The worktree is clean at documentation

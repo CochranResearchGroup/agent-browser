@@ -73,7 +73,7 @@ browser-keyed `BaselineCapacity` demand must be removed or constrained before
 implementation. The corrected split is reconciled through all forward-looking
 M3 sections; no older M3-P1 or host-integration wording grants baseline route
 pressure browser-launch authority.
-This execution window checkpoints at a goal-service readback of 931,884 tokens.
+This execution window recorded a pre-commit goal-service readback of 931,884 tokens.
 Executable work remains stopped at 753,564; the next continuation inherits all
 counters and resumes from M3-P2B without treating unused ceiling space as new
 implementation authority.

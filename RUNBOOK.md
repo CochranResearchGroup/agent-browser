@@ -77,7 +77,7 @@ Version 25 reconciles this correction through the older M3-P1, M3 delivery,
 and M3-P2 host-integration text. The historical baseline fixture remains a test
 of generic mechanics only and is explicitly excluded from G14 acceptance and
 all future browser-launch authority.
-The goal-service terminal readback for this window is 931,884 cumulative tokens
+The goal-service pre-commit checkpoint readback was 931,884 cumulative tokens
 used, 68,116 below the 1,000,000-token ceiling. Executable work stopped at
 753,564. Plan 0219 remains OPEN; this window stops at the durable checkpoint
 without converting unused ceiling space into implementation authority.
