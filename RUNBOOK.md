@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 completion and prohibition audits recorded
+## Current P219 status | 2026-09-27 continuation checkpointed
 
-[Plan 0219 version 20](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 21](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -49,6 +49,9 @@ The architecture audit independently reports 4 pass, 4 detector gaps, and 11
 unverified prohibitions. Zero findings on an unimplemented detector is not
 acceptance. M5 therefore remains ineligible on both requirement and prohibition
 coverage.
+Final goal-service usage is 817,438. Executable work stopped at 753,564; later
+usage was closeout-only. The remaining 182,562 under the ceiling does not renew
+implementation. Resume at M3-P2B with all counters and evidence carried forward.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

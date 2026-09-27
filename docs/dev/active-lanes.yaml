@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v20 preserves checkpoint 53c66ce9; the completion audit is 9 pass, 28 partial, 3 fail, and 5 missing, while the prohibition audit is 4 pass, 4 detector gaps, and 11 unverified; M3-P2B policy consolidation precedes M3-P2C exact-client fencing and M3-P2D eager scheduling, then remaining M3/M4 work and deterministic P01-P19 gates must pass before M5
+    blocker: P219 v21 checkpoints this continuation at 817,438 cumulative tokens with executable work stopped at 753,564; checkpoint 53c66ce9 remains source-qualified, the completion audit is 9/28/3/5 and the prohibition audit is 4 pass/4 detector gaps/11 unverified; resume at M3-P2B with cumulative accounting preserved
     updated_at: 2026-09-27

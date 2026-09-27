@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 20
+Plan version: 21
 
 State: OPEN
 
@@ -77,6 +77,15 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 21 is the final checkpoint for this continuation. The goal service
+reports 817,438 cumulative tokens used. Executable implementation stopped at
+753,564, before the 800,000 implementation boundary; subsequent usage was
+limited to read-only host discovery, requirement and prohibition audits,
+documentation reconciliation, validation, and custody. The remaining 182,562
+tokens under the 1,000,000 ceiling are not treated as a renewed implementation
+allowance. Resume from M3-P2B only under a later continuation that explicitly
+inherits this cumulative accounting and the 200,000-token closeout rule.
 
 Version 20 records the matching P01–P19 prohibition audit. The deterministic
 architecture checker reports only P09, P15, P16, and P19 as pass; P02, P03,

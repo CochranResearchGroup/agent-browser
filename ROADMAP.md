@@ -36,7 +36,7 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 20 preserves the installed M2B subproofs and source-qualifies truthful
+Version 21 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
@@ -57,6 +57,8 @@ The closeout audit confirms P219 remains OPEN: 9 rows pass, 28 are partial, 3
 fail, and 5 are missing. M5 remains ineligible until M3/M4 close those gaps.
 The parallel prohibition audit is 4 pass, 4 detector gaps, and 11 unverified;
 all P01–P19 gates must become deterministic before final qualification.
+This continuation checkpoints at 817,438 cumulative tokens; executable work
+stopped at 753,564 and M3-P2B remains the next implementation packet.
 
 ## P218 | Grilling-Contract Remote View Conformance
 
