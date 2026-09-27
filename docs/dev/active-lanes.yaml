@@ -53,7 +53,7 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 45a76907
+    checkpoint: 6000b9fd
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v15 source-qualifies provider-free M3-P1 recovery admission and scheduling under the 1,000,000-token ceiling; wider G04/P03/P05 product closure, host consumption and installed G14/G15 recovery, and the inherited runtime-database blocker for the CDP live smoke remain open
+    blocker: P219 v16 checkpoints M3-P1 at 6000b9fd and leaves M3-P2 host effect consumption planned but unstarted under the cumulative ceiling; wider G04/P03/P05 product closure, installed G14/G15 recovery, and the inherited runtime-database blocker for the CDP live smoke remain open
     updated_at: 2026-09-27

@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P1 source-qualified
+## Current P219 status | 2026-09-27 M3-P1 checkpointed
 
-[Plan 0219 version 15](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 16](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -23,6 +23,11 @@ singular admission, exact old-browser unusability proof, and bounded retry.
 It has no browser, provider, route, display, publication, or production effect.
 M3-P1 is source-qualified: 276 service-model and 37 browser-session-store tests
 pass, including a four-connection race with one SQLite admission winner.
+Source checkpoint `6000b9fd` is clean. The goal service reports 712,314 tokens
+used. M3-P2 is planned but unstarted: wire the SQLite admission fence into the
+provider-free host recovery effect, add a fenced success/reset transition, and
+inject values from the existing recovery configuration. No push, publication,
+install, merge, or runtime effect occurred.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

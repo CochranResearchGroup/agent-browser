@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 15
+Plan version: 16
 
 State: OPEN
 
@@ -77,6 +77,15 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 16 records source checkpoint `6000b9fd` and the restart-safe successor
+packet M3-P2. The goal service reports 712,314 cumulative tokens used. New
+implementation stops at this coherent boundary rather than risking an
+incomplete host-effect cut inside the remaining implementation allowance. The
+1,000,000-token ceiling and 200,000-token closeout reserve remain controlling;
+this early checkpoint does not reset either counter. The worktree is clean and
+the branch is 59 commits ahead of its unchanged remote. Nothing was pushed,
+published, installed, merged, or applied to a runtime.
 
 Version 15 source-qualifies M3-P1. A strict provider-free decision contract now
 distinguishes eager baseline, authenticated-active-viewer, and exact-client
@@ -678,6 +687,38 @@ passes with 45 ordered unique rows and counts 9/28/3/5. Rust formatting and
 strict workspace Clippy pass. Host launch/focus code
 does not yet consume this fence, so G14 and G15 remain partial and no installed
 recovery claim is made.
+
+### M3-P2 Successor Packet | Host Effect Consumption
+
+M3-P2 is planned and unstarted. Re-anchor at source checkpoint `6000b9fd`, a
+clean `platform/p211-simple-cold-upgrade` worktree, Plan version 16, ledger
+counts 9/28/3/5, and goal thread
+`01a0e3f7-adbb-7312-b748-ce5a462ccd90`. Re-read current planning, testing,
+architecture, runtime-boundary, and branch-custody policies. Verify the goal
+counter before implementation; prior usage and the closeout reserve carry
+forward.
+
+The bounded outcome is one provider-free host integration. Add a typed success
+transition that preserves monotonic recovery generation while resetting the
+attempt window only after a proven usable replacement. Translate the existing
+runtime recovery configuration into `BrowserRecoveryAdmissionPolicy`; do not
+introduce another default source. At the exact retained-browser recovery seam,
+derive demand from baseline deficit, authenticated active viewer, dormant
+state, or exact handoff/named-session resume. Bind old-browser
+`ProvenUnusable` only to a fresh process/CDP observation for that exact browser.
+Call `admit_browser_recovery` before any replacement effect, launch only for
+`AdmitReplacement`, and fence success or failure to its generation.
+
+Provider-free acceptance must prove: usable and unknown observations launch
+nothing; dormant demand launches nothing until exact resume; two concurrent
+host callers produce one replacement effect; a failed effect persists capped
+backoff and cannot bypass its deadline after restart; success preserves logical
+browser, profile, session, tab, target, handoff, and committed navigation
+identity without replaying page effects; stale generations cannot publish or
+reset recovery. Keep provider, browser, display, route, viewer, publication,
+production, and installed-candidate effects excluded. If the existing host seam
+cannot preserve those invariants in one causal batch, stop with the first
+failing fixture and split the packet before changing broader lifecycle code.
 
 ### A01 Source Checkpoint
 

@@ -36,13 +36,17 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 15 preserves the installed M2B subproofs and source-qualifies truthful
+Version 16 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
 The reconciled ledger is 9/28/3/5. M3-P1 source-qualifies provider-free recovery
 admission and scheduling for G14/G15; wider G04/P03/P05 closure, host
 integration, installed recovery, and evidence provenance remain open.
+Source checkpoint `6000b9fd` is clean. M3-P2 is the next bounded packet and is
+unstarted: consume the admission fence at the provider-free host effect seam,
+add fenced success/reset, and preserve every logical identity without page
+effect replay.
 
 ## P218 | Grilling-Contract Remote View Conformance
 
