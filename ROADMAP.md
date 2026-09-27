@@ -36,7 +36,7 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 23 preserves the installed M2B subproofs and source-qualifies truthful
+Version 24 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
@@ -65,6 +65,12 @@ daemon consume one committed policy.
 M3-P2C also requires an observed-live resumable recovery phase and one combined
 SQLite commit for recovery success plus final open/handoff publication; separate
 transactions cannot satisfy crash consistency.
+M3-P2D now has a corrected authority split: baseline presentation capacity is
+reconciled by Route Keeper without launching a browser; only exact current
+SQLite live-viewer authority may schedule eager browser replacement; dormant
+browsers remain lazy until exact handoff or named-session access. The existing
+browser-keyed `BaselineCapacity` demand must be removed or constrained before
+implementation.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 23
+Plan version: 24
 
 State: OPEN
 
@@ -77,6 +77,18 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 24 records the read-only M3-P2D demand-authority audit and corrects an
+overbroad recovery abstraction before implementation. Normative G14 uses
+"baseline capacity" to mean eager presentation capacity, which does not
+identify a profile browser and cannot authorize Chrome launch. The existing
+browser-keyed `BaselineCapacity` pure-model case therefore remains evidence of
+mechanics only. M3-P2D must reconcile provider routes separately, derive eager
+browser recovery only from current-boot, unexpired SQLite live-viewer authority
+joined to the exact current handoff, session, browser, and route, and leave
+dormant browsers lazy until exact handoff or named-session access. The detailed
+authority and test matrix below supersedes the earlier shorthand without
+changing the normative requirement, ledger counts, or executable state.
 
 Version 23 records the read-only M3-P2C transaction audit. Recovery state and
 the browser-open journal currently commit in separate SQLite transactions.
@@ -933,6 +945,50 @@ Stop M3-P2C implementation if the state machine cannot distinguish a proven
 live replacement from a ready published handoff, if success and final open
 publication are not one transaction, or if operation replay can bypass the
 per-browser recovery generation.
+
+#### M3-P2D Demand Authority And Correction
+
+M3-P2D has three distinct authorities. They share observation and admission
+contracts where applicable, but they must not share an effect merely because
+the word recovery appears in each path.
+
+1. **D1 | Baseline presentation recovery.** Reconcile provider presentation
+   capacity from `RouteKeeperAuthority` policy, including `minimum_ready`,
+   `warm_target`, and `requested_ready_slots`, plus current provider
+   observation. This path may restore route, Guacamole, and XRDP capacity. It
+   must not launch Chrome, choose a profile, create a browser session, or mint a
+   handoff. Qualify it first with provider-free policy fixtures and later with
+   installed cold-start recovery evidence.
+2. **D2 | Active-viewer browser recovery.** Add a scheduler-facing SQLite read
+   that projects exact browser candidates from current `desktop_control`
+   records. A candidate must be unexpired, belong to the current boot epoch,
+   and join through the current handoff registry, logical session, browser,
+   and Route Keeper authority. Deduplicate by logical browser ID. Before
+   admission, bind `ProvenUnusable` to a fresh exact `browser_is_live`
+   observation. Feed `AuthenticatedActiveViewer` through the same per-browser
+   recovery admission and M3-P2C effect fence; no scheduler-specific launcher
+   is allowed.
+3. **D3 | Dormant browser access.** Scheduled reap continues to retain a dead
+   named browser without launching it when no current active-viewer authority
+   exists. An exact handoff or named-session access supplies
+   `ExactClientResume` and uses the same M3-P2C admission and effect path.
+
+Correct the service-model boundary before scheduler wiring. Remove
+`BaselineCapacity` from the per-browser `BrowserRecoveryDemand` enum, or make
+it structurally incapable of admitting a browser replacement. If a typed
+presentation demand is useful, keep it in a separate presentation-capacity
+model. A route-capacity deficit by itself must have a red fixture proving it
+cannot admit or launch a browser.
+
+Provider-free acceptance must also prove: one current authenticated viewer
+causes eager recovery of its exact dead browser; expired, disconnected,
+foreign-boot, stale-route, and historical-handoff records create no demand;
+multiple current viewers of one browser deduplicate to one candidate and one
+replacement; a dormant dead named browser launches nothing during scheduled
+reap; baseline presentation slots recover without Chrome; and restart cannot
+create a competing replacement. Installed acceptance remains a later candidate
+gate and must separately qualify presentation cold start and visible active
+viewer recovery.
 
 ### A01 Source Checkpoint
 

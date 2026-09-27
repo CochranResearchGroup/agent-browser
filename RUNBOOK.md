@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P2C transaction audited
+## Current P219 status | 2026-09-27 M3-P2D authority audited
 
-[Plan 0219 version 23](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 24](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -64,6 +64,15 @@ navigation/presentation failure, leaving a usable browser while recovery stays
 `admitted`. Add an observed-live resumable phase and commit final recovery
 success with open/session/handoff publication in one SQLite transaction before
 wiring any replacement effect.
+The M3-P2D audit corrects the eager-demand boundary. G14 baseline capacity is
+presentation route capacity and cannot select or launch a profile browser.
+Route Keeper policy owns eager route, Guacamole, and XRDP reconciliation.
+Eager browser recovery requires a new current-boot, unexpired SQLite projection
+from live viewer control through the exact current handoff, session, browser,
+and route, deduplicated by browser ID and passed through the M3-P2C admission
+and effect fence. Dormant dead named browsers remain effect-free until exact
+handoff or named-session access. The browser-keyed `BaselineCapacity` model
+case must be removed or constrained before scheduler wiring.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
