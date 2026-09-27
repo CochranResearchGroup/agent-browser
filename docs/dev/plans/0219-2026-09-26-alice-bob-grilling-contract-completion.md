@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 27
+Plan version: 28
 
 State: OPEN
 
@@ -77,6 +77,23 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 28 source-qualifies M3-P2C at commit `0522fe95`. The journaled exact-client
+path now proves the selected retained browser dead before SQLite atomically
+admits one per-browser recovery generation and binds it to `launch_started`.
+Two operation IDs no longer stale each other, while the per-browser generation
+permits only one replacement effect. A successor probes and adopts the exact
+reserved launch without launching again. `observed_live` is durable and
+resumable separately from a ready handoff; later navigation or presentation
+failure cannot reopen launch admission. One immediate transaction fences the
+operation generation and recovery generation while publishing session state,
+the same opaque handoff, the committed open result, and recovery success.
+Stale generations and base-state conflicts roll back the entire publication.
+Focused model, manager, store, journal, concurrency, crash-recovery, formatting,
+and strict workspace Clippy gates pass. The ledger remains 9 pass, 29 partial,
+2 fail, and 5 missing because G15 gains source proof but still requires joined
+installed recovery. Plan 0219 remains OPEN; M3-P2D is the next packet and was
+not begun.
 
 Version 27 source-qualifies M3-P2B at commit `c96b7dfd`. Browser Runtime SQLite
 configuration v2 now owns retry budget, base backoff, maximum backoff, and the
@@ -963,9 +980,9 @@ P157 oracle names the removed baseline file
 contract, type, and request-client lanes pass. The shared installed skill was
 not overwritten by this source-only packet.
 
-M3-P2C is now the next bounded packet. It must follow its transaction matrix and
-stop rule; M3-P2B does not authorize replacement effects or claim installed
-recovery.
+At the M3-P2B checkpoint, M3-P2C became the next bounded packet. Its transaction
+matrix and stop rule below governed the completed source work; M3-P2B alone did
+not authorize replacement effects or claim installed recovery.
 
 Do not bump the database `PRAGMA user_version` merely for JSON-row evolution
 unless table shape changes. The runtime-config value carries its own schema and
@@ -1009,6 +1026,34 @@ Stop M3-P2C implementation if the state machine cannot distinguish a proven
 live replacement from a ready published handoff, if success and final open
 publication are not one transaction, or if operation replay can bypass the
 per-browser recovery generation.
+
+#### M3-P2C Source Checkpoint
+
+Commit `0522fe95` completes the exact-client replacement fence. A prepared open
+has no recovery authority. A dead retained browser is observed first, then one
+immediate SQLite transaction admits the recovery generation and records the
+generation-bound `launch_started` observation. A crash after the external
+launch resumes through read-only exact reservation recovery and cannot launch a
+second process. The `browser_opened` transition atomically records
+`observed_live`; subsequent non-launch phases preserve the binding. Final ready
+publication commits the open result, session state, opaque handoff, and recovery
+success together. Legacy persistence implementations return an explicit typed
+unsupported error for these operations.
+
+The focused validation batch passes four recovery-model tests, all 33 Browser
+Session Manager integration tests, six `browser_open_` store tests, eight
+`journaled_open` tests, the one-winner concurrent host fixture, the
+crash-after-launch read-only recovery fixture, the durable retry and deadline
+fixture, the repository focused recovery and open wrappers, Rust formatting,
+diff hygiene, and strict workspace Clippy. These source-only tests launch no
+browser and perform no provider, installed-runtime, publication, production,
+merge, or release effect. G15 remains partial pending joined provider-free and
+installed recovery qualification. M3-P2D remains unstarted.
+
+The goal-service readback after source validation reported 689,484 cumulative
+tokens used and 310,516 remaining. Implementation stopped below the 800,000
+boundary, preserving more than the required 200,000 tokens for reconciliation,
+validation, evidence, and checkpoint custody.
 
 #### M3-P2D Demand Authority And Correction
 
