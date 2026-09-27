@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P1 checkpointed
+## Current P219 status | 2026-09-27 M3-P2A source-qualified
 
-[Plan 0219 version 16](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 17](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -28,6 +28,11 @@ used. M3-P2 is planned but unstarted: wire the SQLite admission fence into the
 provider-free host recovery effect, add a fenced success/reset transition, and
 inject values from the existing recovery configuration. No push, publication,
 install, merge, or runtime effect occurred.
+M3-P2A is source-qualified at `53c66ce9`: exact success is generation-fenced,
+restart-durable, resets attempts only after success, and advances generation for
+the next episode. The affected complete suites pass 277 and 38 tests; strict
+Clippy and formatting pass. Goal usage is 753,564 and implementation is stopped.
+Configuration translation and actual host fence consumption remain unstarted.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

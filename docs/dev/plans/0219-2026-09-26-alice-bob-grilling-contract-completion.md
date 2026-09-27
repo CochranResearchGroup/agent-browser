@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 16
+Plan version: 17
 
 State: OPEN
 
@@ -77,6 +77,16 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 17 source-qualifies M3-P2A at commit `53c66ce9`. Recovery success is
+fenced to the exact admitted generation, persists as a recovered phase, resets
+attempts only after exact success, and preserves monotonic generation when a
+later failure starts a fresh attempt window. Stale generations cannot reset
+recovery. The complete service-model suite passes 277 tests, the
+browser-session-store surface passes 38 tests, and strict workspace Clippy and
+formatting pass. Goal usage is 753,564 tokens. New implementation is stopped;
+configuration translation and actual host effect consumption remain open. No
+runtime or publication effect occurred.
 
 Version 16 records source checkpoint `6000b9fd` and the restart-safe successor
 packet M3-P2. The goal service reports 712,314 cumulative tokens used. New
@@ -719,6 +729,18 @@ reset recovery. Keep provider, browser, display, route, viewer, publication,
 production, and installed-candidate effects excluded. If the existing host seam
 cannot preserve those invariants in one causal batch, stop with the first
 failing fixture and split the packet before changing broader lifecycle code.
+
+### M3-P2A Source Checkpoint
+
+Commit `53c66ce9` completes the first M3-P2 sub-invariant. The pure transition
+requires an admitted exact generation before success, records `recovered`, and
+opens a later episode at the next generation with attempt one and a fresh
+deadline. Browser Runtime SQLite commits that transition atomically and retains
+it across restart. Focused recovery tests pass five cases; the complete affected
+suites pass 277 and 38 tests. The G15 ledger row now records the success fence
+while remaining partial. The next implementation must translate existing
+runtime recovery settings into the admission policy and make the host consume
+admission, failure, and success fences around exactly one replacement effect.
 
 ### A01 Source Checkpoint
 

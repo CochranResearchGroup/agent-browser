@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 6000b9fd
+    checkpoint: 53c66ce9
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; source checkpoints 17c30aaf and df25b73e qualify A01/A02; M3-P1 source-qualifies eager/lazy recovery admission, exact old-browser proof, bounded retry, restart persistence, and one SQLite winner; the reconciled ledger is nine pass, 28 partial, three fail, and five missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 remain source-qualified; M3-P2A at 53c66ce9 adds exact-generation fenced, restart-durable recovery success and fresh attempt-window reset; the reconciled ledger remains nine pass, 28 partial, three fail, and five missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v16 checkpoints M3-P1 at 6000b9fd and leaves M3-P2 host effect consumption planned but unstarted under the cumulative ceiling; wider G04/P03/P05 product closure, installed G14/G15 recovery, and the inherited runtime-database blocker for the CDP live smoke remain open
+    blocker: P219 v17 source-qualifies M3-P2A at 53c66ce9 and stops implementation at 753,564 tokens; existing recovery-configuration translation, actual host fence consumption, wider G04/P03/P05 product closure, installed G14/G15 recovery, and the inherited runtime-database blocker remain open
     updated_at: 2026-09-27
