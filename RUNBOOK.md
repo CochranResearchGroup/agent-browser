@@ -49,9 +49,10 @@ The architecture audit independently reports 4 pass, 4 detector gaps, and 11
 unverified prohibitions. Zero findings on an unimplemented detector is not
 acceptance. M5 therefore remains ineligible on both requirement and prohibition
 coverage.
-Final goal-service usage is 817,438. Executable work stopped at 753,564; later
-usage was closeout-only. The remaining 182,562 under the ceiling does not renew
-implementation. Resume at M3-P2B with all counters and evidence carried forward.
+The version 21 checkpoint readback was 817,438. Executable work stopped at
+753,564; later usage was closeout-only. Remaining capacity under the ceiling
+does not renew implementation. Resume at M3-P2B with all counters and evidence
+carried forward.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
