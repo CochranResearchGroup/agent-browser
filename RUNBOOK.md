@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P2 seam audited
+## Current P219 status | 2026-09-27 closeout audit recorded
 
-[Plan 0219 version 18](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 19](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -40,6 +40,11 @@ and scheduled reap only retains dead named records. M3-P2B must first establish
 one SQLite policy authority; M3-P2C then fences exact-client replacement; M3-P2D
 adds eager active-viewer/baseline scheduling without surprise-launching dormant
 browsers.
+The completion audit confirms only nine rows pass. Three fail, five are missing,
+and 28 remain partial. P219 stays OPEN and M5 is ineligible. The critical path
+is M3-P2B policy consolidation, M3-P2C exact-client fencing, M3-P2D eager
+scheduling, remaining M3 retention, M4 operational closure, then one final
+candidate adjudication.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,

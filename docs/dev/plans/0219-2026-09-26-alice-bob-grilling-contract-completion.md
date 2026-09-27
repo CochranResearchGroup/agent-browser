@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 18
+Plan version: 19
 
 State: OPEN
 
@@ -77,6 +77,14 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 19 records the closeout completion audit against the authoritative
+45-row ledger. Only G11, G23, G24, G31, G35, G41, G43, G44, and G45 pass. G03,
+G04, and G22 fail; G17, G20, G33, G37, and G38 are missing; 28 rows remain
+partial. Therefore P219 is not complete, M5 is ineligible, and no integration or
+installed-final claim is permitted. The ordered successor work remains M3-P2B
+through M3-P2D, followed by the still-open M3 retention rows and M4 operational
+rows before final-candidate adjudication.
 
 Version 18 records the read-only M3-P2 host-seam audit after the implementation
 stop. The default Browser Session Host reads SQLite `BrowserRuntimeConfig`, but
@@ -594,6 +602,24 @@ readback accounts for browser, daemon, keeper, XRDP, and Guacamole residue.
 Exact uncertain foreign resources remain untouched without blocking separate
 valid work. Required public documentation, generated contracts, local/remote
 source identities, plan, roadmap, runbook, catalog, and PR must agree.
+
+### Closeout Completion Audit At Version 19
+
+| Evidence class | Current rows | Completion consequence |
+| --- | --- | --- |
+| Pass | G11, G23, G24, G31, G35, G41, G43, G44, G45 | Preserve these scoped proofs; requalify on the final candidate when their executable dependencies change. |
+| Fail | G03, G04, G22 | Forward-only migration, one SQLite authority, and complete typed configuration are contradicted by current evidence and block final qualification. |
+| Missing | G17, G20, G33, G37, G38 | History compaction, privilege qualification, live pressure, disposable quotas, and absence of promotion/pinning lack required evidence. |
+| Partial | G01, G02, G05–G10, G12–G16, G18, G19, G21, G25–G30, G32, G34, G36, G39, G40, G42 | Source or installed subproofs exist, but their recorded remaining gaps must be closed at the owning milestone. |
+
+The next critical dependency is G22/G04 recovery-policy consolidation in
+M3-P2B because M3-P2C cannot truthfully consume the new admission fence while
+ordinary host and daemon recovery read different authorities. M3-P2C then
+advances G12–G15, G19, G26, G32, G40, and G42 at the exact-client boundary.
+M3-P2D supplies G14 eager-demand behavior. Remaining M3 retention work owns
+G21, G36, G37, and G38. M4 owns the operational and storage gaps listed in the
+Requirement Mapping table. Only after those source and installed gates pass may
+M5 freeze one candidate and re-adjudicate all 45 rows plus P01–P19.
 
 The M2B milestone is an intermediate outcome. P218's cancellation is
 supersession, not acceptance. A partial pass keeps this plan open after

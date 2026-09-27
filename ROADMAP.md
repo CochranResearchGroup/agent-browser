@@ -36,7 +36,7 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 18 preserves the installed M2B subproofs and source-qualifies truthful
+Version 19 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
@@ -53,6 +53,8 @@ consumption remain the next bounded work.
 The read-only host audit orders that work as M3-P2B SQLite policy consolidation,
 M3-P2C exact-client effect fencing, and M3-P2D eager scheduling. Direct host
 wiring before policy consolidation would retain competing authorities.
+The closeout audit confirms P219 remains OPEN: 9 rows pass, 28 are partial, 3
+fail, and 5 are missing. M5 remains ineligible until M3/M4 close those gaps.
 
 ## P218 | Grilling-Contract Remote View Conformance
 
