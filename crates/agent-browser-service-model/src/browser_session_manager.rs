@@ -706,7 +706,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     session_disposition: SessionRecordDisposition::Reused,
                 });
             }
-            if request.requested_browser_id.is_some() {
+            if request.requested_browser_id.is_some() && reservation.is_none() {
                 return Err("browser_session_selected_browser_not_live".to_string());
             }
             if let Some(reservation) = reservation.as_ref() {
@@ -785,7 +785,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 }
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else {
-                if request.requested_browser_id.is_some() {
+                if request.requested_browser_id.is_some() && reservation.is_none() {
                     return Err("browser_session_selected_browser_not_live".to_string());
                 }
                 self.retire_browser(

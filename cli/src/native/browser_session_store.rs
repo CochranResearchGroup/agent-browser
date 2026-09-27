@@ -6,7 +6,8 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    decide_browser_recovery, record_browser_recovery_failure, record_browser_recovery_success,
+    decide_browser_recovery, record_browser_recovery_failure,
+    record_browser_recovery_observed_live, record_browser_recovery_success,
     BrowserNavigationRecord, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
     BrowserRecoveryAdmissionPolicy, BrowserRecoveryDecision, BrowserRecoveryDemand,
     BrowserRecoveryState, BrowserSessionState, BrowserTabEndReason, ManagedBrowserInstance,
@@ -183,6 +184,20 @@ pub(crate) struct BrowserRuntimeOperation {
     pub(crate) result: Option<serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct BrowserOpenRecoveryAdmission {
+    pub(crate) operation: BrowserRuntimeOperation,
+    pub(crate) decision: BrowserRecoveryDecision,
+}
+
+pub(crate) struct BrowserOpenRecoveryPublication<'a> {
+    pub(crate) expected_base_state: &'a BrowserSessionState,
+    pub(crate) session_state: &'a BrowserSessionState,
+    pub(crate) handoff: &'a RemoteViewHandoff,
+    pub(crate) result: serde_json::Value,
+    pub(crate) recovered_at_ms: u64,
+}
+
 struct BrowserPublication<'a> {
     expected_owner_key: Option<&'static str>,
     expected_observation: Option<&'a serde_json::Value>,
@@ -190,6 +205,7 @@ struct BrowserPublication<'a> {
     session_state: &'a BrowserSessionState,
     handoff: &'a RemoteViewHandoff,
     result: serde_json::Value,
+    recovery_success_at_ms: Option<u64>,
 }
 
 pub(crate) struct LegacyBrowserRuntimeSources<'a> {
@@ -1363,6 +1379,97 @@ impl BrowserRuntimeSqliteStore {
         Ok(decision)
     }
 
+    /// Atomically admits one retained-browser replacement and binds its
+    /// recovery generation to the open operation before any launch effect.
+    pub(crate) fn admit_browser_open_recovery(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        browser_id: &str,
+        now_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+        launch_started_observation: serde_json::Value,
+    ) -> Result<BrowserOpenRecoveryAdmission, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        if operation.owner_key != "browser-runtime-open"
+            || operation.generation != operation_generation
+            || operation.state != BrowserRuntimeOperationState::Prepared
+        {
+            return Err(format!(
+                "browser_runtime_open_recovery_operation_invalid:{operation_id}"
+            ));
+        }
+        let current_generation =
+            load_operation_generation(&transaction, &operation.owner_key, operation_id)?;
+        if current_generation != operation_generation {
+            return Err(format!(
+                "browser_runtime_operation_generation_stale:{operation_id}:{operation_generation}:{current_generation}"
+            ));
+        }
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let decision = decide_browser_recovery(
+            registry.states.get(browser_id),
+            browser_id,
+            BrowserRecoveryDemand::ExactClientResume,
+            OldBrowserUsability::ProvenUnusable,
+            now_ms,
+            policy,
+        )?;
+        let mut bound_operation = operation;
+        match &decision {
+            BrowserRecoveryDecision::AdmitReplacement { state } => {
+                registry
+                    .states
+                    .insert(browser_id.to_string(), state.clone());
+                save_document(
+                    &transaction,
+                    BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+                    BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+                    &registry,
+                )?;
+                let observation = bind_browser_recovery_observation(
+                    launch_started_observation,
+                    browser_id,
+                    state.generation,
+                )?;
+                bound_operation = observe_operation_in_transaction(
+                    &transaction,
+                    operation_id,
+                    operation_generation,
+                    observation,
+                )?;
+            }
+            BrowserRecoveryDecision::Exhausted { state } => {
+                registry
+                    .states
+                    .insert(browser_id.to_string(), state.clone());
+                save_document(
+                    &transaction,
+                    BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+                    BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+                    &registry,
+                )?;
+            }
+            _ => {}
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(BrowserOpenRecoveryAdmission {
+            operation: bound_operation,
+            decision,
+        })
+    }
+
     pub(crate) fn record_browser_recovery_failure(
         &mut self,
         browser_id: &str,
@@ -1395,6 +1502,121 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
         Ok(next)
+    }
+
+    /// Atomically records that the admitted replacement is now live and
+    /// advances the owning open operation beyond the launch boundary.
+    pub(crate) fn record_browser_open_recovery_observed_live(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        browser_opened_observation: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        validate_open_recovery_operation(&transaction, &operation, operation_generation)?;
+        let (browser_id, recovery_generation) =
+            browser_recovery_binding(operation.result.as_ref().ok_or_else(|| {
+                format!("browser_runtime_operation_observation_missing:{operation_id}")
+            })?)?
+            .ok_or_else(|| {
+                format!("browser_runtime_open_recovery_binding_missing:{operation_id}")
+            })?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let current = registry
+            .states
+            .get(&browser_id)
+            .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+        let next = record_browser_recovery_observed_live(current, recovery_generation)?;
+        registry.states.insert(browser_id.clone(), next);
+        save_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        let observation = bind_browser_recovery_observation(
+            browser_opened_observation,
+            &browser_id,
+            recovery_generation,
+        )?;
+        let operation = observe_operation_in_transaction(
+            &transaction,
+            operation_id,
+            operation_generation,
+            observation,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(operation)
+    }
+
+    /// Atomically records a pre-live replacement failure and its operation
+    /// cleanup observation so a retry cannot bypass recovery backoff.
+    pub(crate) fn record_browser_open_recovery_failure(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        failed_at_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+        failure_observation: serde_json::Value,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let operation = load_optional_operation(&transaction, operation_id)?
+            .ok_or_else(|| format!("browser_runtime_operation_missing:{operation_id}"))?;
+        validate_open_recovery_operation(&transaction, &operation, operation_generation)?;
+        let (browser_id, recovery_generation) =
+            browser_recovery_binding(operation.result.as_ref().ok_or_else(|| {
+                format!("browser_runtime_operation_observation_missing:{operation_id}")
+            })?)?
+            .ok_or_else(|| {
+                format!("browser_runtime_open_recovery_binding_missing:{operation_id}")
+            })?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let current = registry
+            .states
+            .get(&browser_id)
+            .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+        let next =
+            record_browser_recovery_failure(current, recovery_generation, failed_at_ms, policy)?;
+        registry.states.insert(browser_id.clone(), next);
+        save_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        let observation = bind_browser_recovery_observation(
+            failure_observation,
+            &browser_id,
+            recovery_generation,
+        )?;
+        let operation = observe_operation_in_transaction(
+            &transaction,
+            operation_id,
+            operation_generation,
+            observation,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(operation)
     }
 
     pub(crate) fn record_browser_recovery_success(
@@ -1431,7 +1653,40 @@ impl BrowserRuntimeSqliteStore {
     }
 
     #[cfg(test)]
-    fn load_browser_recovery_state(
+    fn record_browser_recovery_observed_live(
+        &mut self,
+        browser_id: &str,
+        generation: u64,
+    ) -> Result<BrowserRecoveryState, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let current = registry
+            .states
+            .get(browser_id)
+            .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+        let next = record_browser_recovery_observed_live(current, generation)?;
+        registry.states.insert(browser_id.to_string(), next.clone());
+        save_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(next)
+    }
+
+    #[cfg(test)]
+    pub(crate) fn load_browser_recovery_state(
         &self,
         browser_id: &str,
     ) -> Result<Option<BrowserRecoveryState>, String> {
@@ -1476,7 +1731,8 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_replay_mismatch:{operation_id}"
             ));
         }
-        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        let current_generation =
+            load_operation_generation(&transaction, &operation.owner_key, operation_id)?;
         if current_generation != generation {
             return Err(format!(
                 "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
@@ -1575,6 +1831,28 @@ impl BrowserRuntimeSqliteStore {
                 session_state,
                 handoff,
                 result,
+                recovery_success_at_ms: None,
+            },
+        )
+    }
+
+    pub(crate) fn commit_browser_open_with_recovery_success(
+        &mut self,
+        operation_id: &str,
+        generation: u64,
+        publication: BrowserOpenRecoveryPublication<'_>,
+    ) -> Result<BrowserRuntimeOperation, String> {
+        self.commit_browser_publication(
+            operation_id,
+            generation,
+            BrowserPublication {
+                expected_owner_key: Some("browser-runtime-open"),
+                expected_observation: None,
+                expected_base_state: publication.expected_base_state,
+                session_state: publication.session_state,
+                handoff: publication.handoff,
+                result: publication.result,
+                recovery_success_at_ms: Some(publication.recovered_at_ms),
             },
         )
     }
@@ -1630,7 +1908,8 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_replay_mismatch:{operation_id}"
             ));
         }
-        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        let current_generation =
+            load_operation_generation(&transaction, &operation.owner_key, operation_id)?;
         if current_generation != generation {
             return Err(format!(
                 "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
@@ -1644,6 +1923,33 @@ impl BrowserRuntimeSqliteStore {
         }
         if publication.handoff.id.is_empty() {
             return Err("browser_runtime_handoff_identity_invalid".to_string());
+        }
+        if let Some(recovered_at_ms) = publication.recovery_success_at_ms {
+            let (browser_id, recovery_generation) =
+                browser_recovery_binding(operation.result.as_ref().ok_or_else(|| {
+                    format!("browser_runtime_operation_observation_missing:{operation_id}")
+                })?)?
+                .ok_or_else(|| {
+                    format!("browser_runtime_open_recovery_binding_missing:{operation_id}")
+                })?;
+            let mut recovery_registry: BrowserRecoveryRegistry = load_optional_document(
+                &transaction,
+                BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+                BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            )?;
+            let current = recovery_registry
+                .states
+                .get(&browser_id)
+                .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+            let recovered =
+                record_browser_recovery_success(current, recovery_generation, recovered_at_ms)?;
+            recovery_registry.states.insert(browser_id, recovered);
+            save_document(
+                &transaction,
+                BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+                BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+                &recovery_registry,
+            )?;
         }
         let current_session_state: BrowserSessionState = load_optional_document(
             &transaction,
@@ -1719,6 +2025,7 @@ impl BrowserRuntimeSqliteStore {
                 session_state,
                 handoff,
                 result,
+                recovery_success_at_ms: None,
             },
         )
     }
@@ -1756,7 +2063,8 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_abort_mismatch:{operation_id}"
             ));
         }
-        let current_generation = load_owner_generation(&transaction, &operation.owner_key)?;
+        let current_generation =
+            load_operation_generation(&transaction, &operation.owner_key, operation_id)?;
         if current_generation != generation {
             return Err(format!(
                 "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
@@ -2363,7 +2671,8 @@ fn reserve_operation_in_transaction(
             }
         }
     }
-    let current_generation = load_owner_generation(connection, owner_key)?;
+    let generation_key = operation_generation_key(owner_key, operation_id);
+    let current_generation = load_owner_generation(connection, &generation_key)?;
     let generation = current_generation
         .checked_add(1)
         .ok_or_else(|| "browser_runtime_operation_generation_exhausted".to_string())?;
@@ -2373,7 +2682,7 @@ fn reserve_operation_in_transaction(
         .execute(
             "INSERT INTO operation_generations(owner_key, generation) VALUES (?1, ?2)
              ON CONFLICT(owner_key) DO UPDATE SET generation=excluded.generation",
-            params![owner_key, generation_sql],
+            params![generation_key, generation_sql],
         )
         .map_err(|error| format!("browser_runtime_operation_generation_save_failed:{error}"))?;
     let request_json = serde_json::to_string(&request)
@@ -2423,7 +2732,8 @@ fn observe_operation_in_transaction(
             "browser_runtime_operation_replay_mismatch:{operation_id}"
         ));
     }
-    let current_generation = load_owner_generation(connection, &operation.owner_key)?;
+    let current_generation =
+        load_operation_generation(connection, &operation.owner_key, operation_id)?;
     if current_generation != generation {
         return Err(format!(
             "browser_runtime_operation_generation_stale:{operation_id}:{generation}:{current_generation}"
@@ -2451,6 +2761,68 @@ fn observe_operation_in_transaction(
     Ok(operation)
 }
 
+fn bind_browser_recovery_observation(
+    mut observation: serde_json::Value,
+    browser_id: &str,
+    generation: u64,
+) -> Result<serde_json::Value, String> {
+    let object = observation
+        .as_object_mut()
+        .ok_or_else(|| "browser_runtime_open_recovery_observation_invalid".to_string())?;
+    object.insert(
+        "recovery".to_string(),
+        serde_json::json!({
+            "browserId": browser_id,
+            "generation": generation,
+        }),
+    );
+    Ok(observation)
+}
+
+fn browser_recovery_binding(
+    observation: &serde_json::Value,
+) -> Result<Option<(String, u64)>, String> {
+    let Some(recovery) = observation.get("recovery") else {
+        return Ok(None);
+    };
+    let browser_id = recovery
+        .get("browserId")
+        .and_then(serde_json::Value::as_str)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| "browser_runtime_open_recovery_browser_id_invalid".to_string())?;
+    let generation = recovery
+        .get("generation")
+        .and_then(serde_json::Value::as_u64)
+        .filter(|value| *value > 0)
+        .ok_or_else(|| "browser_runtime_open_recovery_generation_invalid".to_string())?;
+    Ok(Some((browser_id.to_string(), generation)))
+}
+
+fn validate_open_recovery_operation(
+    connection: &Connection,
+    operation: &BrowserRuntimeOperation,
+    generation: u64,
+) -> Result<(), String> {
+    if operation.owner_key != "browser-runtime-open"
+        || operation.generation != generation
+        || operation.state != BrowserRuntimeOperationState::Observed
+    {
+        return Err(format!(
+            "browser_runtime_open_recovery_operation_invalid:{}",
+            operation.operation_id
+        ));
+    }
+    let current_generation =
+        load_operation_generation(connection, &operation.owner_key, &operation.operation_id)?;
+    if current_generation != generation {
+        return Err(format!(
+            "browser_runtime_operation_generation_stale:{}:{generation}:{current_generation}",
+            operation.operation_id
+        ));
+    }
+    Ok(())
+}
+
 fn load_owner_generation(connection: &Connection, owner_key: &str) -> Result<u64, String> {
     let generation = connection
         .query_row(
@@ -2463,6 +2835,30 @@ fn load_owner_generation(connection: &Connection, owner_key: &str) -> Result<u64
         .unwrap_or(0);
     u64::try_from(generation)
         .map_err(|_| "browser_runtime_operation_generation_invalid".to_string())
+}
+
+fn operation_generation_key(owner_key: &str, operation_id: &str) -> String {
+    if owner_key == "browser-runtime-open" {
+        format!("{owner_key}:{operation_id}")
+    } else {
+        owner_key.to_string()
+    }
+}
+
+fn load_operation_generation(
+    connection: &Connection,
+    owner_key: &str,
+    operation_id: &str,
+) -> Result<u64, String> {
+    let generation_key = operation_generation_key(owner_key, operation_id);
+    let generation = load_owner_generation(connection, &generation_key)?;
+    if generation == 0 && generation_key != owner_key {
+        // Open operations reserved before per-operation fencing used the shared
+        // owner generation. Keep those durable journal entries resumable.
+        load_owner_generation(connection, owner_key)
+    } else {
+        Ok(generation)
+    }
 }
 
 fn load_optional_operation(
@@ -5759,6 +6155,13 @@ mod tests {
             store.record_browser_recovery_success("browser-retained", 2, 20),
             Err("browser_recovery_success_fence_mismatch".to_string())
         );
+        assert_eq!(
+            store
+                .record_browser_recovery_observed_live("browser-retained", 1)
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::ObservedLive
+        );
         let recovered = store
             .record_browser_recovery_success("browser-retained", 1, 20)
             .unwrap();
@@ -5785,6 +6188,373 @@ mod tests {
                 }
             }
         ));
+    }
+
+    #[test]
+    fn browser_open_recovery_admission_and_launch_observation_are_atomic() {
+        let directory = TempDirectory::new("browser-open-recovery-admission");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let policy = BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: 3,
+            base_backoff_ms: 1_000,
+            maximum_backoff_ms: 30_000,
+            deadline_ms: 90_000,
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let first = store
+            .reserve_operation(
+                "open-first",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-first"}),
+            )
+            .unwrap();
+        let second = store
+            .reserve_operation(
+                "open-second",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-second"}),
+            )
+            .unwrap();
+
+        let admitted = store
+            .admit_browser_open_recovery(
+                &first.operation_id,
+                first.generation,
+                "browser-dead",
+                10,
+                policy,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        assert!(matches!(
+            admitted.decision,
+            BrowserRecoveryDecision::AdmitReplacement {
+                state: BrowserRecoveryState { generation: 1, .. }
+            }
+        ));
+        assert_eq!(
+            admitted.operation.result,
+            Some(serde_json::json!({
+                "phase": "launch_started",
+                "recovery": {"browserId": "browser-dead", "generation": 1}
+            }))
+        );
+
+        let loser = store
+            .admit_browser_open_recovery(
+                &second.operation_id,
+                second.generation,
+                "browser-dead",
+                10,
+                policy,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        assert_eq!(
+            loser.decision,
+            BrowserRecoveryDecision::AlreadyAdmitted { generation: 1 }
+        );
+        assert_eq!(
+            loser.operation.state,
+            BrowserRuntimeOperationState::Prepared
+        );
+        let observed_live = store
+            .record_browser_open_recovery_observed_live(
+                &first.operation_id,
+                first.generation,
+                serde_json::json!({"phase": "browser_opened"}),
+            )
+            .unwrap();
+        assert_eq!(
+            observed_live.result,
+            Some(serde_json::json!({
+                "phase": "browser_opened",
+                "recovery": {"browserId": "browser-dead", "generation": 1}
+            }))
+        );
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            reopened.load_operation("open-first").unwrap(),
+            observed_live
+        );
+        assert_eq!(
+            reopened.load_operation("open-second").unwrap().state,
+            BrowserRuntimeOperationState::Prepared
+        );
+        assert_eq!(
+            reopened
+                .load_browser_recovery_state("browser-dead")
+                .unwrap()
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::ObservedLive
+        );
+    }
+
+    #[test]
+    fn browser_open_recovery_failure_and_backoff_observation_are_atomic() {
+        let directory = TempDirectory::new("browser-open-recovery-failure");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let policy = BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: 3,
+            base_backoff_ms: 1_000,
+            maximum_backoff_ms: 30_000,
+            deadline_ms: 90_000,
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let failed = store
+            .reserve_operation(
+                "open-failed",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-failed"}),
+            )
+            .unwrap();
+        store
+            .admit_browser_open_recovery(
+                &failed.operation_id,
+                failed.generation,
+                "browser-dead",
+                10,
+                policy,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        let recorded = store
+            .record_browser_open_recovery_failure(
+                &failed.operation_id,
+                failed.generation,
+                20,
+                policy,
+                serde_json::json!({"phase": "launch_cleanup_required"}),
+            )
+            .unwrap();
+        assert_eq!(
+            recorded.result,
+            Some(serde_json::json!({
+                "phase": "launch_cleanup_required",
+                "recovery": {"browserId": "browser-dead", "generation": 1}
+            }))
+        );
+        let recovery = store
+            .load_browser_recovery_state("browser-dead")
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            recovery.phase,
+            agent_browser_service_model::BrowserRecoveryPhase::RetryWait
+        );
+        assert_eq!(recovery.next_eligible_at_ms, 1_020);
+
+        let retry = store
+            .reserve_operation(
+                "open-retry",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-retry"}),
+            )
+            .unwrap();
+        let waiting = store
+            .admit_browser_open_recovery(
+                &retry.operation_id,
+                retry.generation,
+                "browser-dead",
+                1_019,
+                policy,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        assert_eq!(
+            waiting.decision,
+            BrowserRecoveryDecision::WaitForRetry { retry_at_ms: 1_020 }
+        );
+        assert_eq!(
+            waiting.operation.state,
+            BrowserRuntimeOperationState::Prepared
+        );
+    }
+
+    #[test]
+    fn browser_open_publication_and_recovery_success_commit_atomically() {
+        let directory = TempDirectory::new("browser-open-recovery-publication");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let policy = BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: 3,
+            base_backoff_ms: 1_000,
+            maximum_backoff_ms: 30_000,
+            deadline_ms: 90_000,
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let operation = store
+            .reserve_operation(
+                "open-atomic-recovery",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-atomic-recovery"}),
+            )
+            .unwrap();
+        store
+            .admit_browser_open_recovery(
+                &operation.operation_id,
+                operation.generation,
+                "browser-dead",
+                10,
+                policy,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        store
+            .record_browser_open_recovery_observed_live(
+                &operation.operation_id,
+                operation.generation,
+                serde_json::json!({"phase": "browser_opened"}),
+            )
+            .unwrap();
+        let ready = serde_json::json!({
+            "phase": "ready",
+            "recovery": {"browserId": "browser-dead", "generation": 1}
+        });
+        let stale_ready = serde_json::json!({
+            "phase": "ready",
+            "recovery": {"browserId": "browser-dead", "generation": 2}
+        });
+        store
+            .record_operation_observation(
+                &operation.operation_id,
+                operation.generation,
+                stale_ready.clone(),
+            )
+            .unwrap();
+        let base_state = store.load_session_state().unwrap();
+        let mut published_state = base_state.clone();
+        published_state.next_session_sequence = 42;
+        let handoff = RemoteViewHandoff {
+            id: "handoff-recovery".to_string(),
+            state: "ready".to_string(),
+            browser_id: Some("browser-dead".to_string()),
+            ..RemoteViewHandoff::default()
+        };
+        assert_eq!(
+            store.commit_browser_open_with_recovery_success(
+                &operation.operation_id,
+                operation.generation,
+                BrowserOpenRecoveryPublication {
+                    expected_base_state: &base_state,
+                    session_state: &published_state,
+                    handoff: &handoff,
+                    result: stale_ready,
+                    recovered_at_ms: 20,
+                },
+            ),
+            Err("browser_recovery_success_fence_mismatch".to_string())
+        );
+        assert_eq!(store.load_session_state().unwrap(), base_state);
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        assert_eq!(
+            store
+                .load_browser_recovery_state("browser-dead")
+                .unwrap()
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::ObservedLive
+        );
+        store
+            .record_operation_observation(
+                &operation.operation_id,
+                operation.generation,
+                ready.clone(),
+            )
+            .unwrap();
+        let mut conflicting_state = base_state.clone();
+        conflicting_state.next_session_sequence = 7;
+        store.save_session_state(&conflicting_state).unwrap();
+
+        assert_eq!(
+            store.commit_browser_open_with_recovery_success(
+                &operation.operation_id,
+                operation.generation,
+                BrowserOpenRecoveryPublication {
+                    expected_base_state: &base_state,
+                    session_state: &published_state,
+                    handoff: &handoff,
+                    result: ready.clone(),
+                    recovered_at_ms: 20,
+                },
+            ),
+            Err("browser_runtime_operation_base_state_conflict".to_string())
+        );
+        assert_eq!(
+            store
+                .load_browser_recovery_state("browser-dead")
+                .unwrap()
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::ObservedLive
+        );
+        assert!(store.load_handoff_registry().unwrap().handoffs.is_empty());
+        assert_eq!(
+            store.load_operation(&operation.operation_id).unwrap().state,
+            BrowserRuntimeOperationState::Observed
+        );
+
+        store.save_session_state(&base_state).unwrap();
+        let committed = store
+            .commit_browser_open_with_recovery_success(
+                &operation.operation_id,
+                operation.generation,
+                BrowserOpenRecoveryPublication {
+                    expected_base_state: &base_state,
+                    session_state: &published_state,
+                    handoff: &handoff,
+                    result: ready,
+                    recovered_at_ms: 20,
+                },
+            )
+            .unwrap();
+        assert_eq!(committed.state, BrowserRuntimeOperationState::Committed);
+        assert_eq!(store.load_session_state().unwrap(), published_state);
+        assert_eq!(
+            store
+                .load_browser_recovery_state("browser-dead")
+                .unwrap()
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::Recovered
+        );
+        assert_eq!(
+            store
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get("handoff-recovery"),
+            Some(&handoff)
+        );
     }
 
     #[test]
@@ -6011,6 +6781,48 @@ mod tests {
         drop(store);
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_operation("open-2").unwrap(), committed);
+    }
+
+    #[test]
+    fn concurrent_browser_open_operation_ids_do_not_stale_each_other() {
+        let directory = TempDirectory::new("browser-runtime-concurrent-open-operations");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+
+        let first = store
+            .reserve_operation(
+                "open-first",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-first"}),
+            )
+            .unwrap();
+        let second = store
+            .reserve_operation(
+                "open-second",
+                "browser-runtime-open",
+                serde_json::json!({"operationId": "open-second"}),
+            )
+            .unwrap();
+
+        assert_eq!(first.generation, 1);
+        assert_eq!(second.generation, 1);
+        let observed = store
+            .record_operation_observation(
+                &first.operation_id,
+                first.generation,
+                serde_json::json!({"phase": "launch_started"}),
+            )
+            .unwrap();
+        assert_eq!(observed.state, BrowserRuntimeOperationState::Observed);
     }
 
     #[test]

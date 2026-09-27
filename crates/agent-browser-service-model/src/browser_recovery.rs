@@ -34,6 +34,7 @@ pub enum OldBrowserUsability {
 #[serde(rename_all = "snake_case")]
 pub enum BrowserRecoveryPhase {
     Admitted,
+    ObservedLive,
     RetryWait,
     Terminal,
     Recovered,
@@ -121,7 +122,7 @@ pub fn decide_browser_recovery(
 
     if let Some(state) = current {
         match state.phase {
-            BrowserRecoveryPhase::Admitted => {
+            BrowserRecoveryPhase::Admitted | BrowserRecoveryPhase::ObservedLive => {
                 return Ok(BrowserRecoveryDecision::AlreadyAdmitted {
                     generation: state.generation,
                 })
@@ -192,7 +193,7 @@ pub fn record_browser_recovery_success(
     recovered_at_ms: u64,
 ) -> Result<BrowserRecoveryState, String> {
     validate_state(current, &current.browser_id)?;
-    if current.phase != BrowserRecoveryPhase::Admitted || current.generation != generation {
+    if current.phase != BrowserRecoveryPhase::ObservedLive || current.generation != generation {
         return Err("browser_recovery_success_fence_mismatch".to_string());
     }
     let mut next = current.clone();
@@ -201,6 +202,19 @@ pub fn record_browser_recovery_success(
     next.deadline_at_ms = recovered_at_ms;
     next.next_eligible_at_ms = recovered_at_ms;
     next.phase = BrowserRecoveryPhase::Recovered;
+    Ok(next)
+}
+
+pub fn record_browser_recovery_observed_live(
+    current: &BrowserRecoveryState,
+    generation: u64,
+) -> Result<BrowserRecoveryState, String> {
+    validate_state(current, &current.browser_id)?;
+    if current.phase != BrowserRecoveryPhase::Admitted || current.generation != generation {
+        return Err("browser_recovery_observed_live_fence_mismatch".to_string());
+    }
+    let mut next = current.clone();
+    next.phase = BrowserRecoveryPhase::ObservedLive;
     Ok(next)
 }
 
@@ -412,7 +426,13 @@ mod tests {
             record_browser_recovery_success(&first, 2, 20),
             Err("browser_recovery_success_fence_mismatch".to_string())
         );
-        let recovered = record_browser_recovery_success(&first, 1, 20).unwrap();
+        assert_eq!(
+            record_browser_recovery_success(&first, 1, 20),
+            Err("browser_recovery_success_fence_mismatch".to_string())
+        );
+        let observed = record_browser_recovery_observed_live(&first, 1).unwrap();
+        assert_eq!(observed.phase, BrowserRecoveryPhase::ObservedLive);
+        let recovered = record_browser_recovery_success(&observed, 1, 20).unwrap();
         assert_eq!(recovered.phase, BrowserRecoveryPhase::Recovered);
         assert_eq!(recovered.attempts, 0);
         let next = admitted(
