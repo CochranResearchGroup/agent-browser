@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-09-26.p219-route-desktop-v9"
+HELPER_VERSION="2026-09-26.p219-route-desktop-v10"
 ROUTE_USER_LEGACY_COMMENT="agent-browser route-pool RDP session"
 ROUTE_USER_OWNED_COMMENT_PREFIX="agent-browser route-pool RDP session; operation-id="
 
@@ -931,6 +931,7 @@ reclaim_route_display_channel_sockets_identity() {
     expected_gid="$(stat -Lc '%g' "$XRDP_SOCKDIR")"
   fi
   local basenames=(
+    "xrdp_chansrv_socket_$display_number"
     "xrdp_display_$display_number"
     "xrdp_disconnect_display_$display_number"
     "xrdpapi_$display_number"

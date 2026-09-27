@@ -356,6 +356,7 @@ fi
         AGENT_BROWSER_HELPER_TEST_XRDP_SOCKDIR: xrdpSockdir,
       };
       const channelSocketBasenames = [
+        'xrdp_chansrv_socket_21',
         'xrdp_display_21',
         'xrdp_disconnect_display_21',
         'xrdpapi_21',
@@ -743,7 +744,7 @@ fi
         display: ':21',
         xServerPid: 41003,
         lockRemoved: true,
-        xrdpSocketCount: 5,
+        xrdpSocketCount: 6,
       });
       assert.equal(existsSync(displayLock), false);
       for (const basename of channelSocketBasenames) {
