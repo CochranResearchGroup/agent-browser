@@ -34,6 +34,7 @@ import {
   createDevelopmentPresentationProviderSystemEffects,
   createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
+  discoverDevelopmentStaleDisplayCandidates,
 } from './lib/development-presentation-provider-system-effects.js';
 import {
   evaluateDevelopmentPresentationPressure,
@@ -306,6 +307,150 @@ try {
   assert.throws(() => guardedEffects.assertProductionUnchanged(guardedBefore, {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
+  const staleDisplayCalls = [];
+  const staleDisplayEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    discoverStaleDisplayCandidates: () => [{
+      routeUser: namespaced.routes[2].user,
+      displayName: ':13',
+      xServerPid: 43123,
+    }, {
+      routeUser: namespaced.routes[3].user,
+      displayName: ':60',
+      xServerPid: 4294967295,
+    }],
+    probeProvider: () => ({
+      displays: namespaced.routes.slice(0, namespaced.warmSlots).map((route, index) => ({
+        displayReservationId: route.displayReservationId,
+        displayName: `:${57 + index}`,
+        user: route.user,
+        ready: true,
+      })),
+    }),
+    run: (command, args) => {
+      staleDisplayCalls.push([command, args]);
+      if (command === 'sudo') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 1,
+            state: 'reclaimed',
+            display: args[args.indexOf('--display') + 1],
+            xServerPid: Number(args.at(-1)),
+            lockRemoved: true,
+            xrdpSocketCount: 1,
+          }),
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  staleDisplayEffects.openWarmRoutes(namespaced);
+  assert.deepEqual(staleDisplayCalls, [
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+      '--user', namespaced.routes[2].user,
+      '--display', ':13',
+      '--x-server-pid', '43123',
+    ]],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+      '--user', namespaced.routes[3].user,
+      '--display', ':60',
+      '--x-server-pid', '4294967295',
+    ]],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+  ]);
+  const unprovenReclaimCalls = [];
+  const unprovenReclaimEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    discoverStaleDisplayCandidates: () => [{
+      routeUser: namespaced.routes[0].user,
+      displayName: ':13',
+      xServerPid: 43123,
+    }],
+    probeProvider: () => { throw new Error('provider probe must not run'); },
+    run: (command, args) => {
+      unprovenReclaimCalls.push([command, args]);
+      if (command === 'sudo') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 1,
+            state: 'ownership_unproven',
+            code: 'rdp_route_display_lock_pid_live',
+          }),
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.throws(
+    () => unprovenReclaimEffects.openWarmRoutes(namespaced),
+    /exact stale-display reclamation was not proven:rdp_route_display_lock_pid_live/,
+  );
+  assert.deepEqual(unprovenReclaimCalls.map(([command, args]) => [command, args.slice(0, 3)]), [
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+    ]],
+  ]);
+  const staleArtifactRoot = join(fixture, 'stale-display-artifacts');
+  const staleTmp = join(staleArtifactRoot, 'tmp');
+  const staleSockdir = join(staleArtifactRoot, 'sockdir');
+  mkdirSync(staleTmp, { recursive: true });
+  mkdirSync(staleSockdir, { recursive: true });
+  writeFileSync(join(staleTmp, '.X13-lock'), ' 43123\n');
+  writeFileSync(join(staleTmp, '.X99-lock'), ' 49999\n');
+  const staleSocket = join(staleSockdir, 'xrdp_chansrv_socket_60');
+  const socketFixture = spawnSync('python3', ['-c', [
+    'import socket, sys',
+    's = socket.socket(socket.AF_UNIX)',
+    's.bind(sys.argv[1])',
+    's.close()',
+  ].join('; '), staleSocket], { encoding: 'utf8' });
+  assert.equal(socketFixture.status, 0, socketFixture.stderr);
+  const fixtureUid = process.getuid();
+  assert.deepEqual(discoverDevelopmentStaleDisplayCandidates(
+    namespaced,
+    (command, args) => {
+      if (command === 'getent' && args[0] === 'passwd') {
+        const routeIndex = namespaced.routes.findIndex((route) => route.user === args[1]);
+        const uid = routeIndex === namespaced.routes.length - 1
+          ? fixtureUid
+          : fixtureUid + routeIndex + 1;
+        return {
+          status: 0,
+          stdout: `${args[1]}:x:${uid}:1005:agent-browser route-pool RDP session:/home/${args[1]}:/bin/bash\n`,
+          stderr: '',
+        };
+      }
+      return { status: 1, stdout: '', stderr: 'unexpected command' };
+    },
+    { tmpRoot: staleTmp, socketDir: staleSockdir },
+  ), [{
+    routeUser: namespaced.routes.at(-1).user,
+    displayName: ':13',
+    xServerPid: 43123,
+  }, {
+    routeUser: namespaced.routes.at(-1).user,
+    displayName: ':60',
+    xServerPid: 4294967295,
+  }]);
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
   assert.match(routeOpenerSource, /'open',\s*url,\s*'--headers'/);
   assert.doesNotMatch(routeOpenerSource, /'open',\s*'about:blank'/);

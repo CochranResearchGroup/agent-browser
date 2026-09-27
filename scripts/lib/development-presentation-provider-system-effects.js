@@ -4,6 +4,8 @@ import {
   accessSync,
   constants as fsConstants,
   existsSync,
+  lstatSync,
+  readdirSync,
   readFileSync,
   statSync,
   statfsSync,
@@ -29,6 +31,9 @@ import {
 
 const MIN_AVAILABLE_MEMORY_BYTES = 8 * 1024 ** 3;
 const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
+const XRDP_DISPLAY_MIN = 10;
+const XRDP_DISPLAY_MAX = 60;
+const ABSENT_X_SERVER_PID = 4294967295;
 
 /** Read-only admission for a fresh or configured development provider transaction. */
 export function developmentPresentationProviderSystemPreflight({
@@ -193,6 +198,8 @@ export function createDevelopmentPresentationProviderSystemEffects({
   assertDefaultDevelopmentUnchanged,
   publishIngress,
   run = commandResult,
+  discoverStaleDisplayCandidates = discoverDevelopmentStaleDisplayCandidates,
+  probeProvider = probeDevelopmentPresentationProvider,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
     throw new Error('Development provider effects require production identity guards');
@@ -445,13 +452,49 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
       runRequired(
         run,
         'systemctl',
-        ['--user', 'restart', `${runtime.name}-runtime-host.service`],
+        ['--user', 'stop', `${runtime.name}-runtime-host.service`],
         {},
-        'restart development runtime host for route-keeper catalog adoption',
+        'stop development runtime host for exact stale-display reconciliation',
+      );
+      const candidates = discoverStaleDisplayCandidates(descriptor, run);
+      for (const candidate of candidates) {
+        const result = runRequired(run, 'sudo', [
+          '-n',
+          helper,
+          'reclaim-rdp-route-display-lock-exact',
+          '--user',
+          candidate.routeUser,
+          '--display',
+          candidate.displayName,
+          '--x-server-pid',
+          String(candidate.xServerPid),
+        ], {}, `reclaim exact stale display ${candidate.displayName}`);
+        let receipt;
+        try {
+          receipt = JSON.parse(result.stdout);
+        } catch {
+          throw new Error('exact stale-display reclamation returned invalid JSON');
+        }
+        if (
+          receipt.schemaVersion !== 1 ||
+          !['absent', 'reclaimed'].includes(receipt.state) ||
+          receipt.display !== candidate.displayName ||
+          Number(receipt.xServerPid) !== candidate.xServerPid
+        ) {
+          const code = typeof receipt.code === 'string' ? `:${receipt.code}` : '';
+          throw new Error(`exact stale-display reclamation was not proven${code}`);
+        }
+      }
+      runRequired(
+        run,
+        'systemctl',
+        ['--user', 'start', `${runtime.name}-runtime-host.service`],
+        {},
+        'start development runtime host after exact stale-display reconciliation',
       );
       waitFor(
         run,
-        () => probeDevelopmentPresentationProvider(descriptor, { run }).displays.length >=
+        () => probeProvider(descriptor, { run }).displays.length >=
           descriptor.warmSlots,
         90000,
         'runtime-owned development warm routes',
@@ -499,6 +542,100 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         'stop quarantined development provider');
     },
   };
+}
+
+export function discoverDevelopmentStaleDisplayCandidates(
+  descriptor,
+  run,
+  { tmpRoot = '/tmp', socketDir = '/run/xrdp/sockdir' } = {},
+) {
+  const routeUserByUid = new Map();
+  for (const route of descriptor.routes) {
+    const result = run('getent', ['passwd', route.user]);
+    const fields = result.status === 0 ? result.stdout.trim().split(':') : [];
+    const uid = Number(fields[2]);
+    if (fields[0] !== route.user || !Number.isInteger(uid) || uid <= 0) {
+      throw new Error(`development route user identity unavailable: ${route.routeId}`);
+    }
+    const existingUser = routeUserByUid.get(uid);
+    if (existingUser && existingUser !== route.user) {
+      throw new Error(`development route user UID is not unique: ${route.routeId}`);
+    }
+    routeUserByUid.set(uid, route.user);
+  }
+
+  const candidates = new Map();
+  const addCandidate = (routeUser, displayNumber, xServerPid) => {
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) return;
+    const displayName = `:${displayNumber}`;
+    const existing = candidates.get(displayName);
+    if (existing && existing.routeUser !== routeUser) {
+      throw new Error(`development stale display ownership conflicts at ${displayName}`);
+    }
+    candidates.set(displayName, {
+      routeUser,
+      displayName,
+      xServerPid: existing?.xServerPid === ABSENT_X_SERVER_PID
+        ? xServerPid
+        : (existing?.xServerPid ?? xServerPid),
+    });
+  };
+
+  for (const name of directoryEntries(tmpRoot)) {
+    const match = name.match(/^\.X([0-9]+)-lock$/);
+    if (!match) continue;
+    const displayNumber = Number(match[1]);
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) continue;
+    const path = join(tmpRoot, name);
+    let status;
+    try {
+      status = lstatSync(path);
+    } catch {
+      continue;
+    }
+    if (!status.isFile() || status.isSymbolicLink()) continue;
+    const routeUser = routeUserByUid.get(status.uid);
+    if (!routeUser) continue;
+    let xServerPid = ABSENT_X_SERVER_PID;
+    try {
+      const parsed = Number(readFileSync(path, 'utf8').trim());
+      if (Number.isInteger(parsed) && parsed > 0) xServerPid = parsed;
+    } catch {
+      // The root-owned helper will reject rather than delete an unreadable or
+      // malformed lock. Retain the absent-PID sentinel for that exact check.
+    }
+    addCandidate(routeUser, displayNumber, xServerPid);
+  }
+
+  const socketPattern = /^(?:xrdp_chansrv_socket_|xrdp_display_|xrdp_disconnect_display_|xrdpapi_|xrdp_chansrv_audio_(?:in|out)_socket_)([0-9]+)$/;
+  for (const name of directoryEntries(socketDir)) {
+    const match = name.match(socketPattern);
+    if (!match) continue;
+    const displayNumber = Number(match[1]);
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) continue;
+    let status;
+    try {
+      status = lstatSync(join(socketDir, name));
+    } catch {
+      continue;
+    }
+    if (!status.isSocket() || status.isSymbolicLink()) continue;
+    const routeUser = routeUserByUid.get(status.uid);
+    if (!routeUser) continue;
+    addCandidate(routeUser, displayNumber, ABSENT_X_SERVER_PID);
+  }
+
+  return [...candidates.values()].sort((left, right) =>
+    Number(left.displayName.slice(1)) - Number(right.displayName.slice(1)) ||
+    left.routeUser.localeCompare(right.routeUser));
+}
+
+function directoryEntries(path) {
+  try {
+    return readdirSync(path);
+  } catch {
+    return [];
+  }
 }
 
 /** Live elastic lifecycle effects, bounded to one descriptor-owned route. */
