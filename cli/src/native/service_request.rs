@@ -3176,7 +3176,10 @@ mod tests {
         let config = json!({
             "maximumDisplays": 5,
             "maximumBrowsersPerDisplay": 3,
-            "requestDeadlineMs": 45_000
+            "requestDeadlineMs": 45_000,
+            "recoveryRetryBudget": 4,
+            "recoveryBaseBackoffMs": 2_000,
+            "recoveryMaxBackoffMs": 20_000
         });
         let normalized = normalize(json!({
             "action": "service_runtime_config_update",

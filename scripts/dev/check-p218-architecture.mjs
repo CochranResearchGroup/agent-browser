@@ -62,6 +62,8 @@ export function evaluate(root = defaultRoot) {
   const presentationAdmission = beforeDisabledLegacyTests(read(root, 'cli/src/native/presentation_request_admission.rs'));
   const workstationInstall = read(root, 'cli/src/workstation_install.rs');
   const browserSessionStore = read(root, 'cli/src/native/browser_session_store.rs');
+  const actionRuntimeRecovery = read(root, 'cli/src/native/action_runtime/runtime/recovery.rs');
+  const actionRuntimeLaunch = read(root, 'cli/src/native/action_runtime/runtime/launch.rs');
   const routeUserPool = read(root, 'scripts/lib/rdp-route-user-pool.py');
   const routeSetup = read(root, 'scripts/setup-rdp-guac-route-pool.sh');
   const routeSync = read(root, 'scripts/sync-rdp-guac-route-specific-user-pool.sh');
@@ -133,6 +135,10 @@ export function evaluate(root = defaultRoot) {
   )?.[0] || '';
   if (/load_configured_service_state\(|load_default_service_state_snapshot\(/u.test(managedDesktopSnapshot)) {
     add('P03', finding('managed_desktop_json_snapshot', 'cli/src/native/desktop_capture.rs', 'managed desktop capture still reads JSON Service State before projecting SQLite authority'));
+  }
+  if (/AGENT_BROWSER_SERVICE_RECOVERY_(?:RETRY_BUDGET|BASE_BACKOFF_MS|MAX_BACKOFF_MS)|browser_recovery_policy_config_from_env/u.test(`${actionRuntimeRecovery}\n${actionRuntimeLaunch}`)) {
+    add('P03', finding('ordinary_recovery_environment_authority', 'cli/src/native/action_runtime/runtime', 'ordinary recovery reconstructs policy from process environment instead of Browser Runtime SQLite'));
+    add('P05', finding('competing_recovery_policy_authority', 'cli/src/native/action_runtime/runtime', 'ordinary recovery retains a writable policy authority outside Browser Runtime SQLite'));
   }
   const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
   if (credentialVariables.length > 0) {

@@ -6821,8 +6821,8 @@ without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReaso
 Commands:
   state validate        Validate exact Service State bytes with this installed parser without writing or starting a service
   status                Show worker state, browser health, profile lease waits, redacted crash recovery progress, configured site policies, and providers
-  runtime-config get    Read SQLite presentation settings
-  runtime-config set <json-object>  Update presentation settings without revision tokens
+  runtime-config get    Read authoritative SQLite runtime settings
+  runtime-config set <json-object>  Update presentation and recovery settings without revision tokens
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   prune-retained        Dry-run or apply removal of inert retained browser, closed-tab, orphaned profile, and display allocation records
@@ -7859,11 +7859,15 @@ Configuration:
   If a caller exits before the worker reaches a terminal result, the daemon
   releases only that transport connection's profile custody. The accepted job
   continues to its recorded terminal state without being replayed.
-  Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and
-  `service.recoveryMaxBackoffMs` or pass the matching service recovery flags
-  to control when repeated browser relaunch attempts become faulted. Recovery
-  trace events include policySource fields showing whether active recovery
-  values came from defaults, config, environment, or CLI flags.
+  SQLite runtime configuration is the ordinary browser recovery authority.
+  Use `service runtime-config get` or `set` for durable inspection and updates.
+  Existing service recovery config, flags, and environment variables are
+  explicit startup inputs committed before host construction; default-sourced
+  values preserve the current row. Recovery reports `config` provenance.
+  Runtime config fields are requestDeadlineMs, recoveryRetryBudget,
+  recoveryBaseBackoffMs, and recoveryMaxBackoffMs. Recovery maximum backoff
+  must be at least its base backoff. Read committed values with
+  `agent-browser service runtime-config get`.
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.

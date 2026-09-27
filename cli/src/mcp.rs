@@ -1159,6 +1159,9 @@ fn service_mcp_tools() -> Vec<Value> {
                             "maximumBrowsersPerDisplay": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
                             "maximumQueueDepth": { "type": "integer", "minimum": 1, "maximum": 4294967295_u64 },
                             "requestDeadlineMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "recoveryRetryBudget": { "type": "integer", "minimum": 1, "maximum": u32::MAX },
+                            "recoveryBaseBackoffMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "recoveryMaxBackoffMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
                             "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
                         },
                         "description": "Strict partial SQLite runtime configuration for service_runtime_config_update."

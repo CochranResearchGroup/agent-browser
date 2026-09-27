@@ -62,8 +62,7 @@ use crate::native::service_health::{
     persist_reconciled_service_state_in_repository, persist_service_browser_record_in_repository,
     reconcile_service_state, retry_degraded_service_browser_in_state,
     retry_persisted_service_browser_in_repository, retry_service_browser_in_state,
-    BrowserRecoveryPersistence, BrowserRecoveryPolicyConfig, BrowserRecoveryPolicySource,
-    BrowserRecoveryPolicyValueSource, BrowserRecoveryReasonKind,
+    BrowserRecoveryPersistence, BrowserRecoveryReasonKind,
 };
 use crate::native::service_lifecycle::{
     profile_lease_telemetry, select_service_profile_for_request, service_profile_id,
@@ -224,58 +223,6 @@ pub(crate) async fn attach_retained_service_session_browser_for_auto_launch(
     state.start_dialog_handler();
     state.update_stream_client().await;
     Ok(())
-}
-pub(crate) fn env_u64_or_default(name: &str, default: u64) -> u64 {
-    env::var(name)
-        .ok()
-        .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(default)
-}
-pub(crate) fn browser_recovery_policy_config_from_env() -> BrowserRecoveryPolicyConfig {
-    let defaults = BrowserRecoveryPolicyConfig::default();
-    BrowserRecoveryPolicyConfig {
-        retry_budget: env_u64_or_default(
-            "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
-            defaults.retry_budget,
-        ),
-        base_backoff_ms: env_u64_or_default(
-            "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
-            defaults.base_backoff_ms,
-        ),
-        max_backoff_ms: env_u64_or_default(
-            "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
-            defaults.max_backoff_ms,
-        ),
-        source: BrowserRecoveryPolicySource {
-            retry_budget: browser_recovery_policy_source_from_env(
-                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET",
-                "AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET_SOURCE",
-            ),
-            base_backoff_ms: browser_recovery_policy_source_from_env(
-                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS",
-                "AGENT_BROWSER_SERVICE_RECOVERY_BASE_BACKOFF_MS_SOURCE",
-            ),
-            max_backoff_ms: browser_recovery_policy_source_from_env(
-                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS",
-                "AGENT_BROWSER_SERVICE_RECOVERY_MAX_BACKOFF_MS_SOURCE",
-            ),
-        },
-    }
-}
-pub(crate) fn browser_recovery_policy_source_from_env(
-    value_name: &str,
-    source_name: &str,
-) -> BrowserRecoveryPolicyValueSource {
-    env::var(source_name)
-        .ok()
-        .map(|value| BrowserRecoveryPolicyValueSource::from_str(&value))
-        .unwrap_or_else(|| {
-            if env::var(value_name).is_ok() {
-                BrowserRecoveryPolicyValueSource::Env
-            } else {
-                BrowserRecoveryPolicyValueSource::Default
-            }
-        })
 }
 pub(crate) async fn terminate_runtime_browser(
     runtime_profile: Option<String>,

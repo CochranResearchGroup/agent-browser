@@ -181,6 +181,13 @@ mod tests {
             legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy:
+                    agent_browser_service_model::BrowserRecoveryAdmissionPolicy {
+                        maximum_attempts: 3,
+                        base_backoff_ms: 1_000,
+                        maximum_backoff_ms: 30_000,
+                        deadline_ms: 90_000,
+                    },
                 remote_desktop_routes: route_keeper_desktop_routes(authority).unwrap(),
                 default_disposable_policy: None,
             },

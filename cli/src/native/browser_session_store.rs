@@ -53,6 +53,7 @@ const PRESENTATION_SCALE_IN_STATE_SCHEMA_V1: &str = "agent-browser.presentation-
 const BROWSER_RECOVERY_REGISTRY_SCHEMA_V1: &str = "agent-browser.browser-recovery-registry.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
+const BROWSER_RUNTIME_CONFIG_SCHEMA_V2: &str = "agent-browser.runtime-config.v2";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -65,6 +66,9 @@ pub(crate) struct BrowserRuntimeConfig {
     pub(crate) maximum_browsers_per_display: u32,
     pub(crate) maximum_queue_depth: u32,
     pub(crate) request_deadline_ms: u64,
+    pub(crate) recovery_retry_budget: u64,
+    pub(crate) recovery_base_backoff_ms: u64,
+    pub(crate) recovery_max_backoff_ms: u64,
     pub(crate) scale_in_cooldown_ms: u64,
     pub(crate) session_idle_timeout_ms: u64,
     pub(crate) disposable_inactivity_ms: u64,
@@ -84,13 +88,16 @@ pub(crate) struct BrowserRuntimeConfigPatch {
     pub(crate) maximum_browsers_per_display: Option<u32>,
     pub(crate) maximum_queue_depth: Option<u32>,
     pub(crate) request_deadline_ms: Option<u64>,
+    pub(crate) recovery_retry_budget: Option<u64>,
+    pub(crate) recovery_base_backoff_ms: Option<u64>,
+    pub(crate) recovery_max_backoff_ms: Option<u64>,
     pub(crate) scale_in_cooldown_ms: Option<u64>,
 }
 
 impl Default for BrowserRuntimeConfig {
     fn default() -> Self {
         Self {
-            schema_version: BROWSER_RUNTIME_CONFIG_SCHEMA_V1.to_string(),
+            schema_version: BROWSER_RUNTIME_CONFIG_SCHEMA_V2.to_string(),
             revision: 0,
             minimum_ready: 1,
             warm_target: 4,
@@ -98,6 +105,9 @@ impl Default for BrowserRuntimeConfig {
             maximum_browsers_per_display: 4,
             maximum_queue_depth: 32,
             request_deadline_ms: 90_000,
+            recovery_retry_budget: 3,
+            recovery_base_backoff_ms: 1_000,
+            recovery_max_backoff_ms: 30_000,
             scale_in_cooldown_ms: 600_000,
             session_idle_timeout_ms: 300_000,
             disposable_inactivity_ms: 86_400_000,
@@ -107,6 +117,21 @@ impl Default for BrowserRuntimeConfig {
             exact_url_history_maximum_bytes: 64 * 1024 * 1024,
             routine_storage_maximum_bytes: 128 * 1024 * 1024,
         }
+    }
+}
+
+impl BrowserRuntimeConfig {
+    pub(crate) fn recovery_admission_policy(
+        &self,
+    ) -> Result<BrowserRecoveryAdmissionPolicy, String> {
+        BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: u32::try_from(self.recovery_retry_budget)
+                .map_err(|_| "browser_runtime_config_recovery_retry_budget_overflow".to_string())?,
+            base_backoff_ms: self.recovery_base_backoff_ms,
+            maximum_backoff_ms: self.recovery_max_backoff_ms,
+            deadline_ms: self.request_deadline_ms,
+        }
+        .validate()
     }
 }
 
@@ -264,8 +289,9 @@ impl BrowserRuntimeSqliteStore {
                 path.display()
             ));
         }
-        let connection = open_runtime_connection(path)?;
+        let mut connection = open_runtime_connection(path)?;
         validate_runtime_schema(&connection)?;
+        migrate_runtime_config_v1_to_v2(&mut connection)?;
         Ok(Self { connection })
     }
 
@@ -984,6 +1010,23 @@ impl BrowserRuntimeSqliteStore {
         load_runtime_config_row(&self.connection)
     }
 
+    pub(crate) fn reconcile_recovery_bootstrap(
+        &mut self,
+        retry_budget: Option<u64>,
+        base_backoff_ms: Option<u64>,
+        max_backoff_ms: Option<u64>,
+    ) -> Result<BrowserRuntimeConfig, String> {
+        if retry_budget.is_none() && base_backoff_ms.is_none() && max_backoff_ms.is_none() {
+            return self.load_runtime_config();
+        }
+        self.update_runtime_config(BrowserRuntimeConfigPatch {
+            recovery_retry_budget: retry_budget,
+            recovery_base_backoff_ms: base_backoff_ms,
+            recovery_max_backoff_ms: max_backoff_ms,
+            ..BrowserRuntimeConfigPatch::default()
+        })
+    }
+
     pub(crate) fn compare_and_swap_runtime_config(
         &mut self,
         expected_revision: u64,
@@ -1045,6 +1088,15 @@ impl BrowserRuntimeSqliteStore {
         }
         if let Some(value) = patch.request_deadline_ms {
             next.request_deadline_ms = value;
+        }
+        if let Some(value) = patch.recovery_retry_budget {
+            next.recovery_retry_budget = value;
+        }
+        if let Some(value) = patch.recovery_base_backoff_ms {
+            next.recovery_base_backoff_ms = value;
+        }
+        if let Some(value) = patch.recovery_max_backoff_ms {
+            next.recovery_max_backoff_ms = value;
         }
         if let Some(value) = patch.scale_in_cooldown_ms {
             next.scale_in_cooldown_ms = value;
@@ -2121,6 +2173,73 @@ fn load_runtime_config_row(connection: &Connection) -> Result<BrowserRuntimeConf
     Ok(config)
 }
 
+fn migrate_runtime_config_v1_to_v2(connection: &mut Connection) -> Result<(), String> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(|error| format!("browser_runtime_config_migration_begin_failed:{error}"))?;
+    let json: String = transaction
+        .query_row(
+            "SELECT value_json FROM runtime_config WHERE key = ?1",
+            params![RUNTIME_CONFIG_KEY],
+            |row| row.get(0),
+        )
+        .map_err(|error| format!("browser_runtime_config_missing:{error}"))?;
+    let mut value: serde_json::Value = serde_json::from_str(&json)
+        .map_err(|error| format!("browser_runtime_config_invalid:{error}"))?;
+    let schema = value
+        .get("schemaVersion")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| "browser_runtime_config_schema_missing".to_string())?;
+    if schema == BROWSER_RUNTIME_CONFIG_SCHEMA_V2 {
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_runtime_config_migration_commit_failed:{error}"))?;
+        return Ok(());
+    }
+    if schema != BROWSER_RUNTIME_CONFIG_SCHEMA_V1 {
+        return Err(format!(
+            "browser_runtime_config_schema_unsupported:{schema}"
+        ));
+    }
+    let object = value
+        .as_object_mut()
+        .ok_or_else(|| "browser_runtime_config_invalid:expected object".to_string())?;
+    let revision = object
+        .get("revision")
+        .and_then(serde_json::Value::as_u64)
+        .ok_or_else(|| "browser_runtime_config_revision_invalid".to_string())?;
+    object.insert(
+        "schemaVersion".to_string(),
+        serde_json::Value::String(BROWSER_RUNTIME_CONFIG_SCHEMA_V2.to_string()),
+    );
+    object.insert(
+        "revision".to_string(),
+        serde_json::Value::from(
+            revision
+                .checked_add(1)
+                .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?,
+        ),
+    );
+    object.insert(
+        "recoveryRetryBudget".to_string(),
+        serde_json::Value::from(3),
+    );
+    object.insert(
+        "recoveryBaseBackoffMs".to_string(),
+        serde_json::Value::from(1_000),
+    );
+    object.insert(
+        "recoveryMaxBackoffMs".to_string(),
+        serde_json::Value::from(30_000),
+    );
+    let migrated: BrowserRuntimeConfig = serde_json::from_value(value)
+        .map_err(|error| format!("browser_runtime_config_invalid:{error}"))?;
+    save_runtime_config_row(&transaction, &migrated)?;
+    transaction
+        .commit()
+        .map_err(|error| format!("browser_runtime_config_migration_commit_failed:{error}"))
+}
+
 fn save_runtime_config_row(
     connection: &Connection,
     config: &BrowserRuntimeConfig,
@@ -2139,7 +2258,7 @@ fn save_runtime_config_row(
 }
 
 fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> {
-    if config.schema_version != BROWSER_RUNTIME_CONFIG_SCHEMA_V1 {
+    if config.schema_version != BROWSER_RUNTIME_CONFIG_SCHEMA_V2 {
         return Err(format!(
             "browser_runtime_config_schema_unsupported:{}",
             config.schema_version
@@ -2162,6 +2281,18 @@ fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> 
     }
     if config.request_deadline_ms == 0 {
         return Err("browser_runtime_config_request_deadline_invalid".to_string());
+    }
+    if config.recovery_retry_budget == 0 {
+        return Err("browser_runtime_config_recovery_retry_budget_invalid".to_string());
+    }
+    if u32::try_from(config.recovery_retry_budget).is_err() {
+        return Err("browser_runtime_config_recovery_retry_budget_overflow".to_string());
+    }
+    if config.recovery_base_backoff_ms == 0 {
+        return Err("browser_runtime_config_recovery_base_backoff_invalid".to_string());
+    }
+    if config.recovery_max_backoff_ms < config.recovery_base_backoff_ms {
+        return Err("browser_runtime_config_recovery_max_backoff_invalid".to_string());
     }
     if config.scale_in_cooldown_ms == 0 {
         return Err("browser_runtime_config_scale_in_cooldown_invalid".to_string());
@@ -4499,6 +4630,9 @@ mod tests {
         assert_eq!(defaults.maximum_browsers_per_display, 4);
         assert_eq!(defaults.maximum_queue_depth, 32);
         assert_eq!(defaults.request_deadline_ms, 90_000);
+        assert_eq!(defaults.recovery_retry_budget, 3);
+        assert_eq!(defaults.recovery_base_backoff_ms, 1_000);
+        assert_eq!(defaults.recovery_max_backoff_ms, 30_000);
         assert_eq!(defaults.scale_in_cooldown_ms, 600_000);
         assert_eq!(defaults.session_idle_timeout_ms, 300_000);
         assert_eq!(defaults.disposable_inactivity_ms, 86_400_000);
@@ -4521,6 +4655,131 @@ mod tests {
 
         let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
         assert_eq!(reopened.load_runtime_config().unwrap(), committed);
+    }
+
+    #[test]
+    fn runtime_config_v1_migrates_atomically_and_only_once() {
+        let directory = TempDirectory::new("browser-runtime-config-v1-migration");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut legacy = serde_json::to_value(store.load_runtime_config().unwrap()).unwrap();
+        let object = legacy.as_object_mut().unwrap();
+        object.insert(
+            "schemaVersion".to_string(),
+            serde_json::Value::String(BROWSER_RUNTIME_CONFIG_SCHEMA_V1.to_string()),
+        );
+        object.insert("revision".to_string(), serde_json::Value::from(7));
+        object.remove("recoveryRetryBudget");
+        object.remove("recoveryBaseBackoffMs");
+        object.remove("recoveryMaxBackoffMs");
+        store
+            .connection
+            .execute(
+                "UPDATE runtime_config SET value_json = ?1 WHERE key = ?2",
+                params![serde_json::to_string(&legacy).unwrap(), RUNTIME_CONFIG_KEY],
+            )
+            .unwrap();
+        drop(store);
+
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let migrated = reopened.load_runtime_config().unwrap();
+        assert_eq!(migrated.schema_version, BROWSER_RUNTIME_CONFIG_SCHEMA_V2);
+        assert_eq!(migrated.revision, 8);
+        assert_eq!(migrated.recovery_retry_budget, 3);
+        assert_eq!(migrated.recovery_base_backoff_ms, 1_000);
+        assert_eq!(migrated.recovery_max_backoff_ms, 30_000);
+        drop(reopened);
+
+        let reopened_again = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened_again.load_runtime_config().unwrap(), migrated);
+    }
+
+    #[test]
+    fn invalid_v1_runtime_config_migration_rolls_back_without_rewriting_the_row() {
+        let directory = TempDirectory::new("browser-runtime-config-v1-rollback");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let mut legacy = serde_json::to_value(store.load_runtime_config().unwrap()).unwrap();
+        let object = legacy.as_object_mut().unwrap();
+        object.insert(
+            "schemaVersion".to_string(),
+            serde_json::Value::String(BROWSER_RUNTIME_CONFIG_SCHEMA_V1.to_string()),
+        );
+        object.insert("revision".to_string(), serde_json::Value::from(u64::MAX));
+        object.remove("recoveryRetryBudget");
+        object.remove("recoveryBaseBackoffMs");
+        object.remove("recoveryMaxBackoffMs");
+        let original = serde_json::to_string(&legacy).unwrap();
+        store
+            .connection
+            .execute(
+                "UPDATE runtime_config SET value_json = ?1 WHERE key = ?2",
+                params![original, RUNTIME_CONFIG_KEY],
+            )
+            .unwrap();
+        drop(store);
+
+        let error = match BrowserRuntimeSqliteStore::open(&database_path) {
+            Ok(_) => panic!("invalid v1 migration unexpectedly succeeded"),
+            Err(error) => error,
+        };
+        assert_eq!(error, "browser_runtime_config_revision_exhausted");
+        let connection = open_runtime_connection(&database_path).unwrap();
+        let retained: String = connection
+            .query_row(
+                "SELECT value_json FROM runtime_config WHERE key = ?1",
+                params![RUNTIME_CONFIG_KEY],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retained, original);
+    }
+
+    #[test]
+    fn runtime_config_projects_one_equal_host_and_daemon_recovery_policy() {
+        let runtime_config = BrowserRuntimeConfig {
+            request_deadline_ms: 44_000,
+            recovery_retry_budget: 9,
+            recovery_base_backoff_ms: 2_500,
+            recovery_max_backoff_ms: 22_500,
+            ..BrowserRuntimeConfig::default()
+        };
+        let host = runtime_config.recovery_admission_policy().unwrap();
+        let daemon = crate::native::action_runtime::runtime::browser_recovery_policy_config_from_runtime_config(&runtime_config);
+
+        assert_eq!(u64::from(host.maximum_attempts), daemon.retry_budget);
+        assert_eq!(host.base_backoff_ms, daemon.base_backoff_ms);
+        assert_eq!(host.maximum_backoff_ms, daemon.max_backoff_ms);
+        assert_eq!(host.deadline_ms, runtime_config.request_deadline_ms);
+        assert_eq!(
+            daemon.source,
+            crate::native::service_health::BrowserRecoveryPolicySource {
+                retry_budget:
+                    crate::native::service_health::BrowserRecoveryPolicyValueSource::Config,
+                base_backoff_ms:
+                    crate::native::service_health::BrowserRecoveryPolicyValueSource::Config,
+                max_backoff_ms:
+                    crate::native::service_health::BrowserRecoveryPolicyValueSource::Config,
+            }
+        );
     }
 
     #[test]
@@ -4549,6 +4808,102 @@ mod tests {
     }
 
     #[test]
+    fn runtime_config_rejects_invalid_recovery_policy_without_mutation() {
+        let directory = TempDirectory::new("browser-runtime-config-recovery-validation");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let defaults = store.load_runtime_config().unwrap();
+        for (patch, expected) in [
+            (
+                BrowserRuntimeConfigPatch {
+                    recovery_retry_budget: Some(0),
+                    ..Default::default()
+                },
+                "browser_runtime_config_recovery_retry_budget_invalid",
+            ),
+            (
+                BrowserRuntimeConfigPatch {
+                    recovery_base_backoff_ms: Some(0),
+                    ..Default::default()
+                },
+                "browser_runtime_config_recovery_base_backoff_invalid",
+            ),
+            (
+                BrowserRuntimeConfigPatch {
+                    recovery_base_backoff_ms: Some(2_000),
+                    recovery_max_backoff_ms: Some(1_999),
+                    ..Default::default()
+                },
+                "browser_runtime_config_recovery_max_backoff_invalid",
+            ),
+        ] {
+            assert_eq!(
+                store.update_runtime_config(patch),
+                Err(expected.to_string())
+            );
+            assert_eq!(store.load_runtime_config().unwrap(), defaults);
+        }
+
+        assert_eq!(
+            store.reconcile_recovery_bootstrap(Some(u64::MAX), None, None),
+            Err("browser_runtime_config_recovery_retry_budget_overflow".to_string())
+        );
+        assert_eq!(store.load_runtime_config().unwrap(), defaults);
+    }
+
+    #[test]
+    fn recovery_bootstrap_defaults_preserve_sqlite_and_explicit_values_commit_atomically() {
+        let directory = TempDirectory::new("browser-runtime-config-bootstrap");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let explicit = store
+            .reconcile_recovery_bootstrap(Some(7), Some(2_000), Some(20_000))
+            .unwrap();
+        assert_eq!(explicit.revision, 1);
+        assert_eq!(
+            store
+                .reconcile_recovery_bootstrap(None, None, None)
+                .unwrap(),
+            explicit
+        );
+        drop(store);
+
+        let mut reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            reopened
+                .reconcile_recovery_bootstrap(None, Some(3_000), None)
+                .unwrap()
+                .recovery_base_backoff_ms,
+            3_000
+        );
+        assert_eq!(
+            reopened
+                .load_runtime_config()
+                .unwrap()
+                .recovery_retry_budget,
+            7
+        );
+    }
+
+    #[test]
     fn runtime_config_patch_is_atomic_idempotent_and_syncs_keeper_policy() {
         let directory = TempDirectory::new("browser-runtime-config-patch");
         let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
@@ -4571,6 +4926,9 @@ mod tests {
             maximum_browsers_per_display: Some(2),
             maximum_queue_depth: Some(12),
             request_deadline_ms: Some(45_000),
+            recovery_retry_budget: Some(5),
+            recovery_base_backoff_ms: Some(2_000),
+            recovery_max_backoff_ms: Some(20_000),
             scale_in_cooldown_ms: Some(120_000),
         };
 
@@ -4582,6 +4940,9 @@ mod tests {
         assert_eq!(updated.maximum_browsers_per_display, 2);
         assert_eq!(updated.maximum_queue_depth, 12);
         assert_eq!(updated.request_deadline_ms, 45_000);
+        assert_eq!(updated.recovery_retry_budget, 5);
+        assert_eq!(updated.recovery_base_backoff_ms, 2_000);
+        assert_eq!(updated.recovery_max_backoff_ms, 20_000);
         assert_eq!(updated.scale_in_cooldown_ms, 120_000);
         let synchronized = store.load_route_keeper_authority().unwrap();
         assert_eq!(synchronized.policy.minimum_ready, 2);

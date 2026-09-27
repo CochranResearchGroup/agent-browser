@@ -161,13 +161,17 @@ Read or update presentation settings through the ordinary service interface:
 ```bash
 agent-browser service runtime-config get
 agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
+agent-browser service runtime-config set '{"requestDeadlineMs":90000,"recoveryRetryBudget":3,"recoveryBaseBackoffMs":1000,"recoveryMaxBackoffMs":30000}'
+agent-browser service runtime-config get
 ```
 
 Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
-`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`, and
+`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`,
+`recoveryRetryBudget`, `recoveryBaseBackoffMs`, `recoveryMaxBackoffMs`, and
 `scaleInCooldownMs` (default 600000, ten minutes).
 All values must be positive integers, with minimum ready no greater than warm
-target and warm target no greater than maximum displays. Updates atomically
+target, warm target no greater than maximum displays, and recovery maximum
+backoff no less than recovery base backoff. Updates atomically
 persist settings and keeper policy in SQLite; clients need no revision token.
 Repeated identical updates preserve the revision. The generic `service_request`
 interface accepts `service_runtime_config_get` and

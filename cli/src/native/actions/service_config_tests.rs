@@ -584,11 +584,15 @@ async fn runtime_config_roundtrip_does_not_launch_browser() {
     )
     .await;
     assert_eq!(before["success"], true);
-    let update = json!({"id":"config-set","action":"service_runtime_config_update","config":{"warmTarget":2,"maximumDisplays":4}});
+    let update = json!({"id":"config-set","action":"service_runtime_config_update","config":{"warmTarget":2,"maximumDisplays":4,"requestDeadlineMs":45000,"recoveryRetryBudget":5,"recoveryBaseBackoffMs":2000,"recoveryMaxBackoffMs":20000}});
     let after = super::execute_command(&update, &mut state).await;
     assert_eq!(after["success"], true);
     assert_eq!(after["data"]["config"]["warmTarget"], 2);
     assert_eq!(after["data"]["config"]["maximumDisplays"], 4);
+    assert_eq!(after["data"]["config"]["requestDeadlineMs"], 45_000);
+    assert_eq!(after["data"]["config"]["recoveryRetryBudget"], 5);
+    assert_eq!(after["data"]["config"]["recoveryBaseBackoffMs"], 2_000);
+    assert_eq!(after["data"]["config"]["recoveryMaxBackoffMs"], 20_000);
     let replay = super::execute_command(&update, &mut state).await;
     assert_eq!(replay["data"], after["data"]);
     let invalid = super::execute_command(

@@ -873,13 +873,17 @@ Read or update presentation settings through the ordinary service interface:
 ```bash
 agent-browser service runtime-config get
 agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
+agent-browser service runtime-config set '{"requestDeadlineMs":90000,"recoveryRetryBudget":3,"recoveryBaseBackoffMs":1000,"recoveryMaxBackoffMs":30000}'
+agent-browser service runtime-config get
 ```
 
 Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
-`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`, and
+`maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`,
+`recoveryRetryBudget`, `recoveryBaseBackoffMs`, `recoveryMaxBackoffMs`, and
 `scaleInCooldownMs` (default 600000, ten minutes).
 All values must be positive integers, with minimum ready no greater than warm
-target and warm target no greater than maximum displays. Updates atomically
+target, warm target no greater than maximum displays, and recovery maximum
+backoff no less than recovery base backoff. Updates atomically
 persist settings and keeper policy in SQLite; clients need no revision token.
 Repeated identical updates preserve the revision. The generic `service_request`
 interface accepts `service_runtime_config_get` and
@@ -3117,7 +3121,7 @@ If a caller process reaches its own deadline and disconnects first, the daemon p
 
 An authenticated launch-new access plan may reserve a deterministic session route before that session record exists. Execution validates the internal route authorization, current capability, exact profile and owner evidence, and absence of competing live work; the future session does not need to be manually precreated.
 
-Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so operators can see whether each active value came from defaults, config, environment, or CLI flags.
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. SQLite runtime configuration is the ordinary recovery authority. Update `recoveryRetryBudget`, `recoveryBaseBackoffMs`, and `recoveryMaxBackoffMs` with `service runtime-config set`. Existing `service.recovery*` configuration, matching `--service-recovery-*` flags, and `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables are explicit startup inputs committed before host construction; default-sourced startup values preserve the existing row. Runtime recovery reports `config` provenance.
 
 Boolean flags accept an optional `true`/`false` value to override config settings. For example, `--headed false` disables `"headed": true` from config. A bare `--headed` is equivalent to `--headed true`.
 
@@ -5452,7 +5456,7 @@ overwrite stale state or weaken browser, profile, lifecycle, route, or effect
 authority. When the command creates a Service job, its retained result records
 the requested `serviceStateLockTimeoutMs` value for audit.
 
-Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff before marking a browser `faulted`. Set `service.recoveryRetryBudget`, `service.recoveryBaseBackoffMs`, and `service.recoveryMaxBackoffMs`, pass the matching `--service-recovery-*` flags, or use the `AGENT_BROWSER_SERVICE_RECOVERY_*` environment variables to tune this for a service host. Recovery-started trace events include `details.policySource.retryBudget`, `details.policySource.baseBackoffMs`, and `details.policySource.maxBackoffMs` so clients can audit whether each active value came from defaults, config, environment, or CLI flags.
+Browser recovery defaults to 3 relaunch attempts, 1000 ms base backoff, and 30000 ms max backoff. SQLite runtime configuration is authoritative. Use `service runtime-config get` or `set` for durable inspection and updates. Legacy config, flags, and environment values act only as explicit startup inputs committed before host construction; default-sourced startup values leave an existing row unchanged. Runtime recovery reports `config` provenance.
 
 ### WebSocket Protocol
 

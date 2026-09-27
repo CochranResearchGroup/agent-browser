@@ -1460,11 +1460,14 @@ export interface ServiceRuntimeConfigPatch {
   maximumBrowsersPerDisplay?: number;
   maximumQueueDepth?: number;
   requestDeadlineMs?: number;
+  recoveryRetryBudget?: number;
+  recoveryBaseBackoffMs?: number;
+  recoveryMaxBackoffMs?: number;
   scaleInCooldownMs?: number;
 }
 
 export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch> {
-  schemaVersion: "agent-browser.runtime-config.v1" | string;
+  schemaVersion: "agent-browser.runtime-config.v2" | string;
   revision: number;
   sessionIdleTimeoutMs: number;
   disposableInactivityMs: number;

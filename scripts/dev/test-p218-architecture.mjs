@@ -81,6 +81,15 @@ impl StateSource for ManagedDesktopStateSource {
   assert.ok(!desktopSqliteCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'managed_desktop_json_snapshot'));
   assert.ok(!desktopSqliteCut.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'desktop_interaction_parallel_operation_authority'));
 
+  write(root, 'cli/src/native/action_runtime/runtime/launch.rs', 'fn browser_recovery_policy_config_from_env() { std::env::var("AGENT_BROWSER_SERVICE_RECOVERY_RETRY_BUDGET"); }\n');
+  const recoveryEnvironmentCut = evaluate(root);
+  assert.ok(recoveryEnvironmentCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'ordinary_recovery_environment_authority'));
+  assert.ok(recoveryEnvironmentCut.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'competing_recovery_policy_authority'));
+  write(root, 'cli/src/native/action_runtime/runtime/launch.rs', 'fn recovery_policy() { BrowserRuntimeSqliteStore::default_sqlite(); }\n');
+  const recoverySqliteCut = evaluate(root);
+  assert.ok(!recoverySqliteCut.rows.find((row) => row.id === 'P03').findings.some((item) => item.id === 'ordinary_recovery_environment_authority'));
+  assert.ok(!recoverySqliteCut.rows.find((row) => row.id === 'P05').findings.some((item) => item.id === 'competing_recovery_policy_authority'));
+
   write(root, 'cli/src/native/remote_view_handoff.rs', 'pub struct RemoteViewHandoff;\n');
   const finalizerOnlyCut = evaluate(root);
   assert.equal(finalizerOnlyCut.rows.find((row) => row.id === 'P03').status, 'violated');

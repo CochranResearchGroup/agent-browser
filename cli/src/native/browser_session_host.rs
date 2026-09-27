@@ -6,11 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use agent_browser_service_model::{
     BrowserDesktopRoute, BrowserDisposableProfilePolicy, BrowserOpenReservation,
-    BrowserProfileCatalog, BrowserSessionEffects, BrowserSessionManager,
-    BrowserSessionManagerConfig, BrowserSessionState, CloseBrowserSessionResult,
-    CloseBrowserTabResult, ControlInputProvider, OpenBrowserSession, OpenBrowserSessionResult,
-    ReapBrowserSessionsResult, RemoteViewHandoff, RouteKeeperAuthority, RouteKeeperPhase,
-    ServiceState, SessionEndReason, ViewStreamProvider,
+    BrowserProfileCatalog, BrowserRecoveryAdmissionPolicy, BrowserSessionEffects,
+    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    CloseBrowserSessionResult, CloseBrowserTabResult, ControlInputProvider, OpenBrowserSession,
+    OpenBrowserSessionResult, ReapBrowserSessionsResult, RemoteViewHandoff, RouteKeeperAuthority,
+    RouteKeeperPhase, ServiceState, SessionEndReason, ViewStreamProvider,
 };
 use sha2::{Digest, Sha256};
 
@@ -76,6 +76,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         &legacy_state_path,
         BrowserSessionHostConfig {
             session_idle_timeout_ms: runtime_config.session_idle_timeout_ms,
+            recovery_admission_policy: runtime_config.recovery_admission_policy()?,
             remote_desktop_routes,
             default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                 id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
@@ -434,6 +435,7 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
 #[derive(Debug, Clone)]
 pub(crate) struct BrowserSessionHostConfig {
     pub(crate) session_idle_timeout_ms: u64,
+    pub(crate) recovery_admission_policy: BrowserRecoveryAdmissionPolicy,
     pub(crate) remote_desktop_routes: Vec<BrowserDesktopRoute>,
     pub(crate) default_disposable_policy: Option<BrowserDisposableProfilePolicy>,
 }
@@ -455,6 +457,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         legacy_service_state_path: &Path,
         config: BrowserSessionHostConfig,
     ) -> Result<Self, String> {
+        config.recovery_admission_policy.validate()?;
         let mut state = persistence.load_session_state()?;
         let handoffs = persistence.load_manager_handoffs()?;
         let handoffs_changed = bind_legacy_manager_handoffs(&mut state, &handoffs);
@@ -3053,6 +3056,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: Vec::new(),
                 default_disposable_policy: None,
             },
@@ -3123,6 +3132,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: vec![BrowserDesktopRoute {
                     id: "route-slot-01".to_string(),
                     display_name: ":10".to_string(),
@@ -3198,6 +3213,12 @@ mod tests {
         .unwrap();
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: Vec::new(),
             default_disposable_policy: None,
         };
@@ -3257,6 +3278,12 @@ mod tests {
         .unwrap();
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: Vec::new(),
             default_disposable_policy: None,
         };
@@ -3408,6 +3435,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: Vec::new(),
                 default_disposable_policy: None,
             },
@@ -3466,6 +3499,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: Vec::new(),
                 default_disposable_policy: None,
             },
@@ -3579,6 +3618,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: None,
             },
@@ -3920,6 +3965,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: None,
             },
@@ -3996,6 +4047,12 @@ mod tests {
         });
         let host_config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
             default_disposable_policy: None,
         };
@@ -4111,6 +4168,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: None,
             },
@@ -4185,6 +4248,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                     id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
@@ -4298,6 +4367,12 @@ mod tests {
         let recovery_probes = Arc::new(AtomicUsize::new(0));
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: vec![
                 BrowserDesktopRoute {
                     id: "route-slot-01".to_string(),
@@ -4610,6 +4685,12 @@ mod tests {
         let recovery_probes = Arc::new(AtomicUsize::new(0));
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: vec![BrowserDesktopRoute {
                 id: "route-slot-01".to_string(),
                 display_name: ":10".to_string(),
@@ -4754,6 +4835,12 @@ mod tests {
         let recovery_probes = Arc::new(AtomicUsize::new(0));
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: vec![BrowserDesktopRoute {
                 id: "route-slot-01".to_string(),
                 display_name: ":10".to_string(),
@@ -4852,6 +4939,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: Vec::new(),
                 default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                     id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
@@ -4927,6 +5020,12 @@ mod tests {
         .unwrap();
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: vec![
                 BrowserDesktopRoute {
                     id: "slot-a".to_string(),
@@ -5032,6 +5131,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: Vec::new(),
                 default_disposable_policy: None,
             },
@@ -5091,6 +5196,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: vec![BrowserDesktopRoute {
                     id: "slot-a".to_string(),
                     display_name: ":10".to_string(),
@@ -5273,6 +5384,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: None,
             },
@@ -5343,6 +5460,12 @@ mod tests {
             &legacy_path,
             BrowserSessionHostConfig {
                 session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
                 remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
                 default_disposable_policy: None,
             },
@@ -5438,6 +5561,12 @@ mod tests {
         .unwrap();
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
             remote_desktop_routes: Vec::new(),
             default_disposable_policy: None,
         };

@@ -917,8 +917,24 @@ fn unsafe_claim_any_allows_daemon_reuse(auth_token_available: bool) -> bool {
 }
 
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
-    cache_runtime_lane_config(session, opts);
     let _startup_lock = acquire_runtime_host_startup_lock(session)?;
+    crate::native::browser_session_store::BrowserRuntimeSqliteStore::migrate_default_from_legacy()?;
+    crate::native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+        .reconcile_recovery_bootstrap(
+            explicit_recovery_bootstrap_value(
+                opts.service_recovery_retry_budget,
+                opts.service_recovery_retry_budget_source,
+            ),
+            explicit_recovery_bootstrap_value(
+                opts.service_recovery_base_backoff_ms,
+                opts.service_recovery_base_backoff_ms_source,
+            ),
+            explicit_recovery_bootstrap_value(
+                opts.service_recovery_max_backoff_ms,
+                opts.service_recovery_max_backoff_ms_source,
+            ),
+        )?;
+    cache_runtime_lane_config(session, opts);
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse
     // an existing daemon they can reach over the socket.
@@ -1146,6 +1162,10 @@ pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult
     );
 
     Err(format!("Daemon failed to start ({})", endpoint_info))
+}
+
+fn explicit_recovery_bootstrap_value(value: u64, source: &str) -> Option<u64> {
+    (source != "default").then_some(value)
 }
 
 fn connect(session: &str) -> Result<Connection, String> {
@@ -2214,5 +2234,22 @@ mod tests {
         );
 
         let _ = fs::remove_dir_all(&dir);
+    }
+}
+
+#[cfg(test)]
+mod recovery_bootstrap_tests {
+    use super::explicit_recovery_bootstrap_value;
+
+    #[test]
+    fn recovery_bootstrap_provenance_preserves_defaults_and_forwards_every_explicit_source() {
+        assert_eq!(explicit_recovery_bootstrap_value(3, "default"), None);
+        for source in ["config", "env", "cli"] {
+            assert_eq!(
+                explicit_recovery_bootstrap_value(7, source),
+                Some(7),
+                "source {source} must remain an explicit SQLite bootstrap input"
+            );
+        }
     }
 }

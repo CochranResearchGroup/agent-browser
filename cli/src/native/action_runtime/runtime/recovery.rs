@@ -9,7 +9,6 @@ use super::daemon::{
     FetchPausedRequest, HarEntry, MouseState, PendingConfirmation, PendingDialog, RouteEntry,
     TrackedRequest,
 };
-use super::launch::browser_recovery_policy_config_from_env;
 use crate::native::browser::{
     should_track_target, BrowserManager, BrowserShutdownOutcome, PageInfo, ProcessExitObservation,
     WaitUntil,
@@ -257,7 +256,7 @@ impl DaemonState {
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(30_000),
-            browser_recovery_policy_config: browser_recovery_policy_config_from_env(),
+            browser_recovery_policy_config: BrowserRecoveryPolicyConfig::default(),
             current_cancellation: None,
             pending_shared_profile_acquisition: None,
             browser_session_manager_owned: false,
@@ -333,27 +332,11 @@ impl DaemonState {
         if let Some(timeout) = config.default_timeout_ms {
             state.default_timeout_ms = timeout;
         }
-        if config.recovery_retry_budget > 0
-            && config.recovery_base_backoff_ms > 0
-            && config.recovery_max_backoff_ms > 0
-        {
-            state.browser_recovery_policy_config = BrowserRecoveryPolicyConfig {
-                retry_budget: config.recovery_retry_budget,
-                base_backoff_ms: config.recovery_base_backoff_ms,
-                max_backoff_ms: config.recovery_max_backoff_ms,
-                source: BrowserRecoveryPolicySource {
-                    retry_budget: BrowserRecoveryPolicyValueSource::from_str(
-                        &config.recovery_retry_budget_source,
-                    ),
-                    base_backoff_ms: BrowserRecoveryPolicyValueSource::from_str(
-                        &config.recovery_base_backoff_ms_source,
-                    ),
-                    max_backoff_ms: BrowserRecoveryPolicyValueSource::from_str(
-                        &config.recovery_max_backoff_ms_source,
-                    ),
-                },
-            };
-        }
+        let runtime_config =
+            crate::native::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                .load_runtime_config()?;
+        state.browser_recovery_policy_config =
+            browser_recovery_policy_config_from_runtime_config(&runtime_config);
         Ok(state)
     }
     pub(crate) fn subscribe_to_browser_events(&mut self) {
@@ -1285,6 +1268,21 @@ impl DaemonState {
             detached_iframe_sessions,
             renderer_crashes,
         }
+    }
+}
+
+pub(crate) fn browser_recovery_policy_config_from_runtime_config(
+    runtime_config: &crate::native::browser_session_store::BrowserRuntimeConfig,
+) -> BrowserRecoveryPolicyConfig {
+    BrowserRecoveryPolicyConfig {
+        retry_budget: runtime_config.recovery_retry_budget,
+        base_backoff_ms: runtime_config.recovery_base_backoff_ms,
+        max_backoff_ms: runtime_config.recovery_max_backoff_ms,
+        source: BrowserRecoveryPolicySource {
+            retry_budget: BrowserRecoveryPolicyValueSource::Config,
+            base_backoff_ms: BrowserRecoveryPolicyValueSource::Config,
+            max_backoff_ms: BrowserRecoveryPolicyValueSource::Config,
+        },
     }
 }
 pub(crate) fn runtime_profile_pid(runtime_profile: Option<&str>) -> Option<u32> {
