@@ -114,7 +114,7 @@ for (const file of files) {
     assert.equal(report.schemaVersion, 1, `${file} status-json schema version should be stable`);
     assert.match(
       report.helperVersion,
-      /^2026-09-26\.p219-route-desktop-v\d+$/,
+      /^2026-09-27\.p219-route-desktop-v\d+$/,
       `${file} status-json should expose the P219 helper contract version`,
     );
     assert.equal(report.routeDesktopSession?.ready, true);
@@ -134,6 +134,10 @@ for (const file of files) {
     assert.equal(report.staleDisplayLockReclamation?.requiresSessionAbsent, true);
     assert.equal(report.staleDisplayLockReclamation?.requiresSocketAbsent, true);
     assert.equal(report.staleDisplayLockReclamation?.requiresPidAbsent, true);
+    assert.equal(
+      report.staleDisplayLockReclamation?.acceptsProvablyForeignPidReuse,
+      true,
+    );
     assert.equal(report.staleDisplayLockReclamation?.retainsInodeIdentity, true);
     assert.equal(report.staleDisplayLockReclamation?.integratedWithAbsenceVerification, true);
     assert.equal(report.staleDisplayLockReclamation?.reclaimsXrdpChannelSockets, true);
@@ -718,6 +722,50 @@ fi
       assert.equal(existsSync(displayLock), false);
       for (const basename of channelSocketBasenames) {
         assert.equal(existsSync(join(xrdpSockdir, basename)), false);
+      }
+
+      mkdirSync(join(proc, '41003'), { recursive: true });
+      writeFileSync(join(proc, '41003', 'status'), 'Name:\tMemoryInfra\nUid:\t1000\t1000\t1000\t1000\n');
+      writeFileSync(displayLock, '      41003\n', { mode: 0o444 });
+      chmodSync(displayLock, 0o444);
+      createStaleChannelSockets();
+      const foreignPidReuse = spawnSync('bash', reclaimArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(foreignPidReuse.status, 0, foreignPidReuse.stderr);
+      assert.deepEqual(JSON.parse(foreignPidReuse.stdout), {
+        schemaVersion: 1,
+        state: 'reclaimed',
+        display: ':21',
+        xServerPid: 41003,
+        lockRemoved: true,
+        xrdpSocketCount: 6,
+      });
+      assert.equal(existsSync(displayLock), false);
+      for (const basename of channelSocketBasenames) {
+        assert.equal(existsSync(join(xrdpSockdir, basename)), false);
+      }
+
+      writeFileSync(join(proc, '41003', 'status'), 'Name:\tXorg\nUid:\t2001\t2001\t2001\t2001\n');
+      writeFileSync(displayLock, '      41003\n', { mode: 0o444 });
+      chmodSync(displayLock, 0o444);
+      createStaleChannelSockets();
+      const routePidStillLive = spawnSync('bash', reclaimArgs, {
+        encoding: 'utf8',
+        env: { ...helperEnv, FIXTURE_LOGINCTL_MODE: 'absent' },
+      });
+      assert.equal(routePidStillLive.status, 0, routePidStillLive.stderr);
+      assert.deepEqual(JSON.parse(routePidStillLive.stdout), {
+        schemaVersion: 1,
+        state: 'ownership_unproven',
+        code: 'rdp_route_display_lock_pid_live',
+      });
+      assert.equal(existsSync(displayLock), true);
+      rmSync(join(proc, '41003'), { recursive: true });
+      rmSync(displayLock, { force: true });
+      for (const basename of channelSocketBasenames) {
+        rmSync(join(xrdpSockdir, basename), { force: true });
       }
 
       writeFileSync(displayLock, '      99999\n', { mode: 0o444 });

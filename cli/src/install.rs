@@ -4531,7 +4531,7 @@ mod tests {
                 "success": true,
                 "parsed": {
                     "schemaVersion": 1,
-                    "helperVersion": "2026-09-26.p219-route-desktop-v8",
+                    "helperVersion": "2026-09-27.p219-route-desktop-v11",
                     "routeDesktopSession": {
                         "ready": true,
                         "terminalStartupDetected": false
@@ -4570,6 +4570,7 @@ mod tests {
                         "requiresSessionAbsent": true,
                         "requiresSocketAbsent": true,
                         "requiresPidAbsent": true,
+                        "acceptsProvablyForeignPidReuse": true,
                         "retainsInodeIdentity": true,
                         "integratedWithAbsenceVerification": true,
                         "reclaimsXrdpChannelSockets": true,
@@ -6009,7 +6010,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-26.p219-route-desktop-v8",
+                "helperVersion": "2026-09-27.p219-route-desktop-v11",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -6033,6 +6034,7 @@ EOF
                     "requiresSessionAbsent": true,
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
+                    "acceptsProvablyForeignPidReuse": true,
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,
@@ -6064,7 +6066,7 @@ EOF
     fn doctor_redaction_preserves_typed_route_user_credential_contract() {
         let status = json!({
             "schemaVersion": 1,
-            "helperVersion": "2026-09-26.p219-route-desktop-v8",
+            "helperVersion": "2026-09-27.p219-route-desktop-v11",
             "routeDesktopSession": {
                 "ready": true,
                 "terminalStartupDetected": false
@@ -6088,6 +6090,7 @@ EOF
                 "requiresSessionAbsent": true,
                 "requiresSocketAbsent": true,
                 "requiresPidAbsent": true,
+                "acceptsProvablyForeignPidReuse": true,
                 "retainsInodeIdentity": true,
                 "integratedWithAbsenceVerification": true,
                 "reclaimsXrdpChannelSockets": true,
@@ -6151,7 +6154,7 @@ EOF
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-26.p219-route-desktop-v8",
+                "helperVersion": "2026-09-27.p219-route-desktop-v11",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -6175,6 +6178,7 @@ EOF
                     "requiresSessionAbsent": true,
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
+                    "acceptsProvablyForeignPidReuse": true,
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,

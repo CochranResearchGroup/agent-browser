@@ -320,17 +320,20 @@ try {
       schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
       retained: [],
     }),
-    displayPidAbsent: (pid) => {
+    displayPidAbsent: (pid, routeUid) => {
       assert.equal(pid, 43123);
+      assert.equal(routeUid, 2003);
       staleDisplayPidAbsenceChecks += 1;
       return staleDisplayPidAbsenceChecks > 1;
     },
     discoverStaleDisplayCandidates: () => [{
       routeUser: namespaced.routes[2].user,
+      routeUid: 2003,
       displayName: ':13',
       xServerPid: 43123,
     }, {
       routeUser: namespaced.routes[3].user,
+      routeUid: 2004,
       displayName: ':60',
       xServerPid: 4294967295,
     }],
@@ -453,6 +456,7 @@ try {
     }),
     discoverStaleDisplayCandidates: () => [{
       routeUser: namespaced.routes[0].user,
+      routeUid: 2001,
       displayName: ':13',
       xServerPid: 43123,
     }],
@@ -519,10 +523,12 @@ try {
     { tmpRoot: staleTmp, socketDir: staleSockdir },
   ), [{
     routeUser: namespaced.routes.at(-1).user,
+    routeUid: fixtureUid,
     displayName: ':13',
     xServerPid: 43123,
   }, {
     routeUser: namespaced.routes.at(-1).user,
+    routeUid: fixtureUid,
     displayName: ':60',
     xServerPid: 4294967295,
   }]);
@@ -985,6 +991,16 @@ try {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
       }
+      if (command === 'sudo' && args.at(-1) === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: '2026-09-27.p219-route-desktop-v11',
+            staleDisplayLockReclamation: { acceptsProvablyForeignPidReuse: true },
+          }),
+          stderr: '',
+        };
+      }
       if (command === 'sudo') return { status: 0, stdout: 'ready\n', stderr: '' };
       if (command === 'systemctl') return { status: 0, stdout: 'active\n', stderr: '' };
       if (command === 'ss') return { status: 0, stdout: '', stderr: '' };
@@ -1399,6 +1415,16 @@ try {
     run(command, args) {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
+      }
+      if (command === 'sudo' && args.at(-1) === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: '2026-09-27.p219-route-desktop-v11',
+            staleDisplayLockReclamation: { acceptsProvablyForeignPidReuse: true },
+          }),
+          stderr: '',
+        };
       }
       if (command === 'sudo') return { status: 0, stdout: 'ready\n', stderr: '' };
       if (command === 'systemctl') return { status: 0, stdout: 'active\n', stderr: '' };

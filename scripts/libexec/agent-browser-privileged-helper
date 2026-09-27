@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-HELPER_VERSION="2026-09-26.p219-route-desktop-v10"
+HELPER_VERSION="2026-09-27.p219-route-desktop-v11"
 ROUTE_USER_LEGACY_COMMENT="agent-browser route-pool RDP session"
 ROUTE_USER_OWNED_COMMENT_PREFIX="agent-browser route-pool RDP session; operation-id="
 
@@ -206,7 +206,7 @@ status_json() {
     apparmor_profile_loaded="true"
   fi
   cat <<EOF
-{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"reclaimsPrimaryChansrvSocket":true,"requiresInactiveSocketPaths":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
+{"schemaVersion":1,"helperVersion":"$HELPER_VERSION","routeDesktopSession":{"ready":true,"state":"browser_control_ready_template","terminalStartupDetected":false,"startsWindowManager":true,"keepsSessionAlive":true},"routeSessionObservation":{"supported":true,"exactCgroupV2Identity":true,"xServerProcessIdentity":true,"x11SocketOwnership":true},"routeSessionTermination":{"supported":true,"exactRouteUser":false,"idempotentWhenAbsent":false,"exactCgroupV2Identity":true,"retainedDirectoryIdentity":true,"usesCgroupKill":true,"broadUserTermination":false},"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"acceptsProvablyForeignPidReuse":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"reclaimsPrimaryChansrvSocket":true,"requiresInactiveSocketPaths":true},"displayAccess":{"supportsFilesystemX11Socket":true,"supportsAbstractX11Socket":true,"boundedXhostTimeoutSeconds":2},"routeUserCredentialUpdate":{"pamBypassed":true,"cryptMethod":"SHA512","shaRounds":100000},"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true},"managedChromeSandboxPolicy":{"profileName":"agent-browser-managed-chrome","loaded":$apparmor_profile_loaded}}
 EOF
 }
 
@@ -795,13 +795,23 @@ verify_rdp_route_session_absent() {
   printf '{"schemaVersion":1,"state":"absent","witnessDigest":"%s","verification":{"sessionInstanceAbsent":true,"xServerInstanceAbsent":true,"ownedScopeEmptyOrAbsent":true}}\n' "$witness_digest"
 }
 
+# A numeric PID may be reused after XRDP teardown. Treat it as the original
+# route X server only while the kernel still attributes it to the route UID.
+route_display_pid_identity_absent() {
+  local x_server_pid="$1"
+  [[ ! -d "$PROC_ROOT/$x_server_pid" ]] && return 0
+  local observed_uid
+  observed_uid="$(awk '/^Uid:/ { print $2; exit }' "$PROC_ROOT/$x_server_pid/status" 2>/dev/null || true)"
+  [[ "$observed_uid" =~ ^[0-9]+$ && "$observed_uid" != "$W_ROUTE_UID" ]]
+}
+
 reclaim_route_display_lock_file_identity() {
   local display_name="$1"
   local x_server_pid="$2"
   W_LOCK_RECLAIM_STATE="ownership_unproven"
   W_LOCK_RECLAIM_CODE="rdp_route_display_lock_identity_invalid"
 
-  if [[ -d "$PROC_ROOT/$x_server_pid" ]]; then
+  if ! route_display_pid_identity_absent "$x_server_pid"; then
     W_LOCK_RECLAIM_CODE="rdp_route_display_lock_pid_live"
     return 0
   fi
@@ -859,8 +869,9 @@ reclaim_route_display_lock_file_identity() {
 
   local current_identity
   current_identity="$(stat -c '%d:%i:%u:%h:%a:%F' "$lock_path" 2>/dev/null || true)"
-  if [[ "$current_identity" != "$device:$inode:$lock_uid:1:444:regular file" \
-    || -d "$PROC_ROOT/$x_server_pid" ]] || display_socket_exists "$display_number"; then
+  if [[ "$current_identity" != "$device:$inode:$lock_uid:1:444:regular file" ]] \
+    || ! route_display_pid_identity_absent "$x_server_pid" \
+    || display_socket_exists "$display_number"; then
     W_LOCK_RECLAIM_CODE="rdp_route_display_lock_identity_changed"
     return 0
   fi

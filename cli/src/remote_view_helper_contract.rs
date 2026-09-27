@@ -3,7 +3,9 @@
 //! Route-user password updates are unattended only when the helper advertises
 //! the fixed SHA-512 crypt path that bypasses `chpasswd`'s PAM default. Exact
 //! route replacement also requires identity-bound stale X display-lock
-//! reclamation after session, process, socket, and cgroup absence is proven.
+//! reclamation after session, socket, cgroup, and original route-user process
+//! identity absence is proven. A reused numeric PID is accepted only when the
+//! kernel reports a different UID from the exact route user.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -81,6 +83,10 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .and_then(Value::as_bool)
             == Some(true)
         && report
+            .pointer("/parsed/staleDisplayLockReclamation/acceptsProvablyForeignPidReuse")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
             .pointer("/parsed/staleDisplayLockReclamation/retainsInodeIdentity")
             .and_then(Value::as_bool)
             == Some(true)
@@ -107,7 +113,7 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
         && report
             .pointer("/parsed/helperVersion")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-09-26.p219-route-desktop-v"))
+            .is_some_and(|value| value.starts_with("2026-09-27.p219-route-desktop-v"))
         && report
             .pointer("/parsed/routeDesktopSession/ready")
             .and_then(Value::as_bool)
@@ -292,7 +298,7 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-09-26.p219-route-desktop-v9",
+                "helperVersion": "2026-09-27.p219-route-desktop-v11",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
@@ -318,6 +324,7 @@ mod tests {
                     "requiresSessionAbsent": true,
                     "requiresSocketAbsent": true,
                     "requiresPidAbsent": true,
+                    "acceptsProvablyForeignPidReuse": true,
                     "retainsInodeIdentity": true,
                     "integratedWithAbsenceVerification": true,
                     "reclaimsXrdpChannelSockets": true,
@@ -391,6 +398,22 @@ mod tests {
             .as_object_mut()
             .expect("parsed helper status must be an object")
             .remove("routeUserOwnedProvisioning");
+
+        let report = evaluate_helper_contract(source, &status, true, true, true);
+
+        assert_eq!(report["ready"], false);
+        assert_eq!(report["capabilities"]["ready"], false);
+        assert_eq!(report["missingRequiredCommands"], json!([]));
+    }
+
+    #[test]
+    fn helper_without_foreign_pid_reuse_proof_is_stale() {
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let mut status = compatible_status();
+        status["parsed"]["staleDisplayLockReclamation"]
+            .as_object_mut()
+            .expect("stale display-lock capabilities must be an object")
+            .remove("acceptsProvablyForeignPidReuse");
 
         let report = evaluate_helper_contract(source, &status, true, true, true);
 

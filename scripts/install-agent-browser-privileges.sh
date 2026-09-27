@@ -543,7 +543,7 @@ helper_contract_ready() {
     '"retainedDirectoryIdentity":true' \
     '"usesCgroupKill":true' \
     '"broadUserTermination":false' \
-    '"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"reclaimsPrimaryChansrvSocket":true,"requiresInactiveSocketPaths":true}' \
+    '"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"acceptsProvablyForeignPidReuse":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"reclaimsPrimaryChansrvSocket":true,"requiresInactiveSocketPaths":true}' \
     '"supportsFilesystemX11Socket":true' \
     '"supportsAbstractX11Socket":true' \
     '"boundedXhostTimeoutSeconds":2' \

@@ -94,6 +94,24 @@ export function developmentPresentationProviderSystemPreflight({
   const helperCheck = run('sudo', ['-n', helper, 'check']);
   checks.push(check('privileged-helper-noninteractive', helperCheck.status === 0,
     helperCheck.status === 0 ? 'ready' : commandError(helperCheck)));
+  const helperStatus = run('sudo', ['-n', helper, 'status-json']);
+  let helperCapabilities = null;
+  try {
+    helperCapabilities = helperStatus.status === 0
+      ? JSON.parse(helperStatus.stdout)
+      : null;
+  } catch {
+    helperCapabilities = null;
+  }
+  const foreignPidReuseReady =
+    helperCapabilities?.staleDisplayLockReclamation?.acceptsProvablyForeignPidReuse === true;
+  checks.push(check(
+    'privileged-helper-foreign-pid-reuse',
+    foreignPidReuseReady,
+    foreignPidReuseReady
+      ? helperCapabilities.helperVersion || 'ready'
+      : commandError(helperStatus) || 'capability missing',
+  ));
   const xrdp = run('systemctl', ['is-active', 'xrdp', 'xrdp-sesman']);
   checks.push(check('shared-xrdp-substrate', xrdp.status === 0, xrdp.status === 0 ? 'active' : commandError(xrdp)));
   checks.push(check('shared-xrdp-restart-prohibited', descriptor.rdpTarget.restartAllowed === false,
@@ -269,7 +287,14 @@ export function createDevelopmentPresentationProviderSystemEffects({
   discoverStaleDisplayCandidates = discoverDevelopmentStaleDisplayCandidates,
   readRouteKeeperRecovery = (descriptor) =>
     readDevelopmentRouteKeeperRecoveryState(descriptor, { run }),
-  displayPidAbsent = (pid) => !existsSync(`/proc/${pid}`),
+  displayPidAbsent = (pid, routeUid) => {
+    try {
+      return statSync(`/proc/${pid}`).uid !== routeUid;
+    } catch (error) {
+      if (error?.code === 'ENOENT') return true;
+      throw error;
+    }
+  },
   probeProvider = probeDevelopmentPresentationProvider,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
@@ -556,7 +581,7 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
         if (candidate.xServerPid !== ABSENT_X_SERVER_PID) {
           waitFor(
             run,
-            () => displayPidAbsent(candidate.xServerPid),
+            () => displayPidAbsent(candidate.xServerPid, candidate.routeUid),
             15000,
             `exact stale display ${candidate.displayName} PID absence`,
             100,
@@ -662,15 +687,16 @@ export function discoverDevelopmentStaleDisplayCandidates(
       throw new Error(`development route user identity unavailable: ${route.routeId}`);
     }
     const existingUser = routeUserByUid.get(uid);
-    if (existingUser && existingUser !== route.user) {
+    if (existingUser && existingUser.routeUser !== route.user) {
       throw new Error(`development route user UID is not unique: ${route.routeId}`);
     }
-    routeUserByUid.set(uid, route.user);
+    routeUserByUid.set(uid, { routeUser: route.user, routeUid: uid });
   }
 
   const candidates = new Map();
-  const addCandidate = (routeUser, displayNumber, xServerPid) => {
+  const addCandidate = (routeIdentity, displayNumber, xServerPid) => {
     if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) return;
+    const { routeUser, routeUid } = routeIdentity;
     const displayName = `:${displayNumber}`;
     const existing = candidates.get(displayName);
     if (existing && existing.routeUser !== routeUser) {
@@ -678,6 +704,7 @@ export function discoverDevelopmentStaleDisplayCandidates(
     }
     candidates.set(displayName, {
       routeUser,
+      routeUid,
       displayName,
       xServerPid: existing?.xServerPid === ABSENT_X_SERVER_PID
         ? xServerPid
@@ -698,8 +725,8 @@ export function discoverDevelopmentStaleDisplayCandidates(
       continue;
     }
     if (!status.isFile() || status.isSymbolicLink()) continue;
-    const routeUser = routeUserByUid.get(status.uid);
-    if (!routeUser) continue;
+    const routeIdentity = routeUserByUid.get(status.uid);
+    if (!routeIdentity) continue;
     let xServerPid = ABSENT_X_SERVER_PID;
     try {
       const parsed = Number(readFileSync(path, 'utf8').trim());
@@ -708,7 +735,7 @@ export function discoverDevelopmentStaleDisplayCandidates(
       // The root-owned helper will reject rather than delete an unreadable or
       // malformed lock. Retain the absent-PID sentinel for that exact check.
     }
-    addCandidate(routeUser, displayNumber, xServerPid);
+    addCandidate(routeIdentity, displayNumber, xServerPid);
   }
 
   const socketPattern = /^(?:xrdp_chansrv_socket_|xrdp_display_|xrdp_disconnect_display_|xrdpapi_|xrdp_chansrv_audio_(?:in|out)_socket_)([0-9]+)$/;
@@ -724,9 +751,9 @@ export function discoverDevelopmentStaleDisplayCandidates(
       continue;
     }
     if (!status.isSocket() || status.isSymbolicLink()) continue;
-    const routeUser = routeUserByUid.get(status.uid);
-    if (!routeUser) continue;
-    addCandidate(routeUser, displayNumber, ABSENT_X_SERVER_PID);
+    const routeIdentity = routeUserByUid.get(status.uid);
+    if (!routeIdentity) continue;
+    addCandidate(routeIdentity, displayNumber, ABSENT_X_SERVER_PID);
   }
 
   return [...candidates.values()].sort((left, right) =>
