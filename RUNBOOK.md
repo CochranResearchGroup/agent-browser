@@ -1,5 +1,37 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M3-P2B source-qualified
+
+[Plan 0219 version 27](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `c96b7dfd` completes M3-P2B with one Browser Runtime SQLite
+recovery-policy authority. Runtime-config v1 migrates atomically to v2 with the
+preserved 3 / 1000 ms / 30000 ms / 90000 ms defaults; retry budget conversion
+is checked; invalid and conflicting updates leave the row unchanged. Default
+startup provenance preserves an operator-mutated row. Explicit config,
+environment, and CLI provenance commits under the shared runtime-host startup
+lock before lane construction. Host admission and daemon recovery consume the
+same row, and daemon policy reports `config` provenance.
+
+The required typed Service request, MCP schema, generated client, help, README,
+skill, and docs-site surfaces agree. The affected Rust suites pass 43 store, 23
+host, 4 handoff-recovery, and 5 navigation-recovery tests plus focused config
+and provenance cases. Strict workspace Clippy, formatting, client generation,
+types, request helper, API/MCP parity, architecture red/green, coverage, no-launch
+Service contracts, remote-view docs, docs production build, and the selected
+route/workstation fixtures pass. The aggregate client wrapper stops in an
+unrelated stale P157 oracle before affected lanes; those affected lanes pass
+when run directly. The source-only packet does not overwrite the installed
+shared skill and performs no browser, provider, publication, or production
+effect.
+
+The ledger is 9 pass, 29 partial, 2 fail, and 5 missing. G22 advances to
+partial; G04 remains fail and G15 remains partial. The prohibition audit stays
+4 pass, 4 detector-gap, and 11 unverified because the new ordinary recovery
+environment detector is a scoped P03/P05 subproof. M3-P2C is next: bind exact
+old-browser liveness to admission, fence one replacement effect, persist an
+observed-live resumable phase, and atomically commit recovery success with final
+open/session/handoff publication. M3-P2D and later M3/M4 work remain open.
+
 ## Current P219 status | 2026-09-27 terminal budget checkpoint
 
 [Plan 0219 version 26](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)

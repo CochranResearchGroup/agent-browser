@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 53c66ce9
+    checkpoint: c96b7dfd
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 remain source-qualified; M3-P2A at 53c66ce9 adds exact-generation fenced, restart-durable recovery success and fresh attempt-window reset; the reconciled ledger remains nine pass, 28 partial, three fail, and five missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3-P1, and M3-P2A remain source-qualified; M3-P2B at c96b7dfd establishes one versioned SQLite recovery-policy authority with passing source gates; the ledger is nine pass, 29 partial, two fail, and five missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: P219 v26 records the terminal continuation checkpoint with a 931884-token pre-commit readback; M3-P2B has an exact policy-migration inventory, M3-P2C requires a durable observed-live phase plus one atomic open/handoff/recovery-success commit, and M3-P2D separates Route Keeper baseline presentation recovery from exact current-viewer browser recovery while keeping dormant browsers lazy; no executable work resumes under the exhausted implementation allocation
+    blocker: M3-P2B is source-qualified at c96b7dfd; M3-P2C requires exact old-browser observation, one SQLite-admitted replacement effect, a durable observed-live phase, and one atomic open/handoff/recovery-success commit; M3-P2D then separates Route Keeper baseline presentation recovery from exact current-viewer browser recovery while keeping dormant browsers lazy
     updated_at: 2026-09-27

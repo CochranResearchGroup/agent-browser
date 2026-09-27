@@ -36,47 +36,28 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 26 preserves the installed M2B subproofs and source-qualifies truthful
-desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
-operator resumed the continuation with a 1,000,000-token cumulative ceiling,
-an 800,000-token implementation stop, and a 200,000-token closeout reserve.
-The reconciled ledger is 9/28/3/5. M3-P1 source-qualifies provider-free recovery
-admission and scheduling for G14/G15; wider G04/P03/P05 closure, host
-integration, installed recovery, and evidence provenance remain open.
-Source checkpoint `6000b9fd` is clean. M3-P2 is the next bounded packet and is
-unstarted: consume the admission fence at the provider-free host effect seam,
-add fenced success/reset, and preserve every logical identity without page
-effect replay.
-M3-P2A is source-qualified at `53c66ce9`: recovery success is exact-generation
-fenced and restart-durable. Configuration translation and host effect
-consumption remain the next bounded work.
-The read-only host audit orders that work as M3-P2B SQLite policy consolidation,
-M3-P2C exact-client effect fencing, and M3-P2D eager scheduling. Direct host
-wiring before policy consolidation would retain competing authorities.
-The closeout audit confirms P219 remains OPEN: 9 rows pass, 28 are partial, 3
-fail, and 5 are missing. M5 remains ineligible until M3/M4 close those gaps.
-The parallel prohibition audit is 4 pass, 4 detector gaps, and 11 unverified;
-all P01–P19 gates must become deterministic before final qualification.
-This continuation checkpoints at 817,438 cumulative tokens; executable work
-stopped at 753,564 and M3-P2B remains the next implementation packet.
-M3-P2B now has an exact surface inventory and compatibility rule: defaults do
-not overwrite SQLite; explicit startup sources update it before both host and
-daemon consume one committed policy.
-M3-P2C also requires an observed-live resumable recovery phase and one combined
-SQLite commit for recovery success plus final open/handoff publication; separate
-transactions cannot satisfy crash consistency.
-M3-P2D now has a corrected authority split: baseline presentation capacity is
-reconciled by Route Keeper without launching a browser; only exact current
-SQLite live-viewer authority may schedule eager browser replacement; dormant
-browsers remain lazy until exact handoff or named-session access. The existing
-browser-keyed `BaselineCapacity` demand must be removed or constrained before
-implementation. The corrected split is reconciled through all forward-looking
-M3 sections; no older M3-P1 or host-integration wording grants baseline route
-pressure browser-launch authority.
-This execution window recorded a pre-commit goal-service readback of 931,884 tokens.
-Executable work remains stopped at 753,564; the next continuation inherits all
-counters and resumes from M3-P2B without treating unused ceiling space as new
-implementation authority.
+Version 27 preserves the installed M2B subproofs plus source-qualified A01/A02,
+M3-P1, and M3-P2A. The preceding execution window recorded a 931,884-token
+pre-commit readback and stopped executable work at 753,564; the operator then
+opened a fresh bounded continuation with the same 1,000,000-token ceiling and
+200,000-token closeout reserve.
+
+M3-P2B is source-qualified at `c96b7dfd`. Browser Runtime SQLite configuration
+v2 is the single ordinary recovery-policy authority. Default startup provenance
+preserves the committed row; explicit config, environment, and CLI provenance
+commits before lane construction; Browser Session Host and daemon recovery
+consume the same row. G22 advances from fail to partial. The reconciled ledger
+is 9 pass, 29 partial, 2 fail, and 5 missing; the prohibition audit remains 4
+pass, 4 detector gaps, and 11 unverified.
+
+M3-P2C is next: exact-client recovery must prove old-browser usability, admit
+one replacement effect, persist an observed-live resumable phase, and atomically
+commit recovery success with final open/session/handoff publication. M3-P2D
+then limits eager browser recovery to exact current SQLite viewer authority;
+Route Keeper owns baseline presentation capacity and dormant browsers remain
+lazy. Remaining M3 retention, M4 operations, and final M5 qualification remain
+open. No installed, provider, publication, production, merge, or release effect
+is implied by the M3-P2B source checkpoint.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

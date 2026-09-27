@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 26
+Plan version: 27
 
 State: OPEN
 
@@ -78,16 +78,27 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 26 is the terminal budget checkpoint for this execution window. The
-pre-commit goal-service readback reported 931,884 cumulative tokens used, leaving 68,116 below the
-operator's 1,000,000-token ceiling. Executable implementation had already
-stopped at 753,564. Subsequent work was limited to audit, plan correction,
-validation, and durable custody. The worktree is clean at documentation
-checkpoint `a7f74c63` before this final checkpoint commit. Plan 0219 remains
-OPEN with 9 pass, 28 partial, 3 fail, and 5 missing requirements and with 4
-pass, 4 detector-gap, and 11 unverified prohibitions. A later continuation must
-inherit these counters and resume from M3-P2B; it must not interpret unused
-ceiling space as implementation authority.
+Version 27 source-qualifies M3-P2B at commit `c96b7dfd`. Browser Runtime SQLite
+configuration v2 now owns retry budget, base backoff, maximum backoff, and the
+existing request deadline. Version 1 rows migrate atomically and once with a
+revision increment. Default startup provenance preserves the committed row;
+explicit config, environment, or CLI provenance commits under the shared host
+startup lock before lane construction. Browser Session Host and daemon recovery
+project the same row, and ordinary daemon recovery reports `config` provenance.
+The typed Service request, MCP, generated client, help, README, skill, and docs
+surfaces agree. G22 advances from fail to partial; G04 remains fail and G15
+remains partial. The ledger is now 9 pass, 29 partial, 2 fail, and 5 missing.
+The architecture audit remains 4 pass, 4 detector-gap, and 11 unverified because
+the new recovery-policy red/green detector closes only that subcase. Plan 0219
+remains OPEN; M3-P2C is next and no installed, provider, or production effect is
+claimed.
+
+Version 26 was the terminal budget checkpoint for the preceding execution
+window. Its pre-commit goal-service readback reported 931,884 cumulative tokens
+used, with executable implementation stopped at 753,564. Documentation
+checkpoint `a7f74c63` preserved the 9/28/3/5 ledger and M3-P2B restart point.
+The operator subsequently opened this fresh bounded continuation; version 27
+does not rewrite or borrow the earlier accounting.
 
 Version 25 reconciles the version 24 authority correction through every older
 forward-looking M3 section. Historical M3-P1 evidence remains recorded, but its
@@ -933,6 +944,28 @@ after the final coherent source batch; focused tests govern intermediate work.
 | Typed request contract | Extend `BrowserRuntimeConfigPatch`, `service-request.v1.schema.json`, the service-request client generator, generated JavaScript declarations, and type coverage. Preserve strict unknown-field rejection. | Schema negative fixtures, request normalization, generated-file check, API/MCP parity, client contract, and client type checks. |
 | User-facing configuration | Reconcile CLI flags and legacy environment variables as explicit bootstrap inputs or deprecate them with a typed error and migration guidance. Update `cli/src/output.rs`, README options/config sections, `skills/agent-browser/SKILL.md`, and the docs-site configuration and remote-view pages together. | Help snapshot/parser tests, documentation links/build, and exact examples proving readback through `service runtime-config get`. |
 | Architecture and ledger | Extend P03/P05/P12 or the appropriate deterministic detectors so direct ordinary recovery-policy environment authority fails. Update G04, G15, and G22 only to the proof actually obtained. | Detector red/green fixtures, architecture check, coverage validator, formatting, affected store/config tests, and strict workspace Clippy. |
+
+#### M3-P2B Source Checkpoint
+
+Commit `c96b7dfd` completes the policy-authority packet. The v2 SQLite row,
+one-time v1 migration, checked admission projection, startup provenance
+reconciliation, daemon projection, strict request contracts, generated client,
+operator documentation, and architecture subdetector are one coherent source
+batch. Validation passes 43 store tests, 23 host tests, 4 handoff-recovery
+tests, 5 navigation-recovery tests, focused config/provenance tests, strict
+workspace Clippy, formatting, generated-client and type checks, API/MCP parity,
+architecture red/green, coverage validation, no-launch Service contracts,
+remote-view documentation checks, the docs production build, and every broad
+route/workstation fixture selected for the changed surfaces. The aggregate
+`pnpm test:service-client` wrapper remains red before affected tests because its
+P157 oracle names the removed baseline file
+`cli/src/native/service_profile_acquisition.rs`; the directly affected client
+contract, type, and request-client lanes pass. The shared installed skill was
+not overwritten by this source-only packet.
+
+M3-P2C is now the next bounded packet. It must follow its transaction matrix and
+stop rule; M3-P2B does not authorize replacement effects or claim installed
+recovery.
 
 Do not bump the database `PRAGMA user_version` merely for JSON-row evolution
 unless table shape changes. The runtime-config value carries its own schema and
