@@ -35,6 +35,7 @@ import {
   createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
   discoverDevelopmentStaleDisplayCandidates,
+  readDevelopmentRouteKeeperRecoveryState,
 } from './lib/development-presentation-provider-system-effects.js';
 import {
   evaluateDevelopmentPresentationPressure,
@@ -314,6 +315,10 @@ try {
     assertProductionUnchanged: assert.deepEqual,
     defaultDevelopmentSnapshot: () => ({}),
     assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => ({
+      schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+      retained: [],
+    }),
     discoverStaleDisplayCandidates: () => [{
       routeUser: namespaced.routes[2].user,
       displayName: ':13',
@@ -369,6 +374,65 @@ try {
     ]],
     ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
   ]);
+  const retainedRecoveryCalls = [];
+  const retainedRecoverySnapshots = [{
+    schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+    retained: [{ slotId: 'route-slot-02', phase: 'quarantined' }],
+  }, {
+    schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+    retained: [],
+  }];
+  const retainedRecoveryEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => retainedRecoverySnapshots.shift(),
+    discoverStaleDisplayCandidates: () => [],
+    probeProvider: () => ({
+      displays: namespaced.routes.slice(0, namespaced.warmSlots).map((route, index) => ({
+        displayReservationId: route.displayReservationId,
+        displayName: `:${57 + index}`,
+        user: route.user,
+        ready: true,
+      })),
+    }),
+    run: (command, args) => {
+      retainedRecoveryCalls.push([command, args]);
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  retainedRecoveryEffects.openWarmRoutes(namespaced);
+  assert.deepEqual(retainedRecoveryCalls, [
+    ['systemctl', ['--user', 'reset-failed', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+  ]);
+  const recoveryReadCommands = [];
+  const recoveryState = readDevelopmentRouteKeeperRecoveryState(namespaced, {
+    run: (command, args, options) => {
+      recoveryReadCommands.push([command, args, options]);
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+          retained: [{ slotId: 'route-slot-02', phase: 'stopping' }],
+        }),
+        stderr: '',
+      };
+    },
+  });
+  assert.deepEqual(recoveryState.retained, [{ slotId: 'route-slot-02', phase: 'stopping' }]);
+  assert.equal(recoveryReadCommands[0][0], 'python3');
+  assert.equal(recoveryReadCommands[0][1].at(-1), join(
+    namespaced.pseudoHome,
+    '.agent-browser',
+    'service',
+    'runtime.sqlite3',
+  ));
+  assert.equal(recoveryReadCommands[0][2].timeout, 10000);
   const unprovenReclaimCalls = [];
   const unprovenReclaimEffects = createDevelopmentPresentationProviderSystemEffects({
     env: namespaceEnv,
@@ -376,6 +440,10 @@ try {
     assertProductionUnchanged: assert.deepEqual,
     defaultDevelopmentSnapshot: () => ({}),
     assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => ({
+      schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+      retained: [],
+    }),
     discoverStaleDisplayCandidates: () => [{
       routeUser: namespaced.routes[0].user,
       displayName: ':13',

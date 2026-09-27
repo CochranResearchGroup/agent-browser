@@ -34,6 +34,34 @@ const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
 const XRDP_DISPLAY_MIN = 10;
 const XRDP_DISPLAY_MAX = 60;
 const ABSENT_X_SERVER_PID = 4294967295;
+const ROUTE_KEEPER_RECOVERY_STATE_SCHEMA =
+  'agent-browser.development-route-keeper-recovery-state.v1';
+const READ_ROUTE_KEEPER_RECOVERY_STATE = `
+import json
+import sqlite3
+import sys
+from urllib.parse import quote
+
+database = sys.argv[1]
+connection = sqlite3.connect(f"file:{quote(database, safe='/')}?mode=ro", uri=True)
+connection.execute("pragma query_only = on")
+row = connection.execute(
+    "select json from state_documents where kind = ?",
+    ("route_keeper_authority",),
+).fetchone()
+if row is None:
+    raise RuntimeError("route_keeper_authority_missing")
+authority = json.loads(row[0])
+retained = []
+for slot_id, record in sorted(authority.get("records", {}).items()):
+    phase = record.get("phase")
+    if phase in ("stopping", "quarantined"):
+        retained.append({"slotId": slot_id, "phase": phase})
+print(json.dumps({
+    "schemaVersion": "${ROUTE_KEEPER_RECOVERY_STATE_SCHEMA}",
+    "retained": retained,
+}, separators=(",", ":")))
+`;
 
 /** Read-only admission for a fresh or configured development provider transaction. */
 export function developmentPresentationProviderSystemPreflight({
@@ -189,6 +217,46 @@ function developmentRouteKeeperRuntimeStatus(env) {
   };
 }
 
+/** Read only the durable stop intents needed to admit provider reconciliation. */
+export function readDevelopmentRouteKeeperRecoveryState(
+  descriptor,
+  { run = commandResult } = {},
+) {
+  const database = join(
+    descriptor.pseudoHome,
+    '.agent-browser',
+    'service',
+    'runtime.sqlite3',
+  );
+  const result = runRequired(
+    run,
+    'python3',
+    ['-c', READ_ROUTE_KEEPER_RECOVERY_STATE, database],
+    { timeout: 10000 },
+    'read development route-keeper recovery state',
+  );
+  let state;
+  try {
+    state = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('Development route-keeper recovery state returned invalid JSON');
+  }
+  const configuredSlots = new Set(descriptor.routes.map(
+    (_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`,
+  ));
+  if (
+    state.schemaVersion !== ROUTE_KEEPER_RECOVERY_STATE_SCHEMA ||
+    !Array.isArray(state.retained) ||
+    state.retained.some((record) =>
+      !record ||
+      !configuredSlots.has(record.slotId) ||
+      !['stopping', 'quarantined'].includes(record.phase))
+  ) {
+    throw new Error('Development route-keeper recovery state was invalid');
+  }
+  return state;
+}
+
 /** Bind the transaction owner to the current workstation effect seams. */
 export function createDevelopmentPresentationProviderSystemEffects({
   env = process.env,
@@ -199,6 +267,8 @@ export function createDevelopmentPresentationProviderSystemEffects({
   publishIngress,
   run = commandResult,
   discoverStaleDisplayCandidates = discoverDevelopmentStaleDisplayCandidates,
+  readRouteKeeperRecovery = (descriptor) =>
+    readDevelopmentRouteKeeperRecoveryState(descriptor, { run }),
   probeProvider = probeDevelopmentPresentationProvider,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
@@ -449,10 +519,34 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
     },
     openWarmRoutes(descriptor) {
       const runtime = developmentRuntimeNamespace(env);
+      const runtimeHostUnit = `${runtime.name}-runtime-host.service`;
+      const retainedRecovery = readRouteKeeperRecovery(descriptor);
+      if (retainedRecovery.retained.length > 0) {
+        runRequired(
+          run,
+          'systemctl',
+          ['--user', 'reset-failed', runtimeHostUnit],
+          {},
+          'reset failed development runtime host for retained exact recovery',
+        );
+        runRequired(
+          run,
+          'systemctl',
+          ['--user', 'start', runtimeHostUnit],
+          {},
+          'start development runtime host for retained exact recovery',
+        );
+        waitFor(
+          run,
+          () => readRouteKeeperRecovery(descriptor).retained.length === 0,
+          60000,
+          'retained exact development route recovery',
+        );
+      }
       runRequired(
         run,
         'systemctl',
-        ['--user', 'stop', `${runtime.name}-runtime-host.service`],
+        ['--user', 'stop', runtimeHostUnit],
         {},
         'stop development runtime host for exact stale-display reconciliation',
       );
@@ -488,7 +582,7 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
       runRequired(
         run,
         'systemctl',
-        ['--user', 'start', `${runtime.name}-runtime-host.service`],
+        ['--user', 'start', runtimeHostUnit],
         {},
         'start development runtime host after exact stale-display reconciliation',
       );
