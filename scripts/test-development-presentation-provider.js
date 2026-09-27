@@ -309,6 +309,7 @@ try {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
   const staleDisplayCalls = [];
+  let staleDisplayPidAbsenceChecks = 0;
   const staleDisplayEffects = createDevelopmentPresentationProviderSystemEffects({
     env: namespaceEnv,
     productionSnapshot: () => ({}),
@@ -319,6 +320,11 @@ try {
       schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
       retained: [],
     }),
+    displayPidAbsent: (pid) => {
+      assert.equal(pid, 43123);
+      staleDisplayPidAbsenceChecks += 1;
+      return staleDisplayPidAbsenceChecks > 1;
+    },
     discoverStaleDisplayCandidates: () => [{
       routeUser: namespaced.routes[2].user,
       displayName: ':13',
@@ -356,6 +362,7 @@ try {
     },
   });
   staleDisplayEffects.openWarmRoutes(namespaced);
+  assert.equal(staleDisplayPidAbsenceChecks, 2);
   assert.deepEqual(staleDisplayCalls, [
     ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
     ['sudo', [

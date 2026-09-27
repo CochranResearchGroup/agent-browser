@@ -269,6 +269,7 @@ export function createDevelopmentPresentationProviderSystemEffects({
   discoverStaleDisplayCandidates = discoverDevelopmentStaleDisplayCandidates,
   readRouteKeeperRecovery = (descriptor) =>
     readDevelopmentRouteKeeperRecoveryState(descriptor, { run }),
+  displayPidAbsent = (pid) => !existsSync(`/proc/${pid}`),
   probeProvider = probeDevelopmentPresentationProvider,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
@@ -552,6 +553,15 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
       );
       const candidates = discoverStaleDisplayCandidates(descriptor, run);
       for (const candidate of candidates) {
+        if (candidate.xServerPid !== ABSENT_X_SERVER_PID) {
+          waitFor(
+            run,
+            () => displayPidAbsent(candidate.xServerPid),
+            15000,
+            `exact stale display ${candidate.displayName} PID absence`,
+            100,
+          );
+        }
         const result = runRequired(run, 'sudo', [
           '-n',
           helper,
