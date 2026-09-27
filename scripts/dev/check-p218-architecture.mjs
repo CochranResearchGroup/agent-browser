@@ -54,6 +54,10 @@ export function evaluate(root = defaultRoot) {
   const actions = read(root, 'cli/src/native/actions.rs');
   const daemon = read(root, 'cli/src/native/daemon.rs');
   const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
+  const guacamoleLiveViewer = read(root, 'cli/src/native/stream/guacamole_live_viewer.rs');
+  const desktopControl = read(root, 'cli/src/native/browser_session_store/desktop_control.rs');
+  const browserSessionManager = beforeDisabledLegacyTests(read(root, 'crates/agent-browser-service-model/src/browser_session_manager.rs'));
+  const presentationAdmission = beforeDisabledLegacyTests(read(root, 'cli/src/native/presentation_request_admission.rs'));
   const workstationInstall = read(root, 'cli/src/workstation_install.rs');
   const browserSessionStore = read(root, 'cli/src/native/browser_session_store.rs');
   const routeUserPool = read(root, 'scripts/lib/rdp-route-user-pool.py');
@@ -173,6 +177,12 @@ export function evaluate(root = defaultRoot) {
       add('P19', finding('dashboard_persisted_viewer_lifecycle', 'packages/dashboard/src/components/workspace-remote-viewport.tsx', 'dashboard viewer presence is projected through the persisted viewer-lease lifecycle'));
     }
   }
+  if (/live_viewer|LiveViewer/.test(browserSessionManager)) {
+    add('P19', finding('viewer_heartbeat_in_session_authority', 'crates/agent-browser-service-model/src/browser_session_manager.rs', 'Browser Session Manager consults live-viewer authority'));
+  }
+  if (/live_viewer|LiveViewer/.test(presentationAdmission)) {
+    add('P19', finding('viewer_heartbeat_in_presentation_admission', 'cli/src/native/presentation_request_admission.rs', 'presentation admission consults live-viewer authority'));
+  }
 
   const leaseAuthorityIsIndependent =
     existsSync(join(root, 'crates/agent-browser-lease-authority/Cargo.toml'))
@@ -187,6 +197,21 @@ export function evaluate(root = defaultRoot) {
     && /remove_inventory_secrets\(secret_file\)/.test(routeUserPool)
     && /--database/.test(routeSetup)
     && /--database/.test(routeSync);
+  const liveViewerBoundaryComplete =
+    /observe_active_connection/.test(guacamoleLiveViewer)
+    && /"connect"/.test(guacamoleLiveViewer)
+    && /"heartbeat"/.test(guacamoleLiveViewer)
+    && /"disconnect"/.test(guacamoleLiveViewer)
+    && /BrowserRuntimeSqliteStore::default_sqlite/.test(guacamoleLiveViewer)
+    && /LIVE_VIEWER_TTL_MS/.test(desktopControl)
+    && /record\.expires_at_ms\s*<=\s*now_ms/.test(desktopControl)
+    && /record\.boot_epoch\s*!=\s*current_boot/.test(desktopControl)
+    && /with_current_desktop_control[\s\S]*?validate_live_viewer_current/.test(desktopControl)
+    && /\/api\/live-viewer-authority/.test(dashboardViewport)
+    && /operation:\s*["']heartbeat["']/.test(dashboardViewport)
+    && /operation:\s*["']disconnect["']/.test(dashboardViewport)
+    && !/live_viewer|LiveViewer/.test(browserSessionManager)
+    && !/live_viewer|LiveViewer/.test(presentationAdmission);
   const definitelyViolated = new Set(['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19']);
   const rows = Array.from({ length: 19 }, (_, index) => {
     const id = `P${String(index + 1).padStart(2, '0')}`;
@@ -196,6 +221,7 @@ export function evaluate(root = defaultRoot) {
     if (id === 'P15' && evidence.length === 0 && leaseAuthorityIsIndependent) status = 'pass';
     if (id === 'P16' && evidence.length === 0 && legacyAuthorityDetectorComplete) status = 'pass';
     if (id === 'P09' && evidence.length === 0 && providerCredentialCustodyComplete) status = 'pass';
+    if (id === 'P19' && evidence.length === 0 && liveViewerBoundaryComplete) status = 'pass';
     return { id, status, findings: evidence };
   });
   const serviceModelLeaseAuthorityFindings = [];

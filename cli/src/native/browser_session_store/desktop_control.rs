@@ -296,13 +296,15 @@ impl BrowserRuntimeSqliteStore {
             .live_viewers
             .get_mut(&request.lease_id)
             .ok_or_else(|| "live_viewer_lease_inactive".to_string())?;
+        if record.state != "controlling" {
+            return Err("live_viewer_lease_inactive".to_string());
+        }
         if record.authenticated_principal != request.authenticated_principal
             || record.provider_route_id != request.provider_route_id
             || record.guacamole_connection_id != request.guacamole_connection_id
             || record.guacamole_primary_active_connection_id
                 != request.guacamole_primary_active_connection_id
             || record.boot_epoch != boot_epoch
-            || record.state != "controlling"
         {
             return Err("live_viewer_authority_mismatch".to_string());
         }
@@ -504,7 +506,7 @@ fn validate_live_viewer_current(
         || record.controller_epoch != lease.epoch
         || record.boot_epoch != current_boot
         || record.observed_shared_connection_count == 0
-        || record.expires_at_ms < now_ms
+        || record.expires_at_ms <= now_ms
     {
         return Err("authenticated_live_viewer_authority_unavailable".to_string());
     }
@@ -535,7 +537,7 @@ fn expire_live_viewers(state: &mut DesktopControlState, now_ms: u64, boot_epoch:
     let mut expired = Vec::new();
     for record in state.live_viewers.values_mut() {
         if record.state == "controlling"
-            && (record.boot_epoch != boot_epoch || record.expires_at_ms < now_ms)
+            && (record.boot_epoch != boot_epoch || record.expires_at_ms <= now_ms)
         {
             record.state = "expired".to_string();
             record.updated_at_ms = now_ms;
@@ -1270,6 +1272,78 @@ mod tests {
                 )
                 .unwrap(),
             "target-1"
+        );
+    }
+
+    #[test]
+    fn live_viewer_heartbeat_at_the_expiry_boundary_is_rejected() {
+        let mut fixture = fixture("live-viewer-expiry-boundary");
+        let observed_at_ms = current_time_ms().unwrap();
+        let mut activation = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = observed_at_ms;
+        fixture.store.activate_live_viewer(&activation).unwrap();
+
+        let result = fixture
+            .store
+            .heartbeat_live_viewer(&LiveViewerHeartbeatRequest {
+                lease_id: "live-viewer:operation-a".to_string(),
+                authenticated_principal: activation.authenticated_principal,
+                provider_route_id: activation.provider_route_id,
+                guacamole_connection_id: activation.guacamole_connection_id,
+                guacamole_primary_active_connection_id: activation
+                    .guacamole_primary_active_connection_id,
+                observed_shared_connection_count: 1,
+                observed_at_ms: observed_at_ms + LIVE_VIEWER_TTL_MS,
+            });
+
+        assert_eq!(result, Err("live_viewer_lease_inactive".to_string()));
+    }
+
+    #[test]
+    fn live_viewer_heartbeat_and_disconnect_do_not_refresh_the_browser_session() {
+        let mut fixture = fixture("live-viewer-session-separation");
+        let before = fixture.store.load_session_state().unwrap();
+        let observed_at_ms = current_time_ms().unwrap();
+        let mut activation = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = observed_at_ms;
+        let control = fixture.store.activate_live_viewer(&activation).unwrap();
+        fixture
+            .store
+            .heartbeat_live_viewer(&LiveViewerHeartbeatRequest {
+                lease_id: "live-viewer:operation-a".to_string(),
+                authenticated_principal: activation.authenticated_principal.clone(),
+                provider_route_id: activation.provider_route_id,
+                guacamole_connection_id: activation.guacamole_connection_id,
+                guacamole_primary_active_connection_id: activation
+                    .guacamole_primary_active_connection_id,
+                observed_shared_connection_count: 1,
+                observed_at_ms: observed_at_ms + 1,
+            })
+            .unwrap();
+        assert_eq!(fixture.store.load_session_state().unwrap(), before);
+
+        fixture
+            .store
+            .disconnect_live_viewer(
+                "live-viewer:operation-a",
+                &activation.authenticated_principal,
+                observed_at_ms + 2,
+            )
+            .unwrap();
+        assert_eq!(fixture.store.load_session_state().unwrap(), before);
+        assert_eq!(
+            fixture
+                .store
+                .current_desktop_control("handoff-1", "client-a", control.epoch),
+            Err("desktop_control_unclaimed".to_string())
         );
     }
 

@@ -112,6 +112,17 @@ try {
   assert.equal(quarantineCut.rows.find((row) => row.id === 'P09').status, 'pass');
   assert.equal(quarantineCut.cuts.providerCredentialCustody.status, 'pass');
 
+  write(root, 'cli/src/native/actions.rs', 'pub fn current_actions() {}\n');
+  write(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx', '/api/live-viewer-authority operation: "heartbeat" operation: "disconnect"\n');
+  write(root, 'cli/src/native/stream/guacamole_live_viewer.rs', 'observe_active_connection "connect" "heartbeat" "disconnect" BrowserRuntimeSqliteStore::default_sqlite\n');
+  write(root, 'cli/src/native/browser_session_store/desktop_control.rs', 'LIVE_VIEWER_TTL_MS record.expires_at_ms <= now_ms record.boot_epoch != current_boot with_current_desktop_control validate_live_viewer_current\n');
+  write(root, 'crates/agent-browser-service-model/src/browser_session_manager.rs', 'pub struct BrowserSessionManager;\n');
+  write(root, 'cli/src/native/presentation_request_admission.rs', 'pub struct PresentationAdmissionRequest;\n');
+  const liveViewerCut = evaluate(root);
+  assert.equal(liveViewerCut.rows.find((row) => row.id === 'P19').status, 'pass');
+  write(root, 'cli/src/native/browser_session_store/desktop_control.rs', 'LIVE_VIEWER_TTL_MS record.expires_at_ms < now_ms validate_live_viewer_current with_current_desktop_control\n');
+  assert.equal(evaluate(root).rows.find((row) => row.id === 'P19').status, 'detector_gap');
+
   const closure = JSON.parse(readFileSync(new URL(
     '../../docs/dev/architecture/p218-ordinary-open-handoff-closure.v1.json',
     import.meta.url,
