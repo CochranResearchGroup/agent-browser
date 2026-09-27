@@ -9,6 +9,7 @@ mod browser_desktop_selector;
 mod browser_process;
 mod browser_profile;
 mod browser_profile_catalog;
+mod browser_recovery;
 mod browser_retirement;
 mod browser_session_manager;
 mod crash_regeneration;
@@ -66,6 +67,11 @@ pub use browser_profile_catalog::{
     BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
     BrowserProfileCatalogEntry, BrowserProfileCatalogImport, BrowserProfileKind,
     BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+};
+pub use browser_recovery::{
+    decide_browser_recovery, record_browser_recovery_failure, BrowserRecoveryAdmissionPolicy,
+    BrowserRecoveryDecision, BrowserRecoveryDemand, BrowserRecoveryPhase, BrowserRecoveryState,
+    OldBrowserUsability, BROWSER_RECOVERY_STATE_SCHEMA_V1,
 };
 pub use browser_retirement::{
     BrowserContaminationReport, BrowserRetirementPlan, BrowserRetirementReceipt,

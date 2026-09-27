@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 13
+Plan version: 15
 
 State: OPEN
 
@@ -77,6 +77,30 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 15 source-qualifies M3-P1. A strict provider-free decision contract now
+distinguishes eager baseline, authenticated-active-viewer, and exact-client
+resume demand from lazy dormant demand; unknown old-browser usability refuses
+admission. Browser Runtime SQLite serializes the retained logical browser's
+generation, attempt, deadline, and capped retry time in one immediate
+transaction. Four independent connections produce one admission winner. The
+complete 276-test service-model suite and 37 browser-session-store tests pass.
+The ledger is now nine pass, 28 partial, three fail, and five missing. G14 moves
+to partial and G15 gains bounded-retry and concurrency evidence; host effect
+consumption and joined installed recovery remain open.
+
+Version 14 starts M3 with one bounded provider-free packet, M3-P1. The packet
+owns only recovery admission and scheduling semantics for G14/G15: eager
+baseline or authenticated-active-viewer demand, lazy dormant demand until an
+exact client resumes, exact old-browser unusability proof, one SQLite-serialized
+replacement winner, and typed bounded retry/backoff with a terminal deadline.
+It preserves every logical browser, session, profile, tab, target, handoff, and
+navigation identity and performs no browser, provider, route, display, viewer,
+publication, or production effect. The primary agent owns the service-model
+contract, Browser Runtime SQLite adapter, provider-free fixtures, ledger, and
+planning authorities. Passing this packet can advance G14/G15 source evidence;
+it cannot close either row or qualify installed recovery without later wiring
+and joined acceptance.
 
 Version 13 records the qualified A02 ordinary-desktop SQLite cut and completes
 the bounded A03–A06 reconciliation. Managed capture no longer overlays JSON Service
@@ -620,6 +644,40 @@ SQLite work remains in the full objective; assigning it is not accepting it.
    terminal closed/expired sessions, and no page-effect replay. The closure
    owner must resolve concrete SQLite dependencies before accepting affected
    recovery behavior; unrelated cleanup and UI work stay outside this packet.
+
+### M3-P1 Recovery Admission And Scheduling
+
+M3-P1 is started under version 14. Reuse the existing recovery budget and
+backoff defaults rather than creating a competing policy. Add one strict pure
+decision contract and one Browser Runtime SQLite transaction boundary. An
+eligible replacement requires an exact observation that the retained browser
+is unusable. Baseline-capacity deficit and an authenticated active viewer are
+eager demand. A dormant retained browser waits without admission until an exact
+handoff or named-session client resumes. Unknown liveness fails closed.
+
+The SQLite transaction must serialize competing callers for the same logical
+browser and return one admission generation. A failed attempt records its
+attempt count, next eligible time, and absolute deadline; exponential delay is
+capped and exhaustion is terminal. Tests must prove eager and lazy decisions,
+unknown-liveness refusal, exact deadline and backoff boundaries, deterministic
+wire decoding, restart persistence, and one winner across independent SQLite
+connections. This packet does not launch or focus a browser and does not replay
+navigation or page effects. Actual host integration and installed joined
+recovery remain later M3 work unless this packet's evidence exposes a smaller
+causal integration cut within the remaining implementation allowance.
+
+### M3-P1 Source Checkpoint
+
+The packet is source-qualified without browser or provider effects. The pure
+contract passes eager/lazy demand, unknown-liveness refusal, capped exponential
+backoff, deadline exhaustion, and strict wire tests. The SQLite adapter passes
+restart persistence, generation fencing, exact retry timing, and a four-client
+race with one admission winner. The complete service-model suite passes 276
+tests and the browser-session-store surface passes 37 tests. Coverage validation
+passes with 45 ordered unique rows and counts 9/28/3/5. Rust formatting and
+strict workspace Clippy pass. Host launch/focus code
+does not yet consume this fence, so G14 and G15 remain partial and no installed
+recovery claim is made.
 
 ### A01 Source Checkpoint
 

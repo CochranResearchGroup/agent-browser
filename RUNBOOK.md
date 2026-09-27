@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 A01 and A02 source-qualified
+## Current P219 status | 2026-09-27 M3-P1 source-qualified
 
-[Plan 0219 version 13](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 15](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -17,7 +17,12 @@ diagnostic preservation. A02 is also source-qualified: managed capture,
 ready-handoff lookup, and interaction replay now use Browser Runtime SQLite,
 with one-time fail-closed import and archival of the former JSON ledger. A03–A06
 are reconciled with the current budget, scoped helper/binary identities, ledger
-rows, and retained first-failure disposition. M3 remains unstarted.
+rows, and retained first-failure disposition. M3-P1 is now the active bounded
+provider-free packet: pure eager/lazy recovery decisions plus SQLite-serialized
+singular admission, exact old-browser unusability proof, and bounded retry.
+It has no browser, provider, route, display, publication, or production effect.
+M3-P1 is source-qualified: 276 service-model and 37 browser-session-store tests
+pass, including a four-connection race with one SQLite admission winner.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
@@ -31,10 +36,13 @@ was attempted.
 A02 validation passes 43 desktop-interaction tests, 21 desktop-capture tests,
 50 browser-session-store tests, 18 Desktop Services tests, architecture detector
 self-tests, formatting, and strict workspace Clippy. The reconciled coverage
-ledger is nine pass, 27 partial, three fail, and six missing. G15 is partial for
-the existing singular restart/adoption proof; bounded retry/backoff,
-old-browser unusability, concurrent replacement, and G14 scheduling remain
-open. Whole-product G04/P03/P05 closure remains open outside the desktop cut.
+ledger is nine pass, 28 partial, three fail, and five missing. G14 is partial for
+provider-free eager/lazy scheduling, and G15 adds exact old-browser proof,
+bounded retry/backoff, restart persistence, and one concurrent admission winner.
+Actual host effect consumption remains open. Whole-product G04/P03/P05 closure
+remains open outside the desktop cut.
+M3-P1 can improve source evidence for G14/G15 but cannot accept installed or
+joined recovery by itself.
 
 Audit baseline: clean `00935477`, 55 commits ahead of the unchanged remote
 `8bb9518e`; development binary digest `ac3c1daed8ab` matches its recorded full

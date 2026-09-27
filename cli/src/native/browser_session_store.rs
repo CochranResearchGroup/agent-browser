@@ -6,9 +6,11 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use agent_browser_service_model::{
-    BrowserNavigationRecord, BrowserProfileCatalog, BrowserProfileCatalogDiagnostic,
-    BrowserSessionState, BrowserTabEndReason, ManagedBrowserInstance, ManagedBrowserSession,
-    ManagedBrowserTab, ManagedDisposableProfile, PresentationRequestQueue,
+    decide_browser_recovery, record_browser_recovery_failure, BrowserNavigationRecord,
+    BrowserProfileCatalog, BrowserProfileCatalogDiagnostic, BrowserRecoveryAdmissionPolicy,
+    BrowserRecoveryDecision, BrowserRecoveryDemand, BrowserRecoveryState, BrowserSessionState,
+    BrowserTabEndReason, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+    ManagedDisposableProfile, OldBrowserUsability, PresentationRequestQueue,
     PresentationRequestState, PresentationScaleInState, RemoteViewHandoff, RouteKeeperAuthority,
     RouteKeeperConnectionCatalog, RouteKeeperReconcileAction, SessionEndReason,
     TerminalBrowserSession, TerminalBrowserTab, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
@@ -41,12 +43,14 @@ const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
+const BROWSER_RECOVERY_REGISTRY_DOCUMENT: &str = "browser_recovery_registry";
 const PRESENTATION_REQUEST_QUEUE_DOCUMENT: &str = "presentation_request_queue";
 const PRESENTATION_SCALE_IN_STATE_DOCUMENT: &str = "presentation_scale_in_state";
 const ROUTE_KEEPER_AUTHORITY_DOCUMENT: &str = "route_keeper_authority";
 const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
 const PRESENTATION_REQUEST_QUEUE_SCHEMA_V1: &str = "agent-browser.presentation-request-queue.v1";
 const PRESENTATION_SCALE_IN_STATE_SCHEMA_V1: &str = "agent-browser.presentation-scale-in-state.v1";
+const BROWSER_RECOVERY_REGISTRY_SCHEMA_V1: &str = "agent-browser.browser-recovery-registry.v1";
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
 
@@ -136,6 +140,12 @@ impl BrowserRuntimeOperationState {
 #[serde(default, rename_all = "camelCase")]
 pub(crate) struct BrowserManagerHandoffRegistry {
     pub(crate) handoffs: BTreeMap<String, RemoteViewHandoff>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BrowserRecoveryRegistry {
+    states: BTreeMap<String, BrowserRecoveryState>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1252,6 +1262,100 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("browser_runtime_operation_commit_failed:{error}"))?;
         Ok(operation)
+    }
+
+    /// Atomically evaluate and persist recovery admission for one retained
+    /// logical browser. This transaction performs no browser effect.
+    pub(crate) fn admit_browser_recovery(
+        &mut self,
+        browser_id: &str,
+        demand: BrowserRecoveryDemand,
+        old_browser: OldBrowserUsability,
+        now_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+    ) -> Result<BrowserRecoveryDecision, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let decision = decide_browser_recovery(
+            registry.states.get(browser_id),
+            browser_id,
+            demand,
+            old_browser,
+            now_ms,
+            policy,
+        )?;
+        let state = match &decision {
+            BrowserRecoveryDecision::AdmitReplacement { state }
+            | BrowserRecoveryDecision::Exhausted { state } => Some(state.clone()),
+            _ => None,
+        };
+        if let Some(state) = state {
+            registry.states.insert(browser_id.to_string(), state);
+            save_document(
+                &transaction,
+                BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+                BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+                &registry,
+            )?;
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(decision)
+    }
+
+    pub(crate) fn record_browser_recovery_failure(
+        &mut self,
+        browser_id: &str,
+        generation: u64,
+        failed_at_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+    ) -> Result<BrowserRecoveryState, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_recovery_begin_failed:{error}"))?;
+        let mut registry: BrowserRecoveryRegistry = load_optional_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        let current = registry
+            .states
+            .get(browser_id)
+            .ok_or_else(|| format!("browser_recovery_state_missing:{browser_id}"))?;
+        let next = record_browser_recovery_failure(current, generation, failed_at_ms, policy)?;
+        registry.states.insert(browser_id.to_string(), next.clone());
+        save_document(
+            &transaction,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+            &registry,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_recovery_commit_failed:{error}"))?;
+        Ok(next)
+    }
+
+    #[cfg(test)]
+    fn load_browser_recovery_state(
+        &self,
+        browser_id: &str,
+    ) -> Result<Option<BrowserRecoveryState>, String> {
+        let registry: BrowserRecoveryRegistry = load_optional_document(
+            &self.connection,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+        Ok(registry.states.get(browser_id).cloned())
     }
 
     pub(crate) fn commit_operation(
@@ -5225,6 +5329,165 @@ mod tests {
                 .unwrap()
                 .state,
             ManualSeedingState::RecoveryRequired
+        );
+    }
+
+    #[test]
+    fn browser_recovery_admission_persists_retry_and_restart_fences() {
+        let directory = TempDirectory::new("browser-recovery-persistence");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let policy = BrowserRecoveryAdmissionPolicy {
+            maximum_attempts: 2,
+            base_backoff_ms: 10,
+            maximum_backoff_ms: 20,
+            deadline_ms: 100,
+        };
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let first = store
+            .admit_browser_recovery(
+                "browser-retained",
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
+                OldBrowserUsability::ProvenUnusable,
+                1_000,
+                policy,
+            )
+            .unwrap();
+        assert!(matches!(
+            first,
+            BrowserRecoveryDecision::AdmitReplacement { .. }
+        ));
+        drop(store);
+
+        let mut restarted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            restarted
+                .admit_browser_recovery(
+                    "browser-retained",
+                    BrowserRecoveryDemand::AuthenticatedActiveViewer,
+                    OldBrowserUsability::ProvenUnusable,
+                    1_001,
+                    policy,
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::AlreadyAdmitted { generation: 1 }
+        );
+        let retry = restarted
+            .record_browser_recovery_failure("browser-retained", 1, 1_005, policy)
+            .unwrap();
+        assert_eq!(retry.next_eligible_at_ms, 1_015);
+        drop(restarted);
+
+        let mut restarted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            restarted
+                .admit_browser_recovery(
+                    "browser-retained",
+                    BrowserRecoveryDemand::ExactClientResume,
+                    OldBrowserUsability::ProvenUnusable,
+                    1_014,
+                    policy,
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::WaitForRetry { retry_at_ms: 1_015 }
+        );
+        assert!(matches!(
+            restarted
+                .admit_browser_recovery(
+                    "browser-retained",
+                    BrowserRecoveryDemand::ExactClientResume,
+                    OldBrowserUsability::ProvenUnusable,
+                    1_015,
+                    policy,
+                )
+                .unwrap(),
+            BrowserRecoveryDecision::AdmitReplacement {
+                state: BrowserRecoveryState { generation: 2, .. }
+            }
+        ));
+        let terminal = restarted
+            .record_browser_recovery_failure("browser-retained", 2, 1_020, policy)
+            .unwrap();
+        assert_eq!(
+            terminal.phase,
+            agent_browser_service_model::BrowserRecoveryPhase::Terminal
+        );
+        assert_eq!(
+            restarted
+                .load_browser_recovery_state("browser-retained")
+                .unwrap(),
+            Some(terminal)
+        );
+    }
+
+    #[test]
+    fn concurrent_browser_recovery_has_one_sqlite_admission_winner() {
+        let directory = TempDirectory::new("browser-recovery-concurrent");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(4));
+        let mut workers = Vec::new();
+        for _ in 0..4 {
+            let barrier = barrier.clone();
+            let database_path = database_path.clone();
+            workers.push(std::thread::spawn(move || {
+                let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+                barrier.wait();
+                store
+                    .admit_browser_recovery(
+                        "browser-shared",
+                        BrowserRecoveryDemand::BaselineCapacity,
+                        OldBrowserUsability::ProvenUnusable,
+                        10,
+                        BrowserRecoveryAdmissionPolicy {
+                            maximum_attempts: 3,
+                            base_backoff_ms: 1_000,
+                            maximum_backoff_ms: 30_000,
+                            deadline_ms: 90_000,
+                        },
+                    )
+                    .unwrap()
+            }));
+        }
+        let decisions = workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| matches!(
+                    decision,
+                    BrowserRecoveryDecision::AdmitReplacement { .. }
+                ))
+                .count(),
+            1
+        );
+        assert_eq!(
+            decisions
+                .iter()
+                .filter(|decision| matches!(
+                    decision,
+                    BrowserRecoveryDecision::AlreadyAdmitted { generation: 1 }
+                ))
+                .count(),
+            3
         );
     }
 
