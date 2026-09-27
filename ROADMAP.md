@@ -36,7 +36,7 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 25 preserves the installed M2B subproofs and source-qualifies truthful
+Version 26 preserves the installed M2B subproofs and source-qualifies truthful
 desktop failure reporting plus the bounded ordinary-desktop SQLite cut. The
 operator resumed the continuation with a 1,000,000-token cumulative ceiling,
 an 800,000-token implementation stop, and a 200,000-token closeout reserve.
@@ -73,6 +73,10 @@ browser-keyed `BaselineCapacity` demand must be removed or constrained before
 implementation. The corrected split is reconciled through all forward-looking
 M3 sections; no older M3-P1 or host-integration wording grants baseline route
 pressure browser-launch authority.
+This execution window checkpoints at a goal-service readback of 931,884 tokens.
+Executable work remains stopped at 753,564; the next continuation inherits all
+counters and resumes from M3-P2B without treating unused ceiling space as new
+implementation authority.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

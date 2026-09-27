@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 25
+Plan version: 26
 
 State: OPEN
 
@@ -77,6 +77,17 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 26 is the terminal budget checkpoint for this execution window. The
+goal service reported 931,884 cumulative tokens used, leaving 68,116 below the
+operator's 1,000,000-token ceiling. Executable implementation had already
+stopped at 753,564. Subsequent work was limited to audit, plan correction,
+validation, and durable custody. The worktree is clean at documentation
+checkpoint `a7f74c63` before this final checkpoint commit. Plan 0219 remains
+OPEN with 9 pass, 28 partial, 3 fail, and 5 missing requirements and with 4
+pass, 4 detector-gap, and 11 unverified prohibitions. A later continuation must
+inherit these counters and resume from M3-P2B; it must not interpret unused
+ceiling space as implementation authority.
 
 Version 25 reconciles the version 24 authority correction through every older
 forward-looking M3 section. Historical M3-P1 evidence remains recorded, but its

@@ -1,8 +1,8 @@
 # Runbook
 
-## Current P219 status | 2026-09-27 M3-P2D authority reconciled
+## Current P219 status | 2026-09-27 terminal budget checkpoint
 
-[Plan 0219 version 25](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+[Plan 0219 version 26](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative
 1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
 closeout reserve and an 800,000-token implementation stop. Goal-service thread
@@ -77,6 +77,10 @@ Version 25 reconciles this correction through the older M3-P1, M3 delivery,
 and M3-P2 host-integration text. The historical baseline fixture remains a test
 of generic mechanics only and is explicitly excluded from G14 acceptance and
 all future browser-launch authority.
+The goal-service terminal readback for this window is 931,884 cumulative tokens
+used, 68,116 below the 1,000,000-token ceiling. Executable work stopped at
+753,564. Plan 0219 remains OPEN; this window stops at the durable checkpoint
+without converting unused ceiling space into implementation authority.
 
 A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
 18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
