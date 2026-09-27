@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -74,14 +74,16 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 6 records the frozen development candidate at `d26a25b9`. The installed
-development generation is `0.28.0-9502ef082e45`, with executable SHA-256
-`9502ef082e45862674821af690af2a5f033c0109f529c534664d1fbc925422b0`.
-The three-iteration development browser-launch smoke passed and the production
-identity remained unchanged. The source-qualified named-profile retention
-repair remains at `d7ec8d2f`: the service model applies the configured
-inactivity deadline only to manager-allocated disposable profiles, while exact
-named-profile sessions and their opaque handoffs use no default idle expiry.
+Version 7 records the current frozen development candidate at `bdf695db`. The
+installed development generation is `0.28.0-ede5cf223fe4`, with executable
+SHA-256
+`ede5cf223fe457e5e3301b58c2aa348873ae454a8eb3d002f1fc6cc794132821`.
+The optimized build and three-iteration development browser-launch smoke
+passed, and the production identity remained unchanged. The source-qualified
+named-profile retention repair remains at `d7ec8d2f`: the service model applies
+the configured inactivity deadline only to manager-allocated disposable
+profiles, while exact named-profile sessions and their opaque handoffs use no
+default idle expiry.
 
 The provider apply during candidate qualification quarantined in receipt
 `apply-1790473069666-74987.json` after runtime-owned warm routes timed out. A
@@ -122,9 +124,13 @@ ended with
 `d7ec8d2f` repairs that defect and is present in the new installed candidate.
 G12 and G36 therefore have source and installed-code identity evidence but
 remain unaccepted because the quarantined provider prevented the installed
-same-handoff retention replay. G42 and G45 still require installed
-exact-session activity refresh and separation of session heartbeat from viewer
-heartbeat. A temporary keepalive was removed because it masked the defect. One
+same-handoff retention replay. G42 still requires installed exact-session
+activity refresh. G45 is now source-qualified as partial: authenticated viewer
+connect and heartbeat re-observe the exact Guacamole primary, viewer authority
+expires after 15 seconds with an inclusive deadline, and heartbeat or
+disconnect does not refresh the logical browser session. Installed separation,
+control transfer, and recovery remain unaccepted. A temporary keepalive was
+removed because it masked the retention defect. One
 operator report of
 "Remote-view handoff was not found in the SQLite session authority" occurred
 while the exact handoff row still existed and an authenticated retry resolved
@@ -142,8 +148,9 @@ At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
 accepted pixels, input, joined recovery, or complete grilling conformance.
 The [inherited coverage ledger](../contracts/p218-grilling-contract-coverage.v1.json)
-has 45 rows: two pass, 29 partial, five fail, and nine missing. Retain its
-filename and row IDs as the single evidence ledger. Succession promotes no row.
+has 45 rows: two pass, 31 partial, three fail, and nine missing. Retain its
+filename and row IDs as the single evidence ledger. G35 and G45 are partial
+from current source and focused tests; neither has installed acceptance.
 
 Completed work materially changes the starting point:
 
@@ -164,8 +171,11 @@ formatting, and strict workspace Clippy. The 31-test receipt is
 runs or installed acceptance. Preserve the earlier fixture failure and
 `sccache` failure receipt `job-20260926T151732Z-4573b2171baa`.
 
-The current architecture report has P09, P15 and P16 passing, five detector
-gaps (P02/P03/P05/P12/P19), and eleven unverified prohibitions. B06 migrated
+The current architecture report has P09, P15, P16 and P19 passing, four
+detector gaps (P02/P03/P05/P12), and eleven unverified prohibitions. P19 passes
+only when authenticated viewer authority is bounded, tied to current boot and
+controller fencing, and absent from Browser Session Manager and presentation
+admission. B06 migrated
 the four persistent route credentials into private Browser Runtime SQLite,
 scrubs legacy keys and projects credentials transiently. Neither a detector gap
 nor an unverified row passes.
@@ -569,12 +579,53 @@ rejected credential file or broaden cleanup. Only after four-route readiness
 may the frozen candidate proceed to installed named-retention and the remaining
 M2B Alice/Bob workflow. This checkpoint promotes no additional G-row to pass.
 
+### Live-viewer boundary and refreshed candidate checkpoint
+
+Source checkpoint `bdf695db` makes the live-viewer TTL boundary strict. A
+heartbeat at the exact expiry instant now returns
+`live_viewer_lease_inactive`; both current-control validation and expiry use an
+inclusive deadline. A second regression proves that live-viewer heartbeat and
+disconnect leave Browser Session Manager state unchanged, while disconnect
+removes current desktop control. The focused `live_viewer_` filter passed four
+tests in receipt `20260927T021202Z-a0456af8a0fa`; the complete 11-test desktop
+control module passed in `20260927T021442Z-dbae322f207f`. Formatting passed in
+`20260927T021442Z-42874926b5c2`, and strict workspace Clippy passed without
+warnings in `20260927T021455Z-db18b3da9800`.
+
+The deterministic architecture detector now passes P19 only when the live
+viewer endpoint performs exact active-connection observation, connect,
+heartbeat and disconnect are present, SQLite stores the bounded viewer record,
+current boot and controller authority are revalidated, the dashboard drives
+heartbeat and disconnect, and neither Browser Session Manager nor presentation
+admission consults viewer authority. Its red-then-green self-test and a negative
+missing-inclusive-expiry fixture pass. The coverage ledger therefore changes
+G35 and G45 from fail to partial and now totals two pass, 31 partial, three
+fail, and nine missing.
+
+The ignored browser-backed same-profile fixture remains diagnostic rather than
+acceptance evidence. Its first retained run failed because the disposable test
+runtime lacked its SQLite database in receipt
+`20260927T020349Z-39f194809aba`. After a temporary fixture-only migration, it
+advanced to the correct `presentation_keeper_unavailable` boundary in receipt
+`20260927T020645Z-3f7e82c03caa`. The temporary change was reverted. Do not
+restore the legacy JSON route inventory fallback; current browser-backed proof
+requires SQLite keeper authority.
+
+The refreshed optimized development candidate at `bdf695db` installed as
+generation `0.28.0-ede5cf223fe4`, executable SHA-256
+`ede5cf223fe457e5e3301b58c2aa348873ae454a8eb3d002f1fc6cc794132821`, and
+passed all three disposable browser-launch smoke iterations. Production stayed
+on its prior generation. The presentation provider remains stopped and not
+ready with only display `:58`; no provider replay occurred. The shared helper
+still needs the interactive version 10 upgrade before provider recovery and
+installed Alice/Bob acceptance.
+
 Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`
 with objective `contimue plan 211 with an additional 1 mm token cap.` The
 objective names the cancelled predecessor, so execution follows its unmet
 outcome through active successor Plan 0219 rather than reopening Plan 0211.
-The latest control readback at this checkpoint reported `tokensUsed=471417`
-and `timeUsedSeconds=2712`; those usage counters continue to advance.
+The latest control readback at this checkpoint reported `tokensUsed=745054`
+and `timeUsedSeconds=4030`; those usage counters continue to advance.
 
 Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
 the Guacamole interaction reference, and make warning banners compact and
