@@ -3,12 +3,12 @@
 ## Current P219 status | 2026-09-27
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
-version 4 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
+version 5 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
 renewal; production, staging, public ingress, merge, release, and worktree
 removal remain excluded. Custody stays on
 `platform/p211-simple-cold-upgrade`, draft PR #191, work items #181/#183/#195.
-HEAD is `67a17375`; the branch is 38 commits ahead of its remote and was clean
-before this documentation reconciliation.
+The named-retention source checkpoint is `d7ec8d2f`; the branch is 40 commits
+ahead of its remote and was clean after that custody commit.
 
 Current installed development identity is generation
 `0.28.0-2423cfb064f2`, executable SHA-256
@@ -31,15 +31,16 @@ with the existing live credential at the operator's direction without recording
 the secret; the live auth file stayed byte-identical. Automated pointer,
 keyboard, and scroll effects were not established.
 
-The current blocking product defect is named-session retention. Exact named
-profile sessions 94 through 97 ended with `heartbeat_expired` roughly five
-minutes after last activity. SQLite records
-`sessionIdleTimeoutMs=300000`, and the current manager applies that finite
-timeout to exact and disposable profiles alike. This violates G12/G36. G42 and
-G45 still require exact-session refresh and separation of session heartbeat
-from viewer heartbeat. The temporary keepalive was removed because it hid the
-defect. A single operator report that the handoff was absent from SQLite was
-not reproduced: the exact row existed and authenticated retry succeeded.
+The named-session retention defect is repaired and source-qualified at
+`d7ec8d2f`. The manager now applies `sessionIdleTimeoutMs` only to
+manager-allocated disposable profiles. Exact named-profile sessions and their
+opaque handoffs have no default idle expiry, while explicit close remains
+terminal. Host restart normalizes and persists legacy finite named-session
+deadlines. The installed generation still predates this repair, so G12/G36 are
+not accepted at the installed boundary. G42 and G45 still require installed
+exact-session refresh and separation of session heartbeat from viewer
+heartbeat. A single operator report that the handoff was absent from SQLite
+was not reproduced: the exact row existed and authenticated retry succeeded.
 
 Acceptance remains partial:
 
@@ -48,25 +49,30 @@ Acceptance remains partial:
 | M1B authority closure | Source cuts and focused gates through `67a17375` | complete for this checkpoint | Final-candidate qualification remains later. |
 | M2A provider and viewer | Three ready RDP routes, authenticated Guacamole, opaque handoff, real pixels | partial | Four-route target readiness and retained exact ownership for the unavailable slot. |
 | M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
-| G12/G36 retention | Repeated SQLite `heartbeat_expired` terminals at about five minutes | fail | Named profiles must have no default time expiry; disposable expiry must remain bounded. |
+| G12/G36 retention | Source regressions prove retained named handoffs, bounded disposable expiry, and restart normalization at `d7ec8d2f` | partial | Installed retention and same-handoff replay on a frozen candidate. |
 | Goal control row | Objective is correct | stale | Goal service still says `blocked`, `tokensUsed=595442`, `timeUsedSeconds=1647`; no resume transition exists. |
 
-Next bounded packet: repair named-profile retention at the service-model and
-SQLite host/config seam. Prove an exact named session and the same opaque
-handoff survive beyond the disposable idle window, while a disposable session
-still expires; preserve explicit-close terminality, success-only exact-session
-refresh, and restart-load behavior. Run focused model and host tests, formatting,
-and strict workspace Clippy. Stop after a source-qualified custody commit and
-evidence update. Do not publish another development candidate or replay M2B
-without a separate freeze decision against the cumulative allowance. Do not
-start M3, M4, or M5.
+The bounded source repair is complete. Its red regression and green focused
+receipts, the complete 271-test Service Model lane, 32 host/navigation tests,
+formatting, and strict workspace Clippy are recorded in Plan 0219. The
+selector-required workstation and Guacamole fixtures, docs build,
+remote-view documentation contract, architecture report, and coverage-ledger
+validator also pass. Four unrelated `browser_session_authority` failures remain
+in a broader name-filtered Rust run and do not invalidate the independently
+green changed surfaces. The repository skill remains intentionally ahead of
+the shared installed skill until candidate publication.
+
+Next gate: decide whether to freeze and publish a new development candidate,
+then replay installed named retention and the remaining M2B Alice/Bob workflow.
+Do not publish or mutate the development runtime without that separate freeze
+decision. Do not start M3, M4, or M5.
 
 Nonblocking future UI direction: adopt the Guacamole interaction approach from
 the sibling `../remote-view` project and make warning banners compact and
 dismissible. This does not expand the retention repair packet.
 
-Progress classification: blocker reduction and evidence reconciliation. M2A
-and M2B remain incomplete; no G-row is promoted by this documentation slice.
+Progress classification: source blocker removal. M2A and M2B remain incomplete;
+no G-row is promoted to installed pass by this source-only packet.
 
 ## Active Plan Locator Index
 

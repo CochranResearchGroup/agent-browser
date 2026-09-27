@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -74,8 +74,15 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 4 reconciles the installed September 26 result. Development generation
-`0.28.0-2423cfb064f2` is current and binds executable SHA-256
+Version 5 records the source-qualified named-profile retention repair at
+`d7ec8d2f`. The service model now applies the configured inactivity deadline
+only to manager-allocated disposable profiles. Exact named-profile sessions
+and their opaque handoffs use no default idle expiry, and the SQLite host
+normalizes and persists legacy finite named-session deadlines on restart.
+Explicit close and typed unrecoverable termination remain unchanged.
+
+The installed September 26 result still runs development generation
+`0.28.0-2423cfb064f2` and binds executable SHA-256
 `2423cfb064f2f3ce4a110f197b5202b64535cfc6c674aabf6484027047fbd2e2`.
 The exact stale-display and XRDP-channel reclamation repairs are committed at
 `5cf1c10f` and `67a17375`; privileged helper contract version 9 is installed.
@@ -97,14 +104,14 @@ without recording the secret; the live auth file remained byte-identical.
 Automated pointer, keyboard, and scroll effects were not established, so input
 acceptance remains incomplete.
 
-Named-profile sessions 94 through 97 then ended with `heartbeat_expired` about
-five minutes after their last activity. The SQLite runtime setting is
-`sessionIdleTimeoutMs=300000`, and the current manager applies that same finite
-expiry to exact named profiles. That behavior contradicts G12 and G36: named
-profile handoffs have no default time expiry, while disposable profiles use
-configured inactivity expiry. G42 and G45 still require exact-session activity
-refresh and separation of session heartbeat from viewer heartbeat. A temporary
-keepalive was removed because it masked the defect. One operator report of
+Named-profile sessions 94 through 97 in the installed generation ended with
+`heartbeat_expired` about five minutes after their last activity. Source commit
+`d7ec8d2f` repairs that defect without changing the installed generation. G12
+and G36 therefore have source and provider-free regression evidence but remain
+unaccepted at the installed boundary. G42 and G45 still require installed
+exact-session activity refresh and separation of session heartbeat from viewer
+heartbeat. A temporary keepalive was removed because it masked the defect. One
+operator report of
 "Remote-view handoff was not found in the SQLite session authority" occurred
 while the exact handoff row still existed and an authenticated retry resolved
 successfully; retain it as diagnostic evidence, not a reproduced second root
@@ -113,8 +120,8 @@ cause.
 M2A has meaningful partial evidence for provider recovery, authenticated access,
 and pixels, but remains incomplete because the configured provider target is
 not ready. M2B remains incomplete because input, Alice/Bob joined lifecycle,
-restart recovery, cleanup, and named-session retention have not all passed on
-one frozen candidate. Do not start M3, M4, or M5.
+installed restart recovery, cleanup, and named-session retention have not all
+passed on one frozen candidate. Do not start M3, M4, or M5.
 
 At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
@@ -497,6 +504,31 @@ focused model and host tests, formatting, and strict workspace Clippy required
 by the Rust change. Stop after a source-qualified custody commit and updated
 evidence. A new development build, provider mutation, or M2B replay requires a
 separate candidate-freeze decision against the remaining cumulative allowance.
+
+Source checkpoint on September 27: complete at `d7ec8d2f`. The initial named
+retention regression failed in receipt
+`20260927T011608Z-b158cd9e9ef2`, then passed in
+`20260927T011720Z-4e968fc1e064`. The disposable-expiry regression passed in
+`20260927T011744Z-d4d2d97df757`; the complete 31-test session-manager file
+passed in `20260927T011818Z-d060623a7039`; all 271 Service Model tests passed in
+`20260927T012640Z-743ad42f95fc`; and the 32 host/navigation tests passed in
+`20260927T012656Z-65f6ac880cfc`. Restart-load normalization passed with the
+documented cache-off retry in `20260927T012046Z-532cd34873bf`. Formatting passed
+in `20260927T012633Z-cc299e28a1ec`, and strict workspace Clippy passed without
+warnings in `job-20260927T012703Z-d135787f09f1`.
+
+The selector-required workstation, host-provision, fresh-VM, Guacamole asset,
+PostgreSQL durability, and route-user fixtures passed. The docs production
+build, remote-view documentation contract, policy wiring, architecture report,
+coverage-ledger validator, and diff checks passed. A broader name-filtered Rust
+run retained four unrelated `browser_session_authority` failures; the changed
+session-manager, host, navigation, and daemon regressions pass independently.
+The repository skill intentionally differs from the shared installed skill
+until a separately authorized development candidate publication.
+
+Next gate: decide whether to freeze and publish a new development candidate for
+installed retention and M2B replay. This source packet does not authorize that
+runtime effect and promotes no G-row to installed pass.
 
 Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` still reports
 the correct objective, `resume p219 with a 1 mm token cap`, but its control row
