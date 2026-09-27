@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -73,6 +73,48 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 4 reconciles the installed September 26 result. Development generation
+`0.28.0-2423cfb064f2` is current and binds executable SHA-256
+`2423cfb064f2f3ce4a110f197b5202b64535cfc6c674aabf6484027047fbd2e2`.
+The exact stale-display and XRDP-channel reclamation repairs are committed at
+`5cf1c10f` and `67a17375`; privileged helper contract version 9 is installed.
+The focused helper, installer, Rust, route, formatting, and strict workspace
+Clippy checks recorded for that batch pass. Production was not changed.
+
+The repairs recovered three development RDP routes on displays `:58`, `:59`,
+and `:60`. The configured fourth warm route remains unavailable because older
+display artifacts outside the exact repair custody still occupy the allocation
+range. Current read-only status therefore reports three ready displays and a
+blocking presentation-provider readiness result for the four-route target.
+This is sufficient to retain the minimum two-party evidence already observed,
+but it is not full provider readiness.
+
+Authenticated operator access and real synthetic browser pixels passed through
+an opaque `/remote-view/<handoff-id>` URL. At the operator's direction, the
+development admin credential was aligned with the existing live credential
+without recording the secret; the live auth file remained byte-identical.
+Automated pointer, keyboard, and scroll effects were not established, so input
+acceptance remains incomplete.
+
+Named-profile sessions 94 through 97 then ended with `heartbeat_expired` about
+five minutes after their last activity. The SQLite runtime setting is
+`sessionIdleTimeoutMs=300000`, and the current manager applies that same finite
+expiry to exact named profiles. That behavior contradicts G12 and G36: named
+profile handoffs have no default time expiry, while disposable profiles use
+configured inactivity expiry. G42 and G45 still require exact-session activity
+refresh and separation of session heartbeat from viewer heartbeat. A temporary
+keepalive was removed because it masked the defect. One operator report of
+"Remote-view handoff was not found in the SQLite session authority" occurred
+while the exact handoff row still existed and an authenticated retry resolved
+successfully; retain it as diagnostic evidence, not a reproduced second root
+cause.
+
+M2A has meaningful partial evidence for provider recovery, authenticated access,
+and pixels, but remains incomplete because the configured provider target is
+not ready. M2B remains incomplete because input, Alice/Bob joined lifecycle,
+restart recovery, cleanup, and named-session retention have not all passed on
+one frozen candidate. Do not start M3, M4, or M5.
 
 At succession, local HEAD and the directly queried remote branch both resolve
 to the source baseline. P218 is incomplete; no installed P218 candidate has
@@ -426,12 +468,45 @@ and P09 passes after private SQLite custody, legacy-key scrubbing, transient
 privileged-helper stdin and provider-sync replay fixtures. Installed provider
 cleanup, rotation and handoff-identity evidence remain in M2A.
 
-M2A execution checkpoint: development generation
-`0.28.0-9484cfa7ef3b` proves the installed runtime-owned route-keeper
-capability and passes provider preflight. Its exact prior-boot absence proof
-cleared the retained generation-32 quarantine through ordinary cold recovery.
-The next join authenticates Guacamole connections 1 and 2 and reaches RDP, but
-each runtime-owned primary closes after roughly 6–7 seconds. Receipt
-`apply-1790451432634-9571.json` quarantines only development resources.
-Terminal folding currently discards the bounded close code, so no blind retry
-or ingress publication is authorized. M2A and M2B remain incomplete.
+The preceding `0.28.0-9484cfa7ef3b` M2A checkpoint remains historical evidence:
+it reached authenticated Guacamole connections 1 and 2, then lost each
+runtime-owned primary after roughly 6–7 seconds. The later helper repairs and
+installed generation `0.28.0-2423cfb064f2` supersede that environment diagnosis
+without erasing receipt `apply-1790451432634-9571.json`.
+
+### Bounded successor repair packet | named-profile retention
+
+Outcome: exact named-profile sessions and their durable opaque handoffs do not
+expire through the disposable-profile inactivity policy. Explicit close,
+configured named retention if one is later introduced, or a typed unrecoverable
+condition may still terminate them. Disposable sessions retain bounded
+inactivity expiry. Handoff access and successful commands refresh only the
+addressed session; viewer heartbeat remains separate.
+
+Primary write surface: the service-model session lifecycle, the SQLite host and
+runtime configuration adapter, and their focused tests. Update public contracts
+or operator docs only if the externally configurable surface changes. Do not
+use a keepalive, extend the global five-minute value, or special-case the P219
+fixture.
+
+Evidence and exit: first add or identify a regression that demonstrates an
+exact named session and its same handoff surviving beyond the disposable idle
+window while a disposable session expires. Preserve explicit-close terminality,
+success-only exact-session refresh, and restart-load behavior. Then run the
+focused model and host tests, formatting, and strict workspace Clippy required
+by the Rust change. Stop after a source-qualified custody commit and updated
+evidence. A new development build, provider mutation, or M2B replay requires a
+separate candidate-freeze decision against the remaining cumulative allowance.
+
+Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` still reports
+the correct objective, `resume p219 with a 1 mm token cap`, but its control row
+is stale at `blocked`, `tokensUsed=595442`, and `timeUsedSeconds=1647`. The goal
+API exposes no resume transition and rejected creation of a replacement while
+that unfinished row exists. The operator's explicit resume direction and this
+plan remain execution authority; the stale goal status is not presented as a
+current stop or counter.
+
+Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
+the Guacamole interaction reference, and make warning banners compact and
+dismissible so they do not permanently consume viewer height. This direction
+does not expand the retention repair packet.

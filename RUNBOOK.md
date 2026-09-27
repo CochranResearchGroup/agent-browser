@@ -1,173 +1,72 @@
 # Runbook
 
-## Current P219 status | 2026-09-26
+## Current P219 status | 2026-09-27
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
-is `OPEN`. P218 version 45 is `CANCELLED` as superseded while incomplete.
-The operator directed execution of Plan 0219 on September 26 and renewed the
-blocked campaign with 1,000,000 additional tokens after the first P219 window
-stopped at 545,502 tokens.
-The full G01–G45 specification and P01–P19 prohibitions remain unchanged.
+version 4 is `OPEN`. The operator resumed the campaign under its 1,000,000-token
+renewal; production, staging, public ingress, merge, release, and worktree
+removal remain excluded. Custody stays on
+`platform/p211-simple-cold-upgrade`, draft PR #191, work items #181/#183/#195.
+HEAD is `67a17375`; the branch is 38 commits ahead of its remote and was clean
+before this documentation reconciliation.
 
-Custody remains on `platform/p211-simple-cold-upgrade`, draft PR #191, work
-items #181/#183/#195. Successor planning began at
-`6b3a41e265d1fd3da27431788e4373b66177225d`; execution incorporated the remote
-policy capsule at `8bb9518eb78b37c22aaec0183348ee6c77adf0da`. The inherited worktree is retained.
-No candidate, runtime, provider, or installed acceptance changed in this slice.
+Current installed development identity is generation
+`0.28.0-2423cfb064f2`, executable SHA-256
+`2423cfb064f2f3ce4a110f197b5202b64535cfc6c674aabf6484027047fbd2e2`.
+Commits `5cf1c10f` and `67a17375` added exact stale X lock and XRDP channel
+socket reclamation. Privileged helper contract version 9 is installed. Focused
+helper, installer, Rust, route, formatting, and strict workspace Clippy checks
+for that repair batch passed. Production remained unchanged.
 
-Acceptance: the inherited [coverage ledger](docs/dev/contracts/p218-grilling-contract-coverage.v1.json)
-has two pass, 29 partial, five fail, and nine missing rows. M1A will
-reconcile stale evidence descriptions without promoting tests to installed
-acceptance. `541d7346` already removed the JSON ordinary-open coordinator and
-fallback. SQLite manual-seeding dispatch already uses its dedicated launcher,
-and both product Cargo manifests lack a direct Lease Authority dependency.
-The remaining complete dependency closure still needs qualification.
+Three development routes are ready on displays `:58`, `:59`, and `:60`.
+The fourth configured warm display is unavailable because older artifacts
+outside exact repair custody still saturate the remaining allocation range.
+Fresh read-only status therefore reports the development runtime ready but the
+four-route presentation provider not ready. Do not broaden cleanup to foreign
+or uncertain artifacts.
 
-M1A checkpoint: [the current authority closure](docs/dev/architecture/p219-m1a-current-authority-closure.v1.json)
-reconciles six bounded blocker groups against current source. A new red detector
-identified an unreachable compiled JSON manager-handoff adapter; that adapter
-and its JSON-only tests are removed while six focused handoff tests pass in
-`job-20260926T174302Z-3972e141d58c`. Formatting passes in
-`job-20260926T174504Z-c8d8e5240533`. No coverage row is promoted. The next
-causal batch removes the compiled keeper-bypassing `ManagerHandoffAuthority::Legacy`
-variant and qualifies the affected host recovery fixtures.
+Authenticated access through an opaque `/remote-view/<handoff-id>` URL and real
+synthetic browser pixels passed. The development admin credential was aligned
+with the existing live credential at the operator's direction without recording
+the secret; the live auth file stayed byte-identical. Automated pointer,
+keyboard, and scroll effects were not established.
 
-That keeper-only batch now passes all eight journaled-open tests in
-`job-20260926T175133Z-8e7342c18660`. One first run exposed two fixtures whose
-route IDs still named the removed static inventory; the consolidated repair
-bound them to the current keeper route and the exact rerun passed. M1A's
-inventory is complete. M1B continues with stale-history availability, ordinary
-open coalescing, restart behavior, and remaining command heartbeat coverage.
-Strict workspace Clippy passes in `job-20260926T175308Z-6dc3a4cd5bae`.
-G05 advances from missing to partial: malformed owner, cleanup and ambiguous
-historical fields do not change ordinary manager translation
-(`job-20260926T175454Z-a004f9e83c83`), and contradictory migration history
-does not block valid profile opens (`job-20260926T175616Z-5f35b7c10690`).
-Provider-free B04 qualification also passes: concurrent exact ordinary opens
-share one execution permit and replay one operation and handoff
-(`job-20260926T175808Z-5fb37dfa5612`), while waiting-only restart performs no
-browser operation before exact client resume
-(`job-20260926T175854Z-10e864191671`). G19, G31 and G40 remain partial until
-their browser-host and installed-daemon boundaries are proven.
-The B05 inventory confirms that ordinary page-effect commands centralize
-success-only heartbeat publication in `execute_managed_command`. Failure,
-execution-error, success and exact Alice/Bob isolation pass in
-`job-20260926T180401Z-b2578ab7c2d2`; shared-browser command and cleanup
-isolation passes in `job-20260926T180405Z-5f6a121c50fc`. B05 remains open for
-generation-plus-operation fencing and browser-backed qualification.
-The renewed B05 cut routes ordinary existing-session page effects through the
-SQLite presentation queue. Each effect now requires the exact current host
-generation and attempt immediately before execution, then publishes one
-generation-checked terminal response for replay. The focused fixture passes in
-`job-20260926T183131Z-ac68ca4b6eae`; strict workspace Clippy passes in
-`job-20260926T183230Z-655f5a76034c`. Lifecycle effects including close, tab
-close, reap and focus still need an equivalent fence that does not make cleanup
-depend on live provider readiness.
-That lifecycle follow-up now introduces a provider-independent
-`wait_for_current_generation` permit. Every effectful `browser_session_*`
-action, managed page command, view focus and periodic reap requires the exact
-current generation and attempt before effects and at terminal publication;
-read-only status is excluded. Two focused fixtures pass in
-`job-20260926T183758Z-d93fb704e698`, and strict Clippy passes in
-`job-20260926T183842Z-e73e88231e49`. B05 now narrows to liveness
-reconciliation, provider callbacks, asynchronous completion and recovery
-commits plus joined daemon-restart qualification.
-Status no longer performs liveness reconciliation as a side effect. The
-periodic fenced lifecycle operation now owns both liveness reconciliation and
-expiry reap. The deterministic `statusReadOnly` architecture cut and negative
-fixture pass, advancing G30 from missing to partial; complete status/doctor
-field mapping and redaction remain open.
-B02 is complete. Ordinary Service State transactions no longer deserialize or
-replay runtime-owner and lifecycle sidecars, and Service State, launch metadata,
-inventory, generated client and public documentation no longer expose protected
-owner observations. Disabled historical fixtures remain noncompiled; the
-independent Lease Authority crate remains a workspace member. P15, P16 and the
-`legacyAuthorityQuarantine` cut pass. Strict workspace Clippy passes in
-`job-20260926T185357Z-7d9bc2827369`; directly affected observability, JavaScript
-type, architecture and generation checks pass. The umbrella
-`pnpm test:service-client` command remains independently red because its P157
-oracle references the already-absent `cli/src/native/service_profile_acquisition.rs`.
-B05 source fencing is complete. Journaled open and navigation now thread the
-exact admitted permit through nested bootstrap, provider observations,
-recovery, handoff binding and terminal SQLite commits. Each phase rechecks the
-current host generation before work and after effect completion. Focused
-recovery fixtures pass in `job-20260926T190143Z-ca2738398002` and
-`job-20260926T190143Z-aa61dba822d2`; strict Clippy passes in
-`job-20260926T190229Z-bbba0fcd7b4c`. Installed daemon-restart qualification
-remains in M2B.
+The current blocking product defect is named-session retention. Exact named
+profile sessions 94 through 97 ended with `heartbeat_expired` roughly five
+minutes after last activity. SQLite records
+`sessionIdleTimeoutMs=300000`, and the current manager applies that finite
+timeout to exact and disposable profiles alike. This violates G12/G36. G42 and
+G45 still require exact-session refresh and separation of session heartbeat
+from viewer heartbeat. The temporary keepalive was removed because it hid the
+defect. A single operator report that the handoff was absent from SQLite was
+not reproduced: the exact row existed and authenticated retry succeeded.
 
-Source evidence carried forward: `44961424` exact browser selection,
-`680eb2df` synthetic navigation proof repair, and `1884c407` journaled
-success-only heartbeat. The recorded 270 model tests, 31 host tests, format,
-strict Clippy, docs, and contract checks retain their original scope. They were
-not rerun as Rust or installed acceptance during successor writing.
+Acceptance remains partial:
 
-Architecture readback: P09, P15 and P16 pass; P02/P03/P05/P12/P19 have
-detector gaps; eleven prohibitions are unverified. The Service-model,
-legacy-authority quarantine and provider-credential custody cuts pass. The old
-M0 dependency graph is historical, not current reachability.
+| Requirement | Source or installed evidence | Current state | Missing proof |
+| --- | --- | --- | --- |
+| M1B authority closure | Source cuts and focused gates through `67a17375` | complete for this checkpoint | Final-candidate qualification remains later. |
+| M2A provider and viewer | Three ready RDP routes, authenticated Guacamole, opaque handoff, real pixels | partial | Four-route target readiness and retained exact ownership for the unavailable slot. |
+| M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
+| G12/G36 retention | Repeated SQLite `heartbeat_expired` terminals at about five minutes | fail | Named profiles must have no default time expiry; disposable expiry must remain bounded. |
+| Goal control row | Objective is correct | stale | Goal service still says `blocked`, `tokensUsed=595442`, `timeUsedSeconds=1647`; no resume transition exists. |
 
-Authority and effort: the latest P218 600,000-token window is exhausted. The
-September 26 handoff recorded goal thread
-`01a0da16-eee9-7511-99e6-ffc04d7b3cff` as `blocked` with
-`tokensUsed=3,808,483`. This is a historical service readback, not a new
-measurement or a sum of all windows. P218's earlier budget/attempt history
-remains preserved. The renewed P219 allowance is 1,000,000 additional tokens
-with 200,000 held for reconciliation, validation, evidence and custody. At
-700,000 renewed tokens, implementation continues only if direct evidence shows
-M2B remains reachable before the 800,000 implementation stop. The alternative
-outcome stop is complete M1B and M2A plus one frozen isolated-development
-candidate passing the installed M2B Alice/Bob checkpoint. M3 through M5 remain
-open after that stop. The verified policy entrypoint is [the P219 M1B–M2B
-capsule](docs/dev/policy-capsules/p219-m1b-m2b.md); broad policy rereads occur
-only on one of its explicit triggers.
+Next bounded packet: repair named-profile retention at the service-model and
+SQLite host/config seam. Prove an exact named session and the same opaque
+handoff survive beyond the disposable idle window, while a disposable session
+still expires; preserve explicit-close terminality, success-only exact-session
+refresh, and restart-load behavior. Run focused model and host tests, formatting,
+and strict workspace Clippy. Stop after a source-qualified custody commit and
+evidence update. Do not publish another development candidate or replay M2B
+without a separate freeze decision against the cumulative allowance. Do not
+start M3, M4, or M5.
 
-M1B source closure is complete. B06 moves the route-user inventory into the
-private Browser Runtime SQLite `provider_credentials` table, migrates and
-scrubs the legacy environment keys, and supplies the privileged helper only
-through transient stdin. The route-user, provider-sync, workstation-install,
-host-provision, Guacamole-asset, PostgreSQL-durability and architecture
-fixtures pass; formatting passes in
-`job-20260926T191050Z-12d5bec83d96`. G25 advances from fail to partial and
-P09 passes. Installed provider projection cleanup and identity-preserving
-credential rotation remain M2A evidence.
+Nonblocking future UI direction: adopt the Guacamole interaction approach from
+the sibling `../remote-view` project and make warning banners compact and
+dismissible. This does not expand the retention repair packet.
 
-Current action: join the minimum M2A provider and live-viewer path, then freeze
-and qualify one M2B Alice/Bob candidate. The early candidate cannot supply
-final proof for a different final candidate.
-
-M2A checkpoint: candidate generation `0.28.0-9484cfa7ef3b` is installed with
-production unchanged and three clean browser-launch cycles. Commit `afe871a9`
-correctly treats a digest-bound XRDP witness from a different kernel boot as
-absent. Installed cold recovery cleared the generation-32 `route-slot-02`
-quarantine and cleanup obligation without editing SQLite; all records were
-re-fenced to generation 39. A fresh full preflight passed.
-
-The next exact apply reached the live provider: Guacamole authenticated the
-operator and connections 1 and 2 reached RDP, but each runtime-owned primary
-closed after roughly 6–7 seconds and warming timed out. Receipt
-`apply-1790451432634-9571.json` retained production invariance and quarantined
-only development-owned provider resources. The current fold returns the routes
-to `absent` but discards the bounded primary terminal code, so another apply
-would be blind. No further retry, broad cleanup, ingress publication, or
-authority override is authorized. M2A and M2B remain open.
-
-Retained stops: no production/staging mutation, ingress publication, merge,
-release, worktree removal, private-site acceptance, or automatic external
-workflow retries. GitHub CI remains operator-disabled. Recheck development
-identity, ingress binding, provider preflight, process ownership, and external
-observer inputs before effects. September 26 stopped-container and blocked
-provider observations are historical leads, not current runtime proof.
-
-Validation: documentation links, policy wiring, active planning audit, goal
-policy audit, coverage validator, and diff hygiene pass. Direct checks prove
-all 45 requirements are mapped exactly once, the normative specification and
-coverage ledger are unchanged, all 33 local plan/runbook links resolve, and
-the archive preserves the previous runbook entries. Selection classifies this
-change as docs; no compiler or runtime checks are required for this slice.
-
-Progress classification: blocker reduction (current closure frozen and one
-compiled JSON handoff fallback removed); no G-row acceptance advanced yet.
+Progress classification: blocker reduction and evidence reconciliation. M2A
+and M2B remain incomplete; no G-row is promoted by this documentation slice.
 
 ## Active Plan Locator Index
 
@@ -180,5 +79,5 @@ compiled JSON handoff fallback removed); no G-row acceptance advanced yet.
 
 [The P218 archive](RUNBOOK-history-2026-09-26-through-p218.md) preserves the
 previous runbook, Turns 418 through 450, P218 source checkpoints, failures,
-prior stop instructions, and links to earlier archives. Read only the entry
-needed for an active decision.
+prior stop instructions, and links to earlier archives. Plan 0219 version 4
+preserves the superseded September 26 M2A checkpoint and its receipt.
