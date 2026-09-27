@@ -242,6 +242,23 @@ pub(crate) async fn run_configured_route_keeper_supervisor(
         .await
 }
 
+/// Run the configured keeper as part of a restartable runtime host.
+///
+/// Host shutdown releases this process's Guacamole primaries but retains the
+/// exact XRDP route witnesses in durable authority. A cold successor can then
+/// prove predecessor exit and adopt those routes. Deliberate provider teardown
+/// continues to use `run_configured_route_keeper_supervisor`, whose shutdown
+/// policy exactly stops every ready route.
+pub(crate) async fn run_restartable_configured_route_keeper_supervisor(
+    repository: &impl RouteKeeperRepository,
+    connector: &mut impl SupervisedPresentationRouteConnector,
+    ticks: &mut mpsc::Receiver<()>,
+    shutdown: &mut watch::Receiver<bool>,
+) -> Result<(), String> {
+    run_route_keeper_supervisor_with_shutdown_policy(repository, connector, ticks, shutdown, false)
+        .await
+}
+
 async fn run_route_keeper_supervisor_with_shutdown_policy(
     repository: &impl RouteKeeperRepository,
     connector: &mut impl SupervisedPresentationRouteConnector,
@@ -4283,6 +4300,38 @@ mod tests {
         assert_eq!(
             repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
             RouteKeeperPhase::Absent
+        );
+    }
+
+    #[tokio::test]
+    async fn restartable_configured_supervisor_retains_ready_routes_for_cold_adoption() {
+        let directory = TempDirectory::new("route-keeper-restartable-configured-shutdown");
+        let repository = repository(&directory);
+        let mut connector = FakeConnector::default();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        reconcile_once(&repository, &mut connector).await.unwrap();
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Ready
+        );
+        let (_tick_tx, mut ticks) = mpsc::channel(1);
+        let (shutdown_tx, mut shutdown) = watch::channel(false);
+        shutdown_tx.send(true).unwrap();
+
+        run_restartable_configured_route_keeper_supervisor(
+            &repository,
+            &mut connector,
+            &mut ticks,
+            &mut shutdown,
+        )
+        .await
+        .unwrap();
+
+        assert!(connector.stops.is_empty());
+        assert_eq!(connector.shutdowns, 1);
+        assert_eq!(
+            repository.load_route_keeper_authority().unwrap().records["route-slot-01"].phase,
+            RouteKeeperPhase::Ready
         );
     }
 

@@ -406,6 +406,10 @@ export async function reconnectDashboardViewerClient(
   };
 }
 
+function dashboardViewportReadyState(last) {
+  return last?.uxState === 'connected' || last?.hasRefreshButton;
+}
+
 function recoveredStaleTabState(last, expected) {
   return Boolean(
     last?.hasViewport &&
@@ -414,7 +418,7 @@ function recoveredStaleTabState(last, expected) {
       last?.sessionParam === expected.sessionName &&
       expected.tabId &&
       last?.tabParam &&
-      last?.hasRefreshButton &&
+      dashboardViewportReadyState(last) &&
       !last?.hasPasswordInput &&
       Array.isArray(last?.noticeText) &&
       last.noticeText.some((text) => /Recovered stale selected tab identity/.test(text)),
@@ -430,7 +434,7 @@ function recoveredLiveTabState(last, expected) {
       expected.tabId &&
       last?.tabParam &&
       last.tabParam !== expected.tabId &&
-      last?.hasRefreshButton &&
+      dashboardViewportReadyState(last) &&
       !last?.hasPasswordInput
   );
 }
@@ -453,7 +457,7 @@ export async function waitForDashboardState(
       last?.browserParam === expected.browserId &&
       last?.sessionParam === expected.sessionName &&
       (!expected.tabId || last?.tabParam === expected.tabId) &&
-      last?.hasRefreshButton &&
+      dashboardViewportReadyState(last) &&
       !last?.hasPasswordInput
     ) {
       return last;

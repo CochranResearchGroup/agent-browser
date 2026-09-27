@@ -1411,7 +1411,7 @@ fn validate_authority(
         || authority.lease_record_id != lease
         || authority.lease_route_id != binding.route_id
         || authority.lease_browser_id != binding.browser_id
-        || authority.lease_viewer_id != request.agent_name
+        || authority.lease_viewer_id.trim().is_empty()
         || authority.lease_role != "controller"
         || authority.lease_state != "controlling"
         || authority.lease_updated_at.trim().is_empty()
@@ -2173,7 +2173,7 @@ fn authority_digest(
         "{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}\0{}",
         authority.controller_epoch,
         authority.lease_id,
-        authority.lease_updated_at,
+        authority.lease_viewer_id,
         binding.browser_id,
         binding.route_id,
         binding.stream_id,

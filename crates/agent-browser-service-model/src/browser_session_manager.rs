@@ -709,6 +709,36 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             if request.requested_browser_id.is_some() {
                 return Err("browser_session_selected_browser_not_live".to_string());
             }
+            if let Some(reservation) = reservation.as_ref() {
+                if reservation.session_id != session.id
+                    || reservation.browser_id != browser.id
+                    || browser.desktop.as_ref() != Some(&reservation.desktop)
+                {
+                    return Err("browser_session_open_reservation_mismatch".to_string());
+                }
+                let launch = self.launch_retained_browser_replacement(
+                    &profile,
+                    reservation,
+                    &mut observed_launch,
+                )?;
+                self.publish_retained_browser_replacement(
+                    &browser,
+                    launch,
+                    &session.id,
+                    request.activity_at_ms,
+                )?;
+                return Ok(OpenBrowserSessionResult {
+                    session_id: session.id,
+                    session_name: session.name,
+                    profile_id: session.profile_id,
+                    browser_id: session.browser_id,
+                    disposition: SessionBrowserDisposition::Launched,
+                    session_disposition: SessionRecordDisposition::Reused,
+                });
+            }
+            if observed_launch.is_some() {
+                return Err("browser_session_observed_launch_requires_reservation".to_string());
+            }
             self.retire_browser(
                 &browser,
                 SessionEndReason::BrowserUnresponsive,
@@ -933,6 +963,114 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_session_reserved_desktop_identity_mismatch".to_string());
         }
         Ok(launch)
+    }
+
+    /// Replace a dead process behind an exact journaled browser identity.
+    ///
+    /// The retained desktop is already capacity-accounted and cannot be
+    /// reselected without breaking durable handoffs. The operation reservation
+    /// therefore binds the replacement to the same browser and desktop while
+    /// the normal route-health check prevents adoption onto stale capacity.
+    fn launch_retained_browser_replacement(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        reservation: &BrowserOpenReservation,
+        observed_launch: &mut Option<BrowserLaunch>,
+    ) -> Result<BrowserLaunch, String> {
+        let reserved_route_is_healthy = self.config.remote_desktop_routes.is_empty()
+            || self.config.remote_desktop_routes.iter().any(|route| {
+                route.healthy
+                    && route.id == reservation.desktop.route_id
+                    && route.display_name == reservation.desktop.display_name
+            });
+        if !reserved_route_is_healthy {
+            return Err("browser_session_reserved_desktop_unavailable".to_string());
+        }
+        let launch = match observed_launch.take() {
+            Some(launch) => launch,
+            None => self.effects.launch_browser_reserved(
+                profile,
+                Some(&reservation.desktop),
+                &reservation.browser_id,
+            )?,
+        };
+        if launch.browser_id != reservation.browser_id {
+            return Err("browser_session_reserved_browser_identity_mismatch".to_string());
+        }
+        if launch.desktop.as_ref() != Some(&reservation.desktop) {
+            return Err("browser_session_reserved_desktop_identity_mismatch".to_string());
+        }
+        Ok(launch)
+    }
+
+    /// Publish one replacement without ending the logical sessions it serves.
+    /// Old target identities belong to the exited process, so they become
+    /// terminal history and each session reacquires a target on demand.
+    fn publish_retained_browser_replacement(
+        &mut self,
+        previous: &ManagedBrowserInstance,
+        launch: BrowserLaunch,
+        refreshed_session_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<(), String> {
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == previous.id)
+            .cloned()
+            .collect::<Vec<_>>();
+        for tab in tabs {
+            self.state.tabs.remove(&tab.id);
+            let profile_id = self
+                .state
+                .sessions
+                .get(&tab.session_id)
+                .map(|session| session.profile_id.clone())
+                .ok_or_else(|| "browser_session_replacement_session_missing".to_string())?;
+            if let Some(session) = self.state.sessions.get_mut(&tab.session_id) {
+                if session.current_tab_id.as_deref() == Some(tab.id.as_str()) {
+                    session.current_tab_id = None;
+                }
+            }
+            self.state.tab_history.push(TerminalBrowserTab {
+                id: tab.id,
+                target_id: tab.target_id,
+                browser_id: tab.browser_id,
+                session_id: tab.session_id,
+                profile_id,
+                created_at_ms: tab.created_at_ms,
+                last_activity_at_ms: tab.last_activity_at_ms,
+                closed_at_ms: activity_at_ms,
+                reason: BrowserTabEndReason::BrowserEnded,
+                session_end_reason: None,
+            });
+        }
+        self.state.browsers.insert(
+            previous.id.clone(),
+            ManagedBrowserInstance {
+                id: launch.browser_id,
+                profile_id: previous.profile_id.clone(),
+                pid: launch.pid,
+                cdp_endpoint: launch.cdp_endpoint,
+                process_identity: launch.process_identity,
+                desktop: launch.desktop,
+                active_session_ids: previous.active_session_ids.clone(),
+            },
+        );
+        let expires_at_ms = self.state.expiry_after_activity(
+            &previous.profile_id,
+            activity_at_ms,
+            self.config.session_idle_timeout_ms,
+        )?;
+        let session = self
+            .state
+            .sessions
+            .get_mut(refreshed_session_id)
+            .ok_or_else(|| "browser_session_replacement_session_missing".to_string())?;
+        session.last_activity_at_ms = session.last_activity_at_ms.max(activity_at_ms);
+        session.expires_at_ms = session.expires_at_ms.max(expires_at_ms);
+        Ok(())
     }
 
     fn resolve_profile_for_open(
@@ -1605,10 +1743,46 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     /// Reconcile durable browser records against current process and CDP
     /// liveness before projecting active inventory.
     pub fn reconcile_liveness(&mut self, now_ms: u64) -> Result<Vec<String>, String> {
+        self.reconcile_liveness_with_named_retention(now_ms, false)
+    }
+
+    /// Reconcile disposable and sessionless browsers while retaining dead
+    /// browsers that still anchor active durable named sessions.
+    ///
+    /// A runtime-host successor uses this policy so its periodic sweep cannot
+    /// erase logical sessions before an exact journaled open replaces the old
+    /// process. The replacement path retains browser identity, handoffs, and
+    /// sibling sessions while rebinding only process-local target IDs.
+    pub fn reconcile_liveness_preserving_named_sessions(
+        &mut self,
+        now_ms: u64,
+    ) -> Result<Vec<String>, String> {
+        self.reconcile_liveness_with_named_retention(now_ms, true)
+    }
+
+    fn reconcile_liveness_with_named_retention(
+        &mut self,
+        now_ms: u64,
+        preserve_named_sessions: bool,
+    ) -> Result<Vec<String>, String> {
         let browsers = self.state.browsers.values().cloned().collect::<Vec<_>>();
         let mut retired = Vec::new();
         for browser in browsers {
             if !self.effects.browser_is_live(&browser)? {
+                let recoverable_named = preserve_named_sessions
+                    && !browser.active_session_ids.is_empty()
+                    && browser.active_session_ids.iter().all(|session_id| {
+                        self.state.sessions.get(session_id).is_some_and(|session| {
+                            session.browser_id == browser.id
+                                && !self
+                                    .state
+                                    .disposable_profiles
+                                    .contains_key(&session.profile_id)
+                        })
+                    });
+                if recoverable_named {
+                    continue;
+                }
                 self.retire_browser(&browser, SessionEndReason::BrowserUnresponsive, now_ms)?;
                 retired.push(browser.id);
             }

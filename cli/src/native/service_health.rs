@@ -2161,6 +2161,11 @@ impl RemoteViewReconcileRepair {
             "releasedRoutePoolEntries": self.released_route_pool_entries,
             "orphanedDisplayAllocations": self.orphaned_display_allocations,
             "orphanedRoutes": self.orphaned_routes,
+            // Viewer authority moved to Browser Runtime SQLite. Keep these
+            // compatibility counters explicit so legacy service-status readers
+            // do not mistake an absent field for an unknown reconciliation.
+            "releasedViewerLeases": 0,
+            "expiredViewerLeases": 0,
             "clearedControllerLeases": self.cleared_controller_leases,
             "completedAcquisitionRollbacks": self.completed_acquisition_rollbacks,
             "repaired": self.unavailable_route_pool_entries
@@ -2169,7 +2174,7 @@ impl RemoteViewReconcileRepair {
                 + self.orphaned_display_allocations
                 + self.orphaned_routes
                 + self.completed_acquisition_rollbacks,
-            "released": self.released_route_pool_entries,
+            "released": self.released_route_pool_entries + self.orphaned_routes,
             "skippedUnsafe": 0,
         })
     }

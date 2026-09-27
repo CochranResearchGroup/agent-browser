@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 6b3a41e265d1fd3da27431788e4373b66177225d
+    checkpoint: 1d940440eeb3e0aae93faba739ed6c89e0af5f96
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M1A is reconciled and M1B source closure is complete; keeper-only handoff, stale-history availability, legacy-authority physical quarantine, ordinary-open coalescing, waiting-only restart, generation-fenced ordinary effects, read-only status, success-only heartbeat, provider-free Alice/Bob isolation and SQLite provider-credential custody receipts pass; inventory is two pass, 29 partial, five fail, nine missing; no installed P219 acceptance; execution continues through the M2B outcome checkpoint under the verified capsule
-    validation_ref: 3946f81b
+    validation_status: M2B installed acceptance and closeout pass on isolated development generation 0.28.0-ac3c1daed8ab; exact shared-profile Alice and Bob identities, addressed activity, disposable expiry isolation, viewer authority and control transfer, final cleanup, two runtime-host replacement cycles, original opaque handoff rebinding, public Guacamole pixels, and no page-effect replay are proven; the reconciled ledger is nine pass, 26 partial, three fail, and seven missing; changed-surface Rust, dashboard, docs, service, installer, provider-boundary, policy, and hygiene gates pass
+    validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: generation 39 safely cleared the prior route-slot-02 quarantine; M2A now stops because runtime-owned Guacamole primaries authenticate and reach RDP but close after roughly 6 to 7 seconds, while terminal folding discards the bounded close code; receipt apply-1790451432634-9571.json; no blind retry or ingress publication; installed M2B remains pending
-    updated_at: 2026-09-26
+    blocker: M2B has no remaining blocker; M3 recovery and retention is the next bounded milestone and is not started
+    updated_at: 2026-09-27

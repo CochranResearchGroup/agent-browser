@@ -375,7 +375,11 @@ export type BrowserSessionManagerWorkspaceSources = {
 };
 
 export type BrowserSessionManagerViewerInventory = {
-  routePool?: Record<string, { routeId?: string | null }>;
+  routePool?: Record<string, WorkspaceServiceViewStream & {
+    target?: {
+      displayAllocationId?: string | null;
+    } | null;
+  }>;
   remoteViewRoutes?: Record<string, WorkspaceServiceViewStream>;
 };
 
@@ -384,10 +388,27 @@ function browserSessionManagerViewStreams(
   inventory?: BrowserSessionManagerViewerInventory,
 ): WorkspaceServiceViewStream[] {
   if (!routePoolEntryId) return [];
-  const routeId = inventory?.routePool?.[routePoolEntryId]?.routeId?.trim() || routePoolEntryId;
+  const routePoolEntry = inventory?.routePool?.[routePoolEntryId];
+  const routeId = routePoolEntry?.routeId?.trim() || routePoolEntryId;
   const stream = inventory?.remoteViewRoutes?.[routeId]
     ?? Object.values(inventory?.remoteViewRoutes ?? {}).find((candidate) => candidate.routeId === routeId);
-  return stream ? [{ ...stream, routeId, routePoolEntryId }] : [];
+  if (stream) return [{ ...stream, routeId, routePoolEntryId }];
+  if (!routePoolEntry) return [];
+
+  // Browser Session Manager records the stable route-pool identity. During
+  // runtime-host adoption the keeper can restore that entry before the legacy
+  // remoteViewRoutes projection is populated, so the ready pool entry remains
+  // the authoritative dashboard stream source.
+  return [{
+    ...routePoolEntry,
+    id: routePoolEntry.id ?? routePoolEntryId,
+    routeId,
+    routePoolEntryId,
+    displayAllocationId: routePoolEntry.displayAllocationId
+      ?? routePoolEntry.target?.displayAllocationId
+      ?? null,
+    routeSource: routePoolEntry.routeSource ?? "route_pool",
+  }];
 }
 
 /** Project the independent simple-session state into dashboard read models. */

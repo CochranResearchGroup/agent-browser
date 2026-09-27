@@ -36,6 +36,16 @@ pub(crate) struct DesktopControlLease {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct LiveViewerControlAuthority {
+    pub(crate) lease_id: String,
+    pub(crate) authenticated_principal: String,
+    pub(crate) provider_route_id: String,
+    pub(crate) updated_at_ms: u64,
+    pub(crate) expires_at_ms: u64,
+    pub(crate) lease: DesktopControlLease,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiveViewerActivationRequest {
     pub(crate) operation_id: String,
     pub(crate) handoff_id: String,
@@ -159,6 +169,49 @@ impl DesktopControlRecord {
 }
 
 impl BrowserRuntimeSqliteStore {
+    pub(crate) fn current_live_viewer_control(
+        &self,
+        lease_id: &str,
+    ) -> Result<LiveViewerControlAuthority, String> {
+        validate_identifier(lease_id, "live_viewer_lease")?;
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| format!("desktop_control_read_begin_failed:{error}"))?;
+        let authority = load_live_viewer_control(&transaction, lease_id, current_time_ms()?)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("desktop_control_read_commit_failed:{error}"))?;
+        Ok(authority)
+    }
+
+    pub(crate) fn with_current_live_viewer_control<T>(
+        &mut self,
+        lease_id: &str,
+        expected_state: &BrowserSessionState,
+        effect: impl FnOnce(&LiveViewerControlAuthority) -> Result<T, String>,
+    ) -> Result<T, String> {
+        validate_identifier(lease_id, "live_viewer_lease")?;
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("desktop_control_effect_begin_failed:{error}"))?;
+        let persisted_state: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        if &persisted_state != expected_state {
+            return Err("desktop_control_session_state_stale".to_string());
+        }
+        let authority = load_live_viewer_control(&transaction, lease_id, current_time_ms()?)?;
+        let result = effect(&authority)?;
+        transaction
+            .commit()
+            .map_err(|error| format!("desktop_control_effect_commit_failed:{error}"))?;
+        Ok(result)
+    }
+
     /// Transfer controller ownership to one exact client and retained handoff.
     ///
     /// The operation is idempotent only while it remains current and its
@@ -475,6 +528,36 @@ impl BrowserRuntimeSqliteStore {
     }
 }
 
+fn load_live_viewer_control(
+    connection: &Connection,
+    lease_id: &str,
+    now_ms: u64,
+) -> Result<LiveViewerControlAuthority, String> {
+    let state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let record = state
+        .live_viewers
+        .get(lease_id)
+        .ok_or_else(|| "authenticated_live_viewer_authority_unavailable".to_string())?;
+    let lease = load_and_validate_current(
+        connection,
+        &record.handoff_id,
+        &record.client_connection_id,
+        record.controller_epoch,
+    )?;
+    validate_live_viewer_current(connection, &lease, now_ms)?;
+    if record.lease_id != lease_id {
+        return Err("authenticated_live_viewer_authority_unavailable".to_string());
+    }
+    Ok(LiveViewerControlAuthority {
+        lease_id: record.lease_id.clone(),
+        authenticated_principal: record.authenticated_principal.clone(),
+        provider_route_id: record.provider_route_id.clone(),
+        updated_at_ms: record.updated_at_ms,
+        expires_at_ms: record.expires_at_ms,
+        lease,
+    })
+}
+
 fn current_time_ms() -> Result<u64, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let millis = SystemTime::now()
@@ -756,6 +839,13 @@ fn validate_manager_handoff(handoff: &RemoteViewHandoff) -> Result<(), String> {
             != Some(true)
         || handoff.view_stream_provider != Some(ViewStreamProvider::RdpGateway)
         || handoff.control_input != Some(ControlInputProvider::ManualAttachedDesktop)
+        || handoff
+            .last_resolution
+            .as_ref()
+            .and_then(|resolution| resolution.get("operatorVisible"))
+            .and_then(|operator_visible| operator_visible.get("state"))
+            .and_then(serde_json::Value::as_str)
+            != Some("ready")
     {
         return Err("desktop_control_handoff_not_ready".to_string());
     }
@@ -1039,6 +1129,9 @@ mod tests {
                 control_input: Some(ControlInputProvider::ManualAttachedDesktop),
                 last_route_id: Some("route-slot-01".to_string()),
                 last_route_pool_entry_id: Some("route-slot-01".to_string()),
+                last_resolution: Some(serde_json::json!({
+                    "operatorVisible": { "state": "ready" }
+                })),
                 ..RemoteViewHandoff::default()
             })
             .unwrap();
@@ -1061,6 +1154,9 @@ mod tests {
                 control_input: Some(ControlInputProvider::ManualAttachedDesktop),
                 last_route_id: Some("route-slot-02".to_string()),
                 last_route_pool_entry_id: Some("route-slot-02".to_string()),
+                last_resolution: Some(serde_json::json!({
+                    "operatorVisible": { "state": "ready" }
+                })),
                 ..RemoteViewHandoff::default()
             })
             .unwrap();
@@ -1273,6 +1369,94 @@ mod tests {
                 .unwrap(),
             "target-1"
         );
+    }
+
+    #[test]
+    fn current_live_viewer_control_returns_only_the_current_authenticated_lease() {
+        let mut fixture = fixture("current-live-viewer-control");
+        let first = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        fixture.store.activate_live_viewer(&first).unwrap();
+
+        let authority = fixture
+            .store
+            .current_live_viewer_control("live-viewer:operation-a")
+            .unwrap();
+        assert_eq!(
+            authority.authenticated_principal,
+            first.authenticated_principal
+        );
+        assert_eq!(authority.provider_route_id, first.provider_route_id);
+        assert_eq!(authority.lease.browser_id, "browser-1");
+        assert_eq!(authority.lease.session_id, "session-1");
+
+        fixture
+            .store
+            .activate_live_viewer(&live_request(
+                "operation-b",
+                "client-b",
+                fixture.binding.guacamole_connection_id,
+            ))
+            .unwrap();
+        assert!(fixture
+            .store
+            .current_live_viewer_control("live-viewer:operation-a")
+            .is_err());
+        assert_eq!(
+            fixture
+                .store
+                .current_live_viewer_control("live-viewer:operation-b")
+                .unwrap()
+                .lease
+                .controller_client_connection_id,
+            "client-b"
+        );
+    }
+
+    #[test]
+    fn current_live_viewer_effect_holds_the_sqlite_writer_fence() {
+        let mut fixture = fixture("current-live-viewer-effect-fence");
+        fixture
+            .store
+            .activate_live_viewer(&live_request(
+                "operation-a",
+                "client-a",
+                fixture.binding.guacamole_connection_id,
+            ))
+            .unwrap();
+        let expected_state = fixture.store.load_session_state().unwrap();
+        let mut competitor = BrowserRuntimeSqliteStore::open(
+            &fixture.directory.join(BROWSER_RUNTIME_DATABASE_FILENAME),
+        )
+        .unwrap();
+        competitor
+            .connection
+            .busy_timeout(std::time::Duration::ZERO)
+            .unwrap();
+        let guacamole_connection_id = fixture.binding.guacamole_connection_id;
+
+        let observed = fixture
+            .store
+            .with_current_live_viewer_control(
+                "live-viewer:operation-a",
+                &expected_state,
+                |authority| {
+                    assert!(competitor
+                        .activate_live_viewer(&live_request(
+                            "operation-b",
+                            "client-b",
+                            guacamole_connection_id,
+                        ))
+                        .unwrap_err()
+                        .starts_with("live_viewer_begin_failed:"));
+                    Ok(authority.lease.epoch)
+                },
+            )
+            .unwrap();
+        assert!(observed > 0);
     }
 
     #[test]

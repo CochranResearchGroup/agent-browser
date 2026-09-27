@@ -121,6 +121,39 @@ assert.equal(managedSessionSources.serviceBrowsers[0].viewStreams[0].frameUrl, "
 assert.deepEqual(managedSessionSources.serviceSessions[0].browserIds, ["browser:work:1"]);
 assert.equal(managedSessionSources.serviceSessions[0].agentName, "alice");
 assert.equal(managedSessionSources.serviceTabs[0].url, "https://example.test/current");
+
+const managedSessionRoutePoolFallback = browserSessionManagerWorkspaceSources({
+  browsers: {
+    "browser:restart:1": {
+      id: "browser:restart:1",
+      profileId: "restart",
+      pid: 4343,
+      cdpEndpoint: "ws://127.0.0.1:9522/devtools/browser/restart",
+      activeSessionIds: ["session:bob:restart:1"],
+      desktop: { routeId: "route-slot-01", displayName: ":10" },
+    },
+  },
+}, {
+  routePool: {
+    "route-slot-01": {
+      provider: "rdp_gateway",
+      routeId: "development-route-1",
+      frameUrl: "http://127.0.0.1:8093/guacamole/#/client/recovered",
+      externalUrl: "https://operator.example.test",
+      readiness: { state: "ready" },
+      target: { displayAllocationId: "display-01" },
+    },
+  },
+  remoteViewRoutes: {},
+});
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams.length, 1);
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].id, "route-slot-01");
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].routeId, "development-route-1");
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].routePoolEntryId, "route-slot-01");
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].displayAllocationId, "display-01");
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].routeSource, "route_pool");
+assert.equal(managedSessionRoutePoolFallback.serviceBrowsers[0].viewStreams[0].readiness.state, "ready");
+
 const managedSessionNodes = deriveLiveWorkspaceNodes(managedSessionSources);
 assert.equal(managedSessionNodes.length, 1);
 assert.equal(managedSessionNodes[0].browserId, "browser:work:1");

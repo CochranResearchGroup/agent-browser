@@ -8,7 +8,7 @@ use crate::native::browser_session_store::BrowserRuntimeSqliteStore;
 use crate::native::presentation_route_keeper::{
     prepare_configured_cold_process_recovery, recover_prepared_cold_process_routes_until_shutdown,
     register_route_keeper_host_process, reserve_prepared_cold_process_routes,
-    run_configured_route_keeper_supervisor, ConfiguredColdProcessRecoveryOutcome,
+    run_restartable_configured_route_keeper_supervisor, ConfiguredColdProcessRecoveryOutcome,
     PresentationRouteConnector, RouteKeeperAdoptionObservation, RouteKeeperConnectorObservation,
     RouteKeeperStopObservation, RouteKeeperTerminalEvent, SqliteRouteKeeperRepository,
     SupervisedPresentationRouteConnector,
@@ -147,7 +147,7 @@ impl ConfiguredRouteKeeperSupervisorHandle {
                     // only after every retained candidate was started under the
                     // pre-provider proof packet above.
                     let _ = task_health.send(RouteKeeperSupervisorHealth::Supervising);
-                    run_configured_route_keeper_supervisor(
+                    run_restartable_configured_route_keeper_supervisor(
                         &repository,
                         &mut connector,
                         &mut ticks,

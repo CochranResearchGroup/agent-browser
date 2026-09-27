@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -74,7 +74,18 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 8 records source checkpoint `375cdfbe` and installed development
+Version 9 records M2B as installed and accepted on isolated development
+generation `0.28.0-ac3c1daed8ab`, built from the working tree based on
+`1d940440eeb3e0aae93faba739ed6c89e0af5f96`. The root-owned privileged helper
+is version 11, all development doctor checks pass, four warm provider displays
+are ready, and production remains selected at
+`0.28.0-b589b318c530-c0c0977896a8`. M3, M4, and M5 remain unstarted. The
+M2B closeout is complete. The next bounded gate is M3 recovery and retention;
+re-read the applicable policy capsule triggers before starting it.
+
+### Prior version 8 checkpoint
+
+Version 8 recorded source checkpoint `375cdfbe` and installed development
 generation `0.28.0-57c51d356866`, with executable SHA-256
 `57c51d3568663fe9f50bd14bab69bc183c71b37b819decd22d64ee62c8f35cf2`.
 The optimized build, development publication, and three-iteration browser
@@ -622,11 +633,76 @@ ready, all six keeper records are absent, and no development XRDP route process
 remains. The root-owned helper needs the interactive version 11 upgrade before
 provider recovery and installed Alice/Bob acceptance.
 
-Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active`.
-Its Plan 211 wording names the cancelled predecessor, so execution follows the
-unmet outcome through active successor Plan 0219 rather than reopening Plan
-0211. The operator expanded the active continuation ceiling to 2,000,000
-tokens; transient service usage counters are not acceptance evidence.
+### M2B installed acceptance checkpoint
+
+The operator installed helper version 11. Provider plan, stage, preflight, and
+apply converged with four ready warm displays. The final published candidate is
+development generation `0.28.0-ac3c1daed8ab`; its doctor reports every check
+green and separately confirms the production identity is unchanged.
+
+The installed Alice/Bob workflow passed the six M2B cases:
+
+1. Alice's authenticated opaque handoff rendered current Guacamole pixels at
+   1152 by 640 during the initial input proof. Pointer, keyboard, and scroll
+   effects passed.
+2. Alice and Bob shared one exact-profile browser while retaining distinct
+   session, tab, target, handoff, heartbeat, and expiry identities. Repeated
+   and concurrent opens created no duplicate browser.
+3. Successful session-addressed commands refreshed only the addressed session;
+   failed commands did not refresh it. Focus and desktop effects used current
+   viewer and provider-generation fences.
+4. Authenticated viewer connect, heartbeat, disconnect, and control transfer
+   passed. A stale Alice control attempt was rejected after Bob took control;
+   Bob's current interaction completed all 41 guarded effect keys.
+5. Closing Alice preserved Bob and the browser. Closing Bob terminated the
+   browser, confirmed by a fresh process census. A separate disposable pair
+   proved Alice expired with `heartbeat_expired` while active Bob survived and
+   remained commandable.
+6. Two successive runtime-host replacements preserved the exact named-profile
+   sessions, logical browser ID, route slot, and original opaque handoff IDs.
+   Each ordinary exact-session reopen created one replacement process and fresh
+   targets. Both original handoffs resolved through authenticated public ingress
+   with `operatorVisible.state=ready`, `uxState=connected`, and embedded
+   Guacamole pixels. The final screenshot visibly showed the Alice fixture and
+   Bob's peer tab. Both pre-restart page markers read back as `null`; navigation
+   history advanced from 136 to 140 only for the four explicit reopens. The
+   final Alice close preserved Bob and PID 54817; the final Bob close removed
+   the browser record and process.
+
+The dashboard route projection defect found during the restart case is repaired:
+when runtime-host adoption restores a ready keeper route before the legacy
+`remoteViewRoutes` projection, the Browser Session Manager now projects the
+authoritative `routePool` entry as the view stream. The viewer-client acceptance
+helper also recognizes the current connected viewport without requiring the
+retired refresh control. The operator-directed future Guacamole UX and compact,
+dismissible warning banners remain a nonblocking follow-up.
+
+The reconciled 45-row coverage ledger now records nine pass, 26 partial, three
+fail, and seven missing. M2B promotes G11, G24, G31, G35, G43, G44, and G45 to
+pass; G36 advances from missing to partial because installed expiry isolation
+passed while delayed profile deletion and quota cleanup remain later work.
+
+Changed-surface validation is complete. Rust format and strict workspace Clippy
+pass. The comprehensive Rust runner passed every compartment except two
+deterministic service-reconcile compatibility assertions and one process-timing
+Lease Authority assertion on its first attempt. Restoring explicit zero-valued
+legacy viewer counters and counting orphaned route removal in the aggregate
+release total repaired the two service assertions; their focused reruns and the
+complete 40-test actions compartment pass. The Lease Authority assertion passed
+immediately in isolation and the complete 118-test compartment passed on rerun.
+All other comprehensive compartments retain their green results under policy
+0042/0072. Dashboard projection, viewer-client, route-confusion, service parity,
+generated-client, docs, coverage-ledger, workstation installer, host provision,
+fresh-VM, Guacamole asset, PostgreSQL durability, route-user synchronization,
+policy wiring, and documentation-link gates pass. Final development doctor is
+green, the development skill copy is current, and a fresh OS census reports no
+development managed-profile Chrome root after final cleanup.
+
+Goal-service note: thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` still exposes
+a stale blocked status from an earlier gate. The operator explicitly resumed
+execution, expanded the continuation ceiling to 2,000,000 tokens, and directed
+this Plan 0219 continuation. The plan and current runtime evidence govern; the
+stale service status is not acceptance evidence.
 
 Deferred, nonblocking UI direction: use the sibling `../remote-view` project as
 the Guacamole interaction reference, and make warning banners compact and

@@ -4,8 +4,8 @@ use agent_browser_service_model::{
     BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
     BrowserOpenReservation, BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
     BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
-    BrowserTabAcquisition, BrowserTabSource, OpenBrowserSession, SessionBrowserDisposition,
-    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabSource, OpenBrowserSession,
+    SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
 };
 
 #[derive(Default)]
@@ -740,6 +740,130 @@ fn observed_reserved_open_is_rejected_when_normal_open_would_reuse() {
 
     assert_eq!(state, state_before_recovery);
     assert_eq!(effects.launches.len(), launch_count_before_recovery);
+}
+
+#[test]
+fn observed_reserved_replacement_preserves_sibling_sessions_and_rebinds_tabs() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tabs: VecDeque::from([
+            BrowserTabAcquisition {
+                tab_id: "tab-alice-before".to_string(),
+                target_id: "target-alice-before".to_string(),
+                source: BrowserTabSource::Bootstrap,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-bob-before".to_string(),
+                target_id: "target-bob-before".to_string(),
+                source: BrowserTabSource::SessionInitial,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-alice-after".to_string(),
+                target_id: "target-alice-after".to_string(),
+                source: BrowserTabSource::Bootstrap,
+            },
+            BrowserTabAcquisition {
+                tab_id: "tab-bob-after".to_string(),
+                target_id: "target-bob-after".to_string(),
+                source: BrowserTabSource::SessionInitial,
+            },
+        ]),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_desktop_routes: vec![agent_browser_service_model::BrowserDesktopRoute {
+            id: "route-a".to_string(),
+            display_name: ":21".to_string(),
+            healthy: true,
+        }],
+    };
+    let mut manager =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    manager.tab_for_command(&alice.session_id, 1_000).unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1_000))
+        .unwrap();
+    manager.tab_for_command(&bob.session_id, 1_000).unwrap();
+    drop(manager);
+    state
+        .bind_manager_handoff(&alice.session_id, "opaque-alice")
+        .unwrap();
+    state
+        .bind_manager_handoff(&bob.session_id, "opaque-bob")
+        .unwrap();
+    let browser = state.browsers[&alice.browser_id].clone();
+    let reservation = BrowserOpenReservation {
+        session_id: alice.session_id.clone(),
+        browser_id: browser.id.clone(),
+        desktop: browser.desktop.clone().unwrap(),
+    };
+    effects.browser_live = false;
+    let observed_launch = BrowserLaunch {
+        browser_id: browser.id.clone(),
+        pid: 5_252,
+        cdp_endpoint: "http://127.0.0.1:9525".to_string(),
+        process_identity: None,
+        desktop: browser.desktop.clone(),
+    };
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+
+    let replaced = manager
+        .open_reserved_observed(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 2_000),
+            reservation,
+            observed_launch,
+        )
+        .unwrap();
+    assert_eq!(replaced.session_id, alice.session_id);
+    assert_eq!(replaced.browser_id, alice.browser_id);
+    assert_eq!(replaced.disposition, SessionBrowserDisposition::Launched);
+    assert_eq!(
+        replaced.session_disposition,
+        SessionRecordDisposition::Reused
+    );
+    assert_eq!(
+        manager
+            .tab_for_command(&alice.session_id, 2_000)
+            .unwrap()
+            .tab_id,
+        "tab-alice-after"
+    );
+    assert_eq!(
+        manager
+            .tab_for_command(&bob.session_id, 2_000)
+            .unwrap()
+            .tab_id,
+        "tab-bob-after"
+    );
+    drop(manager);
+
+    assert_eq!(state.sessions.len(), 2);
+    assert!(state.session_history.is_empty());
+    assert_eq!(state.browsers.len(), 1);
+    assert_eq!(state.browsers[&alice.browser_id].pid, 5_252);
+    assert_eq!(
+        state.sessions[&alice.session_id].handoff_ids,
+        ["opaque-alice"]
+    );
+    assert_eq!(state.sessions[&bob.session_id].handoff_ids, ["opaque-bob"]);
+    assert_eq!(state.sessions[&alice.session_id].last_activity_at_ms, 2_000);
+    assert_eq!(state.sessions[&bob.session_id].last_activity_at_ms, 1_000);
+    assert_eq!(state.tab_history.len(), 2);
+    assert!(state
+        .tab_history
+        .iter()
+        .all(|tab| tab.reason == BrowserTabEndReason::BrowserEnded
+            && tab.session_end_reason.is_none()));
 }
 
 impl BrowserSessionEffects for FixtureEffects {
@@ -1860,4 +1984,51 @@ fn serialized_state_reuses_healthy_session_after_service_restart() {
         SessionRecordDisposition::Reused
     );
     assert!(restarted_effects.launches.is_empty());
+}
+
+#[test]
+fn successor_liveness_sweep_preserves_dead_named_session_for_replacement() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let opened = {
+        let mut effects = FixtureEffects::default();
+        BrowserSessionManager::new(
+            &mut state,
+            &catalog,
+            &mut effects,
+            BrowserSessionManagerConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_desktop_routes: Vec::new(),
+            },
+        )
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap()
+    };
+    let mut successor_effects = FixtureEffects {
+        browser_live: false,
+        ..FixtureEffects::default()
+    };
+    let mut successor = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut successor_effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_desktop_routes: Vec::new(),
+        },
+    );
+
+    let retired = successor
+        .reconcile_liveness_preserving_named_sessions(2_000)
+        .unwrap();
+
+    assert!(retired.is_empty());
+    assert!(state.browsers.contains_key(&opened.browser_id));
+    assert!(state.sessions.contains_key(&opened.session_id));
+    assert!(state.session_history.is_empty());
+    assert!(successor_effects.closes.is_empty());
 }

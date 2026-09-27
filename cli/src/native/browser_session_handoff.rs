@@ -1,8 +1,9 @@
 //! Durable remote-view handoffs for ordinary Browser Session Manager browsers.
 
 use agent_browser_service_model::{
-    BrowserSessionState, ControlInputProvider, ManagedBrowserInstance, ManagedBrowserSession,
-    ManagedBrowserTab, RemoteViewHandoff, RouteKeeperAuthority, ServiceState, ViewStreamProvider,
+    BrowserSessionState, BrowserTabEndReason, ControlInputProvider, ManagedBrowserInstance,
+    ManagedBrowserSession, ManagedBrowserTab, RemoteViewHandoff, RouteKeeperAuthority,
+    ServiceState, ViewStreamProvider,
 };
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
@@ -32,27 +33,51 @@ pub(crate) struct ManagerHandoffResponseProjection {
     pub(crate) view_stream_provider: ViewStreamProvider,
 }
 
-/// Reuse only a ready handoff for this exact logical session and target.
-/// A closed handoff or another tab receives a fresh opaque identity.
+/// Reuse a ready handoff for this exact logical session and target, or for the
+/// most recent current target terminalized by a retained browser replacement.
+/// A closed handoff or an ordinary tab change receives a fresh opaque identity.
 fn reusable_manager_handoff_id<'a>(
     existing: &'a BTreeMap<String, RemoteViewHandoff>,
+    sessions: &BrowserSessionState,
     session: &ManagedBrowserSession,
     browser: &ManagedBrowserInstance,
     tab: &ManagedBrowserTab,
 ) -> Option<&'a str> {
-    existing
-        .values()
+    let matches_logical_session = |handoff: &&RemoteViewHandoff| {
+        handoff.state == "ready"
+            && is_manager_handoff(handoff)
+            && handoff.intent.get("sessionId").and_then(Value::as_str) == Some(session.id.as_str())
+            && handoff.profile_id.as_deref() == Some(session.profile_id.as_str())
+            && handoff.browser_id.as_deref() == Some(browser.id.as_str())
+            && handoff.session_name.as_deref() == Some(session.name.as_str())
+    };
+    session
+        .handoff_ids
+        .iter()
+        .rev()
+        .filter_map(|id| existing.get(id))
         .find(|handoff| {
-            handoff.state == "ready"
-                && is_manager_handoff(handoff)
-                && session.handoff_ids.iter().any(|id| id == &handoff.id)
-                && handoff.intent.get("sessionId").and_then(Value::as_str)
-                    == Some(session.id.as_str())
-                && handoff.profile_id.as_deref() == Some(session.profile_id.as_str())
-                && handoff.browser_id.as_deref() == Some(browser.id.as_str())
-                && handoff.session_name.as_deref() == Some(session.name.as_str())
+            matches_logical_session(handoff)
                 && handoff.tab_id.as_deref() == Some(tab.id.as_str())
                 && handoff.target_id.as_deref() == Some(tab.target_id.as_str())
+        })
+        .or_else(|| {
+            session
+                .handoff_ids
+                .iter()
+                .rev()
+                .filter_map(|id| existing.get(id))
+                .find(|handoff| {
+                    matches_logical_session(handoff)
+                        && sessions.tab_history.iter().any(|terminal| {
+                            terminal.session_id == session.id
+                                && terminal.browser_id == browser.id
+                                && handoff.tab_id.as_deref() == Some(terminal.id.as_str())
+                                && handoff.target_id.as_deref() == Some(terminal.target_id.as_str())
+                                && terminal.reason == BrowserTabEndReason::BrowserEnded
+                                && terminal.session_end_reason.is_none()
+                        })
+                })
         })
         .map(|handoff| handoff.id.as_str())
 }
@@ -125,9 +150,10 @@ pub(crate) fn prepare_manager_handoff(
         &desktop.route_id,
         &desktop.display_name,
     )?;
-    let handoff_id = reusable_manager_handoff_id(existing_handoffs, session, browser, tab)
-        .map(str::to_string)
-        .unwrap_or(candidate_id);
+    let handoff_id =
+        reusable_manager_handoff_id(existing_handoffs, sessions, session, browser, tab)
+            .map(str::to_string)
+            .unwrap_or(candidate_id);
     let handoff_url = durable_remote_view_handoff_url(&binding, &handoff_id)
         .ok_or_else(|| "browser_session_handoff_public_operator_url_missing".to_string())?;
     let created_at = existing_handoffs
@@ -235,9 +261,10 @@ pub(crate) fn prepare_keeper_manager_handoff(
         .map(str::to_string)
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let handoff_id = reusable_manager_handoff_id(existing_handoffs, session, browser, tab)
-        .map(str::to_string)
-        .unwrap_or(candidate_id);
+    let handoff_id =
+        reusable_manager_handoff_id(existing_handoffs, sessions, session, browser, tab)
+            .map(str::to_string)
+            .unwrap_or(candidate_id);
     let handoff_url = durable_remote_view_handoff_url_from_public_operator_url(
         &binding.public_operator_url,
         &handoff_id,
@@ -395,7 +422,7 @@ mod tests {
         ManagedBrowserSession, ManagedBrowserTab, RecordedProcessIdentity, RemoteViewRoute,
         RouteKeeperConnectionBinding, RouteKeeperConnectionCatalog, RouteKeeperHostProcessClaim,
         RouteKeeperProtocolReadyReceipt, RouteKeeperReconcileAction, RouteKeeperStartPriority,
-        RouteKeeperXrdpOwnershipWitness, RoutePoolEntry,
+        RouteKeeperXrdpOwnershipWitness, RoutePoolEntry, TerminalBrowserTab,
     };
     use std::collections::BTreeMap;
 
@@ -623,6 +650,75 @@ mod tests {
         assert_eq!(replay.handoff.id, first.handoff.id);
         assert_eq!(replay.handoff.handoff_url, first.handoff.handoff_url);
         assert_eq!(replay.handoff.created_at, first.handoff.created_at);
+    }
+
+    #[test]
+    fn keeper_handoff_survives_exact_browser_replacement_target_rebinding() {
+        let authority = ready_keeper_authority();
+        let mut sessions = keeper_managed_sessions();
+        let first_response = manager_navigation_response();
+        let first = prepare_keeper_manager_handoff(
+            &first_response,
+            &sessions,
+            &authority,
+            &BTreeMap::new(),
+        )
+        .unwrap();
+        sessions
+            .bind_manager_handoff("session-a", &first.handoff.id)
+            .unwrap();
+        let terminal = sessions.tabs.remove("tab-a").unwrap();
+        sessions.tab_history.push(TerminalBrowserTab {
+            id: terminal.id,
+            target_id: terminal.target_id,
+            browser_id: terminal.browser_id,
+            session_id: terminal.session_id,
+            profile_id: "work".to_string(),
+            created_at_ms: terminal.created_at_ms,
+            last_activity_at_ms: terminal.last_activity_at_ms,
+            closed_at_ms: 3,
+            reason: BrowserTabEndReason::BrowserEnded,
+            session_end_reason: None,
+        });
+        sessions.tabs.insert(
+            "tab-after".to_string(),
+            ManagedBrowserTab {
+                id: "tab-after".to_string(),
+                target_id: "target-after".to_string(),
+                browser_id: "browser-a".to_string(),
+                session_id: "session-a".to_string(),
+                created_at_ms: 4,
+                last_activity_at_ms: 4,
+            },
+        );
+        sessions
+            .sessions
+            .get_mut("session-a")
+            .unwrap()
+            .current_tab_id = Some("tab-after".to_string());
+        let replacement_response = json!({
+            "success": true,
+            "data": {
+                "sessionId": "session-a",
+                "tabId": "tab-after",
+                "targetId": "target-after",
+                "url": "https://example.test/after"
+            }
+        });
+        let existing = BTreeMap::from([(first.handoff.id.clone(), first.handoff.clone())]);
+
+        let replacement =
+            prepare_keeper_manager_handoff(&replacement_response, &sessions, &authority, &existing)
+                .unwrap();
+
+        assert_eq!(replacement.handoff.id, first.handoff.id);
+        assert_eq!(replacement.handoff.handoff_url, first.handoff.handoff_url);
+        assert_eq!(replacement.handoff.created_at, first.handoff.created_at);
+        assert_eq!(replacement.handoff.tab_id.as_deref(), Some("tab-after"));
+        assert_eq!(
+            replacement.handoff.target_id.as_deref(),
+            Some("target-after")
+        );
     }
 
     #[test]

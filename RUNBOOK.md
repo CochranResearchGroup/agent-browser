@@ -1,6 +1,50 @@
 # Runbook
 
-## Current P219 status | 2026-09-27
+## Current P219 status | 2026-09-27 M2B accepted
+
+[Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+version 9 is `OPEN`: M2B is installed and accepted, while M3 through M5 remain
+unstarted. Custody remains on `platform/p211-simple-cold-upgrade`, draft PR
+#191, and work items #181/#183/#195. Production, merge, release, and worktree
+removal remain excluded.
+
+The selected isolated development generation is `0.28.0-ac3c1daed8ab`, built
+from the working tree based on `1d940440eeb3e0aae93faba739ed6c89e0af5f96`.
+Every development doctor check passes, helper version 11 is installed, four
+warm provider displays are ready, and production remains
+`0.28.0-b589b318c530-c0c0977896a8`.
+
+M2B passed shared-profile Alice/Bob identity isolation, exact addressed-command
+activity, failed-command non-refresh, authenticated viewer lifecycle and
+control transfer, stale-controller rejection, guarded desktop input, Alice-first
+cleanup, Bob-final process termination, and a separate disposable expiry case.
+Two runtime-host replacement cycles preserved the same logical browser,
+sessions, route slot, and opaque handoff IDs while launching only one replacement
+browser each time. Both original public handoffs resolved to their fresh exact
+targets with `operatorVisible.state=ready`, `uxState=connected`, and visible
+Guacamole pixels. Pre-restart page markers were absent after recovery, and the
+navigation ledger advanced only for four explicit reopens. Final cleanup left no
+profile browser process.
+
+The 45-row grilling ledger now totals nine pass, 26 partial, three fail, and
+seven missing. G11, G24, G31, G35, G43, G44, and G45 are newly accepted; G36
+is partial pending delayed disposable-profile deletion and quota cleanup.
+
+M2B closeout validation is complete. Rust format, strict Clippy, every retained
+green comprehensive compartment, the repaired 40-test actions compartment, the
+118-test Lease Authority rerun, dashboard and viewer contracts, docs builds,
+service parity and types, route-confusion gates, workstation/provider fixtures,
+coverage validation, policy wiring, documentation links, diff hygiene, final
+doctor, skill sync, and fresh development process census pass. M3 recovery and
+retention is the next bounded milestone and is not started. The goal service still shows a stale blocked row
+from the former helper gate; the operator explicitly resumed this successor
+plan and set the active continuation ceiling to 2,000,000 tokens.
+
+Nonblocking UI direction remains unchanged: adopt the Guacamole interaction
+approach from `../remote-view` and replace the large persistent yellow banners
+with compact dismissible notices.
+
+## Prior P219 checkpoint | 2026-09-27
 
 [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 version 8 is `OPEN`. The operator expanded the active continuation ceiling to

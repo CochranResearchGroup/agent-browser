@@ -348,6 +348,13 @@ Require `operatorVisible.state=ready` in an effectful response. Give the
 operator only `handoffUrl` under `/remote-view/<handoff-id>` and reuse the same
 URL for reconnection. Provider and Guacamole URLs can change during recovery.
 
+If a runtime-host replacement ended the retained browser process, opening the
+handoff alone does not relaunch Chrome. Repeat <code>remote-view open</code> with
+the same logical session and named profile. When the SQLite journal proves the
+old process ended, Agent Browser preserves the logical browser, session, and
+handoff identities, launches one replacement process and target, and rebinds
+the original opaque URL. Explicitly closed or expired sessions remain terminal.
+
 ## Request a handoff from software
 
 Use `requestServiceRemoteViewHandoff()` when a software client needs a link for

@@ -77,6 +77,10 @@ async fn dashboard_status_cache_test_guard() -> tokio::sync::MutexGuard<'static,
 #[path = "dashboard_stress_tests.rs"]
 mod dashboard_stress_tests;
 
+#[cfg(test)]
+#[path = "dashboard_browser_session_status_tests.rs"]
+mod dashboard_browser_session_status_tests;
+
 /// Privacy-bounded terminal telemetry for a dashboard backend request.
 ///
 /// Route, method, body, and error values are closed classifications. Raw request
@@ -3553,10 +3557,46 @@ async fn service_api_cli_fallback(method: &str, path: &str) -> Option<String> {
         }
     }
 
-    exec_agent_browser_args(args)
+    let body = exec_agent_browser_args(args).await.ok()?;
+    let body = if method == "GET" && raw_path == "/api/service/status" {
+        let snapshot = tokio::task::spawn_blocking(|| {
+            BrowserRuntimeSqliteStore::default_sqlite()
+                .and_then(|store| store.load_session_state())
+                .and_then(|state| {
+                    serde_json::to_value(state)
+                        .map_err(|error| format!("browser_session_status_serialize_failed:{error}"))
+                })
+        })
         .await
-        .ok()
-        .map(dashboard_cli_fallback_http_response)
+        .map_err(|error| format!("browser_session_status_join_failed:{error}"))
+        .and_then(|snapshot| snapshot);
+        attach_browser_session_state_to_dashboard_cli_fallback(body, snapshot)
+    } else {
+        body
+    };
+    Some(dashboard_cli_fallback_http_response(body))
+}
+
+fn attach_browser_session_state_to_dashboard_cli_fallback(
+    body: String,
+    snapshot: Result<Value, String>,
+) -> String {
+    let Ok(mut response) = serde_json::from_str::<Value>(&body) else {
+        return body;
+    };
+    let Some(data) = response.get_mut("data").and_then(Value::as_object_mut) else {
+        return body;
+    };
+    match snapshot {
+        Ok(snapshot) => {
+            data.insert("browserSessionState".to_string(), snapshot);
+        }
+        Err(error) => {
+            data.insert("browserSessionState".to_string(), Value::Null);
+            data.insert("browserSessionStateError".to_string(), Value::String(error));
+        }
+    }
+    serde_json::to_string(&response).unwrap_or(body)
 }
 
 fn dashboard_cli_fallback_http_response(body: String) -> String {

@@ -958,7 +958,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     pub(crate) fn reconcile_liveness_current(&mut self) -> Result<Vec<String>, String> {
-        let retired = self.manager().reconcile_liveness(current_unix_ms())?;
+        let retired = self
+            .manager()
+            .reconcile_liveness_preserving_named_sessions(current_unix_ms())?;
         if !retired.is_empty() {
             self.commit_state()?;
         }
@@ -5416,7 +5418,7 @@ mod tests {
     }
 
     #[test]
-    fn status_liveness_reconciliation_retires_dead_persisted_browsers() {
+    fn host_liveness_reconciliation_preserves_dead_named_browser_for_exact_replacement() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
         fs::write(
@@ -5466,13 +5468,9 @@ mod tests {
 
         let retired = restarted.reconcile_liveness_current().unwrap();
 
-        assert_eq!(retired, vec![opened.browser_id]);
-        assert!(restarted.state().browsers.is_empty());
-        assert!(restarted.state().sessions.is_empty());
-        assert_eq!(restarted.state().session_history.len(), 1);
-        assert_eq!(
-            restarted.state().session_history[0].reason,
-            SessionEndReason::BrowserUnresponsive
-        );
+        assert!(retired.is_empty());
+        assert!(restarted.state().browsers.contains_key(&opened.browser_id));
+        assert!(restarted.state().sessions.contains_key(&opened.session_id));
+        assert!(restarted.state().session_history.is_empty());
     }
 }

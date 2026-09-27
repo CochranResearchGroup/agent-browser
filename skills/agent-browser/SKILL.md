@@ -507,6 +507,11 @@ browser:
    hatch, never as an ordinary agent workflow.
 9. A managed session or tab close closes its opaque handoff. Repeat an open
    for the same live tab to reuse its link; a new tab receives a new link.
+10. If runtime-host replacement ended a retained named-profile browser, first
+    repeat `remote-view open` with the same logical session and profile. Exact
+    journal recovery keeps the logical browser, session, and handoff IDs while
+    assigning one replacement process and target. The old handoff alone does
+    not launch Chrome, and an expired or explicitly closed session stays closed.
 
 Do not confuse this remote-view link with `agent-browser handoff
 prepare|resume`, which transfers browser ownership across daemon executable

@@ -865,6 +865,35 @@ mod tests {
     }
 
     #[test]
+    fn live_viewer_heartbeat_refresh_does_not_change_controller_identity() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let initial = fixture.authority();
+        let mut heartbeat = initial.clone();
+        heartbeat.lease_updated_at = "2026-08-12T12:00:05Z".to_string();
+        heartbeat.lease_expires_at_ms += 5_000;
+        let mut authority = ScriptedAuthority::scripted(vec![initial, heartbeat]);
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let receipt = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(receipt.effect_state, "verified_success");
+        assert_eq!(receipt.verification_state, "passed");
+    }
+
+    #[test]
     fn motion_is_byte_stable_bounded_and_identity_mapped() {
         let seed = digest_text("p110-motion-seed");
         for (start, target, width, height) in [
@@ -2173,6 +2202,52 @@ mod tests {
         invalid.lease_updated_at.clear();
         let mut authority = ScriptedAuthority::stable(invalid);
         let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+        let error = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.code(), "desktop_interaction_authority_required");
+        assert!(fixture.events.is_empty());
+    }
+
+    #[test]
+    fn authenticated_viewer_identity_is_distinct_from_agent_attribution() {
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut authenticated = fixture.authority();
+        authenticated.lease_viewer_id = "authenticated-admin".to_string();
+        let mut authority = ScriptedAuthority::stable(authenticated);
+        let coordinator = SyntheticCoordinator::default();
+        let mut idempotency = MemoryIdempotency::default();
+        let mut clock = FixedClock::new(1_000);
+
+        let receipt = run_desktop_interaction(
+            request(),
+            InteractionDependencies {
+                provider: &mut fixture,
+                authority: &mut authority,
+                coordinator: &coordinator,
+                idempotency: &mut idempotency,
+                handoffs: &mut NoHandoffRepository,
+                clock: &mut clock,
+            },
+        )
+        .unwrap();
+        assert_eq!(receipt.verification_state, "passed");
+
+        let mut fixture = SyntheticFixture::ready(PixelPoint { x: 12, y: 20 });
+        let mut missing = fixture.authority();
+        missing.lease_viewer_id.clear();
+        let mut authority = ScriptedAuthority::stable(missing);
         let mut idempotency = MemoryIdempotency::default();
         let mut clock = FixedClock::new(1_000);
         let error = run_desktop_interaction(

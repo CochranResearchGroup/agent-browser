@@ -6453,6 +6453,12 @@ open returns one durable opaque handoffUrl at /remote-view/<handoff-id>.
 Require operatorVisible.state=ready before saying the browser is visible.
 Only the authenticated handoffUrl is suitable for operator sharing or later
 reconnection. Provider and Guacamole URLs describe a replaceable route.
+After a runtime-host replacement, handoff resolution alone does not launch a
+browser. Repeat remote-view open for the same logical session and named profile.
+When the retained journal proves the prior process ended, the runtime preserves
+the logical browser, session, and handoff identities, launches one replacement
+process and target, and rebinds the same opaque URL. Explicitly closed or expired
+sessions remain terminal and are never revived by their old handoff.
 
 An unknown named profile or missing default disposable policy fails from the
 SQLite catalog before presentation admission. When capacity is pending, the

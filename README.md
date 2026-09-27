@@ -927,6 +927,12 @@ the current tab whose URL still matches the recorded intent. It does not
 navigate, open a replacement target, relaunch the browser, or change providers.
 The dashboard stays on the durable URL and waits for a matching authenticated
 presentation generation before rendering.
+If a runtime-host replacement ended the browser process, opening the handoff by
+itself does not relaunch Chrome. Repeat `remote-view open` with the same logical
+session and named profile. With exact terminal-process and journal evidence,
+Agent Browser preserves the logical browser, session, and handoff identities,
+launches one replacement process and target, and rebinds the original opaque
+URL. An explicitly closed or expired session remains terminal.
 Recovery retains the known route and display when current-boot browser ownership
 matches, even if presentation records are pending or orphaned. Physical display
 ownership and visibility are verified before the view becomes ready.
@@ -1889,6 +1895,11 @@ the browser. Exact named-profile sessions do not inherit the disposable idle
 timeout. Their durable handoffs remain reconnectable until explicit close or a
 typed unrecoverable condition. Disposable profiles are session-scoped and are deleted only after
 their exact cleanup delay and ownership checks pass.
+After runtime-host replacement ends a retained named-profile browser, repeat
+`remote-view open` for the same session and profile before reopening the durable
+link. Exact recovery retains the logical browser, session, and handoff IDs while
+assigning a fresh process and target; it never revives an expired or explicitly
+closed session.
 For commands routed through an active managed session, only a successful
 command extends that session's heartbeat. A failed command retains any newly
 attributed tab for cleanup without extending the session.

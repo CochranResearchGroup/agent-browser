@@ -27,7 +27,7 @@ mod manual_seeding;
 mod provisioning;
 pub(crate) use desktop_control::{
     DesktopControlLease, DesktopControlTransferRequest, LiveViewerActivationRequest,
-    LiveViewerHeartbeatRequest,
+    LiveViewerControlAuthority, LiveViewerHeartbeatRequest,
 };
 pub(crate) use manual_seeding::{
     public_manual_seeding_visibility, ManualSeedingReservation, ManualSeedingState,
