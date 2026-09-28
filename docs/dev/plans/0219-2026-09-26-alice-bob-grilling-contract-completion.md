@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 51
+Plan version: 52
 
 State: OPEN
 
@@ -77,6 +77,49 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 52 retains the replacement-candidate installed attempt and reframes the
+remaining acceptance after a second causal defect. Exact generation
+`0.28.0-1fb133361c6d`, full digest
+`1fb133361c6de770f7408e5a3641dbda3b275c52262082bcf2b485adffd28c9f`,
+passed optimized build, isolated development publication, skill sync, three
+browser-launch cycles, and complete development doctor with production
+unchanged. A fresh VM booted as `3fd0cc42-16f3-4988-8c7f-ef1c2174fa54` from a
+new overlay; the failed `d630713aca50` overlay and serial log remain preserved.
+The candidate digest matched in the guest and its dry run was mutation-free.
+
+The first apply crossed exactly one visible sudo password prompt, installed
+dependencies, retired all legacy authority artifacts, persisted a valid v3
+receipt, and stopped at the documented fresh-login group interlock. A new SSH
+login proved both groups effective. The same-command resume was noninteractive,
+started the pinned Guacamole containers, and then returned
+`cold_install_start_deadline_exceeded`. Readback showed the start effect itself
+had exceeded 30 seconds and returned a causal error, but the controller
+unconditionally replaced that error with the deadline label. No convergence
+receipt or active user units existed, so the result is a failed installed
+attempt rather than a slow success. It does not advance G20, G34, or G41.
+
+Commit `2aef4619` source-qualifies the bounded correction. The start phase owns
+provider reconstruction, route-display bring-up, Service projection, unit
+activation, and final doctors, including individual probes bounded to three
+minutes; its enclosing bound is now 15 minutes. A phase's real error always
+wins over a later deadline observation. Red-then-green error-preservation
+coverage, all six controller tests, both current cold-install integration
+cases, source-free workstation fixture, docs contract and build, formatting,
+strict workspace Clippy, and patch hygiene pass. The integration lane also
+removed stale hot-rollback and JSON-profile-catalog expectations in favor of
+forward repair and Browser Runtime SQLite.
+
+This revision is the required local reframe after two causal installed
+failures. One final fresh-overlay acceptance attempt may occur only after a new
+exact optimized candidate containing `2aef4619` passes development publication,
+three-cycle browser smoke, and doctor. It must use the same one-prompt then
+fresh-login sequence, preserve any original failure, and stop without another
+replay if it fails. Success still requires the v3 receipt, zero-sudo resumed
+apply and healthy rerun, owned-provider reconstruction, unrelated-row
+preservation, final doctors, and fresh process/resource census. The ledger
+remains 14 pass, 29 partial, 2 fail, and 0 missing. No production, push, merge,
+or release effect is authorized.
 
 Version 51 preserves the failed first isolated workstation acceptance attempt
 and source-qualifies its causal repair. Exact candidate

@@ -1,5 +1,20 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 cold-start deadline reframe
+
+[Plan 0219 version 52](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+retains replacement generation `0.28.0-1fb133361c6d` and its failed fresh-VM
+attempt. One sudo prompt installed dependencies and retired the legacy authority;
+the documented fresh-login resume was zero-prompt but its real start failure was
+masked by an incompatible 30-second controller deadline. Commit `2aef4619`
+preserves causal errors and gives the complete provider/start/doctor phase a
+15-minute bound. Red-then-green controller coverage, current cold-install
+integration cases, source-free fixture, docs, formatting, and strict Clippy
+pass. Ledger counts remain 14/29/2/0. This is the bounded reframe: one final
+fresh-overlay attempt is permitted only after a new exact development candidate
+passes publication, three browser smokes, and doctor. Any failure stops without
+replay. Production, push, merge, and release remain excluded.
+
 ## Current P219 status | 2026-09-28 legacy authority retirement repair
 
 [Plan 0219 version 51](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

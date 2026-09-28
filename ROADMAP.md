@@ -36,6 +36,13 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
+Version 52 retains the failed `0.28.0-1fb133361c6d` fresh-VM attempt and
+source-qualifies `2aef4619`: the complete workstation start phase now has a
+15-minute bound compatible with its own provider probes, and original causal
+errors cannot be overwritten by a later deadline observation. After this
+required two-failure reframe, one final fresh-overlay attempt is permitted only
+for a newly qualified exact candidate; any failure stops without replay. The
+ledger remains 14 pass, 29 partial, 2 fail, and 0 missing.
 Version 51 retains the failed `0.28.0-d630713aca50` isolated workstation
 attempt and source-qualifies its causal repair at `b806f214`: legacy Lease Authority artifacts
 are retired into diagnostic archives instead of provisioned, development doctor

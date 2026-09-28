@@ -53,17 +53,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: b806f214
+    checkpoint: 2aef4619
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P5 remain source-qualified; exact development generation 0.28.0-d630713aca50 passed development qualification but its first isolated workstation attempt failed after one sudo boundary because the installer attempted quarantined Lease Authority bootstrap through a removed CLI dispatch; corrected source retires exact legacy authority artifacts, receipt v3 attests retirement, development doctor has no authority dependency, and the P15 guard covers trusted install and development-runtime surfaces; G41 is partial pending one authorized replacement candidate and fresh-overlay cold upgrade; G30 and G39 retain their unaffected installed proof; the authoritative JSON ledger is 14 pass, 29 partial, two fail, and zero missing
-    validation_ref: b806f214
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4 remain source-qualified; replacement development generation 0.28.0-1fb133361c6d passed publication, skill sync, three browser smokes, and doctor, then its fresh-VM apply used one sudo prompt, retired legacy authority, persisted receipt v3, and stopped at the expected fresh-login interlock; zero-prompt resume failed because the controller masked a real start failure with an incompatible 30-second deadline; source commit 2aef4619 preserves causal errors and bounds the complete start phase at 15 minutes; G20, G34, and G41 remain partial; the authoritative JSON ledger is 14 pass, 29 partial, two fail, and zero missing
+    validation_ref: 2aef4619
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: source repair is qualified at b806f214; publish one exact replacement development candidate, then reset the disposable VM overlay and execute the single authorized cold-upgrade reconstruction before advancing G20, G34, or G41
+    blocker: after the required two-failure reframe, build and qualify one exact candidate containing 2aef4619, reset the disposable VM overlay, and run one final one-prompt plus fresh-login cold-upgrade attempt; any failure stops without replay before advancing G20, G34, or G41
     updated_at: 2026-09-28
