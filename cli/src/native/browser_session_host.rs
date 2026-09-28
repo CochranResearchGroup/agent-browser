@@ -68,6 +68,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
                 maximum_retained_profiles: 20,
                 maximum_total_bytes: 10 * 1024 * 1024 * 1024,
             }),
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
         },
     )
 }
@@ -118,6 +119,7 @@ pub(crate) struct BrowserSessionHostConfig {
     pub(crate) session_idle_timeout_ms: u64,
     pub(crate) remote_view_desktops: Vec<RemoteViewDesktopCandidate>,
     pub(crate) default_disposable_policy: Option<BrowserDisposableProfilePolicy>,
+    pub(crate) exact_url_history_maximum_bytes: u64,
 }
 
 pub(crate) struct BrowserSessionHost<P, E> {
@@ -126,6 +128,7 @@ pub(crate) struct BrowserSessionHost<P, E> {
     catalog: BrowserProfileCatalog,
     state: BrowserSessionState,
     manager_config: BrowserSessionManagerConfig,
+    exact_url_history_maximum_bytes: u64,
 }
 
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
@@ -164,6 +167,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 session_idle_timeout_ms: config.session_idle_timeout_ms,
                 remote_view_desktops: config.remote_view_desktops,
             },
+            exact_url_history_maximum_bytes: config.exact_url_history_maximum_bytes,
         })
     }
 
@@ -197,6 +201,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let result = self
             .manager()
             .record_navigation(session_id, url, visited_at_ms)?;
+        self.compact_navigation_history()?;
         self.commit_state()?;
         Ok(result)
     }
@@ -208,6 +213,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
         let result = self.manager().navigate(session_id, url, activity_at_ms)?;
+        self.compact_navigation_history()?;
         self.commit_state()?;
         Ok(result)
     }
@@ -401,6 +407,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             &mut self.effects,
             self.manager_config.clone(),
         )
+    }
+
+    fn compact_navigation_history(&mut self) -> Result<(), String> {
+        self.state
+            .compact_navigation_history(self.exact_url_history_maximum_bytes)?;
+        Ok(())
     }
 
     fn commit_state(&self) -> Result<(), String> {
@@ -695,6 +707,7 @@ mod tests {
             session_idle_timeout_ms: 300_000,
             remote_view_desktops: Vec::new(),
             default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
         };
         let first = {
             let store = BrowserSessionJsonStore::new(&directory.0);
@@ -733,6 +746,21 @@ mod tests {
         assert_eq!(new_tab["data"]["url"], "https://example.test/next");
         assert_eq!(restarted.state().tabs.len(), 1);
         assert_eq!(restarted.state().navigation_history.len(), 1);
+        restarted.exact_url_history_maximum_bytes = 2;
+        restarted
+            .record_navigation(
+                &first.session_id,
+                "https://example.test/compacted",
+                1_758_758_400_000,
+            )
+            .unwrap();
+        assert!(restarted.state().navigation_history.is_empty());
+        assert_eq!(restarted.state().navigation_daily_summaries.len(), 2);
+        assert_eq!(restarted.state().history_compaction_events.len(), 1);
+        let persisted = BrowserSessionJsonStore::new(&directory.0)
+            .load_session_state()
+            .unwrap();
+        assert_eq!(persisted, *restarted.state());
 
         let focus = restarted.handle_command(&serde_json::json!({
             "id": "focus-alice-browser",

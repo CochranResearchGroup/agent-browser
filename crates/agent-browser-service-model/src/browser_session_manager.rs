@@ -10,6 +10,7 @@ use crate::{
 };
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
+const MAX_HISTORY_COMPACTION_EVENTS: usize = 512;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BrowserSessionManagerConfig {
@@ -287,6 +288,36 @@ pub struct BrowserNavigationRecord {
     pub target_id: String,
     pub url: String,
     pub visited_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incident_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserNavigationDailySummary {
+    pub utc_day: String,
+    pub profile_id: String,
+    pub session_id: String,
+    pub browser_id: String,
+    pub tab_id: String,
+    pub target_id: String,
+    pub first_url: String,
+    pub last_url: String,
+    pub navigation_count: u64,
+    pub first_visited_at_ms: u64,
+    pub last_visited_at_ms: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub incident_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserHistoryCompactionEvent {
+    pub compacted_at_ms: u64,
+    pub exact_bytes_before: u64,
+    pub exact_bytes_after: u64,
+    pub removed_navigation_count: u64,
+    pub affected_summary_count: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -321,6 +352,8 @@ pub struct BrowserSessionState {
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     pub tab_history: Vec<TerminalBrowserTab>,
     pub navigation_history: Vec<BrowserNavigationRecord>,
+    pub navigation_daily_summaries: Vec<BrowserNavigationDailySummary>,
+    pub history_compaction_events: Vec<BrowserHistoryCompactionEvent>,
     pub session_history: Vec<TerminalBrowserSession>,
 }
 
@@ -336,8 +369,187 @@ impl Default for BrowserSessionState {
             tabs: BTreeMap::new(),
             tab_history: Vec::new(),
             navigation_history: Vec::new(),
+            navigation_daily_summaries: Vec::new(),
+            history_compaction_events: Vec::new(),
             session_history: Vec::new(),
         }
+    }
+}
+
+impl BrowserSessionState {
+    /// Keep exact navigation rows within the configured serialized-byte budget
+    /// while preserving deterministic daily identity summaries.
+    pub fn compact_navigation_history(
+        &mut self,
+        maximum_exact_bytes: u64,
+    ) -> Result<Option<BrowserHistoryCompactionEvent>, String> {
+        if maximum_exact_bytes < 2 {
+            return Err("browser_navigation_history_limit_invalid".to_string());
+        }
+        let exact_bytes_before = serde_json::to_vec(&self.navigation_history)
+            .map_err(|error| format!("browser_navigation_history_measure_failed:{error}"))?
+            .len() as u64;
+        if exact_bytes_before <= maximum_exact_bytes {
+            return Ok(None);
+        }
+
+        let mut oldest_indices: Vec<usize> = (0..self.navigation_history.len()).collect();
+        oldest_indices.sort_by(|left_index, right_index| {
+            let left = &self.navigation_history[*left_index];
+            let right = &self.navigation_history[*right_index];
+            (
+                left.visited_at_ms,
+                left.profile_id.as_str(),
+                left.session_id.as_str(),
+                left.browser_id.as_str(),
+                left.tab_id.as_str(),
+                left.target_id.as_str(),
+                left.url.as_str(),
+            )
+                .cmp(&(
+                    right.visited_at_ms,
+                    right.profile_id.as_str(),
+                    right.session_id.as_str(),
+                    right.browser_id.as_str(),
+                    right.tab_id.as_str(),
+                    right.target_id.as_str(),
+                    right.url.as_str(),
+                ))
+                .then_with(|| left_index.cmp(right_index))
+        });
+
+        let measured_after_removing = |count: usize| -> Result<u64, String> {
+            let removed: BTreeSet<usize> = oldest_indices.iter().take(count).copied().collect();
+            let retained: Vec<&BrowserNavigationRecord> = self
+                .navigation_history
+                .iter()
+                .enumerate()
+                .filter_map(|(index, record)| (!removed.contains(&index)).then_some(record))
+                .collect();
+            serde_json::to_vec(&retained)
+                .map(|value| value.len() as u64)
+                .map_err(|error| format!("browser_navigation_history_measure_failed:{error}"))
+        };
+        let mut low = 1usize;
+        let mut high = oldest_indices.len();
+        while low < high {
+            let middle = low + (high - low) / 2;
+            if measured_after_removing(middle)? <= maximum_exact_bytes {
+                high = middle;
+            } else {
+                low = middle + 1;
+            }
+        }
+        let removed_indices: BTreeSet<usize> = oldest_indices.iter().take(low).copied().collect();
+        let mut removed = Vec::with_capacity(low);
+        let mut retained = Vec::with_capacity(self.navigation_history.len() - low);
+        for (index, record) in self.navigation_history.drain(..).enumerate() {
+            if removed_indices.contains(&index) {
+                removed.push(record);
+            } else {
+                retained.push(record);
+            }
+        }
+        self.navigation_history = retained;
+        removed.sort_by(|left, right| {
+            (left.visited_at_ms, left.url.as_str()).cmp(&(right.visited_at_ms, right.url.as_str()))
+        });
+
+        let mut summaries: BTreeMap<
+            (String, String, String, String, String, String),
+            BrowserNavigationDailySummary,
+        > = self
+            .navigation_daily_summaries
+            .drain(..)
+            .map(|summary| {
+                (
+                    (
+                        summary.utc_day.clone(),
+                        summary.profile_id.clone(),
+                        summary.session_id.clone(),
+                        summary.browser_id.clone(),
+                        summary.tab_id.clone(),
+                        summary.target_id.clone(),
+                    ),
+                    summary,
+                )
+            })
+            .collect();
+        let mut affected = BTreeSet::new();
+        for record in &removed {
+            let visited_at_ms = i64::try_from(record.visited_at_ms)
+                .map_err(|_| "browser_navigation_timestamp_invalid".to_string())?;
+            let utc_day = chrono::DateTime::from_timestamp_millis(visited_at_ms)
+                .ok_or_else(|| "browser_navigation_timestamp_invalid".to_string())?
+                .format("%Y-%m-%d")
+                .to_string();
+            let key = (
+                utc_day.clone(),
+                record.profile_id.clone(),
+                record.session_id.clone(),
+                record.browser_id.clone(),
+                record.tab_id.clone(),
+                record.target_id.clone(),
+            );
+            affected.insert(key.clone());
+            let summary = summaries
+                .entry(key)
+                .or_insert_with(|| BrowserNavigationDailySummary {
+                    utc_day,
+                    profile_id: record.profile_id.clone(),
+                    session_id: record.session_id.clone(),
+                    browser_id: record.browser_id.clone(),
+                    tab_id: record.tab_id.clone(),
+                    target_id: record.target_id.clone(),
+                    first_url: record.url.clone(),
+                    last_url: record.url.clone(),
+                    navigation_count: 0,
+                    first_visited_at_ms: record.visited_at_ms,
+                    last_visited_at_ms: record.visited_at_ms,
+                    incident_ids: Vec::new(),
+                });
+            if record.visited_at_ms < summary.first_visited_at_ms
+                || (record.visited_at_ms == summary.first_visited_at_ms
+                    && record.url.as_str() < summary.first_url.as_str())
+            {
+                summary.first_visited_at_ms = record.visited_at_ms;
+                summary.first_url = record.url.clone();
+            }
+            if record.visited_at_ms > summary.last_visited_at_ms
+                || (record.visited_at_ms == summary.last_visited_at_ms
+                    && record.url.as_str() > summary.last_url.as_str())
+            {
+                summary.last_visited_at_ms = record.visited_at_ms;
+                summary.last_url = record.url.clone();
+            }
+            summary.navigation_count = summary.navigation_count.saturating_add(1);
+            summary
+                .incident_ids
+                .extend(record.incident_ids.iter().cloned());
+            summary.incident_ids.sort();
+            summary.incident_ids.dedup();
+        }
+        self.navigation_daily_summaries = summaries.into_values().collect();
+        let exact_bytes_after = serde_json::to_vec(&self.navigation_history)
+            .map_err(|error| format!("browser_navigation_history_measure_failed:{error}"))?
+            .len() as u64;
+        let event = BrowserHistoryCompactionEvent {
+            compacted_at_ms: removed
+                .iter()
+                .map(|record| record.visited_at_ms)
+                .max()
+                .unwrap_or_default(),
+            exact_bytes_before,
+            exact_bytes_after,
+            removed_navigation_count: removed.len() as u64,
+            affected_summary_count: affected.len() as u64,
+        };
+        self.history_compaction_events.push(event.clone());
+        if self.history_compaction_events.len() > MAX_HISTORY_COMPACTION_EVENTS {
+            let excess = self.history_compaction_events.len() - MAX_HISTORY_COMPACTION_EVENTS;
+            self.history_compaction_events.drain(..excess);
+        }
+        Ok(Some(event))
     }
 }
 
@@ -1030,6 +1242,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             target_id: tab.target_id,
             url: url.to_string(),
             visited_at_ms,
+            incident_ids: Vec::new(),
         };
         self.state.navigation_history.push(record.clone());
         let stored_tab =
