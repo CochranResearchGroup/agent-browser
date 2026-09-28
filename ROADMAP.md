@@ -36,8 +36,8 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 28 preserves the installed M2B subproofs plus source-qualified A01/A02,
-M3-P1, M3-P2A, M3-P2B, and M3-P2C. The preceding execution window recorded a 931,884-token
+Version 29 preserves the installed M2B subproofs plus source-qualified A01/A02,
+M3-P1, M3-P2A, M3-P2B, M3-P2C, and M3-P2D. The preceding execution window recorded a 931,884-token
 pre-commit readback and stopped executable work at 753,564; the operator then
 opened a fresh bounded continuation with the same 1,000,000-token ceiling and
 200,000-token closeout reserve.
@@ -50,12 +50,16 @@ open/session/handoff publication. G15 gains source evidence but remains partial.
 The reconciled ledger stays 9 pass, 29 partial, 2 fail, and 5 missing; the
 prohibition audit remains 4 pass, 4 detector gaps, and 11 unverified.
 
-M3-P2D is next and remains unstarted. It limits eager browser recovery to exact
-current SQLite viewer authority. Route Keeper owns baseline presentation
-capacity and dormant browsers remain lazy. Remaining M3 retention, M4
-operations, and final M5 qualification remain
-open. No installed, provider, publication, production, merge, or release effect
-is implied by the M3-P2C source checkpoint.
+M3-P2D is source-qualified at `0b728fc0`. Baseline presentation recovery remains
+Route Keeper work and cannot authorize Chrome. Only an exact current
+authenticated viewer can create eager browser demand; admission revalidates its
+SQLite authority and uses the M3-P2C journal and fence. Dormant browsers remain
+lazy, duplicate viewers collapse to one candidate, and restart cannot create a
+competing replacement. G14 and G15 remain partial pending installed cold-start
+and visible joined recovery. The reconciled ledger stays 9 pass, 29 partial,
+2 fail, and 5 missing. Remaining M3 retention, M4 operations, and final M5
+qualification remain open. No installed, provider, browser, publication,
+production, merge, or release effect is implied by this source checkpoint.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

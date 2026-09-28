@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 28
+Plan version: 29
 
 State: OPEN
 
@@ -77,6 +77,24 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 29 source-qualifies M3-P2D at commit `0b728fc0`. Baseline presentation
+recovery remains Route Keeper work and cannot deserialize or enter the
+per-browser recovery demand model. Scheduled browser recovery now projects only
+current-boot, unexpired authenticated controlling viewers through the current
+SQLite handoff, session, browser, and Route Keeper authority; it deduplicates by
+browser ID and revalidates that authority in the admission transaction. A fresh
+exact liveness observation then enters the M3-P2C journal and generation fence,
+reuses the same logical session and opaque handoff, and rebinds current desktop
+control after atomic publication. Dormant named browsers remain lazy.
+Provider-free model, store, host, Route Keeper, restart, formatting, strict
+Clippy, documentation, and selected workstation contract gates pass. No browser,
+provider, installed-runtime, publication, production, merge, or release effect
+was performed. The ledger remains 9 pass, 29 partial, 2 fail, and 5 missing:
+G14 gains direct provider-free scheduler proof but still requires installed
+cold-start and visible active-viewer recovery. Plan 0219 remains OPEN; the next
+bounded packet must address the remaining M3 retention rows rather than advance
+automatically to M4.
 
 Version 28 source-qualifies M3-P2C at commit `0522fe95`. The journaled exact-client
 path now proves the selected retained browser dead before SQLite atomically
@@ -1098,6 +1116,41 @@ reap; baseline presentation slots recover without Chrome; and restart cannot
 create a competing replacement. Installed acceptance remains a later candidate
 gate and must separately qualify presentation cold start and visible active
 viewer recovery.
+
+#### M3-P2D Source Checkpoint
+
+Commit `0b728fc0` completes the provider-free eager-scheduler packet. The
+per-browser demand enum no longer contains baseline capacity, and a negative
+serialization fixture prevents that presentation-only signal from returning.
+The SQLite projection rejects expired, disconnected, foreign-boot,
+historical-handoff, and stale-route authority, deduplicates multiple viewers by
+logical browser ID, and admission revalidates the exact viewer and handoff under
+the same immediate transaction as the recovery generation. The daemon scheduler
+uses the existing Browser Session Host path. It performs a fresh exact liveness
+probe, then uses the M3-P2C operation journal, reserved launch/adoption path, and
+atomic publication fence. Restart observes the replacement as live and does not
+create a competing process. A dead named browser without a qualifying viewer
+remains retained and effect-free.
+
+Validation passes all 278 service-model crate tests, 65 browser-session-store
+tests, 26 browser-session-host tests, 37 Route Keeper tests, the focused stale
+authority and scheduled restart fixtures, Rust formatting, strict workspace
+Clippy, patch hygiene, documentation links, remote-view documentation checks,
+the docs production build, and every source-free workstation and Guacamole
+contract selected for the changed prose. The repository skill intentionally
+differs from the installed shared skill because publishing user-scoped guidance
+is outside this source-only packet. Goal thread
+`01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 323,934 cumulative tokens used
+after source validation, below both the 800,000 implementation stop and the
+1,000,000 checkpoint ceiling.
+
+This checkpoint does not change the ledger counts. G14 remains partial until
+installed cold-start route recovery and visible active-viewer browser recovery
+are jointly qualified. G15 remains partial pending the same installed joined
+recovery proof. No installed, provider, browser, route, display, publication,
+production, merge, or release effect is claimed. M4 is not eligible; the next
+packet must reconcile the remaining M3 retention rows and their exact acceptance
+boundary.
 
 ### A01 Source Checkpoint
 

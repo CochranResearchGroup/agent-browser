@@ -1,5 +1,34 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M3-P2D source-qualified
+
+[Plan 0219 version 29](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `0b728fc0` completes the provider-free eager-scheduler packet.
+Baseline presentation capacity remains Route Keeper authority and cannot enter
+the per-browser recovery demand model. Scheduled browser recovery requires a
+current-boot, unexpired authenticated controlling viewer joined through the
+current SQLite handoff, session, browser, and Route Keeper authority. Candidates
+deduplicate by browser ID, revalidate at admission, receive a fresh exact
+liveness observation, and use the existing M3-P2C journal, generation fence,
+reserved launch/adoption path, and atomic publication. The same logical session
+and opaque handoff survive replacement, current desktop control is rebound, and
+restart cannot create a competing replacement. Dormant named browsers remain
+lazy.
+
+All 278 service-model crate tests, 65 store tests, 26 host tests, 37 Route
+Keeper tests, focused stale-authority and restart fixtures, formatting, strict
+workspace Clippy, documentation checks and build, and selected source-free
+workstation/Guacamole contracts pass. The installed shared skill remains
+unchanged by design. No browser, provider, installed-runtime, publication,
+production, merge, or release effect occurred. The ledger remains 9 pass,
+29 partial, 2 fail, and 5 missing. G14 and G15 remain partial until installed
+cold-start and visible joined recovery are qualified. M4 remains ineligible;
+the next bounded packet owns the remaining M3 retention rows.
+
+Goal thread `01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 323,934 cumulative
+tokens used after source validation, below the 800,000 implementation stop and
+the 1,000,000 checkpoint ceiling.
+
 ## Current P219 status | 2026-09-27 M3-P2C source-qualified
 
 [Plan 0219 version 28](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
