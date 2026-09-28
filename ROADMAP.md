@@ -91,6 +91,14 @@ covering configuration, migration, integrity, sizes, budgets, backup state,
 and restoration gaps. G30 and G39 remain partial. M4-P3B owns current
 memory/process/disk launch admission and the remaining operational field map.
 
+M4-P3B is source-qualified at `9aad8500`. A fresh cross-platform snapshot now
+checks memory, profile-filesystem disk, host process capacity, and managed root
+browser count at the exact launch boundary and fails closed before effects.
+Status and doctor expose the same typed observation. G33 moves from missing to
+partial; the ledger is 11 pass, 31 partial, 2 fail, and 1 missing. M4-P4 owns
+the remaining G20 narrow privilege-helper and receipt audit before provider
+reconstruction and final installed qualification.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

@@ -1,5 +1,23 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P3B source-qualified
+
+[Plan 0219 version 36](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `9aad8500` adds a cross-platform current-resource snapshot at
+the exact managed Chrome launch boundary. It checks memory, profile-filesystem
+disk, host process capacity, and managed root browser count before display or
+browser effects and fails closed with typed pressure reasons. Service status
+and install doctor expose the same `browserRuntime.launchAdmission` projection.
+
+Focused admission, read-only store, and status tests, generated-client drift
+and types, API/MCP parity, documentation checks and build, formatting, and
+strict workspace Clippy pass. The attempted Windows cross-check was blocked
+before source compilation by the WSL host's missing MinGW compiler. G33 moves
+from missing to partial; the ledger is 11 pass, 31 partial, 2 fail, and 1
+missing. No installed runtime, browser, provider, privileged, publication,
+production, merge, or release effect occurred. M4-P4 owns the G20 narrow
+privilege-helper and receipt audit.
+
 ## Current P219 status | 2026-09-27 M4-P3A source-qualified
 
 [Plan 0219 version 35](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

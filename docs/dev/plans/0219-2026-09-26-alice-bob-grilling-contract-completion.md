@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 35
+Plan version: 36
 
 State: OPEN
 
@@ -77,6 +77,30 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 36 source-qualifies M4-P3B at commit `9aad8500`. Every Browser
+Session Manager Chrome launch now takes a fresh cross-platform host snapshot
+immediately before display access or browser effects. Admission checks
+available memory, free space on the profile filesystem, current host process
+count, the Linux PID ceiling when available, and managed root Chrome/Chromium
+processes against configured browser capacity. Missing observations or breached
+floors fail closed with typed `browser_launch_resource_pressure` reasons.
+Aggregate Service status and install doctor expose the same typed observation
+under `browserRuntime.launchAdmission`; an unavailable SQLite authority still
+publishes the current host observation without revealing a local path. Foreign
+Chrome processes do not consume the managed-process quota.
+
+Focused admission, read-only store, and status-projection tests pass, as do
+generated-client drift and type gates, API/MCP parity, documentation checks and
+build, formatting, and strict workspace Clippy. A Windows cross-check stopped
+before compiling this source because the WSL host lacks the MinGW C compiler;
+target-platform execution therefore remains an installed-qualification gate.
+G33 advances from missing to partial, and G30 and G39 remain partial until the
+final installed status/doctor and full-resource qualification. The ledger is
+11 pass, 31 partial, 2 fail, and 1 missing. No installed runtime, browser,
+provider, route, display, privileged, publication, production, merge, or
+release effect occurred. M4-P4 owns G20 narrow privilege qualification and the
+remaining provider reconstruction and installed operational gates follow.
 
 Version 35 source-qualifies M4-P3A at commit `91cb79c8`. Aggregate Service
 status now includes `browserRuntime`, and install doctor includes the same
@@ -1378,6 +1402,13 @@ status/doctor join only. The remaining packet is M4-P3B: define provider-free,
 cross-platform current memory/process/disk observations at the exact browser
 launch boundary, fail closed with typed non-disruptive rejection, expose the
 same observation through status and doctor, and finish the G30 field map.
+
+M4-P3B is source-qualified at `9aad8500`. The exact pre-launch boundary now
+fails closed on typed current memory, profile-filesystem disk, host-process,
+and managed-browser pressure and status/doctor publish the same observation.
+G33 remains partial pending final target-platform and pressure qualification.
+M4-P4 owns the bounded G20 narrow privilege-helper and receipt audit; it does
+not authorize a privileged command or provider effect.
 
 ### A01 Source Checkpoint
 
