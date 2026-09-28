@@ -106,6 +106,17 @@ impl StateSource for ManagedDesktopStateSource {
   write(root, 'cli/src/native/daemon.rs', 'async fn attach_browser_session_state() { serde_json::to_value(host.state()); }\nasync fn reap_browser_sessions_if_loaded() {}\n');
   assert.equal(evaluate(root).cuts.statusReadOnly.status, 'pass');
 
+  write(root, 'cli/src/install.rs', 'pub fn run_install_doctor() { persist_privileged_effect_receipt(); }\nfn print_doctor_field() {}\nfn install_doctor_report() {}\nfn workstation_payload_status() {}\n');
+  const mutatingInstallDoctor = evaluate(root);
+  assert.equal(mutatingInstallDoctor.cuts.doctorReadOnly.status, 'fail');
+  assert.equal(
+    mutatingInstallDoctor.cuts.doctorReadOnly.findings[0].id,
+    'doctor_privileged_receipt_mutation',
+  );
+  write(root, 'cli/src/install.rs', 'pub fn run_install_doctor() { install_doctor_report(); }\nfn print_doctor_field() {}\nfn install_doctor_report() { default_operational_status_read_only(); }\nfn workstation_payload_status() {}\n');
+  write(root, 'cli/src/remote_view_doctor.rs', 'fn remote_view_doctor_report() { run_json_command("doctor", &["--json"]); }\nstruct RequestedRouteSubject;\n');
+  assert.equal(evaluate(root).cuts.doctorReadOnly.status, 'pass');
+
   write(root, 'crates/agent-browser-service-model/Cargo.toml', '[dependencies]\n');
   write(root, 'crates/agent-browser-service-model/src/service_state.rs', 'pub struct ServiceState;\n');
   const modelCut = evaluate(root);

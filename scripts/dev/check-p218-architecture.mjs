@@ -64,6 +64,8 @@ export function evaluate(root = defaultRoot) {
   const browserSessionStore = read(root, 'cli/src/native/browser_session_store.rs');
   const actionRuntimeRecovery = read(root, 'cli/src/native/action_runtime/runtime/recovery.rs');
   const actionRuntimeLaunch = read(root, 'cli/src/native/action_runtime/runtime/launch.rs');
+  const install = beforeDisabledLegacyTests(read(root, 'cli/src/install.rs'));
+  const remoteViewDoctor = beforeDisabledLegacyTests(read(root, 'cli/src/remote_view_doctor.rs'));
   const routeUserPool = read(root, 'scripts/lib/rdp-route-user-pool.py');
   const routeSetup = read(root, 'scripts/setup-rdp-guac-route-pool.sh');
   const routeSync = read(root, 'scripts/sync-rdp-guac-route-specific-user-pool.sh');
@@ -274,6 +276,40 @@ export function evaluate(root = defaultRoot) {
       'service status invokes Browser Session Manager reconciliation or lifecycle mutation',
     ));
   }
+  const doctorReadOnlyFindings = [];
+  const installDoctorRun = install.match(
+    /pub fn run_install_doctor[\s\S]*?(?=fn print_doctor_field)/,
+  )?.[0] || '';
+  const installDoctorReport = install.match(
+    /fn install_doctor_report[\s\S]*?(?=fn workstation_payload_status)/,
+  )?.[0] || '';
+  const remoteViewDoctorReport = remoteViewDoctor.match(
+    /fn remote_view_doctor_report[\s\S]*?(?=struct RequestedRouteSubject)/,
+  )?.[0] || '';
+  const doctorMutationPatterns = [
+    ['doctor_direct_filesystem_mutation', /fs::(?:write|remove_file|remove_dir|remove_dir_all|rename|create_dir|create_dir_all)\s*\(/],
+    ['doctor_direct_file_creation', /(?:File::create|OpenOptions::new)\s*\(/],
+    ['doctor_runtime_reconciliation', /(?:reconcile_liveness_current|reap_current|handle_command|migrate_from_legacy)\s*\(/],
+    ['doctor_backup_mutation', /create_verified_runtime_backup\s*\(/],
+    ['doctor_privileged_receipt_mutation', /persist_privileged_effect_receipt\s*\(/],
+    ['doctor_effect_apply_argument', /["']--apply["']/],
+  ];
+  for (const [id, pattern] of doctorMutationPatterns) {
+    if (pattern.test(installDoctorRun) || pattern.test(installDoctorReport)) {
+      doctorReadOnlyFindings.push(finding(
+        id,
+        'cli/src/install.rs',
+        'install doctor contains a direct mutation or effect-capable invocation',
+      ));
+    }
+    if (pattern.test(remoteViewDoctorReport)) {
+      doctorReadOnlyFindings.push(finding(
+        id,
+        'cli/src/remote_view_doctor.rs',
+        'remote-view doctor contains a direct mutation or effect-capable invocation',
+      ));
+    }
+  }
   return {
     schemaVersion: 'p218-architecture-conformance.v1',
     plan: 'docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md',
@@ -287,6 +323,10 @@ export function evaluate(root = defaultRoot) {
       statusReadOnly: {
         status: statusReadOnlyFindings.length === 0 ? 'pass' : 'fail',
         findings: statusReadOnlyFindings,
+      },
+      doctorReadOnly: {
+        status: doctorReadOnlyFindings.length === 0 ? 'pass' : 'fail',
+        findings: doctorReadOnlyFindings,
       },
       legacyAuthorityQuarantine: {
         status: leaseAuthorityIsIndependent
