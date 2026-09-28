@@ -1486,6 +1486,14 @@ export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch
 
 export interface ServiceRuntimeConfigData {
   config: ServiceRuntimeConfig;
+  history: {
+    entries: Array<{
+      previousRevision: number;
+      revision: number;
+      recordedAtMs: number;
+      changedFields: string[];
+    }>;
+  };
   capacityGrowth: {
     state: "idle" | "pending" | "provisioning" | "failed";
     desiredMaximum: number;

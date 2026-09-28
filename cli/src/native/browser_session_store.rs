@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use agent_browser_service_model::{
     decide_browser_recovery, record_browser_recovery_failure,
@@ -52,6 +52,7 @@ const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
 const BROWSER_RECOVERY_REGISTRY_DOCUMENT: &str = "browser_recovery_registry";
 const PRESENTATION_REQUEST_QUEUE_DOCUMENT: &str = "presentation_request_queue";
 const PRESENTATION_SCALE_IN_STATE_DOCUMENT: &str = "presentation_scale_in_state";
+const RUNTIME_CONFIG_HISTORY_DOCUMENT: &str = "runtime_config_history";
 const ROUTE_KEEPER_AUTHORITY_DOCUMENT: &str = "route_keeper_authority";
 const MANAGER_HANDOFF_REGISTRY_SCHEMA_V1: &str = "agent-browser.manager-handoffs.v1";
 const PRESENTATION_REQUEST_QUEUE_SCHEMA_V1: &str = "agent-browser.presentation-request-queue.v1";
@@ -60,6 +61,8 @@ const BROWSER_RECOVERY_REGISTRY_SCHEMA_V1: &str = "agent-browser.browser-recover
 const RUNTIME_CONFIG_KEY: &str = "runtime";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V1: &str = "agent-browser.runtime-config.v1";
 const BROWSER_RUNTIME_CONFIG_SCHEMA_V2: &str = "agent-browser.runtime-config.v2";
+const BROWSER_RUNTIME_CONFIG_HISTORY_SCHEMA_V1: &str = "agent-browser.runtime-config-history.v1";
+const MAX_RUNTIME_CONFIG_HISTORY_ENTRIES: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +107,21 @@ pub(crate) struct BrowserRuntimeConfigPatch {
     pub(crate) live_database_maximum_bytes: Option<u64>,
     pub(crate) exact_url_history_maximum_bytes: Option<u64>,
     pub(crate) routine_storage_maximum_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BrowserRuntimeConfigHistory {
+    pub(crate) entries: Vec<BrowserRuntimeConfigChange>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BrowserRuntimeConfigChange {
+    pub(crate) previous_revision: u64,
+    pub(crate) revision: u64,
+    pub(crate) recorded_at_ms: u64,
+    pub(crate) changed_fields: Vec<String>,
 }
 
 impl Default for BrowserRuntimeConfig {
@@ -1338,6 +1356,7 @@ impl BrowserRuntimeSqliteStore {
         next.revision = expected_revision
             .checked_add(1)
             .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?;
+        append_runtime_config_history(&transaction, &current, &next)?;
         save_runtime_config_row(&transaction, &next)?;
         transaction
             .commit()
@@ -1433,6 +1452,7 @@ impl BrowserRuntimeSqliteStore {
                 .revision
                 .checked_add(1)
                 .ok_or_else(|| "browser_runtime_config_revision_exhausted".to_string())?;
+            append_runtime_config_history(&transaction, &current, &next)?;
         }
         save_runtime_config_row(&transaction, &next)?;
         save_document(
@@ -1445,6 +1465,16 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("browser_runtime_config_commit_failed:{error}"))?;
         Ok(next)
+    }
+
+    pub(crate) fn load_runtime_config_history(
+        &self,
+    ) -> Result<BrowserRuntimeConfigHistory, String> {
+        load_optional_document(
+            &self.connection,
+            RUNTIME_CONFIG_HISTORY_DOCUMENT,
+            BROWSER_RUNTIME_CONFIG_HISTORY_SCHEMA_V1,
+        )
     }
 
     pub(crate) fn reserve_idle_route_stop(
@@ -2666,6 +2696,58 @@ fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
         return Err("browser_runtime_database_schema_incomplete".to_string());
     }
     Ok(())
+}
+
+fn append_runtime_config_history(
+    connection: &Connection,
+    current: &BrowserRuntimeConfig,
+    next: &BrowserRuntimeConfig,
+) -> Result<(), String> {
+    let current_value = serde_json::to_value(current)
+        .map_err(|error| format!("browser_runtime_config_history_encode_failed:{error}"))?;
+    let next_value = serde_json::to_value(next)
+        .map_err(|error| format!("browser_runtime_config_history_encode_failed:{error}"))?;
+    let current_fields = current_value
+        .as_object()
+        .ok_or_else(|| "browser_runtime_config_history_shape_invalid".to_string())?;
+    let next_fields = next_value
+        .as_object()
+        .ok_or_else(|| "browser_runtime_config_history_shape_invalid".to_string())?;
+    let changed_fields = next_fields
+        .iter()
+        .filter_map(|(field, value)| {
+            (field != "revision"
+                && field != "schemaVersion"
+                && current_fields.get(field) != Some(value))
+            .then_some(field.clone())
+        })
+        .collect::<Vec<_>>();
+    let recorded_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "browser_runtime_config_history_clock_invalid".to_string())?
+        .as_millis()
+        .min(u128::from(u64::MAX)) as u64;
+    let mut history: BrowserRuntimeConfigHistory = load_optional_document(
+        connection,
+        RUNTIME_CONFIG_HISTORY_DOCUMENT,
+        BROWSER_RUNTIME_CONFIG_HISTORY_SCHEMA_V1,
+    )?;
+    history.entries.push(BrowserRuntimeConfigChange {
+        previous_revision: current.revision,
+        revision: next.revision,
+        recorded_at_ms,
+        changed_fields,
+    });
+    if history.entries.len() > MAX_RUNTIME_CONFIG_HISTORY_ENTRIES {
+        let excess = history.entries.len() - MAX_RUNTIME_CONFIG_HISTORY_ENTRIES;
+        history.entries.drain(..excess);
+    }
+    save_document(
+        connection,
+        RUNTIME_CONFIG_HISTORY_DOCUMENT,
+        BROWSER_RUNTIME_CONFIG_HISTORY_SCHEMA_V1,
+        &history,
+    )
 }
 
 fn save_document(
@@ -5622,6 +5704,37 @@ mod tests {
             Err("browser_runtime_config_url_history_bytes_invalid".to_string())
         );
         assert_eq!(store.load_runtime_config().unwrap(), defaults);
+        assert!(store
+            .load_runtime_config_history()
+            .unwrap()
+            .entries
+            .is_empty());
+    }
+
+    #[test]
+    fn runtime_config_history_is_atomic_restart_safe_and_bounded() {
+        let (_directory, mut store) = sqlite_store("browser-runtime-config-history");
+        for index in 0..130_u64 {
+            store
+                .update_runtime_config(BrowserRuntimeConfigPatch {
+                    maximum_queue_depth: Some(if index % 2 == 0 { 31 } else { 32 }),
+                    ..BrowserRuntimeConfigPatch::default()
+                })
+                .unwrap();
+        }
+        let history = store.load_runtime_config_history().unwrap();
+        assert_eq!(history.entries.len(), MAX_RUNTIME_CONFIG_HISTORY_ENTRIES);
+        assert_eq!(history.entries[0].previous_revision, 2);
+        assert_eq!(history.entries[0].revision, 3);
+        assert_eq!(history.entries.last().unwrap().revision, 130);
+        assert!(history.entries.iter().all(|entry| {
+            entry.recorded_at_ms > 0 && entry.changed_fields == ["maximumQueueDepth".to_string()]
+        }));
+
+        let database_path = store.database_path().unwrap();
+        drop(store);
+        let reopened = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(reopened.load_runtime_config_history().unwrap(), history);
     }
 
     #[test]

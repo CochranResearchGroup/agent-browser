@@ -1,5 +1,20 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G29 source closure
+
+[Plan 0219 version 43](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+atomically records each real runtime-config revision and keeper-policy change
+with a bounded durable history, exposes it in authoritative readback, and
+preserves it across restart. Invalid and no-op patches add no event. Lowered
+limits report over-target, block worsening admission, preserve existing work,
+and converge through ordinary release. Focused Rust, formatting, strict Clippy,
+generated-client and direct service-client checks, parity, docs, route-confusion,
+coverage, workstation, and PostgreSQL fixtures pass. The umbrella service-client
+command retains the inherited missing P157 oracle-source failure before the
+changed lane; its downstream checks pass directly. The development skill is
+current and the production skill is untouched. The ledger is 13 pass, 30
+partial, two fail, and zero missing. No runtime or provider effect occurred.
+
 ## Current P219 status | 2026-09-28 G28 final-reference source closure
 
 [Plan 0219 version 42](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

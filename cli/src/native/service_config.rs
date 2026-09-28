@@ -2169,7 +2169,7 @@ pub(crate) use service_commands::*;
 pub(crate) fn handle_service_runtime_config_get() -> Result<Value, String> {
     let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
     Ok(
-        serde_json::json!({"config": store.load_runtime_config()?, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
+        serde_json::json!({"config": store.load_runtime_config()?, "history": store.load_runtime_config_history()?, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
     )
 }
 
@@ -2192,7 +2192,7 @@ pub(crate) fn handle_service_runtime_config_update(cmd: &Value) -> Result<Value,
     let mut store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
     let config = store.update_runtime_config(patch)?;
     Ok(
-        serde_json::json!({"config": config, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
+        serde_json::json!({"config": config, "history": store.load_runtime_config_history()?, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
     )
 }
 

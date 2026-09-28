@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 42
+Plan version: 43
 
 State: OPEN
 
@@ -77,6 +77,25 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 43 closes G29. Every real runtime-config mutation now appends a bounded
+128-entry change record in the same SQLite transaction as the new revision and
+keeper policy. Each record contains the prior revision, committed revision,
+timestamp, and exact changed fields; invalid and repeated identical patches add
+nothing, and restart preserves the history. Authoritative config get/update
+readback and the generated client expose the history. Existing placement logic
+reports over-target before effects, rejects worsening admission without moving
+or closing retained work, and returns to full or available through ordinary
+release. The focused ten-test runtime-config lane, formatting, strict workspace
+Clippy, generated-client drift and type checks, direct service-client checks,
+service API/MCP parity, route-confusion gates, documentation build and links,
+coverage validator, and selector-chosen workstation and PostgreSQL fixtures all
+pass. The umbrella service-client command still stops before the changed lane
+at the inherited missing P157 oracle source; every downstream check was run
+directly and passed. The development skill is current; the shared production
+skill remains untouched. The ledger advances to 13 pass, 30 partial, 2 fail,
+and 0 missing. No runtime, browser, provider, privileged, production, merge,
+push, or release effect occurred.
 
 Version 42 closes G28's source-side final-reference gap. The immediate SQLite
 scale-in reservation now joins Browser Session Manager placements, durable

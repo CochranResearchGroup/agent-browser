@@ -919,10 +919,13 @@ All values must be positive integers (`exactUrlHistoryMaximumBytes` is at least
 target, warm target no greater than maximum displays, and recovery maximum
 backoff no less than recovery base backoff. Updates atomically
 persist settings and keeper policy in SQLite; clients need no revision token.
-Repeated identical updates preserve the revision. The generic `service_request`
+Repeated identical updates preserve the revision. Real updates append a bounded
+128-entry SQLite history with the prior revision, committed revision, timestamp,
+and exact changed-field names. The generic `service_request`
 interface accepts `service_runtime_config_get` and
 `service_runtime_config_update` with a `config` object containing the patch.
-Readback returns `config`, including its revision, `capacityGrowth`, and a
+Readback returns `config`, including its revision, the bounded `history`,
+`capacityGrowth`, and a
 read-only `storage` projection with SQLite integrity, database and WAL bytes,
 exact-history bytes, budget state, backup verification, and restoration gaps.
 `service runtime-config backup` explicitly creates and verifies the rotating

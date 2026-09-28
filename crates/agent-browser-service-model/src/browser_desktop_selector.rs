@@ -219,6 +219,11 @@ mod tests {
             Err("presentation_capacity_over_target".to_string())
         );
         assert_eq!(live_displays, before);
+        assert_eq!(
+            select_browser_desktop_with_capacity(&routes, &displays(&[":10"]), 1, 1),
+            Err("presentation_capacity_full".to_string()),
+            "ordinary release converges from over-target without moving retained work"
+        );
     }
 
     #[test]

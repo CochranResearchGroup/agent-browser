@@ -7876,6 +7876,8 @@ Configuration:
   SQLite runtime configuration is the ordinary browser recovery authority.
   Use `service runtime-config get`, `set`, or `backup` for durable inspection,
   updates, and an explicit verified online backup.
+  Real updates append a bounded SQLite history entry with prior revision,
+  committed revision, timestamp, and exact changed fields; no-op updates do not.
   Existing service recovery config, flags, and environment variables are
   explicit startup inputs committed before host construction; default-sourced
   values preserve the current row. Recovery reports `config` provenance.

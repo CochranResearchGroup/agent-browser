@@ -135,6 +135,12 @@ current Desktop Services control, unexpired authenticated viewers, pending
 operations, admission work, or non-idle keeper phases, and still requires the
 configured cooldown. Joined installed-provider scale-in remains open.
 
+G29 is source-qualified. Runtime-config revisions, keeper policy, and bounded
+change history commit atomically and appear in authoritative readback. Lowered
+limits report over-target, reject worsening admission without eviction, and
+converge through ordinary release. The ledger is 13 pass, 30 partial, 2 fail,
+and 0 missing.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED
