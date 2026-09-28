@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -52,6 +52,15 @@ invariant. The current follow-up consumes the complete published foundation
 observation, including command, resource states, and effect discipline. Remote
 View has not yet published the J1 through J3 lifecycle, operation, viewing,
 placement, status, or cleanup contracts required by later slices.
+
+Retained-domain extraction is active through `6b805b12`. The extracted
+presentation-neutral spine owns named browser sessions and tabs, independent
+SQLite persistence, restart reattachment, idle reaping, focus, and addressed
+ordinary-command routing. Desktop selection consumes Remote View UUID, route
+label, generation, and readiness observations instead of the legacy Agent
+Browser route inventory. Real Remote View placement fails closed at
+`remote_view_application_placement_contract_unavailable` until its public
+contract exists.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -132,6 +141,12 @@ presentation-helper path from the successor candidate.
 
 Exit: changed-surface tests pass and architecture checks reject reintroduction
 of the retired presentation ownership.
+
+Status: partial. The initial session, SQLite, and runtime spine plus named-tab,
+reaping, focus, and addressed-command behaviors are extracted and locally
+qualified. Recovery fencing, opaque handoff integration, final-session
+cleanup, later P219 storage/admission/observability work, and the architecture
+guard remain.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

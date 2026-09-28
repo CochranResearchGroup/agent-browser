@@ -33,10 +33,11 @@ Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-i
 [issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202),
 and [Remote View issue #70](https://github.com/CochranResearchGroup/remote-view/issues/70)
 own the `PL-PLATFORM` migration from Agent Browser-owned presentation
-infrastructure to Remote View public contracts. Source checkpoint `9a34e292`
-establishes the provider-free consumer boundary and two-desktop association
-invariant. The current F0 follow-up consumes the complete published foundation
-observation. J1, J2, J3, retained P219 domain extraction, protected integration,
+infrastructure to Remote View public contracts. Source checkpoint `6b805b12`
+includes the complete F0 observation, two-desktop association invariant, and
+the first retained browser/session spine: named sessions and tabs, independent
+SQLite state, restart reattachment, idle reaping, focus, and addressed ordinary
+commands. J1, J2, J3, remaining P219 domain extraction, protected integration,
 and separately authorized installed acceptance remain open. No live Remote
 View, browser, provider, install, privilege, production, or release effect has
 occurred.
