@@ -16,7 +16,7 @@ P220 is active on `platform/p220-remote-view-consumer` from canonical
 `origin/main@a3848e16`. Checkpoint `9a34e292` adds the first provider-free
 Remote View F0 consumer boundary and proves two distinct Agent Browser-owned
 browser/profile associations over distinct fixed desktop identities. The
-source through `8f753da0` also extracts the first presentation-neutral
+source through `d6f390be` also extracts the first presentation-neutral
 browser/session spine with independent SQLite state, restart reattachment,
 idle reaping, focus, named-tab lifecycle, and addressed ordinary commands.
 Desktop choice consumes Remote View UUID, route-label, generation, and
@@ -25,9 +25,15 @@ and real placement fails closed until the public J2 contract exists. J1
 lifecycle and durable operation status are source-bound to Remote View
 `f674518e34fea346002c72c4adc3966b628d0b78`; exact release preserves desktop
 UUID and generation, while tampered operation payload evidence fails closed.
+Disposable browser retention now has count and regular-file byte ceilings,
+oldest-first eviction, explicit protected-session fencing, and no pin or
+promotion bypass. Exact URL history compacts deterministically into
+restart-safe daily identity summaries before host persistence. The retired
+Agent Browser viewer/controller tables are not reintroduced; Remote View J2
+must later supply any presentation-derived protected-session evidence.
 The preserved P219 branch is not merged wholesale;
 its Agent Browser-owned XRDP/Guacamole presentation path is retired. Remote
-View J2 and J3 contracts, retained-domain extraction, protected
+View J2 and J3 contracts, SQLite backup and recovery extraction, protected
 integration, and separately authorized installed acceptance remain. No live
 Remote View, browser, provider, install, privilege, production, or release
 effect occurred.

@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 8f753da0
+    checkpoint: d6f390be
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
     integration: merge through the protected pull-request workflow after current Remote View checkpoints, retained-domain reconciliation, and changed-surface validation
-    validation_status: Remote View F0 and source-bound J1 consumer fixtures, complete service-model package, focused CLI browser-session selection, formatting, strict workspace Clippy, selected service contracts and types, documentation links, custody ledger, and diff hygiene pass locally; complete batch validation remains pending
-    validation_ref: 8f753da0
+    validation_status: Remote View F0 and source-bound J1 consumer fixtures, bounded disposable retention, exact URL compaction, complete service-model package, focused CLI browser-session and filesystem tests, formatting, strict workspace Clippy, selected service contracts and types, documentation links, custody ledger, and diff hygiene pass locally; complete batch validation remains pending
+    validation_ref: d6f390be
     work_items: [CochranResearchGroup/agent-browser#202, CochranResearchGroup/remote-view#70]
     dependencies: [Remote View Plan 0017 J2, Remote View Plan 0017 J3]
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P220 writes only its own bounded planning sections and catalog entry; P204 and P214 retain their own records]
-    blocker: J2 and J3 public contracts are not yet published; remaining P219 recovery, handoff, cleanup, storage, admission, and observability extraction plus final installed acceptance also remain
+    blocker: J2 and J3 public contracts are not yet published; remaining P219 SQLite backup authority, recovery, handoff, cleanup, admission, and observability extraction plus final installed acceptance also remain
     updated_at: 2026-09-28
   - id: P204
     product_lane: PL-PLATFORM

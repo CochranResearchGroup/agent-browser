@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 4
+Plan version: 5
 
 State: OPEN
 
@@ -56,10 +56,14 @@ fencing, and release semantics. J2 and J3 have not yet published the viewing,
 application-placement, viewer-status, and final cleanup contracts required by
 later slices.
 
-Retained-domain extraction is active through `6b805b12`. The extracted
+Retained-domain extraction is active through `d6f390be`. The extracted
 presentation-neutral spine owns named browser sessions and tabs, independent
-SQLite persistence, restart reattachment, idle reaping, focus, and addressed
-ordinary-command routing. Desktop selection consumes Remote View UUID, route
+durable persistence, restart reattachment, idle reaping, focus, and addressed
+ordinary-command routing. It now also bounds disposable profile count and
+regular-file bytes with oldest-first protected-session-aware eviction, rejects
+pin or promotion bypass fields, and compacts exact URL history into
+restart-safe daily identity summaries under a fixed byte ceiling. Desktop
+selection consumes Remote View UUID, route
 label, generation, and readiness observations instead of the legacy Agent
 Browser route inventory. Real Remote View placement fails closed at
 `remote_view_application_placement_contract_unavailable` until its public
@@ -147,11 +151,14 @@ presentation-helper path from the successor candidate.
 Exit: changed-surface tests pass and architecture checks reject reintroduction
 of the retired presentation ownership.
 
-Status: partial. The initial session, SQLite, and runtime spine plus named-tab,
-reaping, focus, and addressed-command behaviors are extracted and locally
-qualified. Recovery fencing, opaque handoff integration, final-session
-cleanup, later P219 storage/admission/observability work, and the architecture
-guard remain.
+Status: partial. The initial session, durable store, and runtime spine plus
+named-tab, reaping, focus, addressed-command, disposable-retention, and exact
+URL compaction behaviors are extracted and locally qualified. The quota model
+accepts protected session identities without importing the retired
+viewer/controller tables; the future J2 join must supply protection from
+Remote View public authority. SQLite migration and backup authority, recovery
+fencing, opaque handoff integration, final-session cleanup, remaining P219
+admission and observability work, and the architecture guard remain.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
