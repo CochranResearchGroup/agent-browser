@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 41
+Plan version: 42
 
 State: OPEN
 
@@ -77,6 +77,19 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 42 closes G28's source-side final-reference gap. The immediate SQLite
+scale-in reservation now joins Browser Session Manager placements, durable
+handoffs, current Desktop Services control, unexpired authenticated same-boot
+viewers, pending operation records, presentation admission, keeper phases, and
+the configured cooldown before reserving one exact route stop. Incomplete or
+cross-boot control/viewer state fails closed. Focused regressions prove viewer
+expiry semantics and prove the final reservation preserves the viewed and
+controlled route while selecting the unreferenced route. All four scale-in
+tests, formatting, strict workspace Clippy, and patch hygiene pass. G28 remains
+partial only for joined installed-provider scale-in after cooldown; ledger
+counts remain 12 pass, 31 partial, 2 fail, and 0 missing. No runtime, provider,
+browser, privileged, production, merge, push, or release effect occurred.
 
 Version 41 closes G10 at source. The durable presentation queue now preserves
 strict recovery, retained-handoff, then new-open priority classes; FIFO sequence

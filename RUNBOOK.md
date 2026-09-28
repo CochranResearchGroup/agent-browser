@@ -1,5 +1,17 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G28 final-reference source closure
+
+[Plan 0219 version 42](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+joins current Desktop Services control and unexpired authenticated viewer routes
+into the final transactional scale-in check. Browsers, handoffs, operations,
+presentation admission, keeper phases, and cooldown remain in the same check;
+ambiguous control/viewer state fails closed. Four focused scale-in tests,
+formatting, strict workspace Clippy, and patch hygiene pass. G28 remains partial
+only for joined installed-provider scale-in after cooldown. The ledger remains
+12 pass, 31 partial, two fail, and zero missing. No runtime or provider effect
+occurred.
+
 ## Current P219 status | 2026-09-28 G10 source closure
 
 [Plan 0219 version 41](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

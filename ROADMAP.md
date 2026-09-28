@@ -129,6 +129,12 @@ already-qualified source checkpoints. The authoritative ledger is 12 pass, 31
 partial, 2 fail, and 0 missing. Exact workstation cold-reconstruction remains
 the next installed gate.
 
+G28's final source-side scale-in reference check is qualified. The immediate
+SQLite reservation now preserves routes referenced by browsers, handoffs,
+current Desktop Services control, unexpired authenticated viewers, pending
+operations, admission work, or non-idle keeper phases, and still requires the
+configured cooldown. Joined installed-provider scale-in remains open.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

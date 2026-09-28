@@ -151,6 +151,56 @@ struct ResolvedDesktopControl {
     route_binding: RouteKeeperHandoffBinding,
 }
 
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(super) struct DesktopControlRouteReferences {
+    pub(super) slot_ids: BTreeSet<String>,
+    pub(super) ambiguous: bool,
+}
+
+/// Return every route that current viewer or Desktop Services control authority
+/// can still address. Scale-in calls this inside its final SQLite transaction;
+/// incomplete control state fails closed instead of making a route look idle.
+pub(super) fn route_references_for_scale_in(
+    connection: &Connection,
+    now_ms: u64,
+) -> Result<DesktopControlRouteReferences, String> {
+    let state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let current_boot = crate::process_identity::current_boot_epoch();
+    let mut references = DesktopControlRouteReferences::default();
+
+    for (slot_id, operation_id) in &state.current_operation_ids {
+        let Some(record) = state.operations.get(operation_id) else {
+            references.ambiguous = true;
+            continue;
+        };
+        if slot_id.is_empty()
+            || record.route_binding.slot_id.is_empty()
+            || record.route_binding.slot_id != *slot_id
+        {
+            references.ambiguous = true;
+            continue;
+        }
+        references.slot_ids.insert(slot_id.clone());
+    }
+
+    for viewer in state.live_viewers.values().filter(|viewer| {
+        viewer.state == "controlling"
+            && viewer.expires_at_ms > now_ms
+            && viewer.observed_shared_connection_count > 0
+    }) {
+        let Some(current_boot) = current_boot.as_deref() else {
+            references.ambiguous = true;
+            continue;
+        };
+        if viewer.boot_epoch != current_boot || viewer.slot_id.is_empty() {
+            references.ambiguous = true;
+            continue;
+        }
+        references.slot_ids.insert(viewer.slot_id.clone());
+    }
+    Ok(references)
+}
+
 impl DesktopControlRouteBinding {
     fn from_binding(binding: &RouteKeeperHandoffBinding) -> Self {
         Self {
@@ -1512,6 +1562,92 @@ mod tests {
             observed_shared_connection_count: 1,
             observed_at_ms: current_time_ms().unwrap(),
         }
+    }
+
+    #[test]
+    fn scale_in_references_current_control_and_live_viewer_routes() {
+        let mut fixture = fixture("scale-in-route-references");
+        let now_ms = current_time_ms().unwrap();
+        let mut activation = live_request(
+            "operation-viewer",
+            "client-viewer",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = now_ms;
+        fixture.store.activate_live_viewer(&activation).unwrap();
+
+        let references = route_references_for_scale_in(&fixture.store.connection, now_ms).unwrap();
+        assert_eq!(
+            references.slot_ids,
+            BTreeSet::from(["route-slot-01".to_string()])
+        );
+        assert!(!references.ambiguous);
+
+        let transaction = fixture.store.connection.transaction().unwrap();
+        let mut state: DesktopControlState =
+            load_optional_document(&transaction, DOCUMENT, SCHEMA).unwrap();
+        state.current_operation_ids.clear();
+        save_document(&transaction, DOCUMENT, SCHEMA, &state).unwrap();
+        transaction.commit().unwrap();
+
+        let viewer_only = route_references_for_scale_in(&fixture.store.connection, now_ms).unwrap();
+        assert_eq!(viewer_only.slot_ids, references.slot_ids);
+        assert!(!viewer_only.ambiguous);
+
+        let expired = route_references_for_scale_in(
+            &fixture.store.connection,
+            now_ms.saturating_add(LIVE_VIEWER_TTL_MS),
+        )
+        .unwrap();
+        assert!(expired.slot_ids.is_empty());
+        assert!(!expired.ambiguous);
+    }
+
+    #[test]
+    fn scale_in_final_transaction_preserves_the_viewed_and_controlled_route() {
+        let mut fixture = fixture("scale-in-final-reference-check");
+        let now_ms = current_time_ms().unwrap();
+        let mut activation = live_request(
+            "operation-viewer",
+            "client-viewer",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = now_ms;
+        fixture.store.activate_live_viewer(&activation).unwrap();
+
+        fixture
+            .store
+            .save_session_state(&BrowserSessionState::default())
+            .unwrap();
+        let transaction = fixture.store.connection.transaction().unwrap();
+        save_document(
+            &transaction,
+            MANAGER_HANDOFF_REGISTRY_DOCUMENT,
+            MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
+            &BrowserManagerHandoffRegistry::default(),
+        )
+        .unwrap();
+        transaction.commit().unwrap();
+        fixture
+            .store
+            .update_runtime_config(BrowserRuntimeConfigPatch {
+                minimum_ready: Some(1),
+                warm_target: Some(1),
+                scale_in_cooldown_ms: Some(100),
+                ..BrowserRuntimeConfigPatch::default()
+            })
+            .unwrap();
+
+        assert_eq!(fixture.store.reserve_idle_route_stop(now_ms).unwrap(), None);
+        let (_, action) = fixture
+            .store
+            .reserve_idle_route_stop(now_ms.saturating_add(100))
+            .unwrap()
+            .unwrap();
+        let RouteKeeperReconcileAction::Stop { slot_id, .. } = action else {
+            panic!("expected a scale-in stop")
+        };
+        assert_eq!(slot_id, "route-slot-02");
     }
 
     #[test]

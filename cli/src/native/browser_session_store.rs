@@ -1473,6 +1473,8 @@ impl BrowserRuntimeSqliteStore {
             PRESENTATION_REQUEST_QUEUE_SCHEMA_V1,
         )?;
         queue.validate()?;
+        let desktop_control_references =
+            desktop_control::route_references_for_scale_in(&transaction, now_ms)?;
         let pending_operations: i64 = transaction
             .query_row(
                 "SELECT COUNT(*) FROM operation_records WHERE state != 'committed'",
@@ -1482,7 +1484,8 @@ impl BrowserRuntimeSqliteStore {
             .map_err(|error| format!("browser_runtime_operation_read_failed:{error}"))?;
 
         let mut referenced_slots = BTreeSet::new();
-        let mut admission_pending = pending_operations != 0;
+        let mut admission_pending = pending_operations != 0 || desktop_control_references.ambiguous;
+        referenced_slots.extend(desktop_control_references.slot_ids);
         for browser in session_state.browsers.values() {
             let Some(desktop) = &browser.desktop else {
                 admission_pending = true;
