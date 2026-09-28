@@ -3257,10 +3257,9 @@ fn service_status_probe() -> serde_json::Value {
     };
 
     let mut command = Command::new(&current_exe);
-    command
-        .args(["--json", "--session", &probe_session, "service", "status"])
-        .env("AGENT_BROWSER_HOME", &temp_home)
-        .env("AGENT_BROWSER_ARGS", "--no-sandbox");
+    command.args(["--json", "--session", &probe_session, "service", "status"]);
+    configure_install_doctor_probe_environment(&mut command, &temp_home);
+    command.env("AGENT_BROWSER_ARGS", "--no-sandbox");
     let output =
         run_install_doctor_command_with_timeout(command, INSTALL_DOCTOR_SERVICE_STATUS_TIMEOUT);
     let state_path = temp_home.join("service").join("state.json");
@@ -3339,10 +3338,9 @@ fn service_status_probe() -> serde_json::Value {
     };
 
     let mut close_command = Command::new(&current_exe);
-    close_command
-        .args(["--json", "--session", &probe_session, "close"])
-        .env("AGENT_BROWSER_HOME", &temp_home)
-        .env("AGENT_BROWSER_ARGS", "--no-sandbox");
+    close_command.args(["--json", "--session", &probe_session, "close"]);
+    configure_install_doctor_probe_environment(&mut close_command, &temp_home);
+    close_command.env("AGENT_BROWSER_ARGS", "--no-sandbox");
     let _ = run_install_doctor_command_with_timeout(
         close_command,
         INSTALL_DOCTOR_SHORT_COMMAND_TIMEOUT,
@@ -3351,6 +3349,18 @@ fn service_status_probe() -> serde_json::Value {
     cleanup_stale_files(&probe_session);
     let _ = fs::remove_dir_all(&temp_home);
     result
+}
+
+/// Keep the install-doctor service probe inside one disposable namespace even
+/// when the invoking launcher exports development runtime-host configuration.
+fn configure_install_doctor_probe_environment(command: &mut Command, temp_home: &Path) {
+    command
+        .env("HOME", temp_home)
+        .env("AGENT_BROWSER_HOME", temp_home)
+        .env("AGENT_BROWSER_SOCKET_DIR", temp_home.join("runtime"))
+        .env(crate::runtime_host::RUNTIME_HOST_ENV, "0")
+        .env_remove(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV)
+        .env_remove("AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE");
 }
 
 fn terminate_session_process_from_metadata(session: &str) {
@@ -4409,7 +4419,10 @@ fn package_exists_apt(pkg: &str) -> bool {
 
 #[cfg(test)]
 mod install_doctor_remedy_contract_tests {
-    use super::InstallDoctorRemedyAction;
+    use super::{configure_install_doctor_probe_environment, InstallDoctorRemedyAction};
+    use std::collections::BTreeMap;
+    use std::path::Path;
+    use std::process::Command;
 
     #[test]
     fn install_doctor_remedies_are_closed_and_never_automatic() {
@@ -4469,6 +4482,51 @@ mod install_doctor_remedy_contract_tests {
                 .recommendation()
                 .get("argv"),
             None
+        );
+    }
+
+    #[test]
+    fn install_doctor_probe_scrubs_shared_runtime_authority() {
+        let mut command = Command::new("agent-browser");
+        configure_install_doctor_probe_environment(
+            &mut command,
+            Path::new("/tmp/agent-browser-install-doctor-probe"),
+        );
+        let env = command
+            .get_envs()
+            .map(|(key, value)| {
+                (
+                    key.to_string_lossy().into_owned(),
+                    value.map(|value| value.to_string_lossy().into_owned()),
+                )
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        assert_eq!(
+            env.get("HOME").and_then(Option::as_deref),
+            Some("/tmp/agent-browser-install-doctor-probe")
+        );
+        assert_eq!(
+            env.get("AGENT_BROWSER_HOME").and_then(Option::as_deref),
+            Some("/tmp/agent-browser-install-doctor-probe")
+        );
+        assert_eq!(
+            env.get("AGENT_BROWSER_SOCKET_DIR")
+                .and_then(Option::as_deref),
+            Some("/tmp/agent-browser-install-doctor-probe/runtime")
+        );
+        assert_eq!(
+            env.get(crate::runtime_host::RUNTIME_HOST_ENV)
+                .and_then(Option::as_deref),
+            Some("0")
+        );
+        assert_eq!(
+            env.get(crate::runtime_host::RUNTIME_HOST_PROCESS_ENV),
+            Some(&None)
+        );
+        assert_eq!(
+            env.get("AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE"),
+            Some(&None)
         );
     }
 }
