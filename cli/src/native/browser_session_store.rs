@@ -359,6 +359,62 @@ impl BrowserRuntimeSqliteStore {
         Ok(Self { connection })
     }
 
+    /// Open the existing Browser Runtime database without migrations or writes.
+    pub(crate) fn open_read_only(path: &Path) -> Result<Self, String> {
+        let metadata = fs::symlink_metadata(path)
+            .map_err(|error| format!("browser_runtime_database_read_only_unavailable:{error}"))?;
+        if metadata.file_type().is_symlink() || !metadata.file_type().is_file() {
+            return Err("browser_runtime_database_read_only_invalid_type".to_string());
+        }
+        let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .map_err(|error| format!("browser_runtime_database_read_only_open_failed:{error}"))?;
+        validate_runtime_schema(&connection)?;
+        Ok(Self { connection })
+    }
+
+    /// Read-only aggregate for Service status and install doctor. Errors are
+    /// reduced to stable codes so local paths never enter public status.
+    pub(crate) fn default_operational_status_read_only() -> serde_json::Value {
+        let result = (|| -> Result<serde_json::Value, String> {
+            let path = Self::default_sqlite_path()?;
+            let store = Self::open_read_only(&path)?;
+            let migration = store.migration_receipt()?;
+            let archive_state = match fs::symlink_metadata(&migration.archive_directory) {
+                Ok(metadata)
+                    if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() =>
+                {
+                    "present"
+                }
+                Ok(_) => "invalid",
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => "missing",
+                Err(_) => "unavailable",
+            };
+            Ok(serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-operational-status.v1",
+                "state": "available",
+                "config": store.load_runtime_config()?,
+                "storage": store.runtime_storage_status()?,
+                "migration": {
+                    "importedSourceCount": migration.imported_source_count,
+                    "rejectedRecordCount": migration.rejected_record_count,
+                    "rejectionCodes": migration.rejection_codes,
+                    "archiveState": archive_state,
+                },
+            }))
+        })();
+        result.unwrap_or_else(|error| {
+            let failure_code = error
+                .split(':')
+                .next()
+                .unwrap_or("browser_runtime_status_failed");
+            serde_json::json!({
+                "schemaVersion": "agent-browser.runtime-operational-status.v1",
+                "state": "unavailable",
+                "failureCode": failure_code,
+            })
+        })
+    }
+
     pub(crate) fn migrate_from_legacy(
         path: &Path,
         sources: LegacyBrowserRuntimeSources<'_>,
@@ -5825,6 +5881,41 @@ mod tests {
             restarted.runtime_storage_status().unwrap().backup_sha256,
             after.backup_sha256
         );
+    }
+
+    #[test]
+    fn read_only_runtime_status_does_not_create_backups_or_mutate_database() {
+        let directory = TempDirectory::new("browser-runtime-read-only-status");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            store
+                .connection
+                .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
+                .unwrap();
+        }
+        let wal_path = PathBuf::from(format!("{}-wal", database_path.to_string_lossy()));
+        let shm_path = PathBuf::from(format!("{}-shm", database_path.to_string_lossy()));
+        let _ = fs::remove_file(&wal_path);
+        let _ = fs::remove_file(&shm_path);
+        let digest_before = sha256_file(&database_path).unwrap();
+
+        let store = BrowserRuntimeSqliteStore::open_read_only(&database_path).unwrap();
+        let status = store.runtime_storage_status().unwrap();
+        assert_eq!(status.integrity_state, "ok");
+        drop(store);
+
+        assert_eq!(sha256_file(&database_path).unwrap(), digest_before);
+        assert!(!directory.0.join(BROWSER_RUNTIME_BACKUP_DIRECTORY).exists());
     }
 
     #[test]

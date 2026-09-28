@@ -921,6 +921,13 @@ URL, first and last visit time, count, and incident IDs when present. A bounded
 compaction-event history records the exact byte change and affected counts.
 Bodies, screenshots, heartbeats, raw logs, and repeated polls are never added
 to navigation history.
+`agent-browser service status` returns the same read-only Browser Runtime
+projection under `browserRuntime`. `agent-browser install doctor` includes it
+under `data.browserRuntime` and prints its availability, integrity, database
+budget, routine-storage budget, and backup state. These reads open the existing
+SQLite database read-only, perform no migration or backup, and create no
+browser or provider effect. Failure output contains a stable code, not
+the local database path.
 Disposable cleanup ranks the oldest inactive allocation first and excludes
 sessions protected by a current viewer, desktop controller, or pending
 operation. Named profiles are never cleanup candidates. Disposable profiles

@@ -1040,6 +1040,26 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/runtimeMultiplicity/state"),
     );
     print_doctor_field(
+        "browser runtime",
+        report.pointer("/data/browserRuntime/state"),
+    );
+    print_doctor_field(
+        "browser database integrity",
+        report.pointer("/data/browserRuntime/storage/integrityState"),
+    );
+    print_doctor_field(
+        "browser database budget",
+        report.pointer("/data/browserRuntime/storage/liveDatabaseState"),
+    );
+    print_doctor_field(
+        "browser routine storage budget",
+        report.pointer("/data/browserRuntime/storage/routineStorageState"),
+    );
+    print_doctor_field(
+        "browser runtime backup",
+        report.pointer("/data/browserRuntime/storage/backupState"),
+    );
+    print_doctor_field(
         "runtime hosts",
         report.pointer("/data/runtimeMultiplicity/counts/runtimeHosts"),
     );
@@ -1186,6 +1206,9 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             &live_dashboard_runtime,
             &workstation_payload,
         );
+    install_doctor_trace("browser_runtime");
+    let browser_runtime =
+        crate::native::browser_session_store::BrowserRuntimeSqliteStore::default_operational_status_read_only();
     install_doctor_trace("issues");
     let mut issues = install_doctor_issues(InstallDoctorIssueInputs {
         current_executable: &current_executable,
@@ -1267,6 +1290,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
             "runtimeMultiplicity": runtime_multiplicity,
+            "browserRuntime": browser_runtime,
             "runtimeMonitor": runtime_monitor,
             "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,

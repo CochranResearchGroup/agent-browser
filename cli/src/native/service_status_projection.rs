@@ -1247,7 +1247,9 @@ pub(crate) mod action_commands {
             )
             .await
             .map_err(|error| error.to_string())?;
-        serde_json::to_value(response).map_err(|error| error.to_string())
+        let mut response = serde_json::to_value(response).map_err(|error| error.to_string())?;
+        response["browserRuntime"] = super::super::browser_session_store::BrowserRuntimeSqliteStore::default_operational_status_read_only();
+        Ok(response)
     }
 
     fn project_browser_record_provenance(state: &mut ServiceState, caller_projection: bool) {
@@ -1410,6 +1412,15 @@ pub(crate) mod action_commands {
             .unwrap();
 
             assert_eq!(repository.mutation_count.load(Ordering::SeqCst), 0);
+            assert_eq!(
+                response["browserRuntime"]["schemaVersion"],
+                "agent-browser.runtime-operational-status.v1"
+            );
+            assert!(matches!(
+                response["browserRuntime"]["state"].as_str(),
+                Some("available" | "unavailable")
+            ));
+            assert!(response["browserRuntime"].get("databasePath").is_none());
             assert!(repository
                 .load_snapshot()
                 .unwrap()

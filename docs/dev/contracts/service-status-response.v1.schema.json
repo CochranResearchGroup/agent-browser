@@ -11,6 +11,20 @@
     "closedTabProjection"
   ],
   "properties": {
+    "browserRuntime": {
+      "description": "Read-only Browser Runtime SQLite configuration, migration, integrity, size, history-budget, backup, and restoration-gap projection. Unavailable projections expose only a stable failureCode.",
+      "type": "object",
+      "required": ["schemaVersion", "state"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.runtime-operational-status.v1" },
+        "state": { "enum": ["available", "unavailable"] },
+        "failureCode": { "type": "string" },
+        "config": { "type": "object" },
+        "storage": { "type": "object" },
+        "migration": { "type": "object" }
+      },
+      "additionalProperties": false
+    },
     "control_plane": {
       "type": "object",
       "properties": {

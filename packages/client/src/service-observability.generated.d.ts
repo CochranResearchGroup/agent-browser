@@ -949,7 +949,34 @@ export interface ServiceStateLockDiagnostics {
   };
 }
 
+export interface ServiceBrowserRuntimeOperationalStatus {
+  schemaVersion: "agent-browser.runtime-operational-status.v1";
+  state: "available" | "unavailable";
+  failureCode?: string;
+  config?: Record<string, unknown>;
+  storage?: {
+    integrityState?: string;
+    databaseBytes?: number;
+    walBytes?: number;
+    exactUrlHistoryBytes?: number;
+    currentBackupBytes?: number;
+    previousBackupBytes?: number;
+    liveDatabaseState?: string;
+    exactUrlHistoryState?: string;
+    routineStorageState?: string;
+    backupState?: string;
+    restorationGap?: string;
+  };
+  migration?: {
+    importedSourceCount: number;
+    rejectedRecordCount: number;
+    rejectionCodes: string[];
+    archiveState: "present" | "missing" | "invalid" | "unavailable";
+  };
+}
+
 export interface ServiceStatusResponse {
+  browserRuntime?: ServiceBrowserRuntimeOperationalStatus;
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown> & {
     profilePolicyMigration?: ServiceProfilePolicyMigrationReport | null;
