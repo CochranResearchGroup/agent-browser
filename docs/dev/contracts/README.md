@@ -9,8 +9,19 @@ software clients and MCP agents are expected to consume directly.
 consumer fixture for the complete public Remote View F0 foundation
 observation. The service-model parser rejects unversioned shape drift and
 validates the exact published resource and state vocabulary. The fixture does
-not advertise desktop lifecycle, viewing, placement, or cleanup operations
-before Remote View publishes those contracts at its J1 through J3 checkpoints.
+not advertise later desktop lifecycle, viewing, placement, or cleanup
+operations ahead of their Remote View checkpoints.
+
+`remote-view-j1-consumer.v1.fixture.json` binds Agent Browser's provider-free
+consumer to Remote View J1 source checkpoint
+`f674518e34fea346002c72c4adc3966b628d0b78`. It covers the public camel-case
+desktop lifecycle observation, exact desktop UUID and generation selection,
+allocation state, and the snake-case durable operation-status record. The
+consumer recomputes Remote View's operation payload hash and preserves the
+exact desktop UUID and generation for a later release request. The fixture
+does not imply application placement, opaque viewing handoff, viewer
+readiness, or installed-runtime acceptance; those remain later Remote View
+checkpoint dependencies.
 
 `p220-p219-file-disposition.v1.json` is the exact 63-file custody ledger for
 the unpublished P219 implementation slice at `47150749`. Every file has one

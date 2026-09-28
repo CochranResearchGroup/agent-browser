@@ -176,11 +176,15 @@ pub use profile_seeding::{
     SERVICE_PROFILE_SEEDING_MODE_VALUES,
 };
 pub use remote_view_consumer::{
-    validate_fixed_desktop_associations, validate_remote_view_foundation,
-    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewEffectBoundary,
+    allocated_desktop_candidate, exact_release_reference, validate_fixed_desktop_associations,
+    validate_remote_view_foundation, validate_remote_view_operation,
+    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewDesktopRecord,
+    RemoteViewDesktopReference, RemoteViewDesktopResources, RemoteViewEffectBoundary,
     RemoteViewEffectEvidence, RemoteViewFixedDesktop, RemoteViewFoundationCommand,
-    RemoteViewFoundationObservation, RemoteViewResourceKind, RemoteViewResourceState,
-    REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
+    RemoteViewFoundationObservation, RemoteViewJ1ConsumerFixture, RemoteViewLifecycleObservation,
+    RemoteViewOperationRecord, RemoteViewOperationState, RemoteViewResourceKind,
+    RemoteViewResourceState, REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION,
+    REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION, REMOTE_VIEW_J1_SOURCE_CHECKPOINT,
 };
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
