@@ -1,5 +1,28 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M3-P3 source-qualified
+
+[Plan 0219 version 31](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `93a740f6` completes the provider-free disposable-retention
+packet. SQLite owns live inactivity, count, and byte settings. Cleanup ranks
+the oldest inactive disposable allocation, protects current viewer, controller,
+and pending-operation sessions from one SQLite snapshot, commits eviction
+before replacement admission, terminalizes handoffs, compacts history, and
+deletes only an idempotent direct-child directory without following symlinks.
+Named profiles cannot enter the candidate set, and strict policy decoding
+rejects pinning or promotion fields.
+
+G37 and G38 advance from missing to pass. G21 and G36 remain partial until the
+frozen installed candidate proves joined retention. The ledger is 11 pass,
+29 partial, 2 fail, and 3 missing. The complete 282-test service-model suite,
+focused host/store/runtime tests, strict Clippy, formatting, generated-client
+contracts, route-confusion gates, documentation checks, and docs build pass.
+The broad browser-session filter retained four unrelated environment-sensitive
+process-census fixture failures; its other 131 executed cases passed. No
+installed runtime, browser, provider, publication, production, merge, or
+release effect occurred. M4 requires a bounded successor packet before source
+or runtime effects.
+
 ## Current P219 status | 2026-09-27 M3-P3 retention audit
 
 [Plan 0219 version 30](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

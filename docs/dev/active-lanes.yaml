@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0b728fc0
+    checkpoint: 93a740f6
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P2D remain source-qualified; M3-P2D at 0b728fc0 separates Route Keeper baseline presentation recovery from current authenticated-viewer exact-browser recovery, reuses the M3-P2C journal and fence, keeps dormant browsers lazy, and prevents competing restart replacement; the ledger is nine pass, 29 partial, two fail, and five missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M3-P3 at 93a740f6 adds live disposable settings, protected oldest-inactive count and byte cleanup, terminal handoffs, safe direct-child deletion, and strict no-pinning/no-promotion proof; the ledger is 11 pass, 29 partial, two fail, and three missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M3-P2D is source-qualified at 0b728fc0; M3-P3 is active for G21/G36/G37/G38 typed disposable retention, protected oldest-inactive quota cleanup, and no-promotion proof; G14 and G15 still require installed cold-start and visible joined recovery evidence before final qualification
+    blocker: M3-P3 is source-qualified at 93a740f6; G21/G36 still require frozen installed retention evidence, G14/G15 require installed cold-start and visible joined recovery evidence, and M4 operational conformance needs a bounded successor packet before final qualification
     updated_at: 2026-09-27

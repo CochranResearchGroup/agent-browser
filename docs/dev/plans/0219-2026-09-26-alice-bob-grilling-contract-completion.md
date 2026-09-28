@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 30
+Plan version: 31
 
 State: OPEN
 
@@ -77,6 +77,28 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 31 source-qualifies M3-P3 at commit `93a740f6`. The strict SQLite
+runtime patch, Service schema, generated client, CLI help, README, repository
+skill, and docs now expose the accepted 24-hour, 20-profile, and 10-GiB
+disposable settings. Browser Session Host consumes the disposable inactivity
+setting, projects current viewer, controller, and pending-operation protection
+from one SQLite snapshot, and commits any oldest-inactive quota eviction before
+admitting a replacement allocation. Count and measured regular-file byte limits
+fail closed when protected capacity prevents convergence. Expiry and quota
+eviction terminalize exact handoffs, compact terminal history, and perform only
+idempotent direct-child deletion without following symlinks. Strict policy
+decoding rejects pinning and promotion bypasses; named profiles remain outside
+the candidate set. G37 and G38 advance from missing to pass; G21 and G36 remain
+partial until the frozen installed candidate proves the joined lifecycle. The
+ledger is now 11 pass, 29 partial, 2 fail, and 3 missing. Provider-free model,
+store, host, runtime, generated-contract, documentation, formatting, and strict
+Clippy gates pass. The broad browser-session filter also exposed four inherited
+environment-sensitive process-census fixture failures while all 131 executed
+manager, host, store, runtime, daemon, and dashboard cases in scope passed.
+No installed, browser, provider, route, display, publication, production,
+merge, or release effect occurred. M4 remains open and requires a fresh bounded
+packet before implementation.
 
 Version 30 starts the remaining M3 retention packet from pushed checkpoint
 `762a7f10`. The read-only audit found that the v2 SQLite runtime row already
@@ -1202,6 +1224,18 @@ and reframe if cleanup requires a second mutable authority, if filesystem size
 observation can follow symlinks outside the recorded direct child, or if an
 external deletion can authorize a new allocation without durable SQLite
 reconciliation.
+
+M3-P3 is source-qualified at `93a740f6`. Its provider-free acceptance passes;
+installed joined retention remains part of the final M4 candidate rather than a
+separate publication. The complete service-model suite passes 282 tests. The
+relevant host, store, runtime, schema/client, documentation, formatting, and
+strict workspace Clippy gates pass. The umbrella service-client command remains
+blocked before the changed lane by the inherited missing
+`cli/src/native/service_profile_acquisition.rs` P157 oracle input; the direct
+service-request client, generated contract, type, parity, route-confusion, and
+documentation gates pass. The installed shared user-scoped skill is unchanged
+by design. Goal thread `01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 385,223
+cumulative tokens used at checkpoint reconciliation.
 
 ### A01 Source Checkpoint
 
