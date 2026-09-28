@@ -147,6 +147,11 @@ validates the typed privileged-repair receipt, exposes the same redacted state
 when SQLite is unavailable, and keeps its sealed digest and action list out of
 status. The remaining G30 gate is complete installed status/doctor readback.
 
+G39's source guard now includes a negative-tested `doctorReadOnly` architecture
+cut at `c5f4db2a`. It rejects direct mutation and effect-capable apply calls in
+both doctor implementations. Installed no-mutation proof and the complete
+typed explicit-repair inventory remain open.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

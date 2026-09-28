@@ -1,5 +1,16 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G39 doctor detector
+
+[Plan 0219 version 46](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+adds the deterministic `doctorReadOnly` architecture cut at `c5f4db2a`.
+Install doctor and remote-view doctor fail the cut if either directly mutates
+the filesystem, reconciles or migrates runtime state, creates a backup,
+persists a privileged receipt, or invokes an `--apply` effect. The negative
+fixture and current zero-finding report pass. G39 remains partial for installed
+no-mutation qualification and the complete explicit-repair inventory. Ledger
+counts remain 13/30/2/0; no runtime effect occurred.
+
 ## Current P219 status | 2026-09-28 G30 receipt projection source-qualified
 
 [Plan 0219 version 45](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

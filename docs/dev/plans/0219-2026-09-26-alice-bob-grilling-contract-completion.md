@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 45
+Plan version: 46
 
 State: OPEN
 
@@ -77,6 +77,18 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 46 advances G39's source proof at `c5f4db2a`. The architecture report
+now has a dedicated `doctorReadOnly` cut over both install doctor and
+remote-view doctor. It rejects direct filesystem mutation, runtime
+reconciliation, migration, backup creation, privileged-receipt persistence,
+and effect-capable `--apply` invocation from either doctor path. Its negative
+fixture demonstrates failure on a receipt-persistence call, its clean fixture
+passes, and the current repository reports zero findings. G39 remains partial
+for installed no-mutation qualification and reconciliation of every remaining
+explicit repair command to a typed narrow-effect boundary. The ledger remains
+13 pass, 30 partial, 2 fail, and 0 missing. No runtime, browser, provider,
+privileged, production, merge, push, or release effect occurred.
 
 Version 45 source-qualifies G30's typed privileged-repair receipt projection at
 `7d043e45`. A successful privileged adapter invocation persists only a fully
