@@ -7882,6 +7882,8 @@ Configuration:
   routineStorageMaximumBytes. Readback storage reports SQLite integrity,
   database and WAL bytes, exact-history bytes, budget state, backup verification,
   and restoration gaps. Backup creation never restores the live database.
+  Exact navigation rows over their byte limit compact oldest-first into UTC-day
+  identity summaries with first/last URL, count, and a bounded audit event.
   Recovery maximum backoff must be at least its base backoff. Read values with
   `agent-browser service runtime-config get`.
 

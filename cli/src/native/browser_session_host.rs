@@ -144,6 +144,10 @@ pub(crate) trait BrowserSessionPersistence {
     ) -> Result<BrowserProfileCatalogLoad, String>;
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String>;
 
+    fn exact_url_history_maximum_bytes(&self) -> Result<Option<u64>, String> {
+        Ok(None)
+    }
+
     fn disposable_retention_protected_session_ids(
         &self,
         _now_ms: u64,
@@ -349,6 +353,11 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
 
     fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
         BrowserRuntimeSqliteStore::save_session_state(self, state)
+    }
+
+    fn exact_url_history_maximum_bytes(&self) -> Result<Option<u64>, String> {
+        BrowserRuntimeSqliteStore::load_runtime_config(self)
+            .map(|config| Some(config.exact_url_history_maximum_bytes))
     }
 
     fn load_or_import_profile_catalog(
@@ -626,6 +635,7 @@ pub(crate) struct BrowserSessionHost<P, E> {
     manager_config: BrowserSessionManagerConfig,
     recovery_admission_policy: BrowserRecoveryAdmissionPolicy,
     desktop_capacity: Option<(u32, u32)>,
+    exact_url_history_maximum_bytes: Option<u64>,
 }
 
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
@@ -636,6 +646,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         config: BrowserSessionHostConfig,
     ) -> Result<Self, String> {
         config.recovery_admission_policy.validate()?;
+        let exact_url_history_maximum_bytes = persistence.exact_url_history_maximum_bytes()?;
         let mut state = persistence.load_session_state()?;
         let handoffs = persistence.load_manager_handoffs()?;
         let handoffs_changed = bind_legacy_manager_handoffs(&mut state, &handoffs);
@@ -669,6 +680,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             state,
             handoffs,
             desktop_capacity: None,
+            exact_url_history_maximum_bytes,
             recovery_admission_policy: config.recovery_admission_policy,
             manager_config: BrowserSessionManagerConfig {
                 session_idle_timeout_ms: config.session_idle_timeout_ms,
@@ -690,6 +702,10 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         maximum_browsers_per_display: u32,
     ) {
         self.desktop_capacity = Some((maximum_displays, maximum_browsers_per_display));
+    }
+
+    pub(crate) fn set_exact_url_history_maximum_bytes(&mut self, maximum_bytes: u64) {
+        self.exact_url_history_maximum_bytes = Some(maximum_bytes);
     }
 
     fn select_desktop(
@@ -736,6 +752,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let result = self
             .manager()
             .record_navigation(session_id, url, visited_at_ms)?;
+        self.compact_navigation_history()?;
         self.commit_state()?;
         Ok(result)
     }
@@ -747,6 +764,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
         let result = self.manager().navigate(session_id, url, activity_at_ms)?;
+        self.compact_navigation_history()?;
         self.commit_state()?;
         Ok(result)
     }
@@ -1755,6 +1773,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                     .unwrap_or_else(current_unix_ms);
                                 match self.manager().navigate(session_id, url, now_ms) {
                                     Ok(navigation) => {
+                                        self.compact_navigation_history()?;
                                         let mut response = response;
                                         response["data"]["url"] = serde_json::json!(navigation.url);
                                         response["data"]["tabId"] =
@@ -2350,6 +2369,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .publish_session_state_and_terminal_handoffs(&self.state)?;
         for handoff in terminal {
             self.handoffs.insert(handoff.id.clone(), handoff);
+        }
+        Ok(())
+    }
+
+    fn compact_navigation_history(&mut self) -> Result<(), String> {
+        if let Some(maximum_bytes) = self.exact_url_history_maximum_bytes {
+            self.state.compact_navigation_history(maximum_bytes)?;
         }
         Ok(())
     }
@@ -4222,6 +4248,87 @@ mod tests {
             persisted.sessions[&bob.session_id].last_activity_at_ms,
             1_100
         );
+    }
+
+    #[test]
+    fn sqlite_host_compacts_navigation_before_atomic_publication() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work",
+                "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        store
+            .update_runtime_config(
+                crate::native::browser_session_store::BrowserRuntimeConfigPatch {
+                    exact_url_history_maximum_bytes: Some(2),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let effects = BrowserSessionEffectAdapter::new(FixtureRuntime {
+            live: true,
+            ..FixtureRuntime::default()
+        });
+        let mut host = BrowserSessionHost::load(
+            store,
+            effects,
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                    maximum_attempts: 3,
+                    base_backoff_ms: 1_000,
+                    maximum_backoff_ms: 30_000,
+                    deadline_ms: 90_000,
+                },
+                remote_desktop_routes: Vec::new(),
+                default_disposable_policy: None,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        host.execute_managed_command(
+            "alice",
+            &serde_json::json!({"id":"snapshot","action":"snapshot","activityAtMs":2_000}),
+        )
+        .unwrap()
+        .unwrap();
+        host.navigate(
+            &opened.session_id,
+            "https://example.test/material",
+            1_758_758_400_000,
+        )
+        .unwrap();
+
+        assert!(host.state().navigation_history.is_empty());
+        assert_eq!(host.state().navigation_daily_summaries.len(), 1);
+        assert_eq!(host.state().history_compaction_events.len(), 1);
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .load_session_state()
+            .unwrap();
+        assert_eq!(persisted, *host.state());
     }
 
     #[test]

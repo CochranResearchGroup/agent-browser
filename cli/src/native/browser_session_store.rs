@@ -2886,7 +2886,7 @@ fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> 
     if config.maximum_disposable_profile_bytes == 0 {
         return Err("browser_runtime_config_disposable_bytes_invalid".to_string());
     }
-    if config.exact_url_history_maximum_bytes == 0
+    if config.exact_url_history_maximum_bytes < 2
         || config.exact_url_history_maximum_bytes > config.live_database_maximum_bytes
     {
         return Err("browser_runtime_config_url_history_bytes_invalid".to_string());
@@ -3829,6 +3829,7 @@ mod tests {
             target_id: "target-a".to_string(),
             url: "https://example.test/".to_string(),
             visited_at_ms: 4,
+            incident_ids: Vec::new(),
         });
         let mut source = serde_json::to_value(state).unwrap();
         source["sessionHistory"]
@@ -5530,6 +5531,14 @@ mod tests {
         assert_eq!(
             store.compare_and_swap_runtime_config(0, invalid),
             Err("browser_runtime_config_maximum_displays_invalid".to_string())
+        );
+        assert_eq!(store.load_runtime_config().unwrap(), defaults);
+        assert_eq!(
+            store.update_runtime_config(BrowserRuntimeConfigPatch {
+                exact_url_history_maximum_bytes: Some(1),
+                ..Default::default()
+            }),
+            Err("browser_runtime_config_url_history_bytes_invalid".to_string())
         );
         assert_eq!(store.load_runtime_config().unwrap(), defaults);
     }

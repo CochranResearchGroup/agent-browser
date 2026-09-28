@@ -900,7 +900,8 @@ Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
 `liveDatabaseMaximumBytes` (default 100663296),
 `exactUrlHistoryMaximumBytes` (default 67108864), and
 `routineStorageMaximumBytes` (default 134217728).
-All values must be positive integers, with minimum ready no greater than warm
+All values must be positive integers (`exactUrlHistoryMaximumBytes` is at least
+2), with minimum ready no greater than warm
 target, warm target no greater than maximum displays, and recovery maximum
 backoff no less than recovery base backoff. Updates atomically
 persist settings and keeper policy in SQLite; clients need no revision token.
@@ -913,6 +914,13 @@ exact-history bytes, budget state, backup verification, and restoration gaps.
 `service runtime-config backup` explicitly creates and verifies the rotating
 online backup. It does not restore or delete the live database. None of these
 fields is browser readiness evidence.
+When exact navigation history exceeds `exactUrlHistoryMaximumBytes`, the
+oldest rows are summarized deterministically by UTC day and exact browser,
+profile, session, tab, and target identity. Each summary retains first and last
+URL, first and last visit time, count, and incident IDs when present. A bounded
+compaction-event history records the exact byte change and affected counts.
+Bodies, screenshots, heartbeats, raw logs, and repeated polls are never added
+to navigation history.
 Disposable cleanup ranks the oldest inactive allocation first and excludes
 sessions protected by a current viewer, desktop controller, or pending
 operation. Named profiles are never cleanup candidates. Disposable profiles

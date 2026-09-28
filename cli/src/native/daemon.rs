@@ -1412,13 +1412,16 @@ impl RuntimeHostRouter {
                 let host = host
                     .as_mut()
                     .ok_or_else(|| "browser_session_host_missing".to_string())?;
+                let runtime_config =
+                    super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                        .load_runtime_config()?;
+                host.set_exact_url_history_maximum_bytes(
+                    runtime_config.exact_url_history_maximum_bytes,
+                );
                 if keeper_required {
-                    let config =
-                        super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
-                            .load_runtime_config()?;
                     host.set_desktop_capacity(
-                        config.maximum_displays,
-                        config.maximum_browsers_per_display,
+                        runtime_config.maximum_displays,
+                        runtime_config.maximum_browsers_per_display,
                     );
                 }
                 let operation_id = command.get("id").and_then(Value::as_str);

@@ -2,10 +2,11 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use agent_browser_service_model::{
     BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
-    BrowserOpenReservation, BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
-    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
-    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabSource, OpenBrowserSession,
-    SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
+    BrowserNavigationRecord, BrowserOpenReservation, BrowserProfileCatalog,
+    BrowserProfileCatalogEntry, BrowserProfileKind, BrowserSessionEffects, BrowserSessionManager,
+    BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabEndReason,
+    BrowserTabSource, OpenBrowserSession, SessionBrowserDisposition, SessionCloseDisposition,
+    SessionEndReason, SessionRecordDisposition,
 };
 
 #[derive(Default)]
@@ -27,6 +28,70 @@ struct FixtureEffects {
     navigations: Vec<(String, String, String)>,
     fail_navigation: bool,
     focuses: Vec<(String, Option<String>)>,
+}
+
+#[test]
+fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summaries() {
+    fn navigation(url: &str, visited_at_ms: u64) -> BrowserNavigationRecord {
+        BrowserNavigationRecord {
+            profile_id: "profile-a".to_string(),
+            session_id: "session-a".to_string(),
+            browser_id: "browser-a".to_string(),
+            tab_id: "tab-a".to_string(),
+            target_id: "target-a".to_string(),
+            url: url.to_string(),
+            visited_at_ms,
+            incident_ids: Vec::new(),
+        }
+    }
+
+    let mut state = BrowserSessionState::default();
+    state.navigation_history = vec![
+        navigation("https://example.test/first", 1_758_758_400_000),
+        navigation("https://example.test/second", 1_758_758_401_000),
+        navigation("https://example.test/third", 1_758_844_800_000),
+    ];
+    state.navigation_history[0].incident_ids = vec!["incident-a".to_string()];
+    let maximum = serde_json::to_vec(&state.navigation_history[1..])
+        .unwrap()
+        .len() as u64;
+
+    let event = state.compact_navigation_history(maximum).unwrap().unwrap();
+    assert_eq!(event.removed_navigation_count, 1);
+    assert!(event.exact_bytes_after <= maximum);
+    assert_eq!(state.navigation_history.len(), 2);
+    assert_eq!(
+        state.navigation_history[0].url,
+        "https://example.test/second"
+    );
+    assert_eq!(state.navigation_daily_summaries.len(), 1);
+    let summary = &state.navigation_daily_summaries[0];
+    assert_eq!(summary.utc_day, "2025-09-25");
+    assert_eq!(summary.first_url, "https://example.test/first");
+    assert_eq!(summary.last_url, "https://example.test/first");
+    assert_eq!(summary.navigation_count, 1);
+    assert_eq!(summary.incident_ids, ["incident-a"]);
+
+    let encoded = serde_json::to_vec(&state).unwrap();
+    let mut restarted: BrowserSessionState = serde_json::from_slice(&encoded).unwrap();
+    assert!(restarted
+        .compact_navigation_history(maximum)
+        .unwrap()
+        .is_none());
+    assert_eq!(restarted, state);
+    restarted
+        .navigation_history
+        .push(navigation("https://example.test/fourth", 1_758_844_801_000));
+    restarted
+        .compact_navigation_history(maximum)
+        .unwrap()
+        .unwrap();
+    assert_eq!(restarted.navigation_daily_summaries[0].navigation_count, 2);
+    assert_eq!(
+        restarted.navigation_daily_summaries[0].last_url,
+        "https://example.test/second"
+    );
+    assert_eq!(restarted.history_compaction_events.len(), 2);
 }
 
 #[test]

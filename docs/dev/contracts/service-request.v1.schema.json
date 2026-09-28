@@ -154,7 +154,7 @@
         "maximumRetainedDisposableProfiles": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
         "maximumDisposableProfileBytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
         "liveDatabaseMaximumBytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
-        "exactUrlHistoryMaximumBytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
+        "exactUrlHistoryMaximumBytes": { "type": "integer", "minimum": 2, "maximum": 18446744073709551615 },
         "routineStorageMaximumBytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 }
       },
       "description": "Partial SQLite runtime configuration for service_runtime_config_update. Unknown keys are rejected."
