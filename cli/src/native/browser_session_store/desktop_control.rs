@@ -157,6 +157,37 @@ pub(super) struct DesktopControlRouteReferences {
     pub(super) ambiguous: bool,
 }
 
+pub(super) fn reconciliation_status(
+    connection: &Connection,
+    now_ms: u64,
+) -> Result<serde_json::Value, String> {
+    let state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let current_boot = crate::process_identity::current_boot_epoch();
+    let controlled_slot_ids = state
+        .current_operation_ids
+        .keys()
+        .filter(|slot_id| !slot_id.is_empty())
+        .cloned()
+        .collect::<BTreeSet<_>>();
+    let active_viewer_slot_ids = state
+        .live_viewers
+        .values()
+        .filter(|viewer| {
+            viewer.state == "controlling"
+                && viewer.expires_at_ms > now_ms
+                && viewer.observed_shared_connection_count > 0
+                && current_boot.as_deref() == Some(viewer.boot_epoch.as_str())
+                && !viewer.slot_id.is_empty()
+        })
+        .map(|viewer| viewer.slot_id.clone())
+        .collect::<BTreeSet<_>>();
+    Ok(serde_json::json!({
+        "controlledSlotIds": controlled_slot_ids,
+        "activeViewerSlotIds": active_viewer_slot_ids,
+        "operationCount": state.operations.len(),
+    }))
+}
+
 /// Return every route that current viewer or Desktop Services control authority
 /// can still address. Scale-in calls this inside its final SQLite transaction;
 /// incomplete control state fails closed instead of making a route look idle.

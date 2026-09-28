@@ -432,6 +432,7 @@ impl BrowserRuntimeSqliteStore {
                 "state": "available",
                 "launchAdmission": &launch_admission,
                 "config": config,
+                "reconciliation": store.runtime_reconciliation_status()?,
                 "storage": store.runtime_storage_status()?,
                 "migration": {
                     "importedSourceCount": migration.imported_source_count,
@@ -1475,6 +1476,105 @@ impl BrowserRuntimeSqliteStore {
             RUNTIME_CONFIG_HISTORY_DOCUMENT,
             BROWSER_RUNTIME_CONFIG_HISTORY_SCHEMA_V1,
         )
+    }
+
+    fn runtime_reconciliation_status(&self) -> Result<serde_json::Value, String> {
+        let now_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|_| "browser_runtime_status_clock_invalid".to_string())?
+            .as_millis()
+            .min(u128::from(u64::MAX)) as u64;
+        let sessions = self.load_session_state()?;
+        let handoffs = self.load_handoff_registry()?;
+        let authority = self.load_route_keeper_authority()?;
+        let queue = self.load_presentation_queue()?;
+        let recovery: BrowserRecoveryRegistry = load_optional_document(
+            &self.connection,
+            BROWSER_RECOVERY_REGISTRY_DOCUMENT,
+            BROWSER_RECOVERY_REGISTRY_SCHEMA_V1,
+        )?;
+
+        let mut browsers_per_display = BTreeMap::<String, usize>::new();
+        for browser in sessions.browsers.values() {
+            let display = browser
+                .desktop
+                .as_ref()
+                .map(|desktop| desktop.display_name.clone())
+                .unwrap_or_else(|| "unassigned".to_string());
+            *browsers_per_display.entry(display).or_default() += 1;
+        }
+        let mut handoff_states = BTreeMap::<String, usize>::new();
+        for handoff in handoffs.handoffs.values() {
+            *handoff_states.entry(handoff.state.clone()).or_default() += 1;
+        }
+        let mut queue_states = BTreeMap::<String, usize>::new();
+        for entry in queue.entries.values() {
+            let state = match &entry.state {
+                PresentationRequestState::Queued => "queued",
+                PresentationRequestState::Admitted { .. } => "admitted",
+                PresentationRequestState::Completed { .. } => "completed",
+                PresentationRequestState::Retryable {
+                    recovery_required: true,
+                } => "recovery_required",
+                PresentationRequestState::Retryable {
+                    recovery_required: false,
+                } => "retryable",
+            };
+            *queue_states.entry(state.to_string()).or_default() += 1;
+        }
+        let mut recovery_phases = BTreeMap::<String, usize>::new();
+        for state in recovery.states.values() {
+            let phase = serde_json::to_value(state.phase)
+                .map_err(|error| format!("browser_runtime_recovery_status_failed:{error}"))?
+                .as_str()
+                .ok_or_else(|| "browser_runtime_recovery_status_invalid".to_string())?
+                .to_string();
+            *recovery_phases.entry(phase).or_default() += 1;
+        }
+        let mut operation_states = BTreeMap::<String, i64>::new();
+        let mut statement = self
+            .connection
+            .prepare("SELECT state, COUNT(*) FROM operation_records GROUP BY state")
+            .map_err(|error| format!("browser_runtime_operation_status_failed:{error}"))?;
+        for row in statement
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|error| format!("browser_runtime_operation_status_failed:{error}"))?
+        {
+            let (state, count) =
+                row.map_err(|error| format!("browser_runtime_operation_status_failed:{error}"))?;
+            operation_states.insert(state, count);
+        }
+        let keeper_records = authority
+            .records
+            .iter()
+            .map(|(slot_id, record)| {
+                serde_json::json!({
+                    "slotId": slot_id,
+                    "phase": record.phase,
+                    "hostGeneration": record.fence.host_generation,
+                    "displayName": record.protocol_ready.as_ref().map(|ready| ready.display_name.clone()),
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(serde_json::json!({
+            "browserCount": sessions.browsers.len(),
+            "sessionCount": sessions.sessions.len(),
+            "browsersPerDisplay": browsers_per_display,
+            "handoffStates": handoff_states,
+            "keeper": {
+                "requestedReadySlots": authority.requested_ready_slots,
+                "records": keeper_records,
+            },
+            "operations": operation_states,
+            "queue": {
+                "hostGeneration": queue.host_generation,
+                "states": queue_states,
+            },
+            "control": desktop_control::reconciliation_status(&self.connection, now_ms)?,
+            "recoveryPhases": recovery_phases,
+        }))
     }
 
     pub(crate) fn reserve_idle_route_stop(
@@ -6035,7 +6135,8 @@ mod tests {
         )
         .unwrap();
         {
-            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let mut store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            publish_ready_route_authority(&mut store, 1, 1);
             store
                 .connection
                 .execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -6050,6 +6151,17 @@ mod tests {
         let store = BrowserRuntimeSqliteStore::open_read_only(&database_path).unwrap();
         let status = store.runtime_storage_status().unwrap();
         assert_eq!(status.integrity_state, "ok");
+        let reconciliation = store.runtime_reconciliation_status().unwrap();
+        assert_eq!(reconciliation["keeper"]["records"][0]["phase"], "ready");
+        let encoded = serde_json::to_string(&reconciliation).unwrap();
+        for forbidden in [
+            "http://guacamole.internal",
+            "https://browser.example.test",
+            "agent-browser-rdp-1",
+            "guacamole-1",
+        ] {
+            assert!(!encoded.contains(forbidden), "leaked {forbidden}");
+        }
         drop(store);
 
         assert_eq!(sha256_file(&database_path).unwrap(), digest_before);

@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 43
+Plan version: 44
 
 State: OPEN
 
@@ -77,6 +77,18 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 44 advances G30's source projection. Service status and install doctor
+now share one read-only SQLite reconciliation aggregate covering configured
+limits, keeper phases and generations, browsers per display, handoff, operation
+and queue counts, current control and viewer slots, recovery phases, migration,
+storage/backup integrity, and current launch pressure. The projection contains
+no provider URL, route user, credential, or Guacamole connection identity. Its
+focused regression proves the database digest and backup directory remain
+unchanged. G30 remains partial until the typed privileged repair receipt joins
+the aggregate and the complete installed readback is qualified. The ledger
+remains 13 pass, 30 partial, 2 fail, and 0 missing. No runtime, browser,
+provider, privileged, production, merge, push, or release effect occurred.
 
 Version 43 closes G29. Every real runtime-config mutation now appends a bounded
 128-entry change record in the same SQLite transaction as the new revision and

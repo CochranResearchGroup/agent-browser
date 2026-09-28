@@ -7888,6 +7888,9 @@ Configuration:
   routineStorageMaximumBytes. Readback storage reports SQLite integrity,
   database and WAL bytes, exact-history bytes, budget state, backup verification,
   and restoration gaps. Backup creation never restores the live database.
+  Status and doctor also expose a redacted read-only reconciliation aggregate:
+  keeper phases and generations, browsers per display, handoff, operation and
+  queue counts, current control/viewer slots, and browser recovery phases.
   Exact navigation rows over their byte limit compact oldest-first into UTC-day
   identity summaries with first/last URL, count, and a bounded audit event.
   Every managed Chrome launch rechecks current memory, profile-filesystem disk,

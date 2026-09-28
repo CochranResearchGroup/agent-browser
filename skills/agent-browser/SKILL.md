@@ -711,6 +711,11 @@ exact-history bytes, budget state, backup verification, and restoration gaps.
 `service runtime-config backup` explicitly creates and verifies the rotating
 online backup. It never restores or deletes the live database. None of these
 fields is browser readiness evidence.
+Service status and install doctor expose a redacted read-only
+`browserRuntime.reconciliation` aggregate with keeper phases and generations,
+browsers per display, handoff/operation/queue counts, current control and viewer
+slots, and recovery phases. Provider URLs, route users, credentials, and
+Guacamole connection identities are omitted.
 When exact navigation history exceeds `exactUrlHistoryMaximumBytes`, the
 oldest rows are summarized deterministically by UTC day and exact browser,
 profile, session, tab, and target identity. Each summary retains first and last

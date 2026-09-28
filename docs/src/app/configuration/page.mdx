@@ -324,6 +324,12 @@ these disposable limits. Cleanup ranks the oldest inactive allocation first and
 excludes sessions protected by a current viewer, desktop controller, or pending
 operation. Disposable profiles cannot be pinned or promoted to bypass retention.
 
+Service status and install doctor expose a redacted read-only Browser Runtime
+reconciliation projection. It includes keeper phases and generations, browsers
+per display, handoff/operation/queue counts, current control and viewer slots,
+and browser recovery phases. Provider URLs, route users, credentials, and
+Guacamole connection identities are omitted.
+
 Service control jobs default to a 900000 ms worker deadline. The service reconciler marks a stranded <code>running</code> record <code>timed_out</code> after its persisted deadline without retrying the original operation. Legacy records without timeout metadata use the same 900000 ms recovery horizon.
 
 ## Common Configurations

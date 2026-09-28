@@ -1,5 +1,16 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G30 read-only projection
+
+[Plan 0219 version 44](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+adds one redacted read-only SQLite reconciliation aggregate to Service status
+and install doctor. It covers keeper generations, browsers per display,
+handoffs, operations, queue state, control/viewer slots, recovery, migration,
+storage/backup, and launch pressure without provider URLs, route users,
+credentials, or Guacamole identities. The focused digest/no-backup regression
+passes. G30 remains partial for privileged-repair receipt projection and
+installed readback. Ledger counts remain 13/30/2/0; no runtime effect occurred.
+
 ## Current P219 status | 2026-09-28 G29 source closure
 
 [Plan 0219 version 43](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
