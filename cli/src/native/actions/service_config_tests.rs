@@ -584,7 +584,9 @@ async fn runtime_config_roundtrip_does_not_launch_browser() {
     )
     .await;
     assert_eq!(before["success"], true);
-    let update = json!({"id":"config-set","action":"service_runtime_config_update","config":{"warmTarget":2,"maximumDisplays":4,"requestDeadlineMs":45000,"recoveryRetryBudget":5,"recoveryBaseBackoffMs":2000,"recoveryMaxBackoffMs":20000}});
+    assert_eq!(before["data"]["storage"]["integrityState"], "ok");
+    assert_eq!(before["data"]["storage"]["backupState"], "missing");
+    let update = json!({"id":"config-set","action":"service_runtime_config_update","config":{"warmTarget":2,"maximumDisplays":4,"requestDeadlineMs":45000,"recoveryRetryBudget":5,"recoveryBaseBackoffMs":2000,"recoveryMaxBackoffMs":20000,"exactUrlHistoryMaximumBytes":50331648_u64,"liveDatabaseMaximumBytes":83886080_u64,"routineStorageMaximumBytes":125829120_u64}});
     let after = super::execute_command(&update, &mut state).await;
     assert_eq!(after["success"], true);
     assert_eq!(after["data"]["config"]["warmTarget"], 2);
@@ -593,8 +595,25 @@ async fn runtime_config_roundtrip_does_not_launch_browser() {
     assert_eq!(after["data"]["config"]["recoveryRetryBudget"], 5);
     assert_eq!(after["data"]["config"]["recoveryBaseBackoffMs"], 2_000);
     assert_eq!(after["data"]["config"]["recoveryMaxBackoffMs"], 20_000);
+    assert_eq!(
+        after["data"]["config"]["exactUrlHistoryMaximumBytes"],
+        50_331_648
+    );
+    assert_eq!(
+        after["data"]["config"]["liveDatabaseMaximumBytes"],
+        83_886_080
+    );
+    assert_eq!(
+        after["data"]["config"]["routineStorageMaximumBytes"],
+        125_829_120
+    );
     let replay = super::execute_command(&update, &mut state).await;
-    assert_eq!(replay["data"], after["data"]);
+    assert_eq!(replay["data"]["config"], after["data"]["config"]);
+    assert_eq!(
+        replay["data"]["capacityGrowth"],
+        after["data"]["capacityGrowth"]
+    );
+    assert_eq!(replay["data"]["storage"]["integrityState"], "ok");
     let invalid = super::execute_command(
         &json!({"id":"bad","action":"service_runtime_config_update","config":{"unknown":1}}),
         &mut state,
@@ -606,7 +625,20 @@ async fn runtime_config_roundtrip_does_not_launch_browser() {
         &mut state,
     )
     .await;
-    assert_eq!(readback["data"], after["data"]);
+    assert_eq!(readback["data"]["config"], after["data"]["config"]);
+    assert_eq!(
+        readback["data"]["capacityGrowth"],
+        after["data"]["capacityGrowth"]
+    );
+    assert_eq!(readback["data"]["storage"]["integrityState"], "ok");
+    let backup = super::execute_command(
+        &json!({"id":"backup","action":"service_runtime_backup_create"}),
+        &mut state,
+    )
+    .await;
+    assert_eq!(backup["success"], true);
+    assert_eq!(backup["data"]["backup"]["integrityState"], "ok");
+    assert_eq!(backup["data"]["storage"]["backupState"], "verified");
     assert!(state.browser.is_none());
     drop(state);
     fs::remove_dir_all(home).unwrap();

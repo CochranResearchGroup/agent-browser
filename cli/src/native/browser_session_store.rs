@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use agent_browser_service_model::{
     decide_browser_recovery, record_browser_recovery_failure,
@@ -19,7 +20,7 @@ use agent_browser_service_model::{
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V1, ROUTE_KEEPER_AUTHORITY_SCHEMA_V2,
     ROUTE_KEEPER_AUTHORITY_SCHEMA_V3, ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
 };
-use rusqlite::{params, Connection, OptionalExtension, TransactionBehavior};
+use rusqlite::{backup, params, Connection, OpenFlags, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -41,6 +42,10 @@ const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
+const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
+const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
+const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
+const BROWSER_RUNTIME_BACKUP_MANIFEST: &str = "manifest.json";
 const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const MANAGER_HANDOFF_REGISTRY_DOCUMENT: &str = "manager_handoff_registry";
@@ -96,6 +101,9 @@ pub(crate) struct BrowserRuntimeConfigPatch {
     pub(crate) disposable_inactivity_ms: Option<u64>,
     pub(crate) maximum_retained_disposable_profiles: Option<u32>,
     pub(crate) maximum_disposable_profile_bytes: Option<u64>,
+    pub(crate) live_database_maximum_bytes: Option<u64>,
+    pub(crate) exact_url_history_maximum_bytes: Option<u64>,
+    pub(crate) routine_storage_maximum_bytes: Option<u64>,
 }
 
 impl Default for BrowserRuntimeConfig {
@@ -137,6 +145,43 @@ impl BrowserRuntimeConfig {
         }
         .validate()
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct BrowserRuntimeStorageStatus {
+    pub(crate) schema_version: &'static str,
+    pub(crate) integrity_state: &'static str,
+    pub(crate) database_bytes: u64,
+    pub(crate) wal_bytes: u64,
+    pub(crate) exact_url_history_bytes: u64,
+    pub(crate) current_backup_bytes: u64,
+    pub(crate) previous_backup_bytes: u64,
+    pub(crate) live_database_maximum_bytes: u64,
+    pub(crate) exact_url_history_maximum_bytes: u64,
+    pub(crate) routine_storage_maximum_bytes: u64,
+    pub(crate) live_database_state: &'static str,
+    pub(crate) exact_url_history_state: &'static str,
+    pub(crate) routine_storage_state: &'static str,
+    pub(crate) backup_state: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) backup_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) backup_created_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) restoration_gap: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct BrowserRuntimeBackupManifest {
+    pub(crate) schema_version: String,
+    pub(crate) created_at: String,
+    pub(crate) database_sha256: String,
+    pub(crate) database_bytes: u64,
+    pub(crate) integrity_state: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) previous_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1030,6 +1075,148 @@ impl BrowserRuntimeSqliteStore {
         load_runtime_config_row(&self.connection)
     }
 
+    /// Read-only SQLite integrity, history, and storage-budget projection.
+    pub(crate) fn runtime_storage_status(&self) -> Result<BrowserRuntimeStorageStatus, String> {
+        let config = self.load_runtime_config()?;
+        let database_path = self.database_path()?;
+        let database_bytes = regular_file_bytes(&database_path)?;
+        let wal_bytes = regular_file_bytes(&PathBuf::from(format!(
+            "{}-wal",
+            database_path.to_string_lossy()
+        )))?;
+        let state = self.load_session_state()?;
+        let exact_url_history_bytes = serde_json::to_vec(&state.navigation_history)
+            .map_err(|error| format!("browser_runtime_history_measure_failed:{error}"))?
+            .len() as u64;
+        let backup_directory = database_path
+            .parent()
+            .ok_or_else(|| "browser_runtime_database_parent_missing".to_string())?
+            .join(BROWSER_RUNTIME_BACKUP_DIRECTORY);
+        let current_backup = backup_directory.join(BROWSER_RUNTIME_BACKUP_CURRENT);
+        let previous_backup = backup_directory.join(BROWSER_RUNTIME_BACKUP_PREVIOUS);
+        let current_backup_bytes = regular_file_bytes(&current_backup)?;
+        let previous_backup_bytes = regular_file_bytes(&previous_backup)?;
+        let manifest_path = backup_directory.join(BROWSER_RUNTIME_BACKUP_MANIFEST);
+        let manifest = read_optional_backup_manifest(&manifest_path)?;
+        let (backup_state, backup_sha256, backup_created_at, restoration_gap) =
+            match (current_backup.is_file(), manifest) {
+                (false, None) => ("missing", None, None, Some("backup_missing".to_string())),
+                (true, Some(manifest)) => {
+                    let digest = sha256_file(&current_backup)?;
+                    if manifest.schema_version == "agent-browser.runtime-backup-manifest.v1"
+                        && digest == manifest.database_sha256
+                        && current_backup_bytes == manifest.database_bytes
+                        && manifest.integrity_state == "ok"
+                        && verify_sqlite_backup(&current_backup).is_ok()
+                    {
+                        ("verified", Some(digest), Some(manifest.created_at), None)
+                    } else {
+                        (
+                            "gap",
+                            Some(digest),
+                            Some(manifest.created_at),
+                            Some("backup_manifest_or_integrity_mismatch".to_string()),
+                        )
+                    }
+                }
+                (true, None) => (
+                    "gap",
+                    None,
+                    None,
+                    Some("backup_manifest_missing".to_string()),
+                ),
+                (false, Some(manifest)) => (
+                    "gap",
+                    Some(manifest.database_sha256),
+                    Some(manifest.created_at),
+                    Some("backup_file_missing".to_string()),
+                ),
+            };
+        let live_bytes = database_bytes.saturating_add(wal_bytes);
+        let routine_bytes = live_bytes
+            .saturating_add(current_backup_bytes)
+            .saturating_add(previous_backup_bytes);
+        Ok(BrowserRuntimeStorageStatus {
+            schema_version: "agent-browser.runtime-storage-status.v1",
+            integrity_state: sqlite_integrity_state(&self.connection)?,
+            database_bytes,
+            wal_bytes,
+            exact_url_history_bytes,
+            current_backup_bytes,
+            previous_backup_bytes,
+            live_database_maximum_bytes: config.live_database_maximum_bytes,
+            exact_url_history_maximum_bytes: config.exact_url_history_maximum_bytes,
+            routine_storage_maximum_bytes: config.routine_storage_maximum_bytes,
+            live_database_state: budget_state(live_bytes, config.live_database_maximum_bytes),
+            exact_url_history_state: budget_state(
+                exact_url_history_bytes,
+                config.exact_url_history_maximum_bytes,
+            ),
+            routine_storage_state: budget_state(
+                routine_bytes,
+                config.routine_storage_maximum_bytes,
+            ),
+            backup_state,
+            backup_sha256,
+            backup_created_at,
+            restoration_gap,
+        })
+    }
+
+    /// Create and verify one online SQLite backup, retaining at most one prior copy.
+    pub(crate) fn create_verified_runtime_backup(
+        &self,
+    ) -> Result<BrowserRuntimeBackupManifest, String> {
+        let database_path = self.database_path()?;
+        let parent = database_path
+            .parent()
+            .ok_or_else(|| "browser_runtime_database_parent_missing".to_string())?;
+        let backup_directory = parent.join(BROWSER_RUNTIME_BACKUP_DIRECTORY);
+        prepare_private_parent(&backup_directory.join("placeholder"))?;
+        let current = backup_directory.join(BROWSER_RUNTIME_BACKUP_CURRENT);
+        let previous = backup_directory.join(BROWSER_RUNTIME_BACKUP_PREVIOUS);
+        let manifest_path = backup_directory.join(BROWSER_RUNTIME_BACKUP_MANIFEST);
+        let staged =
+            backup_directory.join(format!("runtime.staged-{}.sqlite3", uuid::Uuid::new_v4()));
+        let result = (|| -> Result<BrowserRuntimeBackupManifest, String> {
+            let mut destination = Connection::open(&staged)
+                .map_err(|error| format!("browser_runtime_backup_stage_open_failed:{error}"))?;
+            backup::Backup::new(&self.connection, &mut destination)
+                .and_then(|backup| backup.run_to_completion(128, Duration::from_millis(10), None))
+                .map_err(|error| format!("browser_runtime_backup_copy_failed:{error}"))?;
+            drop(destination);
+            verify_sqlite_backup(&staged)?;
+            set_private_file(&staged)?;
+            let previous_sha256 = read_optional_backup_manifest(&manifest_path)?
+                .map(|manifest| manifest.database_sha256);
+            let manifest = BrowserRuntimeBackupManifest {
+                schema_version: "agent-browser.runtime-backup-manifest.v1".to_string(),
+                created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+                database_sha256: sha256_file(&staged)?,
+                database_bytes: regular_file_bytes(&staged)?,
+                integrity_state: "ok".to_string(),
+                previous_sha256,
+            };
+            if current.exists() {
+                atomic_replace(&current, &previous)?;
+            }
+            atomic_replace(&staged, &current)?;
+            write_private_json_atomic(&manifest_path, &manifest)?;
+            Ok(manifest)
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(&staged);
+        }
+        result
+    }
+
+    fn database_path(&self) -> Result<PathBuf, String> {
+        self.connection
+            .path()
+            .map(PathBuf::from)
+            .ok_or_else(|| "browser_runtime_database_path_unavailable".to_string())
+    }
+
     pub(crate) fn reconcile_recovery_bootstrap(
         &mut self,
         retry_budget: Option<u64>,
@@ -1129,6 +1316,15 @@ impl BrowserRuntimeSqliteStore {
         }
         if let Some(value) = patch.maximum_disposable_profile_bytes {
             next.maximum_disposable_profile_bytes = value;
+        }
+        if let Some(value) = patch.live_database_maximum_bytes {
+            next.live_database_maximum_bytes = value;
+        }
+        if let Some(value) = patch.exact_url_history_maximum_bytes {
+            next.exact_url_history_maximum_bytes = value;
+        }
+        if let Some(value) = patch.routine_storage_maximum_bytes {
+            next.routine_storage_maximum_bytes = value;
         }
         provisioning::authorize_growth_config(
             &transaction,
@@ -2701,6 +2897,68 @@ fn validate_runtime_config(config: &BrowserRuntimeConfig) -> Result<(), String> 
         return Err("browser_runtime_config_database_bytes_invalid".to_string());
     }
     Ok(())
+}
+
+fn sqlite_integrity_state(connection: &Connection) -> Result<&'static str, String> {
+    let result: String = connection
+        .query_row("PRAGMA quick_check", [], |row| row.get(0))
+        .map_err(|error| format!("browser_runtime_integrity_check_failed:{error}"))?;
+    if result == "ok" {
+        Ok("ok")
+    } else {
+        Err("browser_runtime_integrity_check_not_ok".to_string())
+    }
+}
+
+fn verify_sqlite_backup(path: &Path) -> Result<(), String> {
+    let connection = Connection::open_with_flags(path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .map_err(|error| format!("browser_runtime_backup_open_failed:{error}"))?;
+    sqlite_integrity_state(&connection)?;
+    validate_runtime_schema(&connection)
+        .map_err(|error| format!("browser_runtime_backup_schema_invalid:{error}"))
+}
+
+fn regular_file_bytes(path: &Path) -> Result<u64, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_file() => Ok(metadata.len()),
+        Ok(_) => Err(format!(
+            "browser_runtime_storage_path_not_regular:{}",
+            path.display()
+        )),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
+        Err(error) => Err(format!(
+            "browser_runtime_storage_metadata_failed:{}:{error}",
+            path.display()
+        )),
+    }
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    fs::read(path)
+        .map(|bytes| sha256_hex(&bytes))
+        .map_err(|error| format!("browser_runtime_backup_digest_failed:{error}"))
+}
+
+fn read_optional_backup_manifest(
+    path: &Path,
+) -> Result<Option<BrowserRuntimeBackupManifest>, String> {
+    match fs::read_to_string(path) {
+        Ok(raw) => serde_json::from_str(&raw)
+            .map(Some)
+            .map_err(|error| format!("browser_runtime_backup_manifest_invalid:{error}")),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!(
+            "browser_runtime_backup_manifest_read_failed:{error}"
+        )),
+    }
+}
+
+fn budget_state(observed: u64, maximum: u64) -> &'static str {
+    if observed <= maximum {
+        "within_target"
+    } else {
+        "over_target"
+    }
 }
 
 /// Reserve an operation inside the caller's SQLite transaction so another
@@ -5402,6 +5660,9 @@ mod tests {
             disposable_inactivity_ms: Some(86_400_000),
             maximum_retained_disposable_profiles: Some(12),
             maximum_disposable_profile_bytes: Some(5 * 1024 * 1024 * 1024),
+            live_database_maximum_bytes: Some(80 * 1024 * 1024),
+            exact_url_history_maximum_bytes: Some(48 * 1024 * 1024),
+            routine_storage_maximum_bytes: Some(120 * 1024 * 1024),
         };
 
         let updated = store.update_runtime_config(patch.clone()).unwrap();
@@ -5422,6 +5683,9 @@ mod tests {
             updated.maximum_disposable_profile_bytes,
             5 * 1024 * 1024 * 1024
         );
+        assert_eq!(updated.live_database_maximum_bytes, 80 * 1024 * 1024);
+        assert_eq!(updated.exact_url_history_maximum_bytes, 48 * 1024 * 1024);
+        assert_eq!(updated.routine_storage_maximum_bytes, 120 * 1024 * 1024);
         let synchronized = store.load_route_keeper_authority().unwrap();
         assert_eq!(synchronized.policy.minimum_ready, 2);
         assert_eq!(synchronized.policy.warm_target, 3);
@@ -5507,6 +5771,50 @@ mod tests {
         assert_eq!(
             store.load_route_keeper_authority().unwrap(),
             lowered_authority
+        );
+    }
+
+    #[test]
+    fn runtime_storage_status_and_verified_backup_are_restart_safe_and_rotating() {
+        let directory = TempDirectory::new("browser-runtime-storage");
+        let database_path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join(BROWSER_SESSION_STATE_FILENAME),
+                profile_catalog_path: &directory.0.join(BROWSER_PROFILE_CATALOG_FILENAME),
+                service_state_path: &directory.0.join("state.json"),
+            },
+        )
+        .unwrap();
+        let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let before = store.runtime_storage_status().unwrap();
+        assert_eq!(before.integrity_state, "ok");
+        assert_eq!(before.backup_state, "missing");
+        assert_eq!(before.restoration_gap.as_deref(), Some("backup_missing"));
+
+        let first = store.create_verified_runtime_backup().unwrap();
+        assert_eq!(first.integrity_state, "ok");
+        let second = store.create_verified_runtime_backup().unwrap();
+        assert_eq!(second.previous_sha256, Some(first.database_sha256));
+        let after = store.runtime_storage_status().unwrap();
+        assert_eq!(after.backup_state, "verified");
+        assert!(after.current_backup_bytes > 0);
+        assert!(after.previous_backup_bytes > 0);
+        assert!(after.restoration_gap.is_none());
+
+        drop(store);
+        let restarted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let restarted_status = restarted.runtime_storage_status().unwrap();
+        assert_eq!(restarted_status.backup_sha256, after.backup_sha256);
+        assert_eq!(restarted_status.backup_created_at, after.backup_created_at);
+
+        let corrupt = directory.0.join("corrupt.sqlite3");
+        fs::write(&corrupt, b"not sqlite").unwrap();
+        assert!(verify_sqlite_backup(&corrupt).is_err());
+        assert_eq!(
+            restarted.runtime_storage_status().unwrap().backup_sha256,
+            after.backup_sha256
         );
     }
 

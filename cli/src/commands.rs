@@ -3509,9 +3509,10 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
         // === Service status ===
         "service" => match rest.first().copied() {
             Some("runtime-config") => {
-                const USAGE: &str = "service runtime-config get | set <json-object>";
+                const USAGE: &str = "service runtime-config get | set <json-object> | backup";
                 match (rest.get(1).copied(), rest.len()) {
                     (Some("get"), 2) => Ok(json!({"id":id,"action":"service_runtime_config_get"})),
+                    (Some("backup"), 2) => Ok(json!({"id":id,"action":"service_runtime_backup_create"})),
                     (Some("set"), 3) => {
                         let config: Value = serde_json::from_str(rest[2]).map_err(|error| ParseError::InvalidValue {
                             message: format!("Invalid runtime config JSON: {error}"), usage: USAGE,
@@ -3521,7 +3522,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                         }
                         Ok(json!({"id":id,"action":"service_runtime_config_update","config":config}))
                     }
-                    _ => Err(ParseError::InvalidValue { message: "Expected runtime-config get or set with one JSON object".to_string(), usage: USAGE }),
+                    _ => Err(ParseError::InvalidValue { message: "Expected runtime-config get, backup, or set with one JSON object".to_string(), usage: USAGE }),
                 }
             }
 
@@ -8769,6 +8770,9 @@ mod tests {
     fn runtime_config_commands_parse_without_revision_tokens() {
         let get = parse_command(&args("service runtime-config get"), &default_flags()).unwrap();
         assert_eq!(get["action"], "service_runtime_config_get");
+        let backup =
+            parse_command(&args("service runtime-config backup"), &default_flags()).unwrap();
+        assert_eq!(backup["action"], "service_runtime_backup_create");
         let set = parse_command(
             &args(r#"service runtime-config set {"warmTarget":2}"#),
             &default_flags(),

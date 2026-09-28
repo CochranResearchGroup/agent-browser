@@ -1162,7 +1162,10 @@ fn service_mcp_tools() -> Vec<Value> {
                             "recoveryRetryBudget": { "type": "integer", "minimum": 1, "maximum": u32::MAX },
                             "recoveryBaseBackoffMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
                             "recoveryMaxBackoffMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
-                            "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
+                            "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "liveDatabaseMaximumBytes": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "exactUrlHistoryMaximumBytes": { "type": "integer", "minimum": 1, "maximum": u64::MAX },
+                            "routineStorageMaximumBytes": { "type": "integer", "minimum": 1, "maximum": u64::MAX }
                         },
                         "description": "Strict partial SQLite runtime configuration for service_runtime_config_update."
                     },

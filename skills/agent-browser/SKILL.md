@@ -668,6 +668,8 @@ agent-browser service runtime-config get
 agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
 agent-browser service runtime-config set '{"requestDeadlineMs":90000,"recoveryRetryBudget":3,"recoveryBaseBackoffMs":1000,"recoveryMaxBackoffMs":30000}'
 agent-browser service runtime-config set '{"disposableInactivityMs":86400000,"maximumRetainedDisposableProfiles":20,"maximumDisposableProfileBytes":10737418240}'
+agent-browser service runtime-config set '{"liveDatabaseMaximumBytes":100663296,"exactUrlHistoryMaximumBytes":67108864,"routineStorageMaximumBytes":134217728}'
+agent-browser service runtime-config backup
 agent-browser service runtime-config get
 ```
 
@@ -677,7 +679,10 @@ Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
 `scaleInCooldownMs` (default 600000, ten minutes), plus
 `disposableInactivityMs` (default 86400000),
 `maximumRetainedDisposableProfiles` (default 20), and
-`maximumDisposableProfileBytes` (default 10737418240).
+`maximumDisposableProfileBytes` (default 10737418240), plus
+`liveDatabaseMaximumBytes` (default 100663296),
+`exactUrlHistoryMaximumBytes` (default 67108864), and
+`routineStorageMaximumBytes` (default 134217728).
 All values must be positive integers, with minimum ready no greater than warm
 target, warm target no greater than maximum displays, and recovery maximum
 backoff no less than recovery base backoff. Updates atomically
@@ -685,7 +690,12 @@ persist settings and keeper policy in SQLite; clients need no revision token.
 Repeated identical updates preserve the revision. The generic `service_request`
 interface accepts `service_runtime_config_get` and
 `service_runtime_config_update` with a `config` object containing the patch.
-Readback returns `config`, including its revision, and `capacityGrowth`; neither is readiness evidence.
+Readback returns `config`, including its revision, `capacityGrowth`, and a
+read-only `storage` projection with SQLite integrity, database and WAL bytes,
+exact-history bytes, budget state, backup verification, and restoration gaps.
+`service runtime-config backup` explicitly creates and verifies the rotating
+online backup. It never restores or deletes the live database. None of these
+fields is browser readiness evidence.
 Disposable cleanup ranks the oldest inactive allocation first and excludes
 sessions protected by a current viewer, desktop controller, or pending
 operation. Named profiles are never cleanup candidates. Disposable profiles

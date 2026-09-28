@@ -2169,7 +2169,7 @@ pub(crate) use service_commands::*;
 pub(crate) fn handle_service_runtime_config_get() -> Result<Value, String> {
     let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
     Ok(
-        serde_json::json!({"config": store.load_runtime_config()?, "capacityGrowth": store.presentation_growth_status()?}),
+        serde_json::json!({"config": store.load_runtime_config()?, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
     )
 }
 
@@ -2190,7 +2190,18 @@ pub(crate) fn handle_service_runtime_config_update(cmd: &Value) -> Result<Value,
         serde_json::from_value(config.clone())
             .map_err(|error| format!("browser_runtime_config_patch_invalid:{error}"))?;
     let mut store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    let config = store.update_runtime_config(patch)?;
     Ok(
-        serde_json::json!({"config": store.update_runtime_config(patch)?, "capacityGrowth": store.presentation_growth_status()?}),
+        serde_json::json!({"config": config, "capacityGrowth": store.presentation_growth_status()?, "storage": store.runtime_storage_status()?}),
     )
+}
+
+/// Create one verified online Browser Runtime SQLite backup. This typed repair
+/// effect never restores, deletes, or modifies the live database.
+pub(crate) fn handle_service_runtime_backup_create() -> Result<Value, String> {
+    let store = super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?;
+    Ok(serde_json::json!({
+        "backup": store.create_verified_runtime_backup()?,
+        "storage": store.runtime_storage_status()?,
+    }))
 }

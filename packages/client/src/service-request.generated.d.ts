@@ -112,6 +112,7 @@ export type ServiceRequestAction =
   | "service_browser_close"
   | "service_browser_repair"
   | "service_runtime_config_get"
+  | "service_runtime_backup_create"
   | "service_runtime_config_update"
   | "service_browser_contamination_report"
   | "service_browser_retirement_plan"
@@ -1587,6 +1588,9 @@ export interface ServiceRuntimeConfigPatch {
   disposableInactivityMs?: number;
   maximumRetainedDisposableProfiles?: number;
   maximumDisposableProfileBytes?: number;
+  liveDatabaseMaximumBytes?: number;
+  exactUrlHistoryMaximumBytes?: number;
+  routineStorageMaximumBytes?: number;
 }
 
 export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch> {
@@ -1611,6 +1615,39 @@ export interface ServiceRuntimeConfigData {
     attempts: number;
     failureCode: string | null;
   };
+  storage: ServiceRuntimeStorageStatus;
+}
+
+export interface ServiceRuntimeStorageStatus {
+  schemaVersion: "agent-browser.runtime-storage-status.v1" | string;
+  integrityState: "ok" | string;
+  databaseBytes: number;
+  walBytes: number;
+  exactUrlHistoryBytes: number;
+  currentBackupBytes: number;
+  previousBackupBytes: number;
+  liveDatabaseMaximumBytes: number;
+  exactUrlHistoryMaximumBytes: number;
+  routineStorageMaximumBytes: number;
+  liveDatabaseState: "within_target" | "over_target" | string;
+  exactUrlHistoryState: "within_target" | "over_target" | string;
+  routineStorageState: "within_target" | "over_target" | string;
+  backupState: "missing" | "verified" | "gap" | string;
+  backupSha256?: string;
+  backupCreatedAt?: string;
+  restorationGap?: string;
+}
+
+export interface ServiceRuntimeBackupData {
+  backup: {
+    schemaVersion: "agent-browser.runtime-backup-manifest.v1" | string;
+    createdAt: string;
+    databaseSha256: string;
+    databaseBytes: number;
+    integrityState: "ok" | string;
+    previousSha256?: string;
+  };
+  storage: ServiceRuntimeStorageStatus;
 }
 
 export interface ServiceRuntimeConfigUpdateRequest extends Omit<ServiceRequest, "action" | "config"> {
@@ -1779,6 +1816,7 @@ export interface ServiceRequestActionDataMap {
   request_detail: ServiceTrackedRequest;
   service_browser_close: ServiceBrowserCloseData;
   service_browser_repair: ServiceBrowserRepairData;
+  service_runtime_backup_create: ServiceRuntimeBackupData;
   service_runtime_config_get: ServiceRuntimeConfigData;
   service_runtime_config_update: ServiceRuntimeConfigData;
   service_prune_retained: ServiceRetainedCleanupData;

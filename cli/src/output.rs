@@ -6830,8 +6830,9 @@ without PID, CDP, or live tabs and preserves lifecycle aliases in candidateReaso
 Commands:
   state validate        Validate exact Service State bytes with this installed parser without writing or starting a service
   status                Show worker state, browser health, profile lease waits, redacted crash recovery progress, configured site policies, and providers
-  runtime-config get    Read authoritative SQLite runtime settings
-  runtime-config set <json-object>  Update presentation, recovery, and disposable-retention settings without revision tokens
+  runtime-config get    Read authoritative SQLite runtime settings and storage health
+  runtime-config set <json-object>  Update presentation, recovery, retention, and storage settings without revision tokens
+  runtime-config backup Create and verify the rotating online SQLite backup
   watch                 Poll service status until interrupted
   reconcile             Probe persisted browser records and update service state
   prune-retained        Dry-run or apply removal of inert retained browser, closed-tab, orphaned profile, and display allocation records
@@ -7869,13 +7870,18 @@ Configuration:
   releases only that transport connection's profile custody. The accepted job
   continues to its recorded terminal state without being replayed.
   SQLite runtime configuration is the ordinary browser recovery authority.
-  Use `service runtime-config get` or `set` for durable inspection and updates.
+  Use `service runtime-config get`, `set`, or `backup` for durable inspection,
+  updates, and an explicit verified online backup.
   Existing service recovery config, flags, and environment variables are
   explicit startup inputs committed before host construction; default-sourced
   values preserve the current row. Recovery reports `config` provenance.
   Runtime config fields include requestDeadlineMs, recoveryRetryBudget,
   recoveryBaseBackoffMs, recoveryMaxBackoffMs, disposableInactivityMs,
-  maximumRetainedDisposableProfiles, and maximumDisposableProfileBytes.
+  maximumRetainedDisposableProfiles, maximumDisposableProfileBytes,
+  liveDatabaseMaximumBytes, exactUrlHistoryMaximumBytes, and
+  routineStorageMaximumBytes. Readback storage reports SQLite integrity,
+  database and WAL bytes, exact-history bytes, budget state, backup verification,
+  and restoration gaps. Backup creation never restores the live database.
   Recovery maximum backoff must be at least its base backoff. Read values with
   `agent-browser service runtime-config get`.
 
