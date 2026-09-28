@@ -106,11 +106,13 @@ prior observation, action, outcome, and ready postcondition. G20 moves from
 missing to partial; the ledger is 11 pass, 32 partial, 2 fail, and 0 missing.
 M4-P5 owns provider-row reconstruction and remaining operational qualification.
 
-M4-P5 has an intermediate custody checkpoint at `8dcbfd89`. The cold install
-path can now rebuild the exact Agent Browser-owned Guacamole namespace from
-retained inputs before authoritative SQLite projection. Focused fixtures pass,
-but documentation, full source gates, unrelated-row preservation, and installed
-reconstruction remain open. G34 and the ledger disposition are unchanged.
+M4-P5 source-qualifies the bounded Agent Browser-owned Guacamole namespace
+rebuild at `7e34acce`. The cold install reconstructs configured routes, sharing
+profiles, parameters, permissions, and the header user from retained inputs. A
+real disposable PostgreSQL fixture proves unrelated provider rows survive, and
+the complete selected source and documentation gates pass. G34 remains partial
+until separately governed installed cold-upgrade reconstruction; this source
+packet performed no provider or other runtime effect.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

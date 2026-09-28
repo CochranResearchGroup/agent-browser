@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 38
+Plan version: 39
 
 State: OPEN
 
@@ -78,24 +78,32 @@ preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
 
-Version 38 is an intermediate M4-P5 custody checkpoint at commit `8dcbfd89`,
-not a source-qualified packet. Cold workstation reconciliation now requests an
-explicit rebuild of the exact Agent Browser-owned Guacamole namespace before
-recreating the header user, canonical routes, sharing profiles, parameters,
-permissions, and the authoritative SQLite route-pool projection from retained
-inputs. The renderer deletes only configured canonical and legacy connection
-names, configured Agent Browser sharing-profile names, and the exact configured
-header user inside one transaction before ordinary reconstruction.
+Version 39 source-qualifies the M4-P5 provider-row reconstruction primitive at
+commit `7e34acce`. Cold workstation reconciliation requests an explicit rebuild
+of the exact Agent Browser-owned Guacamole namespace before recreating the
+header user, canonical routes, sharing profiles, parameters, permissions, and
+the authoritative SQLite route-pool projection from retained inputs. The
+renderer deletes only configured canonical and legacy connection names,
+configured Agent Browser sharing-profile names, and the exact configured header
+user inside one transaction before ordinary reconstruction.
 
-The route-user renderer fixture, source-free workstation-install fixture,
-shell syntax, Python compilation, and patch hygiene pass. Documentation,
-formatting, strict Clippy, complete workstation fixture review, and installed
-provider reconstruction remain open. G34 therefore remains partial and the
-ledger stays 11 pass, 32 partial, 2 fail, and 0 missing. No installed runtime,
-browser, provider, route, display, privileged, publication, production, merge,
-or release effect occurred. Resume M4-P5 by completing its documentation and
-full source gates, then prove that unrelated provider rows survive the bounded
-rebuild before any installed effect.
+A disposable PostgreSQL 16 fixture executes the complete generated transaction
+against the packaged Guacamole schema. It proves canonical reconstruction and
+exact preservation of an unrelated connection, parameter, sharing profile,
+permission, entity, and user. CLI help, README, repository skill, inline source,
+and docs-site guidance now describe the bounded rebuild. The focused renderer,
+source-free workstation install, host provisioning, fresh-VM harness,
+Guacamole assets and durability, route synchronization, documentation,
+validation-selection, release-fixture, formatting, focused Rust, and strict
+Clippy gates pass. G34 remains partial until the separately governed installed
+cold-upgrade reconstruction succeeds, so the ledger stays 11 pass, 32 partial,
+2 fail, and 0 missing. No installed runtime, browser, provider, route, display,
+privileged, publication, production, merge, or release effect occurred.
+
+Version 38 is the intermediate M4-P5 custody checkpoint at commit `8dcbfd89`.
+It introduced the bounded renderer and cold-install call sequence but retained
+documentation, execution-level unrelated-row preservation, full source gates,
+and installed reconstruction as open requirements.
 
 Version 37 source-qualifies M4-P4 at commit `9f6505b7`. The privilege
 installer now distinguishes a healthy cold start from a repair before entering

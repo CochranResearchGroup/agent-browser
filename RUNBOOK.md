@@ -1,5 +1,24 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 M4-P5 source-qualified
+
+[Plan 0219 version 39](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+source-qualifies the bounded Agent Browser-owned Guacamole namespace rebuild at
+commit `7e34acce`. A disposable PostgreSQL 16 fixture executes the generated
+transaction against the packaged schema and proves that an unrelated
+connection, parameter, sharing profile, permission, entity, and user survive
+exactly while the configured routes are reconstructed. Required CLI, README,
+skill, inline, and docs-site guidance is aligned. The complete selected source
+gates pass, including formatting, strict workspace Clippy, focused Rust,
+workstation and Guacamole fixtures, docs build and links, and validation
+selection.
+
+G34 remains partial and the ledger stays 11 pass, 32 partial, 2 fail, and 0
+missing until a separately governed installed cold-upgrade reconstruction
+proves the retained provider database and resulting route topology. No installed
+runtime, browser, provider, route, display, privileged, publication, production,
+merge, or release effect occurred in this source packet.
+
 ## Current P219 status | 2026-09-27 M4-P5 intermediate custody
 
 [Plan 0219 version 38](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
