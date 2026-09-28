@@ -1933,8 +1933,60 @@ fn recommend_next_action(context: RecommendationContext<'_>) -> String {
     "run_many_to_many_live_gate".to_string()
 }
 
-fn recommend_next_command(next_action: &str) -> Value {
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DoctorRecommendationExecutionClass {
+    ReadOnly,
+    ExplicitEffect,
+    LiveAcceptance,
+    Unclassified,
+}
+
+impl DoctorRecommendationExecutionClass {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read_only",
+            Self::ExplicitEffect => "explicit_effect",
+            Self::LiveAcceptance => "live_acceptance",
+            Self::Unclassified => "unclassified",
+        }
+    }
+}
+
+fn doctor_recommendation_execution_class(next_action: &str) -> DoctorRecommendationExecutionClass {
     match next_action {
+        "existing_agent_browser_rdp_routes_collapsed_to_one_display_use_route_specific_user_or_xrdp_policy_isolation"
+        | "open_route_specific_rdp_sessions_then_rerun_doctor"
+        | "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor"
+        | "repair_rdp_route_display_session"
+        | "install_privileged_helper_then_grant_route_display_access"
+        | "install_privileged_helper_for_recurring_desktop_setup"
+        | "grant_route_display_access"
+        | "converge_local_runtime_then_rerun_doctor" => {
+            DoctorRecommendationExecutionClass::ExplicitEffect
+        }
+        "run_many_to_many_live_gate" => DoctorRecommendationExecutionClass::LiveAcceptance,
+        "repair_or_sync_guacamole_route_pool_before_creating_more_users"
+        | "repair_guacamole_admin_credentials"
+        | "run_rdp_gateway_readiness"
+        | "clear_stale_private_display_locks_or_expand_allocator_range"
+        | "create_or_repair_single_agent_browser_rdp_user_before_route_specific_users"
+        | "repair_install_drift"
+        | "rerun_install_doctor_after_timeout"
+        | "rerun_rdp_gateway_readiness_after_timeout"
+        | "rerun_route_pool_readiness_after_timeout"
+        | "rerun_route_display_inspection_after_timeout"
+        | "restart_stale_daemon_sessions_then_rerun_doctor"
+        | "install_viewer_prerequisites_for_many_to_many_gate" => {
+            DoctorRecommendationExecutionClass::ReadOnly
+        }
+        _ => DoctorRecommendationExecutionClass::Unclassified,
+    }
+}
+
+/// Return a closed, non-executing recommendation contract. Consumers must not
+/// infer effect authority from the presence of a command string.
+fn recommend_next_command(next_action: &str) -> Value {
+    let mut recommendation = match next_action {
         "repair_or_sync_guacamole_route_pool_before_creating_more_users" => json!({
             "command": "pnpm test:rdp-guac-route-pool-readiness -- --report-only",
             "requiresInteractiveSudo": false,
@@ -2045,7 +2097,21 @@ fn recommend_next_command(next_action: &str) -> Value {
             "requiresInteractiveSudo": false,
             "why": "Re-run the doctor after resolving the reported state."
         }),
+    };
+    let execution_class = doctor_recommendation_execution_class(next_action);
+    if let Some(object) = recommendation.as_object_mut() {
+        object.insert(
+            "schemaVersion".to_string(),
+            json!("agent-browser.doctor-repair-recommendation.v1"),
+        );
+        object.insert("actionId".to_string(), json!(next_action));
+        object.insert(
+            "executionClass".to_string(),
+            json!(execution_class.as_str()),
+        );
+        object.insert("automaticExecutionAllowed".to_string(), json!(false));
     }
+    recommendation
 }
 
 struct RemoteViewIssueContext<'a> {
@@ -3310,6 +3376,91 @@ MaxSessions=50
         );
         assert_eq!(command["command"], "pnpm setup:rdp-guac-route-pool");
         assert_eq!(command["requiresInteractiveSudo"], true);
+        assert_eq!(command["executionClass"], "explicit_effect");
+        assert_eq!(command["automaticExecutionAllowed"], false);
+    }
+
+    #[test]
+    fn doctor_recommendations_expose_a_closed_non_executing_effect_class() {
+        let cases = [
+            (
+                "repair_or_sync_guacamole_route_pool_before_creating_more_users",
+                "read_only",
+            ),
+            ("repair_guacamole_admin_credentials", "read_only"),
+            ("run_rdp_gateway_readiness", "read_only"),
+            (
+                "clear_stale_private_display_locks_or_expand_allocator_range",
+                "read_only",
+            ),
+            (
+                "existing_agent_browser_rdp_routes_collapsed_to_one_display_use_route_specific_user_or_xrdp_policy_isolation",
+                "explicit_effect",
+            ),
+            (
+                "open_route_specific_rdp_sessions_then_rerun_doctor",
+                "explicit_effect",
+            ),
+            (
+                "open_two_rdp_route_sessions_for_existing_agent_browser_rdp_user_then_rerun_doctor",
+                "explicit_effect",
+            ),
+            ("repair_rdp_route_display_session", "explicit_effect"),
+            (
+                "install_privileged_helper_then_grant_route_display_access",
+                "explicit_effect",
+            ),
+            (
+                "install_privileged_helper_for_recurring_desktop_setup",
+                "explicit_effect",
+            ),
+            ("grant_route_display_access", "explicit_effect"),
+            (
+                "create_or_repair_single_agent_browser_rdp_user_before_route_specific_users",
+                "read_only",
+            ),
+            ("repair_install_drift", "read_only"),
+            ("rerun_install_doctor_after_timeout", "read_only"),
+            (
+                "rerun_rdp_gateway_readiness_after_timeout",
+                "read_only",
+            ),
+            (
+                "rerun_route_pool_readiness_after_timeout",
+                "read_only",
+            ),
+            (
+                "rerun_route_display_inspection_after_timeout",
+                "read_only",
+            ),
+            (
+                "restart_stale_daemon_sessions_then_rerun_doctor",
+                "read_only",
+            ),
+            (
+                "converge_local_runtime_then_rerun_doctor",
+                "explicit_effect",
+            ),
+            ("run_many_to_many_live_gate", "live_acceptance"),
+            (
+                "install_viewer_prerequisites_for_many_to_many_gate",
+                "read_only",
+            ),
+        ];
+        for (action_id, execution_class) in cases {
+            let recommendation = recommend_next_command(action_id);
+            assert_eq!(
+                recommendation["schemaVersion"],
+                "agent-browser.doctor-repair-recommendation.v1"
+            );
+            assert_eq!(recommendation["actionId"], action_id);
+            assert_eq!(recommendation["executionClass"], execution_class);
+            assert_eq!(recommendation["automaticExecutionAllowed"], false);
+        }
+
+        let unknown = recommend_next_command("future_unclassified_action");
+        assert_eq!(unknown["executionClass"], "unclassified");
+        assert_eq!(unknown["automaticExecutionAllowed"], false);
     }
 
     #[test]

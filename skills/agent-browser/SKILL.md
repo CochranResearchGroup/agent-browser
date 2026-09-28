@@ -1015,6 +1015,13 @@ mismatch, missing Guacamole schema, permission gap, or unroutable dashboard
 embed is not a healthy remote-control browser even if the Chrome process is
 alive.
 
+Treat `nextCommand` as a non-executing
+`agent-browser.doctor-repair-recommendation.v1` contract. Inspect its
+`actionId` and `executionClass`; `read_only`, `explicit_effect`, and
+`live_acceptance` are distinct. `automaticExecutionAllowed` is always false,
+and `unclassified` never grants authority. Do not execute a recommendation
+merely because the doctor returned a command string.
+
 Add `--session <name>`, `--runtime-profile <id>`, or `--route-id <id>` when
 the task targets one retained route. Require `requestedScope.status=ready` for
 that subject and still report `globalAdvisories`; unrelated stale sessions are

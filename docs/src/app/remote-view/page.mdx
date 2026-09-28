@@ -301,6 +301,12 @@ Require `requestedScope.status` and `remoteControl.status` to be `ready`.
 Review `globalAdvisories`, but do not let unrelated stale sessions replace the
 requested-subject result.
 
+The returned `nextCommand` is a non-executing
+`agent-browser.doctor-repair-recommendation.v1` object. Check its `actionId`
+and `executionClass` before deciding what to do. A value of `explicit_effect`
+or `live_acceptance` still requires the corresponding authority and gate;
+`automaticExecutionAllowed` is always false, and `unclassified` grants none.
+
 For an ordinary Browser Session Manager session, requested-scope readiness
 joins the exact ready handoff. The profile, browser, route, display, opaque URL,
 current SQLite <code>Ready</code> route-keeper binding, and latest

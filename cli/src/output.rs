@@ -6570,6 +6570,10 @@ Timeout handling:
   issue codes. A timeout does not prove install or readiness drift. Run the
   issue's direct nextCommand, while a completed missing-display inspection
   remains the primary route-session remediation.
+  JSON nextCommand uses agent-browser.doctor-repair-recommendation.v1 and
+  declares actionId, executionClass, and automaticExecutionAllowed=false.
+  read_only, explicit_effect, and live_acceptance are distinct; an unknown
+  action is unclassified and never gains execution authority.
 
 Remote-control install readiness:
   In JSON output, remoteControl.installDoctorReady is the raw embedded install

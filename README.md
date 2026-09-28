@@ -3350,6 +3350,12 @@ stable issue codes with remediation text, drift findings, and the next setup
 action. It also reports the installed helper's route desktop template readiness
 as `helperDesktopSession` and emits `remote_view_route_desktop_helper_stale`
 when the root-owned helper still writes a terminal-first route desktop.
+The JSON `nextCommand` object uses
+`agent-browser.doctor-repair-recommendation.v1`. It identifies the `actionId`,
+classifies the recommendation as `read_only`, `explicit_effect`,
+`live_acceptance`, or `unclassified`, and always reports
+`automaticExecutionAllowed: false`. A command string is guidance, not effect
+authority.
 Embedded diagnostic timeouts use distinct `*_timed_out` issue codes and do not
 claim that the underlying install or readiness check failed. Run the reported
 direct helper command to resolve an inconclusive timeout. When route-display

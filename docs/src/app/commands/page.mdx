@@ -882,6 +882,13 @@ workflow.
 prove install or readiness drift. Run the issue's direct helper command; when
 route-display inspection completed and found missing route sessions, that
 result remains the primary remediation even if another helper timed out.
+Its JSON <code>nextCommand</code> uses the
+<code>agent-browser.doctor-repair-recommendation.v1</code> contract with an
+<code>actionId</code>, an <code>executionClass</code> of
+<code>read_only</code>, <code>explicit_effect</code>,
+<code>live_acceptance</code>, or <code>unclassified</code>, and
+<code>automaticExecutionAllowed=false</code>. The recommendation never grants
+effect authority.
 
 Use <code>--session &lt;name&gt;</code>,
 <code>--runtime-profile &lt;id&gt;</code>, or <code>--route-id &lt;id&gt;</code> to
