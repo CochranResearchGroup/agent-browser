@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 33
+Plan version: 34
 
 State: OPEN
 
@@ -77,6 +77,27 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 34 source-qualifies M4-P2 at commit `fe46f53c`. Browser Session State
+now retains exact navigation rows up to the live SQLite-owned byte limit and
+then deterministically selects the oldest rows for same-transaction compaction.
+Daily UTC summaries are keyed by exact profile, session, browser, tab, and
+target identity and retain first and last URL, first and last timestamp, count,
+and sorted incident references. Repeated compaction merges independently of
+batching, exact rows remain within budget, and a bounded 512-entry event trail
+records before/after bytes and affected counts. The daemon refreshes the live
+limit before ordinary browser-session work. Legacy state decodes with empty
+summary/event defaults; restart preserves both summaries and compaction
+receipts. Bodies, screenshots, heartbeats, raw logs, and repeated polls never
+enter this history surface. The complete 283-test service-model suite and the
+SQLite host publication fixture pass, as do minimum-limit validation, API/MCP
+parity, documentation checks and build, formatting, and strict workspace
+Clippy. G17 advances from missing to partial because indefinite material
+lifecycle and recovery-event retention remains unproved; G16 remains partial.
+The ledger is now 11 pass, 30 partial, 2 fail, and 2 missing. No installed,
+browser, provider, route, display, publication, production, merge, or release
+effect occurred. M4-P3 begins with the remaining operational status, doctor,
+and current-resource-pressure audit.
 
 Version 33 source-qualifies M4-P1 at commit `4ed5820d`. The strict SQLite
 runtime patch, Service schema, MCP schema, generated client, CLI help, README,
@@ -1316,6 +1337,22 @@ lifecycle and recovery events remain exact. Compaction must be deterministic,
 restart-safe, idempotent, and must not retain bodies, screenshots, heartbeats,
 raw logs, credential material, or repeated polls. It does not own provider,
 privilege, resource-pressure, runtime publication, or installed acceptance.
+
+M4-P2 is source-qualified at `fe46f53c`. Its provider-free model, SQLite-host,
+configuration-contract, documentation, formatting, and strict Clippy gates
+pass. G17 is partial rather than pass because its indefinite material-event
+retention clause remains open.
+
+### M4-P3 | Operational Status, Doctor, And Pressure Audit
+
+M4-P3 starts read-only. Reconcile existing aggregate Service status, install
+doctor, Browser Session Authority resource observations, launch admission, and
+privileged-repair receipts against G30, G33, and G39. Identify which current
+memory, process, disk, integrity, size, migration, keeper, display-generation,
+queue, control-owner, handoff-recovery, and repair fields are already joined
+and which remain absent. No live probe, provider mutation, process cleanup,
+privileged command, browser launch, or installed publication is authorized by
+the audit. A source packet follows only from the verified gap map.
 
 ### A01 Source Checkpoint
 

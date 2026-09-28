@@ -1,5 +1,25 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P2 source-qualified
+
+[Plan 0219 version 34](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `fe46f53c` completes deterministic exact-navigation history
+compaction. The daemon consumes the live SQLite byte limit. Oldest exact rows
+compact before atomic publication into UTC-day summaries keyed by exact
+profile, session, browser, tab, and target identity, with first/last URL and
+time, count, sorted incident references, and a bounded compaction audit trail.
+Restart and repeated compaction preserve deterministic results without adding
+bodies, screenshots, heartbeats, raw logs, or repeated polls.
+
+The complete 283-test service-model suite and the SQLite host publication test
+pass, along with runtime-limit validation, API/MCP parity, documentation checks
+and build, formatting, and strict workspace Clippy. G17 moves from missing to
+partial because indefinite material lifecycle and recovery-event retention is
+still open; G16 remains partial. The ledger is 11 pass, 30 partial, 2 fail, and
+2 missing. No installed runtime, browser, provider, publication, production,
+merge, or release effect occurred. M4-P3 begins with a read-only audit of
+aggregate status, doctor, and current-resource-pressure gaps.
+
 ## Current P219 status | 2026-09-27 M4-P1 source-qualified
 
 [Plan 0219 version 33](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

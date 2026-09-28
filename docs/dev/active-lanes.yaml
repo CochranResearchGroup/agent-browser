@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 4ed5820d
+    checkpoint: fe46f53c
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M4-P1 at 4ed5820d adds typed live storage budgets, read-only integrity and WAL-aware size status, typed restoration gaps, and verified rotating online backup; focused Rust, contract, generated-client, documentation, formatting, and strict Clippy gates pass; the ledger is 11 pass, 29 partial, two fail, and three missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M4-P1 at 4ed5820d adds typed storage authority and verified online backup; M4-P2 at fe46f53c adds deterministic live-limit exact navigation compaction, daily identity summaries, and bounded audit receipts; provider-free model, SQLite host, contract, docs, formatting, and strict Clippy gates pass; the ledger is 11 pass, 30 partial, two fail, and two missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M4-P1 is source-qualified at 4ed5820d; M4-P2 is active for deterministic exact URL history compaction and auditable daily summaries; aggregate status and doctor joins, pressure, privilege, provider reconstruction, and installed qualification remain later packets
+    blocker: M4-P2 is source-qualified at fe46f53c; M4-P3 starts with a read-only audit of aggregate status, doctor, and current resource-pressure gaps; privilege effects, provider reconstruction, and installed qualification remain later packets
     updated_at: 2026-09-27

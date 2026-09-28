@@ -78,6 +78,13 @@ online backup without restoring the live database. The ledger remains 11 pass,
 and daily summaries. Aggregate status/doctor joins, privilege, pressure,
 provider reconstruction, and installed effects remain later work.
 
+M4-P2 is source-qualified at `fe46f53c`. Exact navigation rows now compact
+oldest-first under the live 64-MiB budget into restart-safe daily identity
+summaries with auditable bounded receipts. G17 moves from missing to partial
+because indefinite material lifecycle and recovery-event retention remains
+open; the ledger is 11 pass, 30 partial, 2 fail, and 2 missing. M4-P3 starts
+with the read-only operational status, doctor, and resource-pressure audit.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED
