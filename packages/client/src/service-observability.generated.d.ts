@@ -953,6 +953,19 @@ export interface ServiceBrowserRuntimeOperationalStatus {
   schemaVersion: "agent-browser.runtime-operational-status.v1";
   state: "available" | "unavailable";
   failureCode?: string;
+  launchAdmission: {
+    schemaVersion: "agent-browser.browser-launch-admission.v1";
+    state: "admitted" | "rejected";
+    availableMemoryBytes?: number;
+    minimumAvailableMemoryBytes: number;
+    availableDiskBytes?: number;
+    minimumAvailableDiskBytes: number;
+    hostProcessCount?: number;
+    hostProcessLimit?: number;
+    browserProcessCount?: number;
+    maximumBrowserProcesses: number;
+    reasons: string[];
+  };
   config?: Record<string, unknown>;
   storage?: {
     integrityState?: string;

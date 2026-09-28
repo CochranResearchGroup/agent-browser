@@ -14,11 +14,21 @@
     "browserRuntime": {
       "description": "Read-only Browser Runtime SQLite configuration, migration, integrity, size, history-budget, backup, and restoration-gap projection. Unavailable projections expose only a stable failureCode.",
       "type": "object",
-      "required": ["schemaVersion", "state"],
+      "required": ["schemaVersion", "state", "launchAdmission"],
       "properties": {
         "schemaVersion": { "const": "agent-browser.runtime-operational-status.v1" },
         "state": { "enum": ["available", "unavailable"] },
         "failureCode": { "type": "string" },
+        "launchAdmission": {
+          "type": "object",
+          "required": ["schemaVersion", "state", "reasons"],
+          "properties": {
+            "schemaVersion": { "const": "agent-browser.browser-launch-admission.v1" },
+            "state": { "enum": ["admitted", "rejected"] },
+            "reasons": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": true
+        },
         "config": { "type": "object" },
         "storage": { "type": "object" },
         "migration": { "type": "object" }

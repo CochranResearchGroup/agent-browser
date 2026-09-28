@@ -375,9 +375,29 @@ impl BrowserRuntimeSqliteStore {
     /// Read-only aggregate for Service status and install doctor. Errors are
     /// reduced to stable codes so local paths never enter public status.
     pub(crate) fn default_operational_status_read_only() -> serde_json::Value {
+        let database_path = Self::default_sqlite_path();
+        let admission_path = database_path
+            .as_ref()
+            .ok()
+            .and_then(|path| path.parent())
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        let fallback_launch_admission =
+            super::browser_launch_admission::observe_browser_launch_admission(
+                &admission_path,
+                None,
+            );
         let result = (|| -> Result<serde_json::Value, String> {
-            let path = Self::default_sqlite_path()?;
+            let path = database_path?;
             let store = Self::open_read_only(&path)?;
+            let config = store.load_runtime_config()?;
+            let launch_admission =
+                super::browser_launch_admission::observe_browser_launch_admission(
+                    &admission_path,
+                    config
+                        .maximum_displays
+                        .checked_mul(config.maximum_browsers_per_display),
+                );
             let migration = store.migration_receipt()?;
             let archive_state = match fs::symlink_metadata(&migration.archive_directory) {
                 Ok(metadata)
@@ -392,7 +412,8 @@ impl BrowserRuntimeSqliteStore {
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
-                "config": store.load_runtime_config()?,
+                "launchAdmission": &launch_admission,
+                "config": config,
                 "storage": store.runtime_storage_status()?,
                 "migration": {
                     "importedSourceCount": migration.imported_source_count,
@@ -411,6 +432,7 @@ impl BrowserRuntimeSqliteStore {
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "unavailable",
                 "failureCode": failure_code,
+                "launchAdmission": &fallback_launch_admission,
             })
         })
     }

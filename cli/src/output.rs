@@ -7884,6 +7884,8 @@ Configuration:
   and restoration gaps. Backup creation never restores the live database.
   Exact navigation rows over their byte limit compact oldest-first into UTC-day
   identity summaries with first/last URL, count, and a bounded audit event.
+  Every managed Chrome launch rechecks current memory, profile-filesystem disk,
+  host process-ID capacity, and managed root Chrome/Chromium count before any effect.
   Recovery maximum backoff must be at least its base backoff. Read values with
   `agent-browser service runtime-config get`.
 

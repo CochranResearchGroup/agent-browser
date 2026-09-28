@@ -41,6 +41,7 @@ pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) display: Option<String>,
     pub(crate) remote_headed: bool,
     pub(crate) route_users_by_display: HashMap<String, String>,
+    pub(crate) maximum_browser_processes: Option<u32>,
 }
 
 pub(crate) trait BrowserRuntimeDriver {
@@ -756,6 +757,11 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = runtime.block_on(async {
+                    super::browser_launch_admission::observe_browser_launch_admission(
+                        Path::new(&profile.user_data_dir),
+                        config.maximum_browser_processes,
+                    )
+                    .require_admitted()?;
                     if let Some(desktop) = desktop.as_ref() {
                         if let Some(route_user) =
                             config.route_users_by_display.get(&desktop.display_name)

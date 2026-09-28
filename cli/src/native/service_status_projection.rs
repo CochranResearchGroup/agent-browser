@@ -1420,6 +1420,14 @@ pub(crate) mod action_commands {
                 response["browserRuntime"]["state"].as_str(),
                 Some("available" | "unavailable")
             ));
+            assert_eq!(
+                response["browserRuntime"]["launchAdmission"]["schemaVersion"],
+                "agent-browser.browser-launch-admission.v1"
+            );
+            assert!(matches!(
+                response["browserRuntime"]["launchAdmission"]["state"].as_str(),
+                Some("admitted" | "rejected")
+            ));
             assert!(response["browserRuntime"].get("databasePath").is_none());
             assert!(repository
                 .load_snapshot()

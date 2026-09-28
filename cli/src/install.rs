@@ -1060,6 +1060,10 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/browserRuntime/storage/backupState"),
     );
     print_doctor_field(
+        "browser launch admission",
+        report.pointer("/data/browserRuntime/launchAdmission/state"),
+    );
+    print_doctor_field(
         "runtime hosts",
         report.pointer("/data/runtimeMultiplicity/counts/runtimeHosts"),
     );

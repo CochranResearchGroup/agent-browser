@@ -928,6 +928,12 @@ budget, routine-storage budget, and backup state. These reads open the existing
 SQLite database read-only, perform no migration or backup, and create no
 browser or provider effect. Failure output contains a stable code, not
 the local database path.
+Immediately before every Browser Session Manager Chrome launch, agent-browser
+re-observes available memory, free profile-filesystem space, host process-ID
+capacity, and managed root Chrome/Chromium process count. A missing observation or a
+breached floor returns `browser_launch_resource_pressure:<reasons>` before
+display access or browser effects. The current typed observation is available
+at `browserRuntime.launchAdmission` in both Service status and install doctor.
 Disposable cleanup ranks the oldest inactive allocation first and excludes
 sessions protected by a current viewer, desktop controller, or pending
 operation. Named profiles are never cleanup candidates. Disposable profiles

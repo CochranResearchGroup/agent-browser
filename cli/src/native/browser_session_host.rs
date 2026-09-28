@@ -70,6 +70,9 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         display: None,
         remote_headed: false,
         route_users_by_display,
+        maximum_browser_processes: runtime_config
+            .maximum_displays
+            .checked_mul(runtime_config.maximum_browsers_per_display),
     })?;
     BrowserSessionHost::load(
         store,
