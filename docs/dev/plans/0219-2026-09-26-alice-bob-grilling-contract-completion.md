@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 40
+Plan version: 41
 
 State: OPEN
 
@@ -77,6 +77,23 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 41 closes G10 at source. The durable presentation queue now preserves
+strict recovery, retained-handoff, then new-open priority classes; FIFO sequence
+order ages requests within a class without allowing an old new-open request to
+overtake recovery. The existing SQLite adapter supplies the configurable depth
+with a default of 32 and coalesces matching exact operation IDs and payloads
+before effects, then replays one completed result. Logical session and tab
+coalescing remains at the already-accepted G31 manager and handoff boundary, so
+the queue does not collapse genuinely distinct operations merely because they
+share a profile. The focused 12-test queue suite, formatting, strict workspace
+Clippy, coverage-ledger validator, generated-client checks, type coverage, and
+service API/MCP parity pass. The authoritative JSON ledger advances from 9 pass and 29 partial to 10
+pass and 28 partial, with 2 fail and 5 missing unchanged. This also exposes
+stale inflated totals in earlier narrative checkpoints; those prose claims are
+not ledger evidence and require separate row-by-row reconciliation. This
+source-only correction changes no installed generation or provider state, and
+the exact workstation cold-upgrade reconstruction remains the next G34 gate.
 
 Version 40 publishes the final M4 source candidate to isolated development
 generation `0.28.0-3e4532b3d100`, whose full binary digest is

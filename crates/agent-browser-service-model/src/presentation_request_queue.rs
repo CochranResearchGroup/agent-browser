@@ -5,7 +5,6 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-const AGING_PROMOTION_MS: u64 = 30_000;
 const MAX_TERMINAL_ENTRIES: usize = 128;
 const MAX_RECOVERY_REQUIRED_ENTRIES: usize = 128;
 
@@ -237,14 +236,10 @@ impl PresentationRequestQueue {
             .filter(|entry| {
                 new_capacity_available || entry.priority != PresentationRequestPriority::NewOpen
             })
-            .min_by_key(|entry| {
-                let age_promotions =
-                    now_ms.saturating_sub(entry.enqueued_at_ms) / AGING_PROMOTION_MS;
-                (
-                    entry.priority.rank().saturating_sub(age_promotions),
-                    entry.sequence,
-                )
-            })
+            // Priority classes are strict. FIFO sequence ordering provides
+            // aging within each class without allowing a new open to overtake
+            // recovery or retained-handoff access.
+            .min_by_key(|entry| (entry.priority.rank(), entry.sequence))
             .map(|entry| entry.key.clone());
 
         let next_key = next_key.ok_or_else(|| {
@@ -572,7 +567,7 @@ mod tests {
     }
 
     #[test]
-    fn priority_aging_and_fifo_choose_one_ticket() {
+    fn priority_classes_are_strict_and_fifo_choose_one_ticket() {
         let mut queue = PresentationRequestQueue::default();
         queue.advance_generation(7).unwrap();
         enqueue(
@@ -595,17 +590,17 @@ mod tests {
         );
 
         assert_eq!(
+            queue.try_admit("new-old", 7, "attempt-a".to_string(), 60_000, true),
+            Err("presentation_queue_not_next:recovery".to_string())
+        );
+        assert_eq!(
             queue
-                .try_admit("new-old", 7, "attempt-a".to_string(), 60_000, true)
+                .try_admit("recovery", 7, "attempt-b".to_string(), 60_000, true)
                 .unwrap()
                 .state,
             PresentationRequestState::Admitted {
-                attempt_token: "attempt-a".to_string()
+                attempt_token: "attempt-b".to_string()
             }
-        );
-        assert_eq!(
-            queue.try_admit("recovery", 7, "attempt-b".to_string(), 60_000, true),
-            Err("presentation_queue_admission_active:new-old".to_string())
         );
     }
 

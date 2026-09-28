@@ -1,5 +1,19 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G10 source closure
+
+[Plan 0219 version 41](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+closes G10 at source. Presentation admission preserves strict recovery,
+retained-handoff, then FIFO new-open priority; the durable configured queue
+defaults to 32, exact duplicate operations coalesce and replay once, and
+logical session/tab reuse remains at the G31 manager boundary. The focused
+queue suite, formatting, strict workspace Clippy, coverage validator,
+generated-client checks, type coverage, and service API/MCP parity pass. The
+authoritative JSON ledger is now 10 pass, 28 partial, two fail, and five missing; earlier narrative totals
+were inflated and are not accepted as row evidence. No installed candidate or
+provider state changed. Exact workstation cold-upgrade reconstruction remains
+the G34 gate.
+
 ## Current P219 status | 2026-09-28 final M4 candidate published to development
 
 [Plan 0219 version 40](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
