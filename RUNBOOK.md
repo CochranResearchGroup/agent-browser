@@ -1,6 +1,27 @@
 # Runbook
 
-## Current P219 status | 2026-09-28 cold-start deadline reframe
+## Current P220/P219 status | 2026-09-28 presentation supersession
+
+[Plan 0219 version 53](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is `CANCELLED` as superseded while incomplete. Its qualified final candidate
+prefix `7c22bdfa505e` failed the authorized fresh-overlay attempt because XRDP
+could not read `/etc/xrdp/key.pem` after its required group membership was
+applied too late for the running daemon. The failed overlay and serial log are
+preserved with the two earlier failed attempts. The version 52 stop rule
+prohibits replay. No XRDP, Guacamole-provider, route-user, helper, VM, runtime,
+production, push, merge, release, or cleanup effect remains authorized by P219.
+
+[Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
+and [Issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
+own the replacement outcome. The P219 branch remains clean at `47150749`, 36
+commits ahead of its published topic ref. Its browser/session/runtime work must
+be extracted through the recorded retain/adapt/retire audit; the branch must
+not merge wholesale. P220 is `PLANNED`, has no admitted branch or owner, and
+starts with a provider-free Remote View F0 consumer boundary after worktree
+admission. Remote View Issue #70 owns consumer checkpoint coordination. Live or
+installed acceptance remains separately gated.
+
+## Prior P219 status | 2026-09-28 cold-start deadline reframe
 
 [Plan 0219 version 52](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 retains replacement generation `0.28.0-1fb133361c6d` and its failed fresh-VM
@@ -15,7 +36,7 @@ fresh-overlay attempt is permitted only after a new exact development candidate
 passes publication, three browser smokes, and doctor. Any failure stops without
 replay. Production, push, merge, and release remain excluded.
 
-## Current P219 status | 2026-09-28 legacy authority retirement repair
+## Prior P219 status | 2026-09-28 legacy authority retirement repair
 
 [Plan 0219 version 51](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 retains the failed `0.28.0-d630713aca50` isolated workstation attempt. Its one
@@ -32,7 +53,7 @@ returns to partial pending a replacement installed candidate; the ledger is
 fresh-overlay cold-upgrade attempt. Production, push, merge, and release remain
 excluded.
 
-## Current P219 status | 2026-09-28 G30 and G39 installed closure
+## Prior P219 status | 2026-09-28 G30 and G39 installed closure
 
 [Plan 0219 version 50](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 installs exact development generation `0.28.0-d630713aca50`. The first syscall
@@ -46,7 +67,7 @@ and leave no process or directory residue. Service status and install doctor
 return the same complete runtime-operational field map. G30 and G39 pass; the
 ledger is 15/28/2/0. Production identity remains unchanged.
 
-## Current P219 status | 2026-09-28 typed install-doctor remedies
+## Prior P219 status | 2026-09-28 typed install-doctor remedies
 
 [Plan 0219 version 49](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 source-qualifies `d5e5bab7`. Every install-doctor issue remedy now uses the
@@ -59,7 +80,7 @@ tests and is not evidence. G39 remains partial only for complete installed
 doctor no-mutation qualification. Ledger counts remain 13/30/2/0; no runtime
 effect occurred.
 
-## Current P219 status | 2026-09-28 typed remote-view doctor recommendations
+## Prior P219 status | 2026-09-28 typed remote-view doctor recommendations
 
 [Plan 0219 version 48](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 source-qualifies `92b2155f`. Remote-view doctor `nextCommand` values now carry
@@ -70,7 +91,7 @@ Guacamole, and PostgreSQL gates pass. G39 remains partial for typed
 install-doctor remedies and installed no-mutation proof. Ledger counts remain
 13/30/2/0; no runtime effect occurred.
 
-## Current P219 status | 2026-09-28 G18 and G34 ledger reconciliation
+## Prior P219 status | 2026-09-28 G18 and G34 ledger reconciliation
 
 [Plan 0219 version 47](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 repairs stale machine narratives for G18 and G34. G18 now cites M4-P1's
@@ -81,7 +102,7 @@ preservation fixture. Both remain partial only for their exact frozen-candidate
 installed qualification. Ledger counts remain 13/30/2/0; no runtime effect
 occurred.
 
-## Current P219 status | 2026-09-28 G39 doctor detector
+## Prior P219 status | 2026-09-28 G39 doctor detector
 
 [Plan 0219 version 46](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 adds the deterministic `doctorReadOnly` architecture cut at `c5f4db2a`.
@@ -92,7 +113,7 @@ fixture and current zero-finding report pass. G39 remains partial for installed
 no-mutation qualification and the complete explicit-repair inventory. Ledger
 counts remain 13/30/2/0; no runtime effect occurred.
 
-## Current P219 status | 2026-09-28 G30 receipt projection source-qualified
+## Prior P219 status | 2026-09-28 G30 receipt projection source-qualified
 
 [Plan 0219 version 45](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 source-qualifies commit `7d043e45`. Privileged repair now persists a
@@ -105,7 +126,7 @@ Clippy, documentation, remote-view, workstation, Guacamole, and PostgreSQL
 gates pass. G30 remains partial only for complete installed status/doctor
 readback. Ledger counts remain 13/30/2/0; no runtime effect occurred.
 
-## Current P219 status | 2026-09-28 G30 read-only projection
+## Prior P219 status | 2026-09-28 G30 read-only projection
 
 [Plan 0219 version 44](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 adds one redacted read-only SQLite reconciliation aggregate to Service status
@@ -116,7 +137,7 @@ credentials, or Guacamole identities. The focused digest/no-backup regression
 passes. G30 remains partial for privileged-repair receipt projection and
 installed readback. Ledger counts remain 13/30/2/0; no runtime effect occurred.
 
-## Current P219 status | 2026-09-28 G29 source closure
+## Prior P219 status | 2026-09-28 G29 source closure
 
 [Plan 0219 version 43](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 atomically records each real runtime-config revision and keeper-policy change
@@ -131,7 +152,7 @@ changed lane; its downstream checks pass directly. The development skill is
 current and the production skill is untouched. The ledger is 13 pass, 30
 partial, two fail, and zero missing. No runtime or provider effect occurred.
 
-## Current P219 status | 2026-09-28 G28 final-reference source closure
+## Prior P219 status | 2026-09-28 G28 final-reference source closure
 
 [Plan 0219 version 42](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 joins current Desktop Services control and unexpired authenticated viewer routes
@@ -143,7 +164,7 @@ only for joined installed-provider scale-in after cooldown. The ledger remains
 12 pass, 31 partial, two fail, and zero missing. No runtime or provider effect
 occurred.
 
-## Current P219 status | 2026-09-28 G10 source closure
+## Prior P219 status | 2026-09-28 G10 source closure
 
 [Plan 0219 version 41](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 closes G10 at source. Presentation admission preserves strict recovery,
@@ -159,7 +180,7 @@ fail, and zero missing, matching the prior checkpoint narrative. No installed
 candidate or provider state changed. Exact workstation cold-upgrade
 reconstruction remains the G34 gate.
 
-## Current P219 status | 2026-09-28 final M4 candidate published to development
+## Prior P219 status | 2026-09-28 final M4 candidate published to development
 
 [Plan 0219 version 40](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 publishes source-qualified commit `7e34acce` through custody checkpoint
@@ -176,7 +197,7 @@ pass, 32 partial, 2 fail, and 0 missing. The next gate is a bounded installed
 cold-reconstruction acceptance procedure that does not borrow proof from the
 provider-free PostgreSQL fixture or from ordinary development publication.
 
-## Current P219 status | 2026-09-28 M4-P5 source-qualified
+## Prior P219 status | 2026-09-28 M4-P5 source-qualified
 
 [Plan 0219 version 39](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 source-qualifies the bounded Agent Browser-owned Guacamole namespace rebuild at
@@ -195,7 +216,7 @@ proves the retained provider database and resulting route topology. No installed
 runtime, browser, provider, route, display, privileged, publication, production,
 merge, or release effect occurred in this source packet.
 
-## Current P219 status | 2026-09-27 M4-P5 intermediate custody
+## Prior P219 status | 2026-09-27 M4-P5 intermediate custody
 
 [Plan 0219 version 38](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `8dcbfd89` adds an exact Agent Browser-owned Guacamole
@@ -206,7 +227,7 @@ documentation, full Rust gates, unrelated-row preservation proof, and installed
 provider reconstruction remain open. The ledger stays 11 pass, 32 partial, 2
 fail, and 0 missing. No provider or other runtime effect occurred.
 
-## Current P219 status | 2026-09-27 M4-P4 source-qualified
+## Prior P219 status | 2026-09-27 M4-P4 source-qualified
 
 [Plan 0219 version 37](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `9f6505b7` makes healthy privilege-installer reruns use only
@@ -223,7 +244,7 @@ missing. No installed runtime, browser, provider, privileged, publication,
 production, merge, or release effect occurred. M4-P5 owns provider-row
 reconstruction and the remaining operational gap map.
 
-## Current P219 status | 2026-09-27 M4-P3B source-qualified
+## Prior P219 status | 2026-09-27 M4-P3B source-qualified
 
 [Plan 0219 version 36](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `9aad8500` adds a cross-platform current-resource snapshot at
@@ -241,7 +262,7 @@ missing. No installed runtime, browser, provider, privileged, publication,
 production, merge, or release effect occurred. M4-P4 owns the G20 narrow
 privilege-helper and receipt audit.
 
-## Current P219 status | 2026-09-27 M4-P3A source-qualified
+## Prior P219 status | 2026-09-27 M4-P3A source-qualified
 
 [Plan 0219 version 35](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `91cb79c8` joins read-only Browser Runtime SQLite state into
@@ -259,7 +280,7 @@ provider, privileged, publication, production, merge, or release effect
 occurred. M4-P3B owns current memory/process/disk launch admission and the
 remaining operational status map.
 
-## Current P219 status | 2026-09-27 M4-P2 source-qualified
+## Prior P219 status | 2026-09-27 M4-P2 source-qualified
 
 [Plan 0219 version 34](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `fe46f53c` completes deterministic exact-navigation history
@@ -279,7 +300,7 @@ still open; G16 remains partial. The ledger is 11 pass, 30 partial, 2 fail, and
 merge, or release effect occurred. M4-P3 begins with a read-only audit of
 aggregate status, doctor, and current-resource-pressure gaps.
 
-## Current P219 status | 2026-09-27 M4-P1 source-qualified
+## Prior P219 status | 2026-09-27 M4-P1 source-qualified
 
 [Plan 0219 version 33](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `4ed5820d` completes the provider-free Browser Runtime SQLite
@@ -300,7 +321,7 @@ No installed runtime, browser, provider, publication, production, merge, or
 release effect occurred. M4-P2 owns exact URL history compaction and daily
 summaries; the aggregate status/doctor join remains later M4 work.
 
-## Current P219 status | 2026-09-27 M4-P1 storage audit
+## Prior P219 status | 2026-09-27 M4-P1 storage audit
 
 [Plan 0219 version 32](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN at pushed checkpoint `3e2ffa5e`. The v2 SQLite row already carries the
@@ -313,7 +334,7 @@ to M4-P2; privilege, pressure admission, provider reconstruction, and installed
 qualification remain later packets. The ledger remains 11 pass, 29 partial,
 2 fail, and 3 missing. No runtime or provider effect occurred during the audit.
 
-## Current P219 status | 2026-09-27 M3-P3 source-qualified
+## Prior P219 status | 2026-09-27 M3-P3 source-qualified
 
 [Plan 0219 version 31](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `93a740f6` completes the provider-free disposable-retention
@@ -336,7 +357,7 @@ installed runtime, browser, provider, publication, production, merge, or
 release effect occurred. M4 requires a bounded successor packet before source
 or runtime effects.
 
-## Current P219 status | 2026-09-27 M3-P3 retention audit
+## Prior P219 status | 2026-09-27 M3-P3 retention audit
 
 [Plan 0219 version 30](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN at pushed checkpoint `762a7f10`. The M3-P3 audit confirms that SQLite
@@ -349,7 +370,7 @@ the bounded source repair and provider-free proof for G21/G36/G37/G38. The
 ledger remains 9 pass, 29 partial, 2 fail, and 5 missing until executable
 evidence lands. No runtime or provider effect occurred during the audit.
 
-## Current P219 status | 2026-09-27 M3-P2D source-qualified
+## Prior P219 status | 2026-09-27 M3-P2D source-qualified
 
 [Plan 0219 version 29](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `0b728fc0` completes the provider-free eager-scheduler packet.
@@ -378,7 +399,7 @@ Goal thread `01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 323,934 cumulative
 tokens used after source validation, below the 800,000 implementation stop and
 the 1,000,000 checkpoint ceiling.
 
-## Current P219 status | 2026-09-27 M3-P2C source-qualified
+## Prior P219 status | 2026-09-27 M3-P2C source-qualified
 
 [Plan 0219 version 28](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
 is OPEN. Commit `0522fe95` completes M3-P2C. The journaled exact-client path
@@ -402,7 +423,7 @@ The post-source-validation goal readback was 689,484 tokens used and 310,516
 remaining, so implementation stopped below 800,000 with the required closeout
 reserve intact.
 
-## Current P219 status | 2026-09-27 terminal budget checkpoint
+## Prior P219 status | 2026-09-27 terminal budget checkpoint
 
 [Plan 0219 version 26](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
 is OPEN. The operator resumed the amended continuation with a cumulative

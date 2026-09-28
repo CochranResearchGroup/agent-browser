@@ -99,6 +99,7 @@ reuse after those contracts are frozen.
 - [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 - [Plan 0217 execution handoff](0217-1-2026-09-22-execution-handoff.md)
 - [Plan 0217 M0 executable cut line](0217-2-2026-09-22-m0-cut-line.md)
+- [P219 Remote View supersession and custody audit](0220-2026-09-28-p219-remote-view-supersession-audit.md)
 
 [Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset

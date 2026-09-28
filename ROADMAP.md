@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-27
+Updated: 2026-09-28
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -25,24 +25,33 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P220 | Remote View Consumer Integration
+
+State: PLANNED
+
+Current State: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
+and [Issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
+own the successor outcome. Agent Browser will consume Remote View public
+desktop and presentation contracts while retaining browser profiles, processes,
+CDP, logical sessions, affinity, and recovery. The first packet is a
+provider-free F0-shaped consumer boundary and fixed-desktop fixture after the
+P219 custody audit selects an exact integration base. Remote View J1, J2, and
+J3 checkpoint replay and final installed acceptance remain later gates. No
+successor branch or live runtime effect is active yet.
+
 ## P219 | Alice/Bob Grilling Contract Completion
 
-State: OPEN
+State: CANCELLED
 
-Current State: [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
-inherits the full G01–G45 specification and evidence from P218 on the existing
-P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
-#181, #183, and #195. The sequence reconciles completed source cuts, qualifies
-the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
-forward before broad operational qualification. All requirements remain in
-scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
-Version 52 retains the failed `0.28.0-1fb133361c6d` fresh-VM attempt and
-source-qualifies `2aef4619`: the complete workstation start phase now has a
-15-minute bound compatible with its own provider probes, and original causal
-errors cannot be overwritten by a later deadline observation. After this
-required two-failure reframe, one final fresh-overlay attempt is permitted only
-for a newly qualified exact candidate; any failure stops without replay. The
-ledger remains 14 pass, 29 partial, 2 fail, and 0 missing.
+Current State: [Plan 0219 version 53](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is cancelled as superseded while incomplete. Its authorized final
+fresh-overlay attempt used candidate prefix `7c22bdfa505e` and failed before
+installed acceptance when XRDP could not read its private key after group
+membership was applied too late for the running daemon. The failed overlay and
+serial evidence remain preserved, replay is prohibited, and the ledger remains
+14 pass, 29 partial, 2 fail, and 0 missing. The 36 unpublished commits remain
+in branch custody for the Plan 0220 retain/adapt/retire audit. Agent Browser
+will not repair or merge the superseded XRDP/Guacamole presentation path.
 Version 51 retains the failed `0.28.0-d630713aca50` isolated workstation
 attempt and source-qualifies its causal repair at `b806f214`: legacy Lease Authority artifacts
 are retired into diagnostic archives instead of provisioned, development doctor

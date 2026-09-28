@@ -51,19 +51,19 @@ lanes:
     plan_ref: refs/heads/platform/p211-simple-cold-upgrade
     branch: platform/p211-simple-cold-upgrade
     target: main
-    plan_state: OPEN
+    plan_state: CANCELLED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 2aef4619
+    checkpoint: 47150749
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
-    integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4 remain source-qualified; replacement development generation 0.28.0-1fb133361c6d passed publication, skill sync, three browser smokes, and doctor, then its fresh-VM apply used one sudo prompt, retired legacy authority, persisted receipt v3, and stopped at the expected fresh-login interlock; zero-prompt resume failed because the controller masked a real start failure with an incompatible 30-second deadline; source commit 2aef4619 preserves causal errors and bounds the complete start phase at 15 minutes; G20, G34, and G41 remain partial; the authoritative JSON ledger is 14 pass, 29 partial, two fail, and zero missing
-    validation_ref: 2aef4619
+    integration: do not merge draft PR 191 wholesale; preserve this branch while Plan 0220 selects and revalidates presentation-neutral changes through a separate protected integration path
+    validation_status: cancelled as superseded while incomplete after qualified candidate prefix 7c22bdfa505e failed the authorized final fresh-overlay attempt at XRDP private-key access; three failed overlays and serial logs remain preserved; replay and further Agent Browser-owned XRDP/Guacamole presentation repair are prohibited; ledger remains 14 pass, 29 partial, two fail, and zero missing; 36 unpublished commits require Plan 0220 retain/adapt/retire audit before integration
+    validation_ref: 47150749
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
-    dependencies: []
+    dependencies: [P220 planned successor; CochranResearchGroup/remote-view#70]
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: after the required two-failure reframe, build and qualify one exact candidate containing 2aef4619, reset the disposable VM overlay, and run one final one-prompt plus fresh-login cold-upgrade attempt; any failure stops without replay before advancing G20, G34, or G41
+    blocker: no further P219 execution; preserve active-worktree custody until the Plan 0220 integration base and commit dispositions are checkpointed, then transition this lane to a durable paused or archived ref without deleting evidence
     updated_at: 2026-09-28

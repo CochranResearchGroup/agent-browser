@@ -2,9 +2,9 @@
 
 Date: 2026-09-26
 
-Plan version: 52
+Plan version: 53
 
-State: OPEN
+State: CANCELLED
 
 Consolidation: required
 
@@ -13,6 +13,8 @@ Product lane: PL-PLATFORM
 Lane: P219
 
 Predecessor: [Plan 0218](0218-2026-09-23-grilling-contract-remote-view-conformance.md), superseded while incomplete
+
+Successor: [Plan 0220](0220-2026-09-28-remote-view-consumer-integration.md), which preserves the Agent Browser domain requirements while replacing the presentation architecture
 
 Work items: `CochranResearchGroup/agent-browser#181`, `CochranResearchGroup/agent-browser#183`, and `CochranResearchGroup/agent-browser#195`; issues #189 and #190 remain regression subcases of #195
 
@@ -77,6 +79,30 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 53 cancels this plan as superseded while incomplete. The authorized
+final fresh-overlay attempt used qualified candidate prefix `7c22bdfa505e` and
+failed before installed acceptance. Readback identified an XRDP startup-order
+defect: XRDP could not read `/etc/xrdp/key.pem` because its `ssl-cert` group
+membership was applied only after the daemon had started. The failed overlay
+and serial log remain preserved under
+`~/.local/state/agent-browser-p219-g34-v50/`. The version 52 stop rule prohibits
+another replay.
+
+The project will not repair or further qualify the Agent Browser-owned XRDP
+users, Guacamole provider reconstruction, route-user pools, or
+presentation-specific privileged-helper path. Those surfaces are replaced by
+the separate Remote View product through Plan 0220 and work item #202. This
+disposition does not promote any partial or failed grilling-contract row. The
+ledger remains 14 pass, 29 partial, 2 fail, and 0 missing.
+
+The 36 unpublished commits remain preserved on
+`platform/p211-simple-cold-upgrade`. Their presentation-neutral browser,
+session, SQLite, admission, observability, queue, and doctor work requires a
+bounded retain/adapt/retire audit before protected integration. The branch and
+failed artifacts are evidence and custody, not authority to merge the retired
+presentation architecture. No additional P219 runtime, provider, privileged,
+production, push, merge, release, or destructive cleanup effect is authorized.
 
 Version 52 retains the replacement-candidate installed attempt and reframes the
 remaining acceptance after a second causal defect. Exact generation
