@@ -716,6 +716,10 @@ Service status and install doctor expose a redacted read-only
 browsers per display, handoff/operation/queue counts, current control and viewer
 slots, and recovery phases. Provider URLs, route users, credentials, and
 Guacamole connection identities are omitted.
+The sibling `browserRuntime.privilegedRepairReceipt` projection reports only a
+semantically validated privilege-helper result. It omits the sealed plan digest
+and action list, and missing, unreadable, or invalid receipts stay unavailable
+with a stable failure code.
 When exact navigation history exceeds `exactUrlHistoryMaximumBytes`, the
 oldest rows are summarized deterministically by UTC day and exact browser,
 profile, session, tab, and target identity. Each summary retains first and last

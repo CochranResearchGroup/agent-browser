@@ -405,6 +405,8 @@ impl BrowserRuntimeSqliteStore {
                 &admission_path,
                 None,
             );
+        let privileged_repair_receipt =
+            crate::workstation_convergence::privileged_effect_receipt_status();
         let result = (|| -> Result<serde_json::Value, String> {
             let path = database_path?;
             let store = Self::open_read_only(&path)?;
@@ -433,6 +435,7 @@ impl BrowserRuntimeSqliteStore {
                 "launchAdmission": &launch_admission,
                 "config": config,
                 "reconciliation": store.runtime_reconciliation_status()?,
+                "privilegedRepairReceipt": &privileged_repair_receipt,
                 "storage": store.runtime_storage_status()?,
                 "migration": {
                     "importedSourceCount": migration.imported_source_count,
@@ -452,6 +455,7 @@ impl BrowserRuntimeSqliteStore {
                 "state": "unavailable",
                 "failureCode": failure_code,
                 "launchAdmission": &fallback_launch_admission,
+                "privilegedRepairReceipt": &privileged_repair_receipt,
             })
         })
     }

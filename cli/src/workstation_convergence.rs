@@ -8,6 +8,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
+use std::fs::{self, OpenOptions};
+use std::io::Write;
+use std::path::PathBuf;
 
 const WORKSTATION_CONVERGENCE_DESIRED_SCHEMA: &str =
     "agent-browser.workstation-convergence-desired.v1";
@@ -20,6 +23,7 @@ const DASHBOARD_HEALTH_SCHEMA: &str = "agent-browser.dashboard-health.v1";
 const PRIVILEGED_EFFECT_PLAN_SCHEMA: &str = "agent-browser.privileged-host-effect-plan.v1";
 const PRIVILEGED_EFFECT_RECEIPT_SCHEMA: &str = "agent-browser.privileged-host-effect-receipt.v2";
 const PRIVILEGED_EFFECT_RECEIPT_PREFIX: &str = "AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT=";
+const PRIVILEGED_EFFECT_RECEIPT_FILENAME: &str = "privileged-host-effect-receipt.v2.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -291,29 +295,23 @@ pub(crate) struct PrivilegedHostEffectReceipt {
     pub(crate) workstation_dependencies_ready: bool,
 }
 
-pub(crate) fn validate_privileged_effect_adapter_receipt(
-    plan: &PrivilegedHostEffectPlan,
-    stdout: &str,
-) -> Result<PrivilegedHostEffectReceipt, String> {
-    plan.validate()?;
-    let encoded = stdout
-        .lines()
-        .rev()
-        .find_map(|line| line.strip_prefix(PRIVILEGED_EFFECT_RECEIPT_PREFIX))
-        .ok_or_else(|| "privileged_host_effect_receipt_missing".to_string())?;
-    let receipt: PrivilegedHostEffectReceipt = serde_json::from_str(encoded)
-        .map_err(|_| "privileged_host_effect_receipt_invalid".to_string())?;
+fn validate_privileged_effect_receipt_semantics(
+    receipt: &PrivilegedHostEffectReceipt,
+) -> Result<(), String> {
+    let base_actions = "ensure_lease_authority,ensure_privileged_helper";
+    let workstation_actions =
+        "ensure_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies";
+    let actions_valid = matches!(
+        receipt.actions.as_str(),
+        actions if actions == base_actions || actions == workstation_actions
+    );
     if receipt.schema_version != PRIVILEGED_EFFECT_RECEIPT_SCHEMA
-        || receipt.plan_digest != plan.plan_digest
         || receipt.resource != "agent-browser-host-privileges"
-        || receipt.actions != plan.action_csv()
         || receipt.postcondition != "ready"
         || !receipt.helper_ready
         || !receipt.lease_authority_ready
-        || (plan
-            .actions
-            .contains(&PrivilegedHostEffect::WorkstationDependencies)
-            && !receipt.workstation_dependencies_ready)
+        || (receipt.actions == workstation_actions && !receipt.workstation_dependencies_ready)
+        || !actions_valid
         || !matches!(
             receipt.outcome.as_str(),
             "already_ready" | "effects_applied"
@@ -328,9 +326,112 @@ pub(crate) fn validate_privileged_effect_adapter_receipt(
                 | ("repair_required", "apply_sealed_plan", "effects_applied")
         )
     {
+        return Err("privileged_host_effect_receipt_invalid".to_string());
+    }
+    Ok(())
+}
+
+pub(crate) fn validate_privileged_effect_adapter_receipt(
+    plan: &PrivilegedHostEffectPlan,
+    stdout: &str,
+) -> Result<PrivilegedHostEffectReceipt, String> {
+    plan.validate()?;
+    let encoded = stdout
+        .lines()
+        .rev()
+        .find_map(|line| line.strip_prefix(PRIVILEGED_EFFECT_RECEIPT_PREFIX))
+        .ok_or_else(|| "privileged_host_effect_receipt_missing".to_string())?;
+    let receipt: PrivilegedHostEffectReceipt = serde_json::from_str(encoded)
+        .map_err(|_| "privileged_host_effect_receipt_invalid".to_string())?;
+    validate_privileged_effect_receipt_semantics(&receipt)
+        .map_err(|_| "privileged_host_effect_receipt_mismatch".to_string())?;
+    if receipt.plan_digest != plan.plan_digest || receipt.actions != plan.action_csv() {
         return Err("privileged_host_effect_receipt_mismatch".to_string());
     }
     Ok(receipt)
+}
+
+/// Returns the user-scoped durable path for the latest validated privilege receipt.
+fn privileged_effect_receipt_path() -> Result<PathBuf, String> {
+    let state_path = crate::native::service_store::default_service_state_path()?;
+    let service_directory = state_path
+        .parent()
+        .ok_or_else(|| "privileged_host_effect_receipt_directory_unavailable".to_string())?;
+    Ok(service_directory
+        .join("receipts")
+        .join(PRIVILEGED_EFFECT_RECEIPT_FILENAME))
+}
+
+/// Atomically records a receipt after the privileged adapter has validated it.
+pub(crate) fn persist_privileged_effect_receipt(
+    receipt: &PrivilegedHostEffectReceipt,
+) -> Result<(), String> {
+    validate_privileged_effect_receipt_semantics(receipt)?;
+    let path = privileged_effect_receipt_path()?;
+    let parent = path
+        .parent()
+        .ok_or_else(|| "privileged_host_effect_receipt_directory_unavailable".to_string())?;
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("privileged_host_effect_receipt_directory_failed:{error}"))?;
+    let temporary = parent.join(format!(
+        ".{PRIVILEGED_EFFECT_RECEIPT_FILENAME}.{}.tmp",
+        uuid::Uuid::new_v4()
+    ));
+    let encoded = serde_json::to_vec(receipt)
+        .map_err(|error| format!("privileged_host_effect_receipt_encode_failed:{error}"))?;
+    let mut options = OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.mode(0o600);
+    }
+    let result = (|| -> Result<(), String> {
+        let mut file = options
+            .open(&temporary)
+            .map_err(|error| format!("privileged_host_effect_receipt_write_failed:{error}"))?;
+        file.write_all(&encoded)
+            .and_then(|_| file.sync_all())
+            .map_err(|error| format!("privileged_host_effect_receipt_write_failed:{error}"))?;
+        fs::rename(&temporary, &path)
+            .map_err(|error| format!("privileged_host_effect_receipt_publish_failed:{error}"))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
+}
+
+/// Reads and semantically validates the latest receipt, returning only redacted fields.
+pub(crate) fn privileged_effect_receipt_status() -> Value {
+    let result = (|| -> Result<Value, String> {
+        let path = privileged_effect_receipt_path()?;
+        let encoded = fs::read(&path)
+            .map_err(|error| format!("privileged_host_effect_receipt_read_failed:{error}"))?;
+        let receipt: PrivilegedHostEffectReceipt = serde_json::from_slice(&encoded)
+            .map_err(|_| "privileged_host_effect_receipt_invalid".to_string())?;
+        validate_privileged_effect_receipt_semantics(&receipt)?;
+        Ok(serde_json::json!({
+            "state": "recorded",
+            "schemaVersion": receipt.schema_version,
+            "resource": receipt.resource,
+            "priorObservation": receipt.prior_observation,
+            "action": receipt.action,
+            "outcome": receipt.outcome,
+            "postcondition": receipt.postcondition,
+            "helperReady": receipt.helper_ready,
+            "leaseAuthorityReady": receipt.lease_authority_ready,
+            "workstationDependenciesReady": receipt.workstation_dependencies_ready,
+        }))
+    })();
+    result.unwrap_or_else(|error| {
+        let code = error
+            .split(':')
+            .next()
+            .unwrap_or("privileged_host_effect_receipt_unavailable");
+        serde_json::json!({"state": "unavailable", "failureCode": code})
+    })
 }
 
 pub(crate) struct WorkstationConvergenceOwner {
@@ -842,6 +943,28 @@ mod tests {
         let receipt = validate_privileged_effect_adapter_receipt(&plan, &stdout).unwrap();
         assert_eq!(receipt.plan_digest, plan.plan_digest);
         assert_eq!(receipt.actions, plan.action_csv());
+
+        let path = privileged_effect_receipt_path().unwrap();
+        let _ = fs::remove_file(&path);
+        persist_privileged_effect_receipt(&receipt).unwrap();
+        let status = privileged_effect_receipt_status();
+        assert_eq!(status["state"], "recorded");
+        assert_eq!(status["resource"], "agent-browser-host-privileges");
+        assert_eq!(status["priorObservation"], "repair_required");
+        assert!(status.get("planDigest").is_none());
+        assert!(status.get("actions").is_none());
+
+        let mut invalid_receipt = receipt.clone();
+        invalid_receipt.helper_ready = false;
+        fs::write(&path, serde_json::to_vec(&invalid_receipt).unwrap()).unwrap();
+        assert_eq!(
+            privileged_effect_receipt_status(),
+            serde_json::json!({
+                "state": "unavailable",
+                "failureCode": "privileged_host_effect_receipt_invalid"
+            })
+        );
+        let _ = fs::remove_file(path);
 
         let mismatched = stdout.replace(&plan.plan_digest, &"c".repeat(64));
         assert_eq!(

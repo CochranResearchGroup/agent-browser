@@ -7891,6 +7891,9 @@ Configuration:
   Status and doctor also expose a redacted read-only reconciliation aggregate:
   keeper phases and generations, browsers per display, handoff, operation and
   queue counts, current control/viewer slots, and browser recovery phases.
+  The sibling privilegedRepairReceipt field reports only a semantically
+  validated helper result; it omits the sealed plan digest and action list and
+  fails closed with a stable code when the receipt is missing or invalid.
   Exact navigation rows over their byte limit compact oldest-first into UTC-day
   identity summaries with first/last URL, count, and a bounded audit event.
   Every managed Chrome launch rechecks current memory, profile-filesystem disk,

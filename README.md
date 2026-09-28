@@ -946,7 +946,11 @@ projection reports redacted keeper phases and generations, browser counts per
 display, handoff/operation/queue counts, current control and viewer slots, and
 browser recovery phases. It never includes provider URLs, route users,
 credentials, or Guacamole connection identities.
-budget, routine-storage budget, and backup state. These reads open the existing
+The sibling `privilegedRepairReceipt` projection reports the last semantically
+validated privilege-helper result without its sealed plan digest or action
+list. Missing, unreadable, or invalid receipts remain unavailable with a stable
+failure code instead of being reported as ready.
+These reads open the existing
 SQLite database read-only, perform no migration or backup, and create no
 browser or provider effect. Failure output contains a stable code, not
 the local database path.

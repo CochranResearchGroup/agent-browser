@@ -1064,6 +1064,10 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/browserRuntime/launchAdmission/state"),
     );
     print_doctor_field(
+        "privileged repair receipt",
+        report.pointer("/data/browserRuntime/privilegedRepairReceipt/state"),
+    );
+    print_doctor_field(
         "runtime hosts",
         report.pointer("/data/runtimeMultiplicity/counts/runtimeHosts"),
     );
@@ -4311,10 +4315,11 @@ pub(crate) fn install_remote_view_privileges(
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        crate::workstation_convergence::validate_privileged_effect_adapter_receipt(
+        let receipt = crate::workstation_convergence::validate_privileged_effect_adapter_receipt(
             &effect_plan,
             &stdout,
         )?;
+        crate::workstation_convergence::persist_privileged_effect_receipt(&receipt)?;
         if !quiet {
             if !stdout.is_empty() {
                 print!("{stdout}");

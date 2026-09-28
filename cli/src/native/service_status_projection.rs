@@ -1429,6 +1429,10 @@ pub(crate) mod action_commands {
                 Some("admitted" | "rejected")
             ));
             assert!(response["browserRuntime"].get("databasePath").is_none());
+            assert!(matches!(
+                response["browserRuntime"]["privilegedRepairReceipt"]["state"].as_str(),
+                Some("recorded" | "unavailable")
+            ));
             assert!(repository
                 .load_snapshot()
                 .unwrap()
