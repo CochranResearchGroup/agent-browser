@@ -36,6 +36,15 @@ P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
 the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
 forward before broad operational qualification. All requirements remain in
 scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
+Version 51 retains the failed `0.28.0-d630713aca50` isolated workstation
+attempt and source-qualifies its causal repair at `b806f214`: legacy Lease Authority artifacts
+are retired into diagnostic archives instead of provisioned, development doctor
+has no authority dependency, receipt v3 attests retirement, and P15 guards the
+complete trusted install surface. G41 is partial again until the replacement
+candidate passes one fresh-overlay cold upgrade, so the ledger is 14 pass, 29
+partial, 2 fail, and 0 missing. One replacement installed attempt is authorized
+after exact development publication and smoke qualification; production, push,
+merge, and release remain excluded.
 Version 29 preserves the installed M2B subproofs plus source-qualified A01/A02,
 M3-P1, M3-P2A, M3-P2B, M3-P2C, and M3-P2D. The preceding execution window recorded a 931,884-token
 pre-commit readback and stopped executable work at 753,564; the operator then

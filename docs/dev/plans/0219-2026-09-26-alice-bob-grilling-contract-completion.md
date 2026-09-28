@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 50
+Plan version: 51
 
 State: OPEN
 
@@ -77,6 +77,47 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 51 preserves the failed first isolated workstation acceptance attempt
+and source-qualifies its causal repair. Exact candidate
+`0.28.0-d630713aca50` crossed one interactive sudo boundary, installed the
+workstation dependencies, and then failed the Lease Authority readiness
+postcondition because the privilege installer still tried to bootstrap a
+quarantined authority through a CLI dispatch removed by P15. The failure is
+retained and consumed that candidate's installed attempt; it is not a retryable
+environmental flake.
+
+Commit `b806f214` source-qualifies the corrected contract, which retires rather
+than provisions the exact legacy Lease
+Authority service, socket, executable root, and state root. Present artifacts
+move to fixed root-private diagnostic archives without entering trusted runtime
+state. Live/archive conflicts, symbolic links, or incomplete deactivation fail
+closed before a receipt can report readiness. Healthy reruns remain zero-sudo,
+and stale helper-capability repairs retain their regression coverage. Receipt
+schema v3 explicitly invalidates v2 receipts because they cannot attest legacy
+retirement. Development runtime status and doctor no longer require or inspect
+the quarantined authority, and the P15 architecture gate covers the privilege
+installer, Rust convergence adapter, install entry point, and development
+runtime.
+
+The clean installer and workstation-host fixtures, development-runtime fixture,
+architecture self-test and zero-finding cut, source-free workstation and VM
+harnesses, Guacamole and PostgreSQL preservation fixtures, focused Rust receipt
+test, all 118 Lease Authority crate tests, formatting, strict workspace Clippy,
+documentation contract and production build, and patch hygiene pass. G41 moves
+from pass to partial because the installed `d630713aca50` candidate still
+contains the disproven provisioning behavior; the ledger is 14 pass, 29
+partial, 2 fail, and 0 missing. G20 and G34 remain partial.
+
+One replacement installed attempt is authorized only after a new optimized
+candidate is built, published to the isolated development runtime, passes its
+three-cycle browser-launch smoke and development doctor, and is bound to an
+exact digest. Preserve the failed VM evidence, then reset the disposable VM to
+a fresh overlay before that one cold-upgrade attempt. The replacement must
+prove one sudo prompt, exact legacy retirement, v3 receipt persistence, a
+zero-sudo healthy rerun, owned Guacamole reconstruction with unrelated rows
+preserved, and a fresh process/resource census. No production, merge, push,
+release, or formal publication effect is authorized.
 
 Version 50 installs exact development generation `0.28.0-d630713aca50` and
 closes G30 and G39. The first syscall audit exposed that the disposable

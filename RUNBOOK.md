@@ -1,5 +1,22 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 legacy authority retirement repair
+
+[Plan 0219 version 51](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+retains the failed `0.28.0-d630713aca50` isolated workstation attempt. Its one
+sudo boundary installed dependencies, then failed because the installer tried
+to bootstrap the quarantined Lease Authority through a removed CLI dispatch.
+Commit `b806f214` retires exact legacy units, socket, executable root, and
+state into fixed diagnostic archives; conflicts, symbolic links, and incomplete
+deactivation fail closed. Development doctor no longer depends on that
+authority, receipt v3 attests retirement, and the P15 guard covers every
+trusted installer and development-runtime surface. Complete selected source,
+fixture, Rust, strict Clippy, documentation, and architecture gates pass. G41
+returns to partial pending a replacement installed candidate; the ledger is
+14/29/2/0. The next gate is one exact new development candidate followed by one
+fresh-overlay cold-upgrade attempt. Production, push, merge, and release remain
+excluded.
+
 ## Current P219 status | 2026-09-28 G30 and G39 installed closure
 
 [Plan 0219 version 50](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
