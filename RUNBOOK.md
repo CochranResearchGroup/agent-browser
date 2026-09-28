@@ -1,5 +1,16 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 typed remote-view doctor recommendations
+
+[Plan 0219 version 48](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+source-qualifies `92b2155f`. Remote-view doctor `nextCommand` values now carry
+a versioned schema, exact action ID, closed execution class, and
+`automaticExecutionAllowed=false`; unknown actions remain `unclassified`.
+Focused Rust, formatting, strict Clippy, documentation, remote-view, workstation,
+Guacamole, and PostgreSQL gates pass. G39 remains partial for typed
+install-doctor remedies and installed no-mutation proof. Ledger counts remain
+13/30/2/0; no runtime effect occurred.
+
 ## Current P219 status | 2026-09-28 G18 and G34 ledger reconciliation
 
 [Plan 0219 version 47](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

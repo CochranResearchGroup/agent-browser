@@ -152,6 +152,11 @@ cut at `c5f4db2a`. It rejects direct mutation and effect-capable apply calls in
 both doctor implementations. Installed no-mutation proof and the complete
 typed explicit-repair inventory remain open.
 
+Commit `92b2155f` types the remote-view doctor's complete recommendation set as
+read-only, explicit effect, live acceptance, or unclassified and forbids
+automatic execution. Install-doctor remedies still need the same contract
+before the source inventory is closed.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

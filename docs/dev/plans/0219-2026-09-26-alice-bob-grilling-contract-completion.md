@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 47
+Plan version: 48
 
 State: OPEN
 
@@ -77,6 +77,20 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 48 advances G39's explicit-repair inventory at `92b2155f`.
+Remote-view doctor now returns every `nextCommand` through the
+`agent-browser.doctor-repair-recommendation.v1` contract with an exact action
+ID, a closed `read_only`, `explicit_effect`, `live_acceptance`, or
+`unclassified` execution class, and `automaticExecutionAllowed=false`.
+Unknown actions remain unclassified and cannot acquire effect authority from a
+command string. The exhaustive focused contract, four existing recommendation
+tests, formatting, strict workspace Clippy, docs build and remote-view contract,
+and selector-chosen provider-free workstation and PostgreSQL fixtures pass.
+G39 remains partial for equivalent typing of install-doctor issue remedies and
+complete installed no-mutation qualification. The ledger remains 13 pass, 30
+partial, 2 fail, and 0 missing. No runtime, browser, provider, privileged,
+production, merge, push, or release effect occurred.
 
 Version 47 reconciles two stale machine-readable ledger narratives without
 changing their dispositions. G18 now records the already-qualified M4-P1
