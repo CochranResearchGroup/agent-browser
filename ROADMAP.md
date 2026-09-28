@@ -114,6 +114,12 @@ the complete selected source and documentation gates pass. G34 remains partial
 until separately governed installed cold-upgrade reconstruction; this source
 packet performed no provider or other runtime effect.
 
+The final M4 source candidate is published to isolated development generation
+`0.28.0-3e4532b3d100`; development doctor is green and production remains
+unchanged. This qualifies installed identity and readiness, not the exact
+workstation cold-reconstruction, three-start, timeout, or wider M4 acceptance
+matrix. G34 and the ledger remain unchanged.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

@@ -57,13 +57,13 @@ lanes:
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P5 remain source-qualified; commit 7e34acce adds the exact Agent Browser-owned Guacamole namespace rebuild, real PostgreSQL unrelated-row preservation proof, complete documentation, and passing selected source gates; installed cold-upgrade reconstruction remains open; the ledger is unchanged at 11 pass, 32 partial, two fail, and zero missing
-    validation_ref: 0.28.0-ac3c1daed8ab
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P5 remain source-qualified; final M4 source candidate 0.28.0-3e4532b3d100 is installed in development with green doctor, current development skill, six ready provider routes, unchanged production identity, and a fresh OS census; exact workstation cold-upgrade reconstruction remains open; the ledger is unchanged at 11 pass, 32 partial, two fail, and zero missing
+    validation_ref: 0.28.0-3e4532b3d100
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M4-P5 is source-qualified at 7e34acce; perform the separately governed installed cold-upgrade reconstruction before advancing G34; no provider effect is implied by source qualification
+    blocker: M4-P5 source and installed candidate identity are qualified at 7e34acce and 0.28.0-3e4532b3d100; execute the exact bounded workstation cold-upgrade reconstruction before advancing G34
     updated_at: 2026-09-28

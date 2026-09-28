@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 39
+Plan version: 40
 
 State: OPEN
 
@@ -77,6 +77,22 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 40 publishes the final M4 source candidate to isolated development
+generation `0.28.0-3e4532b3d100`, whose full binary digest is
+`3e4532b3d100b25e8dc62b54de6394f2ad39794bdd46b06182c4c1892ecdc768`.
+The development skill is current, every development doctor check passes, all
+six provider routes remain ready, and the installer reports the production
+generation and tracked production state unchanged. A fresh OS process census
+records the three development service processes separately from substantial
+pre-existing production and foreign browser trees; no broad cleanup occurred.
+
+This publication proves installed candidate identity and isolated runtime
+readiness only. It does not execute or prove the exact workstation cold-upgrade
+provider-row reconstruction path, three zero-process starts, capacity timeout,
+or wider M4 acceptance. G34 and the ledger therefore remain unchanged at 11
+pass, 32 partial, 2 fail, and 0 missing. No production, privileged, merge, or
+release effect occurred.
 
 Version 39 source-qualifies the M4-P5 provider-row reconstruction primitive at
 commit `7e34acce`. Cold workstation reconciliation requests an explicit rebuild

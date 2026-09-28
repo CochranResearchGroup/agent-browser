@@ -1,5 +1,22 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 final M4 candidate published to development
+
+[Plan 0219 version 40](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+publishes source-qualified commit `7e34acce` through custody checkpoint
+`7d840169` as isolated development generation `0.28.0-3e4532b3d100` with full
+binary digest `3e4532b3d100b25e8dc62b54de6394f2ad39794bdd46b06182c4c1892ecdc768`.
+The development skill is current, doctor is fully green, all six provider routes
+remain ready, and production identity and tracked state are unchanged.
+
+A fresh OS process census records the three selected development service
+processes and preserves all pre-existing production and foreign browser trees.
+No cleanup was attempted. This publication does not execute the exact
+workstation cold-upgrade reconstruction path, so G34 and the ledger remain 11
+pass, 32 partial, 2 fail, and 0 missing. The next gate is a bounded installed
+cold-reconstruction acceptance procedure that does not borrow proof from the
+provider-free PostgreSQL fixture or from ordinary development publication.
+
 ## Current P219 status | 2026-09-28 M4-P5 source-qualified
 
 [Plan 0219 version 39](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
