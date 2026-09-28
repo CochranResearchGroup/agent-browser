@@ -1,4 +1,21 @@
-use agent_browser_service_model::{BrowserProfileCatalog, BrowserProfileKind};
+use agent_browser_service_model::{
+    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileKind,
+};
+
+#[test]
+fn disposable_policy_rejects_pin_and_promotion_bypasses() {
+    for forbidden in ["pinned", "promoteToNamedProfile"] {
+        let mut value = serde_json::json!({
+            "id": "default",
+            "userDataRoot": "/managed/disposable",
+            "cleanupDelayMs": 0,
+            "maximumRetainedProfiles": 20,
+            "maximumTotalBytes": 10737418240_u64
+        });
+        value[forbidden] = serde_json::Value::Bool(true);
+        assert!(serde_json::from_value::<BrowserDisposableProfilePolicy>(value).is_err());
+    }
+}
 
 #[test]
 fn imports_only_profiles_when_unrelated_legacy_state_is_malformed() {

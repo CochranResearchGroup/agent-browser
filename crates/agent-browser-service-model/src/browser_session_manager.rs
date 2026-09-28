@@ -1,7 +1,7 @@
 //! Browser, session, and tab lifecycle for the ordinary single-user path.
 
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     select_least_crowded_remote_view_desktop, BrowserDisposableProfilePolicy,
@@ -77,6 +77,15 @@ pub trait BrowserSessionEffects {
         &mut self,
         allocation: &ManagedDisposableProfile,
     ) -> Result<(), String>;
+
+    /// Measure regular-file bytes below the recorded disposable profile root.
+    /// Implementations must not follow symbolic links.
+    fn disposable_profile_size_bytes(
+        &mut self,
+        _allocation: &ManagedDisposableProfile,
+    ) -> Result<u64, String> {
+        Ok(0)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -161,6 +170,7 @@ pub enum SessionRecordDisposition {
 pub enum SessionEndReason {
     ExplicitClose,
     HeartbeatExpired,
+    QuotaEvicted,
     BrowserTerminated,
     BrowserUnresponsive,
 }
@@ -181,6 +191,7 @@ pub struct CloseBrowserSessionResult {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReapBrowserSessionsResult {
     pub expired_session_ids: Vec<String>,
+    pub quota_evicted_session_ids: Vec<String>,
     pub closed_browser_ids: Vec<String>,
     pub deleted_disposable_profile_ids: Vec<String>,
 }
@@ -335,6 +346,7 @@ pub struct BrowserSessionManager<'a, E> {
     catalog: &'a BrowserProfileCatalog,
     effects: &'a mut E,
     config: BrowserSessionManagerConfig,
+    protected_session_ids: BTreeSet<String>,
 }
 
 impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
@@ -349,7 +361,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             catalog,
             effects,
             config,
+            protected_session_ids: BTreeSet::new(),
         }
+    }
+
+    /// Protect sessions referenced by current external authority or a pending
+    /// operation from inactivity and quota cleanup for this manager action.
+    pub fn with_protected_sessions(mut self, session_ids: BTreeSet<String>) -> Self {
+        self.protected_session_ids = session_ids;
+        self
     }
 
     pub fn open(
@@ -578,6 +598,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 {
                     return Ok(allocation.profile.clone());
                 }
+                self.enforce_disposable_quota(
+                    policy_id,
+                    &self.protected_session_ids.clone(),
+                    1,
+                    0,
+                    request.activity_at_ms,
+                )?;
                 self.state.next_disposable_sequence = self
                     .state
                     .next_disposable_sequence
@@ -1102,11 +1129,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     }
 
     pub fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+        self.reap_with_protected_sessions(now_ms, &BTreeSet::new())
+    }
+
+    pub fn reap_with_protected_sessions(
+        &mut self,
+        now_ms: u64,
+        protected_session_ids: &BTreeSet<String>,
+    ) -> Result<ReapBrowserSessionsResult, String> {
         let expired_session_ids = self
             .state
             .sessions
             .values()
-            .filter(|session| session.expires_at_ms <= now_ms)
+            .filter(|session| {
+                session.expires_at_ms <= now_ms && !protected_session_ids.contains(&session.id)
+            })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         let mut result = ReapBrowserSessionsResult::default();
@@ -1146,6 +1183,166 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .get(&profile_id)
                 .cloned()
                 .ok_or_else(|| "browser_disposable_profile_missing_during_reap".to_string())?;
+            self.effects.delete_disposable_profile(&allocation)?;
+            self.state.disposable_profiles.remove(&profile_id);
+            result.deleted_disposable_profile_ids.push(profile_id);
+        }
+        let policy_ids = self
+            .state
+            .disposable_profiles
+            .values()
+            .map(|allocation| allocation.policy_id.clone())
+            .collect::<BTreeSet<_>>();
+        for policy_id in policy_ids {
+            let quota =
+                self.enforce_disposable_quota(&policy_id, protected_session_ids, 0, 0, now_ms)?;
+            result
+                .quota_evicted_session_ids
+                .extend(quota.quota_evicted_session_ids);
+            result.closed_browser_ids.extend(quota.closed_browser_ids);
+            result
+                .deleted_disposable_profile_ids
+                .extend(quota.deleted_disposable_profile_ids);
+        }
+        Ok(result)
+    }
+
+    /// Converge one disposable policy before admission or scheduled reaping.
+    /// Candidate selection proves unprotected profiles can satisfy both limits
+    /// before any browser or filesystem effect occurs.
+    pub fn enforce_disposable_quota(
+        &mut self,
+        policy_id: &str,
+        protected_session_ids: &BTreeSet<String>,
+        reserve_profiles: u32,
+        reserve_bytes: u64,
+        now_ms: u64,
+    ) -> Result<ReapBrowserSessionsResult, String> {
+        let policy = self
+            .catalog
+            .disposable_policies
+            .get(policy_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_disposable_policy_not_found:{policy_id}"))?;
+        let mut retained_count = 0_u32;
+        let mut retained_bytes = 0_u64;
+        let mut candidates = Vec::new();
+        for allocation in self
+            .state
+            .disposable_profiles
+            .values()
+            .filter(|allocation| allocation.policy_id == policy_id)
+        {
+            retained_count = retained_count
+                .checked_add(1)
+                .ok_or_else(|| "browser_disposable_profile_count_exhausted".to_string())?;
+            let bytes = self.effects.disposable_profile_size_bytes(allocation)?;
+            retained_bytes = retained_bytes
+                .checked_add(bytes)
+                .ok_or_else(|| "browser_disposable_profile_bytes_exhausted".to_string())?;
+            let sessions = self
+                .state
+                .sessions
+                .values()
+                .filter(|session| session.profile_id == allocation.profile.id)
+                .cloned()
+                .collect::<Vec<_>>();
+            let protected_session = sessions
+                .iter()
+                .any(|session| protected_session_ids.contains(&session.id));
+            let browser_without_session = sessions.is_empty()
+                && self
+                    .state
+                    .browsers
+                    .values()
+                    .any(|browser| browser.profile_id == allocation.profile.id);
+            let protected = protected_session || browser_without_session;
+            let last_activity_at_ms = sessions
+                .iter()
+                .map(|session| session.last_activity_at_ms)
+                .max()
+                .unwrap_or(allocation.created_at_ms);
+            candidates.push((
+                last_activity_at_ms,
+                allocation.created_at_ms,
+                allocation.profile.id.clone(),
+                bytes,
+                protected,
+            ));
+        }
+        let target_count = retained_count
+            .checked_add(reserve_profiles)
+            .ok_or_else(|| "browser_disposable_profile_count_exhausted".to_string())?;
+        let target_bytes = retained_bytes
+            .checked_add(reserve_bytes)
+            .ok_or_else(|| "browser_disposable_profile_bytes_exhausted".to_string())?;
+        if target_count <= policy.maximum_retained_profiles
+            && target_bytes <= policy.maximum_total_bytes
+        {
+            return Ok(ReapBrowserSessionsResult::default());
+        }
+
+        candidates
+            .sort_by(|left, right| (left.0, left.1, &left.2).cmp(&(right.0, right.1, &right.2)));
+        let mut projected_count = target_count;
+        let mut projected_bytes = target_bytes;
+        let mut selected = Vec::new();
+        for (_, _, profile_id, bytes, protected) in candidates {
+            if projected_count <= policy.maximum_retained_profiles
+                && projected_bytes <= policy.maximum_total_bytes
+            {
+                break;
+            }
+            if protected {
+                continue;
+            }
+            projected_count = projected_count.saturating_sub(1);
+            projected_bytes = projected_bytes.saturating_sub(bytes);
+            selected.push(profile_id);
+        }
+        if projected_count > policy.maximum_retained_profiles {
+            return Err("browser_disposable_profile_count_quota_protected".to_string());
+        }
+        if projected_bytes > policy.maximum_total_bytes {
+            return Err("browser_disposable_profile_bytes_quota_protected".to_string());
+        }
+
+        let mut result = ReapBrowserSessionsResult::default();
+        for profile_id in selected {
+            let session_ids = self
+                .state
+                .sessions
+                .values()
+                .filter(|session| session.profile_id == profile_id)
+                .map(|session| session.id.clone())
+                .collect::<Vec<_>>();
+            for session_id in session_ids {
+                let closed =
+                    self.close_session(&session_id, SessionEndReason::QuotaEvicted, now_ms)?;
+                result.quota_evicted_session_ids.push(session_id);
+                if closed.disposition == SessionCloseDisposition::BrowserClosed {
+                    result.closed_browser_ids.push(closed.browser_id);
+                }
+            }
+            if self
+                .state
+                .sessions
+                .values()
+                .any(|session| session.profile_id == profile_id)
+                || self
+                    .state
+                    .browsers
+                    .values()
+                    .any(|browser| browser.profile_id == profile_id)
+            {
+                return Err("browser_disposable_profile_still_referenced".to_string());
+            }
+            let allocation = self
+                .state
+                .disposable_profiles
+                .get(&profile_id)
+                .cloned()
+                .ok_or_else(|| "browser_disposable_profile_missing_during_quota".to_string())?;
             self.effects.delete_disposable_profile(&allocation)?;
             self.state.disposable_profiles.remove(&profile_id);
             result.deleted_disposable_profile_ids.push(profile_id);

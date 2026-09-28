@@ -213,6 +213,55 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
             Err(error) => Err(format!("browser_disposable_cleanup_failed:{error}")),
         }
     }
+
+    fn disposable_profile_size_bytes(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<u64, String> {
+        if allocation.profile.kind != BrowserProfileKind::Disposable {
+            return Err("browser_disposable_size_kind_invalid".to_string());
+        }
+        let root = Path::new(&allocation.user_data_root);
+        let target = Path::new(&allocation.profile.user_data_dir);
+        if !root.is_absolute() || target.parent() != Some(root) || target == root {
+            return Err("browser_disposable_size_path_invalid".to_string());
+        }
+        directory_regular_file_bytes(target)
+    }
+}
+
+fn directory_regular_file_bytes(root: &Path) -> Result<u64, String> {
+    let metadata = match fs::symlink_metadata(root) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+        Err(error) => return Err(format!("browser_disposable_size_failed:{error}")),
+    };
+    if !metadata.file_type().is_dir() {
+        return Err("browser_disposable_size_root_invalid".to_string());
+    }
+    let mut total = 0_u64;
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let entries = fs::read_dir(&directory)
+            .map_err(|error| format!("browser_disposable_size_failed:{error}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| format!("browser_disposable_size_failed:{error}"))?;
+            let metadata = fs::symlink_metadata(entry.path())
+                .map_err(|error| format!("browser_disposable_size_failed:{error}"))?;
+            let file_type = metadata.file_type();
+            if file_type.is_symlink() {
+                continue;
+            }
+            if file_type.is_dir() {
+                pending.push(entry.path());
+            } else if file_type.is_file() {
+                total = total
+                    .checked_add(metadata.len())
+                    .ok_or_else(|| "browser_disposable_profile_bytes_exhausted".to_string())?;
+            }
+        }
+    }
+    Ok(total)
 }
 
 fn create_private_directory(path: &Path) -> Result<(), String> {
@@ -1006,6 +1055,8 @@ mod tests {
             id: "default".to_string(),
             user_data_root: root.0.to_string_lossy().into_owned(),
             cleanup_delay_ms: 0,
+            maximum_retained_profiles: 20,
+            maximum_total_bytes: 10 * 1024 * 1024 * 1024,
         };
         let mut effects = BrowserSessionEffectAdapter::new(FakeRuntime);
 
@@ -1027,5 +1078,24 @@ mod tests {
 
         assert!(!Path::new(&profile.user_data_dir).exists());
         assert!(root.0.is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn disposable_size_counts_regular_files_without_following_symlinks() {
+        use std::os::unix::fs::symlink;
+
+        let root = TempDirectory::new();
+        let outside = TempDirectory::new();
+        let profile = root.0.join("profile");
+        fs::create_dir_all(profile.join("nested")).unwrap();
+        fs::create_dir_all(&outside.0).unwrap();
+        fs::write(profile.join("one.bin"), [0_u8; 3]).unwrap();
+        fs::write(profile.join("nested/two.bin"), [0_u8; 5]).unwrap();
+        fs::write(outside.0.join("outside.bin"), [0_u8; 64]).unwrap();
+        symlink(outside.0.join("outside.bin"), profile.join("file-link")).unwrap();
+        symlink(&outside.0, profile.join("directory-link")).unwrap();
+
+        assert_eq!(directory_regular_file_bytes(&profile).unwrap(), 8);
     }
 }

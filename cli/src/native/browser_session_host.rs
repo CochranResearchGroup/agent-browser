@@ -65,6 +65,8 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
                 id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
                 user_data_root: disposable_root.to_string_lossy().into_owned(),
                 cleanup_delay_ms,
+                maximum_retained_profiles: 20,
+                maximum_total_bytes: 10 * 1024 * 1024 * 1024,
             }),
         },
     )
@@ -381,6 +383,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 let reaped = self.reap(now_ms)?;
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
+                    "quotaEvictedSessionIds": reaped.quota_evicted_session_ids,
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                 }))

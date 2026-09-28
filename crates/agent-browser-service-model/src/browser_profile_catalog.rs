@@ -25,11 +25,23 @@ pub struct BrowserProfileCatalogEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserDisposableProfilePolicy {
     pub id: String,
     pub user_data_root: String,
     pub cleanup_delay_ms: u64,
+    #[serde(default = "default_maximum_retained_disposable_profiles")]
+    pub maximum_retained_profiles: u32,
+    #[serde(default = "default_maximum_disposable_profile_bytes")]
+    pub maximum_total_bytes: u64,
+}
+
+fn default_maximum_retained_disposable_profiles() -> u32 {
+    20
+}
+
+fn default_maximum_disposable_profile_bytes() -> u64 {
+    10 * 1024 * 1024 * 1024
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
