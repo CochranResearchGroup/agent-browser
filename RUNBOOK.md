@@ -1,5 +1,16 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P5 intermediate custody
+
+[Plan 0219 version 38](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `8dcbfd89` adds an exact Agent Browser-owned Guacamole
+namespace rebuild primitive to cold workstation reconciliation. Focused
+route-user and source-free workstation fixtures, shell syntax, Python
+compilation, and patch hygiene pass. This is not M4-P5 source qualification:
+documentation, full Rust gates, unrelated-row preservation proof, and installed
+provider reconstruction remain open. The ledger stays 11 pass, 32 partial, 2
+fail, and 0 missing. No provider or other runtime effect occurred.
+
 ## Current P219 status | 2026-09-27 M4-P4 source-qualified
 
 [Plan 0219 version 37](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

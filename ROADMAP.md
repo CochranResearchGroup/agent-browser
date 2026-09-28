@@ -106,6 +106,12 @@ prior observation, action, outcome, and ready postcondition. G20 moves from
 missing to partial; the ledger is 11 pass, 32 partial, 2 fail, and 0 missing.
 M4-P5 owns provider-row reconstruction and remaining operational qualification.
 
+M4-P5 has an intermediate custody checkpoint at `8dcbfd89`. The cold install
+path can now rebuild the exact Agent Browser-owned Guacamole namespace from
+retained inputs before authoritative SQLite projection. Focused fixtures pass,
+but documentation, full source gates, unrelated-row preservation, and installed
+reconstruction remain open. G34 and the ledger disposition are unchanged.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

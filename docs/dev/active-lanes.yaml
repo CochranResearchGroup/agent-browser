@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9f6505b7
+    checkpoint: 8dcbfd89
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M4-P1 through M4-P3B add storage, history, status, doctor, and launch-pressure controls; M4-P4 at 9f6505b7 gives healthy privilege reruns a zero-privileged-call path and binds repairs to v2 prior-observation, action, and postcondition receipts; focused fixtures, Rust, docs, formatting, and strict Clippy gates pass; final installed and target-platform qualification remain; the ledger is 11 pass, 32 partial, two fail, and zero missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P4 remain source-qualified; intermediate M4-P5 commit 8dcbfd89 adds an exact Agent Browser-owned Guacamole namespace rebuild primitive and passes focused renderer and source-free workstation fixtures, shell syntax, Python compilation, and patch hygiene; documentation, full source gates, unrelated-row preservation, and installed reconstruction remain open; the ledger is unchanged at 11 pass, 32 partial, two fail, and zero missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M4-P4 is source-qualified at 9f6505b7; M4-P5 owns G34 provider-row reconstruction and the remaining placement, queue, scale-in, doctor, and installed operational gaps; no provider effect is implied by source qualification
+    blocker: M4-P5 is checkpointed but not source-qualified at 8dcbfd89; complete documentation and full gates, prove unrelated provider-row preservation, then perform separately governed installed reconstruction; no provider effect is implied by this checkpoint
     updated_at: 2026-09-27
