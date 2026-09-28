@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -84,5 +84,37 @@ const legacy = spawnSync(
 );
 assert.equal(legacy.status, 0, legacy.stderr);
 assert.deepEqual(JSON.parse(legacy.stdout).map((route) => route.routeUser), ['legacy-a', 'legacy-b']);
+
+const database = join(fixtureRoot, 'browser-runtime.sqlite3');
+const migrate = spawnSync(
+  'python3',
+  [
+    'scripts/lib/rdp-route-user-pool.py', 'resolve',
+    '--secret-file', legacySecret,
+    '--database', database,
+    '--generate-passwords',
+  ],
+  { encoding: 'utf8', env: { ...process.env, AGENT_BROWSER_RDP_ROUTE_USER_POOL_JSON: '' } },
+);
+assert.equal(migrate.status, 0, migrate.stderr);
+const migrated = JSON.parse(migrate.stdout);
+assert.deepEqual(migrated.map((route) => route.routeUser), ['legacy-a', 'legacy-b']);
+assert.doesNotMatch(readFileSync(legacySecret, 'utf8'), /XRDP_AGENT_BROWSER_ROUTE_/);
+assert.equal(statSync(database).mode & 0o777, 0o600);
+assert.equal(statSync(fixtureRoot).mode & 0o777, 0o700);
+assert.equal(existsSync(`${database}-journal`), false);
+assert.equal(existsSync(`${database}-wal`), false);
+assert.equal(existsSync(`${database}-shm`), false);
+const replay = spawnSync(
+  'python3',
+  [
+    'scripts/lib/rdp-route-user-pool.py', 'resolve',
+    '--secret-file', legacySecret,
+    '--database', database,
+  ],
+  { encoding: 'utf8' },
+);
+assert.equal(replay.status, 0, replay.stderr);
+assert.deepEqual(JSON.parse(replay.stdout), migrated);
 
 console.log('RDP route-user pool fixtures passed.');

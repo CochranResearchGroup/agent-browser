@@ -1,7 +1,11 @@
 //! Typed compatibility contract for the root-owned remote-view helper.
 //!
 //! Route-user password updates are unattended only when the helper advertises
-//! the fixed SHA-512 crypt path that bypasses `chpasswd`'s PAM default.
+//! the fixed SHA-512 crypt path that bypasses `chpasswd`'s PAM default. Exact
+//! route replacement also requires identity-bound stale X display-lock
+//! reclamation after session, socket, cgroup, and original route-user process
+//! identity absence is proven. A reused numeric PID is accepted only when the
+//! kernel reports a different UID from the exact route user.
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -10,11 +14,15 @@ use std::path::Path;
 
 pub(crate) const FIXED_HELPER_PATH: &str =
     "/usr/local/libexec/agent-browser/agent-browser-privileged-helper";
-const REQUIRED_COMMANDS: [&str; 6] = [
+const REQUIRED_COMMANDS: [&str; 10] = [
     "check",
     "status-json",
     "ensure-rdp-route-user",
-    "terminate-rdp-route-session",
+    "ensure-rdp-route-user-owned",
+    "observe-rdp-route-session",
+    "terminate-rdp-route-session-exact",
+    "verify-rdp-route-session-absent",
+    "reclaim-rdp-route-display-lock-exact",
     "restart-xrdp",
     "grant-display-access",
 ];
@@ -27,11 +35,75 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .and_then(Value::as_bool)
             == Some(true)
         && report
-            .pointer("/parsed/routeSessionTermination/exactRouteUser")
+            .pointer("/parsed/routeSessionObservation/exactCgroupV2Identity")
             .and_then(Value::as_bool)
             == Some(true)
         && report
-            .pointer("/parsed/routeSessionTermination/idempotentWhenAbsent")
+            .pointer("/parsed/routeSessionObservation/xServerProcessIdentity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionObservation/x11SocketOwnership")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/exactCgroupV2Identity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/retainedDirectoryIdentity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/usesCgroupKill")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeSessionTermination/broadUserTermination")
+            .and_then(Value::as_bool)
+            == Some(false)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/supported")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/exactRouteUser")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/requiresSessionAbsent")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/requiresSocketAbsent")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/requiresPidAbsent")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/acceptsProvablyForeignPidReuse")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/retainsInodeIdentity")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/integratedWithAbsenceVerification")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/reclaimsXrdpChannelSockets")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/reclaimsPrimaryChansrvSocket")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/staleDisplayLockReclamation/requiresInactiveSocketPaths")
             .and_then(Value::as_bool)
             == Some(true)
         && report
@@ -41,7 +113,7 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
         && report
             .pointer("/parsed/helperVersion")
             .and_then(Value::as_str)
-            .is_some_and(|value| value.starts_with("2026-06-23.p44-route-desktop-v"))
+            .is_some_and(|value| value.starts_with("2026-09-27.p219-route-desktop-v"))
         && report
             .pointer("/parsed/routeDesktopSession/ready")
             .and_then(Value::as_bool)
@@ -74,6 +146,18 @@ pub(crate) fn status_contract_ready(report: &Value) -> bool {
             .pointer("/parsed/routeUserCredentialUpdate/shaRounds")
             .and_then(Value::as_i64)
             == Some(100_000)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/supported")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/gecosOperationMarker")
+            .and_then(Value::as_bool)
+            == Some(true)
+        && report
+            .pointer("/parsed/routeUserOwnedProvisioning/retrySafe")
+            .and_then(Value::as_bool)
+            == Some(true)
 }
 
 pub(crate) fn helper_contract_report(
@@ -138,9 +222,12 @@ fn evaluate_helper_contract(
         "capabilities": {
             "ready": capability_ready,
             "routeDesktopSession": helper_status.pointer("/parsed/routeDesktopSession"),
+            "routeSessionObservation": helper_status.pointer("/parsed/routeSessionObservation"),
             "routeSessionTermination": helper_status.pointer("/parsed/routeSessionTermination"),
+            "staleDisplayLockReclamation": helper_status.pointer("/parsed/staleDisplayLockReclamation"),
             "displayAccess": helper_status.pointer("/parsed/displayAccess"),
             "routeUserCredentialUpdate": helper_status.pointer("/parsed/routeUserCredentialUpdate"),
+            "routeUserOwnedProvisioning": helper_status.pointer("/parsed/routeUserOwnedProvisioning"),
             "managedChromeSandboxPolicy": helper_status.pointer("/parsed/managedChromeSandboxPolicy"),
         },
         "checkReady": check_ready,
@@ -211,15 +298,38 @@ mod tests {
             "success": true,
             "parsed": {
                 "schemaVersion": 1,
-                "helperVersion": "2026-06-23.p44-route-desktop-v4",
+                "helperVersion": "2026-09-27.p219-route-desktop-v11",
                 "routeDesktopSession": {
                     "ready": true,
                     "terminalStartupDetected": false
                 },
+                "routeSessionObservation": {
+                    "supported": true,
+                    "exactCgroupV2Identity": true,
+                    "xServerProcessIdentity": true,
+                    "x11SocketOwnership": true
+                },
                 "routeSessionTermination": {
                     "supported": true,
+                    "exactRouteUser": false,
+                    "idempotentWhenAbsent": false,
+                    "exactCgroupV2Identity": true,
+                    "retainedDirectoryIdentity": true,
+                    "usesCgroupKill": true,
+                    "broadUserTermination": false
+                },
+                "staleDisplayLockReclamation": {
+                    "supported": true,
                     "exactRouteUser": true,
-                    "idempotentWhenAbsent": true
+                    "requiresSessionAbsent": true,
+                    "requiresSocketAbsent": true,
+                    "requiresPidAbsent": true,
+                    "acceptsProvablyForeignPidReuse": true,
+                    "retainsInodeIdentity": true,
+                    "integratedWithAbsenceVerification": true,
+                    "reclaimsXrdpChannelSockets": true,
+                    "reclaimsPrimaryChansrvSocket": true,
+                    "requiresInactiveSocketPaths": true
                 },
                 "displayAccess": {
                     "supportsFilesystemX11Socket": true,
@@ -230,6 +340,11 @@ mod tests {
                     "pamBypassed": true,
                     "cryptMethod": "SHA512",
                     "shaRounds": 100000
+                },
+                "routeUserOwnedProvisioning": {
+                    "supported": true,
+                    "gecosOperationMarker": true,
+                    "retrySafe": true
                 }
             }
         })
@@ -237,7 +352,7 @@ mod tests {
 
     #[test]
     fn compatible_helper_without_optional_verify_install_remains_ready() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], true);
@@ -249,7 +364,7 @@ mod tests {
 
     #[test]
     fn missing_required_helper_capability_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let report = evaluate_helper_contract(source, &compatible_status(), true, true, true);
 
         assert_eq!(report["ready"], false);
@@ -261,7 +376,7 @@ mod tests {
 
     #[test]
     fn legacy_pam_password_update_contract_is_blocking() {
-        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  terminate-rdp-route-session)\n  restart-xrdp)\n  grant-display-access)\n";
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
         let mut status = compatible_status();
         status["parsed"]
             .as_object_mut()
@@ -273,5 +388,37 @@ mod tests {
         assert_eq!(report["ready"], false);
         assert_eq!(report["capabilities"]["ready"], false);
         assert_eq!(report["requiresInteractiveSudo"], false);
+    }
+
+    #[test]
+    fn helper_without_owned_provisioning_contract_is_stale() {
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let mut status = compatible_status();
+        status["parsed"]
+            .as_object_mut()
+            .expect("parsed helper status must be an object")
+            .remove("routeUserOwnedProvisioning");
+
+        let report = evaluate_helper_contract(source, &status, true, true, true);
+
+        assert_eq!(report["ready"], false);
+        assert_eq!(report["capabilities"]["ready"], false);
+        assert_eq!(report["missingRequiredCommands"], json!([]));
+    }
+
+    #[test]
+    fn helper_without_foreign_pid_reuse_proof_is_stale() {
+        let source = "\n  check)\n  status-json)\n  ensure-rdp-route-user)\n  ensure-rdp-route-user-owned)\n  observe-rdp-route-session)\n  terminate-rdp-route-session-exact)\n  verify-rdp-route-session-absent)\n  reclaim-rdp-route-display-lock-exact)\n  restart-xrdp)\n  grant-display-access)\n";
+        let mut status = compatible_status();
+        status["parsed"]["staleDisplayLockReclamation"]
+            .as_object_mut()
+            .expect("stale display-lock capabilities must be an object")
+            .remove("acceptsProvablyForeignPidReuse");
+
+        let report = evaluate_helper_contract(source, &status, true, true, true);
+
+        assert_eq!(report["ready"], false);
+        assert_eq!(report["capabilities"]["ready"], false);
+        assert_eq!(report["missingRequiredCommands"], json!([]));
     }
 }

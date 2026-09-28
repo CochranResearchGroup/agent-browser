@@ -7,7 +7,6 @@ import { join } from 'node:path';
 
 import {
   evaluateServiceTab,
-  requestServiceRemoteViewOpen,
   requestServiceRoutePoolRepair,
 } from '../packages/client/src/service-request.js';
 import { buildAudit } from './audit-route-handoff.js';
@@ -28,7 +27,6 @@ const useFixture = process.argv.includes('--fixture') || process.env.AGENT_BROWS
 const forceProofFailure = process.argv.includes('--force-proof-failure') ||
   process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_FORCE_PROOF_FAILURE === '1';
 const displayName = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY || ':10';
-const displayIsolation = process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_DISPLAY_ISOLATION || 'shared_display';
 const remoteViewOpenTimeoutMs = Number(process.env.AGENT_BROWSER_REMOTE_VIEW_OPEN_TIMEOUT_MS || 300000);
 const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
 const artifactDir = join(tmpdir(), `agent-browser-remote-view-open-live-${timestamp}`);
@@ -243,10 +241,6 @@ function displayNameForRoute(routeEntry) {
   return routeEntry?.target?.displayName || displayName;
 }
 
-function displayIsolationForRoute(routeEntry) {
-  return routeEntry?.target?.displayIsolation || displayIsolation;
-}
-
 function visibleWindowProof(response, label) {
   const proof = response.data?.verification?.visibleWindowProof;
   assert(proof?.state === 'ready', `${label} visible window proof is not ready: ${JSON.stringify(response)}`);
@@ -357,54 +351,20 @@ function assertForcedProofFailureResponse(response) {
   return cleanup;
 }
 
-function remoteViewOpenCliArgs(routeEntry, taskName, targetUrl) {
-  const routeDisplayName = displayNameForRoute(routeEntry);
+function remoteViewOpenCliArgs(_routeEntry, _taskName, targetUrl) {
   return [
     'remote-view',
     'open',
     targetUrl,
     '--runtime-profile',
     runtimeProfile,
-    '--display',
-    routeDisplayName,
-    '--display-isolation',
-    displayIsolationForRoute(routeEntry),
-    '--route-pool-entry-json',
-    JSON.stringify(routeEntry),
-    '--service-name',
-    serviceName,
-    '--agent-name',
-    agentName,
-    '--task-name',
-    taskName,
+    '--job-timeout-ms',
+    String(remoteViewOpenTimeoutMs),
   ];
 }
 
-function remoteViewOpenRepeatCliArgs(routeEntry, openedIds, taskName, targetUrl) {
-  const routeDisplayName = displayNameForRoute(routeEntry);
-  return [
-    'remote-view',
-    'open',
-    targetUrl,
-    '--runtime-profile',
-    runtimeProfile,
-    '--display',
-    routeDisplayName,
-    '--display-isolation',
-    displayIsolationForRoute(routeEntry),
-    '--route-id',
-    openedIds.routeId,
-    '--route-pool-entry-id',
-    routeEntry.id,
-    '--display-allocation-id',
-    openedIds.displayAllocationId,
-    '--service-name',
-    serviceName,
-    '--agent-name',
-    agentName,
-    '--task-name',
-    taskName,
-  ];
+function remoteViewOpenRepeatCliArgs(routeEntry, _openedIds, taskName, targetUrl) {
+  return remoteViewOpenCliArgs(routeEntry, taskName, targetUrl);
 }
 
 function stateRecords(status, routeId) {
@@ -623,9 +583,8 @@ async function main() {
   );
   const preOpenRepair = hasBlockedRoute ? await repairRoutePoolState(baseUrl, 'pre-open route-pool repair') : null;
   const preOpenStatus = runAgentJson(['service', 'status'], 'pre-open service status');
-  const { entries, selected, liveRoutePool } = selectRouteEntry(readiness, preOpenStatus);
+  const { selected, liveRoutePool } = selectRouteEntry(readiness, preOpenStatus);
   const routeDisplayName = displayNameForRoute(selected);
-  const routeDisplayIsolation = displayIsolationForRoute(selected);
   writeArtifact('route-pool-readiness.json', readiness);
   writeArtifact('pre-open-route-pool-repair.json', {
     ran: Boolean(preOpenRepair),
@@ -691,44 +650,13 @@ async function main() {
       `CLI repeat display allocation changed: ${JSON.stringify({ firstIds, repeatIds })}`,
     );
 
-    const http = await requestServiceRemoteViewOpen({
-      baseUrl,
-      serviceName,
-      agentName,
-      taskName: 'remoteViewOpenLiveHttpHelper',
-      runtimeProfile,
-      display: routeDisplayName,
-      displayName: routeDisplayName,
-      remoteHeadedDisplay: routeDisplayName,
-      displayIsolation: routeDisplayIsolation,
-      routeId: selected.routeId,
-      remoteViewRouteId: selected.routeId,
-      routePoolEntryId: selected.id,
-      routePoolEntry: selected,
-      routePool: entries,
-      routeDescriptor: selected.routeDescriptor,
-      viewStreamProvider: 'rdp_gateway',
-      providerMode: selected.providerMode || selected.routeDescriptor?.providerMode || 'simultaneous_view',
-      frameUrl: selected.frameUrl,
-      externalUrl: selected.externalUrl,
-      connectionId: selected.connectionId,
-      connectionName: selected.connectionName,
-      url: targetUrl,
-      jobTimeoutMs: remoteViewOpenTimeoutMs,
-    });
-    const httpIds = {
-      ...assertOpenResponse(http, 'HTTP helper open'),
+    const acceptedIds = {
+      ...firstIds,
       displayName: routeDisplayName,
     };
-    writeArtifact('http-helper.json', http);
-    assert(httpIds.routeId === firstIds.routeId, `HTTP helper route changed: ${JSON.stringify({ firstIds, httpIds })}`);
-    assert(
-      httpIds.displayAllocationId === firstIds.displayAllocationId,
-      `HTTP helper display allocation changed: ${JSON.stringify({ firstIds, httpIds })}`,
-    );
 
-    const serviceTabHandle = http.data?.tab?.serviceTabHandle;
-    assert(serviceTabHandle?.valid === true, `HTTP helper did not return a valid service tab handle: ${JSON.stringify(http)}`);
+    const serviceTabHandle = first.data?.serviceTabHandle || first.data?.tab?.serviceTabHandle;
+    assert(serviceTabHandle?.valid === true, `ordinary CLI open did not return a valid service tab handle: ${JSON.stringify(first)}`);
     const targetReadback = await evaluateServiceTab({
       baseUrl,
       serviceName,
@@ -753,13 +681,12 @@ async function main() {
     }
 
     const serviceStatus = runAgentJson(['service', 'status'], 'service status');
-    const records = assertServiceState(serviceStatus, httpIds, 'post-open');
+    const records = assertServiceState(serviceStatus, acceptedIds, 'post-open');
     const repeatOpenTargetProof = assertRepeatOpenSingleActiveTarget(serviceStatus, records, targetUrl, [
       { response: first, label: 'CLI first open' },
       { response: repeat, label: 'CLI repeat open' },
-      { response: http, label: 'HTTP helper open' },
     ]);
-    const auditRow = assertRouteHandoffAudit(serviceStatus, httpIds, 'post-open');
+    const auditRow = assertRouteHandoffAudit(serviceStatus, acceptedIds, 'post-open');
     writeArtifact('service-state-proof.json', {
       route: records.route,
       browser: records.browser,
@@ -783,8 +710,8 @@ async function main() {
       displayName: routeDisplayName,
       fixture: Boolean(fixture),
       fixtureMarker: fixture?.marker || null,
-      routeId: httpIds.routeId,
-      displayAllocationId: httpIds.displayAllocationId,
+      routeId: acceptedIds.routeId,
+      displayAllocationId: acceptedIds.displayAllocationId,
       frameUrl: records.route.frameUrl,
       externalUrl: records.route.externalUrl,
       title: evaluatedPage.title,

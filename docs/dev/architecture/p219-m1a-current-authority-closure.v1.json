@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "p219-m1a-current-authority-closure.v1",
+  "plan": "docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md",
+  "milestone": "M1A",
+  "sourceBaseline": "8bb9518eb78b37c22aaec0183348ee6c77adf0da",
+  "observedAt": "2026-09-26",
+  "completedCuts": [
+    {
+      "id": "ordinary-json-coordinator",
+      "evidence": "541d7346",
+      "result": "Authenticated ordinary open and manager handoff resolution no longer enter the JSON coordinator or generic JSON resolution fallback."
+    },
+    {
+      "id": "direct-lease-authority-dependencies",
+      "evidence": "current manifests and check-p218-architecture serviceModelLeaseAuthority pass",
+      "result": "Neither trusted product manifest directly depends on agent-browser-lease-authority."
+    },
+    {
+      "id": "compiled-json-manager-attachment",
+      "evidence": "P219 architecture red guard plus cargo-signal job-20260926T174302Z-3972e141d58c",
+      "result": "The unreachable compiled JSON manager-handoff adapter and its JSON-only tests are removed; six focused handoff tests pass."
+    },
+    {
+      "id": "keeper-only-manager-handoff",
+      "evidence": "P219 architecture red guard plus cargo-signal job-20260926T175133Z-8e7342c18660",
+      "result": "The compiled Legacy manager-handoff authority is removed; ordinary open and navigation bootstrap use Route Keeper authority, and all eight journaled-open tests pass."
+    },
+    {
+      "id": "stale-history-availability",
+      "evidence": "cargo-signal jobs job-20260926T175454Z-a004f9e83c83 and job-20260926T175616Z-5f35b7c10690",
+      "result": "Malformed owner, cleanup and ambiguous history cannot alter ordinary manager translation, and contradictory migration history cannot block valid profile opens."
+    },
+    {
+      "id": "ordinary-open-coalescing-and-waiting-restart",
+      "evidence": "cargo-signal jobs job-20260926T175808Z-5fb37dfa5612 and job-20260926T175854Z-10e864191671",
+      "result": "Exact concurrent ordinary requests share one SQLite execution permit and replay one operation and handoff result; waiting-only restart performs no browser operation until the exact client resumes."
+    },
+    {
+      "id": "managed-command-heartbeat-and-session-isolation",
+      "evidence": "cargo-signal jobs job-20260926T180401Z-b2578ab7c2d2 and job-20260926T180405Z-5f6a121c50fc",
+      "result": "Managed command failure and execution error preserve activity, success refreshes only the addressed session, and Alice-first cleanup preserves Bob until the final browser close."
+    },
+    {
+      "id": "legacy-authority-physical-quarantine",
+      "evidence": "P15/P16 and legacyAuthorityQuarantine pass; strict Clippy job-20260926T185357Z-7d9bc2827369",
+      "result": "Trusted product manifests, Service State, transaction recovery, inventory, generated client and ordinary dispatch no longer link, embed, replay or expose legacy Lease Authority/runtime-owner authority. Disabled historical tests remain noncompiled and the independent crate remains a workspace member."
+    }
+  ],
+  "blockers": [
+    {
+      "id": "M1A-B05",
+      "requirements": ["G26", "G42", "G43", "G44"],
+      "prohibitions": [],
+      "symbols": ["BrowserSessionHost::execute_managed_command", "BrowserRuntimeSqliteStore::commit_browser_navigation", "BrowserSessionManager::close_session"],
+      "writeSurfaces": ["cli/src/native/browser_session_host.rs", "cli/src/native/browser_session_host/navigation_recovery.rs", "crates/agent-browser-service-model/src/browser_session_manager.rs"],
+      "existingTests": ["shared_browser_commands_and_cleanup_remain_session_scoped_in_sqlite", "journaled navigation tests"],
+      "nextCheck": "Page effects, every effectful browser_session action, view focus, liveness reconciliation, periodic reap, provider observations, nested bootstrap, asynchronous completion and recovery commits now reuse the exact admitted generation and operation fence. Next qualify the joined behavior through installed daemon restart."
+    },
+    {
+      "id": "M1A-B06",
+      "requirements": ["G02", "G04", "G25"],
+      "prohibitions": ["P09"],
+      "symbols": ["workstation installer route credential projection"],
+      "writeSurfaces": ["cli/src/workstation_install.rs", "cli/src/native/browser_session_store.rs"],
+      "existingTests": ["check-p218-architecture"],
+      "nextCheck": "Source custody is complete: route credentials migrate once into private browser-runtime SQLite, legacy keys are scrubbed, and privileged user provisioning receives transient stdin. Qualify provider projection cleanup and identity-preserving rotation in installed M2A."
+    }
+  ],
+  "nextBatch": "M1B source closure is complete. Join the minimum M2A provider and live-viewer path, then freeze one M2B Alice/Bob candidate.",
+  "acceptance": {
+    "coverageRows": 45,
+    "promotedRows": 3,
+    "installedEvidence": false
+  }
+}

@@ -1,361 +1,379 @@
 # Runbook
 
-Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-turn312.md) preserves checkpoints through Turn 312; [Turn 313](RUNBOOK-history-2026-09-13-turn313.md), [Turns 314 through 320](RUNBOOK-history-2026-09-14-turn314-through-turn320.md), [P169 history through Turn 319](RUNBOOK-history-2026-09-14-p169-through-turn319.md), [superseded P186 checkpoints through Turn 328](RUNBOOK-history-2026-09-14-p186-through-turn328.md), [P194 through P196 checkpoints from Turns 340 through 343](RUNBOOK-history-2026-09-15-p194-through-turn343.md), and [Turns 323 through 368](RUNBOOK-history-2026-09-14-turn323-through-2026-09-16-turn368.md) remain separately preserved.
+## Current P219 status | 2026-09-27 M3-P3 source-qualified
+
+[Plan 0219 version 31](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `93a740f6` completes the provider-free disposable-retention
+packet. SQLite owns live inactivity, count, and byte settings. Cleanup ranks
+the oldest inactive disposable allocation, protects current viewer, controller,
+and pending-operation sessions from one SQLite snapshot, commits eviction
+before replacement admission, terminalizes handoffs, compacts history, and
+deletes only an idempotent direct-child directory without following symlinks.
+Named profiles cannot enter the candidate set, and strict policy decoding
+rejects pinning or promotion fields.
+
+G37 and G38 advance from missing to pass. G21 and G36 remain partial until the
+frozen installed candidate proves joined retention. The ledger is 11 pass,
+29 partial, 2 fail, and 3 missing. The complete 282-test service-model suite,
+focused host/store/runtime tests, strict Clippy, formatting, generated-client
+contracts, route-confusion gates, documentation checks, and docs build pass.
+The broad browser-session filter retained four unrelated environment-sensitive
+process-census fixture failures; its other 131 executed cases passed. No
+installed runtime, browser, provider, publication, production, merge, or
+release effect occurred. M4 requires a bounded successor packet before source
+or runtime effects.
+
+## Current P219 status | 2026-09-27 M3-P3 retention audit
+
+[Plan 0219 version 30](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN at pushed checkpoint `762a7f10`. The M3-P3 audit confirms that SQLite
+already stores the accepted disposable inactivity, count, and byte defaults,
+but typed updates omit them, disposable sessions still consume the legacy
+five-minute timeout, and no count/byte quota engine joins viewer, control, and
+pending-operation protection. Existing cleanup is direct-child and
+reference-checked but is not oldest-inactive quota enforcement. M3-P3 now owns
+the bounded source repair and provider-free proof for G21/G36/G37/G38. The
+ledger remains 9 pass, 29 partial, 2 fail, and 5 missing until executable
+evidence lands. No runtime or provider effect occurred during the audit.
+
+## Current P219 status | 2026-09-27 M3-P2D source-qualified
+
+[Plan 0219 version 29](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `0b728fc0` completes the provider-free eager-scheduler packet.
+Baseline presentation capacity remains Route Keeper authority and cannot enter
+the per-browser recovery demand model. Scheduled browser recovery requires a
+current-boot, unexpired authenticated controlling viewer joined through the
+current SQLite handoff, session, browser, and Route Keeper authority. Candidates
+deduplicate by browser ID, revalidate at admission, receive a fresh exact
+liveness observation, and use the existing M3-P2C journal, generation fence,
+reserved launch/adoption path, and atomic publication. The same logical session
+and opaque handoff survive replacement, current desktop control is rebound, and
+restart cannot create a competing replacement. Dormant named browsers remain
+lazy.
+
+All 278 service-model crate tests, 65 store tests, 26 host tests, 37 Route
+Keeper tests, focused stale-authority and restart fixtures, formatting, strict
+workspace Clippy, documentation checks and build, and selected source-free
+workstation/Guacamole contracts pass. The installed shared skill remains
+unchanged by design. No browser, provider, installed-runtime, publication,
+production, merge, or release effect occurred. The ledger remains 9 pass,
+29 partial, 2 fail, and 5 missing. G14 and G15 remain partial until installed
+cold-start and visible joined recovery are qualified. M4 remains ineligible;
+the next bounded packet owns the remaining M3 retention rows.
+
+Goal thread `01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 323,934 cumulative
+tokens used after source validation, below the 800,000 implementation stop and
+the 1,000,000 checkpoint ceiling.
+
+## Current P219 status | 2026-09-27 M3-P2C source-qualified
+
+[Plan 0219 version 28](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `0522fe95` completes M3-P2C. The journaled exact-client path
+observes the selected retained browser before one immediate SQLite transaction
+admits a per-browser recovery generation and binds it to `launch_started`.
+Distinct open operation IDs retain independent operation fencing, while only
+one receives replacement authority. A successor probes and adopts the exact
+reserved launch without a second effect. The durable `observed_live` phase is
+separate from handoff readiness, and final session, handoff, open result, and
+recovery success publication is one generation-fenced transaction.
+
+Focused recovery-model, manager, store, journal, concurrency, crash-recovery,
+retry/deadline, formatting, and strict workspace Clippy gates pass. Stale
+recovery generations and base-state conflicts publish nothing. The source-only
+packet performs no browser, provider, installed-runtime, publication,
+production, merge, or release effect. The ledger remains 9 pass, 29 partial,
+2 fail, and 5 missing. G15 gains direct host-path evidence but remains partial
+until joined installed recovery is qualified. M3-P2D is next and was not begun;
+later M3/M4 work remains open.
+The post-source-validation goal readback was 689,484 tokens used and 310,516
+remaining, so implementation stopped below 800,000 with the required closeout
+reserve intact.
+
+## Current P219 status | 2026-09-27 terminal budget checkpoint
+
+[Plan 0219 version 26](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md#fresh-context-continuation-after-m2b)
+is OPEN. The operator resumed the amended continuation with a cumulative
+1,000,000-token ceiling before stop and checkpoint, including a 200,000-token
+closeout reserve and an 800,000-token implementation stop. Goal-service thread
+`01a0e3f7-adbb-7312-b748-ce5a462ccd90` reported 141,869 tokens used at startup
+but no remaining-token field. The read-only audit preserved successful M2B subproofs and found a
+desktop error receipt reported as outer success, remaining ordinary desktop
+JSON dependencies, and policy/budget, ledger, shared-helper, candidate and retry
+provenance gaps. The linked continuation owns findings A01–A06 and their exits.
+A01 is source-qualified: failed desktop receipts now produce truthful outer,
+job, event, and terminal failures with uncertain-effect recourse and redacted
+diagnostic preservation. A02 is also source-qualified: managed capture,
+ready-handoff lookup, and interaction replay now use Browser Runtime SQLite,
+with one-time fail-closed import and archival of the former JSON ledger. A03–A06
+are reconciled with the current budget, scoped helper/binary identities, ledger
+rows, and retained first-failure disposition. M3-P1 is now the active bounded
+provider-free packet: pure eager/lazy recovery decisions plus SQLite-serialized
+singular admission, exact old-browser unusability proof, and bounded retry.
+It has no browser, provider, route, display, publication, or production effect.
+M3-P1 is source-qualified: 276 service-model and 37 browser-session-store tests
+pass, including a four-connection race with one SQLite admission winner.
+Source checkpoint `6000b9fd` is clean. The goal service reports 712,314 tokens
+used. M3-P2 is planned but unstarted: wire the SQLite admission fence into the
+provider-free host recovery effect, add a fenced success/reset transition, and
+inject values from the existing recovery configuration. No push, publication,
+install, merge, or runtime effect occurred.
+M3-P2A is source-qualified at `53c66ce9`: exact success is generation-fenced,
+restart-durable, resets attempts only after success, and advances generation for
+the next episode. The affected complete suites pass 277 and 38 tests; strict
+Clippy and formatting pass. Goal usage is 753,564 and implementation is stopped.
+Configuration translation and actual host fence consumption remain unstarted.
+The read-only host audit proves those cannot safely be one unordered edit:
+ordinary host configuration comes from SQLite, the older daemon retry policy is
+environment-derived, exact-client replacement occurs after `launch_started`,
+and scheduled reap only retains dead named records. M3-P2B must first establish
+one SQLite policy authority; M3-P2C then fences exact-client replacement; M3-P2D
+adds eager active-viewer/baseline scheduling without surprise-launching dormant
+browsers.
+The completion audit confirms only nine rows pass. Three fail, five are missing,
+and 28 remain partial. P219 stays OPEN and M5 is ineligible. The critical path
+is M3-P2B policy consolidation, M3-P2C exact-client fencing, M3-P2D eager
+scheduling, remaining M3 retention, M4 operational closure, then one final
+candidate adjudication.
+The architecture audit independently reports 4 pass, 4 detector gaps, and 11
+unverified prohibitions. Zero findings on an unimplemented detector is not
+acceptance. M5 therefore remains ineligible on both requirement and prohibition
+coverage.
+The version 21 checkpoint readback was 817,438. Executable work stopped at
+753,564; later usage was closeout-only. Remaining capacity under the ceiling
+does not renew implementation. Resume at M3-P2B with all counters and evidence
+carried forward.
+The read-only M3-P2B inventory identifies every required store, startup,
+consumer, schema, generated-client, CLI/help, README, skill, docs-site,
+architecture, and ledger surface. Startup defaults must preserve existing
+SQLite configuration; explicit config/env/CLI values become atomic bootstrap
+updates before host construction; daemon and host then consume the same row.
+The M3-P2C audit found that recovery and open publication currently have
+separate transactions. The open journal can prove `browser_opened` before later
+navigation/presentation failure, leaving a usable browser while recovery stays
+`admitted`. Add an observed-live resumable phase and commit final recovery
+success with open/session/handoff publication in one SQLite transaction before
+wiring any replacement effect.
+The M3-P2D audit corrects the eager-demand boundary. G14 baseline capacity is
+presentation route capacity and cannot select or launch a profile browser.
+Route Keeper policy owns eager route, Guacamole, and XRDP reconciliation.
+Eager browser recovery requires a new current-boot, unexpired SQLite projection
+from live viewer control through the exact current handoff, session, browser,
+and route, deduplicated by browser ID and passed through the M3-P2C admission
+and effect fence. Dormant dead named browsers remain effect-free until exact
+handoff or named-session access. The browser-keyed `BaselineCapacity` model
+case must be removed or constrained before scheduler wiring.
+Version 25 reconciles this correction through the older M3-P1, M3 delivery,
+and M3-P2 host-integration text. The historical baseline fixture remains a test
+of generic mechanics only and is explicitly excluded from G14 acceptance and
+all future browser-launch authority.
+The goal-service pre-commit checkpoint readback was 931,884 cumulative tokens
+used, 68,116 below the 1,000,000-token ceiling. Executable work stopped at
+753,564. Plan 0219 remains OPEN; this window stops at the durable checkpoint
+without converting unused ceiling space into implementation authority.
+
+A01 validation passed 40 desktop-interaction tests, 273 service-model tests,
+18 Desktop Services tests, the focused dispatch/redaction/terminal regressions,
+formatting, strict workspace Clippy, architecture ownership, route-confusion
+gates, and diff hygiene. The selected CDP live smoke remains unqualified: two
+attempts failed before browser launch and a preserved debug receipt reports a
+missing temporary-home runtime SQLite database. The Rust command selected zero
+tests and is not evidence. No candidate was published and no provider effect
+was attempted.
+
+A02 validation passes 43 desktop-interaction tests, 21 desktop-capture tests,
+50 browser-session-store tests, 18 Desktop Services tests, architecture detector
+self-tests, formatting, and strict workspace Clippy. The reconciled coverage
+ledger is nine pass, 28 partial, three fail, and five missing. G14 is partial for
+provider-free eager/lazy scheduling, and G15 adds exact old-browser proof,
+bounded retry/backoff, restart persistence, and one concurrent admission winner.
+Actual host effect consumption remains open. Whole-product G04/P03/P05 closure
+remains open outside the desktop cut.
+M3-P1 can improve source evidence for G14/G15 but cannot accept installed or
+joined recovery by itself.
+
+Audit baseline: clean `00935477`, 55 commits ahead of the unchanged remote
+`8bb9518e`; development binary digest `ac3c1daed8ab` matches its recorded full
+identity. The prior audit coverage readback was 9/26/3/7; architecture reports four pass, four
+detector gaps, eleven unverified. No production repair, runtime publication,
+push, merge, or release is part of this documentation continuation.
+Documentation validation: policy wiring, all three changed Markdown files'
+local links, selector, and diff hygiene pass. Planning audit reports 287
+findings on other plan files, none on P219; no repository-wide clean claim.
+
+## Prior P219 status | 2026-09-27 M2B accepted
+
+[Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+version 9 is `OPEN`: M2B is installed and accepted, while M3 through M5 remain
+unstarted. Custody remains on `platform/p211-simple-cold-upgrade`, draft PR
+#191, and work items #181/#183/#195. Production, merge, release, and worktree
+removal remain excluded.
+
+The selected isolated development generation is `0.28.0-ac3c1daed8ab`, built
+from the working tree based on `1d940440eeb3e0aae93faba739ed6c89e0af5f96`.
+Every development doctor check passes, helper version 11 is installed, four
+warm provider displays are ready, and production remains
+`0.28.0-b589b318c530-c0c0977896a8`.
+
+M2B passed shared-profile Alice/Bob identity isolation, exact addressed-command
+activity, failed-command non-refresh, authenticated viewer lifecycle and
+control transfer, stale-controller rejection, guarded desktop input, Alice-first
+cleanup, Bob-final process termination, and a separate disposable expiry case.
+Two runtime-host replacement cycles preserved the same logical browser,
+sessions, route slot, and opaque handoff IDs while launching only one replacement
+browser each time. Both original public handoffs resolved to their fresh exact
+targets with `operatorVisible.state=ready`, `uxState=connected`, and visible
+Guacamole pixels. Pre-restart page markers were absent after recovery, and the
+navigation ledger advanced only for four explicit reopens. Final cleanup left no
+profile browser process.
+
+The 45-row grilling ledger now totals nine pass, 26 partial, three fail, and
+seven missing. G11, G24, G31, G35, G43, G44, and G45 are newly accepted; G36
+is partial pending delayed disposable-profile deletion and quota cleanup.
+
+M2B closeout validation is complete. Rust format, strict Clippy, every retained
+green comprehensive compartment, the repaired 40-test actions compartment, the
+118-test Lease Authority rerun, dashboard and viewer contracts, docs builds,
+service parity and types, route-confusion gates, workstation/provider fixtures,
+coverage validation, policy wiring, documentation links, diff hygiene, final
+doctor, skill sync, and fresh development process census pass. M3 recovery and
+retention is the next bounded milestone and is not started. The goal service still shows a stale blocked row
+from the former helper gate; the operator explicitly resumed this successor
+plan and set the active continuation ceiling to 2,000,000 tokens.
+
+Nonblocking UI direction remains unchanged: adopt the Guacamole interaction
+approach from `../remote-view` and replace the large persistent yellow banners
+with compact dismissible notices.
+
+## Prior P219 checkpoint | 2026-09-27
+
+[Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+version 8 is `OPEN`. The operator expanded the active continuation ceiling to
+2,000,000 tokens; production, staging, public ingress, merge, release, and worktree
+removal remain excluded. Custody stays on
+`platform/p211-simple-cold-upgrade`, draft PR #191, work items #181/#183/#195.
+The current source checkpoint is `375cdfbe`; the named-retention repair is
+`d7ec8d2f`. The branch is 52 commits ahead and zero behind its remote.
+
+Current installed development identity is generation
+`0.28.0-57c51d356866`, executable SHA-256
+`57c51d3568663fe9f50bd14bab69bc183c71b37b819decd22d64ee62c8f35cf2`.
+The optimized build, development installation, and the three-iteration
+browser-launch smoke passed.
+Production remained unchanged and the development skill is current.
+
+The operator installed helper version 10, including exact primary channel
+socket reclamation. Four subsequent applies failed closed and retained
+production identity: `apply-1790478847005-74899.json` exposed the historical
+display backlog; `apply-1790479449908-49709.json` exposed a quarantined `dev-2`
+stop that had to resume before sweeping; `apply-1790479918735-97420.json`
+exposed the short X-server teardown race; and
+`apply-1790480067753-19562.json` advanced through displays 10 through 19 before
+`.X20-lock` named a live numeric PID.
+
+The `:20` PID is not the old route X server. Kernel readback proves PID 88087
+is now a Chrome thread under UID 1000, while the exact lock inode is owned by
+route UID 1004. Commits `662ab5d2`, `d4e75b70`, and `a11be934` add the bounded
+sweep, retained-stop recovery, and exact PID teardown wait. Commit `375cdfbe`
+adds helper version 11, which accepts numeric PID reuse only when the kernel
+proves a different UID from the route user and rechecks that fact immediately
+before exact inode deletion. Same-route UID, unreadable identity, a live XRDP
+session, a live display socket, or an active channel socket still fails closed.
+
+The v11 helper and provider regressions, focused Rust contracts, formatting,
+strict workspace Clippy, source-free installer, host provisioning, fresh-VM,
+Guacamole asset, PostgreSQL durability, and route-user synchronization fixtures
+pass. The new user-scoped candidate is installed. The root-owned helper remains
+version 10, so provider preflight now fails the explicit
+`privileged-helper-foreign-pid-reuse` capability gate until one interactive
+sudo installation. The provider is quarantined and stopped; all six keeper
+records are absent and no development XRDP route process remains.
+
+Authenticated access through an opaque `/remote-view/<handoff-id>` URL and real
+synthetic browser pixels passed. The development admin credential was aligned
+with the existing live credential at the operator's direction without recording
+the secret; the live auth file stayed byte-identical. Automated pointer,
+keyboard, and scroll effects were not established.
+
+The named-session retention defect is repaired and source-qualified at
+`d7ec8d2f`. The manager now applies `sessionIdleTimeoutMs` only to
+manager-allocated disposable profiles. Exact named-profile sessions and their
+opaque handoffs have no default idle expiry, while explicit close remains
+terminal. Host restart normalizes and persists legacy finite named-session
+deadlines. The installed generation contains this repair, but G12/G36 are not
+accepted at the installed boundary because provider quarantine prevents the
+same-handoff retention replay. G42 still requires installed exact-session
+refresh. G45 is source-qualified as partial: the current authenticated
+Guacamole primary is re-observed on connect and heartbeat, authority expires
+after 15 seconds with an inclusive boundary, and heartbeat or disconnect does
+not refresh the logical session. A single operator report that the handoff was
+absent from SQLite was not reproduced: the exact row existed and authenticated
+retry succeeded.
+
+Acceptance remains partial:
+
+| Requirement | Source or installed evidence | Current state | Missing proof |
+| --- | --- | --- | --- |
+| M1B authority closure | Source cuts and focused gates through `bdf695db`; candidate `0.28.0-57c51d356866` installed | complete for this checkpoint | Installed lifecycle acceptance remains in M2B. |
+| M2A provider and viewer | Historical authenticated Guacamole, opaque handoff, and real pixels; four exact recovery receipts retained | partial | Install helper version 11, recover four routes, and revalidate pixels and input. |
+| M2B Alice/Bob | Named profile and durable handoff exercised | incomplete | Correct retention, joined Alice/Bob identities and effects, input, cleanup, restart recovery, and fresh process census on one candidate. |
+| G12/G36 retention | Source regressions prove retained named handoffs, bounded disposable expiry, and restart normalization at `d7ec8d2f` | partial | Installed retention and same-handoff replay on a frozen candidate. |
+| G35/G45 viewer authority | Exact-primary observation, bounded viewer TTL, inclusive expiry, disconnect, current-control revalidation, and session/viewer separation pass at `bdf695db` | partial | Installed viewer lifecycle, control transfer, eager recovery, and session retention after provider recovery. |
+| Goal control row | Thread `01a0dfee-e1ab-79e0-b34b-b9fa80a58d0c` is `active` | current | Its Plan 211 wording routes through active successor Plan 0219; the operator set a 2,000,000-token continuation cap. |
+
+The bounded retention repair is complete. Its red regression and green focused
+receipts, the complete 271-test Service Model lane, 32 host/navigation tests,
+formatting, and strict workspace Clippy are recorded in Plan 0219. The
+selector-required workstation and Guacamole fixtures, docs build,
+remote-view documentation contract, architecture report, and coverage-ledger
+validator also pass. Four unrelated `browser_session_authority` failures remain
+in a broader name-filtered Rust run and do not invalidate the independently
+green changed surfaces. The development skill is synchronized with the
+candidate; the shared production skill and production runtime remain unchanged.
+
+The live-viewer boundary repair is committed at `bdf695db`. A heartbeat at the
+exact expiry instant is rejected as `live_viewer_lease_inactive`, and viewer
+heartbeat and disconnect leave Browser Session Manager state unchanged. Four
+focused live-viewer tests passed in receipt
+`20260927T021202Z-a0456af8a0fa`; all 11 desktop-control tests passed in
+`20260927T021442Z-dbae322f207f`; formatting passed in
+`20260927T021442Z-42874926b5c2`; and strict workspace Clippy passed without
+warnings in `20260927T021455Z-db18b3da9800`. P19 now passes its deterministic
+architecture gate. The ledger totals two pass, 31 partial, three fail, and nine
+missing.
+
+The ignored same-profile browser fixture is stale diagnostic evidence. It
+first failed on a missing disposable SQLite database in receipt
+`20260927T020349Z-39f194809aba`; a temporary migration advanced it to the
+correct `presentation_keeper_unavailable` boundary in
+`20260927T020645Z-3f7e82c03caa`. The temporary fixture change was reverted. Do
+not restore a JSON route fallback.
+
+Next gate: install the version 11 privileged helper through interactive sudo,
+verify `acceptsProvablyForeignPidReuse=true`, and rerun the exact development
+provider plan, stage, preflight, and one deferred-ingress recovery apply. Do not
+retry the rejected credential file or broaden cleanup. After four-route readiness,
+replay installed named retention
+and the remaining M2B Alice/Bob workflow. Do not start M3, M4, or M5.
+
+Nonblocking future UI direction: adopt the Guacamole interaction approach from
+the sibling `../remote-view` project and make warning banners compact and
+dismissible. This does not expand the retention repair packet.
+
+Progress classification: refreshed frozen development candidate, exact provider
+blocker removal in source, and source-qualified live-viewer separation. M2A and
+M2B remain incomplete; no G-row is promoted to installed pass by this
+checkpoint.
 
 ## Active Plan Locator Index
 
 - [P12](docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md), [P78](docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md), [P111](docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md), [P116](docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md), [P144](docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), and [P158](docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md)
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-- [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+- [P219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md) and [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 
-## Turn 387 | 2026-09-17
+## History
 
-P216 source candidate `6ff7bc0d` and candidate-freeze receipt `3fdfc147`
-entered the single protected integration path through PR #200. The canonical
-provider-free Service State model now lives in `agent-browser-service-model`;
-the CLI retains every filesystem, process, browser, runtime-owner, HTTP, MCP,
-and platform effect. Complete local changed-surface qualification passes. The
-build claim is limited to the measured cold pure-model loop, from 171.01
-seconds to 4.08 seconds, not general CLI or workspace acceleration. Issue #178
-and Plan 0216 close with the protected merge. P211 remains separate and must
-reconcile the integrated model boundary before continuing overlapping urgent
-bug-fix work. GitHub Actions remained disabled, and no browser, provider,
-credential, install, runtime, staging, production, or release effect occurred.
-
-## Turn 386 | 2026-09-17
-
-P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`; issue #194
-closed and no GitHub Actions branch or merge-head run started. P214 is admitted
-from that canonical baseline in the clean reassigned P213 worktree; no checkout
-was created or removed. It owns only an effect-free desktop-services planner
-that accounts every raw pointer move, down and up against the P212 permit
-budget. P205 retains the root Cargo manifest and lockfile, P211 source remains
-disjoint, and shared planning projections are an explicit reconciliation
-overlap. Source checkpoint `f90ef7a7` implements canonical permit validation,
-exact-budget interpolation, monotonic checked scheduling and deterministic
-plan digests. All 18 desktop-services tests, all 58 challenge-control tests,
-the strengthened architecture guard, workspace formatting, strict workspace
-Clippy, documentation links, planning audit, selection and diff hygiene pass
-locally. GitHub CI remains disabled and was not restored or run. Publication
-and protected integration remain. No browser, capture, provider, credential,
-CAPTCHA, route claim, desktop input, runtime or production effect occurred.
-
-## Turn 385 | 2026-09-17
-
-P212 exact head `dc20155e` merged through PR #193 as `ddae1897`. No GitHub
-Actions branch or merge-head run started. P213 is admitted from that canonical
-baseline in the clean reassigned P212 worktree; no checkout was created or
-removed. It owns only a pure challenge-control adapter that proves a visual
-intent is the current state-machine-authorized intent before mapping it to the
-P212 desktop permit. P205 retains the root Cargo manifest and lockfile; P213
-avoids both. P211's source remains disjoint and shared planning projections are
-an explicit reconciliation overlap. Source checkpoint `1bad68e3` implements
-the exact join and bounds permit expiry by the earlier evidence or visual
-policy deadline. All 58 challenge-control tests, all 12 desktop-services tests,
-the strengthened architecture guard, workspace formatting, strict workspace
-Clippy, documentation links, planning audit, selection and diff hygiene pass
-locally. GitHub CI remains disabled and was not restored or run. Publication
-and protected integration remain. No browser, capture, provider, credential,
-CAPTCHA, route-claim, desktop-input, runtime or production effect occurred.
-
-## Turn 384 | 2026-09-17
-
-P210 exact head `343a61b9` merged through PR #192 as `06972a5e`. P212 is
-admitted from that canonical baseline in the clean reassigned worktree; no new
-worktree was created. It owns only an effect-free desktop-services candidate
-geometry and controller-authority contract plus provider-free fixtures. P211's
-active cold-upgrade branch touches CLI shutdown and workstation routing, not
-the P212 source surface; shared planning files are an explicit reconciliation
-overlap. Source checkpoint `00f41715` now binds exact observation and ordered
-candidate geometry to current controller authority and checked effect budgets.
-All 12 desktop-services tests, the strengthened architecture guard, workspace
-formatting, strict workspace Clippy, documentation links and diff hygiene pass
-locally. GitHub CI remains disabled and was not restored or run. Publication
-and protected integration remain. No browser, capture, provider, CAPTCHA,
-desktop-input, runtime or production effect occurred.
-
-## Turn 383 | 2026-09-17
-
-P210 source checkpoint `0729b63d` adds the pure visual artifact and one-shot
-injected transport adapter. Ten adapter fixtures prove exact payload custody,
-deterministic digests, zero-call invalid input, explicit byte ceilings,
-one-call transport and malformed-output failure, strict effect-smuggling
-rejection, typed abstention, delayed response receipt time and raw-byte
-redaction. Review repaired exact artifact/request expiry binding and separated
-request time from transport receipt time. All 52 challenge-control tests, 10
-adapter tests, both architecture guards, workspace formatting, strict
-workspace Clippy and diff hygiene pass. GitHub CI remains disabled and was not
-restored or run. Publication and protected integration remain. No browser,
-image capture, real provider, credential, CAPTCHA, desktop-input, runtime or
-production effect occurred.
-
-## Turn 382 | 2026-09-17
-
-P209 exact head `27cd5342` merged through PR #188 as `fb616aee`. P210 is
-admitted from that exact canonical baseline on
-`challenge/p210-visual-artifact-adapter` in the clean reassigned challenge
-worktree. No new worktree was created. The baseline selector reports no
-changed files and only diff hygiene. P210 owns a new pure visual-adapter crate,
-repository-owned synthetic bytes and one injected fake transport; it owns no
-real provider, network, browser, capture, credential, CAPTCHA, desktop-input,
-runtime, production or CI effect.
-
-## Turn 381 | 2026-09-17
-
-P206 exact head `82e25624` merged through PR #180 as `d3f923a1`. P209 joined
-that canonical result at `3ef2ad9e`; the only conflict was the active-lane
-catalog, resolved by preserving the canonical CI-shutdown record and P209's
-bounded entry. No P209 Rust source or Cargo dependency changed. The reconciled
-challenge-control package passes all 52 tests, including 25 visual-round and
-11 provider-protocol cases. GitHub CI remains disabled and was not restored or
-run. P209 is ready for publication and protected integration. No provider,
-image, browser, credential, CAPTCHA, desktop-input, runtime or production
-effect occurred.
-
-## Turn 380 | 2026-09-17
-
-P209 merge `9df85b9b` joins corrected published P206 head `72eeea03`. The
-combined dependency head passes all 52 challenge-control tests, including 25
-visual-round and 11 provider-protocol cases, the crate architecture guard,
-strict workspace Clippy, formatting and diff hygiene. P209 remains local and
-unpushed until P206 PR #180 enters canonical `main`. No provider, browser,
-CAPTCHA, credential, runtime, production or CI-dispatch effect occurred.
-
-## Turn 380 | 2026-09-17
-
-P206 joined operator-disabled-CI `main@f6d49f89` at `bb961c96`, P208's source
-integration at `db987e4e`, and canonical `main@692f77c6` at `1c9ee159` after
-P208 closed. The only conflicts were shared runbook projections, resolved by
-retaining both plans' records. None of these main slices changes
-challenge-control source or Cargo metadata, so the repaired
-41-test source evidence at published head `72eeea03` remains reusable.
-Conflict-affected policy wiring, documentation links, validation-selection,
-P208 closeout fixtures, active planning audit and diff hygiene pass locally.
-GitHub CI remains disabled by operator direction; no workflow was restored,
-dispatched, retried or run. Reconciled publication and protected integration
-remain. No browser, provider, CAPTCHA, credential, runtime or production
-effect occurred.
-
-## Turn 379 | 2026-09-17
-
-P206 pre-merge review reproduced two budget-boundary defects: cumulative
-selection arithmetic could saturate and admit an actual total above 255, and a
-256-candidate selection returned a generic transition error rather than typed
-round-budget intervention. Repair checkpoint `4813d385` replaces saturation
-with widened and checked arithmetic. All 41 challenge-control tests, including
-25 visual-round cases, the crate architecture guard, strict workspace Clippy,
-formatting and diff hygiene pass. Corrected published head `72eeea03` requires
-protected exact-head evaluation. No provider, browser, CAPTCHA, credential,
-runtime or production effect occurred.
-
-## Turn 378 | 2026-09-17
-
-P209 checkpoint `f9987721` proves the response digest binds request, evidence,
-candidate-set, capability, selected-candidate order, production-time and expiry
-fields. All 50 challenge-control tests, strict workspace Clippy, formatting and
-diff hygiene pass. No provider, browser, CAPTCHA, credential, runtime,
-production or CI-dispatch effect occurred.
-
-## Turn 377 | 2026-09-17
-
-P209 checkpoint `89edafd5` proves request preparation rejects invalid policy,
-mutated evidence, malformed artifact identity or digest, pre-observation and
-expired preparation times, and over-budget execution plans before a provider
-request exists. The complete 49-test challenge-control crate, strict workspace
-Clippy, formatting and diff hygiene pass. No provider, browser, CAPTCHA,
-credential, runtime, production or CI-dispatch effect occurred.
-
-## Turn 376 | 2026-09-17
-
-P209 checkpoint `e7250217` completes the provider-response temporal fixture:
-pre-request, future-produced, produced-at-expiry, expired-at-adjudication,
-beyond-request-expiry and request-expiry cases all fail closed as stale. The
-complete 49-test challenge-control crate, strict workspace Clippy, formatting
-and diff hygiene pass. No provider, browser, CAPTCHA, credential, runtime,
-production or CI-dispatch effect occurred.
-
-## Turn 375 | 2026-09-17
-
-P209 review-hardening checkpoint `3aed9a4b` explicitly proves strict request
-deserialization rejects coordinate, event-sequence, retry and instruction
-smuggling plus nested artifact bytes and execution-plan repeat authority. All
-49 challenge-control tests, strict workspace Clippy, formatting and diff
-hygiene pass. The branch remains local and unpushed behind P206 PR #180; no
-provider, image, browser, credential, CAPTCHA, desktop-input, runtime,
-production or CI-dispatch effect occurred.
-
-[Plan 0210](docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
-records the proposed W7-C artifact-custody and one-shot fake-provider adapter.
-It is `PLANNED | NOT ADMITTED`; no branch, worktree or implementation has
-started, and P209 canonical integration is its hard source-admission gate.
-
-## Turn 374 | 2026-09-17
-
-P209 local checkpoint `8ada33d5` is accepted. The pure protocol binds
-prepared visual artifacts and P206 evidence into deterministic provider
-requests, admits only candidate identities or typed abstention, and binds a
-caller-owned, policy-checked execution budget before provider adjudication. It
-rejects serialized coordinate, event, retry and instruction smuggling. All 48
-challenge-control tests, strict workspace Clippy, formatting,
-four architecture guards and 114 selector-expanded extracted-crate tests pass;
-the exact P206 dependency reconciliation also passes the 48-test
-challenge-control compartment, formatting and strict workspace Clippy.
-The branch has locally joined published P206 head `99793061` and remains
-unpushed until PR #180 enters `main` and the canonical checkpoint is reconciled.
-No browser, provider, CAPTCHA, credential, runtime or production effect
-occurred.
-
-## Turn 373 | 2026-09-17
-
-[Plan 0206](docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
-is source-complete and acceptance-complete at `ac9f50a7` on
-`challenge/p206-visual-round-contract`,
-based on exact published P197 head `cd22a39f`. The pure challenge-control
-contract keeps visual rounds inside one attempt, binds each selection and
-effect receipt to fresh evidence and exact candidate identities, preserves
-after-state continuity, and enforces per-round plus cumulative budgets. All 39
-crate tests, including the complete 23-case visual-round matrix, the crate
-architecture guard, formatting, strict workspace Clippy and diff hygiene pass.
-P197 head `cd22a39f` passed all ordinary required checks and merged through PR
-#157 as `c855fc33`. P206 joined that canonical checkpoint at tree-preserving
-merge `5d6e3d57`, then joined merged P204 and current `main@f5e3f31b` at
-`89bdfdbf`. Reconciled local validation passes the 39-test challenge-control
-compartment, strict workspace Clippy and formatting, four architecture guards,
-and 114 selector-expanded extracted-crate tests. Exact-head forge evaluation
-and protected P206 integration remain. No browser, model provider, CAPTCHA,
-desktop input, credential, installed runtime or production effect occurred.
-
-## Turn 376 | 2026-09-17
-
-[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
-is closed. PR #182 merged validated source `c2ce2b35` into `main` as
-`59928044`; issue #171 closed automatically. The durable advisory closeout
-transaction, candidate archive locator, two-process serialization, explicit
-retain/archive/discard dispositions, interrupted-effect recovery, policy, and
-dormant Repository Tooling definition are integrated. GitHub CI remains
-disabled. No real worktree, candidate, browser, provider, installed-runtime,
-Service State, production, or release effect occurred.
-
-## Turn 375 | 2026-09-17
-
-[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
-exact-head `8a010264` passed GitHub run `35227459177`, including Repository
-Tooling and the stable Presubmit aggregate. Before integration, operator-directed
-PRs #185 and #186 disabled GitHub CI and advanced `main` to `f6d49f89`. P208 is
-rebased onto that tip without restoring an active workflow or trigger. The
-dormant workflow retains Repository Tooling, the obsolete comprehensive-job
-fixture expectation is removed, and the conflict-affected repository-tooling,
-selector, aggregate, dormant-workflow, policy, planning, documentation-link,
-and docs-build checks pass locally at `8c513789`. PR #182 integration remains.
-No real worktree, candidate, browser, provider, installed-runtime, Service
-State, production, or release effect occurred.
-
-## Turn 373 | 2026-09-17
-
-[Plan 0208](docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md)
-is rebased onto `origin/main@f5e3f31b` after P204 merged through PR #179. The
-provider-free closeout transaction, candidate archive locator, two-process
-serialization, retain/archive/discard matrix, and interrupted-effect recovery
-remain source-qualified. Checkpoint `9d34365d` adds package registration and a
-dedicated `Repository Tooling` selector and CI lane; repository-tooling,
-validation-control-plane, workflow syntax, and release-verifier fixtures pass
-locally. P208 now owns the shared integration transition while preserving
-P204's still-open issue #164 records. Exact-head PR #182 evaluation and
-protected integration remain. No real worktree, candidate, browser, provider,
-installed-runtime, Service State, production, or release effect occurred.
-
-## Turn 374 | 2026-09-17
-
-The operator clarified that CI itself should be disabled for now, not merely
-the full-suite routes. Run `35228725370` was cancelled. The active
-`.github/workflows/ci.yml` is removed and the reviewed path-selected workflow
-is retained as `.github/workflows/ci.yml.disabled` at candidate `ca077d9e`,
-which GitHub does not load.
-There are no automatic or manual CI triggers. Re-enablement requires new
-maintainer direction. The separate Lease Authority CI matrix is also retained
-as `.github/workflows/lease-authority.yml.disabled` in candidate `ea254ecd`; no
-active workflow has a push or pull-request trigger. Manual release and governed P158 operational
-workflows remain separate and were not dispatched.
-
-## Turn 373 | 2026-09-17
-
-P204 initially interpreted operator direction as removing full CI while keeping
-focused PR CI. The
-bounded correction removes `main` push, scheduled, manual CI dispatch, and
-commit-message qualification routes together with the comprehensive Rust and
-slow platform jobs. Pull requests retain path-selected jobs, broad ordinary
-fail-safe coverage, superseded-head cancellation, and the stable `Presubmit`
-aggregate. Candidate `d9fede9d` passes the selector and workflow contract suite
-and `actionlint`. The local comprehensive Rust command remains available outside
-GitHub CI. Issue #164 remains useful for enforcing `Presubmit`, but it is no
-longer a dependency for removing duplicate post-merge CI.
-
-## Turn 372 | 2026-09-16
-
-[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-has published source checkpoint `b481ab01`. CI run `35172965793` passed every
-selected ordinary gate and the stable `Presubmit` aggregate; comprehensive and
-platform qualification remained excluded. Superseded run `35170641311`
-cancelled as designed. Failed run `35171646162` exposed same-target CLI test
-binary replacement, and the corrected two-lane runner then passed. P204 is
-reconciled with `main@c855fc33`; protected PR evaluation of the merge result
-remains. The plan stays open for post-merge docs-only and narrow-Rust evidence,
-an explicitly authorized comprehensive dispatch, and issue #164 branch-rule
-enforcement before the temporary `main` fallback can be removed.
-
-## Turn 371 | 2026-09-16
-
-[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-has implementation checkpoint `7f6c7e2e`. The versioned classifier now drives
-exact-head conditional jobs and the stable fail-closed `Presubmit` aggregate;
-unknown and control-plane changes fail safe, while explicit comprehensive
-qualification avoids duplicate focused Rust. Selector, aggregate, economics,
-documentation-link, workflow, docs-build, policy, planning, and Challenge
-Control compartment validation is green locally. One independent review and
-bounded rework corrected every blocking finding. Organic PR receipts and an
-explicitly authorized comprehensive dispatch remain pending. The `main`
-fallback remains because issue #164 has not proved live required-check
-enforcement. No workflow dispatch, branch-rule, browser, provider, credential,
-installed-runtime, Service State, production, or release effect occurred.
-
-## Turn 370 | 2026-09-16
-
-### P204 admission
-
-[Plan 0204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
-is admitted from `main@2632e31c` for issue #174. The current selector is
-advisory and has no versioned tier, fixed job outputs, unknown-impact fallback,
-or direct fixtures; CI does not consume it and has no PR cancellation or stable
-aggregate check. A docs-only probe is red on the missing contract. P204 owns the
-selector, CI workflow, aggregate verifier, and provider-free fixtures. The
-`main` fallback remains until issue #164 proves live `Presubmit` enforcement.
-No workflow dispatch, branch-rule mutation, browser, provider, credential,
-installed-runtime, Service State, production, or release effect is authorized.
-
-### P197 integration
-
-[Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
-joins canonical `main@2632e31c` after P202 protected integration and closeout.
-The source merge is clean outside this runbook projection, retains the complete
-P197 consumer-admission implementation and combined provider-free validation,
-and removes P202 as an active dependency. Final plan and lane reconciliation,
-branch publication at `4321961c` is complete; exact-head forge evaluation and
-protected P197 integration remain. P197 now has durable remote custody and its
-clean primary checkout can be released. W7-A is selected as the next
-provider-free challenge packet but is not yet admitted. No browser, CAPTCHA,
-provider, credential, installed-runtime, Service State, production, release, or
-CI-policy effect occurred.
-
-## Turn 369 | 2026-09-16
-
-[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
-is closed. [PR #168](https://github.com/CochranResearchGroup/agent-browser/pull/168)
-merged source head `6f099292` into `main` as `528f2ef0`; issue #103 closed.
-Provider-free qualification and the isolated disposable real-browser acceptance
-passed. CI run `35163527521` passed every ordinary gate at reviewed code head
-`d7ceca98`; the final head added only integrated P203 closeout documentation,
-and its in-flight Rust rerun was cancelled after the PR merged. P202 is removed
-from the active-lane catalog and releases its shared surfaces to P197. No
-browser, provider, credential, profile, installed-runtime, Service State,
-production, or release effect occurred during integration or closeout.
+[The P218 archive](RUNBOOK-history-2026-09-26-through-p218.md) preserves the
+previous runbook, Turns 418 through 450, P218 source checkpoints, failures,
+prior stop instructions, and links to earlier archives. Plan 0219 version 4
+preserves the superseded September 26 M2A checkpoint and its receipt.

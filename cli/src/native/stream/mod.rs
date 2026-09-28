@@ -8,11 +8,18 @@ mod dashboard_auth;
 pub(crate) use dashboard_auth::verify_operator_focus;
 mod discovery;
 mod foreign_cdp_control;
+mod guacamole_live_viewer;
 mod guacamole_primary_binding;
 mod guacamole_primary_protocol;
 mod guacamole_primary_provider;
 mod guacamole_primary_registry;
 mod guacamole_primary_transport;
+mod guacamole_route_keeper;
+#[cfg(test)]
+pub(crate) use guacamole_route_keeper::configured_route_keeper_supervisor_fixture;
+pub(crate) use guacamole_route_keeper::{
+    ConfiguredRouteKeeperSupervisorHandle, RouteKeeperSupervisorHealth, RouteKeeperSupervisorProbe,
+};
 mod http;
 mod websocket;
 

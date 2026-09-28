@@ -85,7 +85,6 @@ use crate::native::service_model::{
     assert_service_trace_summary_record_contract, service_job_naming_warning_values,
     BrowserCapabilityRegistry, BrowserProcess, BrowserProfile, BrowserSession, BrowserTab,
     DisplayAllocation, ProfileSeedingHandoffState, RemoteViewRoute, RoutePoolEntry, ViewStream,
-    ViewerLease,
 };
 use crate::native::service_model::{
     retained_display_allocation_candidates, service_profile_allocations,
@@ -218,19 +217,9 @@ async fn test_service_reconcile_reports_remote_view_repair_summary() {
             state: "ready".to_string(),
             browser_id: Some("browser-1".to_string()),
             display_allocation_id: Some("display-1".to_string()),
-            controller_lease_id: Some("viewer-1".to_string()),
-            viewer_lease_ids: vec!["viewer-1".to_string()],
+            controller_lease_id: Some("controller-1".to_string()),
+            controller_epoch: 7,
             ..RemoteViewRoute::default()
-        },
-    );
-    service_state.viewer_leases.insert(
-        "viewer-1".to_string(),
-        ViewerLease {
-            id: "viewer-1".to_string(),
-            state: "observing".to_string(),
-            route_id: Some("route-1".to_string()),
-            browser_id: Some("browser-1".to_string()),
-            ..ViewerLease::default()
         },
     );
     let result = execute_command(
@@ -249,15 +238,23 @@ async fn test_service_reconcile_reports_remote_view_repair_summary() {
     assert_eq!(result["data"]["remoteViewRepair"]["orphanedRoutes"], 1);
     assert_eq!(
         result["data"]["remoteViewRepair"]["releasedViewerLeases"],
-        1
+        0
     );
     assert_eq!(
         result["data"]["remoteViewRepair"]["clearedControllerLeases"],
-        1
+        0
     );
     assert_eq!(result["data"]["remoteViewRepair"]["repaired"], 2);
     assert_eq!(result["data"]["remoteViewRepair"]["released"], 1);
     assert_eq!(result["data"]["remoteViewRepair"]["skippedUnsafe"], 0);
+    assert_eq!(
+        result["data"]["service_state"]["remoteViewRoutes"]["route-1"]["controllerLeaseId"],
+        "controller-1"
+    );
+    assert_eq!(
+        result["data"]["service_state"]["remoteViewRoutes"]["route-1"]["controllerEpoch"],
+        7
+    );
     assert_eq!(
         result["data"]["service_state"]["events"][0]["details"]["remoteView"],
         result["data"]["remoteViewRepair"]

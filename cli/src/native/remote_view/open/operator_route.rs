@@ -14,10 +14,27 @@ pub(crate) fn remote_view_open_ensure_display_access(
             route_binding.route_id
         ));
     };
-    let owner = super::super::display_owner::route_display_owner(
-        Some(display_name),
-        route_binding.route_user.as_deref(),
-    );
+    let route_user = route_binding
+        .route_user
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "x11_auth_denied: route '{}' display '{}' is not accessible and no route user was reported",
+                route_binding.route_id, display_name
+            )
+        })?;
+    ensure_route_display_access(&route_binding.route_id, display_name, route_user)
+}
+
+pub(crate) fn ensure_route_display_access(
+    route_id: &str,
+    display_name: &str,
+    route_user: &str,
+) -> Result<Value, String> {
+    let owner =
+        super::super::display_owner::route_display_owner(Some(display_name), Some(route_user));
     if owner.get("verified").and_then(Value::as_bool) != Some(true) {
         return Err(format!(
             "{}: displayOwnerEvidence={owner}",
@@ -38,17 +55,6 @@ pub(crate) fn remote_view_open_ensure_display_access(
             initial_probe, }
         ));
     }
-    let route_user = route_binding
-        .route_user
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            format!(
-                "x11_auth_denied: route '{}' display '{}' is not accessible and no route user was reported",
-                route_binding.route_id, display_name
-            )
-        })?;
     let operator_user = env::var("AGENT_BROWSER_RDP_DISPLAY_ACCESS_USER")
         .or_else(|_| env::var("USER"))
         .map(|value| value.trim().to_string())
@@ -57,7 +63,7 @@ pub(crate) fn remote_view_open_ensure_display_access(
         .ok_or_else(|| {
             format!(
                 "display_access_grant_failed: route '{}' display '{}' cannot infer non-root operator user",
-                route_binding.route_id, display_name
+                route_id, display_name
             )
         })?;
     let helper_path = env::var("AGENT_BROWSER_PRIVILEGED_HELPER").unwrap_or_else(|_| {
@@ -109,12 +115,12 @@ pub(crate) fn remote_view_open_ensure_display_access(
         .map_err(|err| {
             format!(
                 "display_access_grant_failed: route '{}' display '{}' bounded helper could not start: {}",
-                route_binding.route_id, display_name, err
+                route_id, display_name, err
             )
         })?;
     if !output.status.success() {
         return Err(remote_view_display_access_grant_error(
-            &route_binding.route_id,
+            route_id,
             display_name,
             output.status.code().unwrap_or(-1),
             &String::from_utf8_lossy(&output.stderr),
@@ -135,7 +141,7 @@ pub(crate) fn remote_view_open_ensure_display_access(
     }
     Err(format!(
         "x11_auth_denied: route '{}' display '{}' remained inaccessible after display access grant",
-        route_binding.route_id, display_name
+        route_id, display_name
     ))
 }
 pub(crate) fn remote_view_display_access_grant_error(

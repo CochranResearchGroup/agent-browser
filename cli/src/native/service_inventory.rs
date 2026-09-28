@@ -21,7 +21,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_monitors::{
         parse_monitor_state, run_due_persisted_monitors, service_monitors_response,
@@ -114,25 +114,12 @@ pub(crate) mod service_commands {
             .map_err(|err| format!("Invalid serviceState: {}", err))?
             .unwrap_or_default();
         service_state.refresh_service_tab_handles();
-        for (browser_id, observation) in &service_state.protected_browser_owner_observations {
-            let browser = service_state
-                .browsers
-                .get(browser_id)
-                .ok_or_else(|| "protected_browser_owner_observation_invalid".to_string())?;
-            crate::native::service_health::validate_protected_browser_owner_observation_for_inventory(
-                observation,
-                browser,
-            )?;
-        }
-        let protected_browser_owner_observations =
-            service_state.protected_browser_owner_observations.clone();
         let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
         browsers.sort_by(|left, right| left.id.cmp(&right.id));
         let count = browsers.len();
         Ok(json!({
             "browsers": browsers,
             "count": count,
-            "protectedBrowserOwnerObservations": protected_browser_owner_observations,
         }))
     }
     /// Return the service-owned tab collection without the full status payload.

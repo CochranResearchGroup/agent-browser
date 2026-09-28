@@ -193,14 +193,6 @@
               null
             ]
           },
-          "viewerLeaseIds": {
-            "description": "Active or retained viewer leases associated with this route.",
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "uniqueItems": true
-          },
           "controllerLeaseId": {
             "description": "Current controller lease for this stream route, when known.",
             "type": [

@@ -305,6 +305,22 @@ Every CLI flag can be set in the config file using its camelCase equivalent:
   </tbody>
 </table>
 
+The three <code>service.recovery*</code> values and matching flags are explicit
+startup inputs. They commit atomically to SQLite runtime configuration before
+host construction. Default-sourced values preserve the existing row. Use
+<code>agent-browser service runtime-config get</code> for authoritative readback;
+ordinary recovery reports <code>config</code> provenance.
+
+Disposable retention uses the same SQLite authority. Update
+<code>disposableInactivityMs</code>,
+<code>maximumRetainedDisposableProfiles</code>, and
+<code>maximumDisposableProfileBytes</code> through
+<code>service runtime-config set</code>. Their defaults are 86400000
+milliseconds, 20 profiles, and 10737418240 bytes. Named profiles do not consume
+these disposable limits. Cleanup ranks the oldest inactive allocation first and
+excludes sessions protected by a current viewer, desktop controller, or pending
+operation. Disposable profiles cannot be pinned or promoted to bypass retention.
+
 Service control jobs default to a 900000 ms worker deadline. The service reconciler marks a stranded <code>running</code> record <code>timed_out</code> after its persisted deadline without retrying the original operation. Legacy records without timeout metadata use the same 900000 ms recovery horizon.
 
 ## Common Configurations

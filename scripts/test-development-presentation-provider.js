@@ -2,6 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -26,12 +27,15 @@ import {
   probeDevelopmentPresentationProvider,
   prepareDevelopmentPresentationProviderSecrets,
   renderDevelopmentPresentationProviderBundle,
+  resolveDevelopmentRouteKeeperConnectionCatalog,
   stageDevelopmentPresentationProviderBundle,
 } from './lib/development-presentation-provider-deployment.js';
 import {
   createDevelopmentPresentationProviderSystemEffects,
   createDevelopmentPresentationLifecycleSystemEffects,
   developmentPresentationProviderSystemPreflight,
+  discoverDevelopmentStaleDisplayCandidates,
+  readDevelopmentRouteKeeperRecoveryState,
 } from './lib/development-presentation-provider-system-effects.js';
 import {
   evaluateDevelopmentPresentationPressure,
@@ -50,6 +54,41 @@ const env = {
   AGENT_BROWSER_DEV_PUBLIC_OPERATOR_URL: 'https://agent-browser-dev.example.test/',
   AGENT_BROWSER_DEV_EXTERNAL_INGRESS_REVISION: 'cooper-test-revision-001',
 };
+
+function routeKeeperDatabaseRoutes(descriptor) {
+  return descriptor.routes.map((route, index) => ({
+    connectionId: String(index + 201),
+    connectionName: route.connectionName,
+    user: route.user,
+  }));
+}
+
+function routeKeeperPublicationDigest(publication) {
+  const bindings = Object.fromEntries(
+    [...publication.bindings]
+      .sort((left, right) => left.slotId.localeCompare(right.slotId))
+      .map((binding) => [binding.slotId, binding]),
+  );
+  return createHash('sha256').update(JSON.stringify({
+    providerBase: publication.providerBase,
+    ...(publication.publicOperatorUrl == null
+      ? {}
+      : { publicOperatorUrl: publication.publicOperatorUrl }),
+    bindings,
+  })).digest('hex');
+}
+
+function routeKeeperPublicationEffects(descriptor) {
+  return {
+    readRouteKeeperConnections: () => routeKeeperDatabaseRoutes(descriptor),
+    publishRouteKeeperConnectionCatalog: (publication) => ({
+      schemaVersion: 'agent-browser.route-keeper-connection-catalog-publication-receipt.v1',
+      outcome: 'published',
+      catalogDigest: routeKeeperPublicationDigest(publication),
+      bindingCount: publication.bindings.length,
+    }),
+  };
+}
 
 function readExtensionArchive(path) {
   const result = spawnSync('python3', ['-c', `
@@ -134,10 +173,100 @@ try {
   assert.equal(developmentPresentationProviderDeploymentPlan(namespaced).providerRoot, namespaced.root);
   assert.equal(namespaced.warmSlots, 4);
   assert.equal(namespaced.hardMaxSlots, 6);
+  const systemEffectCalls = [];
+  const routeKeeperBlockedEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    run: (command, args) => {
+      systemEffectCalls.push([command, args]);
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.equal(routeKeeperBlockedEffects.routeKeeperRuntimeReady, false);
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: routeKeeperBlockedEffects,
+  }), /requires runtime-host route-keeper integration/);
+  assert.deepEqual(systemEffectCalls, []);
+  let legacyAdapterEffects = 0;
+  assert.throws(() => applyDevelopmentPresentationProvider({
+    env: namespaceEnv,
+    authorizeEffects: true,
+    deferIngress: true,
+    effects: {
+      snapshotProduction: () => { legacyAdapterEffects += 1; return {}; },
+    },
+  }), /require route-keeper catalog publication/);
+  assert.equal(legacyAdapterEffects, 0);
+  const catalogEffectCalls = [];
+  let corruptCatalogReceipt = false;
+  const catalogSystemEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    run: (command, args, options = {}) => {
+      catalogEffectCalls.push([command, args, options]);
+      if (command === 'docker' && args[0] === 'exec') {
+        return {
+          status: 0,
+          stdout: JSON.stringify(namespaced.routes.map((route, index) => ({
+            connectionId: String(index + 201),
+            connectionName: route.connectionName,
+            user: route.user,
+          }))),
+          stderr: '',
+        };
+      }
+      if (command.endsWith('/agent-browser-dev-p158')) {
+        assert.deepEqual(args, ['--internal-route-keeper-connection-catalog-publish']);
+        assert.equal(options.env.HOME, namespaced.pseudoHome);
+        const publication = JSON.parse(options.input);
+        assert.equal(publication.bindings.length, namespaced.hardMaxSlots);
+        assert.deepEqual(publication.provisioning, namespaced.provisioning);
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 'agent-browser.route-keeper-connection-catalog-publication-receipt.v1',
+            outcome: 'published',
+            catalogDigest: corruptCatalogReceipt
+              ? 'ab'.repeat(32)
+              : routeKeeperPublicationDigest(publication),
+            bindingCount: namespaced.hardMaxSlots,
+          }),
+          stderr: '',
+        };
+      }
+      throw new Error(`Unexpected catalog effect command: ${command} ${args.join(' ')}`);
+    },
+  });
+  const catalogPublication = resolveDevelopmentRouteKeeperConnectionCatalog(
+    namespaced,
+    catalogSystemEffects.readRouteKeeperConnections(namespaced),
+  );
+  assert.equal(
+    catalogSystemEffects.publishRouteKeeperConnectionCatalog(catalogPublication, namespaced).outcome,
+    'published',
+  );
+  assert.equal(catalogEffectCalls.length, 2);
+  corruptCatalogReceipt = true;
+  assert.throws(
+    () => catalogSystemEffects.publishRouteKeeperConnectionCatalog(catalogPublication, namespaced),
+    /invalid receipt/,
+  );
+  corruptCatalogReceipt = false;
+  assert.equal(catalogEffectCalls.length, 3);
   const bootstrapOrder = [];
   assert.throws(() => applyDevelopmentPresentationProvider({
     env: namespaceEnv, authorizeEffects: true,
     effects: {
+      ...routeKeeperPublicationEffects(namespaced),
       snapshotProduction: () => ({}), assertProductionUnchanged: assert.deepEqual,
       createVolume: () => {}, startDatabase: () => {}, ensureRouteUser: () => {},
       syncConnections: () => {}, startProvider: () => {},
@@ -179,10 +308,235 @@ try {
   assert.throws(() => guardedEffects.assertProductionUnchanged(guardedBefore, {
     ...guardedBefore, defaultDevelopment: { changed: true },
   }));
+  const staleDisplayCalls = [];
+  let staleDisplayPidAbsenceChecks = 0;
+  const staleDisplayEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => ({
+      schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+      retained: [],
+    }),
+    displayPidAbsent: (pid, routeUid) => {
+      assert.equal(pid, 43123);
+      assert.equal(routeUid, 2003);
+      staleDisplayPidAbsenceChecks += 1;
+      return staleDisplayPidAbsenceChecks > 1;
+    },
+    discoverStaleDisplayCandidates: () => [{
+      routeUser: namespaced.routes[2].user,
+      routeUid: 2003,
+      displayName: ':13',
+      xServerPid: 43123,
+    }, {
+      routeUser: namespaced.routes[3].user,
+      routeUid: 2004,
+      displayName: ':60',
+      xServerPid: 4294967295,
+    }],
+    probeProvider: () => ({
+      displays: namespaced.routes.slice(0, namespaced.warmSlots).map((route, index) => ({
+        displayReservationId: route.displayReservationId,
+        displayName: `:${57 + index}`,
+        user: route.user,
+        ready: true,
+      })),
+    }),
+    run: (command, args) => {
+      staleDisplayCalls.push([command, args]);
+      if (command === 'sudo') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 1,
+            state: 'reclaimed',
+            display: args[args.indexOf('--display') + 1],
+            xServerPid: Number(args.at(-1)),
+            lockRemoved: true,
+            xrdpSocketCount: 1,
+          }),
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  staleDisplayEffects.openWarmRoutes(namespaced);
+  assert.equal(staleDisplayPidAbsenceChecks, 2);
+  assert.deepEqual(staleDisplayCalls, [
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+      '--user', namespaced.routes[2].user,
+      '--display', ':13',
+      '--x-server-pid', '43123',
+    ]],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+      '--user', namespaced.routes[3].user,
+      '--display', ':60',
+      '--x-server-pid', '4294967295',
+    ]],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+  ]);
+  const retainedRecoveryCalls = [];
+  const retainedRecoverySnapshots = [{
+    schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+    retained: [{ slotId: 'route-slot-02', phase: 'quarantined' }],
+  }, {
+    schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+    retained: [],
+  }];
+  const retainedRecoveryEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => retainedRecoverySnapshots.shift(),
+    discoverStaleDisplayCandidates: () => [],
+    probeProvider: () => ({
+      displays: namespaced.routes.slice(0, namespaced.warmSlots).map((route, index) => ({
+        displayReservationId: route.displayReservationId,
+        displayName: `:${57 + index}`,
+        user: route.user,
+        ready: true,
+      })),
+    }),
+    run: (command, args) => {
+      retainedRecoveryCalls.push([command, args]);
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  retainedRecoveryEffects.openWarmRoutes(namespaced);
+  assert.deepEqual(retainedRecoveryCalls, [
+    ['systemctl', ['--user', 'reset-failed', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['systemctl', ['--user', 'start', 'agent-browser-dev-p158-runtime-host.service']],
+  ]);
+  const recoveryReadCommands = [];
+  const recoveryState = readDevelopmentRouteKeeperRecoveryState(namespaced, {
+    run: (command, args, options) => {
+      recoveryReadCommands.push([command, args, options]);
+      return {
+        status: 0,
+        stdout: JSON.stringify({
+          schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+          retained: [{ slotId: 'route-slot-02', phase: 'stopping' }],
+        }),
+        stderr: '',
+      };
+    },
+  });
+  assert.deepEqual(recoveryState.retained, [{ slotId: 'route-slot-02', phase: 'stopping' }]);
+  assert.equal(recoveryReadCommands[0][0], 'python3');
+  assert.equal(recoveryReadCommands[0][1].at(-1), join(
+    namespaced.pseudoHome,
+    '.agent-browser',
+    'service',
+    'runtime.sqlite3',
+  ));
+  assert.equal(recoveryReadCommands[0][2].timeout, 10000);
+  const unprovenReclaimCalls = [];
+  const unprovenReclaimEffects = createDevelopmentPresentationProviderSystemEffects({
+    env: namespaceEnv,
+    productionSnapshot: () => ({}),
+    assertProductionUnchanged: assert.deepEqual,
+    defaultDevelopmentSnapshot: () => ({}),
+    assertDefaultDevelopmentUnchanged: assert.deepEqual,
+    readRouteKeeperRecovery: () => ({
+      schemaVersion: 'agent-browser.development-route-keeper-recovery-state.v1',
+      retained: [],
+    }),
+    discoverStaleDisplayCandidates: () => [{
+      routeUser: namespaced.routes[0].user,
+      routeUid: 2001,
+      displayName: ':13',
+      xServerPid: 43123,
+    }],
+    probeProvider: () => { throw new Error('provider probe must not run'); },
+    run: (command, args) => {
+      unprovenReclaimCalls.push([command, args]);
+      if (command === 'sudo') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            schemaVersion: 1,
+            state: 'ownership_unproven',
+            code: 'rdp_route_display_lock_pid_live',
+          }),
+          stderr: '',
+        };
+      }
+      return { status: 0, stdout: '', stderr: '' };
+    },
+  });
+  assert.throws(
+    () => unprovenReclaimEffects.openWarmRoutes(namespaced),
+    /exact stale-display reclamation was not proven:rdp_route_display_lock_pid_live/,
+  );
+  assert.deepEqual(unprovenReclaimCalls.map(([command, args]) => [command, args.slice(0, 3)]), [
+    ['systemctl', ['--user', 'stop', 'agent-browser-dev-p158-runtime-host.service']],
+    ['sudo', [
+      '-n', '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+      'reclaim-rdp-route-display-lock-exact',
+    ]],
+  ]);
+  const staleArtifactRoot = join(fixture, 'stale-display-artifacts');
+  const staleTmp = join(staleArtifactRoot, 'tmp');
+  const staleSockdir = join(staleArtifactRoot, 'sockdir');
+  mkdirSync(staleTmp, { recursive: true });
+  mkdirSync(staleSockdir, { recursive: true });
+  writeFileSync(join(staleTmp, '.X13-lock'), ' 43123\n');
+  writeFileSync(join(staleTmp, '.X99-lock'), ' 49999\n');
+  const staleSocket = join(staleSockdir, 'xrdp_chansrv_socket_60');
+  const socketFixture = spawnSync('python3', ['-c', [
+    'import socket, sys',
+    's = socket.socket(socket.AF_UNIX)',
+    's.bind(sys.argv[1])',
+    's.close()',
+  ].join('; '), staleSocket], { encoding: 'utf8' });
+  assert.equal(socketFixture.status, 0, socketFixture.stderr);
+  const fixtureUid = process.getuid();
+  assert.deepEqual(discoverDevelopmentStaleDisplayCandidates(
+    namespaced,
+    (command, args) => {
+      if (command === 'getent' && args[0] === 'passwd') {
+        const routeIndex = namespaced.routes.findIndex((route) => route.user === args[1]);
+        const uid = routeIndex === namespaced.routes.length - 1
+          ? fixtureUid
+          : fixtureUid + routeIndex + 1;
+        return {
+          status: 0,
+          stdout: `${args[1]}:x:${uid}:1005:agent-browser route-pool RDP session:/home/${args[1]}:/bin/bash\n`,
+          stderr: '',
+        };
+      }
+      return { status: 1, stdout: '', stderr: 'unexpected command' };
+    },
+    { tmpRoot: staleTmp, socketDir: staleSockdir },
+  ), [{
+    routeUser: namespaced.routes.at(-1).user,
+    routeUid: fixtureUid,
+    displayName: ':13',
+    xServerPid: 43123,
+  }, {
+    routeUser: namespaced.routes.at(-1).user,
+    routeUid: fixtureUid,
+    displayName: ':60',
+    xServerPid: 4294967295,
+  }]);
   const routeOpenerSource = readFileSync('scripts/open-rdp-guac-route-displays.js', 'utf8');
   assert.match(routeOpenerSource, /'open',\s*url,\s*'--headers'/);
   assert.doesNotMatch(routeOpenerSource, /'open',\s*'about:blank'/);
   assert.doesNotMatch(routeOpenerSource, /'set',\s*'headers'/);
+  assert.doesNotMatch(routeOpenerSource, /'--args',\s*'--no-sandbox'/);
   assert.match(routeOpenerSource, /'--runtime-profile',\s*profile/);
   assert.match(routeOpenerSource, /'--runtime-profile',\s*profile,\s*'close'/);
   assert.doesNotMatch(routeOpenerSource, /'--profile',\s*profile/);
@@ -193,6 +547,9 @@ try {
     'scripts/lib/development-presentation-provider-system-effects.js',
     'utf8',
   );
+  assert.doesNotMatch(providerEffectsSource, /AGENT_BROWSER_INTERNAL_PRESENTATION_BOOTSTRAP/);
+  assert.doesNotMatch(providerEffectsSource, /open-rdp-guac-route-displays\.js/);
+  assert.match(providerEffectsSource, /route-keeper runtime required/);
   assert.doesNotMatch(
     providerEffectsSource,
     /'--profile',\s*route\.viewerProfile/,
@@ -205,11 +562,129 @@ try {
     maxConnections: 8,
     maxConnectionsPerUser: 8,
   });
+  assert.deepEqual(descriptor.provisioning, {
+    environment: 'development',
+    composeProject: descriptor.composeProject,
+    postgresContainer: descriptor.services.postgres,
+    postgresUser: descriptor.database.user,
+    postgresDatabase: descriptor.database.name,
+    rdpHost: descriptor.rdpTarget.host,
+    rdpPort: descriptor.rdpTarget.port,
+    routeUserPrefix: 'agent-browser-rdp-dev-',
+    connectionKeyPrefix: 'agent-browser-dev-connection-',
+    connectionNamePrefix: 'Agent Browser Dev RDP Route ',
+    sharingProfilePrefix: 'Agent Browser Shared Session development-route-',
+    maximumSlots: 64,
+    maxConnections: 8,
+    maxConnectionsPerUser: 8,
+  });
+  const providerBundle = renderDevelopmentPresentationProviderBundle(descriptor);
+  assert.match(providerBundle.files['compose.yml'], /agent-browser\.environment: development/);
   assert.equal(descriptor.routes.length, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.routeId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.user)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.connectionKey)).size, 6);
   assert.deepEqual(descriptor.routes.map((route) => route.connectionId), Array(6).fill(null));
+  const resolvedKeeperCatalog = resolveDevelopmentRouteKeeperConnectionCatalog(
+    descriptor,
+    descriptor.routes.map((route, index) => ({
+      connectionId: String(index + 101),
+      connectionName: route.connectionName,
+      user: route.user,
+    })).reverse(),
+  );
+  assert.equal(
+    resolvedKeeperCatalog.schemaVersion,
+    'agent-browser.route-keeper-connection-catalog-publication.v1',
+  );
+  assert.equal(
+    resolvedKeeperCatalog.providerBase,
+    `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`,
+  );
+  assert.equal(resolvedKeeperCatalog.publicOperatorUrl, descriptor.publicOperatorUrl);
+  assert.deepEqual(resolvedKeeperCatalog.provisioning, descriptor.provisioning);
+  assert.notEqual(
+    routeKeeperPublicationDigest(resolvedKeeperCatalog),
+    createHash('sha256').update(JSON.stringify({
+      bindings: Object.fromEntries(
+        resolvedKeeperCatalog.bindings.map((binding) => [binding.slotId, binding]),
+      ),
+    })).digest('hex'),
+  );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.slotId),
+    descriptor.routes.map((_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`),
+  );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.guacamoleConnectionId),
+    descriptor.routes.map((_, index) => index + 101),
+  );
+  assert.deepEqual(
+    resolvedKeeperCatalog.bindings.map((binding) => binding.routeUser),
+    descriptor.routes.map((route) => route.user),
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: index === descriptor.routes.length - 1
+          ? descriptor.routes[0].connectionName
+          : route.connectionName,
+        user: index === descriptor.routes.length - 1 ? descriptor.routes[0].user : route.user,
+      }))),
+    /duplicate stable name/,
+  );
+  for (const invalidConnectionId of ['0', '-1', '+1', '01', '1.0', '1e2', ' 1', '1 ', 'not-a-number', '9007199254740992']) {
+    assert.throws(
+      () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+        (route, index) => ({
+          connectionId: index === 0 ? invalidConnectionId : String(index + 101),
+          connectionName: route.connectionName,
+          user: route.user,
+        }),
+      )),
+      /positive canonical safe integer/,
+      invalidConnectionId,
+    );
+  }
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+      (route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: route.connectionName,
+        user: index === 0 ? descriptor.routes[1].user : route.user,
+      }),
+    )),
+    /route user mismatch/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: index === descriptor.routes.length - 1 ? 'Foreign Route' : route.connectionName,
+        user: index === descriptor.routes.length - 1 ? 'foreign-user' : route.user,
+      }))),
+    /unexpected stable name/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(descriptor, descriptor.routes.map(
+      (route, index) => ({
+        connectionId: String(index === 1 ? 101 : index + 101),
+        connectionName: route.connectionName,
+        user: route.user,
+      }),
+    )),
+    /duplicate numeric ID/,
+  );
+  assert.throws(
+    () => resolveDevelopmentRouteKeeperConnectionCatalog(
+      { ...descriptor, routes: descriptor.routes.slice(0, -1) },
+      descriptor.routes.slice(0, -1).map((route, index) => ({
+        connectionId: String(index + 101),
+        connectionName: route.connectionName,
+        user: route.user,
+      })),
+    ),
+    /complete hard maximum/,
+  );
   assert.equal(new Set(descriptor.routes.map((route) => route.displayReservationId)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.viewerSession)).size, 6);
   assert.equal(new Set(descriptor.routes.map((route) => route.viewerProfile)).size, 6);
@@ -461,6 +936,12 @@ try {
   assert.equal(plan.requiresExplicitApply, true);
   assert.equal(plan.productionPosture, 'read_only');
   assert.equal(plan.steps.at(-1).id, 'publish-ingress');
+  assert.ok(
+    plan.steps.findIndex((item) => item.id === 'sync-connections') <
+      plan.steps.findIndex((item) => item.id === 'publish-route-keeper-catalog') &&
+      plan.steps.findIndex((item) => item.id === 'publish-route-keeper-catalog') <
+      plan.steps.findIndex((item) => item.id === 'start-provider'),
+  );
 
   const bundle = renderDevelopmentPresentationProviderBundle(descriptor);
   assert.match(bundle.files['compose.yml'], /^name: agent-browser-dev-presentation$/m);
@@ -501,9 +982,24 @@ try {
   assert.equal(existsSync(descriptor.manifest), false);
   const preflight = developmentPresentationProviderSystemPreflight({
     env,
+    routeKeeperRuntime: () => ({
+      integrated: true,
+      provider: 'guacamole-xrdp',
+      authority: 'browser-runtime-sqlite',
+    }),
     run(command, args) {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
+      }
+      if (command === 'sudo' && args.at(-1) === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: '2026-09-27.p219-route-desktop-v11',
+            staleDisplayLockReclamation: { acceptsProvablyForeignPidReuse: true },
+          }),
+          stderr: '',
+        };
       }
       if (command === 'sudo') return { status: 0, stdout: 'ready\n', stderr: '' };
       if (command === 'systemctl') return { status: 0, stdout: 'active\n', stderr: '' };
@@ -517,7 +1013,14 @@ try {
   });
   assert.equal(preflight.success, true);
   assert.equal(preflight.authorizesEffects, false);
-  assert.ok(preflight.checks.every((check) => check.ok));
+  assert.equal(
+    preflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
+    true,
+  );
+  assert.ok(
+    preflight.checks
+      .every((check) => check.ok),
+  );
   const firstSecrets = prepareDevelopmentPresentationProviderSecrets({ env });
   const secondSecrets = prepareDevelopmentPresentationProviderSecrets({ env });
   assert.equal(firstSecrets.created, true);
@@ -824,6 +1327,14 @@ try {
       startDatabase: () => effectCalls.push('start-database'),
       ensureRouteUser: (route) => effectCalls.push(`ensure-user:${route.routeId}`),
       syncConnections: () => effectCalls.push('sync-connections'),
+      readRouteKeeperConnections: () => {
+        effectCalls.push('read-route-keeper-connections');
+        return readyObservation.database.routes;
+      },
+      publishRouteKeeperConnectionCatalog: (publication) => {
+        assert.equal(publication.bindings.length, descriptor.hardMaxSlots);
+        effectCalls.push('publish-route-keeper-catalog');
+      },
       startProvider: () => effectCalls.push('start-provider'),
       grantOperatorRouteAccess: () => effectCalls.push('grant-operator-route-access'),
       openWarmRoutes: () => {
@@ -862,6 +1373,8 @@ try {
     'start-database',
     ...descriptor.routes.map((route) => `ensure-user:${route.routeId}`),
     'sync-connections',
+    'read-route-keeper-connections',
+    'publish-route-keeper-catalog',
     'start-provider',
     'grant-operator-route-access',
     'open-warm-routes',
@@ -894,9 +1407,24 @@ try {
   assert.equal(existsSync(descriptor.manifest), true);
   const reconcilePreflight = developmentPresentationProviderSystemPreflight({
     env,
+    routeKeeperRuntime: () => ({
+      integrated: true,
+      provider: 'guacamole-xrdp',
+      authority: 'browser-runtime-sqlite',
+    }),
     run(command, args) {
       if (command === 'docker' && args[0] === 'info') {
         return { status: 0, stdout: '29.7.2\n', stderr: '' };
+      }
+      if (command === 'sudo' && args.at(-1) === 'status-json') {
+        return {
+          status: 0,
+          stdout: JSON.stringify({
+            helperVersion: '2026-09-27.p219-route-desktop-v11',
+            staleDisplayLockReclamation: { acceptsProvablyForeignPidReuse: true },
+          }),
+          stderr: '',
+        };
       }
       if (command === 'sudo') return { status: 0, stdout: 'ready\n', stderr: '' };
       if (command === 'systemctl') return { status: 0, stdout: 'active\n', stderr: '' };
@@ -921,7 +1449,14 @@ try {
   });
   assert.equal(reconcilePreflight.mode, 'reconcile');
   assert.equal(reconcilePreflight.success, true);
-  assert.ok(reconcilePreflight.checks.every((check) => check.ok));
+  assert.equal(
+    reconcilePreflight.checks.find((check) => check.name === 'route-keeper-runtime')?.ok,
+    true,
+  );
+  assert.ok(
+    reconcilePreflight.checks
+      .every((check) => check.ok),
+  );
 
   rmSync(descriptor.manifest, { force: true });
   effectCalls.length = 0;
@@ -930,6 +1465,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       createVolume: () => effectCalls.push('create-volume'),
@@ -957,6 +1493,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       observe: () => readyObservation,
@@ -964,7 +1501,10 @@ try {
     },
   });
   assert.equal(reconciled.state, 'provider_ready_ingress_pending');
-  assert.deepEqual(reconciled.completedSteps, ['reconcile-provider-authority']);
+  assert.deepEqual(reconciled.completedSteps, [
+    'publish-route-keeper-catalog',
+    'reconcile-provider-authority',
+  ]);
   assert.deepEqual(effectCalls, []);
 
   const staleExtension = structuredClone(readyObservation);
@@ -980,6 +1520,7 @@ try {
     authorizeEffects: true,
     deferIngress: true,
     effects: {
+      ...routeKeeperPublicationEffects(descriptor),
       snapshotProduction: () => ({ identity: 'production-fixture' }),
       assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
       createVolume: () => effectCalls.push('create-volume'),
@@ -1016,6 +1557,7 @@ try {
       authorizeEffects: true,
       deferIngress: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => effectCalls.push('create-volume'),
@@ -1056,6 +1598,7 @@ try {
       authorizeEffects: true,
       deferIngress: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => effectCalls.push('create-volume'),
@@ -1190,7 +1733,7 @@ try {
       observe: () => scaledObservation,
       referenceCheck: (route) => ({
         routeId: route.routeId,
-        blockers: ['viewer_lease:fixture'],
+        blockers: ['session:fixture'],
         ambiguities: [],
       }),
       reclaimRoute: () => { blockedReclaim = true; },
@@ -1248,7 +1791,6 @@ try {
   assert.match(reclaimFailed.error, /fixture termination failure/);
 
   const referencedRoute = descriptor.routes[4];
-  let convergingProcessChecks = 0;
   const convergingReclaimEffects = createDevelopmentPresentationLifecycleSystemEffects({
     env,
     reclaimTimeoutMs: 20,
@@ -1263,37 +1805,33 @@ try {
             helperVersion: 'fixture-v5',
             routeSessionTermination: {
               supported: true,
-              exactRouteUser: true,
-              idempotentWhenAbsent: true,
+              exactCgroupV2Identity: true,
+              retainedDirectoryIdentity: true,
+              usesCgroupKill: true,
+              broadUserTermination: false,
             },
           }),
           stderr: '',
         };
       }
-      if (command.endsWith('/agent-browser-dev') && args.at(-1) === 'close') {
-        return { status: 0, stdout: '{"success":true}', stderr: '' };
-      }
-      if (command === 'sudo') {
-        return { status: 1, stdout: '', stderr: 'route user processes remain after termination' };
-      }
-      if (command === 'ps') {
-        convergingProcessChecks += 1;
-        return convergingProcessChecks === 1
-          ? { status: 0, stdout: '4242 Xorg :16\n', stderr: '' }
-          : { status: 1, stdout: '', stderr: '' };
-      }
       throw new Error(`Unexpected converging reclaim command: ${command} ${args.join(' ')}`);
     },
   });
-  assert.doesNotThrow(() => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor));
-  assert.equal(convergingProcessChecks, 2);
+  assert.deepEqual(convergingReclaimEffects.reclaimCapability(), {
+    ready: false,
+    reason: 'route_keeper_stop_integration_required',
+    helper: '/usr/local/libexec/agent-browser/agent-browser-privileged-helper',
+    helperVersion: 'fixture-v5',
+  });
+  assert.throws(
+    () => convergingReclaimEffects.reclaimRoute(referencedRoute, descriptor),
+    /route_keeper_stop_integration_required/,
+  );
   const serviceState = {
     remoteViewRoutes: {
       [referencedRoute.routeId]: {
         browserId: null,
         sessionId: null,
-        viewerLeaseIds: [],
-        controllerLeaseId: null,
       },
     },
     displayAllocations: {
@@ -1304,10 +1842,6 @@ try {
     },
     routePool: { [referencedRoute.slotId]: { id: referencedRoute.slotId } },
     remoteViewAcquisitionLeases: {},
-    viewerLeases: {
-      'viewer-exact': { routeId: referencedRoute.routeId },
-      'viewer-other': { routeId: `${referencedRoute.routeId}0` },
-    },
     remoteViewHandoffs: {
       'handoff-exact': { binding: { routeId: referencedRoute.routeId } },
       'handoff-other': { binding: { routeId: `${referencedRoute.routeId}0` } },
@@ -1346,7 +1880,7 @@ try {
   });
   assert.deepEqual(referenceEffects.referenceCheck(referencedRoute, descriptor), {
     routeId: referencedRoute.routeId,
-    blockers: ['handoff:handoff-exact', 'viewer_lease:viewer-exact'],
+    blockers: ['handoff:handoff-exact'],
     ambiguities: [],
   });
 
@@ -1357,6 +1891,7 @@ try {
       env,
       authorizeEffects: true,
       effects: {
+        ...routeKeeperPublicationEffects(descriptor),
         snapshotProduction: () => ({ identity: 'production-fixture' }),
         assertProductionUnchanged: (before, after) => assert.deepEqual(after, before),
         createVolume: () => {},

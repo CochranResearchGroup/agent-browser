@@ -29,6 +29,14 @@ const PRODUCTION_PORTS = new Set([3389, 3390, 4822, 5432, 4848, 4849, 8092]);
  */
 export function developmentPresentationProviderDescriptor(env = process.env) {
   const { namespace, suffix, name } = developmentRuntimeNamespace(env);
+  const composeProject = `${name}-presentation`;
+  const postgresContainer = `${name}-guacamole-postgres`;
+  const postgresDatabase = `agent_browser_dev${namespace ? `_${namespace}` : ''}_guacamole`;
+  const postgresUser = postgresDatabase;
+  const routeUserPrefix = `agent-browser-rdp-dev${suffix}-`;
+  const connectionKeyPrefix = `${name}-connection-`;
+  const connectionNamePrefix = `Agent Browser Dev${namespace ? ` ${namespace}` : ''} RDP Route `;
+  const sharingProfilePrefix = `Agent Browser Shared Session development${suffix}-route-`;
   requireNamespacedDevelopmentPorts(env);
   const userHome = resolve(env.AGENT_BROWSER_DEV_USER_HOME || homedir());
   const pseudoHome = resolve(
@@ -46,6 +54,9 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
   if (hardMaxSlots < warmSlots) {
     throw new Error('Development presentation hard maximum must be at least the warm slot count');
   }
+  if (hardMaxSlots > 64) {
+    throw new Error('Development presentation hard maximum cannot exceed 64 slots');
+  }
   const routes = Array.from({ length: hardMaxSlots }, (_, index) => {
     const ordinal = index + 1;
     const viewerProfile = `development${suffix}-presentation-provider-v5-${ordinal}`;
@@ -53,10 +64,10 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
       ordinal,
       routeId: `development${suffix}-route-${ordinal}`,
       slotId: `development${suffix}-slot-${ordinal}`,
-      user: `agent-browser-rdp-dev${suffix}-${ordinal}`,
-      connectionKey: `${name}-connection-${ordinal}`,
+      user: `${routeUserPrefix}${ordinal}`,
+      connectionKey: `${connectionKeyPrefix}${ordinal}`,
       connectionId: null,
-      connectionName: `Agent Browser Dev${namespace ? ` ${namespace}` : ''} RDP Route ${ordinal}`,
+      connectionName: `${connectionNamePrefix}${ordinal}`,
       displayReservationId: `development${suffix}-display-${ordinal}`,
       displayName: null,
       viewerSession: viewerProfile,
@@ -83,15 +94,15 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
     stateDir: join(root, 'state'),
     receiptsDir: join(root, 'receipts'),
     inventoryPath: join(root, 'state', 'route-inventory.json'),
-    composeProject: `${name}-presentation`,
+    composeProject,
     services: {
       guacamole: `${name}-guacamole`,
       guacd: `${name}-guacd`,
-      postgres: `${name}-guacamole-postgres`,
+      postgres: postgresContainer,
     },
     database: {
-      name: `agent_browser_dev${namespace ? `_${namespace}` : ''}_guacamole`,
-      user: `agent_browser_dev${namespace ? `_${namespace}` : ''}_guacamole`,
+      name: postgresDatabase,
+      user: postgresUser,
     },
     ports: {
       guacamole: port(env.AGENT_BROWSER_DEV_GUACAMOLE_PORT, 8093),
@@ -112,6 +123,22 @@ export function developmentPresentationProviderDescriptor(env = process.env) {
       restartAllowed: false,
     },
     connectionLimits: {
+      maxConnections: 8,
+      maxConnectionsPerUser: 8,
+    },
+    provisioning: {
+      environment: 'development',
+      composeProject,
+      postgresContainer,
+      postgresUser,
+      postgresDatabase,
+      rdpHost: env.AGENT_BROWSER_DEV_RDP_TARGET_HOST || 'host.docker.internal',
+      rdpPort: port(env.AGENT_BROWSER_DEV_RDP_TARGET_PORT, 3389),
+      routeUserPrefix,
+      connectionKeyPrefix,
+      connectionNamePrefix,
+      sharingProfilePrefix,
+      maximumSlots: 64,
       maxConnections: 8,
       maxConnectionsPerUser: 8,
     },
@@ -254,6 +281,27 @@ export function validateDevelopmentPresentationProviderIsolation(
     if (rebound.bindingSha256 !== descriptor.externalIngress.bindingSha256) {
       throw new Error('Development external-ingress revision binding is inconsistent');
     }
+  }
+  const provisioning = descriptor.provisioning;
+  if (
+    provisioning?.environment !== descriptor.environment ||
+    provisioning?.composeProject !== descriptor.composeProject ||
+    provisioning?.postgresContainer !== descriptor.services.postgres ||
+    provisioning?.postgresUser !== descriptor.database.user ||
+    provisioning?.postgresDatabase !== descriptor.database.name ||
+    provisioning?.rdpHost !== descriptor.rdpTarget.host ||
+    provisioning?.rdpPort !== descriptor.rdpTarget.port ||
+    provisioning?.maximumSlots !== 64 ||
+    provisioning?.maxConnections !== descriptor.connectionLimits.maxConnections ||
+    provisioning?.maxConnectionsPerUser !== descriptor.connectionLimits.maxConnectionsPerUser ||
+    descriptor.routes.some((route) =>
+      route.user !== `${provisioning.routeUserPrefix}${route.ordinal}` ||
+      route.connectionKey !== `${provisioning.connectionKeyPrefix}${route.ordinal}` ||
+      route.connectionName !== `${provisioning.connectionNamePrefix}${route.ordinal}` ||
+      `Agent Browser Shared Session ${route.routeId}` !==
+        `${provisioning.sharingProfilePrefix}${route.ordinal}`)
+  ) {
+    throw new Error('Development route provisioning coordinates do not match the descriptor');
   }
   const providerPorts = Object.entries(descriptor.ports);
   const allDevelopmentPorts = providerPorts.map(([, value]) => value);

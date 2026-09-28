@@ -27,8 +27,6 @@ export {
  * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRouteRecord} ServiceRemoteViewRouteRecord
  * @typedef {import('./service-observability.generated.js').ServiceRemoteViewRoutesResponse} ServiceRemoteViewRoutesResponse
  * @typedef {import('./service-observability.generated.js').ServiceRoutePoolResponse} ServiceRoutePoolResponse
- * @typedef {import('./service-observability.generated.js').ServiceViewerLeaseRecord} ServiceViewerLeaseRecord
- * @typedef {import('./service-observability.generated.js').ServiceViewerLeasesResponse} ServiceViewerLeasesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseRecord} ServiceProfileLeaseRecord
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeasesResponse} ServiceProfileLeasesResponse
  * @typedef {import('./service-observability.generated.js').ServiceProfileLeaseDetailOptions} ServiceProfileLeaseDetailOptions
@@ -971,14 +969,6 @@ export function getServiceRoutePool(options) {
 
 /**
  * @param {ServiceQueryOptions} options
- * @returns {Promise<ServiceViewerLeasesResponse>}
- */
-export function getServiceViewerLeases(options) {
-  return serviceGet(options, '/api/service/viewer-leases');
-}
-
-/**
- * @param {ServiceQueryOptions} options
  * @returns {Promise<ServiceProfileLeasesResponse>}
  */
 export function getServiceProfileLeases(options) {
@@ -1240,15 +1230,6 @@ export function findServiceDisplayAllocation(records, id) {
  */
 export function findServiceRemoteViewRoute(records, id) {
   return findServiceCollectionRecord(records, 'remoteViewRoutes', id);
-}
-
-/**
- * @param {ServiceViewerLeaseRecord[] | ServiceViewerLeasesResponse | null | undefined} records
- * @param {string} id
- * @returns {ServiceViewerLeaseRecord | null}
- */
-export function findServiceViewerLease(records, id) {
-  return findServiceCollectionRecord(records, 'viewerLeases', id);
 }
 
 /**

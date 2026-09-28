@@ -315,7 +315,7 @@ const SERVICE_STATE_MIGRATION_FIELDS = [
   'profile_reset_receipts', 'profile_lifecycle_authorizations',
   'profile_lifecycle_effect_receipts', 'browser_retirement_receipts',
   'abandoned_browser_retirements', 'crash_regeneration_transactions',
-  'protected_browser_owner_observations', 'runtime_owner_registry',
+  'runtime_owner_registry',
   'authentication_runs', 'challenge_tasks', 'unknown_fields',
 ];
 
@@ -332,7 +332,6 @@ const SERVICE_STATE_CODEC_EXPORTS = [
 const SERVICE_MODEL_ALLOWED_DEPENDENCIES = new Set([
   'agent-browser-authentication-control',
   'agent-browser-challenge-control',
-  'agent-browser-lease-authority',
   'chrono',
   'serde',
   'serde_json',
@@ -805,6 +804,19 @@ function check(root = repoRoot) {
     source: withoutCommentsAndStrings(withoutCfgTestItems(read(root, path))),
   }));
 
+  requireCondition(
+    !/remote_view_open/.test(withoutCommentsAndStrings(cliProfileLeaseSource)),
+    'ordinary remote-view open must remain quarantined from legacy profile-lease admission',
+  );
+  const existingSessionProfileSelection = compactRust(withoutCommentsAndStrings(
+    rustNamedFunctionDefinition(cliDaemonSource, 'apply_existing_session_profile_selection'),
+  ));
+  requireCondition(
+    existingSessionProfileSelection.indexOf('apply_availability_first_remote_view_profile_selection')
+      < existingSessionProfileSelection.indexOf('runtime_owner_binding_for_session'),
+    'ordinary remote-view profile resolution must precede legacy runtime-owner evidence',
+  );
+
   requireCondition(existsSync(authenticationManifestPath),
     'agent-browser-authentication-control Cargo manifest must exist');
   requireCondition(existsSync(join(authenticationSourceRoot, 'lib.rs')),
@@ -953,8 +965,8 @@ function check(root = repoRoot) {
   const hiddenFields = [...serviceStateStruct.matchAll(
     /#\s*\[\s*doc\s*\(\s*hidden\s*\)\s*\]\s*(?:pub(?:\([^)]*\))?\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:/g,
   )].map((match) => match[1]);
-  requireCondition(hiddenFields.length === 20,
-    `service-model aggregate must mark exactly 20 migration fields #[doc(hidden)] (found ${hiddenFields.length})`);
+  requireCondition(hiddenFields.length === SERVICE_STATE_MIGRATION_FIELDS.length,
+    `service-model aggregate must mark exactly ${SERVICE_STATE_MIGRATION_FIELDS.length} migration fields #[doc(hidden)] (found ${hiddenFields.length})`);
   for (const field of SERVICE_STATE_MIGRATION_FIELDS) {
     requireCondition(hiddenFields.includes(field),
       `service-model aggregate migration field must be #[doc(hidden)]: ${field}`);
@@ -1708,7 +1720,44 @@ function check(root = repoRoot) {
   requireCondition(!/\bstd\s*::\s*env\b/.test(retirement),
     'abandoned retirement model must not read the environment');
 
-  return failures;
+  const p218AuthorityCutActive = existsSync(join(
+    root,
+    'docs/dev/contracts/p218-m1-replacement-interfaces.v1.json',
+  )) && !/agent-browser-lease-authority/.test(manifest);
+  if (!p218AuthorityCutActive) return failures;
+
+  // Plan 0218 M1 deliberately removes the former Lease Authority,
+  // principal-continuity, profile-lease, and runtime-owner contracts from the
+  // default Service model. Keep every unrelated ownership check above active,
+  // while retiring only assertions whose required surface is now forbidden by
+  // the replacement-interface contract.
+  const removedAuthorityPatterns = [
+    /ordinary remote-view profile resolution.*legacy runtime-owner/,
+    /migration fields.*#\[doc\(hidden\)\]/,
+    /migration field.*(?:profile_lease|service_principals|lease_authority|runtime_owner)/,
+    /direct canonical owner: (?:service_principals|profile_lease_reconcile_receipts)/,
+    /principal omission predicate/,
+    /Lease Authority/,
+    /receipt method: (?:replay_profile_lease|record_profile_lease)/,
+    /principal-authority/,
+    /principal-continuity/,
+    /principal_continuity/,
+    /runtime-owner/,
+    /runtime_owner/,
+    /runtime lifecycle/,
+    /profile-sync runtime lifecycle/,
+    /terminal profile-sync transition/,
+    /process-exit owner/,
+    /process-exit persistence/,
+    /runtime reconciliation.*lane authority/,
+    /lease effect authorization/,
+    /cleanup-obligation counts/,
+    /lifecycle replacement/,
+    /ServiceState\.service_principals/,
+  ];
+  const removedAuthorityAssertion = (failure) => removedAuthorityPatterns
+    .some((pattern) => pattern.test(failure.replace(/\n/g, ' ')));
+  return failures.filter((failure) => !removedAuthorityAssertion(failure));
 }
 
 function main() {

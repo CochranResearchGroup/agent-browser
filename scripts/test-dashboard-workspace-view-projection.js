@@ -410,6 +410,31 @@ assert.equal(crossedReadyNode.state, crossedBlockedNode.state);
 assert.equal(crossedReadyNode.actions.find((item) => item.id === 'view')?.enabled, true);
 assert.equal(crossedBlockedNode.actions.find((item) => item.id === 'view')?.enabled, false);
 
+const prefixedBrowser = {
+  serviceBrowsers: [{
+    ...crossedBase.serviceBrowsers[0],
+    id: 'browser:managed-prefixed',
+    activeSessionIds: ['managed-prefixed-session'],
+  }],
+  serviceSessions: [{
+    id: 'managed-prefixed-session',
+    browserIds: ['browser:managed-prefixed'],
+    tabIds: ['managed-prefixed-tab'],
+  }],
+  serviceTabs: [{
+    id: 'managed-prefixed-tab',
+    browserId: 'browser:managed-prefixed',
+    lifecycle: 'active',
+    url: 'https://example.test/managed-prefixed',
+  }],
+};
+const prefixedLedger = deriveWorkspaceViewAuthorityLedger(prefixedBrowser);
+const prefixedNodes = deriveWorkspaceNodes(prefixedBrowser);
+assert.ok(prefixedLedger['browser:managed-prefixed']);
+assert.equal(prefixedLedger['browser:browser:managed-prefixed'], undefined);
+assert.ok(prefixedNodes.some((node) => node.id === 'browser:managed-prefixed'));
+assert.equal(prefixedNodes.some((node) => node.id === 'browser:browser:managed-prefixed'), false);
+
 const inspectorProjection = projectServiceWorkspaceViews(crossedBase, { mode: 'inspect' });
 const inspectorView = inspectorProjection.candidates.find((candidate) => candidate.browser.id === 'crossed-browser');
 assert.ok(inspectorView);

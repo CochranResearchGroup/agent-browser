@@ -12,6 +12,7 @@ import {
   viewStreamControlTitle,
   viewStreamDashboardFrameUrl,
   viewStreamLabel,
+  viewStreamLeaseLabel,
   viewStreamOpenTitle,
   viewStreamReadinessLabel,
   viewStreamRouteSummary,
@@ -65,6 +66,8 @@ assert.equal(canOpenViewStream(route), true);
 assert.equal(canOpenControlViewStream(route), true);
 assert.equal(viewStreamOpenTitle(route), 'Open rdp gateway in the dashboard.');
 assert.equal(viewStreamReadinessLabel(route), 'ready');
+assert.equal(viewStreamLeaseLabel(route), 'no controller');
+assert.equal(viewStreamLeaseLabel({ ...route, controllerLeaseId: 'controller-a' }), 'controller fenced');
 assert.match(viewStreamRouteSummary(route), /route-a.*display display-a.*ready/);
 assert.equal(
   viewStreamDashboardFrameUrl(route, 'http://127.0.0.1:4848/'),
@@ -159,7 +162,6 @@ const recoveryPlan = planAutomaticWorkspaceConnection({
   routeRecoveryAction: 'service_remote_view_browser_reattach',
   readinessGeneration: 'reattachable-stale-route:2026-08-14T12:00:00Z',
   viewerRoute: route,
-  viewerLeaseIds: [],
   attemptedActionKeys: [],
 });
 assert.equal(recoveryPlan.action?.kind, 'recover-route');
@@ -173,7 +175,6 @@ const repeatedRecoveryPlan = planAutomaticWorkspaceConnection({
   routeRecoveryAction: 'service_remote_view_browser_reattach',
   readinessGeneration: 'reattachable-stale-route:2026-08-14T12:00:00Z',
   viewerRoute: route,
-  viewerLeaseIds: [],
   attemptedActionKeys: [recoveryPlan.action?.attemptKey],
 });
 assert.equal(repeatedRecoveryPlan.action, null);
@@ -194,26 +195,10 @@ const viewerPlan = planAutomaticWorkspaceConnection({
   routeRecoveryAction: null,
   readinessGeneration,
   viewerRoute: attachedRoute,
-  viewerRouteReady: true,
-  viewerLeaseIds: [],
   attemptedActionKeys: [],
 });
-assert.equal(viewerPlan.action?.kind, 'request-viewer-lease');
-const repeatedViewerPlan = planAutomaticWorkspaceConnection({
-  browserId: 'browser-a',
-  browserLive: true,
-  mode: 'control',
-  sourceResolution: resolveWorkspaceViewSources({ streams: [attachedRoute], selected: attachedRoute, mode: 'control' }),
-  currentStream: attachedRoute,
-  routeRecoveryAction: null,
-  readinessGeneration,
-  viewerRoute: attachedRoute,
-  viewerRouteReady: true,
-  viewerLeaseIds: [],
-  attemptedActionKeys: [viewerPlan.action?.attemptKey],
-});
-assert.equal(repeatedViewerPlan.action, null);
-assert.equal(repeatedViewerPlan.status, 'action-required');
+assert.equal(viewerPlan.action, null);
+assert.equal(viewerPlan.status, 'ready', 'an attached route must not require a persisted viewer lease');
 assert.equal(
   selectWorkspaceViewerRoute([daemonStream, route], daemonStream)?.routeId,
   'route-a',
@@ -222,24 +207,24 @@ assert.equal(selectWorkspaceViewerRoute([daemonStream], daemonStream), null);
 assert.equal(
   workspaceRecoveryFailureMessage(
     { code: 'remote_view_route_not_found', error: "remote view route 'route-a' not found" },
-    'service_viewer_lease_request',
+    'service_remote_view_browser_reattach',
   ),
   "remote_view_route_not_found: remote view route 'route-a' not found",
 );
 assert.equal(
   workspaceRecoveryFailureMessage(
     { code: 'remote_view_route_not_found', error: "remote_view_route_not_found: route 'route-a' not found" },
-    'service_viewer_lease_request',
+    'service_remote_view_browser_reattach',
   ),
   "remote_view_route_not_found: route 'route-a' not found",
 );
 assert.equal(
-  workspaceRecoveryFailureMessage({ error: 'backend unavailable' }, 'service_viewer_lease_request'),
+  workspaceRecoveryFailureMessage({ error: 'backend unavailable' }, 'service_remote_view_browser_reattach'),
   'backend unavailable',
 );
 assert.equal(
-  workspaceRecoveryFailureMessage({}, 'service_viewer_lease_request'),
-  'service_viewer_lease_request was not accepted',
+  workspaceRecoveryFailureMessage({}, 'service_remote_view_browser_reattach'),
+  'service_remote_view_browser_reattach was not accepted',
 );
 
 const blocked = { ...route, readiness: { state: 'stale_target', reason: 'Selected tab is not visible' } };
@@ -317,10 +302,8 @@ assert.match(viewport, /projection\.selected[\s\S]*projection\.tiles/);
 assert.doesNotMatch(viewport, /fetch\(`\$\{serviceBase\(activePort\)\}\/status`\)/);
 assert.match(viewport, /selectWorkspaceViewerRoute\(streamChoices, stream\)/);
 assert.match(viewport, /workspaceViewerRoute\?\.routeId/);
-assert.match(
-  viewport,
-  /reconnectWorkspaceViewer[\s\S]*daemonSessionNameForBrowser\(browser, viewportSelection\?\.selection\)[\s\S]*service_viewer_lease_request[\s\S]*sessionName/,
-);
+assert.doesNotMatch(viewport, /service_viewer_lease_(?:request|heartbeat|release)|service_controller_lease_takeover|viewerLeaseIds/);
+assert.match(viewport, /action: "view_takeover"/);
 assert.match(viewport, /WorkspaceSourceMenu/);
 assert.match(viewport, /Advanced connection controls/);
 assert.match(viewport, /Retry connection/);

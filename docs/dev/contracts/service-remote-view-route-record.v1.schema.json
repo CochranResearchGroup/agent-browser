@@ -114,13 +114,6 @@
         "failed"
       ]
     },
-    "viewerLeaseIds": {
-      "type": "array",
-      "items": {
-        "type": "string"
-      },
-      "uniqueItems": true
-    },
     "controllerLeaseId": {
       "type": ["string", "null"]
     },

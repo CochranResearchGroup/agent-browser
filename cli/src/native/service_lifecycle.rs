@@ -29,8 +29,6 @@ pub(crate) struct ServiceLaunchMetadata {
     pub(crate) profile_selection_reason: Option<ProfileSelectionReason>,
     pub(crate) browser_stderr_log_path: Option<String>,
     pub(crate) browser_capability_launch: Option<serde_json::Value>,
-    pub(crate) protected_browser_owner_observation:
-        Option<super::service_model::ProtectedBrowserOwnerObservation>,
     pub(crate) view_streams: Vec<ViewStream>,
     pub(crate) display_isolation: Option<String>,
     pub(crate) display_name: Option<String>,
@@ -1415,7 +1413,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::state;
     use serde_json::{json, Map, Value};

@@ -1,0 +1,54 @@
+{
+  "schemaVersion": "p218-m1-replacement-interfaces.v1",
+  "plan": "docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md",
+  "milestone": "M1",
+  "cut": "agent-browser-service-model->agent-browser-lease-authority",
+  "defaultProductPackages": [
+    "agent-browser",
+    "agent-browser-service-model",
+    "@agent-browser/client",
+    "@agent-browser/dashboard"
+  ],
+  "ordinaryAuthorityInterfaces": [
+    "agent_browser_service_model::BrowserSessionManager",
+    "agent_browser_service_model::BrowserSessionState",
+    "agent_browser_service_model::BrowserRuntimeConfig",
+    "cli::native::browser_session_host::BrowserSessionHost",
+    "cli::native::browser_session_store::BrowserRuntimeSqliteStore"
+  ],
+  "allowedNeutralValueTypes": [
+    {
+      "symbol": "agent_browser_service_model::ServicePrincipalProvenance",
+      "wireValues": ["registered_capability", "authenticated_transport", "unproven_legacy"],
+      "constraints": [
+        "data_only",
+        "cannot_admit_or_deny_ordinary_work",
+        "cannot_reference_agent-browser-lease-authority"
+      ]
+    }
+  ],
+  "migrationDiagnosticBoundary": {
+    "packageClass": "non_default_workspace_tool",
+    "input": "opaque_legacy_json",
+    "output": "typed_redacted_diagnostics",
+    "mayLinkLeaseAuthority": true,
+    "mayBeLinkedByDefaultProductPackages": false
+  },
+  "forbiddenReplacementConcepts": [
+    "lease authority",
+    "lease claim",
+    "runtime owner",
+    "owner generation",
+    "custody",
+    "quarantine",
+    "cleanup obligation as admission authority",
+    "legacy JSON fallback",
+    "dual write"
+  ],
+  "firstCutExit": [
+    "agent-browser-service-model has no Cargo dependency on agent-browser-lease-authority",
+    "agent-browser-service-model source has no agent_browser_lease_authority reference",
+    "the service-model package compiles and its focused tests pass",
+    "the P218 architecture detector no longer reports service_model_cargo_dependency or service-model compiled_product_reference findings"
+  ]
+}

@@ -13,7 +13,7 @@ function usage() {
     'Usage: node scripts/audit-route-handoff.js [--json] [--fixture <path>] [--agent-browser <cmd>] [--skip-doctor]',
     '',
     'Read-only audit that joins service browser rows, tabs, route pool entries,',
-    'display allocations, remote-view routes, viewer leases, runtime identity,',
+    'display allocations, remote-view routes, runtime identity,',
     'view streams, and retained route-visible proof.',
   ].join('\n');
 }
@@ -218,14 +218,6 @@ function streamForBrowser(browser, route, state) {
   );
 }
 
-function viewerLeasesFor({ browser, route, displayAllocationId, viewerLeases }) {
-  return viewerLeases.filter((lease) =>
-    lease?.browserId === browser.id ||
-    (route?.id && lease?.routeId === route.id) ||
-    (displayAllocationId && lease?.displayAllocationId === displayAllocationId),
-  );
-}
-
 function tabsForBrowser(browser, tabsById) {
   const fromHandles = Array.isArray(browser.tabHandles) ? browser.tabHandles : [];
   const fromIds = Array.isArray(browser.tabIds)
@@ -286,7 +278,6 @@ function buildAudit(inputs) {
   const routes = values(state.remoteViewRoutes);
   const routePool = values(state.routePool);
   const displayAllocations = recordMap(state.displayAllocations);
-  const viewerLeases = values(state.viewerLeases);
   const runtimeInventory = inputs.remoteViewDoctor?.data?.runtimeInventory ?? null;
   const runtimeConvergence = inputs.remoteViewDoctor?.data?.runtimeConvergence ?? null;
   const remoteControl = inputs.remoteViewDoctor?.data?.remoteControl ?? null;
@@ -303,7 +294,6 @@ function buildAudit(inputs) {
     const allocation = displayAllocationId ? displayAllocations[displayAllocationId] : null;
     const routePoolEntry = routePoolEntryForRoute(route, routePool);
     const proof = route?.readiness ?? stream?.remoteReadiness ?? stream?.readiness ?? allocation?.readiness ?? null;
-    const leases = viewerLeasesFor({ browser, route, displayAllocationId, viewerLeases });
     const tabs = tabsForBrowser(browser, tabsById);
     const classification = classify({ browser, route, allocation, proof });
     const proofState = readinessState(proof);
@@ -338,7 +328,6 @@ function buildAudit(inputs) {
       proofState,
       visualState,
       proofWindowSummary: windowSummary(proof),
-      viewerLeaseIds: leases.map((lease) => lease.id).filter(Boolean),
       explanation: explanationFor({ classification, route, stream, proof, browser }),
     };
 
@@ -381,7 +370,6 @@ function buildAudit(inputs) {
       displayAllocations: Object.keys(displayAllocations).length,
       remoteViewRoutes: routes.length,
       routePool: routePool.length,
-      viewerLeases: viewerLeases.length,
     },
     rows,
   };
@@ -424,7 +412,7 @@ function printText(audit) {
   if (audit.collectionErrors.length > 0) {
     console.log(`Collection warnings: ${audit.collectionErrors.length}`);
   }
-  console.log(`Collections: browsers=${audit.collections.browsers} tabs=${audit.collections.tabs} routes=${audit.collections.remoteViewRoutes} routePool=${audit.collections.routePool} displays=${audit.collections.displayAllocations} leases=${audit.collections.viewerLeases}`);
+  console.log(`Collections: browsers=${audit.collections.browsers} tabs=${audit.collections.tabs} routes=${audit.collections.remoteViewRoutes} routePool=${audit.collections.routePool} displays=${audit.collections.displayAllocations}`);
   console.log('');
   console.log([
     'classification'.padEnd(27),

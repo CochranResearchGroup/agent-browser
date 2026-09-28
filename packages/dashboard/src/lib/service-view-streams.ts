@@ -23,7 +23,6 @@ export type ServiceViewStream = {
   connectionName?: string | null;
   routeSource?: string | null;
   providerMode?: string | null;
-  viewerLeaseIds?: string[];
   controllerLeaseId?: string | null;
   readOnly?: boolean;
   readiness?: unknown;
@@ -176,10 +175,8 @@ export function viewStreamRouteLabel(stream?: ServiceViewStream | null): string 
 }
 
 export function viewStreamLeaseLabel(stream?: ServiceViewStream | null): string {
-  if (!stream) return "no viewers";
-  const viewerCount = stream.viewerLeaseIds?.length ?? 0;
-  const viewerLabel = `${viewerCount} viewer${viewerCount === 1 ? "" : "s"}`;
-  return stream.controllerLeaseId ? `${viewerLabel}, controller leased` : viewerLabel;
+  if (!stream) return "control unknown";
+  return stream.controllerLeaseId ? "controller fenced" : "no controller";
 }
 
 export function viewStreamReadinessLabel(stream?: ServiceViewStream | null): string {

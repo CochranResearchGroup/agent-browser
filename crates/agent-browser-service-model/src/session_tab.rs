@@ -1,6 +1,6 @@
 //! Provider-free session, tab, and service-owned handle records.
 
-use agent_browser_lease_authority::ServicePrincipalProvenance;
+use crate::ServicePrincipalProvenance;
 use serde::{Deserialize, Serialize};
 
 use crate::{ProfileChildAccess, ProfileOrigin};

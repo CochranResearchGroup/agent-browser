@@ -29,8 +29,6 @@ const serviceName = 'RdpGuacManyToManySmoke';
 const agentName = 'smoke-agent';
 const launchTaskName = 'rdpGuacManyToManyLaunch';
 const checkoutTaskName = 'rdpGuacManyToManyCheckout';
-const viewerTaskName = 'rdpGuacManyToManyViewer';
-const controllerTaskName = 'rdpGuacManyToManyController';
 const closeTaskName = 'rdpGuacManyToManyClose';
 const clientASession = 'rdp-guac-many-viewer-a';
 const clientBSession = 'rdp-guac-many-viewer-b';
@@ -826,58 +824,6 @@ async function waitForVisualBindingProof({ context, session, routes, bindings, l
   throw lastError || new Error(`${label} did not produce visual binding proof before timeout`);
 }
 
-async function requestViewerAndControllerLeases(streamPort, routeA, routeB) {
-  const viewer1A = await serviceRequest(streamPort, {
-    action: 'service_viewer_lease_request',
-    serviceName,
-    agentName,
-    taskName: viewerTaskName,
-    params: { routeId: routeA.routeId, viewerId: 'viewer-1-a', viewerName: 'Viewer 1', openMode: 'tile' },
-    jobTimeoutMs: 30000,
-  }, 'viewer-1-route-a');
-  const viewer2A = await serviceRequest(streamPort, {
-    action: 'service_viewer_lease_request',
-    serviceName,
-    agentName,
-    taskName: viewerTaskName,
-    params: { routeId: routeA.routeId, viewerId: 'viewer-2-a', viewerName: 'Viewer 2', openMode: 'tile' },
-    jobTimeoutMs: 30000,
-  }, 'viewer-2-route-a');
-  const viewer1B = await serviceRequest(streamPort, {
-    action: 'service_viewer_lease_request',
-    serviceName,
-    agentName,
-    taskName: viewerTaskName,
-    params: { routeId: routeB.routeId, viewerId: 'viewer-1-b', viewerName: 'Viewer 1', openMode: 'tile' },
-    jobTimeoutMs: 30000,
-  }, 'viewer-1-route-b');
-  const viewer2B = await serviceRequest(streamPort, {
-    action: 'service_viewer_lease_request',
-    serviceName,
-    agentName,
-    taskName: viewerTaskName,
-    params: { routeId: routeB.routeId, viewerId: 'viewer-2-b', viewerName: 'Viewer 2', openMode: 'tile' },
-    jobTimeoutMs: 30000,
-  }, 'viewer-2-route-b');
-  const controllerA = await serviceRequest(streamPort, {
-    action: 'service_controller_lease_takeover',
-    serviceName,
-    agentName,
-    taskName: controllerTaskName,
-    params: { routeId: routeA.routeId, viewerLeaseId: viewer1A.data.viewerLeaseId, viewerId: 'viewer-1' },
-    jobTimeoutMs: 30000,
-  }, 'controller-viewer-1-route-a');
-  const controllerB = await serviceRequest(streamPort, {
-    action: 'service_controller_lease_takeover',
-    serviceName,
-    agentName,
-    taskName: controllerTaskName,
-    params: { routeId: routeB.routeId, viewerLeaseId: viewer2B.data.viewerLeaseId, viewerId: 'viewer-2' },
-    jobTimeoutMs: 30000,
-  }, 'controller-viewer-2-route-b');
-  return { viewer1A, viewer2A, viewer1B, viewer2B, controllerA, controllerB };
-}
-
 async function closeRemoteBrowser(context, workspace) {
   if (workspace?.streamPort && workspace?.browserId) {
     try {
@@ -1004,9 +950,17 @@ try {
     `Remote view routes were not ready: ${JSON.stringify(serviceState.remoteViewRoutes)}`,
   );
 
-  const leases = await requestViewerAndControllerLeases(browserA.streamPort, routes[0], routes[1]);
-  const afterLeases = await serviceStatusArtifact(browserA.streamPort, 'after-viewer-controller-leases');
-  writeArtifact('viewer-controller-lease-proof.json', leases);
+  assert(!Object.hasOwn(serviceState, 'viewerLeases'), 'Service state must not persist a viewer lease collection');
+  for (const route of routes) {
+    const routeState = serviceState.remoteViewRoutes?.[route.routeId];
+    assert(routeState && !Object.hasOwn(routeState, 'viewerLeaseIds'), `Route ${route.routeId} must not project stored viewer lease IDs`);
+    assert(Object.hasOwn(routeState, 'controllerLeaseId'), `Route ${route.routeId} must preserve controller fencing state`);
+  }
+  writeArtifact('viewer-authority-absence-proof.json', {
+    storedViewerLeaseCollectionPresent: false,
+    routeViewerLeaseIdsPresent: false,
+    controllerLeaseIds: routes.map((route) => serviceState.remoteViewRoutes[route.routeId].controllerLeaseId ?? null),
+  });
 
   const baseDashboardUrl = envValue('AGENT_BROWSER_RDP_TEST_PUBLIC_URL') || `http://127.0.0.1:${browserA.streamPort}/`;
   const dashboardTileUrl = tileUrl(baseDashboardUrl);
@@ -1018,7 +972,7 @@ try {
     routePoolHydratedFromDoctor: doctorHydration.usedDoctor,
     agentBrowserCommand: context.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD || 'scripts/ci/cargo-safe.sh run --manifest-path cli/Cargo.toml',
     routePool: routes,
-    viewerLeaseCount: Object.keys(afterLeases.data?.service_state?.viewerLeases || {}).length,
+    viewerLeaseCollectionPresent: false,
   });
 
   const clientAViewport = { width: 1500, height: 950 };

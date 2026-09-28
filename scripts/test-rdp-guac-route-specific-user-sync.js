@@ -20,6 +20,7 @@ const stateDir = join(fixtureRoot, 'state');
 const binDir = join(fixtureRoot, 'bin');
 const sqlPath = join(fixtureRoot, 'route-write.sql');
 const dockerLog = join(fixtureRoot, 'docker.jsonl');
+const runtimeDatabase = join(fixtureRoot, 'browser-runtime.sqlite3');
 const script = resolve('scripts/sync-rdp-guac-route-specific-user-pool.sh');
 const legacyScript = resolve('scripts/sync-rdp-guac-existing-user-route-pool.sh');
 
@@ -117,8 +118,8 @@ try {
 
   writeSecrets({ includeRouteBPassword: false });
   const missingSecret = run(['--dry-run']);
-  assert.equal(missingSecret.status, 1, 'missing route-specific secrets must fail closed');
-  assert.match(missingSecret.stderr, /route_user_inventory_password_missing/);
+  assert.equal(missingSecret.status, 0, 'SQLite custody must survive removed legacy file secrets');
+  assert.doesNotMatch(readFileSync(secretFile, 'utf8'), /XRDP_AGENT_BROWSER_ROUTE_/);
 
   console.log('RDP Guacamole route-specific user sync behavior passed');
 } finally {
@@ -144,6 +145,7 @@ function run(args, commandPath = script) {
       PATH: `${binDir}${delimiter}${process.env.PATH}`,
       AGENT_BROWSER_GUACAMOLE_DIR: guacDir,
       AGENT_BROWSER_GUACAMOLE_SECRET_FILE: secretFile,
+      AGENT_BROWSER_BROWSER_RUNTIME_DATABASE: runtimeDatabase,
       AGENT_BROWSER_GUACAMOLE_STATE_DIR: stateDir,
       AGENT_BROWSER_GUACAMOLE_IDENTITY_FILE: join(stateDir, 'guacamole-postgres-identity.json'),
       P79_DOCKER_LOG: dockerLog,

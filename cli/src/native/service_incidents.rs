@@ -1102,7 +1102,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
     use crate::native::service_trace::service_now_timestamp;

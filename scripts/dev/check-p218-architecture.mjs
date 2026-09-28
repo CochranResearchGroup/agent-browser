@@ -1,0 +1,359 @@
+#!/usr/bin/env node
+
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scriptDirectory = dirname(fileURLToPath(import.meta.url));
+const defaultRoot = resolve(scriptDirectory, '../..');
+
+function read(root, path) {
+  const absolute = join(root, path);
+  return existsSync(absolute) ? readFileSync(absolute, 'utf8') : '';
+}
+
+function filesUnder(root, path, suffixes) {
+  const base = join(root, path);
+  const files = [];
+  const visit = (directory) => {
+    if (!existsSync(directory)) return;
+    for (const entry of readdirSync(directory)) {
+      const candidate = join(directory, entry);
+      const info = statSync(candidate);
+      if (info.isDirectory()) visit(candidate);
+      else if (suffixes.some((suffix) => candidate.endsWith(suffix))) files.push(candidate);
+    }
+  };
+  visit(base);
+  return files.sort();
+}
+
+function finding(id, path, detail) {
+  return { id, path, detail };
+}
+
+function manifestDependsOnLeaseAuthority(source) {
+  return /^\s*agent-browser-lease-authority\s*=|^\s*[A-Za-z0-9_-]+\s*=\s*\{[^}\n]*\bpackage\s*=\s*["']agent-browser-lease-authority["']/m.test(source);
+}
+
+function beforeDisabledLegacyTests(source) {
+  return source.split(/\n#\[cfg\((?:any\(\)|test)\)\]\nmod tests\s*\{/u, 1)[0];
+}
+
+export function evaluate(root = defaultRoot) {
+  const cliManifest = read(root, 'cli/Cargo.toml');
+  const workspaceManifest = read(root, 'Cargo.toml');
+  const leaseAuthorityManifest = read(root, 'crates/agent-browser-lease-authority/Cargo.toml');
+  const serviceModelManifest = read(root, 'crates/agent-browser-service-model/Cargo.toml');
+  const host = read(root, 'cli/src/native/browser_session_host.rs');
+  const browserSessionHandoff = read(root, 'cli/src/native/browser_session_handoff.rs');
+  const handoff = read(root, 'cli/src/native/remote_view_handoff.rs');
+  const openRuntime = read(root, 'cli/src/native/remote_view/open/runtime.rs');
+  const openCoordinator = read(root, 'cli/src/native/remote_view/open/coordinator.rs');
+  const serviceState = read(root, 'crates/agent-browser-service-model/src/service_state.rs');
+  const actions = read(root, 'cli/src/native/actions.rs');
+  const daemon = read(root, 'cli/src/native/daemon.rs');
+  const dashboardViewport = read(root, 'packages/dashboard/src/components/workspace-remote-viewport.tsx');
+  const guacamoleLiveViewer = read(root, 'cli/src/native/stream/guacamole_live_viewer.rs');
+  const desktopControl = read(root, 'cli/src/native/browser_session_store/desktop_control.rs');
+  const desktopCapture = beforeDisabledLegacyTests(read(root, 'cli/src/native/desktop_capture.rs'));
+  const desktopInteraction = beforeDisabledLegacyTests(read(root, 'cli/src/native/desktop_interaction.rs'));
+  const browserSessionManager = beforeDisabledLegacyTests(read(root, 'crates/agent-browser-service-model/src/browser_session_manager.rs'));
+  const presentationAdmission = beforeDisabledLegacyTests(read(root, 'cli/src/native/presentation_request_admission.rs'));
+  const workstationInstall = read(root, 'cli/src/workstation_install.rs');
+  const browserSessionStore = read(root, 'cli/src/native/browser_session_store.rs');
+  const actionRuntimeRecovery = read(root, 'cli/src/native/action_runtime/runtime/recovery.rs');
+  const actionRuntimeLaunch = read(root, 'cli/src/native/action_runtime/runtime/launch.rs');
+  const routeUserPool = read(root, 'scripts/lib/rdp-route-user-pool.py');
+  const routeSetup = read(root, 'scripts/setup-rdp-guac-route-pool.sh');
+  const routeSync = read(root, 'scripts/sync-rdp-guac-route-specific-user-pool.sh');
+  const productFiles = [
+    ...filesUnder(root, 'cli/src', ['.rs']),
+    ...filesUnder(root, 'crates/agent-browser-service-model/src', ['.rs']),
+    ...filesUnder(root, 'packages/dashboard/src', ['.js', '.jsx', '.ts', '.tsx']),
+    ...filesUnder(root, 'packages/client/src', ['.js', '.ts']),
+  ];
+  const serviceModelFiles = [
+    ...filesUnder(root, 'crates/agent-browser-service-model/src', ['.rs']),
+    ...filesUnder(root, 'crates/agent-browser-service-model/tests', ['.rs']),
+  ];
+  const productSources = productFiles.map((path) => ({
+    path: relative(root, path),
+    source: readFileSync(path, 'utf8'),
+  }));
+
+  const violations = new Map();
+  const add = (prohibitionId, evidence) => {
+    if (!violations.has(prohibitionId)) violations.set(prohibitionId, []);
+    violations.get(prohibitionId).push(evidence);
+  };
+
+  if (/AGENT_BROWSER_SESSION_DISPLAY/.test(host)) {
+    add('P02', finding('browser_session_display_environment', 'cli/src/native/browser_session_host.rs', 'default Browser Session Manager launch reads a display selection from the environment'));
+  }
+  if (/default_service_state_path\(\)/.test(host) && /load_or_import_profile_catalog/.test(host)) {
+    add('P03', finding('legacy_json_import_in_default_host', 'cli/src/native/browser_session_host.rs', 'the default host supplies legacy Service State to ordinary host loading'));
+  }
+  if (/ManagerHandoffAuthority[\s\S]*?Legacy/.test(host)) {
+    add('P03', finding('legacy_manager_handoff_authority', 'cli/src/native/browser_session_host.rs', 'the compiled Browser Session Host retains a non-keeper manager handoff authority'));
+    add('P05', finding('parallel_manager_handoff_authority', 'cli/src/native/browser_session_host.rs', 'manager handoff construction can bypass the SQLite Route Keeper authority'));
+  }
+  if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(handoff)) {
+    add('P03', finding('ordinary_handoff_json_repository', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff finalization still requires the JSON Service State repository'));
+    add('P05', finding('competing_handoff_authority', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff identity is committed outside the Browser Runtime SQLite authority'));
+  }
+  if (/LockedServiceStateRepository::default_json\(\)/.test(browserSessionHandoff)
+    && /attach_manager_handoff/.test(browserSessionHandoff)) {
+    add('P03', finding('manager_handoff_json_fallback', 'cli/src/native/browser_session_handoff.rs', 'compiled manager-handoff compatibility code can publish an ordinary handoff through JSON Service State'));
+    add('P05', finding('manager_handoff_competing_authority', 'cli/src/native/browser_session_handoff.rs', 'compiled manager-handoff compatibility code can commit identity outside Browser Runtime SQLite'));
+  }
+  if (/LockedServiceStateRepository<JsonServiceStateStore>/.test(openRuntime)
+    || /LockedServiceStateRepository::default_json\(\)/.test(openRuntime)) {
+    add('P03', finding('ordinary_open_json_repository', 'cli/src/native/remote_view/open/runtime.rs', 'ordinary remote-view open still loads and mutates JSON Service State'));
+  }
+  if (/begin_route_bound_handoff_plan_acquisition/.test(openCoordinator)
+    || /complete_route_bound_handoff_open/.test(openCoordinator)) {
+    add('P05', finding('ordinary_open_parallel_acquisition', 'cli/src/native/remote_view/open/coordinator.rs', 'ordinary remote-view open still reserves or finalizes a handoff outside the SQLite session operation'));
+  }
+  if (/handle_service_profile_manual_seeding_acquire[\s\S]*?LockedServiceStateRepository::default_json\(\)/.test(openCoordinator)) {
+    add('P03', finding('manual_seeding_json_repository', 'cli/src/native/remote_view/open/coordinator.rs', 'manual seeding still acquires its browser and handoff through legacy JSON Service State'));
+    add('P05', finding('manual_seeding_parallel_handoff', 'cli/src/native/remote_view/open/coordinator.rs', 'manual-seeding handoff publication remains outside the SQLite authority used by durable resolution'));
+  }
+  if (/"service_remote_view_handoff_resolve"\s*=>[\s\S]{0,400}handle_service_remote_view_handoff_resolve\(/.test(actions)) {
+    add('P03', finding('generic_handoff_json_fallback', 'cli/src/native/actions.rs', 'generic action dispatch can resolve a handoff through the legacy JSON coordinator'));
+    add('P05', finding('generic_handoff_parallel_authority', 'cli/src/native/actions.rs', 'generic action dispatch can publish a competing handoff resolution outside the SQLite session host'));
+  }
+  const configuredInteraction = desktopInteraction.match(
+    /fn run_configured_interaction\([\s\S]*?\n\}\n\n\/\/\/ Dispatch the controlled provider/u,
+  )?.[0] || '';
+  if (/LockedServiceStateRepository::default_json\(\)|operations\.json/u.test(configuredInteraction)) {
+    add('P03', finding('desktop_interaction_json_authority', 'cli/src/native/desktop_interaction.rs', 'ordinary configured desktop interaction retains a JSON state or operation-ledger dependency'));
+    add('P05', finding('desktop_interaction_parallel_operation_authority', 'cli/src/native/desktop_interaction.rs', 'ordinary desktop effects retain an operation authority outside Browser Runtime SQLite'));
+  }
+  const managedDesktopSnapshot = desktopCapture.match(
+    /impl StateSource for ManagedDesktopStateSource[\s\S]*?\n\}\n/u,
+  )?.[0] || '';
+  if (/load_configured_service_state\(|load_default_service_state_snapshot\(/u.test(managedDesktopSnapshot)) {
+    add('P03', finding('managed_desktop_json_snapshot', 'cli/src/native/desktop_capture.rs', 'managed desktop capture still reads JSON Service State before projecting SQLite authority'));
+  }
+  if (/AGENT_BROWSER_SERVICE_RECOVERY_(?:RETRY_BUDGET|BASE_BACKOFF_MS|MAX_BACKOFF_MS)|browser_recovery_policy_config_from_env/u.test(`${actionRuntimeRecovery}\n${actionRuntimeLaunch}`)) {
+    add('P03', finding('ordinary_recovery_environment_authority', 'cli/src/native/action_runtime/runtime', 'ordinary recovery reconstructs policy from process environment instead of Browser Runtime SQLite'));
+    add('P05', finding('competing_recovery_policy_authority', 'cli/src/native/action_runtime/runtime', 'ordinary recovery retains a writable policy authority outside Browser Runtime SQLite'));
+  }
+  const credentialVariables = workstationInstall.match(/XRDP_AGENT_BROWSER_ROUTE_[A-Z]_(?:USERNAME|PASSWORD)/g) || [];
+  if (credentialVariables.length > 0) {
+    add('P09', finding('persistent_route_credential_environment', 'cli/src/workstation_install.rs', `${new Set(credentialVariables).size} route credential environment keys remain in installation projection`));
+  }
+  if (/viewer_leases/.test(serviceState) || /viewer_leases/.test(handoff)) {
+    add('P12', finding('stored_viewer_authority', 'crates/agent-browser-service-model/src/service_state.rs', 'stored viewer lease records remain part of Service State authority'));
+  }
+  if (/service_viewer_lease_(?:request|heartbeat|release)/.test(actions)) {
+    add('P12', finding('viewer_lease_dispatch', 'cli/src/native/actions.rs', 'the default runtime dispatches stored viewer lease lifecycle actions'));
+  }
+
+  if (manifestDependsOnLeaseAuthority(cliManifest)) {
+    add('P15', finding('cli_cargo_dependency', 'cli/Cargo.toml', 'the default CLI directly depends on agent-browser-lease-authority'));
+  }
+  if (manifestDependsOnLeaseAuthority(serviceModelManifest)) {
+    add('P15', finding('service_model_cargo_dependency', 'crates/agent-browser-service-model/Cargo.toml', 'the Service model directly depends on agent-browser-lease-authority'));
+  }
+  for (const { path, source } of productSources) {
+    if (/agent_browser_lease_authority/.test(source)) {
+      add('P15', finding('compiled_product_reference', path, 'default product source references the Lease Authority crate'));
+    }
+  }
+  if (/service_profile_lease|runtime_owner_binding_for_session|cleanup_obligation/.test(handoff)) {
+    add('P16', finding('ordinary_handoff_legacy_admission_record', 'cli/src/native/remote_view_handoff.rs', 'ordinary handoff code consults lease, runtime-owner, or cleanup-obligation state'));
+  }
+  if (/runtime_owner_registry/.test(serviceState)) {
+    add('P16', finding('runtime_owner_in_ordinary_state', 'crates/agent-browser-service-model/src/service_state.rs', 'runtime-owner state remains embedded in the ordinary Service State model'));
+  }
+  const trustedLegacyAuthoritySources = [
+    'cli/src/native/control_plane.rs',
+    'cli/src/native/service_store.rs',
+    'cli/src/native/service_health.rs',
+    'cli/src/native/service_inventory.rs',
+    'cli/src/native/service_lifecycle.rs',
+    'cli/src/native/service_failure.rs',
+    'cli/src/native/stream/guacamole_primary_binding.rs',
+    'crates/agent-browser-service-model/src/service_state.rs',
+    'crates/agent-browser-service-model/src/browser_process.rs',
+    'packages/dashboard/src/components/service-panel.tsx',
+    'packages/client/src/service-observability.generated.d.ts',
+  ];
+  const legacyAuthorityPattern = /agent_browser_lease_authority|runtime_owner_transfer|runtime_owner_registry|ProtectedBrowserOwnerObservation|protected_browser_owner_observation|protected_lease_authority/u;
+  for (const path of trustedLegacyAuthoritySources) {
+    const source = beforeDisabledLegacyTests(read(root, path));
+    if (legacyAuthorityPattern.test(source)) {
+      add('P16', finding(
+        'trusted_product_legacy_authority_reference',
+        path,
+        'trusted product code retains a compiled or exposed legacy lease/runtime-owner authority reference',
+      ));
+    }
+  }
+  if (/service_viewer_lease_heartbeat/.test(actions)) {
+    add('P19', finding('persisted_viewer_heartbeat_authority', 'cli/src/native/actions.rs', 'viewer heartbeat is represented by the persisted viewer-lease action surface'));
+    if (/service_viewer_lease_(?:request|release)/.test(dashboardViewport)) {
+      add('P19', finding('dashboard_persisted_viewer_lifecycle', 'packages/dashboard/src/components/workspace-remote-viewport.tsx', 'dashboard viewer presence is projected through the persisted viewer-lease lifecycle'));
+    }
+  }
+  if (/live_viewer|LiveViewer/.test(browserSessionManager)) {
+    add('P19', finding('viewer_heartbeat_in_session_authority', 'crates/agent-browser-service-model/src/browser_session_manager.rs', 'Browser Session Manager consults live-viewer authority'));
+  }
+  if (/live_viewer|LiveViewer/.test(presentationAdmission)) {
+    add('P19', finding('viewer_heartbeat_in_presentation_admission', 'cli/src/native/presentation_request_admission.rs', 'presentation admission consults live-viewer authority'));
+  }
+
+  const leaseAuthorityIsIndependent =
+    existsSync(join(root, 'crates/agent-browser-lease-authority/Cargo.toml'))
+    && /name\s*=\s*["']agent-browser-lease-authority["']/u.test(leaseAuthorityManifest)
+    && /["']crates\/agent-browser-lease-authority["']/u.test(workspaceManifest);
+  const legacyAuthorityDetectorComplete = trustedLegacyAuthoritySources.every((path) =>
+    existsSync(join(root, path))
+  );
+  const providerCredentialCustodyComplete =
+    /CREATE TABLE IF NOT EXISTS provider_credentials/.test(browserSessionStore)
+    && /SQLITE_KEY\s*=\s*["']rdp_route_user_inventory\.v1["']/.test(routeUserPool)
+    && /remove_inventory_secrets\(secret_file\)/.test(routeUserPool)
+    && /--database/.test(routeSetup)
+    && /--database/.test(routeSync);
+  const liveViewerBoundaryComplete =
+    /observe_active_connection/.test(guacamoleLiveViewer)
+    && /"connect"/.test(guacamoleLiveViewer)
+    && /"heartbeat"/.test(guacamoleLiveViewer)
+    && /"disconnect"/.test(guacamoleLiveViewer)
+    && /BrowserRuntimeSqliteStore::default_sqlite/.test(guacamoleLiveViewer)
+    && /LIVE_VIEWER_TTL_MS/.test(desktopControl)
+    && /record\.expires_at_ms\s*<=\s*now_ms/.test(desktopControl)
+    && /record\.boot_epoch\s*!=\s*current_boot/.test(desktopControl)
+    && /with_current_desktop_control[\s\S]*?validate_live_viewer_current/.test(desktopControl)
+    && /\/api\/live-viewer-authority/.test(dashboardViewport)
+    && /operation:\s*["']heartbeat["']/.test(dashboardViewport)
+    && /operation:\s*["']disconnect["']/.test(dashboardViewport)
+    && !/live_viewer|LiveViewer/.test(browserSessionManager)
+    && !/live_viewer|LiveViewer/.test(presentationAdmission);
+  const definitelyViolated = new Set(['P02', 'P03', 'P05', 'P09', 'P12', 'P15', 'P16', 'P19']);
+  const rows = Array.from({ length: 19 }, (_, index) => {
+    const id = `P${String(index + 1).padStart(2, '0')}`;
+    const evidence = violations.get(id) || [];
+    let status = 'unverified';
+    if (definitelyViolated.has(id)) status = evidence.length > 0 ? 'violated' : 'detector_gap';
+    if (id === 'P15' && evidence.length === 0 && leaseAuthorityIsIndependent) status = 'pass';
+    if (id === 'P16' && evidence.length === 0 && legacyAuthorityDetectorComplete) status = 'pass';
+    if (id === 'P09' && evidence.length === 0 && providerCredentialCustodyComplete) status = 'pass';
+    if (id === 'P19' && evidence.length === 0 && liveViewerBoundaryComplete) status = 'pass';
+    return { id, status, findings: evidence };
+  });
+  const serviceModelLeaseAuthorityFindings = [];
+  if (manifestDependsOnLeaseAuthority(serviceModelManifest)) {
+    serviceModelLeaseAuthorityFindings.push(finding(
+      'service_model_cargo_dependency',
+      'crates/agent-browser-service-model/Cargo.toml',
+      'the Service model manifest depends on agent-browser-lease-authority',
+    ));
+  }
+  for (const path of serviceModelFiles) {
+    const source = readFileSync(path, 'utf8');
+    if (/agent_browser_lease_authority/.test(source)) {
+      serviceModelLeaseAuthorityFindings.push(finding(
+        'service_model_compiled_product_reference',
+        relative(root, path),
+        'Service model Rust source references the Lease Authority crate',
+      ));
+    }
+  }
+  const statusReadOnlyFindings = [];
+  const statusProjection = daemon.match(
+    /async fn attach_browser_session_state[\s\S]*?(?=async fn reap_browser_sessions_if_loaded)/,
+  )?.[0] || '';
+  if (/reconcile_liveness_current|reap_current|handle_command\(/.test(statusProjection)) {
+    statusReadOnlyFindings.push(finding(
+      'status_projection_mutates_browser_session_state',
+      'cli/src/native/daemon.rs',
+      'service status invokes Browser Session Manager reconciliation or lifecycle mutation',
+    ));
+  }
+  return {
+    schemaVersion: 'p218-architecture-conformance.v1',
+    plan: 'docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md',
+    milestone: 'M0',
+    rows,
+    cuts: {
+      serviceModelLeaseAuthority: {
+        status: serviceModelLeaseAuthorityFindings.length === 0 ? 'pass' : 'fail',
+        findings: serviceModelLeaseAuthorityFindings,
+      },
+      statusReadOnly: {
+        status: statusReadOnlyFindings.length === 0 ? 'pass' : 'fail',
+        findings: statusReadOnlyFindings,
+      },
+      legacyAuthorityQuarantine: {
+        status: leaseAuthorityIsIndependent
+          && legacyAuthorityDetectorComplete
+          && (violations.get('P15') || []).length === 0
+          && (violations.get('P16') || []).length === 0
+          ? 'pass'
+          : 'fail',
+        findings: [
+          ...(violations.get('P15') || []),
+          ...(violations.get('P16') || []),
+        ],
+      },
+      providerCredentialCustody: {
+        status: providerCredentialCustodyComplete
+          && (violations.get('P09') || []).length === 0 ? 'pass' : 'fail',
+        findings: violations.get('P09') || [],
+      },
+    },
+    summary: rows.reduce((counts, row) => {
+      counts[row.status] = (counts[row.status] || 0) + 1;
+      return counts;
+    }, {}),
+  };
+}
+
+function printHuman(report) {
+  for (const row of report.rows) {
+    console.log(`${row.id} ${row.status} findings=${row.findings.length}`);
+    for (const item of row.findings.slice(0, 5)) console.log(`  ${item.id} ${item.path}: ${item.detail}`);
+    if (row.findings.length > 5) console.log(`  ... ${row.findings.length - 5} more`);
+  }
+  console.log(`summary ${JSON.stringify(report.summary)}`);
+}
+
+function parseArguments(argv) {
+  const options = { root: defaultRoot, format: 'human', enforce: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const argument = argv[index];
+    if (argument === '--root') {
+      const value = argv[index + 1];
+      if (!value) throw new Error('missing value for --root');
+      options.root = resolve(value);
+      index += 1;
+    } else if (argument === '--json') options.format = 'json';
+    else if (argument === '--enforce') options.enforce = true;
+    else if (argument === '--help') options.help = true;
+    else throw new Error(`unknown argument: ${argument}`);
+  }
+  return options;
+}
+
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  try {
+    const options = parseArguments(process.argv.slice(2));
+    if (options.help) {
+      console.log('Usage: node scripts/dev/check-p218-architecture.mjs [--root PATH] [--json] [--enforce]');
+      console.log('Without --enforce the command reports the intentionally red M0 baseline and exits zero.');
+      process.exit(0);
+    }
+    const report = evaluate(options.root);
+    if (options.format === 'json') console.log(JSON.stringify(report, null, 2));
+    else printHuman(report);
+    const red = report.rows.filter((row) => row.status === 'violated' || row.status === 'detector_gap');
+    if (options.enforce && red.length > 0) process.exit(1);
+  } catch (error) {
+    console.error(`p218_architecture_check_failed:${error.message}`);
+    process.exit(2);
+  }
+}

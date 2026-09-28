@@ -1,8 +1,11 @@
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import {
   accessSync,
   constants as fsConstants,
   existsSync,
+  lstatSync,
+  readdirSync,
   readFileSync,
   statSync,
   statfsSync,
@@ -18,6 +21,7 @@ import {
 } from './development-presentation-provider.js';
 import {
   probeDevelopmentPresentationProvider,
+  readDevelopmentRouteKeeperConnections,
   renderDevelopmentPresentationProviderBundle,
 } from './development-presentation-provider-deployment.js';
 import {
@@ -27,11 +31,43 @@ import {
 
 const MIN_AVAILABLE_MEMORY_BYTES = 8 * 1024 ** 3;
 const MIN_FREE_DISK_BYTES = 10 * 1024 ** 3;
+const XRDP_DISPLAY_MIN = 10;
+const XRDP_DISPLAY_MAX = 60;
+const ABSENT_X_SERVER_PID = 4294967295;
+const ROUTE_KEEPER_RECOVERY_STATE_SCHEMA =
+  'agent-browser.development-route-keeper-recovery-state.v1';
+const READ_ROUTE_KEEPER_RECOVERY_STATE = `
+import json
+import sqlite3
+import sys
+from urllib.parse import quote
+
+database = sys.argv[1]
+connection = sqlite3.connect(f"file:{quote(database, safe='/')}?mode=ro", uri=True)
+connection.execute("pragma query_only = on")
+row = connection.execute(
+    "select json from state_documents where kind = ?",
+    ("route_keeper_authority",),
+).fetchone()
+if row is None:
+    raise RuntimeError("route_keeper_authority_missing")
+authority = json.loads(row[0])
+retained = []
+for slot_id, record in sorted(authority.get("records", {}).items()):
+    phase = record.get("phase")
+    if phase in ("stopping", "quarantined"):
+        retained.append({"slotId": slot_id, "phase": phase})
+print(json.dumps({
+    "schemaVersion": "${ROUTE_KEEPER_RECOVERY_STATE_SCHEMA}",
+    "retained": retained,
+}, separators=(",", ":")))
+`;
 
 /** Read-only admission for a fresh or configured development provider transaction. */
 export function developmentPresentationProviderSystemPreflight({
   env = process.env,
   run = commandResult,
+  routeKeeperRuntime = developmentRouteKeeperRuntimeStatus,
 } = {}) {
   const descriptor = developmentPresentationProviderDescriptor(env);
   const configured = existsSync(descriptor.manifest);
@@ -48,6 +84,8 @@ export function developmentPresentationProviderSystemPreflight({
     descriptor.externalIngress.configured === true,
     descriptor.externalIngress,
   ));
+  const routeKeeper = routeKeeperRuntime(env);
+  checks.push(check('route-keeper-runtime', routeKeeper.integrated === true, routeKeeper));
   const docker = run('docker', ['info', '--format', '{{.ServerVersion}}']);
   checks.push(check('docker', docker.status === 0, docker.status === 0 ? docker.stdout.trim() : commandError(docker)));
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
@@ -56,6 +94,24 @@ export function developmentPresentationProviderSystemPreflight({
   const helperCheck = run('sudo', ['-n', helper, 'check']);
   checks.push(check('privileged-helper-noninteractive', helperCheck.status === 0,
     helperCheck.status === 0 ? 'ready' : commandError(helperCheck)));
+  const helperStatus = run('sudo', ['-n', helper, 'status-json']);
+  let helperCapabilities = null;
+  try {
+    helperCapabilities = helperStatus.status === 0
+      ? JSON.parse(helperStatus.stdout)
+      : null;
+  } catch {
+    helperCapabilities = null;
+  }
+  const foreignPidReuseReady =
+    helperCapabilities?.staleDisplayLockReclamation?.acceptsProvablyForeignPidReuse === true;
+  checks.push(check(
+    'privileged-helper-foreign-pid-reuse',
+    foreignPidReuseReady,
+    foreignPidReuseReady
+      ? helperCapabilities.helperVersion || 'ready'
+      : commandError(helperStatus) || 'capability missing',
+  ));
   const xrdp = run('systemctl', ['is-active', 'xrdp', 'xrdp-sesman']);
   checks.push(check('shared-xrdp-substrate', xrdp.status === 0, xrdp.status === 0 ? 'active' : commandError(xrdp)));
   checks.push(check('shared-xrdp-restart-prohibited', descriptor.rdpTarget.restartAllowed === false,
@@ -154,6 +210,71 @@ export function developmentPresentationProviderSystemPreflight({
   };
 }
 
+function developmentRouteKeeperRuntimeStatus(env) {
+  const runtime = developmentRuntimeNamespace(env);
+  const installRoot = env.AGENT_BROWSER_DEV_INSTALL_ROOT ||
+    join(env.HOME, '.local', 'lib', runtime.name);
+  const metadataPath = join(installRoot, 'current', 'generation.json');
+  let metadata = null;
+  try {
+    metadata = JSON.parse(readFileSync(metadataPath, 'utf8'));
+  } catch {
+    return { integrated: false, metadataPath, reason: 'generation_metadata_unavailable' };
+  }
+  const capability = metadata.presentationRouteKeeper;
+  const integrated = capability?.integrated === true &&
+    capability.provider === 'guacamole-xrdp' &&
+    capability.authority === 'browser-runtime-sqlite';
+  return {
+    integrated,
+    metadataPath,
+    generationId: metadata.generationId ?? null,
+    provider: capability?.provider ?? null,
+    authority: capability?.authority ?? null,
+    ...(!integrated ? { reason: 'presentation_route_keeper_capability_missing' } : {}),
+  };
+}
+
+/** Read only the durable stop intents needed to admit provider reconciliation. */
+export function readDevelopmentRouteKeeperRecoveryState(
+  descriptor,
+  { run = commandResult } = {},
+) {
+  const database = join(
+    descriptor.pseudoHome,
+    '.agent-browser',
+    'service',
+    'runtime.sqlite3',
+  );
+  const result = runRequired(
+    run,
+    'python3',
+    ['-c', READ_ROUTE_KEEPER_RECOVERY_STATE, database],
+    { timeout: 10000 },
+    'read development route-keeper recovery state',
+  );
+  let state;
+  try {
+    state = JSON.parse(result.stdout);
+  } catch {
+    throw new Error('Development route-keeper recovery state returned invalid JSON');
+  }
+  const configuredSlots = new Set(descriptor.routes.map(
+    (_, index) => `route-slot-${String(index + 1).padStart(2, '0')}`,
+  ));
+  if (
+    state.schemaVersion !== ROUTE_KEEPER_RECOVERY_STATE_SCHEMA ||
+    !Array.isArray(state.retained) ||
+    state.retained.some((record) =>
+      !record ||
+      !configuredSlots.has(record.slotId) ||
+      !['stopping', 'quarantined'].includes(record.phase))
+  ) {
+    throw new Error('Development route-keeper recovery state was invalid');
+  }
+  return state;
+}
+
 /** Bind the transaction owner to the current workstation effect seams. */
 export function createDevelopmentPresentationProviderSystemEffects({
   env = process.env,
@@ -163,6 +284,18 @@ export function createDevelopmentPresentationProviderSystemEffects({
   assertDefaultDevelopmentUnchanged,
   publishIngress,
   run = commandResult,
+  discoverStaleDisplayCandidates = discoverDevelopmentStaleDisplayCandidates,
+  readRouteKeeperRecovery = (descriptor) =>
+    readDevelopmentRouteKeeperRecoveryState(descriptor, { run }),
+  displayPidAbsent = (pid, routeUid) => {
+    try {
+      return statSync(`/proc/${pid}`).uid !== routeUid;
+    } catch (error) {
+      if (error?.code === 'ENOENT') return true;
+      throw error;
+    }
+  },
+  probeProvider = probeDevelopmentPresentationProvider,
 } = {}) {
   if (typeof productionSnapshot !== 'function' || typeof assertProductionUnchanged !== 'function') {
     throw new Error('Development provider effects require production identity guards');
@@ -175,7 +308,9 @@ export function createDevelopmentPresentationProviderSystemEffects({
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
   const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
+  const routeKeeperRuntime = developmentRouteKeeperRuntimeStatus(env);
   return {
+    routeKeeperRuntimeReady: routeKeeperRuntime.integrated === true,
     snapshotProduction: () => namespaced ? {
       production: productionSnapshot(env),
       defaultDevelopment: defaultDevelopmentSnapshot(env),
@@ -266,6 +401,62 @@ export function createDevelopmentPresentationProviderSystemEffects({
         'CHECKPOINT;',
       ], {}, 'checkpoint development Guacamole database');
     },
+    readRouteKeeperConnections(descriptor) {
+      return readDevelopmentRouteKeeperConnections(descriptor, { run });
+    },
+    publishRouteKeeperConnectionCatalog(publication, descriptor) {
+      const canonicalBindings = Object.fromEntries(
+        [...publication.bindings]
+          .sort((left, right) => left.slotId.localeCompare(right.slotId))
+          .map((binding) => [binding.slotId, binding]),
+      );
+      const expectedDigest = createHash('sha256')
+        .update(JSON.stringify({
+          providerBase: publication.providerBase,
+          ...(publication.publicOperatorUrl == null
+            ? {}
+            : { publicOperatorUrl: publication.publicOperatorUrl }),
+          bindings: canonicalBindings,
+        }))
+        .digest('hex');
+      const command = join(
+        descriptor.userHome,
+        '.local',
+        'bin',
+        `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`,
+      );
+      const result = runRequired(
+        run,
+        command,
+        ['--internal-route-keeper-connection-catalog-publish'],
+        {
+          input: JSON.stringify(publication),
+          env: {
+            ...env,
+            HOME: descriptor.pseudoHome,
+            AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
+          },
+          timeout: 30000,
+        },
+        'publish development route-keeper connection catalog',
+      );
+      let receipt;
+      try {
+        receipt = JSON.parse(result.stdout);
+      } catch {
+        throw new Error('Development route-keeper catalog publisher returned invalid JSON');
+      }
+      if (
+        receipt.schemaVersion !==
+          'agent-browser.route-keeper-connection-catalog-publication-receipt.v1' ||
+        !['published', 'unchanged'].includes(receipt.outcome) ||
+        receipt.catalogDigest !== expectedDigest ||
+        receipt.bindingCount !== descriptor.hardMaxSlots
+      ) {
+        throw new Error('Development route-keeper catalog publisher returned an invalid receipt');
+      }
+      return receipt;
+    },
     startProvider(descriptor) {
       composeRequired(run, descriptor, [
         'up',
@@ -353,49 +544,90 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
       }
     },
     openWarmRoutes(descriptor) {
-      const observation = probeDevelopmentPresentationProvider(descriptor, { run });
-      const databaseRoutes = new Map(
-        observation.database.routes.map((route) => [route.connectionName, route]),
+      const runtime = developmentRuntimeNamespace(env);
+      const runtimeHostUnit = `${runtime.name}-runtime-host.service`;
+      const retainedRecovery = readRouteKeeperRecovery(descriptor);
+      if (retainedRecovery.retained.length > 0) {
+        runRequired(
+          run,
+          'systemctl',
+          ['--user', 'reset-failed', runtimeHostUnit],
+          {},
+          'reset failed development runtime host for retained exact recovery',
+        );
+        runRequired(
+          run,
+          'systemctl',
+          ['--user', 'start', runtimeHostUnit],
+          {},
+          'start development runtime host for retained exact recovery',
+        );
+        waitFor(
+          run,
+          () => readRouteKeeperRecovery(descriptor).retained.length === 0,
+          60000,
+          'retained exact development route recovery',
+        );
+      }
+      runRequired(
+        run,
+        'systemctl',
+        ['--user', 'stop', runtimeHostUnit],
+        {},
+        'stop development runtime host for exact stale-display reconciliation',
       );
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const routes = descriptor.routes.slice(0, descriptor.warmSlots).map((route) => {
-        const connectionId = databaseRoutes.get(route.connectionName)?.connectionId;
-        if (!connectionId) throw new Error(`Development Guacamole connection is missing: ${route.routeId}`);
-        const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-        const frameUrl = `${baseUrl}#/client/${clientId}`;
-        return {
-          id: route.routeId,
-          routeId: `guacamole:${connectionId}`,
-          connectionId,
-          connectionName: route.connectionName,
-          frameUrl,
-          externalUrl: frameUrl,
-          viewerSession: route.viewerSession,
-          viewerProfile: route.viewerProfile,
-          target: {
-            routeUser: route.user,
-            displayReservationId: route.displayReservationId,
-          },
-        };
-      });
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(routes),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, 'open development warm route sessions');
+      const candidates = discoverStaleDisplayCandidates(descriptor, run);
+      for (const candidate of candidates) {
+        if (candidate.xServerPid !== ABSENT_X_SERVER_PID) {
+          waitFor(
+            run,
+            () => displayPidAbsent(candidate.xServerPid, candidate.routeUid),
+            15000,
+            `exact stale display ${candidate.displayName} PID absence`,
+            100,
+          );
+        }
+        const result = runRequired(run, 'sudo', [
+          '-n',
+          helper,
+          'reclaim-rdp-route-display-lock-exact',
+          '--user',
+          candidate.routeUser,
+          '--display',
+          candidate.displayName,
+          '--x-server-pid',
+          String(candidate.xServerPid),
+        ], {}, `reclaim exact stale display ${candidate.displayName}`);
+        let receipt;
+        try {
+          receipt = JSON.parse(result.stdout);
+        } catch {
+          throw new Error('exact stale-display reclamation returned invalid JSON');
+        }
+        if (
+          receipt.schemaVersion !== 1 ||
+          !['absent', 'reclaimed'].includes(receipt.state) ||
+          receipt.display !== candidate.displayName ||
+          Number(receipt.xServerPid) !== candidate.xServerPid
+        ) {
+          const code = typeof receipt.code === 'string' ? `:${receipt.code}` : '';
+          throw new Error(`exact stale-display reclamation was not proven${code}`);
+        }
+      }
+      runRequired(
+        run,
+        'systemctl',
+        ['--user', 'start', runtimeHostUnit],
+        {},
+        'start development runtime host after exact stale-display reconciliation',
+      );
+      waitFor(
+        run,
+        () => probeProvider(descriptor, { run }).displays.length >=
+          descriptor.warmSlots,
+        90000,
+        'runtime-owned development warm routes',
+      );
     },
     observe: (descriptor) => probeDevelopmentPresentationProvider(descriptor, { run }),
     grantDisplayAccess(display) {
@@ -441,6 +673,102 @@ where e.name = ${operator} and e.type = 'USER' and p.permission = 'READ'
   };
 }
 
+export function discoverDevelopmentStaleDisplayCandidates(
+  descriptor,
+  run,
+  { tmpRoot = '/tmp', socketDir = '/run/xrdp/sockdir' } = {},
+) {
+  const routeUserByUid = new Map();
+  for (const route of descriptor.routes) {
+    const result = run('getent', ['passwd', route.user]);
+    const fields = result.status === 0 ? result.stdout.trim().split(':') : [];
+    const uid = Number(fields[2]);
+    if (fields[0] !== route.user || !Number.isInteger(uid) || uid <= 0) {
+      throw new Error(`development route user identity unavailable: ${route.routeId}`);
+    }
+    const existingUser = routeUserByUid.get(uid);
+    if (existingUser && existingUser.routeUser !== route.user) {
+      throw new Error(`development route user UID is not unique: ${route.routeId}`);
+    }
+    routeUserByUid.set(uid, { routeUser: route.user, routeUid: uid });
+  }
+
+  const candidates = new Map();
+  const addCandidate = (routeIdentity, displayNumber, xServerPid) => {
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) return;
+    const { routeUser, routeUid } = routeIdentity;
+    const displayName = `:${displayNumber}`;
+    const existing = candidates.get(displayName);
+    if (existing && existing.routeUser !== routeUser) {
+      throw new Error(`development stale display ownership conflicts at ${displayName}`);
+    }
+    candidates.set(displayName, {
+      routeUser,
+      routeUid,
+      displayName,
+      xServerPid: existing?.xServerPid === ABSENT_X_SERVER_PID
+        ? xServerPid
+        : (existing?.xServerPid ?? xServerPid),
+    });
+  };
+
+  for (const name of directoryEntries(tmpRoot)) {
+    const match = name.match(/^\.X([0-9]+)-lock$/);
+    if (!match) continue;
+    const displayNumber = Number(match[1]);
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) continue;
+    const path = join(tmpRoot, name);
+    let status;
+    try {
+      status = lstatSync(path);
+    } catch {
+      continue;
+    }
+    if (!status.isFile() || status.isSymbolicLink()) continue;
+    const routeIdentity = routeUserByUid.get(status.uid);
+    if (!routeIdentity) continue;
+    let xServerPid = ABSENT_X_SERVER_PID;
+    try {
+      const parsed = Number(readFileSync(path, 'utf8').trim());
+      if (Number.isInteger(parsed) && parsed > 0) xServerPid = parsed;
+    } catch {
+      // The root-owned helper will reject rather than delete an unreadable or
+      // malformed lock. Retain the absent-PID sentinel for that exact check.
+    }
+    addCandidate(routeIdentity, displayNumber, xServerPid);
+  }
+
+  const socketPattern = /^(?:xrdp_chansrv_socket_|xrdp_display_|xrdp_disconnect_display_|xrdpapi_|xrdp_chansrv_audio_(?:in|out)_socket_)([0-9]+)$/;
+  for (const name of directoryEntries(socketDir)) {
+    const match = name.match(socketPattern);
+    if (!match) continue;
+    const displayNumber = Number(match[1]);
+    if (displayNumber < XRDP_DISPLAY_MIN || displayNumber > XRDP_DISPLAY_MAX) continue;
+    let status;
+    try {
+      status = lstatSync(join(socketDir, name));
+    } catch {
+      continue;
+    }
+    if (!status.isSocket() || status.isSymbolicLink()) continue;
+    const routeIdentity = routeUserByUid.get(status.uid);
+    if (!routeIdentity) continue;
+    addCandidate(routeIdentity, displayNumber, ABSENT_X_SERVER_PID);
+  }
+
+  return [...candidates.values()].sort((left, right) =>
+    Number(left.displayName.slice(1)) - Number(right.displayName.slice(1)) ||
+    left.routeUser.localeCompare(right.routeUser));
+}
+
+function directoryEntries(path) {
+  try {
+    return readdirSync(path);
+  } catch {
+    return [];
+  }
+}
+
 /** Live elastic lifecycle effects, bounded to one descriptor-owned route. */
 export function createDevelopmentPresentationLifecycleSystemEffects(options = {}) {
   const env = options.env || process.env;
@@ -448,10 +776,6 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
   const base = createDevelopmentPresentationProviderSystemEffects({ ...options, env, run });
   const helper = env.AGENT_BROWSER_PRIVILEGED_HELPER ||
     '/usr/local/libexec/agent-browser/agent-browser-privileged-helper';
-  const operatorUser = env.AGENT_BROWSER_DEV_OPERATOR_USER || env.USER;
-  const reclaimTimeoutMs = Number(options.reclaimTimeoutMs ??
-    env.AGENT_BROWSER_DEV_PRESENTATION_RECLAIM_TIMEOUT_MS ?? 5000);
-  const reclaimPollMs = Number(options.reclaimPollMs ?? 100);
   const pressureSnapshot = options.pressureSnapshot || sampleDevelopmentPresentationPressure;
   const reclaimCapability = () => {
     const result = run(helper, ['status-json']);
@@ -469,12 +793,14 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       return { ready: false, reason: 'helper_status_json_invalid', helper };
     }
     const termination = status.routeSessionTermination;
-    const ready = termination?.supported === true &&
-      termination?.exactRouteUser === true &&
-      termination?.idempotentWhenAbsent === true;
+    const exactHelper = termination?.supported === true &&
+      termination?.exactCgroupV2Identity === true &&
+      termination?.retainedDirectoryIdentity === true &&
+      termination?.usesCgroupKill === true &&
+      termination?.broadUserTermination === false;
     return {
-      ready,
-      reason: ready ? null : 'helper_contract_missing',
+      ready: false,
+      reason: exactHelper ? 'route_keeper_stop_integration_required' : 'helper_contract_missing',
       helper,
       helperVersion: status.helperVersion || null,
     };
@@ -485,46 +811,8 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
     pressureAdmission(descriptor) {
       return evaluateDevelopmentPresentationPressure(descriptor, pressureSnapshot());
     },
-    provisionRoute(route, descriptor) {
-      const observation = base.observe(descriptor);
-      const connectionId = observation.database.routes
-        .find((candidate) => candidate.connectionName === route.connectionName)?.connectionId;
-      if (!connectionId) throw new Error(`Development route connection is missing: ${route.routeId}`);
-      const baseUrl = `http://127.0.0.1:${descriptor.ports.guacamole}/guacamole/`;
-      const clientId = Buffer.from(`${connectionId}\0c\0postgresql`, 'utf8').toString('base64');
-      const inventory = [{
-        id: route.routeId,
-        routeId: `guacamole:${connectionId}`,
-        connectionId,
-        connectionName: route.connectionName,
-        frameUrl: `${baseUrl}#/client/${clientId}`,
-        externalUrl: `${baseUrl}#/client/${clientId}`,
-        viewerSession: route.viewerSession,
-        viewerProfile: route.viewerProfile,
-        target: {
-          routeUser: route.user,
-          displayReservationId: route.displayReservationId,
-        },
-      }];
-      runRequired(run, process.execPath, [
-        join(process.cwd(), 'scripts', 'open-rdp-guac-route-displays.js'),
-        '--wait-ms',
-        '1000',
-        '--allow-single-route',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-          AGENT_BROWSER_ROUTE_DISPLAY_AGENT_BROWSER_CMD: join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`),
-          AGENT_BROWSER_RDP_ROUTE_POOL_JSON: JSON.stringify(inventory),
-          AGENT_BROWSER_GUACAMOLE_BASE_URL: baseUrl,
-          AGENT_BROWSER_GUACAMOLE_HEADER_USER: operatorUser,
-          AGENT_BROWSER_ROUTE_DISPLAY_FORCE_VIEWER: '1',
-          AGENT_BROWSER_REMOTE_VIEW_SCRIPT_ROOT: join(process.cwd(), 'scripts'),
-        },
-        timeout: 600000,
-      }, `provision ${route.routeId}`);
+    provisionRoute() {
+      throw new Error('development hidden-viewer scale-out removed; route-keeper runtime required');
     },
     cooldownStatus(_route, descriptor) {
       const requiredMs = Number(env.AGENT_BROWSER_DEV_PRESENTATION_COOLDOWN_MS || 5000);
@@ -557,42 +845,9 @@ export function createDevelopmentPresentationLifecycleSystemEffects(options = {}
       }
       return exactRouteReferences(status?.data?.service_state || status?.data?.serviceState || {}, route);
     },
-    reclaimRoute(route, descriptor) {
+    reclaimRoute() {
       const capability = reclaimCapability();
-      if (capability.ready !== true) {
-        throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
-      }
-      const command = join(descriptor.userHome, '.local', 'bin', `agent-browser-dev${descriptor.namespace ? `-${descriptor.namespace}` : ''}`);
-      const close = run(command, [
-        '--json',
-        '--session', route.viewerSession,
-        '--runtime-profile', route.viewerProfile,
-        'close',
-      ], {
-        env: {
-          ...env,
-          HOME: descriptor.pseudoHome,
-          AGENT_BROWSER_HOME: join(descriptor.pseudoHome, '.agent-browser'),
-        },
-        timeout: 30000,
-      });
-      if (close.error || (close.status !== 0 && !/not found|no browser|not running/i.test(`${close.stdout}${close.stderr}`))) {
-        throw new Error(`close ${route.viewerSession} failed: ${commandError(close) || close.status}`);
-      }
-      const termination = run('sudo', [
-        '-n', helper, 'terminate-rdp-route-session', '--user', route.user,
-      ]);
-      try {
-        waitFor(run, () => {
-          const processes = run('ps', ['-u', route.user, '-o', 'pid=,args=']);
-          return processes.status !== 0 || !processes.stdout.trim();
-        }, reclaimTimeoutMs, `reclaim ${route.routeId}`, reclaimPollMs);
-      } catch {
-        if (termination.error || termination.status !== 0) {
-          throw new Error(`terminate ${route.routeId} failed: ${commandError(termination) || termination.status}`);
-        }
-        throw new Error(`Development route processes remain after reclaim: ${route.routeId}`);
-      }
+      throw new Error(`Development reclaim capability is unavailable: ${capability.reason}`);
     },
   };
 }
@@ -606,18 +861,12 @@ function exactRouteReferences(serviceState, route) {
   if (!remoteRoute || !display || !pool) ambiguities.push('service_binding_missing');
   if (remoteRoute?.browserId) blockers.push(`browser:${remoteRoute.browserId}`);
   if (remoteRoute?.sessionId) blockers.push(`session:${remoteRoute.sessionId}`);
-  for (const leaseId of remoteRoute?.viewerLeaseIds || []) blockers.push(`viewer_lease:${leaseId}`);
   if (remoteRoute?.controllerLeaseId) blockers.push(`controller_lease:${remoteRoute.controllerLeaseId}`);
   if (display?.ownerBrowserId) blockers.push(`display_browser:${display.ownerBrowserId}`);
   if (display?.ownerSessionId) blockers.push(`display_session:${display.ownerSessionId}`);
   for (const [id, lease] of Object.entries(serviceState.remoteViewAcquisitionLeases || {})) {
     if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
       blockers.push(`acquisition_lease:${id}`);
-    }
-  }
-  for (const [id, lease] of Object.entries(serviceState.viewerLeases || {})) {
-    if (lease?.routeId === route.routeId || lease?.routePoolEntryId === route.slotId) {
-      blockers.push(`viewer_lease:${id}`);
     }
   }
   for (const [id, handoff] of Object.entries(serviceState.remoteViewHandoffs || {})) {

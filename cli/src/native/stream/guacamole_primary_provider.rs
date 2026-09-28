@@ -1,15 +1,156 @@
 //! Local Guacamole authentication and receive-only tunnel startup.
 //! Provider tokens never leave this module's transient connection setup.
 
-use super::guacamole_primary_binding::{check_primary_authority, PrimaryBinding, PrimaryGuard};
+use super::guacamole_primary_binding::PrimaryBinding;
+use super::guacamole_primary_transport::{check_primary_authority, PrimaryGuard};
 #[cfg(test)]
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpStream;
 use tokio_tungstenite::{tungstenite::client::IntoClientRequest, MaybeTlsStream, WebSocketStream};
 
+/// Browser-independent connection authority for one configured Guacamole
+/// connection. Construction accepts only the reviewed loopback provider path;
+/// authentication remains transient inside `connect_spec`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct GuacamolePrimaryConnectSpec {
+    provider_base: reqwest::Url,
+    connection_id: String,
+}
+
+impl GuacamolePrimaryConnectSpec {
+    pub fn from_local_embed(
+        value: &str,
+        connection_id: impl Into<String>,
+    ) -> Result<Self, &'static str> {
+        let connection_id = connection_id.into();
+        if connection_id.trim().is_empty() {
+            return Err("guacamole_primary_connection_id_invalid");
+        }
+        let mut provider_base =
+            reqwest::Url::parse(value).map_err(|_| "guacamole_primary_provider_invalid")?;
+        let loopback = provider_base.host_str().is_some_and(|host| {
+            host.trim_matches(['[', ']'])
+                .parse::<std::net::IpAddr>()
+                .is_ok_and(|address| address.is_loopback())
+        });
+        if !loopback
+            || !matches!(provider_base.scheme(), "http" | "https")
+            || !provider_base.username().is_empty()
+            || provider_base.password().is_some()
+            || provider_base.query().is_some()
+            || provider_base.path() != "/guacamole/"
+        {
+            return Err("guacamole_primary_provider_invalid");
+        }
+        provider_base.set_fragment(None);
+        Ok(Self {
+            provider_base,
+            connection_id,
+        })
+    }
+
+    pub fn provider_base(&self) -> &reqwest::Url {
+        &self.provider_base
+    }
+
+    pub fn into_provider_base(self) -> reqwest::Url {
+        self.provider_base
+    }
+}
+
+/// Re-observe the exact backend-owned Guacamole primary that donated a
+/// restricted viewer key. The browser separately accepts the key only after
+/// an origin-bound ready message from the sharing iframe; both facts are
+/// required before live-view authority is renewed.
+pub(super) async fn observe_active_connection(
+    spec: GuacamolePrimaryConnectSpec,
+    expected_active_connection_id: &str,
+) -> Result<bool, &'static str> {
+    if expected_active_connection_id.is_empty() || expected_active_connection_id.len() > 512 {
+        return Err("guacamole_live_viewer_active_connection_invalid");
+    }
+    let principal = std::env::var("AGENT_BROWSER_GUACAMOLE_HEADER_USER")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .ok_or("guacamole_live_viewer_principal_missing")?;
+    let client = reqwest::Client::builder()
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|_| "guacamole_live_viewer_client_failed")?;
+    let auth = client
+        .post(
+            spec.provider_base
+                .join("api/tokens")
+                .map_err(|_| "guacamole_live_viewer_provider_invalid")?,
+        )
+        .header("Remote-User", &principal)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body("")
+        .send()
+        .await
+        .map_err(|_| "guacamole_live_viewer_auth_failed")?;
+    if !auth.status().is_success() {
+        return Err("guacamole_live_viewer_auth_failed");
+    }
+    let auth: serde_json::Value = auth
+        .json()
+        .await
+        .map_err(|_| "guacamole_live_viewer_auth_invalid")?;
+    if auth["username"].as_str() != Some(principal.as_str())
+        || !auth["availableDataSources"]
+            .as_array()
+            .is_some_and(|sources| sources.iter().any(|source| source == "postgresql"))
+    {
+        return Err("guacamole_live_viewer_auth_identity_mismatch");
+    }
+    let token = auth["authToken"]
+        .as_str()
+        .filter(|value| !value.is_empty() && value.len() <= 8192)
+        .ok_or("guacamole_live_viewer_auth_invalid")?;
+    let response = client
+        .get(
+            spec.provider_base
+                .join("api/session/data/postgresql/activeConnections")
+                .map_err(|_| "guacamole_live_viewer_provider_invalid")?,
+        )
+        .header("Guacamole-Token", token)
+        .send()
+        .await
+        .map_err(|_| "guacamole_live_viewer_observation_failed")?;
+    if !response.status().is_success() {
+        return Err("guacamole_live_viewer_observation_failed");
+    }
+    let connections: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|_| "guacamole_live_viewer_observation_invalid")?;
+    let present = connections
+        .as_object()
+        .ok_or("guacamole_live_viewer_observation_invalid")?
+        .get(expected_active_connection_id)
+        .is_some_and(|connection| {
+            connection["connectionIdentifier"].as_str() == Some(spec.connection_id.as_str())
+                && connection["connectable"].as_bool() == Some(true)
+        });
+    Ok(present)
+}
+
 pub(super) async fn connect(
     binding: PrimaryBinding,
+    is_current: PrimaryGuard,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
+    let spec = GuacamolePrimaryConnectSpec {
+        provider_base: binding.provider_base,
+        connection_id: binding.connection_id,
+    };
+    connect_spec(spec, is_current).await
+}
+
+pub(super) async fn connect_spec(
+    spec: GuacamolePrimaryConnectSpec,
     is_current: PrimaryGuard,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
     check_primary_authority(&is_current).await?;
@@ -17,11 +158,27 @@ pub(super) async fn connect(
         .ok()
         .filter(|value| !value.trim().is_empty())
         .ok_or("guacamole_primary_provider_principal_missing")?;
-    connect_with_principal(binding, is_current, principal).await
+    connect_spec_with_principal(spec, is_current, principal).await
 }
 
 async fn connect_with_principal(
     binding: PrimaryBinding,
+    is_current: PrimaryGuard,
+    principal: String,
+) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
+    connect_spec_with_principal(
+        GuacamolePrimaryConnectSpec {
+            provider_base: binding.provider_base,
+            connection_id: binding.connection_id,
+        },
+        is_current,
+        principal,
+    )
+    .await
+}
+
+async fn connect_spec_with_principal(
+    spec: GuacamolePrimaryConnectSpec,
     is_current: PrimaryGuard,
     principal: String,
 ) -> Result<WebSocketStream<MaybeTlsStream<TcpStream>>, &'static str> {
@@ -34,8 +191,7 @@ async fn connect_with_principal(
         .map_err(|_| "guacamole_primary_provider_client_failed")?;
     let mut response = client
         .post(
-            binding
-                .provider_base
+            spec.provider_base
                 .join("api/tokens")
                 .map_err(|_| "guacamole_primary_provider_invalid")?,
         )
@@ -82,7 +238,7 @@ async fn connect_with_principal(
         .filter(|value| !value.is_empty() && value.len() <= 8192)
         .ok_or("guacamole_primary_provider_auth_invalid")?;
     check_primary_authority(&is_current).await?;
-    let mut url = binding
+    let mut url = spec
         .provider_base
         .join("websocket-tunnel")
         .map_err(|_| "guacamole_primary_provider_invalid")?;
@@ -92,7 +248,7 @@ async fn connect_with_principal(
     url.query_pairs_mut().extend_pairs([
         ("token", token),
         ("GUAC_DATA_SOURCE", "postgresql"),
-        ("GUAC_ID", binding.connection_id.as_str()),
+        ("GUAC_ID", spec.connection_id.as_str()),
         ("GUAC_TYPE", "c"),
         ("GUAC_WIDTH", "1920"),
         ("GUAC_HEIGHT", "1080"),
@@ -134,6 +290,70 @@ mod tests {
         handshake::server::{Request, Response},
         Message,
     };
+
+    #[tokio::test]
+    async fn live_viewer_observation_requires_the_exact_active_primary() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let provider = format!("http://{}/guacamole/", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for _ in 0..2 {
+                for response_body in [
+                    serde_json::json!({
+                        "authToken": "synthetic-token",
+                        "availableDataSources": ["postgresql"],
+                        "username": "synthetic-operator"
+                    }),
+                    serde_json::json!({
+                        "primary-exact": {
+                            "connectionIdentifier": "41",
+                            "connectable": true,
+                            "sharingProfileIdentifier": null
+                        },
+                        "foreign-excluded": {
+                            "connectionIdentifier": "42",
+                            "connectable": true,
+                            "sharingProfileIdentifier": "sharing-42"
+                        }
+                    }),
+                ] {
+                    let (mut http, _) = listener.accept().await.unwrap();
+                    let mut request = Vec::new();
+                    while !request.ends_with(b"\r\n\r\n") {
+                        request.push(http.read_u8().await.unwrap());
+                    }
+                    if request.starts_with(b"GET ") {
+                        let text = String::from_utf8(request).unwrap();
+                        assert!(text.contains(
+                            "GET /guacamole/api/session/data/postgresql/activeConnections "
+                        ));
+                        assert!(text
+                            .to_ascii_lowercase()
+                            .contains("guacamole-token: synthetic-token\r\n"));
+                    }
+                    let body = response_body.to_string();
+                    http.write_all(
+                    format!(
+                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                        body.len(), body
+                    )
+                    .as_bytes(),
+                )
+                .await
+                    .unwrap();
+                }
+            }
+        });
+        let spec = GuacamolePrimaryConnectSpec::from_local_embed(&provider, "41").unwrap();
+        let guard = crate::test_utils::EnvGuard::new(&["AGENT_BROWSER_GUACAMOLE_HEADER_USER"]);
+        guard.set("AGENT_BROWSER_GUACAMOLE_HEADER_USER", "synthetic-operator");
+        assert!(observe_active_connection(spec.clone(), "primary-exact")
+            .await
+            .unwrap());
+        assert!(!observe_active_connection(spec, "foreign-excluded")
+            .await
+            .unwrap());
+        server.await.unwrap();
+    }
 
     #[tokio::test]
     async fn header_authentication_binds_the_exact_websocket_and_rejects_foreign_principal() {

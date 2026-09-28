@@ -913,7 +913,7 @@ pub(crate) mod service_commands {
         ProfileLeaseDisposition, ProfileOrigin, ProfileSelectionReason, RemoteViewAcquisitionLease,
         RemoteViewHandoff, RemoteViewRoute, RoutePoolEntry, ServiceEntitySource, ServiceEvent,
         ServiceEventKind, ServiceState, ServiceTabHandle, SessionCleanupPolicy, TabLifecycle,
-        ViewStream, ViewStreamProvider, ViewerLease,
+        ViewStream, ViewStreamProvider,
     };
     use crate::native::service_monitors::{
         parse_monitor_state, run_due_persisted_monitors, service_monitors_response,

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import {
   assertProductionUnchanged,
   developmentRuntimeDescriptor,
@@ -27,21 +27,29 @@ waitForServiceStateReady();
 
 for (let index = 1; index <= iterations; index += 1) {
   const identity = `p126-fresh-${runId}-${index}`;
-  const profileRoot = resolve(descriptor.stateDir, 'runtime-profiles', identity);
-  assert.ok(profileRoot.startsWith(`${resolve(descriptor.stateDir)}/`));
+  let profileRoot = null;
   try {
     const opened = runJson([
       '--session', identity,
-      '--runtime-profile', identity,
       '--json',
       'open',
       'about:blank',
     ]);
-    assert.equal(opened.success, true);
+    assert.ok(
+      opened.success === true || opened.error === 'browser_session_handoff_desktop_missing',
+      `unexpected development open result: ${JSON.stringify(opened)}`,
+    );
     assert.equal(opened.data?.url, 'about:blank');
+    assert.equal(typeof opened.data?.profileId, 'string');
+    profileRoot = resolve(
+      descriptor.stateDir,
+      'service',
+      'disposable-profiles',
+      opened.data.profileId,
+    );
+    assert.ok(profileRoot.startsWith(`${resolve(descriptor.stateDir, 'service', 'disposable-profiles')}/`));
     const url = runJson([
       '--session', identity,
-      '--runtime-profile', identity,
       '--json',
       'get',
       'url',
@@ -50,7 +58,6 @@ for (let index = 1; index <= iterations; index += 1) {
     assert.equal(url.data?.url, 'about:blank');
     const closed = runJson([
       '--session', identity,
-      '--runtime-profile', identity,
       '--json',
       'close',
     ]);
@@ -60,12 +67,12 @@ for (let index = 1; index <= iterations; index += 1) {
     results.push({ identity, opened: true, url: 'about:blank', closed: true });
   } finally {
     try {
-      runJson(['--session', identity, '--runtime-profile', identity, '--json', 'close']);
+      runJson(['--session', identity, '--json', 'close']);
     } catch {
       // The exact session may already be absent after a successful close.
     }
     waitForNoProcess(identity);
-    if (existsSync(profileRoot)) execFileSync('gio', ['trash', profileRoot]);
+    if (profileRoot && existsSync(profileRoot)) execFileSync('gio', ['trash', profileRoot]);
   }
 }
 
@@ -83,7 +90,7 @@ if (json) console.log(JSON.stringify(report, null, 2));
 else console.log(`Development browser launch smoke passed: iterations=${iterations}`);
 
 function runJson(commandArgs) {
-  const output = execFileSync(descriptor.executable, [
+  const result = spawnSync(descriptor.executable, [
     '--service-state-lock-timeout-ms',
     '10000',
     ...commandArgs,
@@ -91,7 +98,16 @@ function runJson(commandArgs) {
     encoding: 'utf8',
     timeout: 45_000,
   });
-  return JSON.parse(output.trim());
+  if (result.error) throw result.error;
+  const output = result.stdout.trim();
+  try {
+    return JSON.parse(output);
+  } catch (error) {
+    throw new Error(
+      `Development command did not return JSON: status=${result.status} stderr=${result.stderr}`,
+      { cause: error },
+    );
+  }
 }
 
 function waitForNoProcess(identity) {

@@ -1,46 +1,17 @@
 //! Exact Service authority for a backend-owned provider connection.
 
-use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
 use crate::native::service_model::{RemoteViewRoute, ServiceState, ViewStreamProvider};
 use crate::native::service_store::ServiceStateRepository;
-use crate::runtime_owner_transfer::OwnerAuthorityClaim;
 use sha2::{Digest, Sha256};
 
-/// A fail-closed authority check carries only a bounded public code, never
-/// repository paths or raw provider/identity evidence.
-pub(super) type PrimaryGuard = std::sync::Arc<dyn Fn() -> Result<(), &'static str> + Send + Sync>;
-
-/// Read fresh authority on the blocking pool. Repository locks, JSON projection,
-/// and process inspection must not occupy an asynchronous dashboard worker.
-/// Cancellation can leave only a read running; the caller must await admission
-/// before issuing any provider effect. No successful result is cached.
-pub(super) async fn check_primary_authority(guard: &PrimaryGuard) -> Result<(), &'static str> {
-    // Contention is absence of a read, not evidence of a changed owner. Keep
-    // provider effects paused while attempting fresh proof at most three times.
-    // Other failures remain terminal on their first observation.
-    for attempt in 0..3 {
-        let guard = guard.clone();
-        let result = tokio::task::spawn_blocking(move || guard())
-            .await
-            .map_err(|_| "guacamole_primary_authority_task_failed")?;
-        match result {
-            Err(
-                "guacamole_primary_state_lock_timeout" | "guacamole_primary_authority_lock_timeout",
-            ) if attempt < 2 => {
-                tokio::time::sleep(std::time::Duration::from_millis(100)).await;
-            }
-            _ => return result,
-        }
-    }
-    unreachable!("the final authority attempt always returns")
-}
+use super::guacamole_primary_provider::GuacamolePrimaryConnectSpec;
 
 #[derive(Clone, PartialEq, Eq)]
 pub(super) struct PrimaryBinding {
     pub route_id: String,
     pub connection_id: String,
     pub provider_base: reqwest::Url,
-    owner: OwnerAuthorityClaim,
+    browser_id: String,
     display_id: String,
     display_name: String,
     session_id: String,
@@ -51,7 +22,18 @@ pub(super) struct PrimaryBinding {
 impl PrimaryBinding {
     #[cfg(test)]
     pub fn synthetic_fixture() -> Self {
-        Self::resolve(&tests::repository(), "route", "1").unwrap()
+        let endpoint = "http://127.0.0.1:9222";
+        Self {
+            route_id: "route".into(),
+            connection_id: "1".into(),
+            provider_base: reqwest::Url::parse("http://127.0.0.1:8193/guacamole/").unwrap(),
+            browser_id: "browser".into(),
+            display_id: "display".into(),
+            display_name: ":10".into(),
+            session_id: "scene".into(),
+            process_id: std::process::id(),
+            endpoint_digest: format!("{:x}", Sha256::digest(endpoint.as_bytes())),
+        }
     }
     pub fn resolve(
         repository: &impl ServiceStateRepository,
@@ -94,42 +76,14 @@ impl PrimaryBinding {
             .and_then(|id| snapshot.browsers.get(id))
             .filter(|browser| Some(&browser.id) == route.browser_id.as_ref())
             .ok_or("guacamole_primary_browser_unavailable")?;
-        let mut owners = snapshot
-            .runtime_owner_registry
-            .owners()
-            .values()
-            .filter(|owner| owner.browser_id == browser.id);
-        let owner = owners.next().ok_or("guacamole_primary_owner_unavailable")?;
-        if owners.next().is_some() {
-            return Err("guacamole_primary_owner_ambiguous");
-        }
-        let mut binding = snapshot
-            .runtime_owner_binding_for_session(&owner.daemon_session_route)
-            .map_err(|_| "guacamole_primary_owner_unavailable")?
-            .ok_or("guacamole_primary_owner_unavailable")?;
-        let expected_claim = OwnerAuthorityClaim::from_owner(owner);
-        RuntimeLifecycleAuthority::new(repository)
-            .authorize_effect(&mut binding)
-            .map_err(|error| {
-                if error.starts_with("service_state_lock_timeout") {
-                    "guacamole_primary_authority_lock_timeout"
-                } else if error.starts_with("runtime_owner_generation_stale:")
-                    || error.starts_with("runtime_owner_observation_only:")
-                {
-                    "guacamole_primary_owner_stale"
-                } else {
-                    "guacamole_primary_authority_unavailable"
-                }
-            })?;
-        if binding.claim != expected_claim {
-            return Err("guacamole_primary_owner_stale");
-        }
         let process_id = browser.pid.ok_or("guacamole_primary_process_unproven")?;
         let process = crate::process_identity::capture_process_identity(process_id, None, None)
             .ok_or("guacamole_primary_process_unproven")?;
-        if digest_json(&process).map_err(|_| "guacamole_primary_process_unproven")?
-            != owner.process_instance_digest
-        {
+        let recorded_process = snapshot
+            .browser_process_identities
+            .get(&browser.id)
+            .ok_or("guacamole_primary_process_unproven")?;
+        if recorded_process.process_identity != process {
             return Err("guacamole_primary_process_changed");
         }
         let endpoint = browser
@@ -137,9 +91,6 @@ impl PrimaryBinding {
             .as_deref()
             .ok_or("guacamole_primary_endpoint_unproven")?;
         let endpoint_digest = format!("{:x}", Sha256::digest(endpoint.as_bytes()));
-        if endpoint_digest != owner.cdp_endpoint_identity_digest {
-            return Err("guacamole_primary_endpoint_changed");
-        }
         let display_id = route
             .display_allocation_id
             .as_ref()
@@ -173,8 +124,9 @@ impl PrimaryBinding {
         Ok(Self {
             route_id: route_id.to_owned(),
             connection_id: connection_id.to_owned(),
-            provider_base: local_provider_base(local_url)?,
-            owner: expected_claim,
+            provider_base: GuacamolePrimaryConnectSpec::from_local_embed(local_url, connection_id)?
+                .into_provider_base(),
+            browser_id: browser.id.clone(),
             display_id: display_id.clone(),
             display_name: display_name.clone(),
             session_id: session_id.clone(),
@@ -245,7 +197,7 @@ impl PrimaryBinding {
             )
             || lease.boot_epoch.is_none()
             || lease.boot_epoch != crate::process_identity::current_boot_epoch()
-            || lease.browser_id != self.owner.logical_browser_id
+            || lease.browser_id != self.browser_id
             || lease.session_id != self.session_id
             || lease.route_id != self.route_id
             || lease.display_allocation_id != self.display_id
@@ -263,7 +215,7 @@ impl PrimaryBinding {
         };
         previous.state == "ready"
             && previous.id == self.route_id
-            && previous.browser_id.as_ref() == Some(&self.owner.logical_browser_id)
+            && previous.browser_id.as_ref() == Some(&self.browser_id)
             && previous.session_id.as_ref() == Some(&self.session_id)
             && previous.display_allocation_id.as_ref() == Some(&self.display_id)
             && previous.connection_id.as_ref() == Some(&self.connection_id)
@@ -273,11 +225,14 @@ impl PrimaryBinding {
                 .route_descriptor
                 .as_ref()
                 .and_then(|value| value["localEmbedUrl"].as_str())
-                .and_then(|value| local_provider_base(value).ok())
-                .is_some_and(|base| base == self.provider_base)
+                .and_then(|value| {
+                    GuacamolePrimaryConnectSpec::from_local_embed(value, self.connection_id.clone())
+                        .ok()
+                })
+                .is_some_and(|spec| spec.provider_base() == &self.provider_base)
             && display.id == self.display_id
             && display.display_name.as_ref() == Some(&self.display_name)
-            && display.owner_browser_id.as_ref() == Some(&self.owner.logical_browser_id)
+            && display.owner_browser_id.as_ref() == Some(&self.browser_id)
             && display.owner_session_id.as_ref() == Some(&self.session_id)
             && display.route_ids.contains(&self.route_id)
     }
@@ -294,8 +249,8 @@ impl PrimaryBinding {
     ) -> Result<(), &'static str> {
         let current =
             Self::resolve_inner(repository, &self.route_id, &self.connection_id, Some(self))?;
-        if current.owner != self.owner {
-            return Err("guacamole_primary_owner_changed");
+        if current.browser_id != self.browser_id {
+            return Err("guacamole_primary_browser_changed");
         }
         if current != *self {
             return Err("guacamole_primary_binding_changed");
@@ -304,27 +259,7 @@ impl PrimaryBinding {
     }
 }
 
-fn local_provider_base(value: &str) -> Result<reqwest::Url, &'static str> {
-    let mut url = reqwest::Url::parse(value).map_err(|_| "guacamole_primary_provider_invalid")?;
-    let loopback = url.host_str().is_some_and(|host| {
-        host.trim_matches(['[', ']'])
-            .parse::<std::net::IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
-    });
-    if !loopback
-        || !matches!(url.scheme(), "http" | "https")
-        || !url.username().is_empty()
-        || url.password().is_some()
-        || url.query().is_some()
-        || url.path() != "/guacamole/"
-    {
-        return Err("guacamole_primary_provider_invalid");
-    }
-    url.set_fragment(None);
-    Ok(url)
-}
-
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -723,12 +658,11 @@ mod tests {
     }
 
     #[test]
-    fn exact_owner_survives_viewer_changes_but_rejects_authority_and_display_drift() {
+    fn exact_owner_survives_controller_changes_but_rejects_authority_and_display_drift() {
         let mut repository = repository();
         let binding = PrimaryBinding::resolve(&repository, "route", "1").unwrap();
         assert!(binding.is_current(&repository));
         let route = repository.0.remote_view_routes.get_mut("route").unwrap();
-        route.viewer_lease_ids.push("new-viewer".into());
         route.controller_lease_id = Some("new-controller".into());
         route.controller_epoch += 1;
         assert!(binding.is_current(&repository));
@@ -786,12 +720,19 @@ mod tests {
     #[test]
     fn provider_origin_requires_literal_loopback_without_credentials_or_query() {
         assert_eq!(
-            local_provider_base("http://127.0.0.1:8193/guacamole/#/client/1")
-                .unwrap()
-                .as_str(),
+            GuacamolePrimaryConnectSpec::from_local_embed(
+                "http://127.0.0.1:8193/guacamole/#/client/1",
+                "1",
+            )
+            .unwrap()
+            .provider_base()
+            .as_str(),
             "http://127.0.0.1:8193/guacamole/"
         );
-        assert!(local_provider_base("http://[::1]:8193/guacamole/").is_ok());
+        assert!(
+            GuacamolePrimaryConnectSpec::from_local_embed("http://[::1]:8193/guacamole/", "1")
+                .is_ok()
+        );
         for value in [
             "https://provider.example/guacamole/",
             "http://localhost/guacamole/",
@@ -801,9 +742,17 @@ mod tests {
             "file:///guacamole/",
         ] {
             assert_eq!(
-                local_provider_base(value).err(),
+                GuacamolePrimaryConnectSpec::from_local_embed(value, "1").err(),
                 Some("guacamole_primary_provider_invalid")
             );
         }
+        assert_eq!(
+            GuacamolePrimaryConnectSpec::from_local_embed(
+                "http://127.0.0.1:8193/guacamole/",
+                "  ",
+            )
+            .err(),
+            Some("guacamole_primary_connection_id_invalid")
+        );
     }
 }

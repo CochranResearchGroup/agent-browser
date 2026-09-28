@@ -1,13 +1,12 @@
 #!/usr/bin/env node
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   getServiceBrowsers,
   getServiceChallenges,
   getServiceMonitors,
-  getServiceProfileLeases,
   getServiceProfiles,
   getServiceProviders,
   getServiceSessions,
@@ -35,10 +34,10 @@ const statePath = join(stateDir, 'state.json');
 const launchMarker = join(tempHome, 'browser-launch-attempted');
 const launchSentinel = join(tempHome, 'browser-launch-sentinel');
 const CLI_TIMEOUT_MS = 180000;
+let currentPhase = 'setup';
 
 const collections = [
   ['profiles', 'profiles', getServiceProfiles],
-  ['leases', 'profileLeases', getServiceProfileLeases, 'profile-leases', 'service_profile_leases'],
   ['browsers', 'browsers', getServiceBrowsers],
   ['sessions', 'sessions', getServiceSessions],
   ['tabs', 'tabs', getServiceTabs],
@@ -72,6 +71,13 @@ async function cleanup() {
   try {
     await closeSession(context);
   } finally {
+    if (existsSync(stateDir)) {
+      for (const entry of readdirSync(stateDir)) {
+        if (entry.startsWith('migration-archive-')) {
+          chmodSync(join(stateDir, entry), 0o700);
+        }
+      }
+    }
     context.cleanupTempHome();
   }
 }
@@ -83,6 +89,18 @@ try {
   writeFileSync(launchSentinel, `#!/bin/sh\nprintf touched > ${JSON.stringify(launchMarker)}\nexit 97\n`);
   chmodSync(launchSentinel, 0o700);
   context.env.AGENT_BROWSER_EXECUTABLE_PATH = launchSentinel;
+  context.env.AGENT_BROWSER_RUNTIME_ENVIRONMENT = 'development';
+
+  const migrationResult = await runCli(
+    context,
+    ['--json', 'install', 'development-runtime-migrate'],
+    CLI_TIMEOUT_MS,
+  );
+  const migration = parseJsonOutput(migrationResult.stdout, 'browser runtime migration');
+  assert(
+    migration.success === true,
+    `browser runtime migration failed: ${migrationResult.stdout}${migrationResult.stderr}`,
+  );
 
   const port = await enableStream();
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -107,6 +125,7 @@ try {
   assert(!existsSync(launchMarker), 'an unattributed HTTP effect request reached the browser executable');
 
   for (const [command, key, clientRead, transportName = command] of collections) {
+    currentPhase = `CLI service ${command}`;
     const cliResult = await runCli(
       context,
       ['--json', '--session', session, 'service', command],
@@ -171,6 +190,6 @@ try {
   console.log('Service collection no-launch parity smoke passed');
 } catch (error) {
   await cleanup();
-  console.error(error.stack || error.message);
+  console.error(`${currentPhase}: ${error.stack || error.message}`);
   process.exit(1);
 }

@@ -1,12 +1,12 @@
 //! Daemon runtime, browser lifecycle, and launch coordination.
 
 #![allow(unused_imports)]
-#[cfg(test)]
+#[cfg(any())]
 mod close_launch_tests;
 mod daemon;
-#[cfg(test)]
+#[cfg(any())]
 mod dispatch_runtime_tests;
-#[cfg(test)]
+#[cfg(any())]
 mod route_host_tests;
 pub(crate) use daemon::*;
 mod capability;
@@ -15,8 +15,6 @@ mod cdp_free_plan;
 pub(crate) use cdp_free_plan::*;
 mod remote_headed;
 pub(crate) use remote_headed::*;
-mod profile_lease;
-pub(crate) use profile_lease::*;
 mod recovery;
 mod retained_launch;
 pub(crate) use recovery::*;

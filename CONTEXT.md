@@ -116,6 +116,10 @@ _Avoid_: URL readiness, route health
 An opaque public identity that can reacquire current route and browser evidence without exposing an ephemeral provider address.
 _Avoid_: Guacamole URL, provider URL
 
+**Keeper handoff binding**:
+Current exact presentation evidence joining one ready route keeper, its fenced connection-catalog entry, its XRDP ownership witness, and the reviewed public operator origin used to resolve a Durable Handoff.
+_Avoid_: Durable handoff, static route inventory, provider URL
+
 **Desktop evidence episode**:
 A bounded observation or interaction transaction that owns evidence selection, presentation admission, scene proof, capture, verification, restoration, and release for one browser workspace.
 _Avoid_: Desktop screenshot request, capture mode

@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-17
+Updated: 2026-09-27
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,59 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P219 | Alice/Bob Grilling Contract Completion
+
+State: OPEN
+
+Current State: [Plan 0219](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+inherits the full G01–G45 specification and evidence from P218 on the existing
+P211 branch and draft PR #191. It retains `PL-PLATFORM` ownership and work items
+#181, #183, and #195. The sequence reconciles completed source cuts, qualifies
+the remaining ordinary lifecycle, and brings the installed Alice/Bob proof
+forward before broad operational qualification. All requirements remain in
+scope. [RUNBOOK.md](RUNBOOK.md) owns the current state and budget boundary.
+Version 29 preserves the installed M2B subproofs plus source-qualified A01/A02,
+M3-P1, M3-P2A, M3-P2B, M3-P2C, and M3-P2D. The preceding execution window recorded a 931,884-token
+pre-commit readback and stopped executable work at 753,564; the operator then
+opened a fresh bounded continuation with the same 1,000,000-token ceiling and
+200,000-token closeout reserve.
+
+M3-P2C is source-qualified at `0522fe95`. Exact-client recovery now proves the
+old browser dead, atomically admits and binds one replacement generation before
+launch, resumes an ambiguous launch by read-only adoption, persists a distinct
+observed-live phase, and commits recovery success with final
+open/session/handoff publication. G15 gains source evidence but remains partial.
+The reconciled ledger stays 9 pass, 29 partial, 2 fail, and 5 missing; the
+prohibition audit remains 4 pass, 4 detector gaps, and 11 unverified.
+
+M3-P2D is source-qualified at `0b728fc0`. Baseline presentation recovery remains
+Route Keeper work and cannot authorize Chrome. Only an exact current
+authenticated viewer can create eager browser demand; admission revalidates its
+SQLite authority and uses the M3-P2C journal and fence. Dormant browsers remain
+lazy, duplicate viewers collapse to one candidate, and restart cannot create a
+competing replacement. G14 and G15 remain partial pending installed cold-start
+and visible joined recovery. The reconciled ledger stays 9 pass, 29 partial,
+2 fail, and 5 missing. Remaining M3 retention, M4 operations, and final M5
+qualification remain open. No installed, provider, browser, publication,
+production, merge, or release effect is implied by this source checkpoint.
+
+M3-P3 is source-qualified at `93a740f6`. Typed live disposable settings,
+protected oldest-inactive count and byte cleanup, terminal handoffs, bounded
+history, safe idempotent direct-child deletion, and the no-pinning/no-promotion
+contract pass provider-free gates. G37 and G38 pass; G21 and G36 remain partial
+until frozen installed qualification. The ledger is 11 pass, 29 partial,
+2 fail, and 3 missing. M4 operational conformance remains open and requires a
+bounded successor packet before effects.
+
+## P218 | Grilling-Contract Remote View Conformance
+
+State: CANCELLED
+
+Current State: [Plan 0218](docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md)
+is superseded while incomplete by P219. Its normative specification and
+historical evidence remain preserved. Supersession does not assert acceptance
+or reset cost, retries, findings, or runtime restrictions.
 
 ## P216 | Service Model Extraction Landing
 

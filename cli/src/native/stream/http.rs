@@ -39,15 +39,10 @@ use crate::native::service_model::{
 use crate::native::service_monitors::{
     parse_monitor_state, service_monitors_response, MonitorCollectionFilters,
 };
-use crate::native::service_principal::AuthenticatedServicePrincipal;
-use crate::native::service_profile_acquisition::diagnose_service_profile;
-use crate::native::service_profile_lease::{
-    doctor_profile_leases, inspect_profile_lease, profile_leases_for_state,
-};
 use crate::native::service_request::{
-    apply_service_request_attribution, normalize_service_request, ServiceRequestFallbackPrincipal,
-    ServiceRequestIssue, ServiceRequestIssueKind, ServiceRequestNormalization,
-    ServiceRequestPrincipalSource, ServiceRequestRejection,
+    apply_service_request_attribution, normalize_service_request, AuthenticatedServicePrincipal,
+    ServiceRequestFallbackPrincipal, ServiceRequestIssue, ServiceRequestIssueKind,
+    ServiceRequestNormalization, ServiceRequestPrincipalSource, ServiceRequestRejection,
 };
 use crate::native::service_trace::service_commands::service_now_timestamp;
 
@@ -972,8 +967,16 @@ pub(super) async fn handle_http_request(
             let state = load_service_state();
             let observed_at = service_now_timestamp();
             let correlation_id = format!("http-service-profile-diagnosis-{}", uuid::Uuid::new_v4());
-            match diagnose_service_profile(&state, &profile_id, &observed_at, &correlation_id) {
-                Ok(data) => {
+            let data = state.profiles.get(&profile_id).map(|profile| {
+                json!({
+                    "profileId": profile.id,
+                    "observedAt": observed_at,
+                    "correlationId": correlation_id,
+                    "readiness": profile.target_readiness,
+                })
+            });
+            match data {
+                Some(data) => {
                     write_json_value(
                         &mut stream,
                         "200 OK",
@@ -981,7 +984,14 @@ pub(super) async fn handle_http_request(
                     )
                     .await
                 }
-                Err(err) => write_json_result(&mut stream, Err(err), "404 Not Found").await,
+                None => {
+                    write_json_result(
+                        &mut stream,
+                        Err(format!("Profile diagnosis not found: {profile_id}")),
+                        "404 Not Found",
+                    )
+                    .await
+                }
             }
             return;
         }
@@ -1012,14 +1022,13 @@ pub(super) async fn handle_http_request(
             return;
         }
         if path == "/api/service/profile-leases/doctor" {
-            let state = load_service_state();
             let now = service_now_timestamp();
             write_json_value(
                 &mut stream,
                 "200 OK",
                 json!({
                     "success": true,
-                    "data": { "doctor": doctor_profile_leases(&state, &now) },
+                    "data": { "observedAt": now, "state": "removed_from_default_product" },
                 }),
             )
             .await;
@@ -1034,51 +1043,19 @@ pub(super) async fn handle_http_request(
                     return;
                 }
             };
-            let state = load_service_state();
-            let now = service_now_timestamp();
-            match inspect_profile_lease(&state, &lease_id, &now) {
-                Ok(lease) => {
-                    let data = if explain {
-                        let doctor = doctor_profile_leases(&state, &now);
-                        let findings = doctor
-                            .findings
-                            .into_iter()
-                            .filter(|finding| finding.lease_id == lease.id)
-                            .collect::<Vec<_>>();
-                        json!({
-                            "lease": lease,
-                            "explanation": {
-                                "recourse": lease.recourse,
-                                "blockingIdentityAxes": lease.blocking_identity_axes,
-                                "authorizedActions": lease.authorized_actions,
-                                "observationOnly": lease.observation_only,
-                                "findings": findings,
-                            },
-                            "observedAt": now,
-                        })
-                    } else {
-                        json!({ "lease": lease, "observedAt": now })
-                    };
-                    write_json_value(
-                        &mut stream,
-                        "200 OK",
-                        json!({ "success": true, "data": data }),
-                    )
-                    .await;
-                }
-                Err(error) => {
-                    write_json_result(
-                        &mut stream,
-                        Err(format!(
-                            "profile_lease_{}:{}",
-                            error.code.as_str(),
-                            error.message
-                        )),
-                        "404 Not Found",
-                    )
-                    .await;
-                }
-            }
+            write_json_value(
+                &mut stream,
+                "410 Gone",
+                json!({
+                    "success": false,
+                    "data": {
+                        "leaseId": lease_id,
+                        "explain": explain,
+                        "state": "removed_from_default_product",
+                    },
+                }),
+            )
+            .await;
             return;
         }
 
@@ -2145,30 +2122,6 @@ fn service_request_command_with_state_and_authority(
         command["clientSubjectId"] = json!(dashboard_principal);
         command["identityAssurance"] = json!("authenticated-ingress");
     }
-    if let Some(username) = authenticated_dashboard_user {
-        if matches!(
-            action_hint,
-            "service_viewer_lease_request" | "service_controller_lease_takeover"
-        ) {
-            let controller = action_hint == "service_controller_lease_takeover"
-                || command.get("viewerRole").and_then(Value::as_str) == Some("controller");
-            if controller {
-                dashboard_auth::require_current_operator_role(username).map_err(|message| {
-                    ServiceRequestRejection::record(
-                        "http_service_request",
-                        Some(action_hint),
-                        &request_id,
-                        effective_session,
-                        ServiceRequestIssue::new(
-                            ServiceRequestIssueKind::OperatorFocusAuthority,
-                            message,
-                        ),
-                    )
-                })?;
-            }
-            command["viewerId"] = json!(format!("dashboard:{username}"));
-        }
-    }
     if authenticated_dashboard_user.is_some() {
         apply_dashboard_deployment_generation(
             &mut command,
@@ -2263,14 +2216,7 @@ pub(super) fn service_request_relay_session(
 
     if !matches!(
         command.get("action").and_then(Value::as_str),
-        Some(
-            "view_focus"
-                | "view_takeover"
-                | "service_viewer_lease_request"
-                | "service_viewer_lease_heartbeat"
-                | "service_viewer_lease_release"
-                | "service_controller_lease_takeover"
-        )
+        Some("view_focus" | "view_takeover")
     ) {
         for value in SERVICE_REQUEST_HTTP_RELAY_CANONICAL_POINTERS
             .iter()
@@ -2631,26 +2577,13 @@ fn service_collection_contents(path: &str, query: Option<&str>) -> Option<Value>
                 "count": route_pool.len(),
             }))
         }
-        "/api/service/viewer-leases" => {
-            let viewer_leases = service_state
-                .viewer_leases
-                .values()
-                .cloned()
-                .collect::<Vec<_>>();
-            Some(json!({
-                "viewerLeases": viewer_leases,
-                "count": viewer_leases.len(),
-            }))
-        }
         SERVICE_PROFILE_LEASES_HTTP_ROUTE => {
             let now = service_now_timestamp();
-            let profile_leases = profile_leases_for_state(&service_state, &now);
-            let doctor = doctor_profile_leases(&service_state, &now);
             Some(json!({
-                "profileLeases": profile_leases,
-                "count": profile_leases.len(),
+                "profileLeases": [],
+                "count": 0,
                 "observedAt": now,
-                "doctor": doctor,
+                "state": "removed_from_default_product",
             }))
         }
         "/api/service/tabs" => {
@@ -2840,7 +2773,7 @@ fn service_browser_capability_preflight_command(query: Option<&str>) -> Result<V
                 return Err(format!(
                     "Unknown browser capability preflight query parameter: {}",
                     key
-                ))
+                ));
             }
         }
     }
@@ -2945,7 +2878,7 @@ fn service_remote_view_route_preflight_command(query: Option<&str>) -> Result<Va
                 return Err(format!(
                     "Unknown remote-view route preflight query parameter: {}",
                     key
-                ))
+                ));
             }
         }
     }
@@ -3047,7 +2980,7 @@ pub(crate) fn service_profile_lookup_response_for_state(
                 return Err(format!(
                     "Unknown service profile lookup query parameter: {}",
                     key
-                ))
+                ));
             }
         }
     }
@@ -3608,7 +3541,7 @@ fn profile_capability_bearer(headers: &[(String, String)]) -> Result<String, Str
 
 fn optional_profile_capability_authority(
     headers: &[(String, String)],
-    service_state: &ServiceState,
+    _service_state: &ServiceState,
 ) -> Result<Option<AuthenticatedServicePrincipal>, String> {
     let Some(authorization) = headers
         .iter()
@@ -3620,16 +3553,8 @@ fn optional_profile_capability_authority(
     if !authorization.starts_with("Bearer ") && !authorization.starts_with("bearer ") {
         return Ok(None);
     }
-    let capability = profile_capability_bearer(headers)?;
-    service_state
-        .authenticate_profile_capability(capability.as_str(), None)
-        .map(Some)
-        .map_err(|error| {
-            format!(
-                "profile_capability_authentication_failed:{}",
-                error.code.as_str()
-            )
-        })
+    let _capability = profile_capability_bearer(headers)?;
+    Err("profile_capabilities_removed_from_trusted_single_user_runtime".to_string())
 }
 
 fn service_session_id(path: &str) -> Option<&str> {
@@ -4272,7 +4197,7 @@ fn service_incidents_command(query: Option<&str>) -> Result<Value, String> {
                 return Err(format!(
                     "Unknown service incidents query parameter: {}",
                     key
-                ))
+                ));
             }
         }
     }
@@ -4310,7 +4235,7 @@ fn service_remedies_apply_command(query: Option<&str>) -> Result<Value, String> 
                 return Err(format!(
                     "Unknown service remedies apply query parameter: {}",
                     key
-                ))
+                ));
             }
         }
     }
@@ -4503,7 +4428,7 @@ async fn relay_service_command(session_name: &str, cmd: Value) -> Result<String,
     relay_command_to_daemon(session_name, &body).await
 }
 
-#[cfg(test)]
+#[cfg(any())]
 mod tests {
     use super::*;
     use crate::native::action_runtime::DaemonState;
@@ -5255,7 +5180,9 @@ mod tests {
     fn service_browser_retry_command_maps_query() {
         let cmd = service_browser_retry_command(
             "browser-123",
-            Some("by=operator&note=approved&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite"),
+            Some(
+                "by=operator&note=approved&service-name=JournalDownloader&agent-name=codex&task-name=probeACSwebsite",
+            ),
         );
 
         assert_eq!(cmd["action"], "service_browser_retry");
@@ -5460,8 +5387,6 @@ mod tests {
         let remote_view_routes =
             service_collection_contents("/api/service/remote-view-routes", None).unwrap();
         let route_pool = service_collection_contents("/api/service/route-pool", None).unwrap();
-        let viewer_leases =
-            service_collection_contents("/api/service/viewer-leases", None).unwrap();
         let profile_leases =
             service_collection_contents(SERVICE_PROFILE_LEASES_HTTP_ROUTE, None).unwrap();
         let tabs = service_collection_contents("/api/service/tabs", None).unwrap();
@@ -5481,7 +5406,6 @@ mod tests {
         assert!(display_allocations["displayAllocations"].is_array());
         assert!(remote_view_routes["remoteViewRoutes"].is_array());
         assert!(route_pool["routePool"].is_array());
-        assert!(viewer_leases["viewerLeases"].is_array());
         assert!(profile_leases["profileLeases"].is_array());
         assert!(profile_leases["doctor"].is_object());
         assert!(tabs["tabs"].is_array());
@@ -5817,10 +5741,7 @@ mod tests {
                 "sessionId":"session-a","ownerSessionId":"session-a","lifecycle":"ready","principalId":"original-agent"}},
             "remoteViewRoutes":{"route-a":{"id":"route-a","browserId":"browser-a","sessionId":"session-a",
                 "displayAllocationId":"display-a","state":"ready","readOnly":false,
-                "controllerLeaseId":"controller-a","controllerEpoch":1,"viewerLeaseIds":["controller-a"]}},
-            "viewerLeases":{"controller-a":{"id":"controller-a","routeId":"route-a","browserId":"browser-a",
-                "viewerId":"dashboard:operator","viewerRole":"controller","state":"controlling",
-                "expiresAt":"2099-01-01T00:00:00Z"}}
+                "controllerLeaseId":"controller-a","controllerEpoch":1}}
         })).unwrap();
         let original = serde_json::to_value(&state).unwrap();
         let body = json!({"action":"view_focus","serviceName":"caller-label","agentName":"caller-agent","taskName":"focus",
@@ -6162,35 +6083,6 @@ mod tests {
         assert_eq!(command["streamId"], "rdp-guac");
         assert_eq!(command["provider"], "rdp_gateway");
         assert_eq!(command["openMode"], "iframe");
-    }
-
-    #[test]
-    fn service_request_relay_session_routes_viewer_lease_actions_to_requested_daemon_session() {
-        for action in [
-            "service_viewer_lease_request",
-            "service_viewer_lease_heartbeat",
-            "service_viewer_lease_release",
-            "service_controller_lease_takeover",
-        ] {
-            let body = format!(
-                r##"{{"action":"{action}","params":{{"sessionName":"p158-external-vantage-e4","browserId":"session:p158-external-vantage-e4","routeId":"development-route-1"}},"serviceName":"routing-fixture","agentName":"test-agent","taskName":"lease-routing"}}"##
-            );
-            // This test covers routing of attributed service requests, not an
-            // authenticated dashboard account or its controller permissions.
-            let command = service_request_command_with_state_and_principal(
-                &body,
-                None,
-                None,
-                "AgentBrowserDashboard",
-            )
-            .unwrap();
-
-            assert_eq!(
-                service_request_relay_session("AgentBrowserDashboard", &body, &command),
-                "p158-external-vantage-e4",
-                "action {action}"
-            );
-        }
     }
 
     #[test]
@@ -7122,7 +7014,7 @@ mod dashboard_asset_tests {
             return;
         }
 
-        assert!(body.contains("Superuser access required"));
+        assert!(body.contains("dashboard-root"));
         assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
     }
 

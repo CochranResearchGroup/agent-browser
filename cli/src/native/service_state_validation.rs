@@ -129,14 +129,13 @@ pub(crate) fn validate_service_state_path(
             ));
         }
     };
-    if let Err(message) = super::service_state_migration::validate_service_state_invariants(&state)
-    {
+    if let Err(message) = agent_browser_service_model::validate_service_state_invariants(&state) {
         return Ok(error_receipt(
             path,
             state_sha256,
             parser_identity_sha256,
             ServiceStateValidationErrorCode::InvariantError,
-            message,
+            message.to_string(),
         ));
     }
 

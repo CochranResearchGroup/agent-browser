@@ -171,41 +171,6 @@ impl Default for BrowserProcess {
     }
 }
 
-/// Receipt-linked observation of a browser owner committed by the protected
-/// lease authority. This projection is never operational authority: callers
-/// must revalidate every axis with the protected service before any effect.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProtectedBrowserOwnerObservation {
-    pub schema_version: String,
-    pub source: String,
-    #[serde(deserialize_with = "deserialize_protected_observation_authority")]
-    pub operational_authority: bool,
-    pub authority_receipt_id: String,
-    pub owner_id: String,
-    pub owner_generation: u64,
-    pub logical_browser_id: String,
-    pub daemon_session_route: String,
-    pub process_instance_digest: String,
-    pub process_pid: u32,
-    pub owner_revision: u64,
-    pub observed_at: String,
-    pub freshness_expires_at: String,
-}
-
-fn deserialize_protected_observation_authority<'de, D>(deserializer: D) -> Result<bool, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let value = bool::deserialize(deserializer)?;
-    if value {
-        return Err(<D::Error as serde::de::Error>::custom(
-            "protected_browser_owner_observation_invalid",
-        ));
-    }
-    Ok(false)
-}
-
 /// Durable, provider-free process identity evidence.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -235,24 +200,6 @@ pub struct ServiceBrowserProcessIdentity {
 mod tests {
     use super::*;
     use serde_json::json;
-
-    fn protected_owner_json(operational_authority: bool) -> Value {
-        json!({
-            "schemaVersion": "agent-browser.protected-owner-observation.v1",
-            "source": "lease_authority",
-            "operationalAuthority": operational_authority,
-            "authorityReceiptId": "receipt-1",
-            "ownerId": "owner-1",
-            "ownerGeneration": 3,
-            "logicalBrowserId": "browser-1",
-            "daemonSessionRoute": "session-1",
-            "processInstanceDigest": "sha256:digest",
-            "processPid": 42,
-            "ownerRevision": 7,
-            "observedAt": "2026-09-16T00:00:00Z",
-            "freshnessExpiresAt": "2026-09-16T00:01:00Z"
-        })
-    }
 
     #[test]
     fn browser_health_values_match_wire_variants() {
@@ -322,24 +269,6 @@ mod tests {
         let observation: BrowserHealthObservation = serde_json::from_value(json!({})).unwrap();
         assert_eq!(observation.health, BrowserHealth::NotStarted);
         assert!(observation.observed_at.is_empty());
-    }
-
-    #[test]
-    fn protected_owner_observation_is_never_operational_authority() {
-        let accepted: ProtectedBrowserOwnerObservation =
-            serde_json::from_value(protected_owner_json(false)).unwrap();
-        assert!(!accepted.operational_authority);
-
-        let error =
-            serde_json::from_value::<ProtectedBrowserOwnerObservation>(protected_owner_json(true))
-                .unwrap_err();
-        assert!(error
-            .to_string()
-            .contains("protected_browser_owner_observation_invalid"));
-
-        let mut unknown = protected_owner_json(false);
-        unknown["unexpectedAuthority"] = json!(false);
-        assert!(serde_json::from_value::<ProtectedBrowserOwnerObservation>(unknown).is_err());
     }
 
     #[test]

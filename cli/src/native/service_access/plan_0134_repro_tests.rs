@@ -1,5 +1,5 @@
 use super::*;
-use crate::native::service_model::{DisplayAllocation, ViewerLease};
+use crate::native::service_model::DisplayAllocation;
 use crate::runtime_owner_transfer::{
     CleanupObligationState, ProfileOwner, ProfileOwnerState, RuntimeLaneLifecycleState,
     RuntimeLifecycleRecord, RuntimeOwnerPrincipalBinding,
@@ -91,11 +91,10 @@ fn state_for_case(case: &AccessPlanCase) -> ServiceState {
     }
 
     if case.retained_owner_evidence {
-        let profile_identity_digest =
-            agent_browser_lease_authority::canonical_profile_identity_digest(std::path::Path::new(
-                &profile_path,
-            ))
-            .expect("fixture profile path must canonicalize");
+        let profile_identity_digest = crate::runtime_profile::canonical_profile_identity_digest(
+            std::path::Path::new(&profile_path),
+        )
+        .expect("fixture profile path must canonicalize");
         state.runtime_owner_registry = crate::runtime_owner_transfer::RuntimeOwnerRegistryFixture {
             registry_revision: 1,
             owner_records: BTreeMap::from([(
@@ -394,21 +393,12 @@ fn p134_slice_f_prior_boot_evidence_is_rediscovery_only_and_stable_ids_survive()
                 ..DisplayAllocation::default()
             },
         )]),
-        viewer_leases: BTreeMap::from([(
-            ephemeral["viewerSessionId"].as_str().unwrap().to_string(),
-            ViewerLease {
-                id: ephemeral["viewerSessionId"].as_str().unwrap().to_string(),
-                boot_epoch: Some(prior.to_string()),
-                state: "active".to_string(),
-                ..ViewerLease::default()
-            },
-        )]),
         ..ServiceState::default()
     };
 
     let findings =
         crate::native::service_boot_epoch::service_boot_epoch_findings(&state, Some(current));
-    assert_eq!(findings.len(), 3);
+    assert_eq!(findings.len(), 2);
     assert!(findings.iter().all(|finding| {
         finding.status == crate::process_identity::BootEpochStatus::Prior
             && finding.recourse == "rediscover_current_evidence"

@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs';
 
 import {
   attachServiceTabCdp,
-  createServiceControllerLeaseTakeoverRequest,
   createServiceCdpAttachRequest,
   createServiceCdpDetachRequest,
   createServiceCdpFreeLaunchRequest,
@@ -37,9 +36,6 @@ import {
   createServiceRequestMcpToolCall,
   createServiceTabRequest,
   createServiceTabRequestFromAccessPlan,
-  createServiceViewerLeaseHeartbeatRequest,
-  createServiceViewerLeaseReleaseRequest,
-  createServiceViewerLeaseRequest,
   deriveServiceRemoteViewHandoffResumeIntent,
   evaluateServiceTab,
   getServiceFailureRecourse,
@@ -47,7 +43,6 @@ import {
   getServiceTabDiagnostics,
   getServiceRemoteViewHandoffUrl,
   getServiceRemoteViewOpenOperatorVisible,
-  heartbeatServiceViewerLease,
   isServiceCdpFreeActionAvailable,
   isServiceRemoteViewOpenOperatorVisibleReady,
   postServiceRequest,
@@ -65,7 +60,6 @@ import {
   runServiceDesktopInteraction,
   runServiceUiAction,
   releaseServiceTabHandle,
-  releaseServiceViewerLease,
   requireServiceTabHandle,
   requestServiceCdpAttach,
   requestServiceCdpDetach,
@@ -94,7 +88,6 @@ import {
   requestServiceBrowserRetirementApply,
   requestServiceTab,
   requestServiceTabFromAccessPlan,
-  requestServiceViewerLease,
   requireServiceRemoteViewOpenOperatorVisible,
   requireServiceRemoteViewHandoffUrl,
   requireServiceRequestSuccess,
@@ -106,7 +99,6 @@ import {
   SERVICE_REQUEST_STRING_FIELDS,
   summarizeServiceCdpFreeLaunchAvailability,
   ServiceOperationError,
-  takeoverServiceControllerLease,
 } from '../packages/client/src/service-request.js';
 import { getServiceAccessPlan } from '../packages/client/src/service-observability.js';
 
@@ -3054,78 +3046,6 @@ async function main() {
     },
   });
 
-  const viewerLeaseRequest = createServiceViewerLeaseRequest({
-    serviceName: 'agent-browser-dashboard',
-    routeId: 'route-a',
-    viewerId: 'viewer-a',
-    viewerName: 'Operator A',
-    openMode: 'tile',
-  });
-  assert.equal(viewerLeaseRequest.action, 'service_viewer_lease_request');
-  assert.deepEqual(viewerLeaseRequest.params, {
-    routeId: 'route-a',
-    viewerId: 'viewer-a',
-    viewerName: 'Operator A',
-    openMode: 'tile',
-  });
-
-  const controllerTakeoverRequest = createServiceControllerLeaseTakeoverRequest({
-    serviceName: 'agent-browser-dashboard',
-    routeId: 'route-a',
-    viewerLeaseId: 'viewer-a',
-    viewerId: 'operator-a',
-  });
-  assert.equal(controllerTakeoverRequest.action, 'service_controller_lease_takeover');
-  assert.deepEqual(controllerTakeoverRequest.params, {
-    routeId: 'route-a',
-    viewerLeaseId: 'viewer-a',
-    viewerId: 'operator-a',
-  });
-  const takeoverEnvelopeSchema = JSON.parse(readFileSync(
-    new URL('../docs/dev/contracts/service-request.v1.schema.json', import.meta.url), 'utf8',
-  ));
-  assert.deepEqual(
-    Object.keys(controllerTakeoverRequest).filter((field) => !Object.hasOwn(takeoverEnvelopeSchema.properties, field)),
-    [],
-    'takeover convenience fields must not become unknown HTTP envelope fields',
-  );
-  const takeoverInput = Object.freeze({
-    serviceName: 'review', agentName: 'client', taskName: 'takeover',
-    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
-    routeId: 'route-a', viewerLeaseId: 'lease-a', viewerId: 'viewer-a',
-    viewerName: 'Operator', openMode: 'tile', expiresAt: '2026-09-06T12:00:00Z',
-    params: Object.freeze({ routeId: 'overridden-route', extra: true }),
-  });
-  assert.deepEqual(createServiceControllerLeaseTakeoverRequest(takeoverInput), {
-    action: 'service_controller_lease_takeover',
-    serviceName: 'review', agentName: 'client', taskName: 'takeover',
-    browserId: 'browser-a', sessionName: 'session-a', jobTimeoutMs: 20000,
-    params: {
-      browserId: 'browser-a', routeId: 'route-a', viewerLeaseId: 'lease-a',
-      viewerId: 'viewer-a', viewerName: 'Operator', openMode: 'tile',
-      expiresAt: '2026-09-06T12:00:00Z', extra: true,
-    },
-  });
-  assert.deepEqual(takeoverInput.params, { routeId: 'overridden-route', extra: true });
-
-  const viewerLeaseHeartbeatRequest = createServiceViewerLeaseHeartbeatRequest({
-    serviceName: 'agent-browser-dashboard',
-    viewerLeaseId: 'viewer-a',
-    expiresAt: '2026-05-28T04:00:00Z',
-  });
-  assert.equal(viewerLeaseHeartbeatRequest.action, 'service_viewer_lease_heartbeat');
-  assert.deepEqual(viewerLeaseHeartbeatRequest.params, {
-    viewerLeaseId: 'viewer-a',
-    expiresAt: '2026-05-28T04:00:00Z',
-  });
-
-  const viewerLeaseReleaseRequest = createServiceViewerLeaseReleaseRequest({
-    serviceName: 'agent-browser-dashboard',
-    viewerLeaseId: 'viewer-a',
-  });
-  assert.equal(viewerLeaseReleaseRequest.action, 'service_viewer_lease_release');
-  assert.deepEqual(viewerLeaseReleaseRequest.params, { viewerLeaseId: 'viewer-a' });
-
   const remoteViewWorkflow = createFetchRecorder({
     success: true,
     data: {
@@ -3808,69 +3728,6 @@ async function main() {
     });
     assert.equal(workflow.calls[0].body.action, action);
   }
-
-  const viewerWorkflow = createFetchRecorder({
-    success: true,
-    data: {
-      status: 'viewer_connected',
-      routeId: 'route-a',
-      viewerLeaseId: 'viewer-a',
-    },
-  });
-  await requestServiceViewerLease({
-    baseUrl: 'http://127.0.0.1:4849',
-    fetch: viewerWorkflow.fetch,
-    routeId: 'route-a',
-    viewerId: 'viewer-a',
-  });
-  assert.equal(viewerWorkflow.calls[0].body.action, 'service_viewer_lease_request');
-
-  const heartbeatWorkflow = createFetchRecorder({
-    success: true,
-    data: {
-      status: 'viewer_heartbeat',
-      viewerLeaseId: 'viewer-a',
-    },
-  });
-  await heartbeatServiceViewerLease({
-    baseUrl: 'http://127.0.0.1:4849',
-    fetch: heartbeatWorkflow.fetch,
-    viewerLeaseId: 'viewer-a',
-  });
-  assert.equal(heartbeatWorkflow.calls[0].body.action, 'service_viewer_lease_heartbeat');
-
-  const takeoverWorkflow = createFetchRecorder({
-    success: true,
-    data: {
-      status: 'controller_taken',
-      routeId: 'route-a',
-      viewerLeaseId: 'viewer-a',
-    },
-  });
-  await takeoverServiceControllerLease({
-    baseUrl: 'http://127.0.0.1:4849',
-    fetch: takeoverWorkflow.fetch,
-    routeId: 'route-a',
-    viewerLeaseId: 'viewer-a',
-  });
-  assert.equal(
-    takeoverWorkflow.calls[0].body.action,
-    'service_controller_lease_takeover',
-  );
-
-  const releaseWorkflow = createFetchRecorder({
-    success: true,
-    data: {
-      status: 'released',
-      viewerLeaseId: 'viewer-a',
-    },
-  });
-  await releaseServiceViewerLease({
-    baseUrl: 'http://127.0.0.1:4849',
-    fetch: releaseWorkflow.fetch,
-    viewerLeaseId: 'viewer-a',
-  });
-  assert.equal(releaseWorkflow.calls[0].body.action, 'service_viewer_lease_release');
 
   console.log('Service request client helper tests passed');
 }

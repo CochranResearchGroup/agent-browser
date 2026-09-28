@@ -70,6 +70,11 @@ assert.match(
 );
 assert.match(
   moduleSource,
+  /function dashboardViewportReadyState[\s\S]*uxState === 'connected'[\s\S]*hasRefreshButton/,
+  'viewer-client readiness must accept the current connected viewport without requiring the legacy refresh control',
+);
+assert.match(
+  moduleSource,
   /chosenPage[\s\S]*previousPage[\s\S]*samePageId[\s\S]*writeJson\(artifactName, discovery\)/,
   'viewer-client reconnect must write target discovery evidence before reconnecting CDP',
 );

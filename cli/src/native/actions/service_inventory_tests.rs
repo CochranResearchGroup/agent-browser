@@ -293,15 +293,7 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
         "pid" : 43210, "health" : "degraded",
         "lastHealthObservation" : { "observedAt" : "2026-04-25T00:00:00Z", "failureClass"
         : "browser_shutdown_degraded", "processExitCause" : "operator_requested_close" }
-        } }, "protectedBrowserOwnerObservations" : { "session:protected-session" : {
-        "schemaVersion" : "agent-browser.protected-browser-owner-observation.v1",
-        "source" : "protected_lease_authority_receipt", "operationalAuthority" : false,
-        "authorityReceiptId" : "effect-receipt:launch-1", "ownerId" : "owner:protected-1",
-        "ownerGeneration" : 7, "logicalBrowserId" : "browser:protected-1",
-        "daemonSessionRoute" : "protected-session", "processInstanceDigest" :
-        "sha256:7777777777777777777777777777777777777777777777777777777777777777",
-        "processPid" : 43210, "ownerRevision" : 9, "observedAt" :
-        "2026-09-01T12:00:00Z", "freshnessExpiresAt" : "2026-09-01T12:00:30Z" } } } }
+        } } } }
     );
     let result = execute_command(&cmd, &mut state).await;
     assert_eq!(result["success"], true);
@@ -315,31 +307,13 @@ async fn test_service_browsers_via_actions_returns_last_health_observation() {
         result["data"]["browsers"][0]["lastHealthObservation"]["failureClass"],
         "browser_shutdown_degraded"
     );
-    assert_eq!(
-        result["data"]["protectedBrowserOwnerObservations"]["session:protected-session"]
-            ["authorityReceiptId"],
-        "effect-receipt:launch-1"
-    );
-    assert_eq!(
-        result["data"]["protectedBrowserOwnerObservations"]["session:protected-session"]
-            ["operationalAuthority"],
-        false
-    );
-
-    let mut forged = cmd;
-    forged["id"] = json!("svc-browsers-forged-owner");
-    forged["serviceState"]["protectedBrowserOwnerObservations"]["session:protected-session"]
-        ["operationalAuthority"] = json!(true);
-    let rejected = execute_command(&forged, &mut state).await;
-    assert_eq!(rejected["success"], false);
-    assert!(rejected["error"]
-        .as_str()
-        .unwrap()
-        .contains("protected_browser_owner_observation_invalid"));
+    assert!(result["data"]
+        .get("protectedBrowserOwnerObservations")
+        .is_none());
     assert!(state.browser.is_none());
 }
 #[tokio::test]
-async fn retained_dead_browser_owner_evidence_remains_readable_across_collections() {
+async fn historical_owner_payload_is_ignored_across_collections() {
     let mut state = DaemonState::new();
     let retained_state = json!({
         "profiles": {
@@ -429,31 +403,11 @@ async fn retained_dead_browser_owner_evidence_remains_readable_across_collection
                 .any(|session| session["id"] == "unrelated-active"));
         }
         if action == "service_browsers" {
-            assert_eq!(
-                result["data"]["protectedBrowserOwnerObservations"]["session:retained-default"]
-                    ["ownerGeneration"],
-                62
-            );
+            assert!(result["data"]
+                .get("protectedBrowserOwnerObservations")
+                .is_none());
         }
     }
-
-    let mut inconsistent_live_state = retained_state;
-    inconsistent_live_state["browsers"]["session:retained-default"]["health"] = json!("ready");
-    let rejected = execute_command(
-        &json!({
-            "action": "service_browsers",
-            "id": "retained-owner-inconsistent-live",
-            "serviceState": inconsistent_live_state
-        }),
-        &mut state,
-    )
-    .await;
-    assert_eq!(rejected["success"], false);
-    assert_eq!(
-        rejected["error"],
-        "protected_browser_owner_observation_invalid"
-    );
-
     assert!(state.browser.is_none());
 }
 #[tokio::test]

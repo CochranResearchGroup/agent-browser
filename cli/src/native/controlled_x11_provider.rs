@@ -3,11 +3,11 @@
 use std::path::Path;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use chrono::DateTime;
 use sha2::{Digest, Sha256};
 
+use super::browser_session_store::{BrowserRuntimeSqliteStore, LiveViewerControlAuthority};
 use super::desktop_capture::{
-    capture_configured_desktop_frame, resolve_desktop_capture_binding_for_session,
+    capture_managed_desktop_frame, resolve_managed_desktop_capture_binding, DesktopCaptureBinding,
     DesktopCaptureRequest, DesktopCaptureResult, HARD_MAX_BYTES,
 };
 use super::desktop_input_provider::{
@@ -24,10 +24,8 @@ use super::desktop_interaction::{
     EventAcknowledgement, InputEvent, InteractionClock, PixelBounds, PixelPoint, SurfaceSnapshot,
     HCAPTCHA_RECIPE_ID, TURNSTILE_RECIPE_ID,
 };
-use super::service_model::{controller_authority_fence_matches, ServiceState};
-use super::service_store::{
-    default_service_state_path, LockedServiceStateRepository, ServiceStateRepository,
-};
+use super::service_store::default_service_state_path;
+use agent_browser_service_model::BrowserSessionState;
 
 const TARGET_RGB: [u8; 3] = [32, 122, 214];
 const SUCCESS_RGB: [u8; 3] = [46, 160, 67];
@@ -45,6 +43,7 @@ pub(crate) struct ControlledX11Provider {
     process_identity_digest: String,
     captcha_target: Option<PixelBounds>,
     provider_id: String,
+    manager_state: BrowserSessionState,
 }
 
 enum ConfiguredX11Sink {
@@ -72,10 +71,7 @@ impl ClosedX11Sink for ConfiguredX11Sink {
 
 pub(crate) struct ConfiguredControllerAuthorityRepository {
     request: DesktopInteractionRequest,
-    route_id: String,
-    stream_id: String,
-    display_allocation_id: String,
-    machine_input: String,
+    binding: DesktopCaptureBinding,
 }
 
 pub(crate) struct SystemInteractionClock;
@@ -85,48 +81,28 @@ impl ControlledX11Provider {
         request: DesktopInteractionRequest,
         admission: ProviderAdmission,
     ) -> Result<(Self, ConfiguredControllerAuthorityRepository), DesktopInteractionError> {
-        let repository = LockedServiceStateRepository::default_json()
+        let store = BrowserRuntimeSqliteStore::default_sqlite()
             .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
-        let state = repository
-            .load_snapshot()
+        let live_authority = store
+            .current_live_viewer_control(&request.controller_lease_id)
+            .map_err(|_| provider_error("desktop_interaction_authority_required"))?;
+        let manager_state = store
+            .load_session_state()
             .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
-        let capture_binding = resolve_desktop_capture_binding_for_session(
-            &state,
+        validate_manager_authority(&request, &manager_state, &live_authority)?;
+        let capture_binding = resolve_managed_desktop_capture_binding(
             &request.browser_id,
             request.session_name.as_deref(),
+            &request.controller_lease_id,
         )
         .map_err(|error| provider_error(error.code()))?;
-        let browser = state
+        let browser = manager_state
             .browsers
             .get(&request.browser_id)
             .ok_or_else(|| provider_error("desktop_input_provider_identity_unavailable"))?;
-        let stream = browser
-            .view_streams
-            .iter()
-            .find(|stream| {
-                stream.id == capture_binding.route_id
-                    || stream.route_id.as_deref() == Some(capture_binding.route_id.as_str())
-            })
-            .or_else(|| {
-                browser.view_streams.iter().find(|stream| {
-                    stream.route_id.as_deref() == Some(capture_binding.route_id.as_str())
-                })
-            })
-            .ok_or_else(|| provider_error("desktop_input_provider_identity_unavailable"))?;
-        let route = state
-            .remote_view_routes
-            .get(&capture_binding.route_id)
-            .ok_or_else(|| provider_error("desktop_input_provider_identity_unavailable"))?;
-        if route.controller_lease_id.as_deref() != Some(request.controller_lease_id.as_str())
-            || stream.controller_lease_id.as_deref() != Some(request.controller_lease_id.as_str())
-            || route.controller_epoch == 0
-            || route.controller_epoch != stream.controller_epoch
-        {
-            return Err(provider_error("desktop_interaction_authority_required"));
-        }
         let process_identity_digest = digest_serializable(&(
-            state.browser_process_identities.get(&request.browser_id),
-            browser.pid,
+            browser.process_identity.as_ref(),
+            Some(browser.pid),
             &admission.generation_sha256,
         ))?;
         let state_path = default_service_state_path()
@@ -136,11 +112,14 @@ impl ControlledX11Provider {
             .and_then(Path::parent)
             .ok_or_else(|| provider_error("desktop_input_provider_state_unavailable"))?
             .to_path_buf();
-        let initial_capture = capture_configured_desktop_frame(DesktopCaptureRequest {
-            browser_id: request.browser_id.clone(),
-            session_name: request.session_name.clone(),
-            max_bytes: HARD_MAX_BYTES,
-        })
+        let initial_capture = capture_managed_desktop_frame(
+            DesktopCaptureRequest {
+                browser_id: request.browser_id.clone(),
+                session_name: request.session_name.clone(),
+                max_bytes: HARD_MAX_BYTES,
+            },
+            &request.controller_lease_id,
+        )
         .map_err(|error| provider_error(error.code()))?;
         let initial_captured_at_ms = now_ms();
         let provider_id = if is_captcha_recipe(&request.recipe_id) {
@@ -150,13 +129,8 @@ impl ControlledX11Provider {
         };
         let sink = if is_captcha_recipe(&request.recipe_id) {
             ConfiguredX11Sink::Challenge(
-                XDoToolSink::new(
-                    &capture_binding.display_name,
-                    browser.pid.ok_or_else(|| {
-                        provider_error("desktop_input_provider_identity_unavailable")
-                    })?,
-                )
-                .map_err(|error| provider_error(error.code()))?,
+                XDoToolSink::new(&capture_binding.display_name, browser.pid)
+                    .map_err(|error| provider_error(error.code()))?,
             )
         } else {
             ConfiguredX11Sink::Fixture(
@@ -175,10 +149,7 @@ impl ControlledX11Provider {
         .map_err(|error| provider_error(error.code()))?;
         let authority = ConfiguredControllerAuthorityRepository {
             request: request.clone(),
-            route_id: capture_binding.route_id.clone(),
-            stream_id: stream.id.clone(),
-            display_allocation_id: capture_binding.display_allocation_id.clone(),
-            machine_input: provider_id.clone(),
+            binding: capture_binding.clone(),
         };
         Ok((
             Self {
@@ -188,21 +159,25 @@ impl ControlledX11Provider {
                 executor,
                 initial_capture: Some(initial_capture),
                 initial_captured_at_ms,
-                controller_epoch: route.controller_epoch,
+                controller_epoch: live_authority.lease.epoch,
                 process_identity_digest,
                 captcha_target: None,
                 provider_id,
+                manager_state,
             },
             authority,
         ))
     }
 
     fn capture(&self) -> Result<DesktopCaptureResult, DesktopInteractionError> {
-        capture_configured_desktop_frame(DesktopCaptureRequest {
-            browser_id: self.request.browser_id.clone(),
-            session_name: self.request.session_name.clone(),
-            max_bytes: HARD_MAX_BYTES,
-        })
+        capture_managed_desktop_frame(
+            DesktopCaptureRequest {
+                browser_id: self.request.browser_id.clone(),
+                session_name: self.request.session_name.clone(),
+                max_bytes: HARD_MAX_BYTES,
+            },
+            &self.request.controller_lease_id,
+        )
         .map_err(|error| provider_error(error.code()))
     }
 
@@ -325,13 +300,10 @@ impl DesktopInteractionProvider for ControlledX11Provider {
         &mut self,
         binding: &DesktopBinding,
     ) -> Result<SurfaceSnapshot, DesktopInteractionError> {
-        let state = LockedServiceStateRepository::default_json()
-            .and_then(|repository| repository.load_snapshot())
-            .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
-        let current = resolve_desktop_capture_binding_for_session(
-            &state,
+        let current = resolve_managed_desktop_capture_binding(
             &binding.browser_id,
             Some(&binding.session_name),
+            &self.request.controller_lease_id,
         )
         .map_err(|error| provider_error(error.code()))?;
         if current.route_id != binding.route_id
@@ -423,35 +395,44 @@ impl DesktopInteractionProvider for ControlledX11Provider {
             InputEvent::KeyUp { key, .. } => ControlledX11Event::KeyUp { key: *key },
         };
         let route_id = binding.route_id.clone();
-        let stream_id = binding.stream_id.clone();
         let lease_id = self.request.controller_lease_id.clone();
         let epoch = self.controller_epoch;
         let expected_admission = self.admission.clone();
-        let receipt = self
-            .executor
-            .execute_guarded(effect_key, &controlled, EFFECT_FENCE_DEADLINE, move || {
-                revalidate_current_provider_admission(&expected_admission).map_err(|_| {
-                    DesktopInputProviderError::from_code(
-                        "desktop_input_provider_generation_changed",
-                    )
-                })?;
-                let state = LockedServiceStateRepository::default_json()
-                    .and_then(|repository| repository.load_snapshot())
-                    .map_err(|_| {
-                        DesktopInputProviderError::from_code(
-                            "desktop_input_provider_state_unavailable",
-                        )
-                    })?;
-                if !controller_authority_fence_matches(
-                    &state, &route_id, &stream_id, &lease_id, epoch,
-                ) {
-                    return Err(DesktopInputProviderError::from_code(
-                        "desktop_interaction_authority_changed",
-                    ));
+        let expected_manager_state = self.manager_state.clone();
+        let mut store = BrowserRuntimeSqliteStore::default_sqlite()
+            .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
+        let executor = &mut self.executor;
+        let mut provider_error_code = None;
+        let receipt = store
+            .with_current_live_viewer_control(&lease_id, &expected_manager_state, |authority| {
+                if authority.provider_route_id != route_id
+                    || authority.lease.epoch != epoch
+                    || authority.lease.browser_id != binding.browser_id
+                {
+                    return Err("desktop_interaction_authority_changed".to_string());
                 }
-                Ok(())
+                let result = executor.execute_guarded(
+                    effect_key,
+                    &controlled,
+                    EFFECT_FENCE_DEADLINE,
+                    || {
+                        revalidate_current_provider_admission(&expected_admission).map_err(|_| {
+                            DesktopInputProviderError::from_code(
+                                "desktop_input_provider_generation_changed",
+                            )
+                        })
+                    },
+                );
+                result.map_err(|error| {
+                    provider_error_code = Some(error.code());
+                    error.code().to_string()
+                })
             })
-            .map_err(|error| provider_error(error.code()))?;
+            .map_err(|_| {
+                provider_error(
+                    provider_error_code.unwrap_or("desktop_interaction_authority_changed"),
+                )
+            })?;
         Ok(EventAcknowledgement {
             acknowledgement_id: receipt.acknowledgement_id,
         })
@@ -537,65 +518,80 @@ impl DesktopInteractionProvider for ControlledX11Provider {
 impl ConfiguredControllerAuthorityRepository {
     fn resolve(
         &self,
-        state: &ServiceState,
+        state: &BrowserSessionState,
+        authority: &LiveViewerControlAuthority,
     ) -> Result<ControllerAuthority, DesktopInteractionError> {
-        let browser = state
-            .browsers
-            .get(&self.request.browser_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let stream = browser
-            .view_streams
-            .iter()
-            .find(|stream| stream.id == self.stream_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let route = state
-            .remote_view_routes
-            .get(&self.route_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let lease = state
-            .viewer_leases
-            .get(&self.request.controller_lease_id)
-            .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
-        let expires = lease
-            .expires_at
-            .as_deref()
-            .and_then(parse_timestamp_ms)
-            .unwrap_or(u64::MAX);
-        Ok(ControllerAuthority {
-            browser_id: self.request.browser_id.clone(),
-            display_allocation_id: self.display_allocation_id.clone(),
-            stream_id: self.stream_id.clone(),
-            route_id: self.route_id.clone(),
-            route_controller_lease_id: route.controller_lease_id.clone().unwrap_or_default(),
-            stream_controller_lease_id: stream.controller_lease_id.clone().unwrap_or_default(),
-            lease_id: lease.id.clone(),
-            lease_record_id: lease.id.clone(),
-            lease_route_id: lease.route_id.clone().unwrap_or_default(),
-            lease_browser_id: lease.browser_id.clone().unwrap_or_default(),
-            lease_viewer_id: lease.viewer_id.clone().unwrap_or_default(),
-            lease_role: lease.viewer_role.clone(),
-            lease_state: lease.state.clone(),
-            lease_updated_at: lease.updated_at.clone().unwrap_or_default(),
-            lease_expires_at_ms: expires,
-            controller_epoch: route.controller_epoch,
-            route_controller_epoch: route.controller_epoch,
-            stream_controller_epoch: stream.controller_epoch,
-            route_contains_lease: route.viewer_lease_ids.contains(&lease.id),
-            stream_contains_lease: stream.viewer_lease_ids.contains(&lease.id),
-            route_writable: !route.read_only,
-            stream_writable: !stream.read_only,
-            route_machine_input: Some(self.machine_input.clone()),
-            stream_machine_input: Some(self.machine_input.clone()),
-        })
+        validate_manager_authority(&self.request, state, authority)?;
+        Ok(controller_authority(&self.binding, authority))
     }
 }
 
 impl ControllerAuthorityRepository for ConfiguredControllerAuthorityRepository {
     fn snapshot(&mut self) -> Result<ControllerAuthority, DesktopInteractionError> {
-        let state = LockedServiceStateRepository::default_json()
-            .and_then(|repository| repository.load_snapshot())
+        let store = BrowserRuntimeSqliteStore::default_sqlite()
             .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
-        self.resolve(&state)
+        let authority = store
+            .current_live_viewer_control(&self.request.controller_lease_id)
+            .map_err(|_| provider_error("desktop_interaction_authority_required"))?;
+        let state = store
+            .load_session_state()
+            .map_err(|_| provider_error("desktop_input_provider_state_unavailable"))?;
+        self.resolve(&state, &authority)
+    }
+}
+
+fn validate_manager_authority(
+    request: &DesktopInteractionRequest,
+    state: &BrowserSessionState,
+    authority: &LiveViewerControlAuthority,
+) -> Result<(), DesktopInteractionError> {
+    let lease = &authority.lease;
+    let session = state
+        .sessions
+        .get(&lease.session_id)
+        .ok_or_else(|| provider_error("desktop_interaction_authority_required"))?;
+    if authority.lease_id != request.controller_lease_id
+        || authority.authenticated_principal.trim().is_empty()
+        || lease.browser_id != request.browser_id
+        || request.session_name.as_deref() != Some(session.name.as_str())
+        || session.browser_id != lease.browser_id
+        || session.current_tab_id.as_deref() != Some(lease.tab_id.as_str())
+    {
+        return Err(provider_error("desktop_interaction_authority_required"));
+    }
+    Ok(())
+}
+
+fn controller_authority(
+    binding: &DesktopCaptureBinding,
+    authority: &LiveViewerControlAuthority,
+) -> ControllerAuthority {
+    let lease = &authority.lease;
+    ControllerAuthority {
+        browser_id: lease.browser_id.clone(),
+        display_allocation_id: binding.display_allocation_id.clone(),
+        stream_id: binding.route_id.clone(),
+        route_id: binding.route_id.clone(),
+        route_controller_lease_id: authority.lease_id.clone(),
+        stream_controller_lease_id: authority.lease_id.clone(),
+        lease_id: authority.lease_id.clone(),
+        lease_record_id: authority.lease_id.clone(),
+        lease_route_id: binding.route_id.clone(),
+        lease_browser_id: lease.browser_id.clone(),
+        lease_viewer_id: authority.authenticated_principal.clone(),
+        lease_role: "controller".to_string(),
+        lease_state: "controlling".to_string(),
+        lease_updated_at: authority.updated_at_ms.to_string(),
+        lease_expires_at_ms: authority.expires_at_ms,
+        controller_epoch: lease.epoch,
+        route_controller_epoch: lease.epoch,
+        stream_controller_epoch: lease.epoch,
+        route_contains_lease: true,
+        stream_contains_lease: true,
+        route_writable: true,
+        stream_writable: true,
+        route_machine_input: Some("vnc_input".to_string()),
+        stream_machine_input: Some("vnc_input".to_string()),
     }
 }
 
@@ -637,12 +633,6 @@ fn locate_unique_color(bytes: &[u8], rgb: [u8; 3]) -> Result<PixelBounds, Deskto
         width,
         height,
     })
-}
-
-fn parse_timestamp_ms(value: &str) -> Option<u64> {
-    DateTime::parse_from_rfc3339(value)
-        .ok()
-        .and_then(|value| u64::try_from(value.timestamp_millis()).ok())
 }
 
 fn now_ms() -> u64 {

@@ -19,6 +19,7 @@
     "test:policy-wiring": "node scripts/test-policy-wiring.js",
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
+    "test:policy-capsule": "node scripts/dev/test-policy-capsule.mjs && node scripts/dev/build-policy-capsule.mjs --root . --profile docs/dev/policy-capsules/p218-m1.json --output docs/dev/policy-capsules/p218-m1.md --check",
     "test:validation-selection": "node scripts/test-validation-selection.js && node scripts/test-validation-selector-cli.js && node scripts/test-presubmit-verifier.js && node scripts/test-validation-economics.js && node scripts/test-documentation-links.js && node scripts/test-ci-workflow-contract.js",
     "test:documentation-links": "node scripts/test-documentation-links.js",
     "test:cdp-crate-architecture": "node scripts/test-cdp-crate-architecture.js",

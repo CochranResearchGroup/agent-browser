@@ -85,7 +85,7 @@ const browserSurface = [
 
 const files = {
   actions: read('cli/src/native/actions.rs'),
-  profileLease: read('cli/src/native/action_runtime/runtime/profile_lease.rs'),
+  profileLease: readIfExists('cli/src/native/action_runtime/runtime/profile_lease.rs'),
   serviceContracts: read('cli/src/native/service_contracts.rs'),
   serviceRequestSchema: read('docs/dev/contracts/service-request.v1.schema.json'),
   serviceRequestRoles: read('docs/dev/contracts/service-request-field-roles.v1.json'),
@@ -375,11 +375,9 @@ for (const action of noLaunchServiceActions) {
   );
 }
 
-expectIncludes(
-  files.profileLease,
-  'action.starts_with("service_")',
-  'profile lease gate must exempt service control actions by prefix',
-);
+if (files.profileLease.length > 0) {
+  failures.push('removed profile lease action gate must remain absent from the default CLI');
+}
 
 expectSameItems(
   rustServiceRequestActions,
@@ -756,6 +754,11 @@ console.log(
 
 function read(relativePath) {
   return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+}
+
+function readIfExists(relativePath) {
+  const absolute = path.join(repoRoot, relativePath);
+  return fs.existsSync(absolute) ? fs.readFileSync(absolute, 'utf8') : '';
 }
 
 function expectIncludes(source, needle, message) {

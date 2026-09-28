@@ -29,6 +29,12 @@ assert.match(
 
 assert.match(
   dashboardPage,
+  /new URLSearchParams\(window\.location\.search\)\.get\("next"\)[\s\S]*next\?\.startsWith\("\/"\)[\s\S]*!next\.startsWith\("\/\/"\)[\s\S]*window\.history\.replaceState\(\{ dashboardAuth: true \}, "", next\)/,
+  'same-origin authentication must return an opaque remote-view path without replacing it with a provider URL',
+);
+
+assert.match(
+  dashboardPage,
   /resolveHandoff\(true\)[\s\S]*Reopen tab/,
   'a deliberately closed handoff target must require an explicit reopen action',
 );
@@ -81,6 +87,11 @@ assert.match(
   dashboardPage,
   /durableHandoffPresentationReady\([\s\S]*presentationGeneration[\s\S]*dashboardDeploymentGeneration[\s\S]*logicalBrowserId[\s\S]*daemonOwnerGeneration[\s\S]*processInstanceDigest[\s\S]*requiredStreamProvider[\s\S]*observedStreamProvider[\s\S]*state === "ready"/,
   'the dashboard must require a matching authenticated presentation generation before rendering',
+);
+assert.match(
+  dashboardPage,
+  /resolution\.manualSeeding === true[\s\S]*receipt\.processInstanceDigest[\s\S]*resolution\.viewStreamProvider === "rdp_gateway"[\s\S]*receipt\.state === "ready"/,
+  'manual seeding must use its exact process receipt without claiming a daemon owner generation',
 );
 
 assert.doesNotMatch(

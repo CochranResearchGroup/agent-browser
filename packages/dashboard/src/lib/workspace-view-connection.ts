@@ -34,11 +34,6 @@ export type WorkspaceConnectionAutomaticAction =
       kind: "recover-route";
       serviceAction: WorkspaceRouteRecoveryAction;
       attemptKey: string;
-    }
-  | {
-      kind: "request-viewer-lease";
-      routeId: string;
-      attemptKey: string;
     };
 
 export type WorkspaceConnectionPlan = {
@@ -92,8 +87,6 @@ export function planAutomaticWorkspaceConnection({
   routeRecoveryAction,
   readinessGeneration,
   viewerRoute,
-  viewerRouteReady = false,
-  viewerLeaseIds,
   attemptedActionKeys,
 }: {
   browserId: string;
@@ -104,8 +97,6 @@ export function planAutomaticWorkspaceConnection({
   routeRecoveryAction?: string | null;
   readinessGeneration?: string | null;
   viewerRoute?: ServiceViewStream | null;
-  viewerRouteReady?: boolean;
-  viewerLeaseIds: readonly string[];
   attemptedActionKeys: readonly (string | undefined)[];
 }): WorkspaceConnectionPlan {
   if (!browserLive) {
@@ -146,23 +137,6 @@ export function planAutomaticWorkspaceConnection({
       status: "action-required",
       action: null,
       message: "Automatic desktop recovery did not complete",
-    };
-  }
-
-  const routeId = viewerRoute?.routeId?.trim();
-  if (viewerRouteReady && routeId && viewerLeaseIds.length === 0) {
-    const attemptKey = connectionAttemptKey("request-viewer-lease", browserId, routeId, readinessGeneration);
-    if (!attempted.has(attemptKey)) {
-      return {
-        status: "connecting",
-        action: { kind: "request-viewer-lease", routeId, attemptKey },
-        message: "Connecting desktop viewer",
-      };
-    }
-    return {
-      status: "action-required",
-      action: null,
-      message: "Desktop viewer could not reconnect automatically",
     };
   }
 

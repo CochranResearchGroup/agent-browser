@@ -19,6 +19,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 
+use super::browser_session_store::{BrowserRuntimeSqliteStore, LiveViewerControlAuthority};
 use super::remote_view_attachability::derive_stream_attachability;
 use super::service_contracts::{DESKTOP_CAPTURE_DEFAULT_MAX_BYTES, DESKTOP_CAPTURE_HARD_MAX_BYTES};
 use super::service_model::{
@@ -27,6 +28,7 @@ use super::service_model::{
 };
 use super::service_store::load_default_service_state_snapshot;
 use crate::flags::load_config;
+use agent_browser_service_model::{BrowserSessionState, ControlInputProvider};
 
 const DESKTOP_CONTEXT_SCHEMA_VERSION: &str = "v1";
 const FRAME_RECEIPT_SCHEMA_VERSION: &str = "v1";
@@ -354,6 +356,36 @@ pub(crate) fn capture_configured_desktop_frame(
             &ProcessSequence,
         ),
     )
+}
+
+pub(crate) fn capture_managed_desktop_frame(
+    request: DesktopCaptureRequest,
+    controller_lease_id: &str,
+) -> Result<DesktopCaptureResult, DesktopCaptureError> {
+    let source = ManagedDesktopStateSource {
+        controller_lease_id: controller_lease_id.to_string(),
+    };
+    capture_desktop_frame(
+        request,
+        CaptureDependencies::new(
+            &source,
+            &X11RootFrameProvider,
+            &SystemClock,
+            &ProcessSequence,
+        ),
+    )
+}
+
+pub(crate) fn resolve_managed_desktop_capture_binding(
+    browser_id: &str,
+    session_name: Option<&str>,
+    controller_lease_id: &str,
+) -> Result<DesktopCaptureBinding, DesktopCaptureError> {
+    let state = ManagedDesktopStateSource {
+        controller_lease_id: controller_lease_id.to_string(),
+    }
+    .snapshot()?;
+    resolve_desktop_capture_binding_for_session(&state, browser_id, session_name)
 }
 
 pub(crate) fn resolve_desktop_capture_binding(
@@ -734,22 +766,182 @@ struct ConfiguredStateSource;
 
 impl StateSource for ConfiguredStateSource {
     fn snapshot(&self) -> Result<ServiceState, DesktopCaptureError> {
-        let mut state = load_default_service_state_snapshot().map_err(|_| {
+        load_configured_service_state()
+    }
+}
+
+struct ManagedDesktopStateSource {
+    controller_lease_id: String,
+}
+
+impl StateSource for ManagedDesktopStateSource {
+    fn snapshot(&self) -> Result<ServiceState, DesktopCaptureError> {
+        let store = BrowserRuntimeSqliteStore::default_sqlite().map_err(|_| {
             DesktopCaptureError::new(
-                "desktop_capture_failed",
-                "failed to load the current service-state snapshot",
+                "desktop_input_provider_state_unavailable",
+                "failed to open Browser Runtime SQLite",
             )
         })?;
-        let configured = load_config(&[]).map_err(|_| {
+        let authority = store
+            .current_live_viewer_control(&self.controller_lease_id)
+            .map_err(|_| {
+                DesktopCaptureError::new(
+                    "desktop_interaction_authority_required",
+                    "current authenticated live-viewer authority was not proven",
+                )
+            })?;
+        let manager = store.load_session_state().map_err(|_| {
             DesktopCaptureError::new(
-                "desktop_capture_failed",
-                "failed to load configured service state",
+                "desktop_input_provider_state_unavailable",
+                "failed to load Browser Session Manager state",
             )
         })?;
-        state.overlay_configured_entities(configured.service_state_snapshot());
+        let mut state = load_static_configured_service_state()?;
+        project_managed_desktop(&mut state, &manager, &authority)?;
         state.refresh_derived_views();
         Ok(state)
     }
+}
+
+fn load_static_configured_service_state() -> Result<ServiceState, DesktopCaptureError> {
+    let configured = load_config(&[]).map_err(|_| {
+        DesktopCaptureError::new(
+            "desktop_capture_failed",
+            "failed to load configured service state",
+        )
+    })?;
+    let mut state = configured.service_state_snapshot();
+    state.refresh_derived_views();
+    Ok(state)
+}
+
+fn load_configured_service_state() -> Result<ServiceState, DesktopCaptureError> {
+    let mut state = load_default_service_state_snapshot().map_err(|_| {
+        DesktopCaptureError::new(
+            "desktop_capture_failed",
+            "failed to load the current service-state snapshot",
+        )
+    })?;
+    let configured = load_config(&[]).map_err(|_| {
+        DesktopCaptureError::new(
+            "desktop_capture_failed",
+            "failed to load configured service state",
+        )
+    })?;
+    state.overlay_configured_entities(configured.service_state_snapshot());
+    state.refresh_derived_views();
+    Ok(state)
+}
+
+fn project_managed_desktop(
+    state: &mut ServiceState,
+    manager: &BrowserSessionState,
+    authority: &LiveViewerControlAuthority,
+) -> Result<(), DesktopCaptureError> {
+    let lease = &authority.lease;
+    let browser = manager.browsers.get(&lease.browser_id).ok_or_else(|| {
+        DesktopCaptureError::new("desktop_workspace_not_found", "managed browser is missing")
+    })?;
+    let session = manager.sessions.get(&lease.session_id).ok_or_else(|| {
+        DesktopCaptureError::new("desktop_workspace_not_found", "managed session is missing")
+    })?;
+    if session.browser_id != browser.id
+        || session.current_tab_id.as_deref() != Some(lease.tab_id.as_str())
+        || browser
+            .desktop
+            .as_ref()
+            .map(|desktop| desktop.route_id.as_str())
+            != Some(lease.route_binding.slot_id.as_str())
+        || browser
+            .desktop
+            .as_ref()
+            .map(|desktop| desktop.display_name.as_str())
+            != Some(lease.route_binding.display_name.as_str())
+    {
+        return Err(identity_mismatch("managed desktop lease identity changed"));
+    }
+    let mut route = state
+        .remote_view_routes
+        .get(&authority.provider_route_id)
+        .cloned()
+        .ok_or_else(|| {
+            DesktopCaptureError::new("desktop_route_not_ready", "provider route is missing")
+        })?;
+    let display_id =
+        required_id(route.display_allocation_id.as_deref(), "route display")?.to_string();
+    let mut display = state
+        .display_allocations
+        .get(&display_id)
+        .cloned()
+        .ok_or_else(|| {
+            DesktopCaptureError::new("desktop_display_not_ready", "provider display is missing")
+        })?;
+    route.browser_id = Some(browser.id.clone());
+    route.session_id = Some(session.name.clone());
+    route.controller_lease_id = Some(authority.lease_id.clone());
+    route.controller_epoch = lease.epoch;
+    route.control_input = Some(ControlInputProvider::VncInput);
+    route.read_only = false;
+    route.readiness = Some(json!({
+        "state": "ready",
+        "source": "browser_runtime_manager_handoff_and_live_viewer",
+        "operatorVisible": { "state": "ready" },
+        "displayContent": { "state": "browser_window_visible" }
+    }));
+    display.owner_browser_id = Some(browser.id.clone());
+    display.owner_session_id = Some(session.name.clone());
+    display.profile_id = Some(browser.profile_id.clone());
+    display.display_name = Some(lease.route_binding.display_name.clone());
+    display.host = Some(BrowserHost::RemoteHeaded);
+    display.state = "ready".to_string();
+    display.readiness = route.readiness.clone();
+    if !display.route_ids.iter().any(|id| id == &route.id) {
+        display.route_ids.push(route.id.clone());
+    }
+    let stream = ViewStream {
+        id: route.id.clone(),
+        provider: ViewStreamProvider::RdpGateway,
+        control_input: route.control_input,
+        url: route.frame_url.clone(),
+        frame_url: route.frame_url.clone(),
+        external_url: route.external_url.clone(),
+        route_descriptor: route.route_descriptor.clone(),
+        route_id: Some(route.id.clone()),
+        display_allocation_id: Some(display.id.clone()),
+        connection_id: route.connection_id.clone(),
+        connection_name: route.connection_name.clone(),
+        route_source: Some("browser_runtime_sqlite".to_string()),
+        provider_mode: Some(route.provider_mode.clone()),
+        controller_lease_id: Some(authority.lease_id.clone()),
+        controller_epoch: lease.epoch,
+        read_only: false,
+        readiness: route.readiness.clone(),
+        remote_readiness: route.readiness.clone(),
+        attachability: None,
+    };
+    state.remote_view_routes.insert(route.id.clone(), route);
+    state
+        .display_allocations
+        .insert(display.id.clone(), display.clone());
+    state.browsers.insert(
+        browser.id.clone(),
+        BrowserProcess {
+            id: browser.id.clone(),
+            boot_epoch: crate::process_identity::current_boot_epoch(),
+            profile_id: Some(browser.profile_id.clone()),
+            host: BrowserHost::RemoteHeaded,
+            health: BrowserHealth::Ready,
+            display_isolation: Some(display.display_isolation.clone()),
+            display_name: Some(lease.route_binding.display_name.clone()),
+            display_allocation_id: Some(display.id),
+            pid: Some(browser.pid),
+            cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+            view_streams: vec![stream],
+            active_session_ids: vec![session.name.clone()],
+            ..BrowserProcess::default()
+        },
+    );
+    Ok(())
 }
 
 struct X11RootFrameProvider;
@@ -996,6 +1188,10 @@ mod tests {
         BrowserHealth, BrowserHost, BrowserProcess, DisplayAllocation, RemoteViewRoute,
         ServiceState, ViewStream, ViewStreamProvider,
     };
+    use agent_browser_service_model::{
+        BrowserDesktopAssignment, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+        RouteKeeperFence, RouteKeeperHandoffBinding,
+    };
     use serde_json::json;
     use std::collections::{BTreeMap, VecDeque};
     use std::io::{Cursor, Write};
@@ -1166,6 +1362,114 @@ mod tests {
         assert_eq!(receipt["schemaVersion"], "v1");
         assert_eq!(receipt["sha256"], digest_bytes(&one_pixel_png()));
         assert!(receipt.get("contentSha256").is_none());
+    }
+
+    #[test]
+    fn managed_desktop_projection_binds_the_sqlite_workspace_to_the_provider_route() {
+        let mut state = ready_state();
+        state
+            .remote_view_routes
+            .get_mut("route-1")
+            .unwrap()
+            .readiness = Some(json!({
+            "state": "ready",
+            "displayContent": { "state": "browser_window_visible" }
+        }));
+        let mut manager = BrowserSessionState::default();
+        manager.browsers.insert(
+            "managed-browser".to_string(),
+            ManagedBrowserInstance {
+                id: "managed-browser".to_string(),
+                profile_id: "managed-profile".to_string(),
+                pid: 4200,
+                cdp_endpoint: "http://127.0.0.1:9420".to_string(),
+                process_identity: None,
+                desktop: Some(BrowserDesktopAssignment {
+                    route_id: "route-slot-01".to_string(),
+                    display_name: ":101".to_string(),
+                    live_browser_count: 0,
+                }),
+                active_session_ids: vec!["managed-session-id".to_string()],
+            },
+        );
+        manager.sessions.insert(
+            "managed-session-id".to_string(),
+            ManagedBrowserSession {
+                id: "managed-session-id".to_string(),
+                name: "managed-session".to_string(),
+                profile_id: "managed-profile".to_string(),
+                browser_id: "managed-browser".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+                expires_at_ms: u64::MAX,
+                current_tab_id: Some("managed-tab".to_string()),
+                handoff_ids: vec!["managed-handoff".to_string()],
+            },
+        );
+        manager.tabs.insert(
+            "managed-tab".to_string(),
+            ManagedBrowserTab {
+                id: "managed-tab".to_string(),
+                target_id: "managed-target".to_string(),
+                browser_id: "managed-browser".to_string(),
+                session_id: "managed-session-id".to_string(),
+                created_at_ms: 1,
+                last_activity_at_ms: 1,
+            },
+        );
+        let authority = LiveViewerControlAuthority {
+            lease_id: "live-viewer:operation-1".to_string(),
+            authenticated_principal: "operator@example.test".to_string(),
+            provider_route_id: "route-1".to_string(),
+            updated_at_ms: 2,
+            expires_at_ms: u64::MAX,
+            lease: super::super::browser_session_store::DesktopControlLease {
+                operation_id: "operation-1".to_string(),
+                epoch: 7,
+                handoff_id: "managed-handoff".to_string(),
+                browser_id: "managed-browser".to_string(),
+                session_id: "managed-session-id".to_string(),
+                tab_id: "managed-tab".to_string(),
+                target_id: "managed-target".to_string(),
+                controller_client_connection_id: "viewer-1".to_string(),
+                host_generation: 3,
+                route_binding: RouteKeeperHandoffBinding {
+                    slot_id: "route-slot-01".to_string(),
+                    keeper_id: "keeper-1".to_string(),
+                    fence: RouteKeeperFence {
+                        host_generation: 3,
+                        operation_id: "keeper-operation".to_string(),
+                        operation_generation: 1,
+                        connection_catalog_digest: "catalog-digest".to_string(),
+                    },
+                    route_user: "route-user".to_string(),
+                    display_name: ":101".to_string(),
+                    guacamole_connection_id: 1,
+                    guacamole_connection_uuid: "guacamole-1".to_string(),
+                    public_operator_url: "https://example.test".to_string(),
+                },
+            },
+        };
+
+        project_managed_desktop(&mut state, &manager, &authority).unwrap();
+        state.refresh_derived_views();
+        let binding = resolve_desktop_capture_binding_for_session(
+            &state,
+            "managed-browser",
+            Some("managed-session"),
+        )
+        .unwrap();
+
+        assert_eq!(binding.route_id, "route-1");
+        assert_eq!(binding.display_name, ":101");
+        let route = &state.remote_view_routes["route-1"];
+        assert_eq!(route.browser_id.as_deref(), Some("managed-browser"));
+        assert_eq!(route.session_id.as_deref(), Some("managed-session"));
+        assert_eq!(
+            route.controller_lease_id.as_deref(),
+            Some("live-viewer:operation-1")
+        );
+        assert_eq!(route.controller_epoch, 7);
     }
 
     #[test]
