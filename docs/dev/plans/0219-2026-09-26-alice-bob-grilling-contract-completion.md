@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 32
+Plan version: 33
 
 State: OPEN
 
@@ -77,6 +77,26 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 33 source-qualifies M4-P1 at commit `4ed5820d`. The strict SQLite
+runtime patch, Service schema, MCP schema, generated client, CLI help, README,
+repository skill, and docs now expose the accepted 64-MiB exact-history,
+96-MiB live-database, and 128-MiB routine-storage settings. Runtime-config
+readback runs a read-only SQLite quick check and reports database, WAL,
+exact-history, current-backup, and previous-backup bytes with typed budget and
+restoration-gap state. The explicit `service runtime-config backup` repair uses
+SQLite online backup, verifies the staged schema and integrity before atomic
+rotation, retains at most current and previous copies, and publishes a strict
+digest-and-size manifest. It never restores or deletes the live database.
+Restart, rotation, missing-backup, and corrupt-copy rejection fixtures pass.
+Focused runtime-config and service-config tests, contract metadata, generated
+client checks, API/MCP parity, type coverage, documentation checks and build,
+formatting, and strict workspace Clippy pass. G16, G17, G18, G22, and G30 gain
+bounded source evidence but retain their prior ledger dispositions until URL
+compaction, ordinary status/doctor joins, and final installed qualification.
+The ledger remains 11 pass, 29 partial, 2 fail, and 3 missing. No installed,
+browser, provider, route, display, publication, production, merge, or release
+effect occurred. M4-P2 owns exact URL history compaction and daily summaries.
 
 Version 32 starts M4-P1 from pushed checkpoint `3e2ffa5e`. The read-only M4
 audit found that the v2 SQLite row already stores the accepted 64-MiB exact URL
@@ -1279,6 +1299,23 @@ verified backup, and a restart readback of the same manifest. Stop and reframe
 if backup requires provider state, broad filesystem cleanup, arbitrary command
 execution, or a second mutable configuration authority. URL history compaction
 and daily summaries remain M4-P2 after this storage foundation is source-qualified.
+
+M4-P1 is source-qualified at `4ed5820d`. Its provider-free acceptance passes.
+The read-only projection is currently exposed through runtime-config status;
+joining the same storage projection into the ordinary aggregate status and
+doctor outputs remains explicit M4 work and no doctor mutation is introduced.
+
+### M4-P2 | Exact URL History Compaction
+
+M4-P2 is the next bounded source packet. It owns only G16 and G17 history
+retention: measure exact navigation history against the SQLite-owned 64-MiB
+limit, summarize the oldest eligible navigation rows by UTC day with first and
+last URL, count, session/browser/profile identities and incident linkage, and
+record an auditable compaction event in the same transaction. Material
+lifecycle and recovery events remain exact. Compaction must be deterministic,
+restart-safe, idempotent, and must not retain bodies, screenshots, heartbeats,
+raw logs, credential material, or repeated polls. It does not own provider,
+privilege, resource-pressure, runtime publication, or installed acceptance.
 
 ### A01 Source Checkpoint
 

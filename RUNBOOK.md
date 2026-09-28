@@ -1,5 +1,26 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P1 source-qualified
+
+[Plan 0219 version 33](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `4ed5820d` completes the provider-free Browser Runtime SQLite
+storage-authority packet. Typed configuration now owns the exact-history,
+live-database, and routine-storage limits. Read-only runtime-config status
+reports SQLite integrity, database and WAL bytes, exact-history bytes, backup
+bytes, budget state, and restoration gaps. The explicit backup action creates
+an online SQLite copy, verifies it before atomic rotation, retains current and
+previous copies with a strict digest-and-size manifest, and never restores or
+deletes the live database.
+
+Focused storage, runtime-config, service-config, and contract tests pass, as do
+generated-client drift and type checks, API/MCP parity, remote-view docs,
+production docs build, formatting, and strict workspace Clippy. G16, G17, G18,
+G22, and G30 gain bounded source evidence without changing their ledger
+dispositions. The ledger remains 11 pass, 29 partial, 2 fail, and 3 missing.
+No installed runtime, browser, provider, publication, production, merge, or
+release effect occurred. M4-P2 owns exact URL history compaction and daily
+summaries; the aggregate status/doctor join remains later M4 work.
+
 ## Current P219 status | 2026-09-27 M4-P1 storage audit
 
 [Plan 0219 version 32](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
