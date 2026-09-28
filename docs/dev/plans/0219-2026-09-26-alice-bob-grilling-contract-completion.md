@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 46
+Plan version: 47
 
 State: OPEN
 
@@ -77,6 +77,17 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 47 reconciles two stale machine-readable ledger narratives without
+changing their dispositions. G18 now records the already-qualified M4-P1
+integrity, WAL-aware budgets, verified online backup rotation, corrupt-copy
+preservation, manifest, and restoration-gap projection at `4ed5820d`; only the
+exact frozen-candidate installed recovery proof remains. G34 now records the
+M4-P5 exact owned-provider namespace rebuild and unrelated-row PostgreSQL
+preservation proof at `7e34acce`; only the exact installed forward-only cold
+upgrade and resulting topology proof remain. The ledger stays 13 pass, 30
+partial, 2 fail, and 0 missing. This reconciliation performs no runtime,
+browser, provider, privileged, production, merge, push, or release effect.
 
 Version 46 advances G39's source proof at `c5f4db2a`. The architecture report
 now has a dedicated `doctorReadOnly` cut over both install doctor and

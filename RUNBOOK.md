@@ -1,5 +1,16 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G18 and G34 ledger reconciliation
+
+[Plan 0219 version 47](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+repairs stale machine narratives for G18 and G34. G18 now cites M4-P1's
+read-only integrity, WAL-aware budgets, verified two-copy online backup,
+corruption preservation, manifest, and restoration-gap source proof. G34 now
+cites M4-P5's exact owned-provider rebuild and PostgreSQL unrelated-row
+preservation fixture. Both remain partial only for their exact frozen-candidate
+installed qualification. Ledger counts remain 13/30/2/0; no runtime effect
+occurred.
+
 ## Current P219 status | 2026-09-28 G39 doctor detector
 
 [Plan 0219 version 46](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
