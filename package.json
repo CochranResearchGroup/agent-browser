@@ -272,6 +272,7 @@
     "test:fresh-workstation-vm-harness": "node scripts/test-fresh-workstation-vm-harness.js",
     "sync:rdp-guac-existing-user-route-pool": "bash scripts/sync-rdp-guac-existing-user-route-pool.sh",
     "sync:rdp-guac-route-specific-user-pool": "bash scripts/sync-rdp-guac-route-specific-user-pool.sh",
+    "test:rdp-route-user-pool-postgres": "node scripts/test-rdp-route-user-pool-postgres.js",
     "open:rdp-route-displays": "node scripts/open-rdp-guac-route-displays.js",
     "inspect:rdp-route-displays": "node scripts/inspect-rdp-route-displays.js",
     "grant:rdp-route-display-access": "bash scripts/grant-rdp-route-display-access.sh",

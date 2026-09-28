@@ -191,6 +191,10 @@ function selectRecommendations(files, base) {
       'pnpm test:rdp-guac-route-specific-user-sync',
       'workstation route user projection changed',
     );
+    add(
+      'pnpm test:rdp-route-user-pool-postgres',
+      'owned Guacamole namespace reconstruction or preservation changed',
+    );
   }
 
   if (files.some(isReleaseVerificationSurface)) {

@@ -276,6 +276,7 @@ COMMIT;"""
 
 
 def rebuild_owned_sql(routes: list[dict[str, str]], header_user: str | None) -> str:
+    """Delete only configured Agent Browser provider rows before reconstruction."""
     if not header_user:
         raise ValueError("route_user_inventory_rebuild_header_user_missing")
     connection_names = [route["connectionName"] for route in routes]

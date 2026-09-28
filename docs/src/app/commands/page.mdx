@@ -1597,6 +1597,12 @@ ownership, or resulting two-route topology does not pass readiness. It
 migrates supported legacy rows in place; it is not a PostgreSQL backup or
 restore.
 
+Cold workstation reconciliation rebuilds only the configured Agent Browser
+Guacamole connections, sharing profiles, and exact header user from retained
+SQLite credentials. Unrelated provider rows remain intact. Deletion and
+canonical reconstruction share one PostgreSQL transaction, so a failed
+postcondition rolls the complete change back.
+
 The Service view can inspect retained browser, session, and tab records. When
 a browser record includes an embeddable view stream such as an HTML5 RDP
 gateway, operators can open it from the browser details or from a service tab

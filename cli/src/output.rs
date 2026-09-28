@@ -5865,6 +5865,10 @@ without replacing the installed generation. Failures at or after migration
 preserve the new architecture for forward repair and never restore the old
 generation. This path does not require a transaction ID, revision, census
 digest, replacement-plan hash, or rollback choice.
+Cold reconciliation rebuilds only configured Agent Browser Guacamole
+connections, sharing profiles, and the exact header user from retained SQLite
+credentials. Unrelated provider rows remain intact, and failed reconstruction
+postconditions roll back the PostgreSQL transaction.
 
 The doctor is
 no-launch and also reports service-status, runtime multiplicity, duplicate

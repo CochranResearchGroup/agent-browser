@@ -16,6 +16,11 @@ Failures before migration stop without replacing the installed generation.
 Failures at or after migration preserve the new architecture for forward
 repair and never restore the old generation.
 
+Cold reconciliation rebuilds only the configured Agent Browser Guacamole
+connections, sharing profiles, and exact header user from retained SQLite
+credentials. It preserves unrelated provider rows and rolls back the database
+transaction if canonical reconstruction postconditions fail.
+
 Use `agent-browser shutdown --json` to close exact owned browsers, stop Agent
 Browser user units and presentation containers, release runtime ownership and
 active claims, remove transient metadata, and verify residue. Named profile

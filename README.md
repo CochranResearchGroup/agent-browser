@@ -60,6 +60,12 @@ forward repair and never restore the old generation. You do not supply a
 transaction ID, revision, census digest, replacement-plan hash, route ID,
 display ID, or rollback choice.
 
+During cold reconciliation, the installer rebuilds only the configured Agent
+Browser Guacamole connections, sharing profiles, and header user from retained
+SQLite credentials. Unrelated Guacamole provider rows are preserved. The
+rebuild and reconstruction run in one PostgreSQL transaction, and a failed
+postcondition rolls the transaction back.
+
 Use one command to stop the workstation without removing named profile data:
 
 ```bash
@@ -322,6 +328,12 @@ Apply uses the ordinary cold workflow. It runs stop, payload replacement,
 service start, and readiness in fixed order. Named profiles remain on disk and
 become available to the restarted Browser Session Manager. The JSON receipt
 reports each bounded phase and any rollback attempt.
+
+Cold reconciliation reconstructs the configured Agent Browser Guacamole
+namespace from retained inputs without deleting unrelated provider rows. It
+removes only configured canonical and legacy connection names, configured
+Agent Browser sharing-profile names, and the exact header user before restoring
+the canonical routes and permissions.
 
 ### Legacy hot-upgrade recovery
 
