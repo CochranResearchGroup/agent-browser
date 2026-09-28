@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 34
+Plan version: 35
 
 State: OPEN
 
@@ -77,6 +77,25 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 35 source-qualifies M4-P3A at commit `91cb79c8`. Aggregate Service
+status now includes `browserRuntime`, and install doctor includes the same
+projection under `data.browserRuntime` plus concise text fields. Both surfaces
+open the existing SQLite authority read-only, run no migration or backup, and
+report typed configuration, migration counts and archive state, integrity,
+database/WAL/history/backup bytes, budget state, backup verification, and
+restoration gaps. An unavailable database reports only a stable failure code;
+the local path is redacted. The read-only regression preserves the database
+digest and creates no backup. Status projection remains non-mutating and the
+generated Service client and response schema carry the additive field.
+Focused store and status tests, generated-client drift and type gates, API/MCP
+parity, documentation checks and build, formatting, and strict workspace
+Clippy pass. G30 and G39 gain bounded source evidence but remain partial until
+the full required-field map and whole-doctor effect audit pass. The ledger
+remains 11 pass, 30 partial, 2 fail, and 2 missing. No installed, browser,
+provider, route, display, privileged, publication, production, merge, or
+release effect occurred. M4-P3B owns current memory/process/disk launch
+admission and the remaining operational field map.
 
 Version 34 source-qualifies M4-P2 at commit `fe46f53c`. Browser Session State
 now retains exact navigation rows up to the live SQLite-owned byte limit and
@@ -1353,6 +1372,12 @@ queue, control-owner, handoff-recovery, and repair fields are already joined
 and which remain absent. No live probe, provider mutation, process cleanup,
 privileged command, browser launch, or installed publication is authorized by
 the audit. A source packet follows only from the verified gap map.
+
+M4-P3A is source-qualified at `91cb79c8`. It closes the Browser Runtime SQLite
+status/doctor join only. The remaining packet is M4-P3B: define provider-free,
+cross-platform current memory/process/disk observations at the exact browser
+launch boundary, fail closed with typed non-disruptive rejection, expose the
+same observation through status and doctor, and finish the G30 field map.
 
 ### A01 Source Checkpoint
 

@@ -1,5 +1,23 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P3A source-qualified
+
+[Plan 0219 version 35](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `91cb79c8` joins read-only Browser Runtime SQLite state into
+aggregate Service status and install doctor. Both report typed configuration,
+migration, integrity, WAL-aware sizes, history budget, backup verification,
+and restoration gaps without migration or backup effects. Unavailable state
+redacts the local path to a stable code. The regression preserves the database
+digest and creates no backup.
+
+Focused store/status tests, generated-client drift and types, API/MCP parity,
+documentation checks and build, formatting, and strict workspace Clippy pass.
+G30 and G39 gain source evidence but remain partial; the ledger remains 11
+pass, 30 partial, 2 fail, and 2 missing. No installed runtime, browser,
+provider, privileged, publication, production, merge, or release effect
+occurred. M4-P3B owns current memory/process/disk launch admission and the
+remaining operational status map.
+
 ## Current P219 status | 2026-09-27 M4-P2 source-qualified
 
 [Plan 0219 version 34](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

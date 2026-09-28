@@ -85,6 +85,12 @@ because indefinite material lifecycle and recovery-event retention remains
 open; the ledger is 11 pass, 30 partial, 2 fail, and 2 missing. M4-P3 starts
 with the read-only operational status, doctor, and resource-pressure audit.
 
+M4-P3A is source-qualified at `91cb79c8`. Aggregate Service status and install
+doctor now share a read-only, path-redacted Browser Runtime SQLite projection
+covering configuration, migration, integrity, sizes, budgets, backup state,
+and restoration gaps. G30 and G39 remain partial. M4-P3B owns current
+memory/process/disk launch admission and the remaining operational field map.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED
