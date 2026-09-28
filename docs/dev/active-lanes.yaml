@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 9aad8500
+    checkpoint: 9f6505b7
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M4-P1 adds storage authority and backup, M4-P2 adds navigation compaction, M4-P3A joins Browser Runtime status, and M4-P3B at 9aad8500 adds exact-boundary current memory, profile-filesystem disk, host-process, and managed-browser admission plus status and doctor projection; focused Rust, generated-client, contract, docs, formatting, and strict Clippy gates pass; the Windows cross-check remains environment-blocked before source compilation; the ledger is 11 pass, 31 partial, two fail, and one missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02 and M3-P1 through M3-P3 remain source-qualified; M4-P1 through M4-P3B add storage, history, status, doctor, and launch-pressure controls; M4-P4 at 9f6505b7 gives healthy privilege reruns a zero-privileged-call path and binds repairs to v2 prior-observation, action, and postcondition receipts; focused fixtures, Rust, docs, formatting, and strict Clippy gates pass; final installed and target-platform qualification remain; the ledger is 11 pass, 32 partial, two fail, and zero missing
     validation_ref: 0.28.0-ac3c1daed8ab
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []
@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M4-P3B is source-qualified at 9aad8500; M4-P4 owns the G20 narrow privilege-helper and receipt audit without authorizing a privileged effect; provider reconstruction and installed qualification remain later packets
+    blocker: M4-P4 is source-qualified at 9f6505b7; M4-P5 owns G34 provider-row reconstruction and the remaining placement, queue, scale-in, doctor, and installed operational gaps; no provider effect is implied by source qualification
     updated_at: 2026-09-27

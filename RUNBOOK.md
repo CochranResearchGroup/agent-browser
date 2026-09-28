@@ -1,5 +1,22 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P4 source-qualified
+
+[Plan 0219 version 37](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN. Commit `9f6505b7` makes healthy privilege-installer reruns use only
+unprivileged metadata and capability checks and add zero privileged commands.
+Repairs retain the one explicit authorization and sealed narrow action list;
+the validated v2 receipt records resource, prior observation, action, outcome,
+and ready postcondition.
+
+The clean privilege and complete workstation-host fixtures, focused Rust
+receipt test, shell syntax, documentation checks and build, formatting, and
+strict workspace Clippy pass. G20 moves from missing to partial pending final
+installed qualification; the ledger is 11 pass, 32 partial, 2 fail, and 0
+missing. No installed runtime, browser, provider, privileged, publication,
+production, merge, or release effect occurred. M4-P5 owns provider-row
+reconstruction and the remaining operational gap map.
+
 ## Current P219 status | 2026-09-27 M4-P3B source-qualified
 
 [Plan 0219 version 36](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

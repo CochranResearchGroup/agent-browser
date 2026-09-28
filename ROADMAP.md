@@ -99,6 +99,13 @@ partial; the ledger is 11 pass, 31 partial, 2 fail, and 1 missing. M4-P4 owns
 the remaining G20 narrow privilege-helper and receipt audit before provider
 reconstruction and final installed qualification.
 
+M4-P4 is source-qualified at `9f6505b7`. Healthy privilege-installer reruns
+now make zero privileged calls, while exact repair stays behind one explicit
+authorization and a sealed action list. The v2 receipt records the resource,
+prior observation, action, outcome, and ready postcondition. G20 moves from
+missing to partial; the ledger is 11 pass, 32 partial, 2 fail, and 0 missing.
+M4-P5 owns provider-row reconstruction and remaining operational qualification.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

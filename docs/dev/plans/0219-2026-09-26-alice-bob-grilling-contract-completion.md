@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 36
+Plan version: 37
 
 State: OPEN
 
@@ -77,6 +77,27 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 37 source-qualifies M4-P4 at commit `9f6505b7`. The privilege
+installer now distinguishes a healthy cold start from a repair before entering
+the privileged boundary. A healthy rerun checks root-owned helper and sudoers
+metadata, the helper's non-root capability report, protected lease-authority
+readiness, group membership, and requested workstation dependencies without
+executing `sudo`; compatible helper provenance drift remains allowed. A repair
+still uses the single explicit authorization and sealed narrow action list.
+The validated v2 receipt binds the host-privilege resource, prior observation,
+selected action, outcome, and ready postcondition plus the exact sealed plan.
+
+Both clean privilege-install and complete workstation-host fixtures pass and
+assert that healthy reruns add zero privileged commands, including when the
+AppArmor loaded-profile registry is protected. The focused Rust receipt test,
+shell syntax, documentation checks and build, formatting, and strict workspace
+Clippy pass. G20 advances from missing to partial pending final installed
+first-install, healthy-rerun, and exact-repair qualification. The ledger is 11
+pass, 32 partial, 2 fail, and 0 missing. No installed runtime, browser,
+provider, route, display, privileged, publication, production, merge, or
+release effect occurred. M4-P5 owns provider-row reconstruction and remaining
+placement, queue, scale-in, doctor, and installed operational qualification.
 
 Version 36 source-qualifies M4-P3B at commit `9aad8500`. Every Browser
 Session Manager Chrome launch now takes a fresh cross-platform host snapshot
@@ -1409,6 +1430,12 @@ and managed-browser pressure and status/doctor publish the same observation.
 G33 remains partial pending final target-platform and pressure qualification.
 M4-P4 owns the bounded G20 narrow privilege-helper and receipt audit; it does
 not authorize a privileged command or provider effect.
+
+M4-P4 is source-qualified at `9f6505b7`. Healthy cold starts now make zero
+privileged calls and exact repair receipts bind prior observation, sealed
+action, and ready postcondition. G20 remains partial until installed
+qualification. M4-P5 starts read-only and owns G34 provider-row reconstruction
+plus the remaining operational placement, queue, scale-in, and doctor gap map.
 
 ### A01 Source Checkpoint
 
