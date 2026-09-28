@@ -200,6 +200,8 @@ def render_sql(
     port: str,
     max_connections: int = MAX_CONNECTIONS,
     max_connections_per_user: int = MAX_CONNECTIONS_PER_USER,
+    rebuild_owned: bool = False,
+    header_user: str | None = None,
 ) -> str:
     declarations = ["  canonical_count integer;", "  legacy_count integer;"]
     declarations.extend(f"  route_id_{index} integer;" for index in range(len(routes)))
@@ -232,7 +234,10 @@ def render_sql(
     sharing_profile_names = ", ".join(
         quote(f'Agent Browser Shared Session {route["id"]}') for route in routes
     )
+    rebuild = rebuild_owned_sql(routes, header_user) if rebuild_owned else ""
     return f"""BEGIN;
+
+{rebuild}
 
 DO $$
 DECLARE
@@ -268,6 +273,35 @@ BEGIN
 END $$;
 
 COMMIT;"""
+
+
+def rebuild_owned_sql(routes: list[dict[str, str]], header_user: str | None) -> str:
+    if not header_user:
+        raise ValueError("route_user_inventory_rebuild_header_user_missing")
+    connection_names = [route["connectionName"] for route in routes]
+    connection_names.extend(
+        route["legacyConnectionName"]
+        for route in routes
+        if route["legacyConnectionName"]
+    )
+    sharing_names = [f'Agent Browser Shared Session {route["id"]}' for route in routes]
+    connections = ", ".join(quote(name) for name in connection_names)
+    sharing = ", ".join(quote(name) for name in sharing_names)
+    return f"""DELETE FROM guacamole_sharing_profile
+WHERE sharing_profile_name IN ({sharing})
+   OR primary_connection_id IN (
+     SELECT connection_id FROM guacamole_connection
+     WHERE parent_id IS NULL AND connection_name IN ({connections})
+   );
+DELETE FROM guacamole_connection
+WHERE parent_id IS NULL AND connection_name IN ({connections});
+DELETE FROM guacamole_user
+WHERE entity_id IN (
+  SELECT entity_id FROM guacamole_entity
+  WHERE type::text = 'USER' AND name = {quote(header_user)}
+);
+DELETE FROM guacamole_entity
+WHERE type::text = 'USER' AND name = {quote(header_user)};"""
 
 
 def route_sql_block(
@@ -409,6 +443,8 @@ def main() -> int:
         type=bounded_connection_limit,
         default=MAX_CONNECTIONS_PER_USER,
     )
+    sql.add_argument("--rebuild-owned", action="store_true")
+    sql.add_argument("--header-user")
     args = parser.parse_args()
     try:
         if args.command == "resolve":
@@ -432,6 +468,8 @@ def main() -> int:
                     args.port,
                     args.max_connections,
                     args.max_connections_per_user,
+                    args.rebuild_owned,
+                    args.header_user,
                 )
             )
         return 0

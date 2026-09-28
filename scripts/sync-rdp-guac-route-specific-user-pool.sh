@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 DRY_RUN=0
+REBUILD_OWNED=0
+HEADER_USER="${AGENT_BROWSER_GUACAMOLE_HEADER_USER:-${USER:-agent-browser}}"
 for arg in "$@"; do
   case "$arg" in
     --)
@@ -11,9 +13,12 @@ for arg in "$@"; do
     --dry-run)
       DRY_RUN=1
       ;;
+    --rebuild-owned)
+      REBUILD_OWNED=1
+      ;;
     *)
       echo "Unknown argument: $arg" >&2
-      echo "Usage: bash scripts/sync-rdp-guac-route-specific-user-pool.sh [--dry-run]" >&2
+      echo "Usage: bash scripts/sync-rdp-guac-route-specific-user-pool.sh [--dry-run] [--rebuild-owned]" >&2
       exit 2
       ;;
   esac
@@ -102,7 +107,11 @@ fi
 
 ensure_guacamole_postgres
 
-SQL="$(printf '%s' "$ROUTE_USER_POOL_JSON" | python3 "$ROUTE_USER_HELPER" sql --hostname "$HOSTNAME" --port "$PORT")"
+sql_args=(sql --hostname "$HOSTNAME" --port "$PORT")
+if [[ "$REBUILD_OWNED" == "1" ]]; then
+  sql_args+=(--rebuild-owned --header-user "$HEADER_USER")
+fi
+SQL="$(printf '%s' "$ROUTE_USER_POOL_JSON" | python3 "$ROUTE_USER_HELPER" "${sql_args[@]}")"
 
 printf '%s\n' "$SQL" |
   compose exec -T postgres psql -U guacamole_user -d guacamole_db -v ON_ERROR_STOP=1
@@ -110,5 +119,8 @@ compose exec -T postgres psql -U guacamole_user -d guacamole_db \
   -v ON_ERROR_STOP=1 -c "CHECKPOINT;" >/dev/null
 
 echo "Configured $ROUTE_COUNT canonical Guacamole RDP routes with distinct route-specific users."
+if [[ "$REBUILD_OWNED" == "1" ]]; then
+  echo "Rebuilt the exact Agent Browser-owned Guacamole namespace from retained inputs."
+fi
 echo "Guacamole Postgres route writes checkpoint completed."
 echo "Next: open every configured route in Guacamole, then run node scripts/inspect-rdp-route-displays.js."

@@ -650,9 +650,10 @@ try {
   assert.match(routeSyncSource, /ROUTE_USER_HELPER=.*rdp-route-user-pool\.py/);
   assert.match(
     routeSyncSource,
-    /printf '%s' "\$ROUTE_USER_POOL_JSON" \| python3 "\$ROUTE_USER_HELPER" sql/,
+    /printf '%s' "\$ROUTE_USER_POOL_JSON" \| python3 "\$ROUTE_USER_HELPER" "\$\{sql_args\[@\]\}"/,
     'canonical route-user JSON must reach the SQL renderer through stdin',
   );
+  assert.match(routeSyncSource, /--rebuild-owned/);
   assert.equal(
     /python3 - \\\n[^]*?\$PASS_A/.test(routeSyncSource),
     false,

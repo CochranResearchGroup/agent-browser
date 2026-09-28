@@ -70,6 +70,27 @@ assert.doesNotMatch(sql.stdout, /max_connections = 4/);
 assert.match(sql.stdout, /max_connections = 8/);
 assert.match(sql.stdout, /max_connections_per_user = 8/);
 
+const rebuildSql = spawnSync(
+  'python3',
+  [
+    'scripts/lib/rdp-route-user-pool.py', 'sql',
+    '--hostname', 'host.docker.internal',
+    '--port', '3389',
+    '--rebuild-owned',
+    '--header-user', 'operator-fixture',
+  ],
+  { encoding: 'utf8', input: JSON.stringify(resolved) },
+);
+assert.equal(rebuildSql.status, 0, rebuildSql.stderr);
+assert.match(rebuildSql.stdout, /DELETE FROM guacamole_sharing_profile/);
+assert.match(rebuildSql.stdout, /DELETE FROM guacamole_connection/);
+assert.match(rebuildSql.stdout, /DELETE FROM guacamole_user/);
+assert.match(rebuildSql.stdout, /name = 'operator-fixture'/);
+assert.ok(
+  rebuildSql.stdout.indexOf('DELETE FROM guacamole_connection')
+    < rebuildSql.stdout.indexOf('INSERT INTO guacamole_connection'),
+);
+
 const legacySecret = join(fixtureRoot, 'legacy.env');
 writeFileSync(legacySecret, [
   'XRDP_AGENT_BROWSER_ROUTE_A_USERNAME=legacy-a',

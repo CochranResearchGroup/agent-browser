@@ -867,6 +867,25 @@ fn reconcile_workstation_after_quiesce(
     let header_user = env::var("USER").unwrap_or_else(|_| "agent-browser".to_string());
     let guacamole_port = env_file_value(&guacamole_env, "AGENT_BROWSER_GUACAMOLE_HTTP_PORT")
         .unwrap_or_else(|| DEFAULT_GUACAMOLE_PORT.to_string());
+    run_required(
+        "bash",
+        &[
+            scripts_dir
+                .join("sync-rdp-guac-route-specific-user-pool.sh")
+                .to_str()
+                .ok_or_else(|| "invalid installed route sync path".to_string())?,
+            "--rebuild-owned",
+        ],
+        support_root,
+        &command_env,
+        true,
+        "rebuild Agent Browser-owned Guacamole namespace",
+    )?;
+    steps.push(ReconcileStep {
+        name: "provider-owned-namespace-rebuilt",
+        success: true,
+    });
+
     ensure_guacamole_header_user(&header_user, &guacamole_port, support_root, &command_env)?;
     steps.push(ReconcileStep {
         name: "guacamole-header-user-ready",
