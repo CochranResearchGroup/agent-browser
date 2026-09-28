@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 48
+Plan version: 49
 
 State: OPEN
 
@@ -77,6 +77,21 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 49 closes G39's source-side explicit-repair inventory at `d5e5bab7`.
+Every install-doctor `issues[].remedy` now comes from one closed typed builder
+using the shared `agent-browser.doctor-repair-recommendation.v1` schema, an
+exact action ID, a `read_only`, `explicit_effect`, or `manual_plan` execution
+class, and `automaticExecutionAllowed=false`. A negative-tested architecture
+guard rejects literal remedy objects outside that builder. The active focused
+Rust contract, architecture self-test and zero-finding cut, formatting, strict
+workspace Clippy, documentation build and remote-view contract, and every
+selector-chosen provider-free workstation and PostgreSQL fixture pass. The
+selector's legacy `workstation_payload_status` filter executes zero tests and
+is not counted as proof. G39 remains partial only for complete installed
+doctor no-mutation qualification. The ledger remains 13 pass, 30 partial,
+2 fail, and 0 missing. No runtime, browser, provider, privileged, production,
+merge, push, or release effect occurred.
 
 Version 48 advances G39's explicit-repair inventory at `92b2155f`.
 Remote-view doctor now returns every `nextCommand` through the

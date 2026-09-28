@@ -1,5 +1,18 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 typed install-doctor remedies
+
+[Plan 0219 version 49](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+source-qualifies `d5e5bab7`. Every install-doctor issue remedy now uses the
+shared versioned recommendation schema with a closed action ID, typed execution
+class, and `automaticExecutionAllowed=false`. The architecture guard rejects
+literal remedies outside the builder. Focused Rust, architecture, formatting,
+strict Clippy, documentation, remote-view, workstation, Guacamole, and
+PostgreSQL gates pass. The selector's legacy workstation-status filter ran zero
+tests and is not evidence. G39 remains partial only for complete installed
+doctor no-mutation qualification. Ledger counts remain 13/30/2/0; no runtime
+effect occurred.
+
 ## Current P219 status | 2026-09-28 typed remote-view doctor recommendations
 
 [Plan 0219 version 48](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

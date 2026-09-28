@@ -147,15 +147,12 @@ validates the typed privileged-repair receipt, exposes the same redacted state
 when SQLite is unavailable, and keeps its sealed digest and action list out of
 status. The remaining G30 gate is complete installed status/doctor readback.
 
-G39's source guard now includes a negative-tested `doctorReadOnly` architecture
-cut at `c5f4db2a`. It rejects direct mutation and effect-capable apply calls in
-both doctor implementations. Installed no-mutation proof and the complete
-typed explicit-repair inventory remain open.
-
-Commit `92b2155f` types the remote-view doctor's complete recommendation set as
-read-only, explicit effect, live acceptance, or unclassified and forbids
-automatic execution. Install-doctor remedies still need the same contract
-before the source inventory is closed.
+G39's source guard includes a negative-tested `doctorReadOnly` architecture cut
+at `c5f4db2a`. Commit `92b2155f` types the remote-view doctor's complete
+recommendation set. Commit `d5e5bab7` closes the source inventory by routing
+every install-doctor remedy through the same non-executing versioned contract
+and adding a negative guard against bypassing its closed typed builder. G39 now
+remains partial only for complete installed doctor no-mutation qualification.
 
 ## P218 | Grilling-Contract Remote View Conformance
 
