@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 29
+Plan version: 30
 
 State: OPEN
 
@@ -77,6 +77,18 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 30 starts the remaining M3 retention packet from pushed checkpoint
+`762a7f10`. The read-only audit found that the v2 SQLite runtime row already
+stores the accepted 24-hour disposable inactivity, 20-profile, and 10-GiB
+defaults, but the typed update patch omits all three. Browser Session Host also
+projects the legacy five-minute `sessionIdleTimeoutMs` into disposable session
+expiry instead of the accepted `disposableInactivityMs`, while count and byte
+limits are not enforced. Existing reaping reference-checks sessions and
+browsers before profile deletion, but it has no current SQLite protection join
+for authenticated viewers, Desktop Services control, or pending operations and
+does not choose oldest inactive profiles under quota pressure. M3-P3 below owns
+that exact gap. No executable or runtime state changed in this audit.
 
 Version 29 source-qualifies M3-P2D at commit `0b728fc0`. Baseline presentation
 recovery remains Route Keeper work and cannot deserialize or enter the
@@ -1151,6 +1163,45 @@ recovery proof. No installed, provider, browser, route, display, publication,
 production, merge, or release effect is claimed. M4 is not eligible; the next
 packet must reconcile the remaining M3 retention rows and their exact acceptance
 boundary.
+
+### M3-P3 | Disposable Retention And Quota Enforcement
+
+M3-P3 closes the source portion of G21, G36, G37, and G38 without weakening the
+named-profile retention already qualified at `d7ec8d2f`.
+
+1. **M3-P3A | One live retention configuration.** Add
+   `disposableInactivityMs`, `maximumRetainedDisposableProfiles`, and
+   `maximumDisposableProfileBytes` to the strict runtime-config patch, Service
+   request schema, generated client, CLI help, README, skill, and docs site.
+   Project `disposableInactivityMs`, not the legacy five-minute timeout, into
+   disposable session expiry and cleanup. Preserve one-time v1 to v2 migration,
+   atomic validation, and exact readback.
+2. **M3-P3B | Protected oldest-inactive cleanup.** Derive a scheduler and
+   admission protection projection from current SQLite authenticated viewers,
+   current Desktop Services control, and prepared or observed operations joined
+   to exact sessions. Named profiles are structurally outside the disposable
+   candidate set. Rank unprotected disposable candidates by last activity,
+   then creation and stable profile ID. Enforce count and measured profile-byte
+   limits before admitting a new disposable allocation and during scheduled
+   reap. If protected candidates prevent convergence, return a typed count,
+   byte-quota, or low-disk refusal without deleting protected or named state.
+3. **M3-P3C | Terminal cleanup and no promotion.** Expiry or quota eviction
+   closes the exact logical session, makes its handoffs terminal, preserves
+   compact terminal history, and deletes only the reference-free direct-child
+   disposable directory. External deletion is idempotent across restart and the
+   resulting SQLite state commits before admission continues. Add a structural
+   red fixture proving there is no disposable pin or profile-promotion field,
+   command, or bypass.
+
+Provider-free acceptance requires the 24-hour boundary, exact-session activity
+refresh, deterministic oldest-first cleanup, count and byte convergence,
+active-viewer/control/pending-operation protection, named-profile immunity,
+typed protected-capacity refusal, terminal handoffs after expiry, direct-child
+deletion only, restart-safe cleanup, and absence of pinning or promotion. Stop
+and reframe if cleanup requires a second mutable authority, if filesystem size
+observation can follow symlinks outside the recorded direct child, or if an
+external deletion can authorize a new allocation without durable SQLite
+reconciliation.
 
 ### A01 Source Checkpoint
 

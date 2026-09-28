@@ -61,6 +61,14 @@ and visible joined recovery. The reconciled ledger stays 9 pass, 29 partial,
 qualification remain open. No installed, provider, browser, publication,
 production, merge, or release effect is implied by this source checkpoint.
 
+M3-P3 is active. Its audit found that the existing SQLite row carries the
+accepted disposable retention defaults but the update contract and lifecycle
+do not consume them completely: disposable expiry still uses five minutes,
+quota cleanup is unenforced, and current viewer/control/pending-operation
+protection is not joined. The packet owns typed live settings, protected
+oldest-inactive count and byte cleanup, terminal disposable handoffs, safe
+direct-child deletion, and the no-pinning/no-promotion proof before M4.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

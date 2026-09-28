@@ -1,5 +1,18 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M3-P3 retention audit
+
+[Plan 0219 version 30](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN at pushed checkpoint `762a7f10`. The M3-P3 audit confirms that SQLite
+already stores the accepted disposable inactivity, count, and byte defaults,
+but typed updates omit them, disposable sessions still consume the legacy
+five-minute timeout, and no count/byte quota engine joins viewer, control, and
+pending-operation protection. Existing cleanup is direct-child and
+reference-checked but is not oldest-inactive quota enforcement. M3-P3 now owns
+the bounded source repair and provider-free proof for G21/G36/G37/G38. The
+ledger remains 9 pass, 29 partial, 2 fail, and 5 missing until executable
+evidence lands. No runtime or provider effect occurred during the audit.
+
 ## Current P219 status | 2026-09-27 M3-P2D source-qualified
 
 [Plan 0219 version 29](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
