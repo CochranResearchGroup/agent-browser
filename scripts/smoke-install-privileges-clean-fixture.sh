@@ -102,6 +102,13 @@ if [[ "${1:-}" == "-c" \
 fi
 if [[ "${1:-}" == "-c" \
    && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_SUDOERS:-}" \
+   && -f "${3:-}" ]]; then
+  echo root:root:440
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
    && "${3:-}" == "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" \
    && -d "${3:-}" ]]; then
   echo root:root:700
@@ -317,15 +324,15 @@ if [[ "$sudo_v_count_after" != "1" ]]; then
   exit 1
 fi
 
-if [[ "$sudo_n_count_after" != "22" ]]; then
-  echo "Second apply should add exactly two non-interactive helper capability checks." >&2
+if [[ "$sudo_n_count_after" != "$sudo_n_count" ]]; then
+  echo "Second apply must make zero privileged calls." >&2
   cat "$LOG" >&2
   exit 1
 fi
 
-if [[ "$(grep -c "^SUDO -n $HELPER_PATH check$" "$LOG" || true)" != "2" \
-   || "$(grep -c "^SUDO -n $HELPER_PATH status-json$" "$LOG" || true)" != "2" ]]; then
-  echo "Second apply must probe the bounded helper check and status-json contracts." >&2
+if [[ "$(grep -c "^SUDO -n $HELPER_PATH check$" "$LOG" || true)" != "1" \
+   || "$(grep -c "^SUDO -n $HELPER_PATH status-json$" "$LOG" || true)" != "1" ]]; then
+  echo "Second apply unexpectedly repeated privileged helper probes." >&2
   cat "$LOG" >&2
   exit 1
 fi

@@ -18,7 +18,7 @@ const WORKSTATION_CONVERGENCE_RECEIPT_SCHEMA: &str =
     "agent-browser.workstation-convergence-receipt.v1";
 const DASHBOARD_HEALTH_SCHEMA: &str = "agent-browser.dashboard-health.v1";
 const PRIVILEGED_EFFECT_PLAN_SCHEMA: &str = "agent-browser.privileged-host-effect-plan.v1";
-const PRIVILEGED_EFFECT_RECEIPT_SCHEMA: &str = "agent-browser.privileged-host-effect-receipt.v1";
+const PRIVILEGED_EFFECT_RECEIPT_SCHEMA: &str = "agent-browser.privileged-host-effect-receipt.v2";
 const PRIVILEGED_EFFECT_RECEIPT_PREFIX: &str = "AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT=";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -280,8 +280,12 @@ impl PrivilegedHostEffectPlan {
 pub(crate) struct PrivilegedHostEffectReceipt {
     pub(crate) schema_version: String,
     pub(crate) plan_digest: String,
+    pub(crate) resource: String,
     pub(crate) actions: String,
+    pub(crate) prior_observation: String,
+    pub(crate) action: String,
     pub(crate) outcome: String,
+    pub(crate) postcondition: String,
     pub(crate) helper_ready: bool,
     pub(crate) lease_authority_ready: bool,
     pub(crate) workstation_dependencies_ready: bool,
@@ -301,7 +305,9 @@ pub(crate) fn validate_privileged_effect_adapter_receipt(
         .map_err(|_| "privileged_host_effect_receipt_invalid".to_string())?;
     if receipt.schema_version != PRIVILEGED_EFFECT_RECEIPT_SCHEMA
         || receipt.plan_digest != plan.plan_digest
+        || receipt.resource != "agent-browser-host-privileges"
         || receipt.actions != plan.action_csv()
+        || receipt.postcondition != "ready"
         || !receipt.helper_ready
         || !receipt.lease_authority_ready
         || (plan
@@ -311,6 +317,15 @@ pub(crate) fn validate_privileged_effect_adapter_receipt(
         || !matches!(
             receipt.outcome.as_str(),
             "already_ready" | "effects_applied"
+        )
+        || !matches!(
+            (
+                receipt.prior_observation.as_str(),
+                receipt.action.as_str(),
+                receipt.outcome.as_str()
+            ),
+            ("ready", "none", "already_ready")
+                | ("repair_required", "apply_sealed_plan", "effects_applied")
         )
     {
         return Err("privileged_host_effect_receipt_mismatch".to_string());
@@ -819,7 +834,7 @@ mod tests {
     fn privileged_effect_adapter_is_bound_to_the_exact_rust_plan() {
         let plan = PrivilegedHostEffectPlan::seal(true, &"a".repeat(64), &"b".repeat(64)).unwrap();
         let stdout = format!(
-            "installer output\n{PRIVILEGED_EFFECT_RECEIPT_PREFIX}{{\"schemaVersion\":\"{PRIVILEGED_EFFECT_RECEIPT_SCHEMA}\",\"planDigest\":\"{}\",\"actions\":\"{}\",\"outcome\":\"effects_applied\",\"helperReady\":true,\"leaseAuthorityReady\":true,\"workstationDependenciesReady\":true}}\n",
+            "installer output\n{PRIVILEGED_EFFECT_RECEIPT_PREFIX}{{\"schemaVersion\":\"{PRIVILEGED_EFFECT_RECEIPT_SCHEMA}\",\"planDigest\":\"{}\",\"resource\":\"agent-browser-host-privileges\",\"actions\":\"{}\",\"priorObservation\":\"repair_required\",\"action\":\"apply_sealed_plan\",\"outcome\":\"effects_applied\",\"postcondition\":\"ready\",\"helperReady\":true,\"leaseAuthorityReady\":true,\"workstationDependenciesReady\":true}}\n",
             plan.plan_digest,
             plan.action_csv(),
         );

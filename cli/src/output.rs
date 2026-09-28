@@ -6116,7 +6116,7 @@ is unchanged.
 Options:
   -d, --with-deps      Also install system dependencies (Linux only)
   --with-remote-view-privileges
-                       Install the agent-browser group, root-owned helper, and sudoers rule used by RDP/Guacamole desktop setup (Linux only)
+                       Install the agent-browser group, root-owned helper, and sudoers rule used by RDP/Guacamole desktop setup (Linux only); healthy reruns make zero privileged calls
   --force              Replace an existing chromium-stealthcdp artifact
   --dry-run            Plan workstation payload installation without mutation
   --apply              Materialize the installed workstation payload

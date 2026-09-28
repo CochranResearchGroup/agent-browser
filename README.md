@@ -299,9 +299,11 @@ with `agent-browser doctor remote-view`.
 When `--with-deps` is combined with `--with-remote-view-privileges`, the
 remote-view privilege installer runs first so its explicit `sudo -v` boundary
 authorizes the later dependency installation.
-Re-running the command on an already-provisioned machine exits before any
-privileged changes when the helper, sudoers policy, group, and membership are
-already ready.
+Re-running the command on an already-provisioned machine uses unprivileged
+metadata and helper-capability checks and exits with zero privileged calls when
+the helper, sudoers policy, group, membership, protected lease authority, and
+requested workstation dependencies are already ready. A repair receipt records
+the resource, prior observation, sealed action, and ready postcondition.
 
 The `v0.28.0` release-candidate lane adds
 `agent-browser install workstation`. It plans or installs the binary,

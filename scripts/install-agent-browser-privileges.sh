@@ -115,6 +115,7 @@ fi
 EFFECT_HELPER_READY=false
 EFFECT_LEASE_AUTHORITY_READY=false
 EFFECT_WORKSTATION_DEPENDENCIES_READY=true
+EFFECT_PRIOR_OBSERVATION="repair_required"
 
 observe_effect_postconditions() {
   EFFECT_HELPER_READY=false
@@ -136,8 +137,10 @@ observe_effect_postconditions() {
 
 emit_effect_receipt() {
   local outcome="$1"
-  printf 'AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT={"schemaVersion":"agent-browser.privileged-host-effect-receipt.v1","planDigest":"%s","actions":"%s","outcome":"%s","helperReady":%s,"leaseAuthorityReady":%s,"workstationDependenciesReady":%s}\n' \
-    "$SEALED_PLAN_DIGEST" "$SEALED_PLAN_ACTIONS" "$outcome" \
+  local action="apply_sealed_plan"
+  [[ "$outcome" == "already_ready" ]] && action="none"
+  printf 'AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT={"schemaVersion":"agent-browser.privileged-host-effect-receipt.v2","planDigest":"%s","resource":"agent-browser-host-privileges","actions":"%s","priorObservation":"%s","action":"%s","outcome":"%s","postcondition":"ready","helperReady":%s,"leaseAuthorityReady":%s,"workstationDependenciesReady":%s}\n' \
+    "$SEALED_PLAN_DIGEST" "$SEALED_PLAN_ACTIONS" "$EFFECT_PRIOR_OBSERVATION" "$action" "$outcome" \
     "$EFFECT_HELPER_READY" "$EFFECT_LEASE_AUTHORITY_READY" "$EFFECT_WORKSTATION_DEPENDENCIES_READY"
 }
 
@@ -507,10 +510,85 @@ workstation_deps_ready() {
   id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx docker >/dev/null || return 1
 }
 
-all_requested_effects_satisfied() {
+helper_contract_ready_unprivileged() {
+  [[ -x "$HELPER_PATH" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$HELPER_PATH" 2>/dev/null)" == "root:root:755" ]] || return 1
+  [[ -f "$SUDOERS_PATH" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$SUDOERS_PATH" 2>/dev/null)" == "root:root:440" ]] || return 1
+
+  local helper_status compact_status required
+  helper_status="$("$HELPER_PATH" status-json 2>/dev/null)" || return 1
+  compact_status="$(printf '%s' "$helper_status" | tr -d '[:space:]')"
+  for required in \
+    '"schemaVersion":1' \
+    '"state":"browser_control_ready_template"' \
+    '"startsWindowManager":true' \
+    '"keepsSessionAlive":true' \
+    '"routeSessionTermination":{' \
+    '"supported":true' \
+    '"routeSessionObservation":{' \
+    '"exactCgroupV2Identity":true' \
+    '"xServerProcessIdentity":true' \
+    '"x11SocketOwnership":true' \
+    '"retainedDirectoryIdentity":true' \
+    '"usesCgroupKill":true' \
+    '"broadUserTermination":false' \
+    '"staleDisplayLockReclamation":{"supported":true,"exactRouteUser":true,"requiresSessionAbsent":true,"requiresSocketAbsent":true,"requiresPidAbsent":true,"acceptsProvablyForeignPidReuse":true,"retainsInodeIdentity":true,"integratedWithAbsenceVerification":true,"reclaimsXrdpChannelSockets":true,"reclaimsPrimaryChansrvSocket":true,"requiresInactiveSocketPaths":true}' \
+    '"supportsFilesystemX11Socket":true' \
+    '"supportsAbstractX11Socket":true' \
+    '"boundedXhostTimeoutSeconds":2' \
+    '"routeUserCredentialUpdate":{' \
+    '"pamBypassed":true' \
+    '"cryptMethod":"SHA512"' \
+    '"shaRounds":100000' \
+    '"routeUserOwnedProvisioning":{"supported":true,"gecosOperationMarker":true,"retrySafe":true}'; do
+    [[ "$compact_status" == *"$required"* ]] || return 1
+  done
+}
+
+apparmor_profile_ready_unprivileged() {
+  apparmor_policy_required || return 0
+  command -v apparmor_parser >/dev/null 2>&1 || return 1
+  systemctl is-active --quiet apparmor || return 1
+  [[ -r "$APPARMOR_PROFILE_PATH" ]] || return 1
+  [[ "$(stat -c '%U:%G:%a' "$APPARMOR_PROFILE_PATH" 2>/dev/null)" == "root:root:644" ]] || return 1
+
+  local home_dir chrome_path profile_header
+  home_dir="$(operator_home)"
+  chrome_path="$home_dir/.agent-browser/browsers/**/chrome"
+  profile_header="profile $APPARMOR_PROFILE_NAME \"$chrome_path\" flags=(unconfined) {"
+  grep -Fqx "$profile_header" "$APPARMOR_PROFILE_PATH" || return 1
+  grep -Eq '^[[:space:]]*userns,[[:space:]]*$' "$APPARMOR_PROFILE_PATH" || return 1
+  if [[ -r "$APPARMOR_PROFILES_PATH" ]]; then
+    local registry_status=0
+    grep -Fqx "$APPARMOR_PROFILE_NAME (unconfined)" "$APPARMOR_PROFILES_PATH" \
+      || registry_status=$?
+    [[ "$registry_status" == "0" || "$registry_status" == "2" ]]
+  fi
+}
+
+workstation_deps_ready_unprivileged() {
+  [[ "$(uname -m)" == "x86_64" ]] || return 1
+  command -v apt-get >/dev/null 2>&1 || return 1
+  command -v docker >/dev/null 2>&1 || return 1
+  docker compose version >/dev/null 2>&1 || return 1
+  command -v xrdp >/dev/null 2>&1 || [[ -x /usr/sbin/xrdp ]] || return 1
+  command -v openbox-session >/dev/null 2>&1 || return 1
+  command -v xhost >/dev/null 2>&1 || return 1
+  command -v flock >/dev/null 2>&1 || return 1
+  apparmor_profile_ready_unprivileged || return 1
+  getent group docker >/dev/null 2>&1 || return 1
+  id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx docker >/dev/null || return 1
+}
+
+healthy_cold_start_ready() {
   getent group "$GROUP_NAME" >/dev/null 2>&1 || return 1
   id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$GROUP_NAME" >/dev/null || return 1
-  observe_effect_postconditions
+  helper_contract_ready_unprivileged || return 1
+  lease_authority_contract_ready || return 1
+  if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
+    workstation_deps_ready_unprivileged || return 1
+  fi
 }
 
 lease_authority_upgrade_needed() {
@@ -725,9 +803,13 @@ EOF
   exit 0
 fi
 
-if all_requested_effects_satisfied && ! lease_authority_upgrade_needed; then
+if healthy_cold_start_ready && ! lease_authority_upgrade_needed; then
+  EFFECT_PRIOR_OBSERVATION="ready"
+  EFFECT_HELPER_READY=true
+  EFFECT_LEASE_AUTHORITY_READY=true
+  EFFECT_WORKSTATION_DEPENDENCIES_READY=true
   echo "agent-browser privileged helper is already ready."
-  echo "No privileged changes were needed."
+  echo "No privileged calls or changes were needed."
   emit_effect_receipt "already_ready"
   exit 0
 fi

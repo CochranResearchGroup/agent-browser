@@ -110,6 +110,13 @@ if [[ "${1:-}" == "-c" \
 fi
 if [[ "${1:-}" == "-c" \
    && "${2:-}" == "%U:%G:%a" \
+   && "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_SUDOERS:-}" \
+   && -f "${3:-}" ]]; then
+  echo root:root:440
+  exit 0
+fi
+if [[ "${1:-}" == "-c" \
+   && "${2:-}" == "%U:%G:%a" \
    && "${3:-}" == "${AGENT_BROWSER_CHROME_APPARMOR_PROFILE:-}" \
    && -r "${3:-}" ]]; then
   echo root:root:644
@@ -366,19 +373,11 @@ if [[ "$(grep -c '^SUDO -v$' "$LOG" || true)" != "1" ]]; then
   cat "$LOG" >&2
   exit 1
 fi
-if [[ "$second_command_count" != "$((first_command_count + 3))" ]]; then
-  echo "Idempotent rerun should add only bounded noninteractive helper checks." >&2
+if [[ "$second_command_count" != "$first_command_count" ]]; then
+  echo "Idempotent rerun must make zero privileged calls." >&2
   cat "$LOG" >&2
   exit 1
 fi
-if [[ "$(tail -n 3 "$LOG" | head -n 1)" != "SUDO -n $HELPER_PATH check" \
-   || "$(tail -n 3 "$LOG" | tail -n 2 | head -n 1)" != "SUDO -n $HELPER_PATH status-json" \
-   || "$(tail -n 1 "$LOG")" != "SUDO -n $HELPER_PATH verify-install --group $GROUP_NAME --sudoers $SUDOERS_PATH --sha256 $(sha256sum "$HELPER_PATH" | awk '{print $1}') --apparmor-profile-name agent-browser-managed-chrome" ]]; then
-  echo "Unexpected idempotent rerun command." >&2
-  tail -n 4 "$LOG" >&2
-  exit 1
-fi
-
 rm "$STATE/profiles-read-denied"
 printf 'N\n' >"$APPARMOR_ENABLED_PATH"
 rm "$APPARMOR_PROFILE_PATH"
@@ -391,8 +390,8 @@ if [[ "$(grep -c '^SUDO -v$' "$LOG" || true)" != "1" ]]; then
   cat "$LOG" >&2
   exit 1
 fi
-if [[ "$third_command_count" != "$((second_command_count + 2))" ]]; then
-  echo "An AppArmor-disabled rerun should add only helper capability checks." >&2
+if [[ "$third_command_count" != "$second_command_count" ]]; then
+  echo "An AppArmor-disabled rerun must make zero privileged calls." >&2
   cat "$LOG" >&2
   exit 1
 fi
