@@ -53,12 +53,12 @@ lanes:
     target: main
     plan_state: CANCELLED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 47150749
+    checkpoint: 7fd03d0d
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: do not merge draft PR 191 wholesale; preserve this branch while Plan 0220 selects and revalidates presentation-neutral changes through a separate protected integration path
     validation_status: cancelled as superseded while incomplete after qualified candidate prefix 7c22bdfa505e failed the authorized final fresh-overlay attempt at XRDP private-key access; three failed overlays and serial logs remain preserved; replay and further Agent Browser-owned XRDP/Guacamole presentation repair are prohibited; ledger remains 14 pass, 29 partial, two fail, and zero missing; 36 unpublished commits require Plan 0220 retain/adapt/retire audit before integration
-    validation_ref: 47150749
+    validation_ref: 7fd03d0d
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: [P220 planned successor; CochranResearchGroup/remote-view#70]
     overlaps: [P207:cli-help-README-skill-and-service-docs, P219:remote-view-regression-subcases-189-190]
