@@ -26,6 +26,7 @@ mod profile_readiness;
 mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
+mod remote_view_consumer;
 mod request_provenance;
 mod runtime_owner_projection;
 mod service_authentication_run;
@@ -151,6 +152,12 @@ pub use profile_seeding::{
     profile_seeding_handoff_id, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
     ProfileSeedingMode, SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES,
     SERVICE_PROFILE_SEEDING_MODE_VALUES,
+};
+pub use remote_view_consumer::{
+    validate_fixed_desktop_associations, validate_remote_view_foundation,
+    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewFixedDesktop,
+    RemoteViewFoundationObservation, RemoteViewResourceKind,
+    REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
 };
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
