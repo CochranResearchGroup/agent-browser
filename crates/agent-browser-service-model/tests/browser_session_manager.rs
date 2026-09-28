@@ -342,7 +342,7 @@ fn dashboard_focus_selects_attributed_target_and_refreshes_its_session() {
         &mut effects,
         BrowserSessionManagerConfig {
             session_idle_timeout_ms: 300_000,
-            remote_desktop_routes: Vec::new(),
+            remote_view_desktops: Vec::new(),
         },
     );
     let alice = manager
