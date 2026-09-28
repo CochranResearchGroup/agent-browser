@@ -4,10 +4,10 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agent_browser_service_model::{
-    BrowserDesktopRoute, BrowserDisposableProfilePolicy, BrowserProfileCatalog,
-    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserSessionEffects,
+    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
     CloseBrowserSessionResult, CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult,
-    ReapBrowserSessionsResult, SessionEndReason,
+    ReapBrowserSessionsResult, RemoteViewDesktopCandidate, SessionEndReason,
 };
 
 use super::browser_session_runtime::{
@@ -44,22 +44,9 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         return Err("browser_disposable_root_not_absolute".to_string());
     }
     let display = std::env::var("AGENT_BROWSER_SESSION_DISPLAY").ok();
-    let remote_desktop_routes = if display.is_some() {
-        Vec::new()
-    } else {
-        super::presentation_inventory::StaticRouteInventory::from_environment()?
-            .routes()
-            .iter()
-            .filter_map(|route| {
-                let display_name = route.display_name.as_ref()?;
-                Some(BrowserDesktopRoute {
-                    id: route.id.clone(),
-                    display_name: display_name.clone(),
-                    healthy: super::remote_view::route_display_socket_available(display_name),
-                })
-            })
-            .collect()
-    };
+    // Remote View desktop candidates must arrive through its public consumer
+    // contract. Never reconstruct them from Agent Browser's legacy route pool.
+    let remote_view_desktops = Vec::new();
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
         executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
@@ -72,7 +59,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         &legacy_state_path,
         BrowserSessionHostConfig {
             session_idle_timeout_ms,
-            remote_desktop_routes,
+            remote_view_desktops,
             default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                 id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
                 user_data_root: disposable_root.to_string_lossy().into_owned(),
@@ -126,7 +113,7 @@ impl BrowserSessionPersistence for BrowserSessionJsonStore {
 #[derive(Debug, Clone)]
 pub(crate) struct BrowserSessionHostConfig {
     pub(crate) session_idle_timeout_ms: u64,
-    pub(crate) remote_desktop_routes: Vec<BrowserDesktopRoute>,
+    pub(crate) remote_view_desktops: Vec<RemoteViewDesktopCandidate>,
     pub(crate) default_disposable_policy: Option<BrowserDisposableProfilePolicy>,
 }
 
@@ -172,7 +159,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             state,
             manager_config: BrowserSessionManagerConfig {
                 session_idle_timeout_ms: config.session_idle_timeout_ms,
-                remote_desktop_routes: config.remote_desktop_routes,
+                remote_view_desktops: config.remote_view_desktops,
             },
         })
     }
@@ -464,7 +451,7 @@ mod tests {
         fn launch_browser(
             &mut self,
             profile: &BrowserProfileCatalogEntry,
-            desktop: Option<&agent_browser_service_model::BrowserDesktopAssignment>,
+            desktop: Option<&agent_browser_service_model::RemoteViewFixedDesktop>,
         ) -> Result<BrowserLaunch, String> {
             self.launches += 1;
             Ok(BrowserLaunch {
@@ -554,7 +541,7 @@ mod tests {
         .unwrap();
         let config = BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
-            remote_desktop_routes: Vec::new(),
+            remote_view_desktops: Vec::new(),
             default_disposable_policy: None,
         };
         let first = {

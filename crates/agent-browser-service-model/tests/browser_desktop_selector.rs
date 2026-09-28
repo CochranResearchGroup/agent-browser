@@ -1,61 +1,68 @@
-use agent_browser_service_model::{select_least_crowded_browser_desktop, BrowserDesktopRoute};
+use agent_browser_service_model::{
+    select_least_crowded_remote_view_desktop, RemoteViewDesktopCandidate, RemoteViewFixedDesktop,
+};
 
-fn route(id: &str, display_name: &str, healthy: bool) -> BrowserDesktopRoute {
-    BrowserDesktopRoute {
-        id: id.to_string(),
-        display_name: display_name.to_string(),
-        healthy,
+fn candidate(id: &str, route: &str, ready: bool) -> RemoteViewDesktopCandidate {
+    RemoteViewDesktopCandidate {
+        desktop: RemoteViewFixedDesktop {
+            desktop_id: id.to_string(),
+            friendly_route_label: route.to_string(),
+            generation: 1,
+        },
+        ready,
     }
 }
 
 #[test]
-fn selects_the_healthy_desktop_with_fewer_live_browsers() {
-    let routes = vec![route("guac-a", ":10", true), route("guac-b", ":11", true)];
-    let live_displays = vec![":10".to_string()];
+fn selects_the_ready_desktop_with_fewer_agent_browser_browsers() {
+    let candidates = vec![
+        candidate("11111111-1111-1111-1111-111111111111", "desktop-a", true),
+        candidate("22222222-2222-2222-2222-222222222222", "desktop-b", true),
+    ];
+    let selected = select_least_crowded_remote_view_desktop(
+        &candidates,
+        &["11111111-1111-1111-1111-111111111111".to_string()],
+    )
+    .unwrap();
 
-    let selected = select_least_crowded_browser_desktop(&routes, &live_displays).unwrap();
-
-    assert_eq!(selected.route_id, "guac-b");
-    assert_eq!(selected.display_name, ":11");
+    assert_eq!(
+        selected.desktop.desktop_id,
+        "22222222-2222-2222-2222-222222222222"
+    );
     assert_eq!(selected.live_browser_count, 0);
 }
 
 #[test]
-fn configured_route_order_breaks_equal_load_ties() {
-    let routes = vec![route("guac-a", ":10", true), route("guac-b", ":11", true)];
-    let live_displays = Vec::new();
-
-    let selected = select_least_crowded_browser_desktop(&routes, &live_displays).unwrap();
-
-    assert_eq!(selected.route_id, "guac-a");
-}
-
-#[test]
-fn automatic_remote_selection_excludes_local_screen_and_unhealthy_routes() {
-    let routes = vec![
-        route("local", ":0", true),
-        route("guac-a", ":10", false),
-        route("guac-b", ":11", true),
+fn observation_order_breaks_equal_load_ties_and_unready_desktops_are_excluded() {
+    let candidates = vec![
+        candidate("11111111-1111-1111-1111-111111111111", "desktop-a", false),
+        candidate("22222222-2222-2222-2222-222222222222", "desktop-b", true),
+        candidate("33333333-3333-3333-3333-333333333333", "desktop-c", true),
     ];
-    let live_displays = vec![":11".to_string(), ":11".to_string()];
-
-    let selected = select_least_crowded_browser_desktop(&routes, &live_displays).unwrap();
-
-    assert_eq!(selected.route_id, "guac-b");
-    assert_eq!(selected.live_browser_count, 2);
+    let selected = select_least_crowded_remote_view_desktop(&candidates, &[]).unwrap();
+    assert_eq!(
+        selected.desktop.desktop_id,
+        "22222222-2222-2222-2222-222222222222"
+    );
 }
 
 #[test]
-fn duplicate_active_route_or_display_identity_is_rejected() {
-    let duplicate_route = vec![route("guac-a", ":10", true), route("guac-a", ":11", true)];
+fn duplicate_ready_desktop_or_route_identity_is_rejected() {
+    let duplicate_desktop = vec![
+        candidate("11111111-1111-1111-1111-111111111111", "desktop-a", true),
+        candidate("11111111-1111-1111-1111-111111111111", "desktop-b", true),
+    ];
     assert_eq!(
-        select_least_crowded_browser_desktop(&duplicate_route, &[]).unwrap_err(),
-        "browser_desktop_route_id_duplicate:guac-a"
+        select_least_crowded_remote_view_desktop(&duplicate_desktop, &[]).unwrap_err(),
+        "remote_view_desktop_id_duplicate:11111111-1111-1111-1111-111111111111"
     );
 
-    let duplicate_display = vec![route("guac-a", ":10", true), route("guac-b", ":10", true)];
+    let duplicate_route = vec![
+        candidate("11111111-1111-1111-1111-111111111111", "desktop-a", true),
+        candidate("22222222-2222-2222-2222-222222222222", "desktop-a", true),
+    ];
     assert_eq!(
-        select_least_crowded_browser_desktop(&duplicate_display, &[]).unwrap_err(),
-        "browser_desktop_display_duplicate::10"
+        select_least_crowded_remote_view_desktop(&duplicate_route, &[]).unwrap_err(),
+        "remote_view_route_label_duplicate:desktop-a"
     );
 }

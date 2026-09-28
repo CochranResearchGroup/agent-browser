@@ -158,6 +158,7 @@ impl StaticRouteInventory {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn routes(&self) -> &[StaticRouteSubject] {
         &self.routes
     }

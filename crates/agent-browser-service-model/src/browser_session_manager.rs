@@ -4,9 +4,9 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 use crate::{
-    select_least_crowded_browser_desktop, BrowserDesktopAssignment, BrowserDesktopRoute,
-    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserProfileCatalogEntry,
-    BrowserProfileKind,
+    select_least_crowded_remote_view_desktop, BrowserDisposableProfilePolicy,
+    BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
+    RemoteViewDesktopCandidate, RemoteViewFixedDesktop,
 };
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
@@ -14,7 +14,7 @@ pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct BrowserSessionManagerConfig {
     pub session_idle_timeout_ms: u64,
-    pub remote_desktop_routes: Vec<BrowserDesktopRoute>,
+    pub remote_view_desktops: Vec<RemoteViewDesktopCandidate>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +22,7 @@ pub struct BrowserLaunch {
     pub browser_id: String,
     pub pid: u32,
     pub cdp_endpoint: String,
-    pub desktop: Option<BrowserDesktopAssignment>,
+    pub desktop: Option<RemoteViewFixedDesktop>,
 }
 
 pub trait BrowserSessionEffects {
@@ -31,7 +31,7 @@ pub trait BrowserSessionEffects {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
-        desktop: Option<&BrowserDesktopAssignment>,
+        desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String>;
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
@@ -210,7 +210,7 @@ pub struct ManagedBrowserInstance {
     pub pid: u32,
     pub cdp_endpoint: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub desktop: Option<BrowserDesktopAssignment>,
+    pub desktop: Option<RemoteViewFixedDesktop>,
     pub active_session_ids: Vec<String>,
 }
 
@@ -501,10 +501,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         profile: &BrowserProfileCatalogEntry,
     ) -> Result<BrowserLaunch, String> {
-        let desktop = if self.config.remote_desktop_routes.is_empty() {
+        let desktop = if self.config.remote_view_desktops.is_empty() {
             None
         } else {
-            let live_display_names = self
+            let live_desktop_ids = self
                 .state
                 .browsers
                 .values()
@@ -512,13 +512,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     browser
                         .desktop
                         .as_ref()
-                        .map(|desktop| desktop.display_name.clone())
+                        .map(|desktop| desktop.desktop_id.clone())
                 })
                 .collect::<Vec<_>>();
-            Some(select_least_crowded_browser_desktop(
-                &self.config.remote_desktop_routes,
-                &live_display_names,
-            )?)
+            Some(
+                select_least_crowded_remote_view_desktop(
+                    &self.config.remote_view_desktops,
+                    &live_desktop_ids,
+                )?
+                .desktop,
+            )
         };
         let mut launch = self.effects.launch_browser(profile, desktop.as_ref())?;
         if launch.desktop != desktop {

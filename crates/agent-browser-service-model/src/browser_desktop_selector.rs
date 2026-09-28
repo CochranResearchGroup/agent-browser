@@ -1,71 +1,66 @@
-//! Deterministic desktop selection for the ordinary remote-view path.
+//! Deterministic selection of Remote View-owned desktops for Agent Browser.
 
 use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::RemoteViewFixedDesktop;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BrowserDesktopRoute {
-    pub id: String,
-    pub display_name: String,
-    pub healthy: bool,
+pub struct RemoteViewDesktopCandidate {
+    pub desktop: RemoteViewFixedDesktop,
+    pub ready: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct BrowserDesktopAssignment {
-    pub route_id: String,
-    pub display_name: String,
+pub struct RemoteViewDesktopSelection {
+    pub desktop: RemoteViewFixedDesktop,
     pub live_browser_count: usize,
 }
 
-/// Select the least-crowded healthy virtual desktop in configured route order.
+/// Select the least-crowded ready desktop in Remote View observation order.
 ///
-/// The caller supplies only current live-browser display assignments. Retained
-/// leases, historical allocations, and prior route ownership are deliberately
-/// outside this calculation. Display `:0` is local-screen-only and is never an
-/// automatic remote-view candidate.
-pub fn select_least_crowded_browser_desktop(
-    routes: &[BrowserDesktopRoute],
-    live_browser_display_names: &[String],
-) -> Result<BrowserDesktopAssignment, String> {
-    let mut route_ids = HashSet::new();
-    let mut display_names = HashSet::new();
-    for route in routes.iter().filter(|route| route.healthy) {
-        if route.id.trim().is_empty() {
-            return Err("browser_desktop_route_id_missing".to_string());
-        }
-        if route.display_name.trim().is_empty() {
-            return Err(format!("browser_desktop_display_missing:{}", route.id));
-        }
-        if !route_ids.insert(route.id.as_str()) {
-            return Err(format!("browser_desktop_route_id_duplicate:{}", route.id));
-        }
-        if !display_names.insert(route.display_name.as_str()) {
+/// Remote View owns readiness and desktop identity. Agent Browser supplies only
+/// its current browser-to-desktop associations and owns the resulting choice.
+pub fn select_least_crowded_remote_view_desktop(
+    candidates: &[RemoteViewDesktopCandidate],
+    live_browser_desktop_ids: &[String],
+) -> Result<RemoteViewDesktopSelection, String> {
+    let mut desktop_ids = HashSet::new();
+    let mut route_labels = HashSet::new();
+    for candidate in candidates.iter().filter(|candidate| candidate.ready) {
+        let desktop = &candidate.desktop;
+        if !desktop_ids.insert(desktop.desktop_id.as_str()) {
             return Err(format!(
-                "browser_desktop_display_duplicate:{}",
-                route.display_name
+                "remote_view_desktop_id_duplicate:{}",
+                desktop.desktop_id
+            ));
+        }
+        if !route_labels.insert(desktop.friendly_route_label.as_str()) {
+            return Err(format!(
+                "remote_view_route_label_duplicate:{}",
+                desktop.friendly_route_label
             ));
         }
     }
 
     let mut counts = HashMap::<&str, usize>::new();
-    for display_name in live_browser_display_names {
-        *counts.entry(display_name.as_str()).or_default() += 1;
+    for desktop_id in live_browser_desktop_ids {
+        *counts.entry(desktop_id.as_str()).or_default() += 1;
     }
 
-    routes
+    candidates
         .iter()
-        .filter(|route| route.healthy && route.display_name != ":0")
-        .map(|route| BrowserDesktopAssignment {
-            route_id: route.id.clone(),
-            display_name: route.display_name.clone(),
+        .filter(|candidate| candidate.ready)
+        .map(|candidate| RemoteViewDesktopSelection {
+            desktop: candidate.desktop.clone(),
             live_browser_count: counts
-                .get(route.display_name.as_str())
+                .get(candidate.desktop.desktop_id.as_str())
                 .copied()
                 .unwrap_or_default(),
         })
-        .min_by_key(|assignment| assignment.live_browser_count)
-        .ok_or_else(|| "browser_desktop_route_unavailable".to_string())
+        .min_by_key(|selection| selection.live_browser_count)
+        .ok_or_else(|| "remote_view_desktop_unavailable".to_string())
 }

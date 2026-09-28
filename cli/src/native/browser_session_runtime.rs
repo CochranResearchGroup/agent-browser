@@ -8,9 +8,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_browser_service_model::{
-    BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
-    BrowserProfileCatalogEntry, BrowserProfileKind, BrowserSessionEffects, BrowserTabAcquisition,
-    BrowserTabSource, ManagedBrowserInstance, ManagedBrowserTab, ManagedDisposableProfile,
+    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalogEntry, BrowserProfileKind,
+    BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource, ManagedBrowserInstance,
+    ManagedBrowserTab, ManagedDisposableProfile, RemoteViewFixedDesktop,
 };
 use serde_json::Value;
 
@@ -30,7 +30,7 @@ pub(crate) trait BrowserRuntimeDriver {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
-        desktop: Option<&BrowserDesktopAssignment>,
+        desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String>;
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
     fn acquire_initial_tab(
@@ -73,7 +73,7 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
-        desktop: Option<&BrowserDesktopAssignment>,
+        desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         self.runtime.launch_browser(profile, desktop)
     }
@@ -183,7 +183,7 @@ enum BrowserRuntimeCommand {
     },
     Launch {
         profile: BrowserProfileCatalogEntry,
-        desktop: Option<BrowserDesktopAssignment>,
+        desktop: Option<RemoteViewFixedDesktop>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
     Close {
@@ -279,7 +279,7 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
     fn launch_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
-        desktop: Option<&BrowserDesktopAssignment>,
+        desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -396,10 +396,12 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = runtime.block_on(async {
-                    let display = desktop
-                        .as_ref()
-                        .map(|desktop| desktop.display_name.clone())
-                        .or_else(|| config.display.clone());
+                    if desktop.is_some() {
+                        return Err(
+                            "remote_view_application_placement_contract_unavailable".to_string()
+                        );
+                    }
+                    let display = config.display.clone();
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
                             headless: config.headless && display.is_none(),
@@ -638,7 +640,7 @@ mod tests {
         fn launch_browser(
             &mut self,
             _profile: &BrowserProfileCatalogEntry,
-            _desktop: Option<&BrowserDesktopAssignment>,
+            _desktop: Option<&RemoteViewFixedDesktop>,
         ) -> Result<BrowserLaunch, String> {
             Err("unused".to_string())
         }
@@ -712,6 +714,29 @@ mod tests {
 
         browser.pid = u32::MAX;
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    fn remote_view_desktop_launch_fails_before_local_display_inference() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "remote-view-fixture".to_string(),
+            name: "Remote View fixture".to_string(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            friendly_route_label: "desktop-a".to_string(),
+            generation: 1,
+        };
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default())
+            .expect("runtime starts without launching a browser");
+
+        assert_eq!(
+            runtime.launch_browser(&profile, Some(&desktop)),
+            Err("remote_view_application_placement_contract_unavailable".to_string())
+        );
     }
 
     #[test]
