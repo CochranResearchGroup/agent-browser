@@ -521,6 +521,16 @@ always explicit. Reload, route reattach, viewer reconnect or release, and
 Guacamole input settings are grouped under **Advanced connection controls**.
 Automatic recovery never launches another browser, mutates its profile, takes
 control, or releases a viewer.
+
+That viewport recovery guarantee is separate from periodic browser recovery.
+Route Keeper may restore the configured minimum, warm target, or requested
+ready slots by recovering routes, Guacamole, and XRDP without launching Chrome.
+Only a current authenticated controlling viewer, joined through the current
+SQLite handoff, session, browser, and Route Keeper authority, can request one
+exact dead-browser replacement. The replacement uses the existing journal and
+generation fence and reuses the same session and opaque handoff. Expired,
+disconnected, foreign-boot, stale-route, and historical records create no
+browser demand; dormant named browsers remain lazy until exact access.
 Route reattach requires configured presentation capacity and reserves the
 exact browser, route, and display slot at recovery priority before route
 mutation. It rejects active human control, focuses and maximizes the exact

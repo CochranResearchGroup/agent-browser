@@ -1949,6 +1949,12 @@ impl RuntimeHostRouter {
                     .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
                 permit.require_current()?;
                 if let Some(host) = host.as_mut() {
+                    let authority =
+                        super::browser_session_store::BrowserRuntimeSqliteStore::default_sqlite()?
+                            .load_route_keeper_authority()?;
+                    host.recover_active_viewer_browsers_current(&authority, &mut || {
+                        permit.require_current()
+                    })?;
                     host.reconcile_liveness_current()?;
                     host.reap_current()?;
                 }

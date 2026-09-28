@@ -6460,6 +6460,15 @@ the logical browser, session, and handoff identities, launches one replacement
 process and target, and rebinds the same opaque URL. Explicitly closed or expired
 sessions remain terminal and are never revived by their old handoff.
 
+Periodic recovery keeps presentation capacity separate from browser demand.
+Route Keeper can restore baseline ready slots without launching Chrome. Only a
+current authenticated controlling viewer joined through the current SQLite
+handoff, session, browser, and Route Keeper authority can request recovery of
+its exact dead browser. The replacement uses the existing journal and fence and
+reuses the same session and opaque handoff. Expired, disconnected, stale, or
+historical authority creates no browser demand; dormant named browsers remain
+lazy until exact access.
+
 An unknown named profile or missing default disposable policy fails from the
 SQLite catalog before presentation admission. When capacity is pending, the
 request waits within its configured deadline. A positive --job-timeout-ms sets

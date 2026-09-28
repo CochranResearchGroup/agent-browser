@@ -29,8 +29,8 @@ mod desktop_control;
 mod manual_seeding;
 mod provisioning;
 pub(crate) use desktop_control::{
-    DesktopControlLease, DesktopControlTransferRequest, LiveViewerActivationRequest,
-    LiveViewerControlAuthority, LiveViewerHeartbeatRequest,
+    ActiveViewerBrowserRecoveryCandidate, DesktopControlLease, DesktopControlTransferRequest,
+    LiveViewerActivationRequest, LiveViewerControlAuthority, LiveViewerHeartbeatRequest,
 };
 pub(crate) use manual_seeding::{
     public_manual_seeding_visibility, ManualSeedingReservation, ManualSeedingState,
@@ -1390,6 +1390,54 @@ impl BrowserRuntimeSqliteStore {
         policy: BrowserRecoveryAdmissionPolicy,
         launch_started_observation: serde_json::Value,
     ) -> Result<BrowserOpenRecoveryAdmission, String> {
+        self.admit_browser_open_recovery_for_demand(
+            operation_id,
+            operation_generation,
+            browser_id,
+            now_ms,
+            policy,
+            launch_started_observation,
+            BrowserRecoveryDemand::ExactClientResume,
+            None,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn admit_active_viewer_browser_open_recovery(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        browser_id: &str,
+        viewer_lease_id: &str,
+        handoff_id: &str,
+        now_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+        launch_started_observation: serde_json::Value,
+    ) -> Result<BrowserOpenRecoveryAdmission, String> {
+        self.admit_browser_open_recovery_for_demand(
+            operation_id,
+            operation_generation,
+            browser_id,
+            now_ms,
+            policy,
+            launch_started_observation,
+            BrowserRecoveryDemand::AuthenticatedActiveViewer,
+            Some((viewer_lease_id, handoff_id)),
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn admit_browser_open_recovery_for_demand(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        browser_id: &str,
+        now_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+        launch_started_observation: serde_json::Value,
+        demand: BrowserRecoveryDemand,
+        active_viewer: Option<(&str, &str)>,
+    ) -> Result<BrowserOpenRecoveryAdmission, String> {
         let transaction = self
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -1411,6 +1459,15 @@ impl BrowserRuntimeSqliteStore {
                 "browser_runtime_operation_generation_stale:{operation_id}:{operation_generation}:{current_generation}"
             ));
         }
+        if let Some((viewer_lease_id, handoff_id)) = active_viewer {
+            desktop_control::validate_active_viewer_browser_recovery_authority(
+                &transaction,
+                viewer_lease_id,
+                browser_id,
+                handoff_id,
+                now_ms,
+            )?;
+        }
         let mut registry: BrowserRecoveryRegistry = load_optional_document(
             &transaction,
             BROWSER_RECOVERY_REGISTRY_DOCUMENT,
@@ -1419,7 +1476,7 @@ impl BrowserRuntimeSqliteStore {
         let decision = decide_browser_recovery(
             registry.states.get(browser_id),
             browser_id,
-            BrowserRecoveryDemand::ExactClientResume,
+            demand,
             OldBrowserUsability::ProvenUnusable,
             now_ms,
             policy,
@@ -1981,6 +2038,9 @@ impl BrowserRuntimeSqliteStore {
             MANAGER_HANDOFF_REGISTRY_SCHEMA_V1,
             &registry,
         )?;
+        if publication.recovery_success_at_ms.is_some() {
+            desktop_control::rebind_after_browser_recovery(&transaction, &publication.handoff.id)?;
+        }
         transaction
             .execute(
                 "UPDATE operation_records SET state = ?2, result_json = ?3 WHERE operation_id = ?1",
@@ -6172,7 +6232,7 @@ mod tests {
         let next = restarted
             .admit_browser_recovery(
                 "browser-retained",
-                BrowserRecoveryDemand::BaselineCapacity,
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
                 OldBrowserUsability::ProvenUnusable,
                 100,
                 policy,
@@ -6677,7 +6737,7 @@ mod tests {
                 store
                     .admit_browser_recovery(
                         "browser-shared",
-                        BrowserRecoveryDemand::BaselineCapacity,
+                        BrowserRecoveryDemand::AuthenticatedActiveViewer,
                         OldBrowserUsability::ProvenUnusable,
                         10,
                         BrowserRecoveryAdmissionPolicy {

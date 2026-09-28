@@ -1651,6 +1651,14 @@ recovery does not finish. Take control is always explicit. Route reattach,
 viewer reconnect or release, reload, and Guacamole input settings are grouped
 under Advanced connection controls; automatic recovery never launches another
 browser, changes the profile, takes control, or releases a viewer.
+This viewport recovery guarantee is separate from periodic browser recovery.
+Route Keeper may restore baseline presentation slots without launching Chrome.
+Only a current authenticated controlling viewer joined through the current
+SQLite handoff, session, browser, and Route Keeper authority can request one
+exact dead-browser replacement. That replacement uses the existing journal and
+generation fence and reuses the same session and opaque handoff. Expired,
+disconnected, foreign-boot, stale-route, and historical records create no
+browser demand; dormant named browsers remain lazy until exact access.
 When a client is finished with a leased shared-profile tab, use
 `releaseServiceTabHandle()` or service request `action: "tab_handle_release"`.
 Release recovers an identity-verified retained connection if needed, closes the

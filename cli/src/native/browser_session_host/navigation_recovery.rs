@@ -172,6 +172,7 @@ where
                                 &bootstrap,
                                 authority,
                                 require_current,
+                                None,
                             )?;
                             self.navigation_target_from_response(&response)?
                         }

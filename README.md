@@ -788,6 +788,16 @@ adoption. Interrupted stops use the exact retained XRDP witness and preserve
 stop intent. Live or ambiguous ownership and quarantined records stop startup.
 A pending connection is not a ready remote view.
 
+Periodic recovery keeps presentation capacity separate from browser demand.
+Route Keeper may restore the configured minimum, warm target, or requested
+ready slots by recovering routes, Guacamole, and XRDP without launching Chrome.
+Only a current authenticated controlling viewer, joined through the current
+SQLite handoff, session, browser, and Route Keeper authority, can request eager
+recovery of its exact dead browser. The replacement reuses the existing
+journal, generation fence, session, and opaque handoff. Expired, disconnected,
+foreign-boot, stale-route, and historical records create no browser demand;
+dormant named browsers remain lazy until exact access.
+
 Service status reports `presentationKeeper` by joining current SQLite route
 receipts with the live supervisor and its host generation. `supervising` means
 the reconciliation loop is running; `minimumSatisfied` establishes whether it

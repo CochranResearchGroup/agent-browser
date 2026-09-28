@@ -20,10 +20,10 @@ use super::browser_session_runtime::{
     ReservedBrowserRecoveryEffects,
 };
 use super::browser_session_store::{
-    BrowserManagerHandoffRegistry, BrowserOpenRecoveryAdmission, BrowserOpenRecoveryPublication,
-    BrowserProfileCatalogLoad, BrowserRuntimeOperation, BrowserRuntimeOperationState,
-    BrowserRuntimeSqliteStore, BrowserSessionJsonStore, DesktopControlLease,
-    DesktopControlTransferRequest,
+    ActiveViewerBrowserRecoveryCandidate, BrowserManagerHandoffRegistry,
+    BrowserOpenRecoveryAdmission, BrowserOpenRecoveryPublication, BrowserProfileCatalogLoad,
+    BrowserRuntimeOperation, BrowserRuntimeOperationState, BrowserRuntimeSqliteStore,
+    BrowserSessionJsonStore, DesktopControlLease, DesktopControlTransferRequest,
 };
 use super::presentation_inventory::StaticRouteInventory;
 
@@ -242,6 +242,28 @@ pub(crate) trait BrowserSessionPersistence {
         _operation_id: &str,
         _operation_generation: u64,
         _browser_id: &str,
+        _now_ms: u64,
+        _policy: BrowserRecoveryAdmissionPolicy,
+        _launch_started_observation: serde_json::Value,
+    ) -> Result<BrowserOpenRecoveryAdmission, String> {
+        Err("browser_session_recovery_persistence_unsupported".to_string())
+    }
+
+    fn active_viewer_browser_recovery_candidates(
+        &self,
+        _now_ms: u64,
+    ) -> Result<Vec<ActiveViewerBrowserRecoveryCandidate>, String> {
+        Ok(Vec::new())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn admit_active_viewer_browser_open_recovery(
+        &mut self,
+        _operation_id: &str,
+        _operation_generation: u64,
+        _browser_id: &str,
+        _viewer_lease_id: &str,
+        _handoff_id: &str,
         _now_ms: u64,
         _policy: BrowserRecoveryAdmissionPolicy,
         _launch_started_observation: serde_json::Value,
@@ -468,6 +490,37 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
             operation_id,
             operation_generation,
             browser_id,
+            now_ms,
+            policy,
+            launch_started_observation,
+        )
+    }
+
+    fn active_viewer_browser_recovery_candidates(
+        &self,
+        now_ms: u64,
+    ) -> Result<Vec<ActiveViewerBrowserRecoveryCandidate>, String> {
+        BrowserRuntimeSqliteStore::active_viewer_browser_recovery_candidates(self, now_ms)
+    }
+
+    fn admit_active_viewer_browser_open_recovery(
+        &mut self,
+        operation_id: &str,
+        operation_generation: u64,
+        browser_id: &str,
+        viewer_lease_id: &str,
+        handoff_id: &str,
+        now_ms: u64,
+        policy: BrowserRecoveryAdmissionPolicy,
+        launch_started_observation: serde_json::Value,
+    ) -> Result<BrowserOpenRecoveryAdmission, String> {
+        BrowserRuntimeSqliteStore::admit_active_viewer_browser_open_recovery(
+            self,
+            operation_id,
+            operation_generation,
+            browser_id,
+            viewer_lease_id,
+            handoff_id,
             now_ms,
             policy,
             launch_started_observation,
@@ -1080,6 +1133,56 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(retired)
     }
 
+    /// Eagerly recover only exact dead browsers backed by current authenticated
+    /// viewer authority. The ordinary journal, recovery generation, reserved
+    /// launch, and atomic publication path remains the sole effect path.
+    pub(crate) fn recover_active_viewer_browsers_current(
+        &mut self,
+        authority: &RouteKeeperAuthority,
+        require_current: &mut dyn FnMut() -> Result<(), String>,
+    ) -> Result<Vec<String>, String>
+    where
+        E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
+    {
+        let now_ms = current_unix_ms();
+        let candidates = self
+            .persistence
+            .active_viewer_browser_recovery_candidates(now_ms)?;
+        let mut recovered = Vec::new();
+        for candidate in candidates {
+            require_current()?;
+            let Some(browser) = self.state.browsers.get(&candidate.browser_id).cloned() else {
+                continue;
+            };
+            if self.effects.browser_is_live(&browser)? {
+                continue;
+            }
+            let operation_id = active_viewer_recovery_operation_id(&candidate);
+            let command = serde_json::json!({
+                "id": operation_id,
+                "action": "browser_session_open",
+                "sessionName": candidate.session_name,
+                "profileId": candidate.profile_id,
+                "browserId": candidate.browser_id,
+                "activityAtMs": candidate.viewer_updated_at_ms,
+            });
+            match self.journaled_open_with_handoff_result(
+                &command,
+                authority,
+                require_current,
+                Some(&candidate),
+            ) {
+                Ok(_) => recovered.push(candidate.browser_id),
+                Err(error)
+                    if error.starts_with("browser_runtime_open_recovery_already_admitted:")
+                        || error.starts_with("browser_runtime_open_recovery_retry_wait:")
+                        || error == "authenticated_live_viewer_authority_unavailable" => {}
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(recovered)
+    }
+
     pub(crate) fn handle_command(&mut self, command: &serde_json::Value) -> serde_json::Value {
         let id = command
             .get("id")
@@ -1117,7 +1220,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .cloned()
             .unwrap_or(serde_json::Value::Null);
         let baseline_state = self.state.clone();
-        let result = self.journaled_open_with_handoff_result(command, authority, require_current);
+        let result =
+            self.journaled_open_with_handoff_result(command, authority, require_current, None);
         match result {
             Ok(response) => response,
             Err(error) => {
@@ -1135,6 +1239,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         command: &serde_json::Value,
         authority: &RouteKeeperAuthority,
         require_current: &mut dyn FnMut() -> Result<(), String>,
+        active_viewer: Option<&ActiveViewerBrowserRecoveryCandidate>,
     ) -> Result<serde_json::Value, String>
     where
         E: ReservedBrowserRecoveryEffects + ManagerPresentationProofEffects,
@@ -1172,11 +1277,23 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             existing.request.clone()
         } else {
-            let matching_session = self.state.sessions.values().find(|session| {
-                session.name == session_name
-                    && session.profile_id == profile_id
-                    && !self.state.session_is_expired(&session.id, activity_at_ms)
-            });
+            let matching_session = if let Some(candidate) = active_viewer {
+                self.state
+                    .sessions
+                    .get(&candidate.session_id)
+                    .filter(|session| {
+                        session.name == session_name
+                            && session.profile_id == profile_id
+                            && session.browser_id == candidate.browser_id
+                            && !self.state.session_is_expired(&session.id, activity_at_ms)
+                    })
+            } else {
+                self.state.sessions.values().find(|session| {
+                    session.name == session_name
+                        && session.profile_id == profile_id
+                        && !self.state.session_is_expired(&session.id, activity_at_ms)
+                })
+            };
             let selected_browser_id = optional_string(command, "browserId");
             if matching_session.is_some_and(|session| {
                 selected_browser_id
@@ -1229,7 +1346,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             let browser_id = reusable_browser
                 .map(|browser| browser.id.clone())
                 .unwrap_or_else(|| deterministic_manager_browser_id(operation_id, &profile_id));
-            let handoff_id = deterministic_manager_handoff_id(operation_id);
+            let handoff_id = active_viewer
+                .map(|candidate| candidate.handoff_id.clone())
+                .unwrap_or_else(|| deterministic_manager_handoff_id(operation_id));
             serde_json::json!({
                 "schemaVersion": "agent-browser.browser-open-operation.v1",
                 "command": command,
@@ -1319,14 +1438,36 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                 "handoff": null,
                                 "response": response,
                             });
-                            let admission = self.persistence.admit_browser_open_recovery(
-                                &operation.operation_id,
-                                operation.generation,
-                                browser_id,
-                                activity_at_ms,
-                                self.recovery_admission_policy,
-                                launch_started_observation,
-                            )?;
+                            let admission = if let Some(candidate) = active_viewer {
+                                if candidate.browser_id != browser_id
+                                    || candidate.handoff_id
+                                        != operation.request["intent"]["handoff"]["id"]
+                                            .as_str()
+                                            .unwrap_or_default()
+                                {
+                                    return Err("authenticated_live_viewer_authority_unavailable"
+                                        .to_string());
+                                }
+                                self.persistence.admit_active_viewer_browser_open_recovery(
+                                    &operation.operation_id,
+                                    operation.generation,
+                                    browser_id,
+                                    &candidate.viewer_lease_id,
+                                    &candidate.handoff_id,
+                                    current_unix_ms(),
+                                    self.recovery_admission_policy,
+                                    launch_started_observation,
+                                )?
+                            } else {
+                                self.persistence.admit_browser_open_recovery(
+                                    &operation.operation_id,
+                                    operation.generation,
+                                    browser_id,
+                                    activity_at_ms,
+                                    self.recovery_admission_policy,
+                                    launch_started_observation,
+                                )?
+                            };
                             match admission.decision {
                                 BrowserRecoveryDecision::AdmitReplacement { .. } => {
                                     operation = admission.operation;
@@ -2531,6 +2672,24 @@ fn deterministic_manager_handoff_id(operation_id: &str) -> String {
     format!("manager-{suffix}")
 }
 
+fn active_viewer_recovery_operation_id(candidate: &ActiveViewerBrowserRecoveryCandidate) -> String {
+    let digest = Sha256::digest(
+        format!(
+            "{}\0{}\0{}\0{}",
+            candidate.viewer_lease_id,
+            candidate.viewer_updated_at_ms,
+            candidate.browser_id,
+            candidate.handoff_id
+        )
+        .as_bytes(),
+    );
+    let suffix = digest[..16]
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    format!("active-viewer-recovery:{suffix}")
+}
+
 fn deterministic_manager_browser_id(operation_id: &str, profile_id: &str) -> String {
     let digest = Sha256::digest(format!("{operation_id}\0{profile_id}").as_bytes());
     let suffix = digest[..16]
@@ -2613,7 +2772,7 @@ mod tests {
         BrowserRuntimeDriver, BrowserSessionEffectAdapter, ReservedBrowserRecovery,
     };
     use crate::native::browser_session_store::{
-        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources,
+        BrowserRuntimeSqliteStore, LegacyBrowserRuntimeSources, LiveViewerActivationRequest,
     };
     use crate::native::presentation_request_admission::{
         now_ms, PresentationAdmission, PresentationAdmissionRequest,
@@ -5041,6 +5200,188 @@ mod tests {
             published.load_presentation_queue().unwrap().entries["browser:journal-open-1"].state,
             PresentationRequestState::Completed { .. }
         ));
+    }
+
+    #[test]
+    fn scheduled_recovery_is_lazy_without_a_viewer_and_eager_for_the_exact_active_viewer() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        let database_path = directory.0.join("runtime.sqlite3");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({
+                "profiles": {"work": {
+                    "id": "work",
+                    "name": "Work",
+                    "userDataDir": directory.0.join("work"),
+                    "profileClass": "durable_named"
+                }}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        BrowserRuntimeSqliteStore::migrate_from_legacy(
+            &database_path,
+            LegacyBrowserRuntimeSources {
+                session_state_path: &directory.0.join("browser-session-state.json"),
+                profile_catalog_path: &directory.0.join("browser-profile-catalog.json"),
+                service_state_path: &legacy_path,
+            },
+        )
+        .unwrap();
+        let authority = ready_keeper_authority_for_handoff();
+        let mut authority_store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        let default_authority = authority_store.load_route_keeper_authority().unwrap();
+        authority_store
+            .compare_and_swap_route_keeper_authority(&default_authority, &authority)
+            .unwrap();
+        drop(authority_store);
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            recovery_admission_policy: BrowserRecoveryAdmissionPolicy {
+                maximum_attempts: 3,
+                base_backoff_ms: 1_000,
+                maximum_backoff_ms: 30_000,
+                deadline_ms: 90_000,
+            },
+            remote_desktop_routes: route_keeper_desktop_routes(&authority).unwrap(),
+            default_disposable_policy: None,
+        };
+        let initial_launches = Arc::new(AtomicUsize::new(0));
+        let opened = {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(JournalFixtureRuntime {
+                database_path: database_path.clone(),
+                launches: initial_launches.clone(),
+                reserved_launches: Arc::new(Mutex::new(BTreeMap::new())),
+                recovery_probes: Arc::new(AtomicUsize::new(0)),
+                recover_reserved_browser: false,
+                inner: FixtureRuntime {
+                    live: true,
+                    ..FixtureRuntime::default()
+                },
+                fail_reserved_launch_once: false,
+                fail_initial_tab_once: false,
+            });
+            let mut host =
+                BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap();
+            host.handle_journaled_open_with_keeper_handoff(
+                &serde_json::json!({
+                    "id": "journal-open-1",
+                    "action": "browser_session_open",
+                    "sessionName": "alice",
+                    "profileId": "work",
+                    "activityAtMs": 1_000
+                }),
+                &authority,
+            )
+        };
+        assert_eq!(opened["success"], true, "{opened}");
+        assert_eq!(initial_launches.load(Ordering::SeqCst), 1);
+        let browser_id = opened["data"]["browserId"].as_str().unwrap().to_string();
+        let handoff_id = opened["data"]["handoffId"].as_str().unwrap().to_string();
+        let binding = authority
+            .ready_handoff_binding("route-slot-01", ":10")
+            .unwrap();
+
+        let recovery_launches = Arc::new(AtomicUsize::new(0));
+        let replacement_pid = Arc::new(AtomicU32::new(0));
+        let recovered_launch = Arc::new(Mutex::new(None));
+        let recovery_probes = Arc::new(AtomicUsize::new(0));
+        let load_dead_host = || {
+            let store = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+            let effects = BrowserSessionEffectAdapter::new(BlockingRecoveryRuntime {
+                launches: recovery_launches.clone(),
+                replacement_pid: replacement_pid.clone(),
+                recovered_launch: recovered_launch.clone(),
+                recovery_probes: recovery_probes.clone(),
+                fail_after_launch: false,
+                gate: None,
+                inner: FixtureRuntime {
+                    live: false,
+                    ..FixtureRuntime::default()
+                },
+            });
+            BrowserSessionHost::load(store, effects, &legacy_path, config.clone()).unwrap()
+        };
+        let mut dormant = load_dead_host();
+        assert!(dormant
+            .recover_active_viewer_browsers_current(&authority, &mut || Ok(()))
+            .unwrap()
+            .is_empty());
+        assert!(dormant.reconcile_liveness_current().unwrap().is_empty());
+        assert_eq!(recovery_launches.load(Ordering::SeqCst), 0);
+        drop(dormant);
+
+        let observed_at_ms = current_unix_ms();
+        BrowserRuntimeSqliteStore::open(&database_path)
+            .unwrap()
+            .activate_live_viewer(&LiveViewerActivationRequest {
+                operation_id: "viewer-operation".to_string(),
+                handoff_id: handoff_id.clone(),
+                client_connection_id: "viewer-client".to_string(),
+                authenticated_principal: "operator@example.test".to_string(),
+                provider_route_id: "development-route-1".to_string(),
+                guacamole_connection_id: binding.guacamole_connection_id,
+                guacamole_primary_active_connection_id: "primary-viewer".to_string(),
+                observed_shared_connection_count: 1,
+                observed_at_ms,
+            })
+            .unwrap();
+        let mut active = load_dead_host();
+        assert_eq!(
+            active
+                .recover_active_viewer_browsers_current(&authority, &mut || Ok(()))
+                .unwrap(),
+            vec![browser_id.clone()]
+        );
+        assert_eq!(recovery_launches.load(Ordering::SeqCst), 1);
+        assert_eq!(active.state().browsers[&browser_id].pid, 5_252);
+        assert!(active.manager_handoff(&handoff_id).is_some());
+        drop(active);
+
+        let mut restarted = load_dead_host();
+        assert!(restarted
+            .recover_active_viewer_browsers_current(&authority, &mut || Ok(()))
+            .unwrap()
+            .is_empty());
+        assert_eq!(recovery_launches.load(Ordering::SeqCst), 1);
+        drop(restarted);
+
+        let persisted = BrowserRuntimeSqliteStore::open(&database_path).unwrap();
+        assert_eq!(
+            persisted
+                .load_browser_recovery_state(&browser_id)
+                .unwrap()
+                .unwrap()
+                .phase,
+            agent_browser_service_model::BrowserRecoveryPhase::Recovered
+        );
+        assert_eq!(
+            persisted
+                .load_handoff_registry()
+                .unwrap()
+                .handoffs
+                .get(&handoff_id)
+                .unwrap()
+                .id,
+            handoff_id
+        );
+        assert_eq!(
+            persisted
+                .active_viewer_browser_recovery_candidates(current_unix_ms())
+                .unwrap()
+                .len(),
+            1
+        );
+        assert_eq!(
+            persisted
+                .current_live_viewer_control("live-viewer:viewer-operation")
+                .unwrap()
+                .lease
+                .browser_id,
+            browser_id
+        );
     }
 
     #[test]

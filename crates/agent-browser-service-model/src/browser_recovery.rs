@@ -10,7 +10,6 @@ pub const BROWSER_RECOVERY_STATE_SCHEMA_V1: &str = "agent-browser.browser-recove
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserRecoveryDemand {
-    BaselineCapacity,
     AuthenticatedActiveViewer,
     Dormant,
     ExactClientResume,
@@ -281,7 +280,6 @@ mod tests {
     fn demand_and_old_browser_proof_gate_admission() {
         let policy = policy();
         for demand in [
-            BrowserRecoveryDemand::BaselineCapacity,
             BrowserRecoveryDemand::AuthenticatedActiveViewer,
             BrowserRecoveryDemand::ExactClientResume,
         ] {
@@ -325,6 +323,11 @@ mod tests {
     }
 
     #[test]
+    fn presentation_capacity_cannot_deserialize_as_browser_recovery_demand() {
+        assert!(serde_json::from_str::<BrowserRecoveryDemand>("\"baseline_capacity\"").is_err());
+    }
+
+    #[test]
     fn retry_backoff_is_bounded_and_deadline_is_terminal() {
         let policy = BrowserRecoveryAdmissionPolicy {
             maximum_attempts: 3,
@@ -336,7 +339,7 @@ mod tests {
             decide_browser_recovery(
                 None,
                 "browser",
-                BrowserRecoveryDemand::BaselineCapacity,
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
                 OldBrowserUsability::ProvenUnusable,
                 1_000,
                 policy,
@@ -349,7 +352,7 @@ mod tests {
             decide_browser_recovery(
                 Some(&wait),
                 "browser",
-                BrowserRecoveryDemand::BaselineCapacity,
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
                 OldBrowserUsability::ProvenUnusable,
                 1_014,
                 policy
@@ -361,7 +364,7 @@ mod tests {
             decide_browser_recovery(
                 Some(&wait),
                 "browser",
-                BrowserRecoveryDemand::BaselineCapacity,
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
                 OldBrowserUsability::ProvenUnusable,
                 1_015,
                 policy,
@@ -374,7 +377,7 @@ mod tests {
         let at_deadline = decide_browser_recovery(
             Some(&wait),
             "browser",
-            BrowserRecoveryDemand::BaselineCapacity,
+            BrowserRecoveryDemand::AuthenticatedActiveViewer,
             OldBrowserUsability::ProvenUnusable,
             1_100,
             policy,
@@ -439,7 +442,7 @@ mod tests {
             decide_browser_recovery(
                 Some(&recovered),
                 "browser",
-                BrowserRecoveryDemand::BaselineCapacity,
+                BrowserRecoveryDemand::AuthenticatedActiveViewer,
                 OldBrowserUsability::ProvenUnusable,
                 100,
                 policy,

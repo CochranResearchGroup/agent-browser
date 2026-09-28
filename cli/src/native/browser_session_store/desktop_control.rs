@@ -45,6 +45,20 @@ pub(crate) struct LiveViewerControlAuthority {
     pub(crate) lease: DesktopControlLease,
 }
 
+/// One exact logical browser selected from current authenticated viewer
+/// authority. The scheduler may observe this projection, but replacement still
+/// requires a fresh browser liveness proof and the shared recovery fence.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ActiveViewerBrowserRecoveryCandidate {
+    pub(crate) viewer_lease_id: String,
+    pub(crate) viewer_updated_at_ms: u64,
+    pub(crate) browser_id: String,
+    pub(crate) profile_id: String,
+    pub(crate) session_id: String,
+    pub(crate) session_name: String,
+    pub(crate) handoff_id: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LiveViewerActivationRequest {
     pub(crate) operation_id: String,
@@ -169,6 +183,80 @@ impl DesktopControlRecord {
 }
 
 impl BrowserRuntimeSqliteStore {
+    pub(crate) fn active_viewer_browser_recovery_candidates(
+        &self,
+        now_ms: u64,
+    ) -> Result<Vec<ActiveViewerBrowserRecoveryCandidate>, String> {
+        let boot_epoch = crate::process_identity::current_boot_epoch()
+            .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+        self.active_viewer_browser_recovery_candidates_for_boot(now_ms, &boot_epoch)
+    }
+
+    fn active_viewer_browser_recovery_candidates_for_boot(
+        &self,
+        now_ms: u64,
+        boot_epoch: &str,
+    ) -> Result<Vec<ActiveViewerBrowserRecoveryCandidate>, String> {
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| format!("desktop_control_read_begin_failed:{error}"))?;
+        let state: DesktopControlState = load_optional_document(&transaction, DOCUMENT, SCHEMA)?;
+        let sessions: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let mut candidates = BTreeMap::new();
+        for record in state.live_viewers.values() {
+            if record.state != "controlling"
+                || record.boot_epoch != boot_epoch
+                || record.expires_at_ms <= now_ms
+                || record.observed_shared_connection_count == 0
+            {
+                continue;
+            }
+            let Ok(lease) = load_and_validate_current(
+                &transaction,
+                &record.handoff_id,
+                &record.client_connection_id,
+                record.controller_epoch,
+            ) else {
+                continue;
+            };
+            if record.operation_id != lease.operation_id
+                || record.slot_id != lease.route_binding.slot_id
+                || record.host_generation != lease.host_generation
+            {
+                continue;
+            }
+            let Some(session) = sessions.sessions.get(&lease.session_id) else {
+                continue;
+            };
+            let Some(browser) = sessions.browsers.get(&lease.browser_id) else {
+                continue;
+            };
+            if session.browser_id != browser.id || session.profile_id != browser.profile_id {
+                continue;
+            }
+            candidates.entry(browser.id.clone()).or_insert_with(|| {
+                ActiveViewerBrowserRecoveryCandidate {
+                    viewer_lease_id: record.lease_id.clone(),
+                    viewer_updated_at_ms: record.updated_at_ms,
+                    browser_id: browser.id.clone(),
+                    profile_id: browser.profile_id.clone(),
+                    session_id: session.id.clone(),
+                    session_name: session.name.clone(),
+                    handoff_id: lease.handoff_id.clone(),
+                }
+            });
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("desktop_control_read_commit_failed:{error}"))?;
+        Ok(candidates.into_values().collect())
+    }
+
     pub(crate) fn current_live_viewer_control(
         &self,
         lease_id: &str,
@@ -556,6 +644,94 @@ fn load_live_viewer_control(
         expires_at_ms: record.expires_at_ms,
         lease,
     })
+}
+
+pub(super) fn validate_active_viewer_browser_recovery_authority(
+    connection: &Connection,
+    lease_id: &str,
+    browser_id: &str,
+    handoff_id: &str,
+    now_ms: u64,
+) -> Result<(), String> {
+    let state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let record = state
+        .live_viewers
+        .get(lease_id)
+        .ok_or_else(|| "authenticated_live_viewer_authority_unavailable".to_string())?;
+    let current_boot = crate::process_identity::current_boot_epoch()
+        .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+    if record.state != "controlling"
+        || record.boot_epoch != current_boot
+        || record.expires_at_ms <= now_ms
+        || record.observed_shared_connection_count == 0
+        || record.handoff_id != handoff_id
+    {
+        return Err("authenticated_live_viewer_authority_unavailable".to_string());
+    }
+    let lease = load_and_validate_current(
+        connection,
+        handoff_id,
+        &record.client_connection_id,
+        record.controller_epoch,
+    )?;
+    if lease.browser_id != browser_id
+        || record.operation_id != lease.operation_id
+        || record.slot_id != lease.route_binding.slot_id
+        || record.host_generation != lease.host_generation
+    {
+        return Err("authenticated_live_viewer_authority_unavailable".to_string());
+    }
+    Ok(())
+}
+
+/// Rebind the current controller and viewer lease to target identities emitted
+/// by a retained-browser replacement. The caller owns the surrounding SQLite
+/// transaction that also publishes session state, the reused handoff, and
+/// recovery success.
+pub(super) fn rebind_after_browser_recovery(
+    connection: &Connection,
+    handoff_id: &str,
+) -> Result<(), String> {
+    let mut state: DesktopControlState = load_optional_document(connection, DOCUMENT, SCHEMA)?;
+    let has_current_control = state.current_operation_ids.values().any(|operation_id| {
+        state
+            .operations
+            .get(operation_id)
+            .is_some_and(|record| record.handoff_id == handoff_id)
+    });
+    if !has_current_control {
+        return Ok(());
+    }
+    let resolved = resolve_ready_manager_handoff(connection, handoff_id)?;
+    let Some(operation_id) = state
+        .current_operation_ids
+        .get(&resolved.route_binding.slot_id)
+        .cloned()
+    else {
+        return Ok(());
+    };
+    let record = state
+        .operations
+        .get_mut(&operation_id)
+        .ok_or_else(|| "desktop_control_state_incomplete".to_string())?;
+    if record.handoff_id != handoff_id {
+        return Ok(());
+    }
+    record.browser_id = resolved.browser_id.clone();
+    record.session_id = resolved.session_id.clone();
+    record.tab_id = resolved.tab_id.clone();
+    record.target_id = resolved.target_id.clone();
+    record.host_generation = resolved.host_generation;
+    record.route_binding = DesktopControlRouteBinding::from_binding(&resolved.route_binding);
+    for viewer in state.live_viewers.values_mut().filter(|viewer| {
+        viewer.state == "controlling"
+            && viewer.operation_id == operation_id
+            && viewer.handoff_id == handoff_id
+    }) {
+        viewer.slot_id = resolved.route_binding.slot_id.clone();
+        viewer.host_generation = resolved.host_generation;
+    }
+    save_document(connection, DOCUMENT, SCHEMA, &state)
 }
 
 fn current_time_ms() -> Result<u64, String> {
@@ -1414,6 +1590,145 @@ mod tests {
                 .controller_client_connection_id,
             "client-b"
         );
+    }
+
+    #[test]
+    fn active_viewer_recovery_projection_is_current_exact_and_deduplicated() {
+        let mut fixture = fixture("active-viewer-recovery-projection");
+        let now_ms = current_time_ms().unwrap();
+        let mut first = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        first.observed_at_ms = now_ms;
+        fixture.store.activate_live_viewer(&first).unwrap();
+        let candidates = fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms)
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].browser_id, "browser-1");
+        assert_eq!(candidates[0].session_id, "session-1");
+        assert_eq!(candidates[0].handoff_id, "handoff-1");
+
+        let mut successor = live_request(
+            "operation-b",
+            "client-b",
+            fixture.binding.guacamole_connection_id,
+        );
+        successor.observed_at_ms = now_ms + 1;
+        fixture.store.activate_live_viewer(&successor).unwrap();
+        let candidates = fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms + 1)
+            .unwrap();
+        assert_eq!(candidates.len(), 1);
+        assert_eq!(candidates[0].viewer_lease_id, "live-viewer:operation-b");
+    }
+
+    #[test]
+    fn inactive_or_foreign_boot_viewers_create_no_browser_recovery_demand() {
+        let mut fixture = fixture("inactive-viewer-recovery-projection");
+        let now_ms = current_time_ms().unwrap();
+        let mut activation = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = now_ms;
+        fixture.store.activate_live_viewer(&activation).unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms + LIVE_VIEWER_TTL_MS)
+            .unwrap()
+            .is_empty());
+
+        let current_boot = crate::process_identity::current_boot_epoch().unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates_for_boot(now_ms, "foreign-boot")
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            fixture
+                .store
+                .active_viewer_browser_recovery_candidates_for_boot(now_ms, &current_boot)
+                .unwrap()
+                .len(),
+            1
+        );
+
+        fixture
+            .store
+            .disconnect_live_viewer(
+                "live-viewer:operation-a",
+                &activation.authenticated_principal,
+                now_ms + 1,
+            )
+            .unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms + 1)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn historical_or_stale_handoffs_create_no_browser_recovery_demand() {
+        let mut fixture = fixture("stale-handoff-recovery-projection");
+        let now_ms = current_time_ms().unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms)
+            .unwrap()
+            .is_empty());
+        let mut activation = live_request(
+            "operation-a",
+            "client-a",
+            fixture.binding.guacamole_connection_id,
+        );
+        activation.observed_at_ms = now_ms;
+        fixture.store.activate_live_viewer(&activation).unwrap();
+        let ready_authority = fixture.store.load_route_keeper_authority().unwrap();
+        let transaction = fixture.store.connection.unchecked_transaction().unwrap();
+        save_document(
+            &transaction,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+            &RouteKeeperAuthority::default(),
+        )
+        .unwrap();
+        transaction.commit().unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms)
+            .unwrap()
+            .is_empty());
+        let transaction = fixture.store.connection.unchecked_transaction().unwrap();
+        save_document(
+            &transaction,
+            ROUTE_KEEPER_AUTHORITY_DOCUMENT,
+            ROUTE_KEEPER_AUTHORITY_SCHEMA_V4,
+            &ready_authority,
+        )
+        .unwrap();
+        transaction.commit().unwrap();
+
+        let mut handoff = fixture
+            .store
+            .load_handoff_registry()
+            .unwrap()
+            .handoffs
+            .remove("handoff-1")
+            .unwrap();
+        handoff.state = "closed".to_string();
+        fixture.store.save_manager_handoff(&handoff).unwrap();
+        assert!(fixture
+            .store
+            .active_viewer_browser_recovery_candidates(now_ms)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
