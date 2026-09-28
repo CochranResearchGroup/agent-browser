@@ -9,10 +9,12 @@ defaults to 32, exact duplicate operations coalesce and replay once, and
 logical session/tab reuse remains at the G31 manager boundary. The focused
 queue suite, formatting, strict workspace Clippy, coverage validator,
 generated-client checks, type coverage, and service API/MCP parity pass. The
-authoritative JSON ledger is now 10 pass, 28 partial, two fail, and five missing; earlier narrative totals
-were inflated and are not accepted as row evidence. No installed candidate or
-provider state changed. Exact workstation cold-upgrade reconstruction remains
-the G34 gate.
+row-by-row audit also repairs stale machine dispositions for G17, G20, G33,
+G37, and G38 from their already-qualified M3-P3 and M4-P2 through M4-P4
+checkpoints. The authoritative JSON ledger is now 12 pass, 31 partial, two
+fail, and zero missing, matching the prior checkpoint narrative. No installed
+candidate or provider state changed. Exact workstation cold-upgrade
+reconstruction remains the G34 gate.
 
 ## Current P219 status | 2026-09-28 final M4 candidate published to development
 

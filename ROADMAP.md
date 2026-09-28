@@ -123,10 +123,11 @@ matrix. G34 and the ledger remain unchanged.
 G10 is source-qualified after correcting admission to preserve strict recovery,
 retained-handoff, then FIFO new-open priority. The durable configurable queue
 defaults to 32 and exact duplicate operations coalesce and replay one result;
-logical session/tab reuse remains at the separately accepted G31 boundary. The
-authoritative JSON ledger is 10 pass, 28 partial, 2 fail, and 5 missing. Earlier
-narrative totals are stale and need row-by-row reconciliation. Exact workstation
-cold-reconstruction remains the next installed gate.
+logical session/tab reuse remains at the separately accepted G31 boundary. A
+row-by-row audit also synchronizes G17, G20, G33, G37, and G38 with their
+already-qualified source checkpoints. The authoritative ledger is 12 pass, 31
+partial, 2 fail, and 0 missing. Exact workstation cold-reconstruction remains
+the next installed gate.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

@@ -88,10 +88,11 @@ coalescing remains at the already-accepted G31 manager and handoff boundary, so
 the queue does not collapse genuinely distinct operations merely because they
 share a profile. The focused 12-test queue suite, formatting, strict workspace
 Clippy, coverage-ledger validator, generated-client checks, type coverage, and
-service API/MCP parity pass. The authoritative JSON ledger advances from 9 pass and 29 partial to 10
-pass and 28 partial, with 2 fail and 5 missing unchanged. This also exposes
-stale inflated totals in earlier narrative checkpoints; those prose claims are
-not ledger evidence and require separate row-by-row reconciliation. This
+service API/MCP parity pass. A row-by-row audit also repairs five stale ledger
+dispositions that had not incorporated already-qualified M3-P3 and M4-P2
+through M4-P4 checkpoints: G17, G20, and G33 are partial, while G37 and G38 are
+pass. With G10, the authoritative ledger is now 12 pass, 31 partial, 2 fail,
+and 0 missing, matching the prior checkpoint narrative. This
 source-only correction changes no installed generation or provider state, and
 the exact workstation cold-upgrade reconstruction remains the next G34 gate.
 
