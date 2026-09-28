@@ -183,6 +183,79 @@ impl DesktopControlRecord {
 }
 
 impl BrowserRuntimeSqliteStore {
+    /// Project every logical session that disposable retention must leave alone.
+    /// The projection is read from one SQLite snapshot so controller, viewer,
+    /// pending-operation, and session identities cannot be mixed across commits.
+    pub(crate) fn disposable_retention_protected_session_ids(
+        &self,
+        now_ms: u64,
+    ) -> Result<BTreeSet<String>, String> {
+        let boot_epoch = crate::process_identity::current_boot_epoch()
+            .ok_or_else(|| "live_viewer_boot_epoch_unavailable".to_string())?;
+        let transaction = self
+            .connection
+            .unchecked_transaction()
+            .map_err(|error| format!("disposable_retention_read_begin_failed:{error}"))?;
+        let control: DesktopControlState = load_optional_document(&transaction, DOCUMENT, SCHEMA)?;
+        let sessions: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let mut protected = BTreeSet::new();
+
+        for operation_id in control.current_operation_ids.values() {
+            if let Some(record) = control.operations.get(operation_id) {
+                if sessions.sessions.contains_key(&record.session_id) {
+                    protected.insert(record.session_id.clone());
+                }
+            }
+        }
+        for viewer in control.live_viewers.values() {
+            if viewer.state != "controlling"
+                || viewer.boot_epoch != boot_epoch
+                || viewer.expires_at_ms <= now_ms
+                || viewer.observed_shared_connection_count == 0
+            {
+                continue;
+            }
+            if let Some(record) = control.operations.get(&viewer.operation_id) {
+                if record.handoff_id == viewer.handoff_id
+                    && record.host_generation == viewer.host_generation
+                    && sessions.sessions.contains_key(&record.session_id)
+                {
+                    protected.insert(record.session_id.clone());
+                }
+            }
+        }
+
+        {
+            let mut statement = transaction
+                .prepare(
+                    "SELECT request_json FROM operation_records \
+                     WHERE state IN ('prepared', 'observed') ORDER BY operation_id",
+                )
+                .map_err(|error| format!("disposable_retention_operation_read_failed:{error}"))?;
+            let rows = statement
+                .query_map([], |row| row.get::<_, String>(0))
+                .map_err(|error| format!("disposable_retention_operation_read_failed:{error}"))?;
+            for row in rows {
+                let encoded = row.map_err(|error| {
+                    format!("disposable_retention_operation_read_failed:{error}")
+                })?;
+                let request: serde_json::Value =
+                    serde_json::from_str(&encoded).map_err(|error| {
+                        format!("disposable_retention_operation_decode_failed:{error}")
+                    })?;
+                collect_operation_session_references(&request, &sessions, &mut protected);
+            }
+        }
+        transaction
+            .commit()
+            .map_err(|error| format!("disposable_retention_read_commit_failed:{error}"))?;
+        Ok(protected)
+    }
+
     pub(crate) fn active_viewer_browser_recovery_candidates(
         &self,
         now_ms: u64,
@@ -613,6 +686,63 @@ impl BrowserRuntimeSqliteStore {
             .commit()
             .map_err(|error| format!("desktop_control_effect_commit_failed:{error}"))?;
         Ok(result)
+    }
+}
+
+fn collect_operation_session_references(
+    value: &serde_json::Value,
+    state: &BrowserSessionState,
+    protected: &mut BTreeSet<String>,
+) {
+    match value {
+        serde_json::Value::Object(object) => {
+            for (key, value) in object {
+                if let Some(identity) = value.as_str() {
+                    match key.as_str() {
+                        "sessionId" => {
+                            if state.sessions.contains_key(identity) {
+                                protected.insert(identity.to_string());
+                            }
+                        }
+                        "sessionName" => {
+                            protected.extend(
+                                state
+                                    .sessions
+                                    .values()
+                                    .filter(|session| session.name == identity)
+                                    .map(|session| session.id.clone()),
+                            );
+                        }
+                        "browserId" => {
+                            protected.extend(
+                                state
+                                    .sessions
+                                    .values()
+                                    .filter(|session| session.browser_id == identity)
+                                    .map(|session| session.id.clone()),
+                            );
+                        }
+                        "profileId" => {
+                            protected.extend(
+                                state
+                                    .sessions
+                                    .values()
+                                    .filter(|session| session.profile_id == identity)
+                                    .map(|session| session.id.clone()),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+                collect_operation_session_references(value, state, protected);
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                collect_operation_session_references(value, state, protected);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -1382,6 +1512,37 @@ mod tests {
             observed_shared_connection_count: 1,
             observed_at_ms: current_time_ms().unwrap(),
         }
+    }
+
+    #[test]
+    fn retention_projection_joins_current_control_and_pending_operation_sessions() {
+        let mut fixture = fixture("retention-projection");
+        fixture
+            .store
+            .transfer_desktop_control(&request("operation-control", "client-a", &fixture.binding))
+            .unwrap();
+        fixture
+            .store
+            .reserve_operation(
+                "operation-pending",
+                "browser-runtime-open",
+                serde_json::json!({
+                    "intent": {
+                        "session": { "profileId": "profile-2" }
+                    }
+                }),
+            )
+            .unwrap();
+
+        let protected = fixture
+            .store
+            .disposable_retention_protected_session_ids(current_time_ms().unwrap())
+            .unwrap();
+
+        assert_eq!(
+            protected,
+            BTreeSet::from(["session-1".to_string(), "session-2".to_string()])
+        );
     }
 
     #[test]

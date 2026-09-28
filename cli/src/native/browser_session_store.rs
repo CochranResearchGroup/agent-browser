@@ -93,6 +93,9 @@ pub(crate) struct BrowserRuntimeConfigPatch {
     pub(crate) recovery_base_backoff_ms: Option<u64>,
     pub(crate) recovery_max_backoff_ms: Option<u64>,
     pub(crate) scale_in_cooldown_ms: Option<u64>,
+    pub(crate) disposable_inactivity_ms: Option<u64>,
+    pub(crate) maximum_retained_disposable_profiles: Option<u32>,
+    pub(crate) maximum_disposable_profile_bytes: Option<u64>,
 }
 
 impl Default for BrowserRuntimeConfig {
@@ -611,6 +614,7 @@ impl BrowserRuntimeSqliteStore {
                                 ended.reason,
                                 SessionEndReason::ExplicitClose
                                     | SessionEndReason::HeartbeatExpired
+                                    | SessionEndReason::QuotaEvicted
                             )
                     })
             });
@@ -1116,6 +1120,15 @@ impl BrowserRuntimeSqliteStore {
         }
         if let Some(value) = patch.scale_in_cooldown_ms {
             next.scale_in_cooldown_ms = value;
+        }
+        if let Some(value) = patch.disposable_inactivity_ms {
+            next.disposable_inactivity_ms = value;
+        }
+        if let Some(value) = patch.maximum_retained_disposable_profiles {
+            next.maximum_retained_disposable_profiles = value;
+        }
+        if let Some(value) = patch.maximum_disposable_profile_bytes {
+            next.maximum_disposable_profile_bytes = value;
         }
         provisioning::authorize_growth_config(
             &transaction,
@@ -5386,6 +5399,9 @@ mod tests {
             recovery_base_backoff_ms: Some(2_000),
             recovery_max_backoff_ms: Some(20_000),
             scale_in_cooldown_ms: Some(120_000),
+            disposable_inactivity_ms: Some(86_400_000),
+            maximum_retained_disposable_profiles: Some(12),
+            maximum_disposable_profile_bytes: Some(5 * 1024 * 1024 * 1024),
         };
 
         let updated = store.update_runtime_config(patch.clone()).unwrap();
@@ -5400,6 +5416,12 @@ mod tests {
         assert_eq!(updated.recovery_base_backoff_ms, 2_000);
         assert_eq!(updated.recovery_max_backoff_ms, 20_000);
         assert_eq!(updated.scale_in_cooldown_ms, 120_000);
+        assert_eq!(updated.disposable_inactivity_ms, 86_400_000);
+        assert_eq!(updated.maximum_retained_disposable_profiles, 12);
+        assert_eq!(
+            updated.maximum_disposable_profile_bytes,
+            5 * 1024 * 1024 * 1024
+        );
         let synchronized = store.load_route_keeper_authority().unwrap();
         assert_eq!(synchronized.policy.minimum_ready, 2);
         assert_eq!(synchronized.policy.warm_target, 3);

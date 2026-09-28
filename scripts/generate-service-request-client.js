@@ -1464,6 +1464,9 @@ export interface ServiceRuntimeConfigPatch {
   recoveryBaseBackoffMs?: number;
   recoveryMaxBackoffMs?: number;
   scaleInCooldownMs?: number;
+  disposableInactivityMs?: number;
+  maximumRetainedDisposableProfiles?: number;
+  maximumDisposableProfileBytes?: number;
 }
 
 export interface ServiceRuntimeConfig extends Required<ServiceRuntimeConfigPatch> {

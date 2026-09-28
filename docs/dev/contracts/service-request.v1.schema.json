@@ -148,7 +148,10 @@
         "recoveryRetryBudget": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
         "recoveryBaseBackoffMs": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
         "recoveryMaxBackoffMs": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
-        "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 }
+        "scaleInCooldownMs": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
+        "disposableInactivityMs": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 },
+        "maximumRetainedDisposableProfiles": { "type": "integer", "minimum": 1, "maximum": 4294967295 },
+        "maximumDisposableProfileBytes": { "type": "integer", "minimum": 1, "maximum": 18446744073709551615 }
       },
       "description": "Partial SQLite runtime configuration for service_runtime_config_update. Unknown keys are rejected."
     },

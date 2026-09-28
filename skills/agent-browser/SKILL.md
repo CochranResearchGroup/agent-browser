@@ -667,13 +667,17 @@ Read or update presentation settings through the ordinary service interface:
 agent-browser service runtime-config get
 agent-browser service runtime-config set '{"warmTarget":2,"maximumDisplays":4}'
 agent-browser service runtime-config set '{"requestDeadlineMs":90000,"recoveryRetryBudget":3,"recoveryBaseBackoffMs":1000,"recoveryMaxBackoffMs":30000}'
+agent-browser service runtime-config set '{"disposableInactivityMs":86400000,"maximumRetainedDisposableProfiles":20,"maximumDisposableProfileBytes":10737418240}'
 agent-browser service runtime-config get
 ```
 
 Partial updates support `minimumReady`, `warmTarget`, `maximumDisplays`,
 `maximumBrowsersPerDisplay`, `maximumQueueDepth`, `requestDeadlineMs`,
 `recoveryRetryBudget`, `recoveryBaseBackoffMs`, `recoveryMaxBackoffMs`, and
-`scaleInCooldownMs` (default 600000, ten minutes).
+`scaleInCooldownMs` (default 600000, ten minutes), plus
+`disposableInactivityMs` (default 86400000),
+`maximumRetainedDisposableProfiles` (default 20), and
+`maximumDisposableProfileBytes` (default 10737418240).
 All values must be positive integers, with minimum ready no greater than warm
 target, warm target no greater than maximum displays, and recovery maximum
 backoff no less than recovery base backoff. Updates atomically
@@ -682,6 +686,10 @@ Repeated identical updates preserve the revision. The generic `service_request`
 interface accepts `service_runtime_config_get` and
 `service_runtime_config_update` with a `config` object containing the patch.
 Readback returns `config`, including its revision, and `capacityGrowth`; neither is readiness evidence.
+Disposable cleanup ranks the oldest inactive allocation first and excludes
+sessions protected by a current viewer, desktop controller, or pending
+operation. Named profiles are never cleanup candidates. Disposable profiles
+cannot be pinned or promoted to bypass retention.
 
 When the installer has imported provisioning coordinates, raising
 `maximumDisplays` records durable growth intent, up to the imported ceiling

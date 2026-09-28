@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use agent_browser_service_model::{
     BrowserDesktopAssignment, BrowserDisposableProfilePolicy, BrowserLaunch,
@@ -23,6 +23,7 @@ struct FixtureEffects {
     tab_closes: Vec<(String, String)>,
     disposable_allocations: Vec<String>,
     disposable_deletions: Vec<String>,
+    disposable_sizes: BTreeMap<String, u64>,
     navigations: Vec<(String, String, String)>,
     fail_navigation: bool,
     focuses: Vec<(String, Option<String>)>,
@@ -985,6 +986,17 @@ impl BrowserSessionEffects for FixtureEffects {
             .push(allocation.profile.id.clone());
         Ok(())
     }
+
+    fn disposable_profile_size_bytes(
+        &mut self,
+        allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<u64, String> {
+        Ok(self
+            .disposable_sizes
+            .get(&allocation.profile.id)
+            .copied()
+            .unwrap_or(0))
+    }
 }
 
 #[test]
@@ -1603,7 +1615,7 @@ fn reaper_expires_idle_disposable_session_and_closes_sessionless_browser() {
         &catalog,
         &mut effects,
         BrowserSessionManagerConfig {
-            session_idle_timeout_ms: 300_000,
+            session_idle_timeout_ms: 86_400_000,
             remote_desktop_routes: Vec::new(),
         },
     );
@@ -1611,7 +1623,12 @@ fn reaper_expires_idle_disposable_session_and_closes_sessionless_browser() {
         .open(OpenBrowserSession::disposable("alice", "default", 1_000))
         .unwrap();
 
-    let reaped = manager.reap(301_000).unwrap();
+    assert!(manager
+        .reap(86_400_999)
+        .unwrap()
+        .expired_session_ids
+        .is_empty());
+    let reaped = manager.reap(86_401_000).unwrap();
     drop(manager);
 
     assert_eq!(reaped.expired_session_ids, [alice.session_id.clone()]);
@@ -1875,6 +1892,137 @@ fn disposable_profiles_are_session_scoped_reused_and_reaped() {
 }
 
 #[test]
+fn disposable_count_quota_evicts_oldest_unprotected_session_before_admission() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 2;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    );
+    let alice = manager
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+        .unwrap();
+    let carol = manager
+        .open(OpenBrowserSession::disposable("carol", "default", 3_000))
+        .unwrap();
+    drop(manager);
+
+    assert!(!state.sessions.contains_key(&alice.session_id));
+    assert!(state.sessions.contains_key(&bob.session_id));
+    assert!(state.sessions.contains_key(&carol.session_id));
+    assert_eq!(effects.disposable_deletions, [alice.profile_id.clone()]);
+    assert_eq!(
+        state.session_history.last().unwrap().reason,
+        SessionEndReason::QuotaEvicted
+    );
+}
+
+#[test]
+fn disposable_quota_fails_closed_when_only_candidate_is_protected() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let first = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+    .unwrap();
+    let error = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .with_protected_sessions(BTreeSet::from([first.session_id.clone()]))
+    .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+    .unwrap_err();
+
+    assert_eq!(error, "browser_disposable_profile_count_quota_protected");
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert!(effects.disposable_deletions.is_empty());
+    assert_eq!(effects.disposable_allocations.len(), 1);
+}
+
+#[test]
+fn disposable_byte_quota_evicts_oldest_profile_first() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_total_bytes = 10;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let alice = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 60_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+    .unwrap();
+    let bob = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 60_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+    .unwrap();
+    effects.disposable_sizes.insert(alice.profile_id.clone(), 6);
+    effects.disposable_sizes.insert(bob.profile_id.clone(), 6);
+
+    let reaped = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 60_000,
+            ..BrowserSessionManagerConfig::default()
+        },
+    )
+    .reap(3_000)
+    .unwrap();
+
+    assert_eq!(reaped.deleted_disposable_profile_ids, [alice.profile_id]);
+    assert!(state.sessions.contains_key(&bob.session_id));
+}
+
+#[test]
 fn exact_intent_rejects_disposable_profile_definition() {
     let profile = BrowserProfileCatalogEntry {
         id: "legacy-one-time".to_string(),
@@ -1925,6 +2073,8 @@ fn catalog_with_disposable_policy() -> BrowserProfileCatalog {
                 id: "default".to_string(),
                 user_data_root: "/managed/disposable".to_string(),
                 cleanup_delay_ms: 0,
+                maximum_retained_profiles: 20,
+                maximum_total_bytes: 10 * 1024 * 1024 * 1024,
             },
         )]),
     }

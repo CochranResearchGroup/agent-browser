@@ -1,6 +1,6 @@
 //! Durable host for the ordinary Browser Session Manager path.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -76,13 +76,15 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         BrowserSessionEffectAdapter::new(runtime),
         &legacy_state_path,
         BrowserSessionHostConfig {
-            session_idle_timeout_ms: runtime_config.session_idle_timeout_ms,
+            session_idle_timeout_ms: runtime_config.disposable_inactivity_ms,
             recovery_admission_policy: runtime_config.recovery_admission_policy()?,
             remote_desktop_routes,
             default_disposable_policy: Some(BrowserDisposableProfilePolicy {
                 id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
                 user_data_root: disposable_root.to_string_lossy().into_owned(),
                 cleanup_delay_ms: runtime_config.disposable_inactivity_ms,
+                maximum_retained_profiles: runtime_config.maximum_retained_disposable_profiles,
+                maximum_total_bytes: runtime_config.maximum_disposable_profile_bytes,
             }),
         },
     )
@@ -141,6 +143,13 @@ pub(crate) trait BrowserSessionPersistence {
         legacy_service_state_path: &Path,
     ) -> Result<BrowserProfileCatalogLoad, String>;
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String>;
+
+    fn disposable_retention_protected_session_ids(
+        &self,
+        _now_ms: u64,
+    ) -> Result<BTreeSet<String>, String> {
+        Ok(BTreeSet::new())
+    }
 
     fn load_manager_handoffs(&self) -> Result<BTreeMap<String, RemoteViewHandoff>, String> {
         Ok(BTreeMap::new())
@@ -355,6 +364,13 @@ impl BrowserSessionPersistence for BrowserRuntimeSqliteStore {
 
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
         BrowserRuntimeSqliteStore::save_profile_catalog(self, catalog)
+    }
+
+    fn disposable_retention_protected_session_ids(
+        &self,
+        now_ms: u64,
+    ) -> Result<BTreeSet<String>, String> {
+        BrowserRuntimeSqliteStore::disposable_retention_protected_session_ids(self, now_ms)
     }
 
     fn load_manager_handoffs(&self) -> Result<BTreeMap<String, RemoteViewHandoff>, String> {
@@ -635,11 +651,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             persistence.load_or_import_profile_catalog(legacy_service_state_path)?;
         let mut catalog_changed = false;
         if let Some(policy) = config.default_disposable_policy {
-            if !catalog_load
-                .catalog
-                .disposable_policies
-                .contains_key(&policy.id)
-            {
+            if catalog_load.catalog.disposable_policies.get(&policy.id) != Some(&policy) {
                 catalog_load
                     .catalog
                     .disposable_policies
@@ -704,7 +716,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
-        let result = self.manager().open(request)?;
+        self.prepare_disposable_admission(&request)?;
+        let protected = self
+            .persistence
+            .disposable_retention_protected_session_ids(request.activity_at_ms)?;
+        let result = self
+            .manager_with_protected_sessions(protected)
+            .open(request)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -1060,7 +1078,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
-        let result = self.manager().reap(now_ms)?;
+        let protected = self
+            .persistence
+            .disposable_retention_protected_session_ids(now_ms)?;
+        let result = self
+            .manager_with_protected_sessions(protected.clone())
+            .reap_with_protected_sessions(now_ms, &protected)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -1251,14 +1274,6 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let operation_id = required_string(command, "id")?;
         let session_name = required_string(command, "sessionName")?;
         let existing_operation = self.persistence.find_operation(operation_id)?;
-        let profile_id = if let Some(existing) = &existing_operation {
-            existing.request["intent"]["session"]["profileId"]
-                .as_str()
-                .ok_or("browser_runtime_operation_profile_id_missing")?
-                .to_string()
-        } else {
-            self.profile_id_for_journaled_open(command, session_name)?
-        };
         let activity_at_ms = command
             .get("activityAtMs")
             .or_else(|| {
@@ -1268,6 +1283,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             })
             .and_then(serde_json::Value::as_u64)
             .unwrap_or_else(current_unix_ms);
+        if existing_operation.is_none() {
+            let admission =
+                self.open_request_from_command_shape(command, session_name, activity_at_ms);
+            self.prepare_disposable_admission(&admission)?;
+        }
+        let profile_id = if let Some(existing) = &existing_operation {
+            existing.request["intent"]["session"]["profileId"]
+                .as_str()
+                .ok_or("browser_runtime_operation_profile_id_missing")?
+                .to_string()
+        } else {
+            self.profile_id_for_journaled_open(command, session_name)?
+        };
         let owner_key = "browser-runtime-open";
         let request = if let Some(existing) = &existing_operation {
             if existing.request.get("command") != Some(command) {
@@ -1596,11 +1624,18 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                                             &profile_id,
                                             activity_at_ms,
                                         );
-                                        match self.manager().open_reserved_observed(
-                                            open_request,
-                                            reservation,
-                                            launch,
-                                        ) {
+                                        let protected = self
+                                            .persistence
+                                            .disposable_retention_protected_session_ids(
+                                                activity_at_ms,
+                                            )?;
+                                        match self
+                                            .manager_with_protected_sessions(protected)
+                                            .open_reserved_observed(
+                                                open_request,
+                                                reservation,
+                                                launch,
+                                            ) {
                                             Ok(opened) => opened,
                                             Err(error) => {
                                                 self.retain_reserved_browser_cleanup(
@@ -1936,7 +1971,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             &profile_id,
             activity_at_ms,
         );
-        self.manager().open_reserved(request, reservation)
+        let protected = self
+            .persistence
+            .disposable_retention_protected_session_ids(activity_at_ms)?;
+        self.manager_with_protected_sessions(protected)
+            .open_reserved(request, reservation)
     }
 
     /// Resolve the profile identity without allocating a disposable directory.
@@ -2229,6 +2268,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 let reaped = self.reap(now_ms)?;
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
+                    "quotaEvictedSessionIds": reaped.quota_evicted_session_ids,
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
                 }))
@@ -2249,6 +2289,58 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         match self.desktop_capacity {
             Some((maximum, density)) => manager.with_desktop_capacity(maximum, density),
             None => manager,
+        }
+    }
+
+    fn manager_with_protected_sessions(
+        &mut self,
+        protected_session_ids: BTreeSet<String>,
+    ) -> BrowserSessionManager<'_, E> {
+        self.manager()
+            .with_protected_sessions(protected_session_ids)
+    }
+
+    fn prepare_disposable_admission(&mut self, request: &OpenBrowserSession) -> Result<(), String> {
+        let agent_browser_service_model::BrowserProfileIntent::Disposable { policy_id } =
+            &request.profile_intent
+        else {
+            return Ok(());
+        };
+        if self.state.disposable_profiles.values().any(|allocation| {
+            allocation.policy_id == *policy_id && allocation.session_name == request.session_name
+        }) {
+            return Ok(());
+        }
+        let protected = self
+            .persistence
+            .disposable_retention_protected_session_ids(request.activity_at_ms)?;
+        let result = self
+            .manager_with_protected_sessions(protected.clone())
+            .enforce_disposable_quota(policy_id, &protected, 1, 0, request.activity_at_ms)?;
+        if !result.quota_evicted_session_ids.is_empty()
+            || !result.closed_browser_ids.is_empty()
+            || !result.deleted_disposable_profile_ids.is_empty()
+        {
+            self.commit_state()?;
+        }
+        Ok(())
+    }
+
+    fn open_request_from_command_shape(
+        &self,
+        command: &serde_json::Value,
+        session_name: &str,
+        activity_at_ms: u64,
+    ) -> OpenBrowserSession {
+        if let Some(profile_id) = optional_string(command, "profileId") {
+            OpenBrowserSession::exact_profile(session_name, profile_id, activity_at_ms)
+        } else {
+            OpenBrowserSession::disposable(
+                session_name,
+                optional_string(command, "disposablePolicyId")
+                    .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
+                activity_at_ms,
+            )
         }
     }
 
@@ -2303,10 +2395,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
             )
         };
+        self.prepare_disposable_admission(&request)?;
+        let protected = self
+            .persistence
+            .disposable_retention_protected_session_ids(activity_at_ms)?;
+        let mut manager = self.manager_with_protected_sessions(protected);
         let result = if refresh_activity_on_reuse {
-            self.manager().open(request)?
+            manager.open(request)?
         } else {
-            self.manager().open_for_command(request)?
+            manager.open_for_command(request)?
         };
         self.commit_state()?;
         Ok(result)
@@ -4415,8 +4512,8 @@ mod tests {
         assert_eq!(browser_closes.load(Ordering::SeqCst), 1);
         assert_eq!(*tab_closes.lock().unwrap(), vec!["tab-1", "tab-2"]);
 
-        // A browser loss may still be recoverable; only explicit close or
-        // heartbeat expiry makes the old logical handoff terminal.
+        // A browser loss may still be recoverable; quota eviction makes the
+        // old logical handoff terminal just like explicit close or expiry.
         let mut recovery_state = after_bob;
         let alice_history = recovery_state
             .session_history
@@ -4439,7 +4536,7 @@ mod tests {
             .iter_mut()
             .find(|ended| ended.id == alice.session_id)
             .unwrap()
-            .reason = SessionEndReason::HeartbeatExpired;
+            .reason = SessionEndReason::QuotaEvicted;
         let terminal = store
             .publish_session_state_and_terminal_handoffs(&recovery_state)
             .unwrap();
@@ -4812,6 +4909,8 @@ mod tests {
                         .to_string_lossy()
                         .into_owned(),
                     cleanup_delay_ms: 86_400_000,
+                    maximum_retained_profiles: 20,
+                    maximum_total_bytes: 10 * 1024 * 1024 * 1024,
                 }),
             },
         )
@@ -6013,6 +6112,8 @@ mod tests {
                     id: DEFAULT_DISPOSABLE_POLICY_ID.to_string(),
                     user_data_root: disposable_root.to_string_lossy().into_owned(),
                     cleanup_delay_ms: 0,
+                    maximum_retained_profiles: 20,
+                    maximum_total_bytes: 10 * 1024 * 1024 * 1024,
                 }),
             },
         )
