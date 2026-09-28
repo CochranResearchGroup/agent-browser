@@ -1,5 +1,18 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G30 receipt projection source-qualified
+
+[Plan 0219 version 45](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+source-qualifies commit `7d043e45`. Privileged repair now persists a
+semantically validated v2 receipt through an atomic user-private replacement.
+Service status and install doctor expose the same redacted receipt state even
+when Browser Runtime SQLite is unavailable, and text doctor prints that state.
+The sealed plan digest and action list remain absent; missing, unreadable,
+invalid, and not-ready receipts fail closed. Focused Rust, formatting, strict
+Clippy, documentation, remote-view, workstation, Guacamole, and PostgreSQL
+gates pass. G30 remains partial only for complete installed status/doctor
+readback. Ledger counts remain 13/30/2/0; no runtime effect occurred.
+
 ## Current P219 status | 2026-09-28 G30 read-only projection
 
 [Plan 0219 version 44](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

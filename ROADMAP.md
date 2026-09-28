@@ -141,9 +141,11 @@ limits report over-target, reject worsening admission without eviction, and
 converge through ordinary release. The ledger is 13 pass, 30 partial, 2 fail,
 and 0 missing.
 
-G30 now has one redacted read-only SQLite reconciliation aggregate shared by
-Service status and install doctor. The remaining G30 gates are typed privileged
-repair-receipt projection and complete installed readback.
+G30 now has one redacted read-only reconciliation aggregate shared by Service
+status and install doctor. Commit `7d043e45` also persists and semantically
+validates the typed privileged-repair receipt, exposes the same redacted state
+when SQLite is unavailable, and keeps its sealed digest and action list out of
+status. The remaining G30 gate is complete installed status/doctor readback.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

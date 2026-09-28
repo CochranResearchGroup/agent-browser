@@ -53,11 +53,11 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 7e34acce
+    checkpoint: 7d043e45
     remote_ref: refs/remotes/origin/platform/p211-simple-cold-upgrade
     integration_receipt: null
     integration: retain draft PR 191; qualify the complete grilling contract and prepare the protected integration handoff; merge requires separate authority
-    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P5 remain source-qualified; final M4 source candidate 0.28.0-3e4532b3d100 is installed in development with green doctor, current development skill, six ready provider routes, unchanged production identity, and a fresh OS census; G10 queue, G28 scale-in references, and G29 configuration convergence are source-qualified; G30 has a shared redacted read-only reconciliation aggregate but remains partial for repair receipt and installed readback; exact workstation cold-upgrade reconstruction and joined installed scale-in remain open; the authoritative JSON ledger is 13 pass, 30 partial, two fail, and zero missing
+    validation_status: M2B installed acceptance remains bound to isolated development generation 0.28.0-ac3c1daed8ab; A01/A02, M3, and M4-P1 through M4-P5 remain source-qualified; final M4 source candidate 0.28.0-3e4532b3d100 is installed in development with green doctor, current development skill, six ready provider routes, unchanged production identity, and a fresh OS census; G10 queue, G28 scale-in references, G29 configuration convergence, and G30 redacted reconciliation plus validated privileged-repair receipt projection are source-qualified; G30 remains partial only for complete installed readback; exact workstation cold-upgrade reconstruction and joined installed scale-in remain open; the authoritative JSON ledger is 13 pass, 30 partial, two fail, and zero missing
     validation_ref: 0.28.0-3e4532b3d100
     work_items: [CochranResearchGroup/agent-browser#181, CochranResearchGroup/agent-browser#183, CochranResearchGroup/agent-browser#195]
     dependencies: []

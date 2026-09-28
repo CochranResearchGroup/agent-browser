@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 44
+Plan version: 45
 
 State: OPEN
 
@@ -77,6 +77,20 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 45 source-qualifies G30's typed privileged-repair receipt projection at
+`7d043e45`. A successful privileged adapter invocation persists only a fully
+validated v2 receipt through a user-private atomic replacement. Service status
+and install doctor share the same redacted readback even when Browser Runtime
+SQLite is unavailable; the sealed plan digest and action list never enter the
+projection. Missing, unreadable, semantically invalid, or not-ready receipts
+fail closed behind stable codes. Install doctor also prints the receipt state.
+Focused receipt and Service-status tests, formatting, strict workspace Clippy,
+the documentation build and remote-view contract, and every selector-chosen
+provider-free workstation and PostgreSQL fixture pass. G30 remains partial only
+for complete installed status/doctor qualification. The ledger stays 13 pass,
+30 partial, 2 fail, and 0 missing. No runtime, browser, provider, privileged,
+production, merge, push, or release effect occurred.
 
 Version 44 advances G30's source projection. Service status and install doctor
 now share one read-only SQLite reconciliation aggregate covering configured
