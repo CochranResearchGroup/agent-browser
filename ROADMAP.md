@@ -69,6 +69,13 @@ until frozen installed qualification. The ledger is 11 pass, 29 partial,
 2 fail, and 3 missing. M4 operational conformance remains open and requires a
 bounded successor packet before effects.
 
+M4-P1 is active from pushed checkpoint `3e2ffa5e`. It owns the bounded Browser
+Runtime SQLite storage foundation: complete live history/database budget
+settings, read-only integrity and WAL-aware size projection, and one rotating
+verified online backup with typed gap receipts. URL compaction remains M4-P2;
+privilege, pressure, provider reconstruction, and installed effects are outside
+this packet.
+
 ## P218 | Grilling-Contract Remote View Conformance
 
 State: CANCELLED

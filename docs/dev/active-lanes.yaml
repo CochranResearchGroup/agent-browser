@@ -65,5 +65,5 @@ lanes:
     reconciled_overlaps:
       - "P219 inherits P218 and P211 custody on the same branch; the September 18 assignment of shared CLI help, README, skill, installation, remote-view, RUNBOOK, and lane prose remains; P207 retains its tab-refresh source and branch history"
       - "Issues #189 and #190 remain linked remote-view regression subcases under primary work item #195"
-    blocker: M3-P3 is source-qualified at 93a740f6; G21/G36 still require frozen installed retention evidence, G14/G15 require installed cold-start and visible joined recovery evidence, and M4 operational conformance needs a bounded successor packet before final qualification
+    blocker: M3-P3 is source-qualified at 93a740f6; M4-P1 is active for typed Browser Runtime SQLite storage budgets, read-only integrity and size projection, and verified rotating online backup; URL compaction, pressure, privilege, provider reconstruction, and installed qualification remain later packets
     updated_at: 2026-09-27

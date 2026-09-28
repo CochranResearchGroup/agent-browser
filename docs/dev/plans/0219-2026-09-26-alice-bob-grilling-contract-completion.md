@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 31
+Plan version: 32
 
 State: OPEN
 
@@ -77,6 +77,16 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 32 starts M4-P1 from pushed checkpoint `3e2ffa5e`. The read-only M4
+audit found that the v2 SQLite row already stores the accepted 64-MiB exact URL
+history, 96-MiB live database, and 128-MiB routine storage defaults and validates
+their ordering, but the strict update patch omits all three and no executable
+consumer enforces them. Browser Runtime SQLite has WAL migration checkpointing
+but no ordinary integrity surface, verified rotating online backup, database and
+WAL size projection, or restoration-gap receipt. M4-P1 below owns that bounded
+storage-authority foundation. The ledger remains 11 pass, 29 partial, 2 fail,
+and 3 missing. No runtime or provider effect occurred in this audit.
 
 Version 31 source-qualifies M3-P3 at commit `93a740f6`. The strict SQLite
 runtime patch, Service schema, generated client, CLI help, README, repository
@@ -1236,6 +1246,39 @@ service-request client, generated contract, type, parity, route-confusion, and
 documentation gates pass. The installed shared user-scoped skill is unchanged
 by design. Goal thread `01a0e57f-4aa3-7630-b4d7-50227d132ba5` reported 385,223
 cumulative tokens used at checkpoint reconciliation.
+
+### M4-P1 | Browser Runtime SQLite Storage Authority
+
+M4-P1 is the first bounded M4 packet. It advances only the storage/configuration
+portions of G16, G17, G18, G22, and G30 and does not claim provider, privilege,
+resource-pressure, or installed acceptance.
+
+1. **M4-P1A | Complete live storage settings.** Add
+   `exactUrlHistoryMaximumBytes`, `liveDatabaseMaximumBytes`, and
+   `routineStorageMaximumBytes` to the strict runtime-config patch, Service
+   schema, generated client, CLI help, README, repository skill, and docs.
+   Preserve atomic validation and exact readback.
+2. **M4-P1B | Read-only integrity and budget projection.** Add one SQLite
+   snapshot/report that runs the bounded integrity check, reports database and
+   WAL bytes, exact navigation-history bytes, configured limits, and typed
+   within-target or over-target state. Expose it through status/doctor without
+   mutation, credential material, or provider URLs.
+3. **M4-P1C | One rotating verified online backup.** Create at most one current
+   and one previous Browser Runtime SQLite backup plus a compact manifest under
+   the governed runtime directory. Use SQLite's online backup mechanism, verify
+   the staged copy with integrity check before atomic publication, preserve a
+   corrupt live database, and record typed backup or restoration gaps rather
+   than silently manufacturing continuity. Backup creation belongs to the
+   ordinary reconciler or an explicit typed repair path; doctor remains
+   read-only.
+
+Provider-free acceptance requires strict update/readback, relation validation,
+WAL-aware byte accounting, read-only doctor behavior, successful verified
+backup rotation, injected corrupt-copy rejection without replacing the prior
+verified backup, and a restart readback of the same manifest. Stop and reframe
+if backup requires provider state, broad filesystem cleanup, arbitrary command
+execution, or a second mutable configuration authority. URL history compaction
+and daily summaries remain M4-P2 after this storage foundation is source-qualified.
 
 ### A01 Source Checkpoint
 

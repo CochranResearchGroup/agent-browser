@@ -1,5 +1,18 @@
 # Runbook
 
+## Current P219 status | 2026-09-27 M4-P1 storage audit
+
+[Plan 0219 version 32](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+is OPEN at pushed checkpoint `3e2ffa5e`. The v2 SQLite row already carries the
+accepted exact-history, live-database, and routine-storage byte defaults, but
+the strict update contract omits them and no executable path enforces or reports
+their budgets. Ordinary Browser Runtime SQLite also lacks an integrity report,
+verified rotating online backup, and restoration-gap receipt. M4-P1 owns only
+that configuration and storage-authority foundation. URL compaction is deferred
+to M4-P2; privilege, pressure admission, provider reconstruction, and installed
+qualification remain later packets. The ledger remains 11 pass, 29 partial,
+2 fail, and 3 missing. No runtime or provider effect occurred during the audit.
+
 ## Current P219 status | 2026-09-27 M3-P3 source-qualified
 
 [Plan 0219 version 31](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
