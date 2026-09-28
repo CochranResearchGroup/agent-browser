@@ -145,14 +145,18 @@ G30 now has one redacted read-only reconciliation aggregate shared by Service
 status and install doctor. Commit `7d043e45` also persists and semantically
 validates the typed privileged-repair receipt, exposes the same redacted state
 when SQLite is unavailable, and keeps its sealed digest and action list out of
-status. The remaining G30 gate is complete installed status/doctor readback.
+status. Exact development generation `0.28.0-d630713aca50` proves the complete
+installed Service-status and install-doctor field map, closing G30.
 
 G39's source guard includes a negative-tested `doctorReadOnly` architecture cut
 at `c5f4db2a`. Commit `92b2155f` types the remote-view doctor's complete
 recommendation set. Commit `d5e5bab7` closes the source inventory by routing
 every install-doctor remedy through the same non-executing versioned contract
 and adding a negative guard against bypassing its closed typed builder. G39 now
-remains partial only for complete installed doctor no-mutation qualification.
+passes after `26898035` isolates the disposable Service probe from inherited
+development runtime-host authority and the exact installed candidate records
+zero persistent-state or shared-runtime mutations for both doctor paths under
+syscall tracing.
 
 ## P218 | Grilling-Contract Remote View Conformance
 

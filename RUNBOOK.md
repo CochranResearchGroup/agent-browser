@@ -1,5 +1,19 @@
 # Runbook
 
+## Current P219 status | 2026-09-28 G30 and G39 installed closure
+
+[Plan 0219 version 50](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)
+installs exact development generation `0.28.0-d630713aca50`. The first syscall
+audit found the disposable install-doctor Service probe inheriting shared
+development runtime-host authority. Commit `26898035` isolates its HOME, state,
+socket, and runtime-host environment. Focused Rust, formatting, strict Clippy,
+workstation, architecture, candidate build, three-cycle browser smoke, and
+development doctor pass. Repaired install and remote-view doctors record zero
+persistent development-state or shared-runtime mutations under syscall tracing
+and leave no process or directory residue. Service status and install doctor
+return the same complete runtime-operational field map. G30 and G39 pass; the
+ledger is 15/28/2/0. Production identity remains unchanged.
+
 ## Current P219 status | 2026-09-28 typed install-doctor remedies
 
 [Plan 0219 version 49](docs/dev/plans/0219-2026-09-26-alice-bob-grilling-contract-completion.md)

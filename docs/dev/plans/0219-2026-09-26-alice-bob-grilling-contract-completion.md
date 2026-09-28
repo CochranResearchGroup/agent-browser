@@ -2,7 +2,7 @@
 
 Date: 2026-09-26
 
-Plan version: 49
+Plan version: 50
 
 State: OPEN
 
@@ -77,6 +77,25 @@ P218 and the [archived runbook](../../../RUNBOOK-history-2026-09-26-through-p218
 preserve history. Keep new execution narratives in the runbook.
 
 ## Current State
+
+Version 50 installs exact development generation `0.28.0-d630713aca50` and
+closes G30 and G39. The first syscall audit exposed that the disposable
+install-doctor Service probe inherited development runtime-host authority and
+touched the shared startup-lock and SQLite descriptor namespace. Commit
+`26898035` now gives that child an explicit disposable HOME, state directory,
+socket directory, and disabled runtime-host authority. Its active regression,
+formatting, strict workspace Clippy, workstation fixture, architecture self-test
+and zero-finding cut pass. The repaired candidate passes the required
+three-cycle development browser-launch smoke and development doctor with six
+ready provider routes and unchanged production identity. Installed install and
+remote-view doctors then complete under syscall tracing with zero write,
+rename, create, or removal effects in persistent development state or the
+shared runtime namespace; disposable captures leave no process or directory
+residue. Service status and install doctor expose the same complete
+`agent-browser.runtime-operational-status.v1` field map, including stable
+unavailable privileged-receipt state. A fresh OS census finds no doctor or
+smoke residue. The ledger advances to 15 pass, 28 partial, 2 fail, and 0
+missing. No production, privileged, merge, push, or release effect occurred.
 
 Version 49 closes G39's source-side explicit-repair inventory at `d5e5bab7`.
 Every install-doctor `issues[].remedy` now comes from one closed typed builder
