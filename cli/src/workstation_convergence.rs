@@ -20,10 +20,10 @@ const WORKSTATION_CONVERGENCE_PLAN_SCHEMA: &str = "agent-browser.workstation-con
 const WORKSTATION_CONVERGENCE_RECEIPT_SCHEMA: &str =
     "agent-browser.workstation-convergence-receipt.v1";
 const DASHBOARD_HEALTH_SCHEMA: &str = "agent-browser.dashboard-health.v1";
-const PRIVILEGED_EFFECT_PLAN_SCHEMA: &str = "agent-browser.privileged-host-effect-plan.v1";
-const PRIVILEGED_EFFECT_RECEIPT_SCHEMA: &str = "agent-browser.privileged-host-effect-receipt.v2";
+const PRIVILEGED_EFFECT_PLAN_SCHEMA: &str = "agent-browser.privileged-host-effect-plan.v2";
+const PRIVILEGED_EFFECT_RECEIPT_SCHEMA: &str = "agent-browser.privileged-host-effect-receipt.v3";
 const PRIVILEGED_EFFECT_RECEIPT_PREFIX: &str = "AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT=";
-const PRIVILEGED_EFFECT_RECEIPT_FILENAME: &str = "privileged-host-effect-receipt.v2.json";
+const PRIVILEGED_EFFECT_RECEIPT_FILENAME: &str = "privileged-host-effect-receipt.v3.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -187,7 +187,7 @@ pub(crate) struct WorkstationConvergenceReceipt {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub(crate) enum PrivilegedHostEffect {
-    LeaseAuthority,
+    RetireLegacyLeaseAuthority,
     PrivilegedHelper,
     WorkstationDependencies,
 }
@@ -195,7 +195,7 @@ pub(crate) enum PrivilegedHostEffect {
 impl PrivilegedHostEffect {
     fn as_str(self) -> &'static str {
         match self {
-            Self::LeaseAuthority => "ensure_lease_authority",
+            Self::RetireLegacyLeaseAuthority => "retire_legacy_lease_authority",
             Self::PrivilegedHelper => "ensure_privileged_helper",
             Self::WorkstationDependencies => "ensure_workstation_dependencies",
         }
@@ -208,7 +208,6 @@ struct PrivilegedHostEffectPlanMaterial<'a> {
     schema_version: &'a str,
     actions: &'a [PrivilegedHostEffect],
     helper_sha256: &'a str,
-    lease_authority_sha256: &'a str,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,20 +217,18 @@ pub(crate) struct PrivilegedHostEffectPlan {
     pub(crate) plan_digest: String,
     actions: Vec<PrivilegedHostEffect>,
     helper_sha256: String,
-    lease_authority_sha256: String,
 }
 
 impl PrivilegedHostEffectPlan {
     pub(crate) fn seal(
         with_workstation_dependencies: bool,
         helper_sha256: &str,
-        lease_authority_sha256: &str,
     ) -> Result<Self, String> {
-        if !is_sha256(helper_sha256) || !is_sha256(lease_authority_sha256) {
+        if !is_sha256(helper_sha256) {
             return Err("privileged_host_effect_plan_identity_invalid".to_string());
         }
         let mut actions = vec![
-            PrivilegedHostEffect::LeaseAuthority,
+            PrivilegedHostEffect::RetireLegacyLeaseAuthority,
             PrivilegedHostEffect::PrivilegedHelper,
         ];
         if with_workstation_dependencies {
@@ -241,14 +238,12 @@ impl PrivilegedHostEffectPlan {
             schema_version: PRIVILEGED_EFFECT_PLAN_SCHEMA,
             actions: &actions,
             helper_sha256,
-            lease_authority_sha256,
         };
         Ok(Self {
             schema_version: PRIVILEGED_EFFECT_PLAN_SCHEMA.to_string(),
             plan_digest: digest_serializable(&material),
             actions,
             helper_sha256: helper_sha256.to_string(),
-            lease_authority_sha256: lease_authority_sha256.to_string(),
         })
     }
 
@@ -266,11 +261,9 @@ impl PrivilegedHostEffectPlan {
             schema_version: &self.schema_version,
             actions: &self.actions,
             helper_sha256: &self.helper_sha256,
-            lease_authority_sha256: &self.lease_authority_sha256,
         };
         if self.schema_version != PRIVILEGED_EFFECT_PLAN_SCHEMA
             || !is_sha256(&self.helper_sha256)
-            || !is_sha256(&self.lease_authority_sha256)
             || digest_serializable(&material) != self.plan_digest
         {
             return Err("privileged_host_effect_plan_digest_mismatch".to_string());
@@ -291,16 +284,16 @@ pub(crate) struct PrivilegedHostEffectReceipt {
     pub(crate) outcome: String,
     pub(crate) postcondition: String,
     pub(crate) helper_ready: bool,
-    pub(crate) lease_authority_ready: bool,
+    pub(crate) legacy_lease_authority_retired: bool,
     pub(crate) workstation_dependencies_ready: bool,
 }
 
 fn validate_privileged_effect_receipt_semantics(
     receipt: &PrivilegedHostEffectReceipt,
 ) -> Result<(), String> {
-    let base_actions = "ensure_lease_authority,ensure_privileged_helper";
+    let base_actions = "retire_legacy_lease_authority,ensure_privileged_helper";
     let workstation_actions =
-        "ensure_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies";
+        "retire_legacy_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies";
     let actions_valid = matches!(
         receipt.actions.as_str(),
         actions if actions == base_actions || actions == workstation_actions
@@ -309,7 +302,7 @@ fn validate_privileged_effect_receipt_semantics(
         || receipt.resource != "agent-browser-host-privileges"
         || receipt.postcondition != "ready"
         || !receipt.helper_ready
-        || !receipt.lease_authority_ready
+        || !receipt.legacy_lease_authority_retired
         || (receipt.actions == workstation_actions && !receipt.workstation_dependencies_ready)
         || !actions_valid
         || !matches!(
@@ -421,7 +414,7 @@ pub(crate) fn privileged_effect_receipt_status() -> Value {
             "outcome": receipt.outcome,
             "postcondition": receipt.postcondition,
             "helperReady": receipt.helper_ready,
-            "leaseAuthorityReady": receipt.lease_authority_ready,
+            "legacyLeaseAuthorityRetired": receipt.legacy_lease_authority_retired,
             "workstationDependenciesReady": receipt.workstation_dependencies_ready,
         }))
     })();
@@ -933,9 +926,9 @@ mod tests {
 
     #[test]
     fn privileged_effect_adapter_is_bound_to_the_exact_rust_plan() {
-        let plan = PrivilegedHostEffectPlan::seal(true, &"a".repeat(64), &"b".repeat(64)).unwrap();
+        let plan = PrivilegedHostEffectPlan::seal(true, &"a".repeat(64)).unwrap();
         let stdout = format!(
-            "installer output\n{PRIVILEGED_EFFECT_RECEIPT_PREFIX}{{\"schemaVersion\":\"{PRIVILEGED_EFFECT_RECEIPT_SCHEMA}\",\"planDigest\":\"{}\",\"resource\":\"agent-browser-host-privileges\",\"actions\":\"{}\",\"priorObservation\":\"repair_required\",\"action\":\"apply_sealed_plan\",\"outcome\":\"effects_applied\",\"postcondition\":\"ready\",\"helperReady\":true,\"leaseAuthorityReady\":true,\"workstationDependenciesReady\":true}}\n",
+            "installer output\n{PRIVILEGED_EFFECT_RECEIPT_PREFIX}{{\"schemaVersion\":\"{PRIVILEGED_EFFECT_RECEIPT_SCHEMA}\",\"planDigest\":\"{}\",\"resource\":\"agent-browser-host-privileges\",\"actions\":\"{}\",\"priorObservation\":\"repair_required\",\"action\":\"apply_sealed_plan\",\"outcome\":\"effects_applied\",\"postcondition\":\"ready\",\"helperReady\":true,\"legacyLeaseAuthorityRetired\":true,\"workstationDependenciesReady\":true}}\n",
             plan.plan_digest,
             plan.action_csv(),
         );
@@ -943,6 +936,15 @@ mod tests {
         let receipt = validate_privileged_effect_adapter_receipt(&plan, &stdout).unwrap();
         assert_eq!(receipt.plan_digest, plan.plan_digest);
         assert_eq!(receipt.actions, plan.action_csv());
+
+        let legacy_stdout = stdout.replace(
+            PRIVILEGED_EFFECT_RECEIPT_SCHEMA,
+            "agent-browser.privileged-host-effect-receipt.v2",
+        );
+        assert_eq!(
+            validate_privileged_effect_adapter_receipt(&plan, &legacy_stdout),
+            Err("privileged_host_effect_receipt_mismatch".to_string())
+        );
 
         let path = privileged_effect_receipt_path().unwrap();
         let _ = fs::remove_file(&path);

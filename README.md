@@ -138,34 +138,13 @@ are installed. Set `AGENT_BROWSER_CARGO_CACHE=off` or
 Run `pnpm benchmark:cargo-build-jobs` to repeat the isolated 4/6/8-job
 comparison without deleting or reusing the shared Cargo target directory.
 
-The development doctor also requires the shared root-owned
-`agent-browser-lease-authority.socket` to be loaded, enabled, active, owned by
-root, group-accessible through the `agent-browser` operator group, and mode
-`0660`. Development services do not create a second authority daemon. If this
-check fails, run the reviewed one-sudo `pnpm install:privileges -- --apply`
-bootstrap before browser acquisition. The protected service has read-only home
-visibility so it can prove an enrolled user-owned managed profile without being
-able to modify that profile. Its only filesystem capability is
-`CAP_DAC_READ_SEARCH`, which permits canonical identity and ownership checks
-through mode-`0700` operator directories without granting writes. A healthy
-rerun automatically migrates only the exact prior no-capability unit or
-`ProtectHome=true` unit to this contract. Any other unit drift still fails
-closed. If the home-visibility migration was interrupted by the prior
-candidate-path rendering defect, a rerun recovers only when the unit names an
-absent, well-formed banked generation and one valid retained generation is
-uniquely proven. The retry candidate may differ from the interrupted candidate.
-Normal privilege-installer reruns retain an exact ready authority generation.
-To replace it with an explicit reviewed candidate while preserving protected
-state, set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` and run
-`pnpm install:privileges -- --apply --upgrade-lease-authority`. The upgrade
-banks the candidate immutably and switches only the exact ready service unit.
-Clients prove either the root PID 1 socket activator before service startup or
-a root peer PID in the exact
-`/system.slice/agent-browser-lease-authority.service` cgroup after startup.
-Both states bind the same protected socket before any capability is sent. The
-active service independently validates its banked executable before reading
-the request; ordinary clients do not need access to the root process's
-`/proc/<pid>/exe` link.
+The development runtime and doctor do not depend on the quarantined legacy
+Lease Authority. The reviewed one-sudo
+`pnpm install:privileges -- --apply` flow retires an exact legacy service,
+socket, executable root, and state root when present. It archives those exact
+artifacts for diagnosis without importing their state into the trusted runtime.
+Symbolic links, archive conflicts, or an incomplete stop fail closed for manual
+review. A healthy rerun performs no privileged calls.
 
 The dashboard labels this runtime `Development`, and its runtime manifest
 reports `runtimeEnvironment: "development"`. The Cooper service inventory owns
@@ -307,7 +286,7 @@ remote-view privilege installer runs first so its explicit `sudo -v` boundary
 authorizes the later dependency installation.
 Re-running the command on an already-provisioned machine uses unprivileged
 metadata and helper-capability checks and exits with zero privileged calls when
-the helper, sudoers policy, group, membership, protected lease authority, and
+the helper, sudoers policy, group, membership, legacy-authority retirement, and
 requested workstation dependencies are already ready. A repair receipt records
 the resource, prior observation, sealed action, and ready postcondition.
 
@@ -3896,16 +3875,13 @@ host-XRDP route-pool bootstrap without changing the host. Run `pnpm
 install:privileges -- --dry-run` to review the one-time privileged bootstrap,
 then `pnpm install:privileges -- --apply` from an interactive terminal. It
 creates the `agent-browser` group, installs the narrow root-owned RDP helper,
-banks the reviewed Agent Browser binary by SHA-256 under
-`/usr/local/libexec/agent-browser/lease-authority/generations`, initializes the
-absent root-private lease authority, and enables its systemd socket. A source
-checkout can set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` to the exact
-reviewed release binary. The sudoers rule remains limited to the RDP helper and
-does not expose lease signing, state mutation, bootstrap, or upgrade. A healthy
-rerun retains the installed authority generation even if another candidate is
-present. It can restart an exact stopped socket, but it refuses changed units,
-changed banked bytes, or existing invalid authority state. Open a new shell or
-run `newgrp agent-browser` after applying it. Then run
+and retires any exact legacy Lease Authority service, socket, executable root,
+and state root. Retired artifacts move to root-private diagnostic archives;
+their state is never imported into the trusted runtime. Symbolic links,
+conflicting live and archived paths, or an incomplete stop fail closed. The
+sudoers rule remains limited to the RDP helper. A healthy rerun performs no
+privileged calls. Open a new shell or run `newgrp agent-browser` after applying
+it. Then run
 `pnpm setup:rdp-guac-route-pool` only after the doctor or display inspector
 proves the existing route topology collapsed to one display, or when a
 reviewed operator override passes `--force`. It creates or updates every local

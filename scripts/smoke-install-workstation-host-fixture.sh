@@ -10,8 +10,6 @@ STATE="$WORKDIR/state"
 HELPER_DIR="$WORKDIR/usr/local/libexec/agent-browser"
 HELPER_PATH="$HELPER_DIR/agent-browser-privileged-helper"
 SUDOERS_PATH="$WORKDIR/etc/sudoers.d/agent-browser"
-AUTHORITY_SOURCE="$WORKDIR/source/agent-browser"
-AUTHORITY_STATE_ROOT="$WORKDIR/var/lib/agent-browser/lease-authority"
 APPARMOR_PROFILE_PATH="$WORKDIR/etc/apparmor.d/agent-browser-managed-chrome"
 APPARMOR_ENABLED_PATH="$WORKDIR/sys/module/apparmor/parameters/enabled"
 APPARMOR_RESTRICTION_PATH="$WORKDIR/proc/sys/kernel/apparmor_restrict_unprivileged_userns"
@@ -33,22 +31,10 @@ mkdir -p \
   "$(dirname "$APPARMOR_ENABLED_PATH")" \
   "$(dirname "$APPARMOR_RESTRICTION_PATH")" \
   "$(dirname "$APPARMOR_PROFILES_PATH")"
-mkdir -p "$(dirname "$AUTHORITY_SOURCE")"
 : >"$LOG"
 printf 'Y\n' >"$APPARMOR_ENABLED_PATH"
 printf '1\n' >"$APPARMOR_RESTRICTION_PATH"
 : >"$APPARMOR_PROFILES_PATH"
-
-cat >"$AUTHORITY_SOURCE" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-[[ "${AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP:-}" == "1" ]]
-[[ ! -e "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" ]]
-mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/store/generations"
-mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/trust/generations"
-chmod 0700 "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT"
-EOF
-chmod +x "$AUTHORITY_SOURCE"
 
 cat >"$FAKE_BIN/getent" <<'EOF'
 #!/usr/bin/env bash
@@ -122,28 +108,6 @@ if [[ "${1:-}" == "-c" \
   echo root:root:644
   exit 0
 fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" \
-   && -d "${3:-}" ]]; then
-  echo root:root:700
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT"/usr/local/libexec/agent-browser/lease-authority/generations/*/agent-browser \
-   && -x "${3:-}" ]]; then
-  echo root:root:755
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && ( "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.service" \
-     || "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.socket" ) \
-   && -f "${3:-}" ]]; then
-  echo root:root:644
-  exit 0
-fi
 exec /usr/bin/stat "$@"
 EOF
 
@@ -190,12 +154,25 @@ fi
 exit 1
 EOF
 
-for command_name in xrdp openbox-session xhost flock systemctl; do
+for command_name in xrdp openbox-session xhost flock; do
   cat >"$FAKE_BIN/$command_name" <<'EOF'
 #!/usr/bin/env bash
 exit 0
 EOF
 done
+
+cat >"$FAKE_BIN/systemctl" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  is-active|is-enabled)
+    if [[ " $* " == *" agent-browser-lease-authority."* ]]; then exit 1; fi
+    exit 0
+    ;;
+  enable|disable|stop|daemon-reload) exit 0 ;;
+esac
+exit 1
+EOF
 
 cat >"$FAKE_BIN/apparmor_parser" <<'EOF'
 #!/usr/bin/env bash
@@ -284,7 +261,6 @@ run_installer() {
     AGENT_BROWSER_FIXTURE_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_FIXTURE_OPERATOR_USER="$OPERATOR_USER" \
     AGENT_BROWSER_FIXTURE_ROOT="$WORKDIR" \
-    AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT="$AUTHORITY_STATE_ROOT" \
     AGENT_BROWSER_PRIVILEGED_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_PRIVILEGED_USER="$OPERATOR_USER" \
     AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE="$ROOT/scripts/libexec/agent-browser-privileged-helper" \
@@ -296,15 +272,18 @@ run_installer() {
     AGENT_BROWSER_APPARMOR_RESTRICTION_PATH="$APPARMOR_RESTRICTION_PATH" \
     AGENT_BROWSER_APPARMOR_PROFILES_PATH="$APPARMOR_PROFILES_PATH" \
     AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
-    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="$AUTHORITY_SOURCE" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" \
       --apply \
       --with-workstation-deps \
       --sealed-plan-digest "$(printf 'a%.0s' {1..64})" \
-      --sealed-plan-actions ensure_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies
+      --sealed-plan-actions retire_legacy_lease_authority,ensure_privileged_helper,ensure_workstation_dependencies
 }
 
-run_installer >"$WORKDIR/first.out"
+run_installer >"$WORKDIR/first.out" || {
+  cat "$WORKDIR/first.out" >&2
+  cat "$LOG" >&2
+  exit 1
+}
 
 if [[ "$(grep -c '^SUDO -v$' "$LOG" || true)" != "1" ]]; then
   echo "Expected exactly one sudo authorization on first apply." >&2

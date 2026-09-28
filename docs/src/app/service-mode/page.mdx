@@ -1486,44 +1486,15 @@ The repo includes <code>examples/service-client/</code> as a copyable software-c
 
 For a managed Guacamole route with <code>providerMode="simultaneous_view"</code>, the dashboard joins the existing Guacamole tunnel through a transient connection-sharing URL instead of opening another RDP login. The share key remains iframe-local and is never an operator handoff or a persisted evidence field.
 
-## Protected lease authority bootstrap
+## Legacy lease authority retirement
 
-<code>pnpm install:privileges -- --apply</code> includes the protected
-lease-authority first bootstrap inside its single interactive sudo boundary. It
-banks the exact reviewed Agent Browser binary by SHA-256, creates root-private
-authority state, and installs and enables fixed systemd service and socket
-units. From a source checkout, set
-<code>AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE</code> to the exact reviewed
-release binary. The passwordless helper cannot sign, mutate, bootstrap, or
-upgrade lease authority. A healthy rerun retains the selected installed
-generation. It may restart the exact stopped socket, but it refuses modified
-units, modified banked bytes, or invalid existing authority state. The service
-uses <code>ProtectHome=read-only</code> so it can prove an enrolled user-owned
-managed profile without modifying that profile. Its only filesystem capability
-is <code>CAP_DAC_READ_SEARCH</code>, which permits canonical identity and
-ownership checks through mode-<code>0700</code> operator directories without
-granting writes. A healthy rerun has guarded migrations for the exact prior
-no-capability unit and <code>ProtectHome=true</code> unit. Any other unit drift
-remains an error. A rerun can also recover the exact
-interrupted form of that migration when the unit points to any absent,
-well-formed banked generation and exactly one valid retained generation is
-proven, even when the retry uses a different candidate. It does not install
-either candidate or repeat bootstrap.
-
-Normal privilege-installer reruns retain an exact ready authority generation.
-To replace it with an explicit reviewed candidate while preserving protected
-state, set <code>AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE</code> and run
-<code>pnpm install:privileges -- --apply --upgrade-lease-authority</code>. The
-upgrade banks the candidate immutably and switches only the exact ready service
-unit.
-
-Clients prove either the root PID 1 socket activator before service startup or
-a root peer PID in the exact
-<code>/system.slice/agent-browser-lease-authority.service</code> cgroup after
-startup. Both endpoint states bind the same protected socket inode before any
-capability is sent. The active service independently validates its banked
-executable before reading the request; ordinary clients do not need access to
-the root process's <code>/proc/&lt;pid&gt;/exe</code> link.
+<code>pnpm install:privileges -- --apply</code> retires the exact legacy Lease
+Authority service, socket, executable root, and state root inside its single
+interactive sudo boundary. Present artifacts move to root-private diagnostic
+archives without importing their state into the trusted runtime. The
+passwordless helper cannot sign, mutate, bootstrap, or upgrade Lease Authority.
+Symbolic links, conflicting live and archived paths, or an incomplete stop fail
+closed for manual review. A healthy rerun performs no privileged calls.
 
 ## Operator request model
 

@@ -4324,18 +4324,9 @@ pub(crate) fn install_remote_view_privileges(
     }
 
     let helper_sha256 = sha256_bytes(REMOTE_VIEW_PRIVILEGED_HELPER.as_bytes());
-    let lease_authority_sha256 = binary_fingerprint(std::env::current_exe().ok())
-        .get("sha256")
-        .and_then(Value::as_str)
-        .ok_or_else(|| {
-            "Could not establish the lease-authority executable identity for the privileged effect plan."
-                .to_string()
-        })?
-        .to_string();
     let effect_plan = crate::workstation_convergence::PrivilegedHostEffectPlan::seal(
         with_workstation_deps,
         &helper_sha256,
-        &lease_authority_sha256,
     )?;
     let mut command = Command::new("bash");
     command

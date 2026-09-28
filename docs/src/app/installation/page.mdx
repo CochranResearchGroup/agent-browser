@@ -104,7 +104,7 @@ runs first so its explicit <code>sudo -v</code> boundary authorizes the later
 dependency installation.
 Re-running the command on an already-provisioned machine uses unprivileged
 metadata and helper-capability checks and exits with zero privileged calls when
-the helper, sudoers policy, group, membership, protected lease authority, and
+the helper, sudoers policy, group, membership, legacy-authority retirement, and
 requested workstation dependencies are already ready. A repair receipt records
 the resource, prior observation, sealed action, and ready postcondition.
 Readiness is based on the bounded helper command and capability

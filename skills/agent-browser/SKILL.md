@@ -432,7 +432,7 @@ The CLI uses Chrome/Chromium via CDP directly. For this fork, install the native
 
 Healthy privilege-installer reruns use unprivileged metadata and helper-capability
 checks and make zero privileged calls when the helper, sudoers policy, group,
-membership, protected lease authority, and requested dependencies are ready.
+membership, legacy-authority retirement, and requested dependencies are ready.
 Repair receipts record the resource, prior observation, sealed action, and
 ready postcondition.
 
@@ -1519,34 +1519,13 @@ unselected-generation cleanup. Development JSON status reports configured
 listener numbers under `ports`; service process identities remain under
 `units.*.mainPid`. Doctor prints configured ports while checking listener
 ownership separately.
-The development doctor also verifies the shared root-owned protected lease
-authority socket, including its system unit state, root ownership,
-`agent-browser` group, and mode `0660`. Do not create a development authority
-daemon. When the check fails, use the reviewed one-sudo
-`pnpm install:privileges -- --apply` bootstrap before acquisition. The
-protected service has read-only home visibility so it can prove an enrolled
-user-owned managed profile without modifying it. Its only filesystem
-capability is `CAP_DAC_READ_SEARCH`, which permits canonical identity and
-ownership checks through mode-`0700` operator directories without granting
-writes. A healthy rerun automatically migrates only the exact prior
-no-capability unit or `ProtectHome=true` unit to this contract. If the
-home-visibility migration was interrupted by the prior candidate-path
-rendering defect, a rerun recovers only when the unit names an absent,
-well-formed banked generation and one valid retained generation is uniquely
-proven. The retry candidate may differ from the interrupted candidate. Any
-other unit drift still fails closed.
-Normal privilege-installer reruns retain an exact ready authority generation.
-To replace it with an explicit reviewed candidate while preserving protected
-state, set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` and run
-`pnpm install:privileges -- --apply --upgrade-lease-authority`. The upgrade
-banks the candidate immutably and switches only the exact ready service unit.
-Clients prove either the root PID 1 socket activator before service startup or
-a root peer PID in the exact
-`/system.slice/agent-browser-lease-authority.service` cgroup after startup.
-Both states bind the same protected socket before any capability is sent. The
-active service independently validates its banked executable before reading
-the request; ordinary clients do not need access to the root process's
-`/proc/<pid>/exe` link.
+The development runtime and doctor do not depend on the quarantined legacy
+Lease Authority. The reviewed one-sudo
+`pnpm install:privileges -- --apply` flow retires an exact legacy service,
+socket, executable root, and state root when present. It archives those exact
+artifacts for diagnosis without importing their state into the trusted runtime.
+Symbolic links, archive conflicts, or an incomplete stop fail closed for manual
+review. A healthy rerun performs no privileged calls.
 Use `pnpm development-runtime:skill-sync` to publish this repository skill into
 the development pseudo-home and `pnpm development-runtime:skill-status` to
 verify its tree digest. These commands never replace the shared user-scoped
@@ -3334,17 +3313,15 @@ To auto-shutdown the daemon after a period of inactivity (useful for ephemeral/C
 AGENT_BROWSER_IDLE_TIMEOUT_MS=60000 agent-browser open example.com
 ```
 
-## Protected Lease Authority Bootstrap
+## Legacy Lease Authority Retirement
 
-`pnpm install:privileges -- --apply` includes the protected lease-authority
-first bootstrap inside its single interactive sudo boundary. It banks the exact
-reviewed Agent Browser binary by SHA-256, creates root-private authority state,
-and installs and enables fixed systemd service and socket units. From a source
-checkout, set `AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE` to the exact
-reviewed release binary. The passwordless helper cannot sign, mutate,
-bootstrap, or upgrade lease authority. A healthy rerun retains the selected
-installed generation. It may restart the exact stopped socket, but it refuses
-modified units, modified banked bytes, or invalid existing authority state.
+`pnpm install:privileges -- --apply` retires the exact legacy Lease Authority
+service, socket, executable root, and state root inside its single interactive
+sudo boundary. It moves present artifacts to root-private diagnostic archives
+without importing their state into the trusted runtime. The passwordless helper
+cannot sign, mutate, bootstrap, or upgrade Lease Authority. Symbolic links,
+conflicting live and archived paths, or an incomplete stop fail closed for
+manual review. A healthy rerun performs no privileged calls.
 
 ## Ref Lifecycle (Important)
 

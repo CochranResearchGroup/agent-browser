@@ -35,6 +35,10 @@ function check(root) {
   const runtimeOwnerSource = read('crates/agent-browser-lease-authority/src/runtime_owner.rs', root);
   const cliRuntimeOwnerSource = read('cli/src/runtime_owner_transfer.rs', root);
   const cliRuntimeAdoptionSource = read('cli/src/runtime_adoption.rs', root);
+  const privilegeInstaller = read('scripts/install-agent-browser-privileges.sh', root);
+  const privilegeConvergence = read('cli/src/workstation_convergence.rs', root);
+  const installSource = read('cli/src/install.rs', root);
+  const developmentRuntimeSource = read('scripts/lib/development-runtime.js', root);
   const focusedWorkflow = read('.github/workflows/lease-authority.yml', root) ||
     read('.github/workflows/lease-authority.yml.disabled', root);
   const cliRust = rustFilesUnder(join(root, 'cli', 'src'));
@@ -102,6 +106,16 @@ function check(root) {
   );
   requireCondition(!cliSources.some((source) => /(?:crate::native::|super(?:::\s*super)*::)service_lease_authority\b/.test(source)), 'CLI source must not import the removed native service_lease_authority owner');
   requireCondition(!cliSources.some((source) => /\bagent_browser_lease_authority\b/.test(source)), 'default CLI source must not import the quarantined Lease-authority crate');
+  const trustedPrivilegeSources = [
+    privilegeInstaller,
+    privilegeConvergence,
+    installSource,
+    developmentRuntimeSource,
+  ].join('\n');
+  requireCondition(
+    !/(?:AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE|ensure_lease_authority|upgrade_lease_authority|AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_(?:BOOTSTRAP|SERVICE)|enable\s+--now\s+agent-browser-lease-authority)/.test(trustedPrivilegeSources),
+    'trusted privilege installation must retire, never provision or dispatch, the quarantined Lease Authority',
+  );
   requireCondition(!/\bagent-browser\s*=/.test(crateManifest), 'Lease-authority crate must not depend back on the agent-browser package');
   const forbiddenDependencies = ['agent-browser-cdp', 'tokio', 'reqwest', 'image'];
   requireCondition(
@@ -165,6 +179,12 @@ function selfTest() {
     writeFileSync(join(root, 'cli/src/native/service_store.rs'), 'fn project(persistence: &RuntimeOwnerPersistenceParts) { let _ = &persistence.lifecycle_records; }\n');
     writeFileSync(join(root, 'cli/src/runtime_owner_transfer.rs'), 'pub fn removed_runtime_owner_surface() {}\n');
     writeFileSync(join(root, 'cli/src/runtime_adoption.rs'), 'pub fn removed_runtime_adoption_surface() {}\n');
+    mkdirSync(join(root, 'scripts'), { recursive: true });
+    writeFileSync(join(root, 'scripts/install-agent-browser-privileges.sh'), 'retire_legacy_lease_authority\n');
+    writeFileSync(join(root, 'cli/src/workstation_convergence.rs'), 'RetireLegacyLeaseAuthority\n');
+    writeFileSync(join(root, 'cli/src/install.rs'), 'install_remote_view_privileges\n');
+    mkdirSync(join(root, 'scripts/lib'), { recursive: true });
+    writeFileSync(join(root, 'scripts/lib/development-runtime.js'), 'export const developmentRuntime = true;\n');
     if (check(root).length) throw new Error('valid extracted fixture was rejected');
     const cases = [
       ['missing crate', 'rm-crate'], ['upward import', 'upward-import'],
@@ -189,13 +209,14 @@ function selfTest() {
       ['direct CLI registry revision access', 'direct-registry-revision'],
       ['aliased CLI registry revision access', 'aliased-registry-revision'],
       ['CLI registry literal', 'cli-registry-literal'],
+      ['live privilege authority provisioning', 'live-privilege-authority'],
     ];
     for (const [label, mutation] of cases) {
       const mutated = mkdtempSync(join(tmpdir(), `agent-browser-lease-authority-${mutation}-`));
       try {
         mkdirSync(join(mutated, 'cli/src/native'), { recursive: true });
         mkdirSync(join(mutated, 'crates/agent-browser-lease-authority/src'), { recursive: true });
-        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', 'crates/agent-browser-lease-authority/src/runtime_owner.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs', 'cli/src/native/service_store.rs', 'cli/src/runtime_owner_transfer.rs', 'cli/src/runtime_adoption.rs']) {
+        for (const path of ['Cargo.toml', 'cli/Cargo.toml', 'crates/agent-browser-lease-authority/Cargo.toml', 'crates/agent-browser-lease-authority/src/lib.rs', 'crates/agent-browser-lease-authority/src/runtime_owner.rs', '.github/workflows/lease-authority.yml', 'cli/src/native/mod.rs', 'cli/src/native/adapter.rs', 'cli/src/native/service_store.rs', 'cli/src/runtime_owner_transfer.rs', 'cli/src/runtime_adoption.rs', 'scripts/install-agent-browser-privileges.sh', 'scripts/lib/development-runtime.js', 'cli/src/workstation_convergence.rs', 'cli/src/install.rs']) {
           mkdirSync(join(mutated, path, '..'), { recursive: true });
           writeFileSync(join(mutated, path), read(path, root));
         }
@@ -237,6 +258,7 @@ function selfTest() {
         if (mutation === 'direct-registry-revision') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { state.runtime_owner_registry.revision; }\n');
         if (mutation === 'aliased-registry-revision') writeFileSync(join(mutated, 'cli/src/runtime_owner_transfer.rs'), 'pub(crate) use agent_browser_lease_authority::RuntimeOwnerRegistry;\nfn inspect(registry: &RuntimeOwnerRegistry) { registry.revision; }\n');
         if (mutation === 'cli-registry-literal') writeFileSync(join(mutated, 'cli/src/native/adapter.rs'), 'use agent_browser_lease_authority::Authority;\nfn inspect() { let registry = RuntimeOwnerRegistry { revision: 3 }; }\n');
+        if (mutation === 'live-privilege-authority') writeFileSync(join(mutated, 'scripts/lib/development-runtime.js'), 'const protectedLeaseAuthorityStatus = true;\nAGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE\n');
         if (!check(mutated).length) throw new Error(`${label} mutation was not rejected`);
       } finally { rmSync(mutated, { recursive: true, force: true }); }
     }

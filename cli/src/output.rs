@@ -6081,26 +6081,11 @@ The first host bootstrap has one sudo authorization boundary. Later route-user,
 XRDP restart, and display-access maintenance uses only the fixed passwordless
 helper and fails closed instead of prompting. Compatible installed helper
 versions are retained across byte-only bundle drift.
-The protected lease-authority service has read-only home visibility so it can
-prove an enrolled user-owned managed profile without modifying that profile.
-Its only filesystem capability is CAP_DAC_READ_SEARCH, which permits canonical
-identity and ownership checks through mode-0700 operator directories without
-granting writes. A healthy privilege-installer rerun migrates only the exact
-prior no-capability unit or ProtectHome=true unit to this contract. It can
-recover the home-visibility migration's prior interrupted form when the unit
-names any absent, well-formed banked generation and one valid retained banked
-generation is uniquely proven, even when a later retry uses a different
-candidate. Any other unit drift still fails closed.
-Normal privilege-installer reruns retain an exact ready authority generation.
-Use --upgrade-lease-authority with an explicit
-AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE to bank a reviewed replacement,
-preserve protected state, and switch only the exact ready service unit.
-Clients prove either the root PID 1 socket activator before service startup or
-a root peer PID in the exact /system.slice/agent-browser-lease-authority.service
-cgroup after startup. Both states bind the same protected socket before any
-capability is sent. The active service independently validates its banked
-executable before reading the request; ordinary clients do not need access to
-the root process's /proc/<pid>/exe link.
+The privilege installer retires an exact legacy Lease Authority service,
+socket, executable root, and state root. It archives those artifacts for
+diagnosis without importing their state into the trusted runtime. Symbolic
+links, archive conflicts, or an incomplete stop fail closed for manual review.
+A healthy rerun performs no privileged calls.
 Routine workstation reconciliation preserves live XRDP desktops and applies
 route-user credential changes at the next login without restarting sesman.
 Host preparation includes display inspection, visual-proof tools, and a

@@ -10,8 +10,14 @@ STATE_DIR="$WORKDIR/state"
 HELPER_DIR="$WORKDIR/usr/local/libexec/agent-browser"
 HELPER_PATH="$HELPER_DIR/agent-browser-privileged-helper"
 SUDOERS_PATH="$WORKDIR/etc/sudoers.d/agent-browser"
-AUTHORITY_SOURCE="$WORKDIR/source/agent-browser"
-AUTHORITY_STATE_ROOT="$WORKDIR/var/lib/agent-browser/lease-authority"
+LEGACY_ROOT="$HELPER_DIR/lease-authority"
+LEGACY_STATE="$WORKDIR/var/lib/agent-browser/lease-authority"
+LEGACY_SERVICE="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
+LEGACY_SOCKET_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.socket"
+LEGACY_SOCKET="$WORKDIR/run/agent-browser/lease-authority.sock"
+ARCHIVE_ROOT="$HELPER_DIR/retired-lease-authority"
+ARCHIVE_STATE="$WORKDIR/var/lib/agent-browser/retired-lease-authority"
+ARCHIVE_UNITS="$WORKDIR/var/lib/agent-browser/retired-lease-authority-units"
 LOG="$WORKDIR/sudo.log"
 GROUP_NAME="agent-browser-fixture-$$"
 OPERATOR_USER="${USER:-}"
@@ -21,44 +27,20 @@ if [[ -z "$OPERATOR_USER" || "$OPERATOR_USER" == "root" ]]; then
   exit 2
 fi
 
-mkdir -p "$FAKE_BIN" "$STATE_DIR" "$(dirname "$SUDOERS_PATH")" "$(dirname "$AUTHORITY_SOURCE")"
+mkdir -p "$FAKE_BIN" "$STATE_DIR" "$(dirname "$SUDOERS_PATH")"
 : >"$LOG"
-
-cat >"$AUTHORITY_SOURCE" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ "${AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP:-}" != "1" ]]; then
-  echo "fixture authority binary accepts bootstrap only" >&2
-  exit 2
-fi
-if [[ -e "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" ]]; then
-  echo "lease_authority_bootstrap_state_exists" >&2
-  exit 1
-fi
-mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/store/generations"
-mkdir -p "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT/trust/generations"
-chmod 0700 "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT"
-EOF
-chmod +x "$AUTHORITY_SOURCE"
 
 cat >"$FAKE_BIN/getent" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
-  passwd)
-    exec /usr/bin/getent "$@"
-    ;;
+  passwd) exec /usr/bin/getent "$@" ;;
   group)
     group="${2:-}"
-    if [[ -n "$group" && -f "$AGENT_BROWSER_FIXTURE_STATE/group-$group" ]]; then
-      printf '%s:x:9001:%s\n' "$group" "${AGENT_BROWSER_FIXTURE_OPERATOR_USER:-operator}"
-      exit 0
-    fi
-    exit 2
+    [[ -f "$AGENT_BROWSER_FIXTURE_STATE/group-$group" ]] || exit 2
+    printf '%s:x:9001:%s\n' "$group" "$AGENT_BROWSER_FIXTURE_OPERATOR_USER"
     ;;
-  *)
-    exec /usr/bin/getent "$@"
-    ;;
+  *) exec /usr/bin/getent "$@" ;;
 esac
 EOF
 
@@ -70,12 +52,13 @@ if [[ "${1:-}" == "-u" && "${AGENT_BROWSER_FAKE_ROOT:-0}" == "1" ]]; then
   exit 0
 fi
 if [[ "${1:-}" == "-nG" ]]; then
-  user="${2:-${USER:-}}"
-  group="${AGENT_BROWSER_FIXTURE_GROUP:-agent-browser-fixture}"
-  if [[ -f "$AGENT_BROWSER_FIXTURE_STATE/member-$user-$group" ]]; then
-    echo "$user $group"
-    exit 0
+  user="${2:-$AGENT_BROWSER_FIXTURE_OPERATOR_USER}"
+  if [[ -f "$AGENT_BROWSER_FIXTURE_STATE/member-$user-$AGENT_BROWSER_FIXTURE_GROUP" ]]; then
+    echo "$user $AGENT_BROWSER_FIXTURE_GROUP"
+  else
+    echo "$user"
   fi
+  exit 0
 fi
 exec /usr/bin/id "$@"
 EOF
@@ -83,51 +66,21 @@ EOF
 cat >"$FAKE_BIN/visudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1:-}" == "-cf" && -f "${2:-}" ]]; then
-  exit 0
-fi
-echo "fake visudo expected -cf <file>" >&2
-exit 2
+[[ "${1:-}" == "-cf" && -f "${2:-}" ]]
 EOF
 
 cat >"$FAKE_BIN/stat" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_HELPER:-}" \
-   && -x "${3:-}" ]]; then
-  echo root:root:755
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_SUDOERS:-}" \
-   && -f "${3:-}" ]]; then
-  echo root:root:440
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT" \
-   && -d "${3:-}" ]]; then
-  echo root:root:700
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT"/usr/local/libexec/agent-browser/lease-authority/generations/*/agent-browser \
-   && -x "${3:-}" ]]; then
-  echo root:root:755
-  exit 0
-fi
-if [[ "${1:-}" == "-c" \
-   && "${2:-}" == "%U:%G:%a" \
-   && ( "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.service" \
-     || "${3:-}" == "$AGENT_BROWSER_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.socket" ) \
-   && -f "${3:-}" ]]; then
-  echo root:root:644
-  exit 0
+if [[ "${1:-}" == "-c" && "${2:-}" == "%U:%G:%a" ]]; then
+  if [[ "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_HELPER:-}" && -x "${3:-}" ]]; then
+    echo root:root:755
+    exit 0
+  fi
+  if [[ "${3:-}" == "${AGENT_BROWSER_PRIVILEGED_SUDOERS:-}" && -f "${3:-}" ]]; then
+    echo root:root:440
+    exit 0
+  fi
 fi
 exec /usr/bin/stat "$@"
 EOF
@@ -136,82 +89,58 @@ cat >"$FAKE_BIN/systemctl" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 case "${1:-}" in
-  daemon-reload)
-    exit 0
+  is-active)
+    unit="${3:-${2:-}}"
+    [[ -f "$AGENT_BROWSER_FIXTURE_STATE/active-$unit" ]]
+    ;;
+  is-enabled)
+    unit="${3:-${2:-}}"
+    [[ -f "$AGENT_BROWSER_FIXTURE_STATE/enabled-$unit" ]]
+    ;;
+  disable)
+    unit="${3:-${2:-}}"
+    rm -f "$AGENT_BROWSER_FIXTURE_STATE/active-$unit" "$AGENT_BROWSER_FIXTURE_STATE/enabled-$unit"
+    if [[ "$unit" == "agent-browser-lease-authority.socket" ]]; then
+      rm -f "$AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT/run/agent-browser/lease-authority.sock"
+    fi
     ;;
   stop)
-    if [[ "${2:-}" == "agent-browser-lease-authority.service" ]]; then
-      exit 0
-    fi
+    rm -f "$AGENT_BROWSER_FIXTURE_STATE/active-${2:-}"
     ;;
-  enable)
-    if [[ "${2:-}" == "--now" && "${3:-}" == "agent-browser-lease-authority.socket" ]]; then
-      touch "$AGENT_BROWSER_FIXTURE_STATE/lease-authority-socket-enabled"
-      exit 0
-    fi
-    ;;
-  is-enabled|is-active)
-    if [[ "${2:-}" == "--quiet" && "${3:-}" == "agent-browser-lease-authority.socket" \
-       && -f "$AGENT_BROWSER_FIXTURE_STATE/lease-authority-socket-enabled" ]]; then
-      exit 0
-    fi
-    ;;
+  daemon-reload) ;;
+  *) exit 1 ;;
 esac
-exit 1
 EOF
 
 cat >"$FAKE_BIN/sudo" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'SUDO' >>"$AGENT_BROWSER_FIXTURE_LOG"
-for arg in "$@"; do
-  printf ' %q' "$arg" >>"$AGENT_BROWSER_FIXTURE_LOG"
-done
+for arg in "$@"; do printf ' %q' "$arg" >>"$AGENT_BROWSER_FIXTURE_LOG"; done
 printf '\n' >>"$AGENT_BROWSER_FIXTURE_LOG"
-
-if [[ "${1:-}" == "-v" ]]; then
-  exit 0
-fi
-
-if [[ "${1:-}" == "-n" ]]; then
-  shift
-fi
-
+if [[ "${1:-}" == "-v" ]]; then exit 0; fi
+if [[ "${1:-}" == "-n" ]]; then shift; fi
 cmd="${1:-}"
 shift || true
 case "$cmd" in
   install)
     args=()
     while [[ $# -gt 0 ]]; do
-      case "$1" in
-        -o|-g)
-          shift 2
-          ;;
-        *)
-          args+=("$1")
-          shift
-          ;;
-      esac
+      case "$1" in -o|-g) shift 2 ;; *) args+=("$1"); shift ;; esac
     done
     exec /usr/bin/install "${args[@]}"
     ;;
-  groupadd)
-    group="${*: -1}"
-    touch "$AGENT_BROWSER_FIXTURE_STATE/group-$group"
-    ;;
+  groupadd) touch "$AGENT_BROWSER_FIXTURE_STATE/group-${*: -1}" ;;
   usermod)
-    if [[ "${1:-}" == "-aG" ]]; then
-      group="${2:-}"
-      user="${3:-}"
-      touch "$AGENT_BROWSER_FIXTURE_STATE/member-$user-$group"
-    fi
+    [[ "${1:-}" == "-aG" ]]
+    touch "$AGENT_BROWSER_FIXTURE_STATE/member-${3:-}-${2:-}"
     ;;
-  visudo)
-    exec visudo "$@"
-    ;;
-  test)
-    exit 0
-    ;;
+  visudo) exec visudo "$@" ;;
+  systemctl) exec systemctl "$@" ;;
+  mv) exec /usr/bin/mv "$@" ;;
+  chmod) exec /usr/bin/chmod "$@" ;;
+  test) exit 0 ;;
+  sha256sum) exec /usr/bin/sha256sum "$@" ;;
   *)
     if [[ "$cmd" == "${AGENT_BROWSER_PRIVILEGED_HELPER:-}" && "${1:-}" == "verify-install" ]]; then
       exit 0
@@ -221,22 +150,14 @@ case "$cmd" in
 esac
 EOF
 
-chmod +x "$FAKE_BIN/getent" "$FAKE_BIN/id" "$FAKE_BIN/stat" "$FAKE_BIN/sudo" "$FAKE_BIN/systemctl" "$FAKE_BIN/visudo"
+chmod +x "$FAKE_BIN"/*
 
-run_installer_mode() {
-  local plan_actions="ensure_lease_authority,ensure_privileged_helper"
-  local arg
-  for arg in "$@"; do
-    [[ "$arg" != "--with-workstation-deps" ]] || plan_actions="$plan_actions,ensure_workstation_dependencies"
-    [[ "$arg" != "--upgrade-lease-authority" ]] || plan_actions="$plan_actions,upgrade_lease_authority"
-  done
+run_installer() {
   PATH="$FAKE_BIN:$PATH" \
     AGENT_BROWSER_FIXTURE_LOG="$LOG" \
     AGENT_BROWSER_FIXTURE_STATE="$STATE_DIR" \
     AGENT_BROWSER_FIXTURE_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_FIXTURE_OPERATOR_USER="$OPERATOR_USER" \
-    AGENT_BROWSER_FIXTURE_ROOT="$WORKDIR" \
-    AGENT_BROWSER_FIXTURE_AUTHORITY_STATE_ROOT="$AUTHORITY_STATE_ROOT" \
     AGENT_BROWSER_PRIVILEGED_GROUP="$GROUP_NAME" \
     AGENT_BROWSER_PRIVILEGED_USER="$OPERATOR_USER" \
     AGENT_BROWSER_PRIVILEGED_HELPER_SOURCE="$ROOT/scripts/libexec/agent-browser-privileged-helper" \
@@ -244,401 +165,91 @@ run_installer_mode() {
     AGENT_BROWSER_PRIVILEGED_HELPER="$HELPER_PATH" \
     AGENT_BROWSER_PRIVILEGED_SUDOERS="$SUDOERS_PATH" \
     AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT="$WORKDIR" \
-    AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE="${AUTHORITY_RUN_SOURCE:-$AUTHORITY_SOURCE}" \
     bash "$ROOT/scripts/install-agent-browser-privileges.sh" \
       --sealed-plan-digest "$(printf 'b%.0s' {1..64})" \
-      --sealed-plan-actions "$plan_actions" \
+      --sealed-plan-actions retire_legacy_lease_authority,ensure_privileged_helper \
       "$@"
 }
 
-run_installer() {
-  run_installer_mode --apply
-}
+run_installer --apply >"$WORKDIR/first.out"
+grep -q '"schemaVersion":"agent-browser.privileged-host-effect-receipt.v3"' "$WORKDIR/first.out"
+grep -q '"legacyLeaseAuthorityRetired":true' "$WORKDIR/first.out"
+[[ ! -e "$LEGACY_ROOT" && ! -e "$LEGACY_SERVICE" && ! -e "$LEGACY_SOCKET_UNIT" ]]
+[[ "$(grep -c '^SUDO -v$' "$LOG" || true)" == "1" ]]
 
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-first.out
+: >"$LOG"
+run_installer --apply >"$WORKDIR/healthy.out"
+grep -q 'No privileged calls or changes were needed.' "$WORKDIR/healthy.out"
+grep -q '"outcome":"already_ready"' "$WORKDIR/healthy.out"
+[[ ! -s "$LOG" ]]
 
-sudo_v_count="$(grep -c '^SUDO -v$' "$LOG" || true)"
-sudo_n_count="$(grep -c '^SUDO -n ' "$LOG" || true)"
-sudo_install_count="$(grep -c '^SUDO -n install ' "$LOG" || true)"
-sudo_groupadd_count="$(grep -c '^SUDO -n groupadd ' "$LOG" || true)"
-sudo_usermod_count="$(grep -c '^SUDO -n usermod ' "$LOG" || true)"
+# Compatible byte-only helper drift stays on the zero-sudo path.
+printf '\n# compatible fixture drift\n' >>"$HELPER_PATH"
+compatible_sha="$(sha256sum "$HELPER_PATH" | awk '{print $1}')"
+: >"$LOG"
+run_installer --apply >"$WORKDIR/compatible.out"
+[[ ! -s "$LOG" ]]
+[[ "$(sha256sum "$HELPER_PATH" | awk '{print $1}')" == "$compatible_sha" ]]
 
-if [[ "$sudo_v_count" != "1" ]]; then
-  echo "Expected exactly one sudo -v during first apply, found $sudo_v_count" >&2
-  cat "$LOG" >&2
-  exit 1
-fi
+# Missing runtime capabilities must refresh the helper through one explicit
+# authorization rather than taking the compatible healthy-rerun path.
+for capability in routeUserOwnedProvisioning routeSessionTermination routeUserCredentialUpdate; do
+  sed -i "s/$capability/${capability}Legacy/" "$HELPER_PATH"
+  if "$HELPER_PATH" status-json | grep -q "\"$capability\""; then
+    echo "Stale-helper fixture still advertises $capability." >&2
+    exit 1
+  fi
+  : >"$LOG"
+  run_installer --apply >"$WORKDIR/stale-$capability.out"
+  [[ "$(grep -c '^SUDO -v$' "$LOG" || true)" == "1" ]]
+  cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"
+done
 
-if [[ "$sudo_n_count" != "20" ]]; then
-  echo "Expected twenty noninteractive privileged commands after authorization, found $sudo_n_count" >&2
-  cat "$LOG" >&2
-  exit 1
-fi
+mkdir -p "$LEGACY_ROOT/generations/sha256-fixture" "$LEGACY_STATE/store" \
+  "$(dirname "$LEGACY_SERVICE")" "$(dirname "$LEGACY_SOCKET")"
+printf 'legacy-binary\n' >"$LEGACY_ROOT/generations/sha256-fixture/agent-browser"
+printf '[Service]\nExecStart=%s\n' "$LEGACY_ROOT/generations/sha256-fixture/agent-browser" >"$LEGACY_SERVICE"
+printf '[Socket]\nListenStream=%s\n' "$LEGACY_SOCKET" >"$LEGACY_SOCKET_UNIT"
+printf 'socket\n' >"$LEGACY_SOCKET"
+touch "$STATE_DIR/active-agent-browser-lease-authority.service"
+touch "$STATE_DIR/active-agent-browser-lease-authority.socket"
+touch "$STATE_DIR/enabled-agent-browser-lease-authority.socket"
+: >"$LOG"
 
-if [[ "$sudo_install_count" != "9" || "$sudo_groupadd_count" != "1" || "$sudo_usermod_count" != "1" ]]; then
-  echo "Unexpected first-apply privileged command shape." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
+run_installer --apply >"$WORKDIR/retire.out"
+grep -q '"legacyLeaseAuthorityRetired":true' "$WORKDIR/retire.out"
+[[ -d "$ARCHIVE_ROOT" && -d "$ARCHIVE_STATE" ]]
+[[ -f "$ARCHIVE_UNITS/agent-browser-lease-authority.service" ]]
+[[ -f "$ARCHIVE_UNITS/agent-browser-lease-authority.socket" ]]
+[[ ! -e "$LEGACY_ROOT" && ! -e "$LEGACY_STATE" && ! -e "$LEGACY_SOCKET" ]]
+[[ ! -e "$LEGACY_SERVICE" && ! -e "$LEGACY_SOCKET_UNIT" ]]
+grep -q '^SUDO -n systemctl disable --now agent-browser-lease-authority.socket$' "$LOG"
+grep -q '^SUDO -n systemctl stop agent-browser-lease-authority.service$' "$LOG"
 
-if [[ ! -x "$HELPER_PATH" || ! -f "$SUDOERS_PATH" ]]; then
-  echo "Fixture install did not create helper and sudoers artifacts." >&2
+mkdir -p "$LEGACY_ROOT"
+: >"$LOG"
+if run_installer --apply >"$WORKDIR/conflict.out" 2>"$WORKDIR/conflict.err"; then
+  echo "Conflicting live and archived authority roots must fail closed." >&2
   exit 1
 fi
+grep -q 'Conflicting live and archived legacy lease-authority artifacts require manual review.' "$WORKDIR/conflict.err"
+[[ ! -s "$LOG" ]]
 
-if [[ ! -d "$AUTHORITY_STATE_ROOT" \
-   || ! -f "$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service" \
-   || ! -f "$WORKDIR/etc/systemd/system/agent-browser-lease-authority.socket" ]]; then
-  echo "Fixture install did not create the protected lease-authority artifacts." >&2
+rm -rf "$LEGACY_ROOT"
+ln -s /tmp "$LEGACY_ROOT"
+: >"$LOG"
+if run_installer --apply >"$WORKDIR/symlink.out" 2>"$WORKDIR/symlink.err"; then
+  echo "Symbolic-link legacy authority paths must fail closed." >&2
   exit 1
 fi
+grep -q 'retirement refuses symbolic-link paths' "$WORKDIR/symlink.err"
+[[ ! -s "$LOG" ]]
+rm -f "$LEGACY_ROOT"
 
-AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
-if ! grep -q '^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT" \
-  || ! grep -q '^AmbientCapabilities=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT"; then
-  echo "Protected authority cannot traverse an operator-owned mode-0700 profile path." >&2
+if run_installer --apply --upgrade-lease-authority >"$WORKDIR/obsolete.out" 2>"$WORKDIR/obsolete.err"; then
+  echo "Removed lease-authority upgrade flag must be rejected." >&2
   exit 1
 fi
+grep -q 'Unknown argument: --upgrade-lease-authority' "$WORKDIR/obsolete.err"
 
-if grep -Eq 'lease-authority|bootstrap|sign|upgrade' "$SUDOERS_PATH"; then
-  echo "Lease-authority mutation unexpectedly entered the passwordless sudoers surface." >&2
-  exit 1
-fi
-
-# A compatible installed helper may differ byte-for-byte from the newly bundled
-# helper. Repeat installation must use its bounded runtime contract instead of
-# requiring an interactive root-owned file refresh solely for provenance drift.
-printf '\n# compatible fixture provenance drift\n' >>"$HELPER_PATH"
-helper_sha_before_second_apply="$(sha256sum "$HELPER_PATH" | awk '{print $1}')"
-
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-second.out
-
-sudo_v_count_after="$(grep -c '^SUDO -v$' "$LOG" || true)"
-sudo_n_count_after="$(grep -c '^SUDO -n ' "$LOG" || true)"
-sudo_install_count_after="$(grep -c '^SUDO -n install ' "$LOG" || true)"
-helper_sha_after_second_apply="$(sha256sum "$HELPER_PATH" | awk '{print $1}')"
-
-if [[ "$sudo_v_count_after" != "1" ]]; then
-  echo "Second apply must not add another sudo -v prompt boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if [[ "$sudo_n_count_after" != "$sudo_n_count" ]]; then
-  echo "Second apply must make zero privileged calls." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if [[ "$(grep -c "^SUDO -n $HELPER_PATH check$" "$LOG" || true)" != "1" \
-   || "$(grep -c "^SUDO -n $HELPER_PATH status-json$" "$LOG" || true)" != "1" ]]; then
-  echo "Second apply unexpectedly repeated privileged helper probes." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if [[ "$sudo_install_count_after" != "$sudo_install_count" ]]; then
-  echo "Second apply unexpectedly repeated privileged install commands." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if [[ "$helper_sha_after_second_apply" != "$helper_sha_before_second_apply" ]]; then
-  echo "Second apply unexpectedly replaced the compatible installed helper." >&2
-  exit 1
-fi
-
-# An older helper can satisfy the pre-owned-provisioning route-session contract
-# while lacking the operation-bound account capability. It must not take the
-# already-ready exit: refresh the bundled helper before growth can invoke it.
-sed -i \
-  's/"routeUserOwnedProvisioning"/"routeUserOwnedProvisioningLegacy"/' \
-  "$HELPER_PATH"
-if "$HELPER_PATH" status-json | grep -q 'routeUserOwnedProvisioning"'; then
-  echo "Owned-provisioning stale-helper fixture still advertises the current capability." >&2
-  exit 1
-fi
-
-sudo_v_count_before_owned_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-owned-stale.out
-sudo_v_count_after_owned_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_owned_stale_apply" != "$((sudo_v_count_before_owned_stale_apply + 1))" ]]; then
-  echo "Owned-provisioning stale helper replacement must cross one sudo -v boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
-  echo "Owned-provisioning stale helper was not refreshed from the bundled helper." >&2
-  exit 1
-fi
-
-# The exact read-only unit shipped without profile-traversal capability has one
-# guarded migration. It must retain the banked binary and authority state.
-AUTHORITY_SERVICE_UNIT="$WORKDIR/etc/systemd/system/agent-browser-lease-authority.service"
-sed -i 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' "$AUTHORITY_SERVICE_UNIT"
-sed -i '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d' "$AUTHORITY_SERVICE_UNIT"
-profile_traversal_dry_run="$(run_installer_mode --dry-run)"
-if ! grep -q 'migrate only the exact legacy no-profile-traversal service unit' \
-  <<<"$profile_traversal_dry_run"; then
-  echo "Profile-traversal migration dry run did not describe the exact migration." >&2
-  printf '%s\n' "$profile_traversal_dry_run" >&2
-  exit 1
-fi
-authority_binary_before_profile_traversal="$(sed -n 's/^ExecStart=//p' "$AUTHORITY_SERVICE_UNIT")"
-authority_sha_before_profile_traversal="$(sha256sum "$authority_binary_before_profile_traversal" | awk '{print $1}')"
-sudo_v_count_before_profile_traversal="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-profile-traversal.out
-sudo_v_count_after_profile_traversal="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_profile_traversal" != "$((sudo_v_count_before_profile_traversal + 1))" ]]; then
-  echo "Profile-traversal migration must cross one explicit sudo boundary." >&2
-  exit 1
-fi
-if ! grep -q '^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT" \
-  || ! grep -q '^AmbientCapabilities=CAP_DAC_READ_SEARCH$' "$AUTHORITY_SERVICE_UNIT"; then
-  echo "Profile-traversal migration did not publish the exact bounded capability contract." >&2
-  exit 1
-fi
-if [[ "$(sha256sum "$authority_binary_before_profile_traversal" | awk '{print $1}')" != "$authority_sha_before_profile_traversal" ]]; then
-  echo "Profile-traversal migration unexpectedly replaced the banked binary." >&2
-  exit 1
-fi
-if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Profile-traversal migration unexpectedly repeated authority bootstrap." >&2
-  exit 1
-fi
-
-# A stopped or disabled socket is a bounded service-lifecycle repair. Existing
-# authority state and its banked executable must be retained, and bootstrap
-# must never run a second time.
-AUTHORITY_BANKED_BINARY="$(sed -n 's/^ExecStart=//p' "$AUTHORITY_SERVICE_UNIT")"
-authority_sha_before_recovery="$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')"
-rm -f "$STATE_DIR/lease-authority-socket-enabled"
-sudo_v_count_before_socket_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-socket-recovery.out
-sudo_v_count_after_socket_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_socket_recovery" != "$((sudo_v_count_before_socket_recovery + 1))" ]]; then
-  echo "Socket recovery must cross exactly one explicit sudo boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Socket recovery unexpectedly repeated authority bootstrap." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
-  echo "Socket recovery unexpectedly replaced the banked authority binary." >&2
-  exit 1
-fi
-
-# The exact previous ProtectHome=true unit has one guarded migration. It must
-# preserve state and the banked binary, stop only the protected service, and
-# replace only the service unit with read-only home visibility.
-sed -i 's/^ProtectHome=read-only$/ProtectHome=true/' "$AUTHORITY_SERVICE_UNIT"
-sed -i 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' "$AUTHORITY_SERVICE_UNIT"
-sed -i '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d' "$AUTHORITY_SERVICE_UNIT"
-AUTHORITY_CANDIDATE="$WORKDIR/source/agent-browser-candidate"
-cp "$AUTHORITY_SOURCE" "$AUTHORITY_CANDIDATE"
-printf '\n# different reviewed candidate generation\n' >>"$AUTHORITY_CANDIDATE"
-chmod +x "$AUTHORITY_CANDIDATE"
-home_migration_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" run_installer_mode --dry-run)"
-if ! grep -q 'migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only' \
-  <<<"$home_migration_dry_run"; then
-  echo "Lease-authority home-visibility dry run did not describe the exact migration." >&2
-  printf '%s\n' "$home_migration_dry_run" >&2
-  exit 1
-fi
-if grep -q 'initialize absent lease-authority state exactly once' <<<"$home_migration_dry_run"; then
-  echo "Lease-authority home-visibility dry run falsely described a fresh bootstrap." >&2
-  printf '%s\n' "$home_migration_dry_run" >&2
-  exit 1
-fi
-sudo_v_count_before_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
-AUTHORITY_RUN_SOURCE="$AUTHORITY_CANDIDATE" \
-  run_installer >/tmp/agent-browser-install-privileges-clean-fixture-home-migration.out
-sudo_v_count_after_home_migration="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_home_migration" != "$((sudo_v_count_before_home_migration + 1))" ]]; then
-  echo "Lease-authority home-visibility migration must cross one explicit sudo boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if ! grep -q '^ProtectHome=read-only$' "$AUTHORITY_SERVICE_UNIT"; then
-  echo "Lease-authority home-visibility migration did not publish the exact current unit." >&2
-  exit 1
-fi
-if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Lease-authority home-visibility migration unexpectedly repeated bootstrap." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
-  echo "Lease-authority home-visibility migration unexpectedly replaced the banked binary." >&2
-  exit 1
-fi
-
-# Recover only the exact interrupted state produced by the prior migration bug:
-# the current read-only unit points at the reviewed but absent candidate, while
-# one exact valid installed generation remains available.
-candidate_sha256="$(sha256sum "$AUTHORITY_CANDIDATE" | awk '{print $1}')"
-candidate_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$candidate_sha256/agent-browser"
-sed -i "s#^ExecStart=.*#ExecStart=$candidate_banked_binary#" "$AUTHORITY_SERVICE_UNIT"
-AUTHORITY_RETRY_CANDIDATE="$WORKDIR/source/agent-browser-retry-candidate"
-cp "$AUTHORITY_CANDIDATE" "$AUTHORITY_RETRY_CANDIDATE"
-printf '\n# later reviewed retry generation\n' >>"$AUTHORITY_RETRY_CANDIDATE"
-chmod +x "$AUTHORITY_RETRY_CANDIDATE"
-retry_candidate_sha256="$(sha256sum "$AUTHORITY_RETRY_CANDIDATE" | awk '{print $1}')"
-retry_candidate_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$retry_candidate_sha256/agent-browser"
-partial_recovery_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_RETRY_CANDIDATE" run_installer_mode --dry-run)"
-if ! grep -q 'repair the exact interrupted lease-authority home-visibility migration' \
-  <<<"$partial_recovery_dry_run"; then
-  echo "Interrupted lease-authority migration dry run did not describe exact recovery." >&2
-  printf '%s\n' "$partial_recovery_dry_run" >&2
-  exit 1
-fi
-if grep -q 'initialize absent lease-authority state exactly once' <<<"$partial_recovery_dry_run"; then
-  echo "Interrupted lease-authority migration dry run falsely described a fresh bootstrap." >&2
-  exit 1
-fi
-sudo_v_count_before_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
-AUTHORITY_RUN_SOURCE="$AUTHORITY_RETRY_CANDIDATE" \
-  run_installer >/tmp/agent-browser-install-privileges-clean-fixture-partial-recovery.out
-sudo_v_count_after_partial_recovery="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_partial_recovery" != "$((sudo_v_count_before_partial_recovery + 1))" ]]; then
-  echo "Interrupted lease-authority migration recovery must cross one explicit sudo boundary." >&2
-  exit 1
-fi
-if ! grep -q "^ExecStart=$AUTHORITY_BANKED_BINARY$" "$AUTHORITY_SERVICE_UNIT"; then
-  echo "Interrupted lease-authority migration recovery did not retain the valid banked generation." >&2
-  exit 1
-fi
-if [[ -e "$candidate_banked_binary" ]]; then
-  echo "Interrupted lease-authority migration recovery unexpectedly installed the candidate binary." >&2
-  exit 1
-fi
-if [[ -e "$retry_candidate_banked_binary" ]]; then
-  echo "Interrupted lease-authority migration recovery unexpectedly installed the retry candidate binary." >&2
-  exit 1
-fi
-if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Interrupted lease-authority migration recovery unexpectedly repeated bootstrap." >&2
-  exit 1
-fi
-
-# Modified authority units are not a service-lifecycle repair. With protected
-# state present, the installer must fail without overwriting state, units, or
-# the banked binary and without invoking bootstrap again.
-cp "$AUTHORITY_SERVICE_UNIT" "$AUTHORITY_SERVICE_UNIT.fixture-backup"
-printf '\nProtectKernelTunables=false\n' >>"$AUTHORITY_SERVICE_UNIT"
-sudo_v_count_before_tamper="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if run_installer >/tmp/agent-browser-install-privileges-clean-fixture-tamper.out 2>&1; then
-  echo "Tampered authority unit unexpectedly passed installer readiness." >&2
-  exit 1
-fi
-sudo_v_count_after_tamper="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_tamper" != "$((sudo_v_count_before_tamper + 1))" ]]; then
-  echo "Tampered authority handling must cross exactly one explicit sudo boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Tampered authority handling unexpectedly repeated bootstrap." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-if [[ "$(sha256sum "$AUTHORITY_BANKED_BINARY" | awk '{print $1}')" != "$authority_sha_before_recovery" ]]; then
-  echo "Tampered authority handling unexpectedly replaced the banked binary." >&2
-  exit 1
-fi
-mv "$AUTHORITY_SERVICE_UNIT.fixture-backup" "$AUTHORITY_SERVICE_UNIT"
-
-# An installed helper without exact cgroup-v2 observation and retained-scope
-# termination is not compatible with route-keeper lifecycle. It must be
-# replaced before the runtime can claim exact XRDP ownership.
-sed -Ei \
-  's/,"routeSessionObservation":\{[^}]*\},"routeSessionTermination":\{[^}]*\}//' \
-  "$HELPER_PATH"
-if "$HELPER_PATH" status-json | grep -q 'routeSessionTermination'; then
-  echo "Stale-helper fixture still advertises route-session termination." >&2
-  exit 1
-fi
-
-sudo_v_count_before_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-stale.out
-sudo_v_count_after_stale_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-
-if [[ "$sudo_v_count_after_stale_apply" != "$((sudo_v_count_before_stale_apply + 1))" ]]; then
-  echo "Stale helper replacement must cross exactly one sudo -v boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
-  echo "Stale helper without route-session termination was not replaced." >&2
-  exit 1
-fi
-
-# A formerly compatible helper that advertises the non-PAM fields below the
-# redaction-triggering legacy object name is unsafe. It must cross the
-# intentional authorization boundary and be replaced, even when its remaining
-# capabilities still pass.
-sed -i \
-  's/"routeUserCredentialUpdate"/"routeUserPasswordUpdate"/' \
-  "$HELPER_PATH"
-if "$HELPER_PATH" status-json | grep -q 'routeUserCredentialUpdate'; then
-  echo "Legacy-helper fixture still advertises the current credential-update contract." >&2
-  exit 1
-fi
-
-sudo_v_count_before_legacy_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-run_installer >/tmp/agent-browser-install-privileges-clean-fixture-legacy.out
-sudo_v_count_after_legacy_apply="$(grep -c '^SUDO -v$' "$LOG" || true)"
-
-if [[ "$sudo_v_count_after_legacy_apply" != "$((sudo_v_count_before_legacy_apply + 1))" ]]; then
-  echo "Legacy helper replacement must cross exactly one sudo -v boundary." >&2
-  cat "$LOG" >&2
-  exit 1
-fi
-
-if ! cmp -s "$ROOT/scripts/libexec/agent-browser-privileged-helper" "$HELPER_PATH"; then
-  echo "Legacy prompt-producing helper was not replaced by the bundled helper." >&2
-  exit 1
-fi
-
-# An explicit reviewed authority upgrade banks a new immutable generation,
-# switches only an exact ready service unit, and preserves authority state.
-AUTHORITY_UPGRADE_CANDIDATE="$WORKDIR/source/agent-browser-upgrade-candidate"
-cp "$AUTHORITY_SOURCE" "$AUTHORITY_UPGRADE_CANDIDATE"
-printf '\n# explicit reviewed authority upgrade\n' >>"$AUTHORITY_UPGRADE_CANDIDATE"
-chmod +x "$AUTHORITY_UPGRADE_CANDIDATE"
-upgrade_sha256="$(sha256sum "$AUTHORITY_UPGRADE_CANDIDATE" | awk '{print $1}')"
-upgrade_banked_binary="$WORKDIR/usr/local/libexec/agent-browser/lease-authority/generations/sha256-$upgrade_sha256/agent-browser"
-upgrade_dry_run="$(AUTHORITY_RUN_SOURCE="$AUTHORITY_UPGRADE_CANDIDATE" run_installer_mode --dry-run --upgrade-lease-authority)"
-if ! grep -q 'switch the exact ready service unit to the reviewed generation' <<<"$upgrade_dry_run"; then
-  echo "Explicit authority upgrade dry run did not describe the bounded switch." >&2
-  exit 1
-fi
-sudo_v_count_before_upgrade="$(grep -c '^SUDO -v$' "$LOG" || true)"
-AUTHORITY_RUN_SOURCE="$AUTHORITY_UPGRADE_CANDIDATE" \
-  run_installer_mode --apply --upgrade-lease-authority \
-  >/tmp/agent-browser-install-privileges-clean-fixture-upgrade.out
-sudo_v_count_after_upgrade="$(grep -c '^SUDO -v$' "$LOG" || true)"
-if [[ "$sudo_v_count_after_upgrade" != "$((sudo_v_count_before_upgrade + 1))" ]]; then
-  echo "Explicit authority upgrade must cross one sudo boundary." >&2
-  exit 1
-fi
-if [[ ! -x "$upgrade_banked_binary" ]] \
-  || ! grep -q "^ExecStart=$upgrade_banked_binary$" "$AUTHORITY_SERVICE_UNIT"; then
-  echo "Explicit authority upgrade did not publish the reviewed generation." >&2
-  exit 1
-fi
-if [[ ! -d "$AUTHORITY_STATE_ROOT" ]] \
-  || [[ "$(grep -c 'AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1' "$LOG" || true)" != "1" ]]; then
-  echo "Explicit authority upgrade did not preserve existing protected state." >&2
-  exit 1
-fi
-if [[ ! -x "$AUTHORITY_BANKED_BINARY" ]]; then
-  echo "Explicit authority upgrade removed the retained rollback generation." >&2
-  exit 1
-fi
-
-echo "Install privileges clean-fixture smoke passed"
+echo "Privileged helper clean-install and legacy-authority retirement fixture passed"

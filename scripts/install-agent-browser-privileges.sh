@@ -3,7 +3,6 @@ set -euo pipefail
 
 APPLY=0
 WITH_WORKSTATION_DEPS=0
-UPGRADE_LEASE_AUTHORITY=0
 SEALED_PLAN_DIGEST=""
 SEALED_PLAN_ACTIONS=""
 GROUP_NAME="${AGENT_BROWSER_PRIVILEGED_GROUP:-agent-browser}"
@@ -14,15 +13,15 @@ HELPER_PATH="${AGENT_BROWSER_PRIVILEGED_HELPER:-$HELPER_DIR/agent-browser-privil
 EXPECTED_HELPER_SHA256="${AGENT_BROWSER_PRIVILEGED_HELPER_SHA256:-}"
 SUDOERS_PATH="${AGENT_BROWSER_PRIVILEGED_SUDOERS:-/etc/sudoers.d/agent-browser}"
 INSTALL_FIXTURE_ROOT="${AGENT_BROWSER_INSTALL_PRIVILEGES_FIXTURE_ROOT:-}"
-LEASE_AUTHORITY_BINARY_SOURCE="${AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE:-}"
 LEASE_AUTHORITY_ROOT="$INSTALL_FIXTURE_ROOT/usr/local/libexec/agent-browser/lease-authority"
-LEASE_AUTHORITY_GENERATIONS_ROOT="$LEASE_AUTHORITY_ROOT/generations"
 LEASE_AUTHORITY_STATE_PARENT="$INSTALL_FIXTURE_ROOT/var/lib/agent-browser"
 LEASE_AUTHORITY_STATE_ROOT="$LEASE_AUTHORITY_STATE_PARENT/lease-authority"
 LEASE_AUTHORITY_SERVICE_UNIT="$INSTALL_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.service"
 LEASE_AUTHORITY_SOCKET_UNIT="$INSTALL_FIXTURE_ROOT/etc/systemd/system/agent-browser-lease-authority.socket"
-LEASE_AUTHORITY_SYSTEMD_UNIT_DIR="$(dirname "$LEASE_AUTHORITY_SERVICE_UNIT")"
 LEASE_AUTHORITY_SOCKET_PATH="$INSTALL_FIXTURE_ROOT/run/agent-browser/lease-authority.sock"
+LEASE_AUTHORITY_ARCHIVE_ROOT="$INSTALL_FIXTURE_ROOT/usr/local/libexec/agent-browser/retired-lease-authority"
+LEASE_AUTHORITY_STATE_ARCHIVE_ROOT="$LEASE_AUTHORITY_STATE_PARENT/retired-lease-authority"
+LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT="$LEASE_AUTHORITY_STATE_PARENT/retired-lease-authority-units"
 APPARMOR_PROFILE_PATH="${AGENT_BROWSER_CHROME_APPARMOR_PROFILE:-/etc/apparmor.d/agent-browser-managed-chrome}"
 APPARMOR_PROFILE_NAME="agent-browser-managed-chrome"
 APPARMOR_ENABLED_PATH="${AGENT_BROWSER_APPARMOR_ENABLED_PATH:-/sys/module/apparmor/parameters/enabled}"
@@ -30,28 +29,23 @@ APPARMOR_RESTRICTION_PATH="${AGENT_BROWSER_APPARMOR_RESTRICTION_PATH:-/proc/sys/
 APPARMOR_PROFILES_PATH="${AGENT_BROWSER_APPARMOR_PROFILES_PATH:-/sys/kernel/security/apparmor/profiles}"
 APPARMOR_TMP=""
 SUDOERS_TMP=""
-LEASE_AUTHORITY_SERVICE_TMP=""
-LEASE_AUTHORITY_SOCKET_TMP=""
 
 cleanup_temp_files() {
   [[ -z "$APPARMOR_TMP" ]] || rm -f "$APPARMOR_TMP"
   [[ -z "$SUDOERS_TMP" ]] || rm -f "$SUDOERS_TMP"
-  [[ -z "$LEASE_AUTHORITY_SERVICE_TMP" ]] || rm -f "$LEASE_AUTHORITY_SERVICE_TMP"
-  [[ -z "$LEASE_AUTHORITY_SOCKET_TMP" ]] || rm -f "$LEASE_AUTHORITY_SOCKET_TMP"
 }
 trap cleanup_temp_files EXIT
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--upgrade-lease-authority] [--sealed-plan-digest <sha256>] [--sealed-plan-actions <actions>]
+Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--sealed-plan-digest <sha256>] [--sealed-plan-actions <actions>]
 
-Installs the narrow root-owned helper and protected lease-authority service.
+Installs the narrow root-owned helper and retires any exact legacy protected
+lease-authority service without importing its state into the trusted runtime.
 The helper is protected by a sudoers rule for the agent-browser group so later
 route-user and display-access maintenance can run without repeated prompts.
 The optional workstation dependency phase is Ubuntu 24.04 amd64 only and
 installs Docker, Compose, XRDP, XorgXRDP, Openbox, and required host tools.
-The upgrade flag replaces only an exact ready protected authority with the
-explicit reviewed binary source while preserving protected authority state.
 EOF
 }
 
@@ -67,9 +61,6 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     --with-workstation-deps)
       WITH_WORKSTATION_DEPS=1
-      ;;
-    --upgrade-lease-authority)
-      UPGRADE_LEASE_AUTHORITY=1
       ;;
     --sealed-plan-digest)
       [[ "$#" -ge 2 ]] || { echo "Missing value for --sealed-plan-digest" >&2; exit 2; }
@@ -94,12 +85,9 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-EXPECTED_PLAN_ACTIONS="ensure_lease_authority,ensure_privileged_helper"
+EXPECTED_PLAN_ACTIONS="retire_legacy_lease_authority,ensure_privileged_helper"
 if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
   EXPECTED_PLAN_ACTIONS="$EXPECTED_PLAN_ACTIONS,ensure_workstation_dependencies"
-fi
-if [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]]; then
-  EXPECTED_PLAN_ACTIONS="$EXPECTED_PLAN_ACTIONS,upgrade_lease_authority"
 fi
 if [[ "$APPLY" == "1" ]]; then
   if [[ ! "$SEALED_PLAN_DIGEST" =~ ^[a-f0-9]{64}$ ]]; then
@@ -113,25 +101,25 @@ if [[ "$APPLY" == "1" ]]; then
 fi
 
 EFFECT_HELPER_READY=false
-EFFECT_LEASE_AUTHORITY_READY=false
+EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED=false
 EFFECT_WORKSTATION_DEPENDENCIES_READY=true
 EFFECT_PRIOR_OBSERVATION="repair_required"
 
 observe_effect_postconditions() {
   EFFECT_HELPER_READY=false
-  EFFECT_LEASE_AUTHORITY_READY=false
+  EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED=false
   EFFECT_WORKSTATION_DEPENDENCIES_READY=true
   if helper_contract_ready; then
     EFFECT_HELPER_READY=true
   fi
-  if lease_authority_contract_ready; then
-    EFFECT_LEASE_AUTHORITY_READY=true
+  if legacy_lease_authority_retired; then
+    EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED=true
   fi
   if [[ "$WITH_WORKSTATION_DEPS" == "1" ]] && ! workstation_deps_ready; then
     EFFECT_WORKSTATION_DEPENDENCIES_READY=false
   fi
   [[ "$EFFECT_HELPER_READY" == "true" \
-    && "$EFFECT_LEASE_AUTHORITY_READY" == "true" \
+    && "$EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED" == "true" \
     && "$EFFECT_WORKSTATION_DEPENDENCIES_READY" == "true" ]]
 }
 
@@ -139,9 +127,9 @@ emit_effect_receipt() {
   local outcome="$1"
   local action="apply_sealed_plan"
   [[ "$outcome" == "already_ready" ]] && action="none"
-  printf 'AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT={"schemaVersion":"agent-browser.privileged-host-effect-receipt.v2","planDigest":"%s","resource":"agent-browser-host-privileges","actions":"%s","priorObservation":"%s","action":"%s","outcome":"%s","postcondition":"ready","helperReady":%s,"leaseAuthorityReady":%s,"workstationDependenciesReady":%s}\n' \
+  printf 'AGENT_BROWSER_PRIVILEGED_EFFECT_RECEIPT={"schemaVersion":"agent-browser.privileged-host-effect-receipt.v3","planDigest":"%s","resource":"agent-browser-host-privileges","actions":"%s","priorObservation":"%s","action":"%s","outcome":"%s","postcondition":"ready","helperReady":%s,"legacyLeaseAuthorityRetired":%s,"workstationDependenciesReady":%s}\n' \
     "$SEALED_PLAN_DIGEST" "$SEALED_PLAN_ACTIONS" "$EFFECT_PRIOR_OBSERVATION" "$action" "$outcome" \
-    "$EFFECT_HELPER_READY" "$EFFECT_LEASE_AUTHORITY_READY" "$EFFECT_WORKSTATION_DEPENDENCIES_READY"
+    "$EFFECT_HELPER_READY" "$EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED" "$EFFECT_WORKSTATION_DEPENDENCIES_READY"
 }
 
 if [[ -z "$OPERATOR_USER" || "$OPERATOR_USER" == "root" ]]; then
@@ -174,30 +162,6 @@ if [[ ! -f "$HELPER_SOURCE" ]]; then
   exit 1
 fi
 
-if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
-  if [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" ]]; then
-    INSTALLED_LEASE_AUTHORITY_BINARY="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-    if [[ -x "$INSTALLED_LEASE_AUTHORITY_BINARY" ]]; then
-      LEASE_AUTHORITY_BINARY_SOURCE="$INSTALLED_LEASE_AUTHORITY_BINARY"
-    fi
-  fi
-  if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" && -x "cli/target/release/agent-browser" ]]; then
-    LEASE_AUTHORITY_BINARY_SOURCE="cli/target/release/agent-browser"
-  elif [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]] && command -v agent-browser >/dev/null 2>&1; then
-    LEASE_AUTHORITY_BINARY_SOURCE="$(command -v agent-browser)"
-  fi
-fi
-if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" || ! -x "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
-  echo "Set AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE to an executable reviewed agent-browser binary." >&2
-  exit 1
-fi
-LEASE_AUTHORITY_BINARY_SHA256="$(sha256sum "$LEASE_AUTHORITY_BINARY_SOURCE" | awk '{print $1}')"
-if [[ ! "$LEASE_AUTHORITY_BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
-  echo "Lease-authority binary SHA-256 is invalid." >&2
-  exit 1
-fi
-LEASE_AUTHORITY_GENERATION="sha256-$LEASE_AUTHORITY_BINARY_SHA256"
-LEASE_AUTHORITY_BANKED_BINARY="$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION/agent-browser"
 if [[ -z "$EXPECTED_HELPER_SHA256" ]]; then
   EXPECTED_HELPER_SHA256="$(sha256sum "$HELPER_SOURCE" | awk '{print $1}')"
 fi
@@ -217,157 +181,45 @@ expected_sudoers_content() {
 EOF
 }
 
-lease_authority_service_unit_content() {
-  local banked_binary="${1:-$LEASE_AUTHORITY_BANKED_BINARY}"
-  cat <<EOF
-[Unit]
-Description=Agent Browser protected lease authority
-Requires=agent-browser-lease-authority.socket
-After=agent-browser-lease-authority.socket
-
-[Service]
-Type=simple
-ExecStart=$banked_binary
-Environment=AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_SERVICE=1
-User=root
-Group=root
-NoNewPrivileges=true
-CapabilityBoundingSet=CAP_DAC_READ_SEARCH
-AmbientCapabilities=CAP_DAC_READ_SEARCH
-DevicePolicy=closed
-IPAddressDeny=any
-LockPersonality=true
-MemoryDenyWriteExecute=true
-MemoryMax=256M
-PrivateDevices=true
-PrivateTmp=true
-ProtectHome=read-only
-ProtectControlGroups=true
-ProtectKernelModules=true
-ProtectKernelTunables=true
-ProtectSystem=strict
-ReadWritePaths=$LEASE_AUTHORITY_STATE_ROOT
-RestrictAddressFamilies=AF_UNIX
-RestrictSUIDSGID=true
-SystemCallArchitectures=native
-TasksMax=16
-UMask=0077
-
-[Install]
-WantedBy=multi-user.target
-EOF
+legacy_lease_authority_retired() {
+  [[ ! -e "$LEASE_AUTHORITY_SERVICE_UNIT" && ! -L "$LEASE_AUTHORITY_SERVICE_UNIT" ]] || return 1
+  [[ ! -e "$LEASE_AUTHORITY_SOCKET_UNIT" && ! -L "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
+  [[ ! -e "$LEASE_AUTHORITY_ROOT" && ! -L "$LEASE_AUTHORITY_ROOT" ]] || return 1
+  [[ ! -e "$LEASE_AUTHORITY_STATE_ROOT" && ! -L "$LEASE_AUTHORITY_STATE_ROOT" ]] || return 1
+  [[ ! -e "$LEASE_AUTHORITY_SOCKET_PATH" && ! -L "$LEASE_AUTHORITY_SOCKET_PATH" ]] || return 1
+  ! systemctl is-active --quiet agent-browser-lease-authority.service 2>/dev/null || return 1
+  ! systemctl is-active --quiet agent-browser-lease-authority.socket 2>/dev/null || return 1
+  ! systemctl is-enabled --quiet agent-browser-lease-authority.socket 2>/dev/null || return 1
 }
 
-lease_authority_legacy_home_protection_service_unit_content() {
-  lease_authority_legacy_no_profile_traversal_service_unit_content \
-    "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
-    | sed 's/^ProtectHome=read-only$/ProtectHome=true/'
+path_present() {
+  [[ -e "$1" || -L "$1" ]]
 }
 
-lease_authority_legacy_no_profile_traversal_service_unit_content() {
-  lease_authority_service_unit_content "${1:-$LEASE_AUTHORITY_BANKED_BINARY}" \
-    | sed 's/^CapabilityBoundingSet=CAP_DAC_READ_SEARCH$/CapabilityBoundingSet=/' \
-    | sed '/^AmbientCapabilities=CAP_DAC_READ_SEARCH$/d'
+legacy_lease_authority_symlink_present() {
+  local path
+  for path in \
+    "$LEASE_AUTHORITY_ROOT" \
+    "$LEASE_AUTHORITY_STATE_ROOT" \
+    "$LEASE_AUTHORITY_SERVICE_UNIT" \
+    "$LEASE_AUTHORITY_SOCKET_UNIT" \
+    "$LEASE_AUTHORITY_SOCKET_PATH" \
+    "$LEASE_AUTHORITY_ARCHIVE_ROOT" \
+    "$LEASE_AUTHORITY_STATE_ARCHIVE_ROOT" \
+    "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT" \
+    "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.service" \
+    "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.socket"; do
+    [[ ! -L "$path" ]] || return 0
+  done
+  return 1
 }
 
-lease_authority_socket_unit_content() {
-  cat <<EOF
-[Unit]
-Description=Agent Browser protected lease authority socket
-
-[Socket]
-ListenStream=$LEASE_AUTHORITY_SOCKET_PATH
-SocketUser=root
-SocketGroup=$GROUP_NAME
-SocketMode=0660
-RemoveOnStop=true
-
-[Install]
-WantedBy=sockets.target
-EOF
-}
-
-lease_authority_banked_binary_integrity_ready() {
-  local banked_binary="$1"
-  local installed_generation installed_sha256
-  [[ "$(dirname "$(dirname "$banked_binary")")" == "$LEASE_AUTHORITY_GENERATIONS_ROOT" ]] || return 1
-  [[ "$(basename "$banked_binary")" == "agent-browser" ]] || return 1
-  installed_generation="$(basename "$(dirname "$banked_binary")")"
-  [[ "$installed_generation" =~ ^sha256-[a-f0-9]{64}$ ]] || return 1
-  [[ -x "$banked_binary" && ! -L "$banked_binary" ]] || return 1
-  installed_sha256="$(sha256sum "$banked_binary" 2>/dev/null | awk '{print $1}')"
-  [[ "sha256-$installed_sha256" == "$installed_generation" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$banked_binary" 2>/dev/null)" == "root:root:755" ]] || return 1
-}
-
-lease_authority_artifacts_integrity_ready() {
-  [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
-  local installed_binary
-  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  lease_authority_banked_binary_integrity_ready "$installed_binary" || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
-}
-
-lease_authority_artifacts_ready() {
-  lease_authority_artifacts_integrity_ready || return 1
-  local installed_binary
-  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  lease_authority_service_unit_content "$installed_binary" | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
-  lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
-}
-
-lease_authority_legacy_home_protection_ready() {
-  lease_authority_artifacts_integrity_ready || return 1
-  local installed_binary
-  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  lease_authority_legacy_home_protection_service_unit_content "$installed_binary" \
-    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
-  lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
-}
-
-lease_authority_legacy_no_profile_traversal_ready() {
-  lease_authority_artifacts_integrity_ready || return 1
-  local installed_binary
-  installed_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  lease_authority_legacy_no_profile_traversal_service_unit_content "$installed_binary" \
-    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
-  lease_authority_socket_unit_content | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
-}
-
-lease_authority_interrupted_home_migration_recovery_binary() {
-  [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" && -r "$LEASE_AUTHORITY_SOCKET_UNIT" ]] || return 1
-  local interrupted_binary interrupted_generation
-  interrupted_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  [[ "$(dirname "$(dirname "$interrupted_binary")")" == "$LEASE_AUTHORITY_GENERATIONS_ROOT" ]] || return 1
-  [[ "$(basename "$interrupted_binary")" == "agent-browser" ]] || return 1
-  interrupted_generation="$(basename "$(dirname "$interrupted_binary")")"
-  [[ "$interrupted_generation" =~ ^sha256-[a-f0-9]{64}$ ]] || return 1
-  [[ ! -e "$interrupted_binary" && ! -L "$interrupted_binary" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_STATE_ROOT" 2>/dev/null)" == "root:root:700" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SERVICE_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
-  [[ "$(stat -c '%U:%G:%a' "$LEASE_AUTHORITY_SOCKET_UNIT" 2>/dev/null)" == "root:root:644" ]] || return 1
-  lease_authority_service_unit_content "$interrupted_binary" \
-    | diff -q - "$LEASE_AUTHORITY_SERVICE_UNIT" >/dev/null 2>&1 || return 1
-  lease_authority_socket_unit_content \
-    | diff -q - "$LEASE_AUTHORITY_SOCKET_UNIT" >/dev/null 2>&1 || return 1
-
-  local generation_entries=()
-  while IFS= read -r -d '' entry; do
-    generation_entries+=("$entry")
-  done < <(find "$LEASE_AUTHORITY_GENERATIONS_ROOT" -mindepth 1 -maxdepth 1 -print0 2>/dev/null)
-  [[ "${#generation_entries[@]}" == "1" ]] || return 1
-
-  local retained_binary="${generation_entries[0]}/agent-browser"
-  lease_authority_banked_binary_integrity_ready "$retained_binary" || return 1
-  printf '%s\n' "$retained_binary"
-}
-
-lease_authority_contract_ready() {
-  lease_authority_artifacts_ready || return 1
-  systemctl is-enabled --quiet agent-browser-lease-authority.socket || return 1
-  systemctl is-active --quiet agent-browser-lease-authority.socket || return 1
+legacy_lease_authority_retirement_conflict() {
+  ! path_present "$LEASE_AUTHORITY_ROOT" || ! path_present "$LEASE_AUTHORITY_ARCHIVE_ROOT" || return 0
+  ! path_present "$LEASE_AUTHORITY_STATE_ROOT" || ! path_present "$LEASE_AUTHORITY_STATE_ARCHIVE_ROOT" || return 0
+  ! path_present "$LEASE_AUTHORITY_SERVICE_UNIT" || ! path_present "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.service" || return 0
+  ! path_present "$LEASE_AUTHORITY_SOCKET_UNIT" || ! path_present "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.socket" || return 0
+  return 1
 }
 
 operator_home() {
@@ -585,18 +437,10 @@ healthy_cold_start_ready() {
   getent group "$GROUP_NAME" >/dev/null 2>&1 || return 1
   id -nG "$OPERATOR_USER" 2>/dev/null | tr ' ' '\n' | grep -Fx "$GROUP_NAME" >/dev/null || return 1
   helper_contract_ready_unprivileged || return 1
-  lease_authority_contract_ready || return 1
+  legacy_lease_authority_retired || return 1
   if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
     workstation_deps_ready_unprivileged || return 1
   fi
-}
-
-lease_authority_upgrade_needed() {
-  [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]] || return 1
-  lease_authority_contract_ready || return 1
-  local installed_authority_binary
-  installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  [[ "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]
 }
 
 helper_contract_ready() {
@@ -676,10 +520,12 @@ print_install_status() {
     echo "  passwordless helper contract: not ready"
   fi
 
-  if lease_authority_contract_ready; then
-    echo "  protected lease authority: ready"
+  if legacy_lease_authority_retired; then
+    echo "  legacy protected lease authority: retired"
+  elif legacy_lease_authority_retirement_conflict; then
+    echo "  legacy protected lease authority: retirement archive conflict"
   else
-    echo "  protected lease authority: not ready"
+    echo "  legacy protected lease authority: retirement required"
   fi
 
   if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
@@ -730,9 +576,6 @@ Operator user: $OPERATOR_USER
 Helper source: $HELPER_SOURCE
 Installed helper: $HELPER_PATH
 Sudoers file: $SUDOERS_PATH
-Lease-authority source: $LEASE_AUTHORITY_BINARY_SOURCE
-Lease-authority generation: $LEASE_AUTHORITY_GENERATION
-Lease-authority state: $LEASE_AUTHORITY_STATE_ROOT
 
 Would run with one privileged authorization:
   sudo install -d -o root -g root -m 0755 $HELPER_DIR
@@ -741,47 +584,16 @@ Would run with one privileged authorization:
   sudo usermod -aG $GROUP_NAME $OPERATOR_USER
   sudo install validated sudoers policy at $SUDOERS_PATH
 EOF
-  if lease_authority_contract_ready; then
-    installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-    if [[ "$UPGRADE_LEASE_AUTHORITY" == "1" && "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]; then
-      echo "  sudo bank reviewed lease-authority generation at $LEASE_AUTHORITY_BANKED_BINARY"
-      echo "  sudo stop only agent-browser-lease-authority.service"
-      echo "  preserve protected authority state at $LEASE_AUTHORITY_STATE_ROOT"
-      echo "  sudo switch the exact ready service unit to the reviewed generation"
-      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
-    else
-      echo "  retain the exact ready protected lease-authority contract"
-    fi
-  elif [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
-    if lease_authority_legacy_home_protection_ready; then
-      installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-      echo "  sudo systemctl stop agent-browser-lease-authority.service"
-      echo "  sudo migrate only the exact legacy ProtectHome=true service unit to ProtectHome=read-only"
-      echo "  retain protected authority state and banked binary at $installed_authority_binary"
-      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
-    elif lease_authority_legacy_no_profile_traversal_ready; then
-      installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-      echo "  sudo systemctl stop agent-browser-lease-authority.service"
-      echo "  sudo migrate only the exact legacy no-profile-traversal service unit"
-      echo "  retain protected authority state and banked binary at $installed_authority_binary"
-      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
-    elif retained_authority_binary="$(lease_authority_interrupted_home_migration_recovery_binary)"; then
-      echo "  sudo repair the exact interrupted lease-authority home-visibility migration"
-      echo "  retain protected authority state and banked binary at $retained_authority_binary"
-      echo "  sudo systemctl enable --now agent-browser-lease-authority.socket"
-    elif lease_authority_artifacts_ready; then
-      echo "  retain protected authority state, units, and banked binary"
-      echo "  sudo recover the exact protected lease-authority socket lifecycle"
-    else
-      echo "  refuse untrusted existing lease-authority artifacts without mutation"
-    fi
+  if legacy_lease_authority_retired; then
+    echo "  retain the absence of the legacy protected lease-authority runtime"
+  elif legacy_lease_authority_retirement_conflict; then
+    echo "  refuse conflicting live and archived legacy lease-authority artifacts without mutation"
   else
-    cat <<EOF
-  sudo install immutable lease-authority binary at $LEASE_AUTHORITY_BANKED_BINARY
-  sudo install fixed systemd units at $LEASE_AUTHORITY_SERVICE_UNIT and $LEASE_AUTHORITY_SOCKET_UNIT
-  sudo initialize absent lease-authority state exactly once
-  sudo systemctl enable --now agent-browser-lease-authority.socket
-EOF
+    echo "  sudo disable and stop only agent-browser-lease-authority.service and .socket"
+    echo "  sudo archive exact legacy units under $LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT"
+    echo "  sudo archive the exact legacy executable root at $LEASE_AUTHORITY_ARCHIVE_ROOT"
+    echo "  sudo archive legacy state diagnostically at $LEASE_AUTHORITY_STATE_ARCHIVE_ROOT"
+    echo "  preserve no live lease-authority unit, socket, executable root, or state root"
   fi
   if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
     echo "  sudo apt-get update"
@@ -803,10 +615,10 @@ EOF
   exit 0
 fi
 
-if healthy_cold_start_ready && ! lease_authority_upgrade_needed; then
+if healthy_cold_start_ready; then
   EFFECT_PRIOR_OBSERVATION="ready"
   EFFECT_HELPER_READY=true
-  EFFECT_LEASE_AUTHORITY_READY=true
+  EFFECT_LEGACY_LEASE_AUTHORITY_RETIRED=true
   EFFECT_WORKSTATION_DEPENDENCIES_READY=true
   echo "agent-browser privileged helper is already ready."
   echo "No privileged calls or changes were needed."
@@ -816,6 +628,16 @@ fi
 
 if ! command -v visudo >/dev/null 2>&1; then
   echo "visudo is required to validate the sudoers policy." >&2
+  exit 1
+fi
+
+if legacy_lease_authority_symlink_present; then
+  echo "Legacy lease-authority retirement refuses symbolic-link paths; manual review is required." >&2
+  exit 1
+fi
+
+if legacy_lease_authority_retirement_conflict; then
+  echo "Conflicting live and archived legacy lease-authority artifacts require manual review." >&2
   exit 1
 fi
 
@@ -871,10 +693,6 @@ fi
 
 SUDOERS_TMP="$(mktemp)"
 expected_sudoers_content >"$SUDOERS_TMP"
-LEASE_AUTHORITY_SERVICE_TMP="$(mktemp)"
-lease_authority_service_unit_content >"$LEASE_AUTHORITY_SERVICE_TMP"
-LEASE_AUTHORITY_SOCKET_TMP="$(mktemp)"
-lease_authority_socket_unit_content >"$LEASE_AUTHORITY_SOCKET_TMP"
 
 sudo -n visudo -cf "$SUDOERS_TMP" >/dev/null
 sudo -n install -d -o root -g root -m 0755 "$HELPER_DIR"
@@ -882,79 +700,31 @@ sudo -n install -o root -g root -m 0755 "$HELPER_SOURCE" "$HELPER_PATH"
 sudo -n groupadd --force "$GROUP_NAME"
 sudo -n usermod -aG "$GROUP_NAME" "$OPERATOR_USER"
 
-if lease_authority_contract_ready && [[ "$UPGRADE_LEASE_AUTHORITY" == "1" ]]; then
-  installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-  if [[ "$installed_authority_binary" != "$LEASE_AUTHORITY_BANKED_BINARY" ]]; then
-    if [[ -e "$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION" ]]; then
-      lease_authority_banked_binary_integrity_ready "$LEASE_AUTHORITY_BANKED_BINARY" || {
-        echo "Reviewed lease-authority generation already exists with invalid integrity." >&2
-        exit 1
-      }
-    else
-      sudo -n install -d -o root -g root -m 0755 "$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION"
-      sudo -n install -o root -g root -m 0755 "$LEASE_AUTHORITY_BINARY_SOURCE" "$LEASE_AUTHORITY_BANKED_BINARY"
+if ! legacy_lease_authority_retired; then
+  sudo -n systemctl disable --now agent-browser-lease-authority.socket >/dev/null 2>&1 || true
+  sudo -n systemctl stop agent-browser-lease-authority.service >/dev/null 2>&1 || true
+  if [[ -e "$LEASE_AUTHORITY_SERVICE_UNIT" || -L "$LEASE_AUTHORITY_SERVICE_UNIT" \
+     || -e "$LEASE_AUTHORITY_SOCKET_UNIT" || -L "$LEASE_AUTHORITY_SOCKET_UNIT" ]]; then
+    sudo -n install -d -o root -g root -m 0700 "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT"
+    if [[ -e "$LEASE_AUTHORITY_SERVICE_UNIT" || -L "$LEASE_AUTHORITY_SERVICE_UNIT" ]]; then
+      sudo -n mv "$LEASE_AUTHORITY_SERVICE_UNIT" "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.service"
     fi
-    sudo -n systemctl stop agent-browser-lease-authority.service
-    sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
-    sudo -n systemctl daemon-reload
-    sudo -n systemctl enable --now agent-browser-lease-authority.socket
-    lease_authority_contract_ready || {
-      echo "Protected lease-authority upgrade did not pass exact readiness verification." >&2
-      exit 1
-    }
+    if [[ -e "$LEASE_AUTHORITY_SOCKET_UNIT" || -L "$LEASE_AUTHORITY_SOCKET_UNIT" ]]; then
+      sudo -n mv "$LEASE_AUTHORITY_SOCKET_UNIT" "$LEASE_AUTHORITY_UNIT_ARCHIVE_ROOT/agent-browser-lease-authority.socket"
+    fi
   fi
-fi
-
-if ! lease_authority_contract_ready; then
-  if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
-    if ! lease_authority_artifacts_ready; then
-      if lease_authority_legacy_home_protection_ready; then
-        installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-        lease_authority_service_unit_content "$installed_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
-        sudo -n systemctl stop agent-browser-lease-authority.service
-        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
-      elif lease_authority_legacy_no_profile_traversal_ready; then
-        installed_authority_binary="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-        lease_authority_service_unit_content "$installed_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
-        sudo -n systemctl stop agent-browser-lease-authority.service
-        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
-      elif retained_authority_binary="$(lease_authority_interrupted_home_migration_recovery_binary)"; then
-        lease_authority_service_unit_content "$retained_authority_binary" >"$LEASE_AUTHORITY_SERVICE_TMP"
-        sudo -n systemctl stop agent-browser-lease-authority.service
-        sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
-      else
-        echo "Existing lease-authority state has untrusted installation artifacts and will not be overwritten." >&2
-        exit 1
-      fi
-    fi
-    sudo -n systemctl daemon-reload
-    sudo -n systemctl enable --now agent-browser-lease-authority.socket
-    lease_authority_contract_ready || {
-      echo "Protected lease-authority socket did not recover to exact readiness." >&2
-      exit 1
-    }
-  else
-    sudo -n install -d -o root -g root -m 0755 "$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION"
-    sudo -n install -o root -g root -m 0755 "$LEASE_AUTHORITY_BINARY_SOURCE" "$LEASE_AUTHORITY_BANKED_BINARY"
-    sudo -n install -d -o root -g root -m 0755 "$LEASE_AUTHORITY_STATE_PARENT"
-    sudo -n install -d -o root -g root -m 0755 "$LEASE_AUTHORITY_SYSTEMD_UNIT_DIR"
-    sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SERVICE_TMP" "$LEASE_AUTHORITY_SERVICE_UNIT"
-    sudo -n install -o root -g root -m 0644 "$LEASE_AUTHORITY_SOCKET_TMP" "$LEASE_AUTHORITY_SOCKET_UNIT"
-    OPERATOR_GROUP_ID="$(getent group "$GROUP_NAME" | awk -F: '{print $3}')"
-    if [[ ! "$OPERATOR_GROUP_ID" =~ ^[1-9][0-9]*$ ]]; then
-      echo "Unable to resolve the protected lease-authority operator group id." >&2
-      exit 1
-    fi
-    sudo -n env \
-      AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_BOOTSTRAP=1 \
-      AGENT_BROWSER_INTERNAL_LEASE_AUTHORITY_OPERATOR_GROUP_ID="$OPERATOR_GROUP_ID" \
-      "$LEASE_AUTHORITY_BANKED_BINARY"
-    sudo -n systemctl daemon-reload
-    sudo -n systemctl enable --now agent-browser-lease-authority.socket
-    lease_authority_contract_ready || {
-      echo "Protected lease-authority installation did not pass exact readiness verification." >&2
-      exit 1
-    }
+  if [[ -e "$LEASE_AUTHORITY_ROOT" || -L "$LEASE_AUTHORITY_ROOT" ]]; then
+    sudo -n mv "$LEASE_AUTHORITY_ROOT" "$LEASE_AUTHORITY_ARCHIVE_ROOT"
+    sudo -n chmod 0700 "$LEASE_AUTHORITY_ARCHIVE_ROOT"
+  fi
+  if [[ -e "$LEASE_AUTHORITY_STATE_ROOT" || -L "$LEASE_AUTHORITY_STATE_ROOT" ]]; then
+    sudo -n mv "$LEASE_AUTHORITY_STATE_ROOT" "$LEASE_AUTHORITY_STATE_ARCHIVE_ROOT"
+    sudo -n chmod 0700 "$LEASE_AUTHORITY_STATE_ARCHIVE_ROOT"
+  fi
+  sudo -n systemctl daemon-reload
+  if ! legacy_lease_authority_retired; then
+    echo "Legacy protected lease authority did not reach the retired postcondition." >&2
+    exit 1
   fi
 fi
 
@@ -975,6 +745,7 @@ if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
 fi
 echo "Log out and back in or reboot so group membership is active."
 if ! observe_effect_postconditions; then
+  print_install_status >&2
   echo "Privileged effect postconditions did not become ready." >&2
   exit 1
 fi
