@@ -440,7 +440,11 @@ back in or reboot, then rerun the same apply command. With both groups
 effective, apply starts the pinned stack, creates the two route users and
 canonical Guacamole rows, opens distinct XRDP displays selected by readiness,
 projects `guacamole:1` and `guacamole:2` into service state, and activates the
-user services only after the final doctors pass.
+user services only after the final doctors pass. The complete start phase is
+bounded to 15 minutes because it includes provider reconstruction, route-display
+bring-up, Service projection, unit activation, and final doctors. If it fails,
+the receipt preserves the original causal error even when the bound is also
+reached.
 The pinned Guacamole web app loads an agent-browser defaults extension. It
 migrates each browser origin once to the `text` input method so existing and
 new connections default to text input, then preserves later user-selected

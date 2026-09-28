@@ -57,10 +57,14 @@ pub(crate) trait ColdInstallEffects {
 fn phase_deadline(phase: ColdInstallPhase) -> Duration {
     Duration::from_secs(match phase {
         ColdInstallPhase::Replace => 60,
-        ColdInstallPhase::Stop
-        | ColdInstallPhase::Migrate
-        | ColdInstallPhase::Start
-        | ColdInstallPhase::Readiness => 30,
+        // Start owns the complete bounded workstation reconciliation: pinned
+        // browser acquisition, Guacamole startup and schema checks, owned-route
+        // reconstruction, display opening, Service projection, unit activation,
+        // and final doctors. Its individual network probes can consume three
+        // minutes, so the phase must remain bounded without contradicting the
+        // work assigned to it on a cold or emulated host.
+        ColdInstallPhase::Start => 900,
+        ColdInstallPhase::Stop | ColdInstallPhase::Migrate | ColdInstallPhase::Readiness => 30,
     })
 }
 
@@ -87,7 +91,7 @@ fn execute_step(
     let mut step = effects.execute_phase(phase, deadline);
     step.phase = phase;
     step.deadline_ms = deadline.as_millis() as u64;
-    if clock.now().saturating_sub(started) >= deadline {
+    if step.error.is_none() && clock.now().saturating_sub(started) >= deadline {
         step.ready = false;
         let phase_name = match phase {
             ColdInstallPhase::Stop => "stop",

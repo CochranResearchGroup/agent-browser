@@ -5865,6 +5865,10 @@ without replacing the installed generation. Failures at or after migration
 preserve the new architecture for forward repair and never restore the old
 generation. This path does not require a transaction ID, revision, census
 digest, replacement-plan hash, or rollback choice.
+The start phase owns the complete provider reconstruction, route-display
+bring-up, Service projection, unit activation, and final doctors. It remains
+bounded to 15 minutes so the phase's own three-minute network probes and cold
+or emulated hosts can finish without losing the original causal error.
 Cold reconciliation rebuilds only configured Agent Browser Guacamole
 connections, sharing profiles, and the exact header user from retained SQLite
 credentials. Unrelated provider rows remain intact, and failed reconstruction
@@ -5876,9 +5880,9 @@ profile pressure, and remote-view privilege readiness. Warning-severity
 observations remain visible but do not make doctor exit nonzero. Workstation
 runtime multiplicity is scoped to the exact production socket namespace, so
 an isolated `agent-browser-dev` host is not classified as production drift.
-Production and isolated development clients share one root-owned protected
-lease-authority socket; a development runtime must verify that endpoint rather
-than launching a second authority daemon.
+Production and isolated development runtimes do not depend on the quarantined
+legacy Lease Authority. Privileged installation retires its exact legacy
+artifacts into diagnostic archives and never launches a replacement daemon.
 Workstation payload checks bind the installed binary and support assets to
 recorded SHA-256 provenance. Runtime-host transition checks bind each host to its PID,
 process start token, binary hash, generation, and socket identity. Real-host preflight

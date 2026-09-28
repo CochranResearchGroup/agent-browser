@@ -28,7 +28,11 @@ data remains on disk. Foreign or uncertain processes remain running. The
 command is idempotent and accepts no hot-upgrade coordination input.
 
 A first apply that adds required groups exits 75 with `relogin_required`; log
-out and back in or reboot, then rerun the same apply.
+out and back in or reboot, then rerun the same apply. The complete start phase
+is bounded to 15 minutes because it includes provider reconstruction,
+route-display bring-up, Service projection, unit activation, and final doctors.
+Its receipt preserves the original causal error if the phase also reaches its
+bound.
 
 `AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled` prevents session discovery
 from enumerating host browser processes or probing foreign CDP endpoints;

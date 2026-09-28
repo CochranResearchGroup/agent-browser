@@ -80,7 +80,7 @@ fn clean_cold_install_runs_stop_migrate_replace_start_and_readiness_in_order() {
     assert_eq!(effects.calls[0].1, Duration::from_secs(30));
     assert_eq!(effects.calls[1].1, Duration::from_secs(30));
     assert_eq!(effects.calls[2].1, Duration::from_secs(60));
-    assert_eq!(effects.calls[3].1, Duration::from_secs(30));
+    assert_eq!(effects.calls[3].1, Duration::from_secs(900));
     assert_eq!(effects.calls[4].1, Duration::from_secs(30));
 }
 
@@ -166,4 +166,21 @@ fn replacement_deadline_overrun_fails_without_restoring_the_old_generation() {
             ColdInstallPhase::Replace,
         ]
     );
+}
+
+#[test]
+fn phase_failure_is_not_replaced_by_a_later_deadline_observation() {
+    let now = Rc::new(Cell::new(0));
+    let clock = InjectedClock(now.clone());
+    let mut effects = ScriptedInstall {
+        failures: vec![ColdInstallPhase::Start],
+        clock: Some(now),
+        overrun_phase: Some(ColdInstallPhase::Start),
+        ..ScriptedInstall::default()
+    };
+
+    let receipt = execute_workstation_cold_install_with_clock(&mut effects, &clock);
+
+    assert!(!receipt.success);
+    assert_eq!(receipt.original_error.as_deref(), Some("Start_failed"));
 }

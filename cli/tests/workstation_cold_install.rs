@@ -250,7 +250,7 @@ fn ordinary_apply_ignores_stale_hot_upgrade_metadata_and_selects_a_cold_generati
             .iter()
             .map(|step| step["phase"].as_str().expect("phase"))
             .collect::<Vec<_>>(),
-        vec!["stop", "replace", "start", "readiness"]
+        vec!["stop", "migrate", "replace", "start", "readiness"]
     );
     assert!(receipt.get("transactionId").is_none());
 
@@ -280,11 +280,10 @@ fn ordinary_apply_ignores_stale_hot_upgrade_metadata_and_selects_a_cold_generati
         failure["originalError"],
         "Injected workstation install failure after selector-committed"
     );
-    assert_eq!(failure["rollback"]["phase"], "rollback");
-    assert!(failure["rollback"].get("error").is_none());
+    assert!(failure.get("rollback").is_none());
     assert_eq!(
         fs::read_link(workstation.join(".local/lib/agent-browser/current"))
-            .expect("restored selected generation"),
+            .expect("forward-repair selected generation"),
         selected_before_failure
     );
 }
@@ -343,30 +342,14 @@ fn fresh_cold_install_starts_one_runtime_host_and_dashboard_for_service_use() {
         status["data"]["browserSessionState"]["schemaVersion"],
         "agent-browser.browser-session-state.v1"
     );
-    let profile_catalog: serde_json::Value = serde_json::from_slice(
-        &fs::read(
-            fixture
-                .root
-                .join("home/.agent-browser/service/browser-profile-catalog.json"),
-        )
-        .expect("startup browser profile catalog"),
-    )
-    .expect("startup browser profile catalog JSON");
-    assert_eq!(
-        profile_catalog["schemaVersion"],
-        "agent-browser.browser-profile-catalog.v1"
-    );
-    assert!(profile_catalog["profiles"]
-        .as_object()
-        .is_some_and(serde_json::Map::is_empty));
-    assert_eq!(
-        profile_catalog["disposablePolicies"]["default"]["id"],
-        "default"
+    let service_root = fixture.root.join("home/.agent-browser/service");
+    assert!(
+        service_root.join("runtime.sqlite3").is_file(),
+        "Browser Runtime SQLite authority was not created"
     );
     assert!(
-        profile_catalog["disposablePolicies"]["default"]["userDataRoot"]
-            .as_str()
-            .is_some_and(|path| Path::new(path).is_absolute())
+        !service_root.join("browser-profile-catalog.json").exists(),
+        "cold install recreated the retired JSON profile catalog"
     );
 
     let socket_dir = fixture.root.join("runtime/sockets");

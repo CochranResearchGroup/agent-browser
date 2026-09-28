@@ -249,7 +249,11 @@ then rerun the same apply command. With both groups effective, apply starts the
 pinned stack, creates the two route users and canonical Guacamole rows, opens
 distinct XRDP displays selected by readiness, projects
 <code>guacamole:1</code> and <code>guacamole:2</code> into service state, and
-activates the user services only after the final doctors pass.
+activates the user services only after the final doctors pass. The complete
+start phase is bounded to 15 minutes because it includes provider
+reconstruction, route-display bring-up, Service projection, unit activation,
+and final doctors. Its receipt preserves the original causal error if the phase
+also reaches its bound.
 The Guacamole web container loads the packaged agent-browser defaults
 extension. It performs a one-time browser-origin migration to the
 <code>text</code> input method, making text input the default for existing and
