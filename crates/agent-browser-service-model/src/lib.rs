@@ -155,8 +155,9 @@ pub use profile_seeding::{
 };
 pub use remote_view_consumer::{
     validate_fixed_desktop_associations, validate_remote_view_foundation,
-    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewFixedDesktop,
-    RemoteViewFoundationObservation, RemoteViewResourceKind,
+    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewEffectBoundary,
+    RemoteViewEffectEvidence, RemoteViewFixedDesktop, RemoteViewFoundationCommand,
+    RemoteViewFoundationObservation, RemoteViewResourceKind, RemoteViewResourceState,
     REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
 };
 pub use request_provenance::{

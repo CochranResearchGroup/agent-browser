@@ -36,6 +36,10 @@ and zero behind `origin/platform/p211-simple-cold-upgrade`, at `47150749`. The
 slice changes 63 files with 4,523 insertions and 1,461 deletions. The branch is
 preserved in its existing worktree and must not be merged wholesale.
 
+The supersession and transition-custody commits `7fd03d0d` and `6af49f67`
+were then added on that preserved branch, bringing it to 38 commits ahead of
+its published topic ref without changing the audited implementation slice.
+
 ## Initial commit disposition
 
 ### Retain
@@ -109,8 +113,9 @@ specific Remote View consumer contract demonstrates reusable behavior.
 
 ## Next gate
 
-Do not open the P220 branch until session/worktree admission selects an exact
-base and one primary owner. The first implementation packet is provider-free:
-freeze the Remote View consumer-client boundary and create the F0-shaped Agent
-Browser fixture. Live Remote View, installed runtime, privilege, public ingress,
-merge, release, and destructive cleanup remain excluded.
+The P220 branch is admitted from `origin/main@a3848e16` with one primary owner.
+Its first provider-free packet freezes the Remote View F0 consumer boundary and
+creates the Agent Browser fixture. J1 through J3 contract replay and selective
+retained-domain extraction remain next. Live Remote View, installed runtime,
+privilege, public ingress, merge, release, and destructive cleanup remain
+separately gated.

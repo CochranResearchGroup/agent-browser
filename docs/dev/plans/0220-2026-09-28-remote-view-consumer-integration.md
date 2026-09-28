@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -46,10 +46,18 @@ provider-free Agent Browser contract probe. That probe uses two existing fixed
 desktops and will replay at J1, J2, and J3. It is compatibility feedback rather
 than final RV-014 acceptance.
 
+P220 source checkpoint `9a34e292` establishes the Agent Browser-owned F0
+consumer boundary and distinct two-desktop browser/profile association
+invariant. The current follow-up consumes the complete published foundation
+observation, including command, resource states, and effect discipline. Remote
+View has not yet published the J1 through J3 lifecycle, operation, viewing,
+placement, status, or cleanup contracts required by later slices.
+
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
-the published topic ref and contains both reusable Agent Browser domain work
-and retired presentation-specific work. The successor branch was admitted from
+the published topic ref at audit start and contains both reusable Agent Browser
+domain work and retired presentation-specific work. Two later governance
+commits bring the preserved branch to 38 commits ahead. The successor branch was admitted from
 `origin/main` at `a3848e16`; P219 custody remains preserved and is not merged
 wholesale.
 
@@ -109,6 +117,11 @@ shapes. Use no Remote View internal modules and perform no runtime effects.
 
 Exit: the F0-shaped fixture proves two fixed desktop selections and distinct
 browser associations while Agent Browser retains its domain authority.
+
+Status: F0 complete at the current source checkpoint. Public identity,
+foundation observation, and fixed-desktop association are covered. Acquire,
+opaque handoff, layered status, and exact release remain checkpoint-gated and
+must not be invented ahead of Remote View J1 through J3.
 
 ### S2 — Retained-domain integration
 

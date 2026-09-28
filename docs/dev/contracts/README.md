@@ -3,6 +3,15 @@
 This directory holds machine-readable schemas for service API records that
 software clients and MCP agents are expected to consume directly.
 
+## Remote View Consumer Foundation v1
+
+`remote-view-foundation.v1.fixture.json` is the provider-free Agent Browser
+consumer fixture for the complete public Remote View F0 foundation
+observation. The service-model parser rejects unversioned shape drift and
+validates the exact published resource and state vocabulary. The fixture does
+not advertise desktop lifecycle, viewing, placement, or cleanup operations
+before Remote View publishes those contracts at its J1 through J3 checkpoints.
+
 ## Service Principal Authority v1
 
 `service-principal-authority.v1.md` defines the internal authenticated

@@ -18,12 +18,48 @@ pub enum RemoteViewResourceKind {
     EventCursor,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum RemoteViewFoundationCommand {
+    #[serde(rename = "foundation.inspect")]
+    Inspect,
+}
+
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewResourceState {
+    Requested,
+    Provisioning,
+    Ready,
+    Unhealthy,
+    Draining,
+    Removed,
+    Failed,
+    AwaitingIntervention,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewEffectBoundary {
+    CommitDesiredStateBeforeEffects,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewEffectEvidence {
+    EffectJournal,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct RemoteViewFoundationObservation {
     pub schema_version: u32,
+    pub command: RemoteViewFoundationCommand,
     pub contract_version: u32,
     pub read_only: bool,
     pub resource_kinds: Vec<RemoteViewResourceKind>,
+    pub resource_states: Vec<RemoteViewResourceState>,
+    pub effect_boundary: RemoteViewEffectBoundary,
+    pub effect_evidence: RemoteViewEffectEvidence,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -63,12 +99,28 @@ pub fn validate_remote_view_foundation(
         RemoteViewResourceKind::ViewerSession,
         RemoteViewResourceKind::EventCursor,
     ]);
+    let required_states = BTreeSet::from([
+        RemoteViewResourceState::Requested,
+        RemoteViewResourceState::Provisioning,
+        RemoteViewResourceState::Ready,
+        RemoteViewResourceState::Unhealthy,
+        RemoteViewResourceState::Draining,
+        RemoteViewResourceState::Removed,
+        RemoteViewResourceState::Failed,
+        RemoteViewResourceState::AwaitingIntervention,
+    ]);
     let observed: BTreeSet<_> = observation.resource_kinds.iter().copied().collect();
+    let observed_states: BTreeSet<_> = observation.resource_states.iter().copied().collect();
     if observation.schema_version != REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION
+        || observation.command != RemoteViewFoundationCommand::Inspect
         || observation.contract_version != REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION
         || !observation.read_only
         || observation.resource_kinds.len() != required.len()
         || observed != required
+        || observation.resource_states.len() != required_states.len()
+        || observed_states != required_states
+        || observation.effect_boundary != RemoteViewEffectBoundary::CommitDesiredStateBeforeEffects
+        || observation.effect_evidence != RemoteViewEffectEvidence::EffectJournal
     {
         return Err(RemoteViewConsumerError::IncompatibleFoundation);
     }
@@ -129,21 +181,10 @@ mod tests {
     use super::*;
 
     fn foundation() -> RemoteViewFoundationObservation {
-        RemoteViewFoundationObservation {
-            schema_version: 1,
-            contract_version: 1,
-            read_only: true,
-            resource_kinds: vec![
-                RemoteViewResourceKind::Installation,
-                RemoteViewResourceKind::Desktop,
-                RemoteViewResourceKind::Generation,
-                RemoteViewResourceKind::Pool,
-                RemoteViewResourceKind::ApplicationPlacement,
-                RemoteViewResourceKind::Operation,
-                RemoteViewResourceKind::ViewerSession,
-                RemoteViewResourceKind::EventCursor,
-            ],
-        }
+        serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-foundation.v1.fixture.json"
+        ))
+        .unwrap()
     }
 
     fn association(
@@ -210,5 +251,13 @@ mod tests {
             validate_fixed_desktop_associations(&associations),
             Err(RemoteViewConsumerError::DuplicateDesktop)
         );
+    }
+
+    #[test]
+    fn rejects_unversioned_foundation_shape_drift() {
+        let changed =
+            include_str!("../../../docs/dev/contracts/remote-view-foundation.v1.fixture.json")
+                .replace("\n}", ",\n  \"unpublished_field\": true\n}");
+        assert!(serde_json::from_str::<RemoteViewFoundationObservation>(&changed).is_err());
     }
 }

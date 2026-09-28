@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-17
+Updated: 2026-09-28
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -24,6 +24,22 @@ checkpoints. They do not define permanent product ownership. New substantive
 plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
+
+## P220 | Remote View Consumer Integration
+
+State: OPEN
+
+Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md),
+[issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202),
+and [Remote View issue #70](https://github.com/CochranResearchGroup/remote-view/issues/70)
+own the `PL-PLATFORM` migration from Agent Browser-owned presentation
+infrastructure to Remote View public contracts. Source checkpoint `9a34e292`
+establishes the provider-free consumer boundary and two-desktop association
+invariant. The current F0 follow-up consumes the complete published foundation
+observation. J1, J2, J3, retained P219 domain extraction, protected integration,
+and separately authorized installed acceptance remain open. No live Remote
+View, browser, provider, install, privilege, production, or release effect has
+occurred.
 
 ## P216 | Service Model Extraction Landing
 

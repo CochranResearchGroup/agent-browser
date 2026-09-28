@@ -8,6 +8,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
+- [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
+
+## Turn 388 | 2026-09-28
+
+P220 is active on `platform/p220-remote-view-consumer` from canonical
+`origin/main@a3848e16`. Checkpoint `9a34e292` adds the first provider-free
+Remote View F0 consumer boundary and proves two distinct Agent Browser-owned
+browser/profile associations over distinct fixed desktop identities. The
+current follow-up tightens that boundary to the complete published F0
+foundation observation. The preserved P219 branch is not merged wholesale;
+its Agent Browser-owned XRDP/Guacamole presentation path is retired. Remote
+View J1, J2, and J3 contracts, retained-domain extraction, protected
+integration, and separately authorized installed acceptance remain. No live
+Remote View, browser, provider, install, privilege, production, or release
+effect occurred.
 
 ## Turn 387 | 2026-09-17
 
