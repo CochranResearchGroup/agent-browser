@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -41,17 +41,20 @@ input, diagnostics, and exact desktop cleanup.
 
 ## Current State
 
-Remote View Plan 0017 has integrated its F0 foundation and an early
-provider-free Agent Browser contract probe. That probe uses two existing fixed
-desktops and will replay at J1, J2, and J3. It is compatibility feedback rather
-than final RV-014 acceptance.
+Remote View Plan 0017 has integrated its F0 foundation, J1 durable operation
+and desktop lifecycle checkpoint, and an early provider-free Agent Browser
+contract probe. That probe uses two existing fixed desktops and remains
+compatibility feedback rather than final RV-014 acceptance.
 
 P220 source checkpoint `9a34e292` establishes the Agent Browser-owned F0
 consumer boundary and distinct two-desktop browser/profile association
 invariant. The current follow-up consumes the complete published foundation
 observation, including command, resource states, and effect discipline. Remote
-View has not yet published the J1 through J3 lifecycle, operation, viewing,
-placement, status, or cleanup contracts required by later slices.
+View J1 source checkpoint `f674518e34fea346002c72c4adc3966b628d0b78`
+publishes lifecycle observations, durable operation status, exact generation
+fencing, and release semantics. J2 and J3 have not yet published the viewing,
+application-placement, viewer-status, and final cleanup contracts required by
+later slices.
 
 Retained-domain extraction is active through `6b805b12`. The extracted
 presentation-neutral spine owns named browser sessions and tabs, independent
@@ -127,10 +130,12 @@ shapes. Use no Remote View internal modules and perform no runtime effects.
 Exit: the F0-shaped fixture proves two fixed desktop selections and distinct
 browser associations while Agent Browser retains its domain authority.
 
-Status: F0 complete at the current source checkpoint. Public identity,
-foundation observation, and fixed-desktop association are covered. Acquire,
-opaque handoff, layered status, and exact release remain checkpoint-gated and
-must not be invented ahead of Remote View J1 through J3.
+Status: F0 and J1 complete at source checkpoint `8f753da0`. Public identity,
+foundation observation, lifecycle observation, durable operation status,
+allocated fixed-desktop selection, distinct browser association, and exact
+UUID-plus-generation release targeting are covered. Opaque handoff, layered
+viewer and application status, and final cleanup remain checkpoint-gated and
+must not be invented ahead of Remote View J2 and J3.
 
 ### S2 — Retained-domain integration
 
@@ -160,6 +165,11 @@ installed acceptance packet has exact targets, stop rules, and rollback or
 forward-recovery boundaries.
 
 No installed acceptance begins merely because S0 through S3 source work passes.
+
+Status: J1 replay complete against Remote View source checkpoint
+`f674518e34fea346002c72c4adc3966b628d0b78`. The fixture rejects unversioned
+shape drift and tampered operation payload evidence. J2 and J3 replay remain
+pending their published contracts.
 
 ## Worker assignments
 
