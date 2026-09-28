@@ -310,6 +310,13 @@ export function evaluate(root = defaultRoot) {
       ));
     }
   }
+  if (/"remedy"\s*:\s*\{/.test(install)) {
+    doctorReadOnlyFindings.push(finding(
+      'install_doctor_untyped_remedy',
+      'cli/src/install.rs',
+      'install doctor constructs a remedy outside the closed typed recommendation builder',
+    ));
+  }
   return {
     schemaVersion: 'p218-architecture-conformance.v1',
     plan: 'docs/dev/plans/0218-2026-09-23-grilling-contract-remote-view-conformance.md',

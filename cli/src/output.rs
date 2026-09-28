@@ -6565,6 +6565,12 @@ Post-setup validation:
   When profileSmoke.available is true, run pnpm test:wsl-windows-chromium-profile-live
   from the repo to verify Windows chromium-stealthcdp profile writes from WSL.
 
+Install-doctor remedies:
+  JSON issues[].remedy uses agent-browser.doctor-repair-recommendation.v1 and
+  declares actionId, executionClass, and automaticExecutionAllowed=false.
+  read_only, explicit_effect, and manual_plan are distinct. A command or plan
+  is guidance only and never grants effect authority.
+
 Timeout handling:
   remote-view doctor reports child-command timeouts with distinct *_timed_out
   issue codes. A timeout does not prove install or readiness drift. Run the

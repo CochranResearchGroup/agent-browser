@@ -3361,6 +3361,13 @@ claim that the underlying install or readiness check failed. Run the reported
 direct helper command to resolve an inconclusive timeout. When route-display
 inspection completed and proves that route sessions are missing, that result
 remains the primary remediation even if another embedded helper timed out.
+`agent-browser install doctor --json` emits every `issues[].remedy` through the
+same `agent-browser.doctor-repair-recommendation.v1` contract. Install remedies
+use a closed action ID and classify the next step as `read_only`,
+`explicit_effect`, or `manual_plan`; `automaticExecutionAllowed` is always
+false. A returned command or manual plan is guidance and does not grant effect
+authority.
+
 `agent-browser install doctor --json` also reports `remoteViewPrivileges` with
 helper, sudoers, group, membership, `helperDesktopSession`, and
 `requiresInteractiveSudo` fields plus `service` readiness from a no-launch

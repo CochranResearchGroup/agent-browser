@@ -1568,6 +1568,96 @@ fn workstation_unit_is_source_free(contents: &str) -> bool {
     })
 }
 
+/// Closed install-doctor recommendations. These values describe a possible
+/// next step but never authorize or execute it from the read-only doctor path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum InstallDoctorRemedyAction {
+    InstallWorkstationPayload,
+    InstallRemoteViewPrivileges,
+    ConvergeLocalRuntime,
+    InspectWorkstationUpgradeStatus,
+    CloseStaleDaemonSession(String),
+    RepairDaemonListenerAuthority,
+}
+
+impl InstallDoctorRemedyAction {
+    /// Render the shared non-executing doctor recommendation contract.
+    fn recommendation(&self) -> Value {
+        let (action_id, execution_class, kind, command, argv, requires_sudo, why) = match self {
+            Self::InstallWorkstationPayload => (
+                "install_workstation_payload",
+                "explicit_effect",
+                "operator_command",
+                Some("agent-browser install workstation --apply --json"),
+                Some(json!(["agent-browser", "install", "workstation", "--apply", "--json"])),
+                false,
+                "Install or refresh the versioned source-free workstation payload, service units, Guacamole bundle, and protected state.",
+            ),
+            Self::InstallRemoteViewPrivileges => (
+                "install_remote_view_privileges",
+                "explicit_effect",
+                "operator_command",
+                Some("agent-browser install --with-remote-view-privileges"),
+                Some(json!(["agent-browser", "install", "--with-remote-view-privileges"])),
+                true,
+                "Refresh the root-owned helper through the sealed privileged installation boundary.",
+            ),
+            Self::ConvergeLocalRuntime => (
+                "converge_local_runtime",
+                "explicit_effect",
+                "operator_command",
+                Some("pnpm converge:local-runtime -- --apply --json"),
+                Some(json!(["pnpm", "converge:local-runtime", "--", "--apply", "--json"])),
+                false,
+                "Republish and restart the bounded local dashboard runtime, then rerun install doctor.",
+            ),
+            Self::InspectWorkstationUpgradeStatus => (
+                "inspect_workstation_upgrade_status",
+                "read_only",
+                "operator_command",
+                Some("agent-browser install workstation status --json"),
+                Some(json!(["agent-browser", "install", "workstation", "status", "--json"])),
+                false,
+                "Review the redacted workstation transaction and readiness state before another effect.",
+            ),
+            Self::CloseStaleDaemonSession(session) => (
+                "restart_stale_daemon_session",
+                "explicit_effect",
+                "operator_command",
+                Some("agent-browser close --session <session>"),
+                Some(json!(["agent-browser", "close", "--session", session])),
+                false,
+                "Stop only the named stale daemon session so a later command can relaunch it from the current executable.",
+            ),
+            Self::RepairDaemonListenerAuthority => (
+                "repair_daemon_listener_authority",
+                "manual_plan",
+                "operator_plan",
+                None,
+                None,
+                false,
+                "Reconcile the exact default-socket listener identities and stop only reviewed stale owners.",
+            ),
+        };
+        let mut recommendation = json!({
+            "schemaVersion": "agent-browser.doctor-repair-recommendation.v1",
+            "actionId": action_id,
+            "executionClass": execution_class,
+            "automaticExecutionAllowed": false,
+            "kind": kind,
+            "requiresInteractiveSudo": requires_sudo,
+            "why": why,
+        });
+        if let Some(command) = command {
+            recommendation["command"] = json!(command);
+        }
+        if let Some(argv) = argv {
+            recommendation["argv"] = argv;
+        }
+        recommendation
+    }
+}
+
 #[cfg(unix)]
 fn private_file_mode(path: &Path) -> Option<u32> {
     use std::os::unix::fs::PermissionsExt;
@@ -1590,13 +1680,7 @@ fn workstation_payload_issues(status: &serde_json::Value) -> Vec<serde_json::Val
         "code": "workstation_payload_partial_or_drifted",
         "message": "workstation payload artifacts are incomplete or drifted from the current source-free version",
         "nextAction": "install_workstation_payload",
-        "remedy": {
-            "kind": "operator_command",
-            "command": "agent-browser install workstation --apply --json",
-            "argv": ["agent-browser", "install", "workstation", "--apply", "--json"],
-            "requiresInteractiveSudo": false,
-            "why": "Install or refresh the versioned source-free workstation payload, service units, Guacamole bundle, and protected state."
-        }
+        "remedy": InstallDoctorRemedyAction::InstallWorkstationPayload.recommendation()
     })]
 }
 
@@ -1752,13 +1836,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "code": "remote_view_route_desktop_helper_stale",
             "message": "the installed remote-view helper still writes a terminal-first route desktop session",
             "nextAction": "install_remote_view_privileges",
-            "remedy": {
-                "kind": "operator_command",
-                "command": "agent-browser install --with-remote-view-privileges",
-                "argv": ["agent-browser", "install", "--with-remote-view-privileges"],
-                "requiresInteractiveSudo": true,
-                "why": "Refresh the root-owned helper so new RDP route users start a terminal-free browser-control desktop."
-            }
+            "remedy": InstallDoctorRemedyAction::InstallRemoteViewPrivileges.recommendation()
         }));
     }
     if remote_view_privileges
@@ -1775,13 +1853,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "code": "remote_view_privileged_helper_status_stale",
             "message": "the installed remote-view helper does not expose the current route-desktop and display-access capability contract",
             "nextAction": "install_remote_view_privileges",
-            "remedy": {
-                "kind": "operator_command",
-                "command": "agent-browser install --with-remote-view-privileges",
-                "argv": ["agent-browser", "install", "--with-remote-view-privileges"],
-                "requiresInteractiveSudo": true,
-                "why": "Refresh the root-owned helper so doctors and launch preflight can verify route desktop and X11 display-access capabilities."
-            }
+            "remedy": InstallDoctorRemedyAction::InstallRemoteViewPrivileges.recommendation()
         }));
     }
 
@@ -1831,13 +1903,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "code": "dashboard_runtime_stale_or_unreadable",
             "message": "the running local dashboard service did not serve a runtime manifest matching the current executable",
             "nextAction": "converge_local_runtime",
-            "remedy": {
-                "kind": "operator_command",
-                "command": "pnpm converge:local-runtime -- --apply --json",
-                "argv": ["pnpm", "converge:local-runtime", "--", "--apply", "--json"],
-                "requiresInteractiveSudo": false,
-                "why": "Republish and restart the local dashboard runtime, then rerun install doctor."
-            },
+            "remedy": InstallDoctorRemedyAction::ConvergeLocalRuntime.recommendation(),
             "dashboardUrl": live_dashboard_runtime.get("url").cloned().unwrap_or(serde_json::Value::Null),
             "state": live_dashboard_runtime.get("state").cloned().unwrap_or(serde_json::Value::Null)
         }));
@@ -1902,13 +1968,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                 "state": state,
                 "admissionDraining": admission_draining,
                 "nextAction": "inspect_workstation_upgrade_status",
-                "remedy": {
-                    "kind": "operator_command",
-                    "command": "agent-browser install workstation status --json",
-                    "argv": ["agent-browser", "install", "workstation", "status", "--json"],
-                    "requiresInteractiveSudo": false,
-                    "why": "Review the redacted transaction, blocker, runtime dispositions, and rollback state before retrying."
-                }
+                "remedy": InstallDoctorRemedyAction::InspectWorkstationUpgradeStatus.recommendation()
             }));
         }
         if upgrade
@@ -1969,13 +2029,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                 "unreadyAxes": unready_axes,
                 "readiness": readiness,
                 "nextAction": "inspect_workstation_upgrade_status",
-                "remedy": {
-                    "kind": "operator_command",
-                    "command": "agent-browser install workstation status --json",
-                    "argv": ["agent-browser", "install", "workstation", "status", "--json"],
-                    "requiresInteractiveSudo": false,
-                    "why": "Resolve the payload, generation, runtime, ingress, operator-journey, and rollback axes before accepting the workstation generation."
-                }
+                "remedy": InstallDoctorRemedyAction::InspectWorkstationUpgradeStatus.recommendation()
             }));
         }
     }
@@ -2018,13 +2072,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                         "message": format!("active daemon session {session} advertises stale or unreachable stream backend metadata"),
                         "session": session,
                         "nextAction": "restart_stale_daemon_session",
-                        "remedy": {
-                            "kind": "operator_command",
-                            "command": "agent-browser close --session <session>",
-                            "argv": ["agent-browser", "close", "--session", session],
-                            "requiresInteractiveSudo": false,
-                            "why": "Stop the stale daemon session so the next command relaunches it with a current stream backend."
-                        }
+                        "remedy": InstallDoctorRemedyAction::CloseStaleDaemonSession(session.to_string()).recommendation()
                     }));
                 } else {
                     issues.push(json!({
@@ -2032,13 +2080,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
                         "message": format!("active daemon session {session} was started by stale or incomplete executable metadata"),
                         "session": session,
                         "nextAction": "restart_stale_daemon_session",
-                        "remedy": {
-                            "kind": "operator_command",
-                            "command": "agent-browser close --session <session>",
-                            "argv": ["agent-browser", "close", "--session", session],
-                            "requiresInteractiveSudo": false,
-                            "why": "Stop the stale daemon session so the next command relaunches it with the current executable."
-                        }
+                        "remedy": InstallDoctorRemedyAction::CloseStaleDaemonSession(session.to_string()).recommendation()
                     }));
                 }
             }
@@ -2068,10 +2110,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "listenerCount": listener_count,
             "defaultSocketListenerCount": default_socket_listener_count,
             "nextAction": "repair_daemon_listener_authority",
-            "remedy": {
-                "kind": "operator_plan",
-                "why": "Stop stale default-socket daemon listeners and leave exactly one listener for the intended binary before live remote-view stress."
-            }
+            "remedy": InstallDoctorRemedyAction::RepairDaemonListenerAuthority.recommendation()
         }));
     }
     if default_socket_listener_count > 0 && default_socket_current_match_count == 0 {
@@ -2082,10 +2121,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "defaultSocketListenerCount": default_socket_listener_count,
             "defaultSocketCurrentExecutableMatchCount": default_socket_current_match_count,
             "nextAction": "repair_daemon_listener_authority",
-            "remedy": {
-                "kind": "operator_plan",
-                "why": "Restart the default daemon listener from the intended current executable before live validation."
-            }
+            "remedy": InstallDoctorRemedyAction::RepairDaemonListenerAuthority.recommendation()
         }));
     }
     if default_socket_deleted_executable_count > 0 {
@@ -2095,10 +2131,7 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
             "deletedExecutableCount": default_socket_deleted_executable_count,
             "defaultSocketDeletedExecutableCount": default_socket_deleted_executable_count,
             "nextAction": "repair_daemon_listener_authority",
-            "remedy": {
-                "kind": "operator_plan",
-                "why": "Stop stale default-socket daemon processes whose executable has been replaced on disk."
-            }
+            "remedy": InstallDoctorRemedyAction::RepairDaemonListenerAuthority.recommendation()
         }));
     }
 
@@ -4372,6 +4405,72 @@ fn package_exists_apt(pkg: &str) -> bool {
         .status()
         .map(|s| s.success())
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod install_doctor_remedy_contract_tests {
+    use super::InstallDoctorRemedyAction;
+
+    #[test]
+    fn install_doctor_remedies_are_closed_and_never_automatic() {
+        let cases = [
+            (
+                InstallDoctorRemedyAction::InstallWorkstationPayload,
+                "install_workstation_payload",
+                "explicit_effect",
+            ),
+            (
+                InstallDoctorRemedyAction::InstallRemoteViewPrivileges,
+                "install_remote_view_privileges",
+                "explicit_effect",
+            ),
+            (
+                InstallDoctorRemedyAction::ConvergeLocalRuntime,
+                "converge_local_runtime",
+                "explicit_effect",
+            ),
+            (
+                InstallDoctorRemedyAction::InspectWorkstationUpgradeStatus,
+                "inspect_workstation_upgrade_status",
+                "read_only",
+            ),
+            (
+                InstallDoctorRemedyAction::CloseStaleDaemonSession("session-a".to_string()),
+                "restart_stale_daemon_session",
+                "explicit_effect",
+            ),
+            (
+                InstallDoctorRemedyAction::RepairDaemonListenerAuthority,
+                "repair_daemon_listener_authority",
+                "manual_plan",
+            ),
+        ];
+
+        for (action, action_id, execution_class) in cases {
+            let recommendation = action.recommendation();
+            assert_eq!(
+                recommendation["schemaVersion"],
+                "agent-browser.doctor-repair-recommendation.v1"
+            );
+            assert_eq!(recommendation["actionId"], action_id);
+            assert_eq!(recommendation["executionClass"], execution_class);
+            assert_eq!(recommendation["automaticExecutionAllowed"], false);
+        }
+
+        let session =
+            InstallDoctorRemedyAction::CloseStaleDaemonSession("reviewed-session".to_string())
+                .recommendation();
+        assert_eq!(
+            session["argv"],
+            serde_json::json!(["agent-browser", "close", "--session", "reviewed-session"])
+        );
+        assert_eq!(
+            InstallDoctorRemedyAction::RepairDaemonListenerAuthority
+                .recommendation()
+                .get("argv"),
+            None
+        );
+    }
 }
 
 #[cfg(any())]

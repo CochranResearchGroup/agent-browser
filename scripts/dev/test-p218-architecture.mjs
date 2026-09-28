@@ -113,6 +113,13 @@ impl StateSource for ManagedDesktopStateSource {
     mutatingInstallDoctor.cuts.doctorReadOnly.findings[0].id,
     'doctor_privileged_receipt_mutation',
   );
+  write(root, 'cli/src/install.rs', 'pub fn run_install_doctor() { install_doctor_report(); }\nfn print_doctor_field() {}\nfn install_doctor_report() { json!({"remedy": {"command": "unsafe"}}); }\nfn workstation_payload_status() {}\n');
+  const untypedInstallDoctorRemedy = evaluate(root);
+  assert.equal(untypedInstallDoctorRemedy.cuts.doctorReadOnly.status, 'fail');
+  assert.equal(
+    untypedInstallDoctorRemedy.cuts.doctorReadOnly.findings[0].id,
+    'install_doctor_untyped_remedy',
+  );
   write(root, 'cli/src/install.rs', 'pub fn run_install_doctor() { install_doctor_report(); }\nfn print_doctor_field() {}\nfn install_doctor_report() { default_operational_status_read_only(); }\nfn workstation_payload_status() {}\n');
   write(root, 'cli/src/remote_view_doctor.rs', 'fn remote_view_doctor_report() { run_json_command("doctor", &["--json"]); }\nstruct RequestedRouteSubject;\n');
   assert.equal(evaluate(root).cuts.doctorReadOnly.status, 'pass');

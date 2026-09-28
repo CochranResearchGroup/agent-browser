@@ -890,6 +890,12 @@ Its JSON <code>nextCommand</code> uses the
 <code>automaticExecutionAllowed=false</code>. The recommendation never grants
 effect authority.
 
+`install doctor --json` uses the same contract for every
+<code>issues[].remedy</code>. Its closed install actions use
+<code>read_only</code>, <code>explicit_effect</code>, or
+<code>manual_plan</code>; <code>automaticExecutionAllowed</code> remains false,
+so neither a command nor a manual plan grants effect authority.
+
 Use <code>--session &lt;name&gt;</code>,
 <code>--runtime-profile &lt;id&gt;</code>, or <code>--route-id &lt;id&gt;</code> to
 select one retained remote-view subject. The additive

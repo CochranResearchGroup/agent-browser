@@ -306,6 +306,8 @@ The returned `nextCommand` is a non-executing
 and `executionClass` before deciding what to do. A value of `explicit_effect`
 or `live_acceptance` still requires the corresponding authority and gate;
 `automaticExecutionAllowed` is always false, and `unclassified` grants none.
+Install-doctor issue remedies use the same schema and may also report
+`manual_plan`; it is non-executing guidance and grants no effect authority.
 
 For an ordinary Browser Session Manager session, requested-scope readiness
 joins the exact ready handoff. The profile, browser, route, display, opaque URL,
