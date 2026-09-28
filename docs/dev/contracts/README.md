@@ -12,6 +12,11 @@ validates the exact published resource and state vocabulary. The fixture does
 not advertise desktop lifecycle, viewing, placement, or cleanup operations
 before Remote View publishes those contracts at its J1 through J3 checkpoints.
 
+`p220-p219-file-disposition.v1.json` is the exact 63-file custody ledger for
+the unpublished P219 implementation slice at `47150749`. Every file has one
+retain, adapt, retire, or evidence-only disposition; mixed files require
+hunk-level reconciliation and are never blanket cherry-pick authority.
+
 ## Service Principal Authority v1
 
 `service-principal-authority.v1.md` defines the internal authenticated

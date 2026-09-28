@@ -111,6 +111,15 @@ state, status projection, and pure queue behavior should be evaluated first.
 Provider scripts and workstation fixtures are presumed retired unless a
 specific Remote View consumer contract demonstrates reusable behavior.
 
+The machine-readable
+[`p220-p219-file-disposition.v1.json`](../contracts/p220-p219-file-disposition.v1.json)
+assigns each of the 63 changed files at implementation head `47150749` exactly
+one `retain`, `adapt`, `retire`, or `evidence-only` disposition. `Adapt` is
+deliberately conservative for mixed source, generated-client, schema,
+documentation, and installer files: it requires hunk-level reconciliation and
+does not authorize a cherry-pick. The ledger excludes the two later governance
+commits because they do not alter the audited implementation slice.
+
 ## Next gate
 
 The P220 branch is admitted from `origin/main@a3848e16` with one primary owner.
