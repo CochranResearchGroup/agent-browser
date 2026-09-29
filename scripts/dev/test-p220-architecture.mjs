@@ -66,8 +66,11 @@ function check(root) {
     'CLI adapter must own the reviewed bundled SQLite backup dependency',
   );
   requireCondition(
-    source.runtime.includes('remote_view_application_placement_contract_unavailable'),
-    'runtime must fail closed until a real Remote View application-effect adapter exists',
+    !source.runtime.includes('remote_view_application_placement_contract_unavailable') &&
+      source.runtime.includes('resolve_remote_view_display') &&
+      source.runtime.includes('remote_view_desktop_runtime_context_unavailable') &&
+      source.runtime.includes('remote_view_desktop_runtime_context_stale'),
+    'runtime must require exact Remote View desktop identity and generation context without application placement',
   );
   requireCondition(
     source.runtime.indexOf('observe_browser_launch_admission') <
@@ -82,10 +85,10 @@ function check(root) {
     'browser launch resource admission must remain provider-neutral and fail closed',
   );
   requireCondition(
-    !/desktop\s*\.\s*(?:route_label|desktop_id)[\s\S]{0,160}(?:display|DISPLAY)/i.test(
+    !/desktop\s*\.\s*(?:route_label|friendly_route_label)[\s\S]{0,160}(?:display|DISPLAY)/i.test(
       source.runtime,
     ),
-    'runtime must not infer a local display from Remote View public identity',
+    'runtime must not infer a local display from a Remote View route label',
   );
   requireCondition(
     /REMOTE_VIEW_J3_SOURCE_CHECKPOINT\s*:\s*&str\s*=\s*"018d3d752f9d99805242f99c00034f0caabc53d1"/.test(
@@ -174,6 +177,13 @@ function selfTest() {
       writeFileSync(join(root, path), `${read(root, path)}${mutation}`);
       if (check(root).length === 0) throw new Error(`self-test missed ${label}`);
     }
+    copyFixture(root);
+    const runtimeWithoutContextFence = read(root, paths.runtime).replaceAll(
+      'remote_view_desktop_runtime_context_stale',
+      'remote_view_desktop_context_mismatch',
+    );
+    writeFileSync(join(root, paths.runtime), runtimeWithoutContextFence);
+    if (check(root).length === 0) throw new Error('self-test missed generation context fence removal');
     copyFixture(root);
     const retention = read(root, paths.retention).replace(
       'handoff_url: format!("/remote-view/{handoff_id}"),',

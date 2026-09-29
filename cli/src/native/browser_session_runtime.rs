@@ -10,7 +10,8 @@ use std::time::{Duration, Instant};
 use agent_browser_service_model::{
     BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalogEntry, BrowserProfileKind,
     BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource, ManagedBrowserInstance,
-    ManagedBrowserTab, ManagedDisposableProfile, RemoteViewFixedDesktop,
+    ManagedBrowserTab, ManagedDisposableProfile, RemoteViewDesktopRuntimeContext,
+    RemoteViewFixedDesktop,
 };
 use serde_json::Value;
 
@@ -27,6 +28,9 @@ pub(crate) struct BrowserManagerRuntimeConfig {
     /// Optional installation capacity ceiling checked before a local browser
     /// process is launched. `None` uses the conservative host default.
     pub(crate) maximum_browser_processes: Option<u32>,
+    /// Exact Remote View desktop contexts obtained from its public consumer
+    /// contract. Empty means remote desktop launches remain unavailable.
+    pub(crate) remote_view_desktop_contexts: Vec<RemoteViewDesktopRuntimeContext>,
 }
 
 pub(crate) trait BrowserRuntimeDriver {
@@ -550,17 +554,21 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = runtime.block_on(async {
-                    if desktop.is_some() {
-                        return Err(
-                            "remote_view_application_placement_contract_unavailable".to_string()
-                        );
-                    }
+                    let remote_display = desktop
+                        .as_ref()
+                        .map(|desktop| {
+                            resolve_remote_view_display(
+                                desktop,
+                                &config.remote_view_desktop_contexts,
+                            )
+                        })
+                        .transpose()?;
                     super::browser_launch_admission::observe_browser_launch_admission(
                         Path::new(&profile.user_data_dir),
                         config.maximum_browser_processes,
                     )
                     .require_admitted()?;
-                    let display = config.display.clone();
+                    let display = remote_display.or_else(|| config.display.clone());
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
                             headless: config.headless && display.is_none(),
@@ -754,6 +762,41 @@ fn run_browser_worker(
             manager.relinquish_browser_for_handoff();
         }
     }
+}
+
+fn resolve_remote_view_display(
+    desktop: &RemoteViewFixedDesktop,
+    contexts: &[RemoteViewDesktopRuntimeContext],
+) -> Result<String, String> {
+    let matching_id = contexts
+        .iter()
+        .filter(|context| context.desktop_id == desktop.desktop_id)
+        .collect::<Vec<_>>();
+    if matching_id.is_empty() {
+        return Err(format!(
+            "remote_view_desktop_runtime_context_unavailable:{}:{}",
+            desktop.desktop_id, desktop.generation
+        ));
+    }
+    let context = matching_id
+        .into_iter()
+        .find(|context| context.generation == desktop.generation)
+        .ok_or_else(|| {
+            format!(
+                "remote_view_desktop_runtime_context_stale:{}:{}",
+                desktop.desktop_id, desktop.generation
+            )
+        })?;
+    if context.display_name.is_empty()
+        || context.display_name.contains(char::is_whitespace)
+        || context.display_name.contains('\0')
+    {
+        return Err(format!(
+            "remote_view_desktop_runtime_context_invalid:{}:{}",
+            desktop.desktop_id, desktop.generation
+        ));
+    }
+    Ok(context.display_name.clone())
 }
 
 async fn recorded_browser_is_live(
@@ -978,7 +1021,51 @@ mod tests {
 
         assert_eq!(
             runtime.launch_browser(&profile, Some(&desktop)),
-            Err("remote_view_application_placement_contract_unavailable".to_string())
+            Err(
+                "remote_view_desktop_runtime_context_unavailable:11111111-1111-1111-1111-111111111111:1"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn remote_view_display_requires_exact_desktop_generation() {
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            friendly_route_label: "desktop-a".to_string(),
+            generation: 2,
+        };
+        let contexts = vec![RemoteViewDesktopRuntimeContext {
+            desktop_id: desktop.desktop_id.clone(),
+            generation: 1,
+            display_name: ":21".to_string(),
+        }];
+
+        assert_eq!(
+            resolve_remote_view_display(&desktop, &contexts),
+            Err(
+                "remote_view_desktop_runtime_context_stale:11111111-1111-1111-1111-111111111111:2"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn remote_view_display_uses_authoritative_runtime_context() {
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: "11111111-1111-1111-1111-111111111111".to_string(),
+            friendly_route_label: "route-label-is-not-a-display".to_string(),
+            generation: 3,
+        };
+        let contexts = vec![RemoteViewDesktopRuntimeContext {
+            desktop_id: desktop.desktop_id.clone(),
+            generation: desktop.generation,
+            display_name: ":47".to_string(),
+        }];
+
+        assert_eq!(
+            resolve_remote_view_display(&desktop, &contexts),
+            Ok(":47".to_string())
         );
     }
 

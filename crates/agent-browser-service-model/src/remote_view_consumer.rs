@@ -75,6 +75,19 @@ pub struct RemoteViewFixedDesktop {
     pub generation: u64,
 }
 
+/// Launch context resolved from Remote View's authoritative desktop record.
+///
+/// Consumers must join this context to a selected desktop by both stable
+/// desktop identity and generation. The display name is an effect input, not
+/// an identity and must never be reconstructed from a route label.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewDesktopRuntimeContext {
+    pub desktop_id: String,
+    pub generation: u64,
+    pub display_name: String,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemoteViewDesktopResources {
@@ -593,6 +606,19 @@ pub fn allocated_desktop_candidate(
     })
 }
 
+pub fn allocated_desktop_runtime_context(
+    observation: &RemoteViewLifecycleObservation,
+) -> Result<RemoteViewDesktopRuntimeContext, RemoteViewConsumerError> {
+    // Reuse the candidate validation so runtime context can only be projected
+    // from the same ready, allocated, versioned observation used for selection.
+    let candidate = allocated_desktop_candidate(observation)?;
+    Ok(RemoteViewDesktopRuntimeContext {
+        desktop_id: candidate.desktop.desktop_id,
+        generation: candidate.desktop.generation,
+        display_name: format!(":{}", observation.desktop.resources.display),
+    })
+}
+
 pub fn exact_release_reference(
     association: &AgentBrowserDesktopAssociation,
 ) -> RemoteViewDesktopReference {
@@ -766,6 +792,20 @@ mod tests {
             .map(allocated_desktop_candidate)
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
+        let runtime_contexts = fixture
+            .lifecycle_observations
+            .iter()
+            .map(allocated_desktop_runtime_context)
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        assert_eq!(
+            runtime_contexts[0],
+            RemoteViewDesktopRuntimeContext {
+                desktop_id: candidates[0].desktop.desktop_id.clone(),
+                generation: candidates[0].desktop.generation,
+                display_name: ":80".into(),
+            }
+        );
         let associations = [
             AgentBrowserDesktopAssociation {
                 browser_id: "browser-alice".into(),

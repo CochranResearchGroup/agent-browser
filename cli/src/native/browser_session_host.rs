@@ -58,6 +58,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         display,
         remote_headed: false,
         maximum_browser_processes: None,
+        remote_view_desktop_contexts: Vec::new(),
     })?;
     BrowserSessionHost::load(
         store,
