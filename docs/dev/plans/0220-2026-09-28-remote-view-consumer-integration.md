@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 8
+Plan version: 9
 
 State: OPEN
 
@@ -207,9 +207,14 @@ the supported JSON persistence path with SQLite WAL authority for the session
 and profile aggregates. Migration stages the database atomically, archives
 legacy inputs read-only, makes an existing database authoritative even when it
 is corrupt, and provides integrity-checked current-plus-previous online backup
-rotation. Operator exposure for backup status and creation, recovery fencing,
-operator-handoff integration, final-session cleanup, remaining P219 admission
-and observability work, and the architecture guard remain.
+rotation. Checkpoint `64f75821` adds pure recovery admission and transition
+rules plus a restart-safe SQLite recovery registry. Replacement requires exact
+client or authenticated-viewer demand and proof that the old browser is
+unusable; retry timing is bounded, and observed-live, failure, and success
+transitions reject stale generations. Runtime launch and observation wiring,
+operator exposure for backup status and creation, operator-handoff integration,
+final-session cleanup, remaining P219 admission and observability work, and the
+architecture guard remain.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

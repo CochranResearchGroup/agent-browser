@@ -62,6 +62,12 @@ entrypoints still use provider-free host, application-effect, and control
 implementations. Agent Browser must not infer an installed application launch
 or CDP endpoint from that transport reachability.
 
+Checkpoint `64f75821` adds presentation-neutral, generation-fenced browser
+recovery admission and persists it in the same SQLite authority. Dormant demand
+and ambiguous old-browser health cannot launch a replacement; retry, observed
+live, failure, and success transitions remain exact across restart. Runtime
+effect wiring is still pending.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

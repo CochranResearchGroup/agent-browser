@@ -10,6 +10,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 392 | 2026-09-28
+
+P220 checkpoint `64f75821` extracts the retained browser-recovery model without
+presentation ownership. Exact-client resume and authenticated active-viewer
+demand may admit a replacement only after the old browser is proven unusable;
+dormant demand waits, unknown health fails closed, retry backoff and deadlines
+are bounded, and every observed-live, failure, and success transition is fenced
+by generation. The recovery registry commits transactionally in SQLite and
+replays the admitted generation after restart. The complete service-model
+package, focused browser-session tests, formatting, and strict workspace Clippy
+pass. Runtime observation and replacement-launch wiring remain pending, and no
+browser or provider effect occurred.
+
 ## Turn 391 | 2026-09-28
 
 P220 checkpoint `ca3709e1` replaces the supported browser-session JSON path
