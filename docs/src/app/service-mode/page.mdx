@@ -1916,6 +1916,14 @@ Service tools include `service_request`, `desktop_capture`, `desktop_evidence_ob
 
 Browser Runtime backup operations use the same serialized `service_request` queue. `service_runtime_backup_status` verifies the current SQLite backup without changing it. `service_runtime_backup_create` creates one verified online backup and rotates at most one previous copy. Neither action restores data or includes the separate Service State store.
 
+Service status also exposes additive <code>browserRuntime</code> read-only
+health. It reports redacted SQLite integrity and database size, migration
+archive state, verified-backup state, and current browser-launch admission.
+Unavailable storage returns only a stable failure code plus launch admission;
+the database path is never public. <code>agent-browser install doctor</code>
+prints the same health fields without migrating the database or creating a
+backup.
+
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 
 ## Dashboard operations

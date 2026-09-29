@@ -1976,6 +1976,13 @@ for host-local observations. Treat reconciled `service_state` and a present
 from `validUntil`; unavailable means unknown, not absent or non-viable. Older
 v1 servers may omit this object, and legacy v1 mirrors remain supported.
 
+Current responses also include additive `browserRuntime` read-only health.
+Inspect its redacted SQLite integrity and size, migration archive state,
+verified-backup state, and browser-launch admission without opening or
+migrating the runtime database. An unavailable database returns a stable
+failure code plus launch admission and never exposes its filesystem path.
+`agent-browser install doctor` prints the same fields.
+
 Current Service Status also exposes additive `runtimeLifecycle` readback through
 CLI JSON, HTTP `GET /api/service/status`, typed MCP `service_status`, the
 generated client's `getServiceStatus()` and `createServiceStatusMcpToolCall()`

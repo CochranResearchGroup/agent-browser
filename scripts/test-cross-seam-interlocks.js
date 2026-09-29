@@ -34,6 +34,11 @@ assert.match(
   /runtimeLifecycle\??: ServiceRuntimeLifecycleStatus/,
   'Generated service observability types must expose typed runtimeLifecycle status.',
 );
+assert.match(
+  observabilityTypes,
+  /browserRuntime\??: ServiceBrowserRuntimeOperationalStatus/,
+  'Generated service observability types must expose Browser Runtime health.',
+);
 
 assert.ok(
   serviceStatusSchema.properties.browserSessionAuthority?.properties?.browserVerdicts,
@@ -61,6 +66,30 @@ const knownBadStream = {
 };
 
 const fixture = {
+  browserRuntime: {
+    schemaVersion: 'agent-browser.runtime-operational-status.v1',
+    state: 'available',
+    launchAdmission: {
+      schemaVersion: 'agent-browser.browser-launch-admission.v1',
+      state: 'admitted',
+      availableMemoryBytes: 8_000_000_000,
+      minimumAvailableMemoryBytes: 1_073_741_824,
+      availableDiskBytes: 20_000_000_000,
+      minimumAvailableDiskBytes: 1_073_741_824,
+      hostProcessCount: 120,
+      hostProcessLimit: 4_194_304,
+      browserProcessCount: 1,
+      maximumBrowserProcesses: 64,
+      reasons: [],
+    },
+    storage: {
+      integrityState: 'ok',
+      databaseBytes: 65_536,
+      backupState: 'verified',
+      backupSha256: 'a'.repeat(64),
+    },
+    migration: { importedSourceCount: 3, archiveState: 'present' },
+  },
   control_plane: {
     waiting_profile_lease_job_count: 0,
     service_monitor_interval_ms: 60000,

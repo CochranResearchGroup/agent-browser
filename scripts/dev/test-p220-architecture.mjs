@@ -42,6 +42,10 @@ function check(root) {
     source.retention.indexOf('pub fn project_remote_view_operator_handoff'),
     source.retention.indexOf('pub fn retain_remote_view_presentation'),
   );
+  const operationalStatusProjection = source.store.slice(
+    source.store.indexOf('pub(crate) fn default_operational_status_read_only'),
+    source.store.indexOf('pub(crate) fn open_or_migrate'),
+  );
 
   requireCondition(
     !retiredProviderTerms.test(modelSources),
@@ -125,6 +129,14 @@ function check(root) {
       !/restore/i.test(source.backup.replace(/do not restore/gi, '')),
     'backup surface must expose status and creation without a restore effect',
   );
+  requireCondition(
+    /SQLITE_OPEN_READ_ONLY/.test(source.store) &&
+      /unavailable_operational_status/.test(operationalStatusProjection) &&
+      !/(?:databasePath|archive_directory\s*:|to_string_lossy)/.test(
+        operationalStatusProjection,
+      ),
+    'Browser Runtime operational status must stay read-only and path-redacted',
+  );
   return failures;
 }
 
@@ -169,6 +181,13 @@ function selfTest() {
     );
     writeFileSync(join(root, paths.retention), retention);
     if (check(root).length === 0) throw new Error('self-test missed route identity handoff leak');
+    copyFixture(root);
+    const store = read(root, paths.store).replace(
+      '"state": "available",',
+      '"state": "available", "databasePath": path.to_string_lossy(),',
+    );
+    writeFileSync(join(root, paths.store), store);
+    if (check(root).length === 0) throw new Error('self-test missed runtime status path leak');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
