@@ -9,7 +9,7 @@ use std::time::Duration;
 #[cfg(test)]
 use agent_browser_service_model::BrowserRecoveryPhase;
 use agent_browser_service_model::{
-    decide_browser_recovery, record_browser_recovery_failure,
+    decide_browser_recovery, detach_remote_view_presentation, record_browser_recovery_failure,
     record_browser_recovery_observed_live, record_browser_recovery_success,
     release_remote_view_presentation, retain_remote_view_presentation, BrowserProfileCatalog,
     BrowserProfileCatalogDiagnostic, BrowserRecoveryAdmissionPolicy, BrowserRecoveryDecision,
@@ -320,6 +320,13 @@ impl BrowserSessionSqliteStore {
         self.mutate_session_state(|state| {
             release_remote_view_presentation(state, browser_id, release)
         })
+    }
+
+    pub(crate) fn detach_remote_view_presentation(
+        &mut self,
+        browser_id: &str,
+    ) -> Result<usize, String> {
+        self.mutate_session_state(|state| detach_remote_view_presentation(state, browser_id))
     }
 
     fn mutate_session_state<T>(
@@ -1372,6 +1379,20 @@ mod tests {
                 .unwrap()
                 .remote_view_presentations["browser-a"],
             retained
+        );
+        assert_eq!(
+            restarted
+                .detach_remote_view_presentation("browser-a")
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            restarted
+                .load_session_state()
+                .unwrap()
+                .remote_view_presentations["browser-a"]
+                .state,
+            RemoteViewPresentationRetentionState::Detached
         );
         let released = restarted
             .release_remote_view_presentation(

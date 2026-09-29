@@ -203,9 +203,10 @@ pub use remote_view_consumer::{
     REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
 };
 pub use remote_view_retention::{
-    project_remote_view_operator_handoff, release_remote_view_presentation,
-    retain_remote_view_presentation, RemoteViewOperatorHandoffLink,
-    RemoteViewPresentationRetention, RemoteViewPresentationRetentionState,
+    detach_remote_view_presentation, project_remote_view_operator_handoff,
+    release_remote_view_presentation, retain_remote_view_presentation,
+    RemoteViewOperatorHandoffLink, RemoteViewPresentationRetention,
+    RemoteViewPresentationRetentionState,
 };
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,

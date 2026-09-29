@@ -115,11 +115,14 @@ function check(root) {
   requireCondition(
     /remote_view_presentations/.test(source.manager) &&
       /release_remote_view_presentation/.test(source.retention) &&
+      /detach_remote_view_presentation/.test(source.retention) &&
+      /RemoteViewPresentationRetentionState::Detached/.test(source.retention) &&
+      /remote_view_retention_release_still_referenced/.test(source.retention) &&
       /RemoteViewPresentationRetentionState::Released/.test(source.retention) &&
       /pub\(crate\) fn retain_remote_view_presentation/.test(source.store) &&
       /fn mutate_session_state/.test(source.store) &&
       !/(?:provider_url|display_number|credential)/i.test(source.retention),
-    'Remote View retention must stay exact, provider-neutral, and release-fenced',
+    'Remote View retention must stay exact, shareable, provider-neutral, and reference-fenced',
   );
   requireCondition(
     /\/remote-view\/\{handoff_id\}/.test(handoffProjection) &&
@@ -184,6 +187,13 @@ function selfTest() {
     );
     writeFileSync(join(root, paths.runtime), runtimeWithoutContextFence);
     if (check(root).length === 0) throw new Error('self-test missed generation context fence removal');
+    copyFixture(root);
+    const retentionWithoutReferenceFence = read(root, paths.retention).replaceAll(
+      'remote_view_retention_release_still_referenced',
+      'remote_view_retention_release_unchecked',
+    );
+    writeFileSync(join(root, paths.retention), retentionWithoutReferenceFence);
+    if (check(root).length === 0) throw new Error('self-test missed shared-assignment reference fence removal');
     copyFixture(root);
     const retention = read(root, paths.retention).replace(
       'handoff_url: format!("/remote-view/{handoff_id}"),',
