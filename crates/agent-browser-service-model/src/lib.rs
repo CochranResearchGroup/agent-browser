@@ -31,6 +31,7 @@ mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
 mod remote_view_consumer;
+mod remote_view_retention;
 mod request_provenance;
 mod runtime_owner_projection;
 mod service_authentication_run;
@@ -200,6 +201,10 @@ pub use remote_view_consumer::{
     RemoteViewViewerSessionStatus, RemoteViewViewingRoute, REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION,
     REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION, REMOTE_VIEW_J1_SOURCE_CHECKPOINT,
     REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
+};
+pub use remote_view_retention::{
+    release_remote_view_presentation, retain_remote_view_presentation,
+    RemoteViewPresentationRetention, RemoteViewPresentationRetentionState,
 };
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,

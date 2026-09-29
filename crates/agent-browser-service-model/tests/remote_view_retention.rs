@@ -1,0 +1,134 @@
+use std::collections::BTreeMap;
+
+use agent_browser_service_model::{
+    release_remote_view_presentation, retain_remote_view_presentation, BrowserSessionState,
+    ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, RemoteViewAssignmentRecord,
+    RemoteViewAssignmentState, RemoteViewDesktopPresentationBinding,
+    RemoteViewDesktopViewingRetirement, RemoteViewFixedDesktop, RemoteViewJoinedReleaseOutcome,
+    RemoteViewPresentationRetentionState,
+};
+
+fn fixture_state() -> BrowserSessionState {
+    BrowserSessionState {
+        browsers: BTreeMap::from([(
+            "browser-a".into(),
+            ManagedBrowserInstance {
+                id: "browser-a".into(),
+                profile_id: "profile-a".into(),
+                pid: 42,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                    friendly_route_label: "desktop-a".into(),
+                    generation: 7,
+                }),
+                active_session_ids: vec!["session-a".into()],
+            },
+        )]),
+        sessions: BTreeMap::from([(
+            "session-a".into(),
+            ManagedBrowserSession {
+                id: "session-a".into(),
+                name: "work".into(),
+                profile_id: "profile-a".into(),
+                browser_id: "browser-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: 10,
+                current_tab_id: Some("tab-a".into()),
+            },
+        )]),
+        tabs: BTreeMap::from([(
+            "tab-a".into(),
+            ManagedBrowserTab {
+                id: "tab-a".into(),
+                target_id: "target-a".into(),
+                browser_id: "browser-a".into(),
+                session_id: "session-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+            },
+        )]),
+        ..BrowserSessionState::default()
+    }
+}
+
+fn binding() -> RemoteViewDesktopPresentationBinding {
+    RemoteViewDesktopPresentationBinding {
+        registration_id: "registration-a".into(),
+        pool_id: "pool-a".into(),
+        desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+        generation: 7,
+        assignment_id: "assignment-a".into(),
+        placement_id: "placement-a".into(),
+        route_id: "22222222-2222-2222-2222-222222222222".into(),
+        viewer_session_ids: vec!["viewer-desktop".into(), "viewer-mobile".into()],
+    }
+}
+
+#[test]
+fn exact_public_binding_is_retained_idempotently_without_provider_urls() {
+    let mut state = fixture_state();
+    let first =
+        retain_remote_view_presentation(&mut state, "browser-a", "session-a", "tab-a", &binding())
+            .unwrap();
+    let mut reordered = binding();
+    reordered.viewer_session_ids.reverse();
+    let replay =
+        retain_remote_view_presentation(&mut state, "browser-a", "session-a", "tab-a", &reordered)
+            .unwrap();
+
+    assert_eq!(first, replay);
+    assert_eq!(first.target_id, "target-a");
+    assert_eq!(first.state, RemoteViewPresentationRetentionState::Active);
+    let encoded = serde_json::to_value(&state).unwrap();
+    let retained = &encoded["remoteViewPresentations"]["browser-a"];
+    assert_eq!(retained["routeId"], binding().route_id);
+    assert!(retained.get("providerUrl").is_none());
+    assert!(retained.get("display").is_none());
+}
+
+#[test]
+fn release_requires_the_exact_assignment_generation_route_and_viewer_set() {
+    let mut state = fixture_state();
+    retain_remote_view_presentation(&mut state, "browser-a", "session-a", "tab-a", &binding())
+        .unwrap();
+    let release = RemoteViewJoinedReleaseOutcome {
+        assignment: RemoteViewAssignmentRecord {
+            assignment_id: "assignment-a".into(),
+            registration_id: "registration-a".into(),
+            pool_id: "pool-a".into(),
+            desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+            generation: 7,
+            state: RemoteViewAssignmentState::Released,
+        },
+        retirement: RemoteViewDesktopViewingRetirement {
+            schema_version: 1,
+            desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+            generation: 7,
+            routes: vec!["22222222-2222-2222-2222-222222222222".into()],
+            sessions: vec!["viewer-mobile".into(), "viewer-desktop".into()],
+        },
+    };
+
+    let released = release_remote_view_presentation(&mut state, "browser-a", &release).unwrap();
+    assert_eq!(
+        released.state,
+        RemoteViewPresentationRetentionState::Released
+    );
+    assert_eq!(
+        release_remote_view_presentation(&mut state, "browser-a", &release).unwrap(),
+        released
+    );
+
+    let mut stale = fixture_state();
+    retain_remote_view_presentation(&mut stale, "browser-a", "session-a", "tab-a", &binding())
+        .unwrap();
+    let mut wrong_generation = release;
+    wrong_generation.retirement.generation = 8;
+    assert!(release_remote_view_presentation(&mut stale, "browser-a", &wrong_generation).is_err());
+    assert_eq!(
+        stale.remote_view_presentations["browser-a"].state,
+        RemoteViewPresentationRetentionState::Active
+    );
+}

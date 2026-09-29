@@ -973,7 +973,9 @@ fn atomic_replace(source: &Path, destination: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use agent_browser_service_model::BrowserProfileKind;
+    use agent_browser_service_model::{
+        BrowserProfileKind, RemoteViewPresentationRetention, RemoteViewPresentationRetentionState,
+    };
 
     struct TempDirectory(PathBuf);
 
@@ -1104,6 +1106,45 @@ mod tests {
             .join(BROWSER_RUNTIME_BACKUP_DIRECTORY)
             .join(BROWSER_RUNTIME_BACKUP_PREVIOUS)
             .is_file());
+    }
+
+    #[test]
+    fn sqlite_session_document_retains_remote_view_public_identity_across_restart() {
+        let directory = TempDirectory::new("remote-view-retention-restart");
+        let legacy_path = directory.0.join("state.json");
+        let (store, _) =
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
+        let mut state = store.load_session_state().unwrap();
+        state.remote_view_presentations.insert(
+            "browser-a".into(),
+            RemoteViewPresentationRetention {
+                browser_id: "browser-a".into(),
+                profile_id: "profile-a".into(),
+                session_id: "session-a".into(),
+                tab_id: "tab-a".into(),
+                target_id: "target-a".into(),
+                registration_id: "registration-a".into(),
+                pool_id: "pool-a".into(),
+                desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                generation: 7,
+                assignment_id: "assignment-a".into(),
+                placement_id: "placement-a".into(),
+                route_id: "22222222-2222-2222-2222-222222222222".into(),
+                viewer_session_ids: vec!["viewer-a".into()],
+                state: RemoteViewPresentationRetentionState::Active,
+            },
+        );
+        store.save_session_state(&state).unwrap();
+        drop(store);
+
+        let restarted = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        assert_eq!(
+            restarted
+                .load_session_state()
+                .unwrap()
+                .remote_view_presentations,
+            state.remote_view_presentations
+        );
     }
 
     #[test]

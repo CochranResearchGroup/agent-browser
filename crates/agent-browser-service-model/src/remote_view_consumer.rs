@@ -267,6 +267,8 @@ pub struct RemoteViewJoinedReleaseOutcome {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RemoteViewDesktopPresentationBinding {
+    pub registration_id: String,
+    pub pool_id: String,
     pub desktop_id: String,
     pub generation: u64,
     pub assignment_id: String,
@@ -474,6 +476,8 @@ pub fn validate_remote_view_j3_agent_browser_fixture(
             return Err(RemoteViewConsumerError::InvalidJ3Fixture);
         }
         accepted.push(RemoteViewDesktopPresentationBinding {
+            registration_id: assignment.registration_id.clone(),
+            pool_id: assignment.pool_id.clone(),
             desktop_id: assignment.desktop_id.clone(),
             generation: assignment.generation,
             assignment_id: assignment.assignment_id.clone(),

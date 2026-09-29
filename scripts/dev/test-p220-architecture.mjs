@@ -9,6 +9,7 @@ const paths = {
   consumer: 'crates/agent-browser-service-model/src/remote_view_consumer.rs',
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
+  retention: 'crates/agent-browser-service-model/src/remote_view_retention.rs',
   host: 'cli/src/native/browser_session_host.rs',
   runtime: 'cli/src/native/browser_session_runtime.rs',
   store: 'cli/src/native/browser_session_store.rs',
@@ -27,7 +28,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.manager, source.recovery].join('\n');
+  const modelSources = [source.consumer, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [source.host, source.runtime, source.store, source.backup].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
 
@@ -82,6 +83,13 @@ function check(root) {
     'recovery state must remain under transactional CLI persistence authority',
   );
   requireCondition(
+    /remote_view_presentations/.test(source.manager) &&
+      /release_remote_view_presentation/.test(source.retention) &&
+      /RemoteViewPresentationRetentionState::Released/.test(source.retention) &&
+      !/(?:provider_url|display_number|credential)/i.test(source.retention),
+    'Remote View retention must stay exact, provider-neutral, and release-fenced',
+  );
+  requireCondition(
     /handle_service_runtime_backup_status/.test(source.backup) &&
       /handle_service_runtime_backup_create/.test(source.backup) &&
       !/restore/i.test(source.backup.replace(/do not restore/gi, '')),
@@ -112,6 +120,7 @@ function selfTest() {
     requireClean(root, 'valid fixture rejected');
     const cases = [
       [paths.consumer, '\npub struct ProviderFreeHost;\n', 'provider-private model'],
+      [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
       [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],
       [paths.backup, '\nstruct ProviderFreeControl;\n', 'provider-private backup action'],

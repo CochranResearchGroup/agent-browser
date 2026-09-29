@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::{
     select_least_crowded_remote_view_desktop, BrowserDisposableProfilePolicy,
     BrowserProfileCatalog, BrowserProfileCatalogEntry, BrowserProfileKind,
-    RemoteViewDesktopCandidate, RemoteViewFixedDesktop,
+    RemoteViewDesktopCandidate, RemoteViewFixedDesktop, RemoteViewPresentationRetention,
 };
 
 pub const BROWSER_SESSION_STATE_SCHEMA_V1: &str = "agent-browser.browser-session-state.v1";
@@ -347,6 +347,7 @@ pub struct BrowserSessionState {
     pub next_session_sequence: u64,
     pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
+    pub remote_view_presentations: BTreeMap<String, RemoteViewPresentationRetention>,
     pub sessions: BTreeMap<String, ManagedBrowserSession>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
@@ -364,6 +365,7 @@ impl Default for BrowserSessionState {
             next_session_sequence: 0,
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
+            remote_view_presentations: BTreeMap::new(),
             sessions: BTreeMap::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
