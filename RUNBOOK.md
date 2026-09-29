@@ -10,6 +10,22 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 390 | 2026-09-28
+
+P220 source checkpoint `552c8162` consumes Remote View's strict public J3
+registration, assignment, ready-placement, opaque-route, viewer-session status,
+and joined-release records in `agent-browser-service-model`. Its source-bound
+fixture proves two desktops, distinct placement and route identity, independent
+desktop/mobile sessions, exact route-and-session retirement, and rejection of
+browser-private state or partial cleanup. The complete service-model package
+passes with 228 unit tests plus all integration tests; workspace formatting and
+strict Clippy pass. This is provider-free wire-consumption evidence only. The
+next packet must replace the CLI's placement-unavailable stop with an injected
+Remote View adapter while preserving browser/profile/CDP authority and the
+opaque route-ID versus durable operator-handoff distinction. No live Remote
+View, browser, provider, install, privilege, production, or release effect
+occurred.
+
 ## Turn 389 | 2026-09-28
 
 Remote View Plan 0017 is closed from corrected canonical evidence. J2

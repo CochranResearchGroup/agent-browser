@@ -45,8 +45,11 @@ disposable profile count and bytes and compacts exact URL history into durable
 daily summaries without importing the retired presentation authority. Remote
 View J2 and J3 are canonical, and corrected production CLI, HTTP, and MCP
 reachability closes the external contract dependency. Agent Browser must now
-consume those public records, preserve the distinction between Remote View's
-opaque route ID and its own durable operator handoff URL, and complete the
+consume those public records. Checkpoint `552c8162` adds the strict
+provider-free J3 wire fixture with two placements, four viewer sessions,
+private-state exclusion, and exact joined cleanup. The runtime join must
+preserve the distinction between Remote View's opaque route ID and Agent
+Browser's durable operator handoff URL, and complete the
 remaining P219 domain extraction, protected integration, and separately
 authorized installed acceptance. No live Remote View, browser, provider,
 install, privilege, production, or release effect has occurred.

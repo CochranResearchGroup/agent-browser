@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 6
+Plan version: 7
 
 State: OPEN
 
@@ -94,6 +94,16 @@ those identities distinct and add one Agent Browser handoff adapter over the
 public route contract. It must not expose a route ID or provider URL as though
 it were the durable operator handoff.
 
+P220 checkpoint `552c8162` consumes the strict public J3 registration,
+assignment, placement, viewing-route, viewer-session status, and joined-release
+records in the provider-free service-model boundary. The source-bound fixture
+proves two exact desktops, one ready placement and opaque route per desktop,
+independent desktop/mobile viewer sessions, and release that retires the exact
+route and both sessions. Unknown browser-private fields, partial retirement,
+identity mismatch, and generation mismatch fail closed. This completes the
+J3 wire-consumption tracer, not the CLI placement adapter or installed
+acceptance.
+
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
 the published topic ref at audit start and contains both reusable Agent Browser
@@ -159,15 +169,17 @@ shapes. Use no Remote View internal modules and perform no runtime effects.
 Exit: the F0-shaped fixture proves two fixed desktop selections and distinct
 browser associations while Agent Browser retains its domain authority.
 
-Status: F0 and J1 complete at source checkpoint `8f753da0`. Public identity,
+Status: F0 and J1 complete at source checkpoint `8f753da0`; strict J3 public
+wire consumption is complete at `552c8162`. Public identity,
 foundation observation, lifecycle observation, durable operation status,
 allocated fixed-desktop selection, distinct browser association, and exact
 UUID-plus-generation release targeting are covered. J2 and J3 are now
-canonical and release the next provider-free packet: consume registration,
-pool, assignment, placement, viewing-route, viewer-session, reacquisition,
-placement-stop, and joined-release records through the existing client
-boundary. Operator handoff materialization remains Agent Browser-owned and
-must preserve the route-ID versus handoff-URL distinction.
+canonical. Registration, assignment, ready placement, viewing-route,
+viewer-session status, and joined-release records are consumed through the
+existing boundary. The next packet must bind those records to the CLI runtime,
+including placement-stop and truthful reacquisition behavior. Operator handoff
+materialization remains Agent Browser-owned and must preserve the route-ID
+versus handoff-URL distinction.
 
 ### S2 — Retained-domain integration
 
@@ -205,12 +217,13 @@ No installed acceptance begins merely because S0 through S3 source work passes.
 
 Status: J1 replay complete against Remote View source checkpoint
 `f674518e34fea346002c72c4adc3966b628d0b78`. The fixture rejects unversioned
-shape drift and tampered operation payload evidence. J2/J3 and corrected
-production-adapter authority are published; their Agent Browser-owned replay
-and cross-contract fixture remain pending. Remote View's provider-free fixture
-is compatibility evidence, not a substitute for proving Agent Browser's
-browser launch, recovery, durable handoff, retention mapping, or cleanup
-adapter.
+shape drift and tampered operation payload evidence. The J3 Agent Browser wire
+fixture now passes at `552c8162`, including strict private-state exclusion and
+exact joined cleanup. The remaining replay work is the Agent Browser runtime
+join against Remote View's corrected production-adapter contract. Remote
+View's provider-free fixture is compatibility evidence, not a substitute for
+proving Agent Browser's browser launch, recovery, durable handoff, retention
+mapping, or cleanup adapter.
 
 ## Worker assignments
 
