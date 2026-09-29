@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 22
+Plan version: 23
 
 State: OPEN
 
@@ -212,6 +212,16 @@ both UUID and generation match, rejects missing, stale, or invalid context
 before resource admission or Chrome launch, and never derives display from a
 route label. The default host supplies no fabricated context, so production
 Remote View launch remains fail-closed until its public adapter is wired.
+
+Checkpoint `cfaf3f12` adapts retained presentation identity to the accepted
+shared-desktop model. Multiple browsers may retain the same exact registration,
+pool, assignment, desktop generation, route, and viewer-session set while
+keeping distinct Agent Browser browser, profile, session, tab, and target
+identity. A browser detach is durable and does not release the Remote View
+assignment. Joined release fails while any peer browser reference remains.
+Conflicting or partially overlapping desktop identity still fails closed. The
+legacy schema-v1 `placementId` string remains empty for reader compatibility
+and no longer participates in validation or retention authority.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -434,6 +444,14 @@ guard now rejects restoration of the application-placement stop, loss of the
 generation fence, or route-label display inference. Workspace formatting and
 strict Clippy pass. The production adapter, dynamic refresh, viewing/window
 join, and live launch remain pending.
+Checkpoint `cfaf3f12` completes the pure shared-assignment retention and
+transactional detach seam. Five focused retention tests prove exact sharing,
+distinct logical identities, conflict rejection before and after detach,
+reference-fenced release, handoff privacy, and exact joined cleanup. The full
+228-test service-model unit suite and every service-model integration test,
+the focused SQLite restart transaction, the self-testing architecture guard,
+formatting, and strict workspace Clippy pass. Runtime ingress still must call
+detach and final release from authenticated Remote View evidence.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

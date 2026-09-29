@@ -10,6 +10,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 406 | 2026-09-29
+
+P220 version 23 and checkpoint `cfaf3f12` adapt presentation retention to the
+accepted shared-desktop model. Multiple Agent Browser browsers may retain one
+exact Remote View registration, pool, assignment, desktop generation, route,
+and viewer-session set while preserving distinct browser, profile, session,
+tab, and target identity. A durable detach removes one browser reference
+without releasing the assignment. Joined provider release fails while any
+peer browser remains active. Partial or conflicting shared identity fails both
+before and after detach.
+
+The legacy schema-v1 `placementId` remains an empty string for older-reader
+compatibility but is no longer validated, retained from input, or used as
+authority. Five focused retention tests, the full 228-test service-model unit
+suite and all service-model integration tests, the SQLite detach/release
+restart test, the self-testing architecture guard, formatting, and strict
+workspace Clippy pass. The first comprehensive replay attempt failed before
+compilation in the optional cache wrapper; the documented cache-off replay
+passed and preserves that infrastructure failure rather than erasing it. No
+live Remote View, browser, provider, install, privilege, production, or release
+effect occurred.
+
 ## Turn 405 | 2026-09-29
 
 P220 version 22 records the bounded Remote View source integration result and

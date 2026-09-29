@@ -106,6 +106,13 @@ Remote View's installed lifecycle record now supplies the launch-side resource;
 issue #146 tracks the distinct public join from that dynamic desktop identity
 to viewing and slot-addressed window actions.
 
+Checkpoint `cfaf3f12` makes presentation retention share one exact desktop
+assignment across multiple Agent Browser browsers. Detach removes one browser
+reference without releasing the assignment; joined release fails until no peer
+reference remains. Conflicting partial identity reuse remains rejected, and
+the legacy placement field is retained only as an empty schema-v1 compatibility
+string.
+
 Checkpoint `e36f7d42` exposes additive Browser Runtime operational health in
 Service status and install doctor. The read-only, path-redacted projection
 reports SQLite integrity and size, migration archive state, verified-backup
