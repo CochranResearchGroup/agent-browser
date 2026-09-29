@@ -10,6 +10,27 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 389 | 2026-09-28
+
+Remote View Plan 0017 is closed from corrected canonical evidence. J2
+`7298ae7f76626c61ba5086eb4f934699251009ce` and J3
+`018d3d752f9d99805242f99c00034f0caabc53d1` publish registration, bounded
+pools, exact assignment and placement, opaque route identity, layered viewer
+status, truthful reacquisition, placement stop, and joined cleanup. Corrective
+source `b7caa1f209f2d64cd400b1766c50389ab4dc5cb3` makes the operation matrix
+reachable through real CLI, authenticated HTTP, and MCP adapters; governance
+evidence is canonical at `eefddd2c862ce97bcf4387b2cc43dbbb2d9274eb`, and
+Remote View `origin/main@30f3e37` reconciles the closure narrative. P220's
+external J2/J3 wait is therefore cleared. Its next packet is Agent
+Browser-owned provider-free consumption and replay, including replacement of
+the temporary placement-unavailable boundary, retention mapping, exact cleanup,
+and a handoff adapter that does not confuse Remote View's opaque `routeId` with
+the operator-facing `/remote-view/<handoff-id>` URL. SQLite backup and recovery
+authority, remaining admission and observability extraction, the architecture
+guard, protected integration, and separately authorized installed acceptance
+remain. Remote View's provider-free and production-entrypoint evidence does not
+authorize an Agent Browser live effect.
+
 ## Turn 388 | 2026-09-28
 
 P220 is active on `platform/p220-remote-view-consumer` from canonical

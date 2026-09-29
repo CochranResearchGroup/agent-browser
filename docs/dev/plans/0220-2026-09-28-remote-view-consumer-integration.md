@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 5
+Plan version: 6
 
 State: OPEN
 
@@ -16,7 +16,7 @@ Predecessor: Agent Browser Issue #195 and the linked P219 supersession audit, ca
 
 Work item: [CochranResearchGroup/agent-browser#202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
 
-Consumer dependency: [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70)
+Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, and corrective Plan 0028
 
 Target: `origin/main` at `a3848e16`
 
@@ -41,10 +41,26 @@ input, diagnostics, and exact desktop cleanup.
 
 ## Current State
 
-Remote View Plan 0017 has integrated its F0 foundation, J1 durable operation
-and desktop lifecycle checkpoint, and an early provider-free Agent Browser
-contract probe. That probe uses two existing fixed desktops and remains
-compatibility feedback rather than final RV-014 acceptance.
+Remote View Plan 0017 is closed from corrected canonical evidence. J2
+integrated at `7298ae7f76626c61ba5086eb4f934699251009ce`; J3 integrated at
+`018d3d752f9d99805242f99c00034f0caabc53d1`. Its final provider-free Agent
+Browser fixture proves two simultaneous desktop assignments, one external
+browser association per desktop, independent desktop and mobile viewer
+sessions, private-state exclusion, truthful reacquisition, and exact joined
+cleanup. RV-014 and Remote View Issue #70 are closed.
+
+The initial Plan 0017 closure was later reopened because its complete operation
+matrix was reachable only through in-memory adapter-shaped fixtures and its
+closure evidence lacked release and documentation validation plus a fresh
+resource census. Corrective Plan 0028 added real production CLI,
+authenticated HTTP, and MCP reachability through one `ControlRuntime`, repaired
+the legacy capacity-routing regression found during canonical validation, and
+reclosed Plan 0017 from source `b7caa1f209f2d64cd400b1766c50389ab4dc5cb3`
+with governance evidence at
+`eefddd2c862ce97bcf4387b2cc43dbbb2d9274eb`. Remote View `origin/main` at
+`30f3e37` reconciles the closure narrative. This is authoritative provider
+source and provider-free validation evidence, not Agent Browser installed
+acceptance or authority for a live effect.
 
 P220 source checkpoint `9a34e292` establishes the Agent Browser-owned F0
 consumer boundary and distinct two-desktop browser/profile association
@@ -52,11 +68,13 @@ invariant. The current follow-up consumes the complete published foundation
 observation, including command, resource states, and effect discipline. Remote
 View J1 source checkpoint `f674518e34fea346002c72c4adc3966b628d0b78`
 publishes lifecycle observations, durable operation status, exact generation
-fencing, and release semantics. J2 and J3 have not yet published the viewing,
-application-placement, viewer-status, and final cleanup contracts required by
-later slices.
+fencing, and release semantics. The now-published J2 and J3 contracts add
+application registration, bounded pools, exact assignment and placement,
+opaque viewing-route identity, viewer admission and layered live status,
+generation-safe reacquisition, placement stop, and joined release that retires
+the exact route and viewer sessions.
 
-Retained-domain extraction is active through `d6f390be`. The extracted
+Retained-domain extraction is active through `f695c545`. The extracted
 presentation-neutral spine owns named browser sessions and tabs, independent
 durable persistence, restart reattachment, idle reaping, focus, and addressed
 ordinary-command routing. It now also bounds disposable profile count and
@@ -65,9 +83,16 @@ pin or promotion bypass fields, and compacts exact URL history into
 restart-safe daily identity summaries under a fixed byte ceiling. Desktop
 selection consumes Remote View UUID, route
 label, generation, and readiness observations instead of the legacy Agent
-Browser route inventory. Real Remote View placement fails closed at
-`remote_view_application_placement_contract_unavailable` until its public
-contract exists.
+Browser route inventory. Real Remote View placement still fails closed at
+`remote_view_application_placement_contract_unavailable`; the contract now
+exists, so replacing that temporary boundary is the next source packet rather
+than an external dependency wait.
+
+Remote View's opaque `routeId` is a provider route identity, not by itself the
+Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep
+those identities distinct and add one Agent Browser handoff adapter over the
+public route contract. It must not expose a route ID or provider URL as though
+it were the durable operator handoff.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -137,9 +162,12 @@ browser associations while Agent Browser retains its domain authority.
 Status: F0 and J1 complete at source checkpoint `8f753da0`. Public identity,
 foundation observation, lifecycle observation, durable operation status,
 allocated fixed-desktop selection, distinct browser association, and exact
-UUID-plus-generation release targeting are covered. Opaque handoff, layered
-viewer and application status, and final cleanup remain checkpoint-gated and
-must not be invented ahead of Remote View J2 and J3.
+UUID-plus-generation release targeting are covered. J2 and J3 are now
+canonical and release the next provider-free packet: consume registration,
+pool, assignment, placement, viewing-route, viewer-session, reacquisition,
+placement-stop, and joined-release records through the existing client
+boundary. Operator handoff materialization remains Agent Browser-owned and
+must preserve the route-ID versus handoff-URL distinction.
 
 ### S2 — Retained-domain integration
 
@@ -155,10 +183,12 @@ Status: partial. The initial session, durable store, and runtime spine plus
 named-tab, reaping, focus, addressed-command, disposable-retention, and exact
 URL compaction behaviors are extracted and locally qualified. The quota model
 accepts protected session identities without importing the retired
-viewer/controller tables; the future J2 join must supply protection from
-Remote View public authority. SQLite migration and backup authority, recovery
-fencing, opaque handoff integration, final-session cleanup, remaining P219
-admission and observability work, and the architecture guard remain.
+viewer/controller tables. The J2/J3 join must now map exact public assignment,
+placement, route, and viewer-session observations into Agent Browser's own
+retention policy and fail closed on ambiguity. SQLite migration and backup
+authority, recovery fencing, operator-handoff integration, final-session
+cleanup, remaining P219 admission and observability work, and the architecture
+guard remain.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
@@ -175,8 +205,12 @@ No installed acceptance begins merely because S0 through S3 source work passes.
 
 Status: J1 replay complete against Remote View source checkpoint
 `f674518e34fea346002c72c4adc3966b628d0b78`. The fixture rejects unversioned
-shape drift and tampered operation payload evidence. J2 and J3 replay remain
-pending their published contracts.
+shape drift and tampered operation payload evidence. J2/J3 and corrected
+production-adapter authority are published; their Agent Browser-owned replay
+and cross-contract fixture remain pending. Remote View's provider-free fixture
+is compatibility evidence, not a substitute for proving Agent Browser's
+browser launch, recovery, durable handoff, retention mapping, or cleanup
+adapter.
 
 ## Worker assignments
 
@@ -187,9 +221,10 @@ separate audit and test surfaces. Client-contract implementation, extraction
 of mixed P219 commits, schema generation, and shared documentation remain on
 the serialized critical path.
 
-Remote View retains authority over its repository and Issue #70. Agent Browser
-consumes published checkpoints and does not edit Remote View source as part of
-this plan.
+Remote View retains authority over its repository. Issue #70 and RV-014 are
+closed from Remote View's J3 fixture; Agent Browser consumes the published J2,
+J3, and corrective production-adapter checkpoints and does not edit Remote
+View source as part of this plan.
 
 ## Evidence and exit
 

@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d6f390be
+    checkpoint: f695c545
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
-    integration: merge through the protected pull-request workflow after current Remote View checkpoints, retained-domain reconciliation, and changed-surface validation
-    validation_status: Remote View F0 and source-bound J1 consumer fixtures, bounded disposable retention, exact URL compaction, complete service-model package, focused CLI browser-session and filesystem tests, formatting, strict workspace Clippy, selected service contracts and types, documentation links, custody ledger, and diff hygiene pass locally; complete batch validation remains pending
-    validation_ref: d6f390be
+    integration: merge through the protected pull-request workflow after J2/J3 consumer replay, retained-domain reconciliation, and changed-surface validation
+    validation_status: Remote View F0 and source-bound J1 consumer fixtures, bounded disposable retention, exact URL compaction, complete service-model package, focused CLI browser-session and filesystem tests, formatting, strict workspace Clippy, selected service contracts and types, documentation links, custody ledger, and diff hygiene pass locally; Remote View J2/J3 and corrected production adapters are canonical but Agent Browser replay and complete batch validation remain pending
+    validation_ref: f695c545
     work_items: [CochranResearchGroup/agent-browser#202, CochranResearchGroup/remote-view#70]
-    dependencies: [Remote View Plan 0017 J2, Remote View Plan 0017 J3]
+    dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P220 writes only its own bounded planning sections and catalog entry; P204 and P214 retain their own records]
-    blocker: J2 and J3 public contracts are not yet published; remaining P219 SQLite backup authority, recovery, handoff, cleanup, admission, and observability extraction plus final installed acceptance also remain
+    blocker: No external Remote View source-contract blocker remains; Agent Browser J2/J3 consumption, SQLite backup authority, recovery, operator handoff, cleanup, admission, observability, protected integration, and separately authorized installed acceptance remain
     updated_at: 2026-09-28
   - id: P204
     product_lane: PL-PLATFORM
