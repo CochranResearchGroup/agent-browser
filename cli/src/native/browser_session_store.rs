@@ -58,7 +58,8 @@ pub(crate) struct BrowserRuntimeBackupManifest {
     pub(crate) previous_sha256: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(crate) struct BrowserRuntimeBackupStatus {
     pub(crate) state: &'static str,
     pub(crate) sha256: Option<String>,

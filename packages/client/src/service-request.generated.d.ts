@@ -45,6 +45,8 @@ export type ServiceRequestAction =
   | "service_viewer_lease_heartbeat"
   | "service_viewer_lease_release"
   | "service_controller_lease_takeover"
+  | "service_runtime_backup_status"
+  | "service_runtime_backup_create"
   | "service_authentication_run_start"
   | "service_authentication_run_status"
   | "service_authentication_run_resume"
@@ -1626,6 +1628,29 @@ export interface ServiceChallengeTaskData {
   replayed: boolean;
 }
 
+export interface ServiceRuntimeBackupStatus {
+  state: "missing" | "verified" | "gap" | string;
+  sha256: string | null;
+}
+
+export interface ServiceRuntimeBackupManifest {
+  schemaVersion: "agent-browser.runtime-backup-manifest.v1" | string;
+  createdAt: string;
+  databaseSha256: string;
+  databaseBytes: number;
+  integrityState: "ok" | string;
+  previousSha256?: string | null;
+}
+
+export interface ServiceRuntimeBackupStatusData {
+  backup: ServiceRuntimeBackupStatus;
+}
+
+export interface ServiceRuntimeBackupCreateData {
+  backup: ServiceRuntimeBackupManifest;
+  status: ServiceRuntimeBackupStatus;
+}
+
 export interface ServiceRequestActionDataMap {
   navigate: ServiceNavigateData;
   cdp_free_launch: ServiceCdpFreeLaunchData;
@@ -1682,6 +1707,8 @@ export interface ServiceRequestActionDataMap {
   service_viewer_lease_heartbeat: ServiceViewerLeaseMutationData;
   service_viewer_lease_release: ServiceViewerLeaseMutationData;
   service_controller_lease_takeover: ServiceViewerLeaseMutationData;
+  service_runtime_backup_status: ServiceRuntimeBackupStatusData;
+  service_runtime_backup_create: ServiceRuntimeBackupCreateData;
   tab_list: ServiceTabListData;
   url: ServiceUrlData;
   title: ServiceTitleData;

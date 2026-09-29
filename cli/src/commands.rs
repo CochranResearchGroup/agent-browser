@@ -3556,6 +3556,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("runtime-backup") => match (rest.get(1).copied(), rest.len()) {
+                (Some("status"), 2) => {
+                    Ok(json!({"id": id, "action": "service_runtime_backup_status"}))
+                }
+                (Some("create"), 2) => {
+                    Ok(json!({"id": id, "action": "service_runtime_backup_create"}))
+                }
+                _ => Err(ParseError::InvalidValue {
+                    message: "Expected runtime-backup status or create".to_string(),
+                    usage: "service runtime-backup <status|create>",
+                }),
+            },
             Some("connections") => {
                 if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
                     return Err(ParseError::InvalidValue {
@@ -5145,6 +5157,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "status",
                     "watch",
                     "reconcile",
+                    "runtime-backup",
                     "resources",
                     "gc",
                     "browser-capability",
@@ -5163,7 +5176,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <state|status|watch|reconcile|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <state|status|watch|reconcile|runtime-backup|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -9124,6 +9137,26 @@ mod tests {
         .unwrap();
 
         assert_eq!(cmd["action"], "service_resources_write_monitor_summary");
+    }
+
+    #[test]
+    fn test_service_runtime_backup_commands() {
+        let status =
+            parse_command(&args("service runtime-backup status"), &default_flags()).unwrap();
+        assert_eq!(status["action"], "service_runtime_backup_status");
+
+        let create =
+            parse_command(&args("service runtime-backup create"), &default_flags()).unwrap();
+        assert_eq!(create["action"], "service_runtime_backup_create");
+
+        for invalid in [
+            "service runtime-backup",
+            "service runtime-backup status extra",
+            "service runtime-backup create extra",
+            "service runtime-backup restore",
+        ] {
+            assert!(parse_command(&args(invalid), &default_flags()).is_err());
+        }
     }
 
     #[test]

@@ -1964,6 +1964,8 @@ Streaming is opt-in. Use `agent-browser stream enable` to start a runtime WebSoc
 
 ## Service Status
 
+Use `agent-browser service runtime-backup status` to verify the current Browser Runtime SQLite backup without changing it. Use `agent-browser service runtime-backup create` to create one verified online backup and retain at most one previous copy. Neither command restores data or backs up the separate Service State store.
+
 Use profile lookup before creating a browser when the user names a site, login, account, hostname, profile, alias, auth state, freshness state, or tag. The response is ranked and includes the matched field and identity plus a launch, add-tab, view, seed, wait, or holder-inspection recommendation. Do not replace a failed identity search with a generic browser-build profile.
 
 `service status` includes `manualBrowsers` for live detached headed runtime launches. These rows remain discoverable without CDP and report PID, profile path, target URL, display, browser family and build, remote-view route, supported control posture, and next safe action. A daemon executable mismatch uses authenticated runtime handoff automatically; the browser PID and DevTools endpoint must survive. Reconciliation expires an active session lease when all recorded browser ownership is gone.

@@ -204,6 +204,8 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "service_viewer_lease_heartbeat",
     "service_viewer_lease_release",
     "service_controller_lease_takeover",
+    "service_runtime_backup_status",
+    "service_runtime_backup_create",
     "service_authentication_run_start",
     "service_authentication_run_status",
     "service_authentication_run_resume",

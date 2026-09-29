@@ -12,6 +12,7 @@ const paths = {
   host: 'cli/src/native/browser_session_host.rs',
   runtime: 'cli/src/native/browser_session_runtime.rs',
   store: 'cli/src/native/browser_session_store.rs',
+  backup: 'cli/src/native/service_runtime_backup.rs',
 };
 
 function read(root, path) {
@@ -27,7 +28,7 @@ function check(root) {
     if (!condition) failures.push(message);
   };
   const modelSources = [source.consumer, source.manager, source.recovery].join('\n');
-  const supportedCliSources = [source.host, source.runtime, source.store].join('\n');
+  const supportedCliSources = [source.host, source.runtime, source.store, source.backup].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
 
   requireCondition(
@@ -80,6 +81,12 @@ function check(root) {
       /transaction_with_behavior\(TransactionBehavior::Immediate\)/.test(source.store),
     'recovery state must remain under transactional CLI persistence authority',
   );
+  requireCondition(
+    /handle_service_runtime_backup_status/.test(source.backup) &&
+      /handle_service_runtime_backup_create/.test(source.backup) &&
+      !/restore/i.test(source.backup.replace(/do not restore/gi, '')),
+    'backup surface must expose status and creation without a restore effect',
+  );
   return failures;
 }
 
@@ -107,6 +114,7 @@ function selfTest() {
       [paths.consumer, '\npub struct ProviderFreeHost;\n', 'provider-private model'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
       [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],
+      [paths.backup, '\nstruct ProviderFreeControl;\n', 'provider-private backup action'],
       [paths.modelManifest, '\nrusqlite = "0.40"\n', 'model persistence'],
     ];
     for (const [path, mutation, label] of cases) {

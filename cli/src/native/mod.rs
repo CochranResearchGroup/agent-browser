@@ -191,6 +191,7 @@ pub(crate) mod service_request_provenance;
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;
+pub(crate) mod service_runtime_backup;
 pub(crate) mod service_state_migration;
 pub(crate) mod service_state_validation;
 #[allow(dead_code)]

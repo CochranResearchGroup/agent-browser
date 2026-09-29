@@ -3731,7 +3731,7 @@ poisoning. Use it to distinguish current contention from a completed timeout.
 It is diagnostic only, contains no profile paths or request payloads, and is
 never persisted into Service State.
 
-Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
+Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser. `service runtime-backup status` verifies the current Browser Runtime SQLite backup without changing it. `service runtime-backup create` performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
 ```bash
 agent-browser service status
@@ -3739,6 +3739,8 @@ agent-browser service status --watch --interval 1000
 agent-browser service status --full-tab-history
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
+agent-browser service runtime-backup status
+agent-browser service runtime-backup create
 agent-browser service resources
 agent-browser service gc --dry-run
 agent-browser service gc --apply --review-token <token>

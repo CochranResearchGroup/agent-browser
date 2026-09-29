@@ -185,6 +185,9 @@ use super::service_resources::{
 use super::service_retained_state::{
     handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
+use super::service_runtime_backup::{
+    handle_service_runtime_backup_create, handle_service_runtime_backup_status,
+};
 use super::service_status_projection::handle_service_status;
 use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
@@ -295,6 +298,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
+            | "service_runtime_backup_status"
+            | "service_runtime_backup_create"
             | "service_profile_upsert"
             | "service_profile_policy_mutate"
             | "service_profile_tab_evict"
@@ -1066,6 +1071,8 @@ async fn execute_command_after_navigation_admission(
             "service_job_cancel" => handle_service_job_cancel(cmd).await,
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
+            "service_runtime_backup_status" => handle_service_runtime_backup_status().await,
+            "service_runtime_backup_create" => handle_service_runtime_backup_create().await,
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
             "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
             "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,
