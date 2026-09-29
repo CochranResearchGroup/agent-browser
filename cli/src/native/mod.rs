@@ -22,6 +22,8 @@ pub mod browser_input;
 #[allow(dead_code)]
 pub mod browser_inspection;
 #[allow(dead_code)]
+pub(crate) mod browser_launch_admission;
+#[allow(dead_code)]
 pub mod browser_lifecycle;
 #[allow(dead_code)]
 pub mod browser_locator;

@@ -24,6 +24,9 @@ pub(crate) struct BrowserManagerRuntimeConfig {
     pub(crate) executable_path: Option<String>,
     pub(crate) display: Option<String>,
     pub(crate) remote_headed: bool,
+    /// Optional installation capacity ceiling checked before a local browser
+    /// process is launched. `None` uses the conservative host default.
+    pub(crate) maximum_browser_processes: Option<u32>,
 }
 
 pub(crate) trait BrowserRuntimeDriver {
@@ -552,6 +555,11 @@ fn run_browser_worker(
                             "remote_view_application_placement_contract_unavailable".to_string()
                         );
                     }
+                    super::browser_launch_admission::observe_browser_launch_admission(
+                        Path::new(&profile.user_data_dir),
+                        config.maximum_browser_processes,
+                    )
+                    .require_admitted()?;
                     let display = config.display.clone();
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {
@@ -972,6 +980,26 @@ mod tests {
             runtime.launch_browser(&profile, Some(&desktop)),
             Err("remote_view_application_placement_contract_unavailable".to_string())
         );
+    }
+
+    #[test]
+    fn resource_pressure_rejects_before_local_browser_launch() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "resource-pressure-fixture".to_string(),
+            name: "Resource pressure fixture".to_string(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            maximum_browser_processes: Some(0),
+            ..BrowserManagerRuntimeConfig::default()
+        })
+        .expect("runtime starts without launching a browser");
+
+        let error = runtime.launch_browser(&profile, None).unwrap_err();
+        assert!(error.starts_with("browser_launch_resource_pressure:"));
+        assert!(error.contains("browser_process_capacity_exhausted"));
     }
 
     #[test]

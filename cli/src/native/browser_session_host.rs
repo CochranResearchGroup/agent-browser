@@ -57,6 +57,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
         display,
         remote_headed: false,
+        maximum_browser_processes: None,
     })?;
     BrowserSessionHost::load(
         store,

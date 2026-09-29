@@ -10,6 +10,7 @@ const paths = {
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
   retention: 'crates/agent-browser-service-model/src/remote_view_retention.rs',
+  launchAdmission: 'cli/src/native/browser_launch_admission.rs',
   host: 'cli/src/native/browser_session_host.rs',
   runtime: 'cli/src/native/browser_session_runtime.rs',
   store: 'cli/src/native/browser_session_store.rs',
@@ -29,7 +30,13 @@ function check(root) {
     if (!condition) failures.push(message);
   };
   const modelSources = [source.consumer, source.manager, source.recovery, source.retention].join('\n');
-  const supportedCliSources = [source.host, source.runtime, source.store, source.backup].join('\n');
+  const supportedCliSources = [
+    source.host,
+    source.runtime,
+    source.store,
+    source.backup,
+    source.launchAdmission,
+  ].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
   const handoffProjection = source.retention.slice(
     source.retention.indexOf('pub fn project_remote_view_operator_handoff'),
@@ -57,6 +64,18 @@ function check(root) {
   requireCondition(
     source.runtime.includes('remote_view_application_placement_contract_unavailable'),
     'runtime must fail closed until a real Remote View application-effect adapter exists',
+  );
+  requireCondition(
+    source.runtime.indexOf('observe_browser_launch_admission') <
+      source.runtime.indexOf('BrowserManager::launch'),
+    'host resource admission must run before the local browser launch effect',
+  );
+  requireCondition(
+    /browser_launch_resource_pressure/.test(source.launchAdmission) &&
+      !/(?:remote.?view|guacamole|xrdp|presentation|route.?keeper)/i.test(
+        source.launchAdmission.replace(/Provider-neutral/g, ''),
+      ),
+    'browser launch resource admission must remain provider-neutral and fail closed',
   );
   requireCondition(
     !/desktop\s*\.\s*(?:route_label|desktop_id)[\s\S]{0,160}(?:display|DISPLAY)/i.test(
@@ -135,6 +154,7 @@ function selfTest() {
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
       [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],
       [paths.backup, '\nstruct ProviderFreeControl;\n', 'provider-private backup action'],
+      [paths.launchAdmission, '\nstruct GuacamoleRoute;\n', 'provider-private launch admission'],
       [paths.modelManifest, '\nrusqlite = "0.40"\n', 'model persistence'],
     ];
     for (const [path, mutation, label] of cases) {
