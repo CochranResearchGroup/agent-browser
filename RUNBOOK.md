@@ -234,6 +234,34 @@ guard, protected integration, and separately authorized installed acceptance
 remain. Remote View's provider-free and production-entrypoint evidence does not
 authorize an Agent Browser live effect.
 
+## Turn 404 | 2026-09-29
+
+P220 version 21 corrects the Remote View consumer boundary after the
+Alice/Bob design grilling. Remote View managed `application place` and
+`application stop` are not Agent Browser dependencies and no longer block the
+plan. Agent Browser owns browser launch, process/profile/CDP identity, logical
+sessions and tabs, foreground arbitration, recovery, and browser cleanup.
+Remote View owns the Agent Browser-reserved desktop pool, generation-bound
+desktop environment, application/window observation, viewing, OS-level effects,
+events, and exact desktop lifecycle.
+
+The next critical-path packet is a bounded source integration spike over the
+existing Remote View pool-assignment, desktop-environment, window-inventory,
+event, viewing-route, and window-raise surfaces. One service-level assignment
+may host multiple Agent Browser browsers; empty desktops are preferred but not
+required. Durable Agent Browser handoffs resolve one logical tab through its
+browser's current desktop. Focus combines CDP target activation and Remote View
+window raise under one serialized heartbeat/TTL lease epoch. Attributable
+operator stop suppresses recovery until explicit reopen; unattributed loss uses
+bounded demand-driven recovery. Assignment release, return to the reserved
+pool, and clean pool scale-in remain separate transitions.
+
+The prior Remote View issue #62 request for an installed application-placement
+effect is withdrawn as a P220 prerequisite. Any new Remote View dependency must
+come from a concrete failure in the bounded integration spike. No live Remote
+View, browser, provider, install, privilege, production, or release effect was
+authorized or performed during this correction.
+
 ## Turn 388 | 2026-09-28
 
 P220 is active on `platform/p220-remote-view-consumer` from canonical

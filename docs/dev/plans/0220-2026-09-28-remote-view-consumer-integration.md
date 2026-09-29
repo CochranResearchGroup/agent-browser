@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 20
+Plan version: 21
 
 State: OPEN
 
@@ -34,14 +34,22 @@ Authority: the operator directed creation and execution preparation on 2026-09-2
 
 Make Agent Browser a consumer of Remote View desktop and presentation
 contracts in the trusted single-user WSL proof of concept. An ordinary request
-selects or acquires a fixed Remote View desktop, launches or recovers the
-addressed browser there, and returns only the durable opaque operator handoff.
+resolves one logical Agent Browser session and tab, selects an Agent Browser
+reserved Remote View desktop, launches or recovers the addressed browser there,
+and returns only the durable opaque Agent Browser operator handoff. Resolving
+that handoff locates the browser's current desktop and obtains the current
+Remote View presentation; it does not bind the handoff permanently to one
+desktop or provider route.
 
 Agent Browser continues to own browser profiles, browser processes, CDP,
 logical sessions, tabs, targets, browser-to-desktop affinity, activity,
-recovery, and final-session cleanup. Remote View owns desktop identity,
-lifecycle, health, viewing routes, viewer admission, presentation, OS-level
-input, diagnostics, and exact desktop cleanup.
+recovery, foreground arbitration, and final-session cleanup. Remote View owns
+the Agent Browser-reserved desktop pool, desktop identity, lifecycle, health,
+application and window observation, viewing routes, viewer admission,
+presentation, OS-level input, diagnostics, and exact desktop cleanup. Agent
+Browser launches its browsers into the exact generation-bound desktop
+environment. It does not use Remote View `application place` or `application
+stop` for those browsers.
 
 ## Current State
 
@@ -86,34 +94,36 @@ ordinary-command routing. It now also bounds disposable profile count and
 regular-file bytes with oldest-first protected-session-aware eviction, rejects
 pin or promotion bypass fields, and compacts exact URL history into
 restart-safe daily identity summaries under a fixed byte ceiling. Desktop
-selection consumes Remote View UUID, route
-label, generation, and readiness observations instead of the legacy Agent
-Browser route inventory. Real Remote View placement still fails closed at
-`remote_view_application_placement_contract_unavailable`. Current Remote View
-production entrypoints reach one `ControlRuntime`, but that runtime still uses
-`ProviderFreeHost`, `ProviderFreeApplicationEffect`, and `ProviderFreeControl`.
-The public record contract is complete; the installed application-placement
-effect required to run an Agent Browser-owned browser in the exact Remote View
-desktop context is not.
-P220 therefore continues independent retained-domain work without pretending
-that transport reachability supplies a usable runtime adapter.
+selection consumes Remote View UUID, route label, generation, readiness,
+pool-assignment, and application/window observations instead of the legacy
+Agent Browser route inventory. The earlier
+`remote_view_application_placement_contract_unavailable` boundary and the
+request recorded on Remote View issue #62 were based on an incorrect ownership
+model. Remote View's managed application-placement verbs are valid for
+consumers that delegate launch and stop effects, but they are not an Agent
+Browser dependency. Agent Browser owns browser launch, process identity,
+profile, CDP, readiness, termination, and recovery. Remote View neither
+authorizes nor inspects CDP.
 
-The remaining provider dependency is now recorded on
-[Remote View issue #62](https://github.com/CochranResearchGroup/remote-view/issues/62#issuecomment-5884721315).
-Remote View's roadmap says application deployment launches an application under
-an owned service and cgroup, while Plan 0015 correctly leaves browser process,
-profile, CDP, and recovery ownership with the consumer. The missing public seam
-must bind an exact desktop and generation to an idempotent allowlisted
-application-placement effect. It must return only Remote View-owned operation,
-placement, application-instance, and effect-status evidence. Agent Browser
-independently owns browser launch or adoption, CDP, browser readiness, and
-recovery after placement. Remote View neither authorizes nor inspects CDP.
+The runtime join now targets Remote View's existing reserved-pool assignment,
+generation-bound desktop environment, live application/window inventory,
+durable events, authenticated viewing route, and exact window-raise surfaces.
+One Remote View assignment reserves a desktop for the Agent Browser service;
+Agent Browser may associate multiple browsers with that desktop. Empty
+desktops are preferred, not required. Assignment release returns an empty
+desktop to the Agent Browser-reserved pool, while a distinct clean scale-in
+operation may return it to general Remote View capacity. A short integration
+spike must consume these public surfaces before any narrower provider gap is
+claimed.
 
 Remote View's opaque `routeId` is a provider route identity, not by itself the
 Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep
 those identities distinct and add one Agent Browser handoff adapter over the
-public route contract. It must not expose a route ID or provider URL as though
-it were the durable operator handoff.
+public route contract. The Agent Browser handoff identifies one logical session
+and tab, resolves the browser's current desktop at use time, activates the exact
+CDP target, and then raises the browser's current top-level window through
+Remote View. It must not expose a route ID or provider URL as though it were the
+durable operator handoff.
 
 P220 checkpoint `552c8162` consumes the strict public J3 registration,
 assignment, placement, viewing-route, viewer-session status, and joined-release
@@ -122,8 +132,10 @@ proves two exact desktops, one ready placement and opaque route per desktop,
 independent desktop/mobile viewer sessions, and release that retires the exact
 route and both sessions. Unknown browser-private fields, partial retirement,
 identity mismatch, and generation mismatch fail closed. This completes the
-J3 wire-consumption tracer, not the CLI placement adapter or installed
-acceptance.
+J3 wire-consumption tracer. Its placement-shaped records remain compatibility
+evidence for Remote View, but P220 must adapt the runtime join and retained
+binding so Agent Browser browsers depend on service-level desktop assignment
+and observation rather than managed application placement.
 
 Checkpoint `d7c43915` exposes the P220-owned SQLite backup boundary through
 `service runtime-backup status|create` and the generic HTTP and MCP
@@ -139,9 +151,13 @@ assignment, placement, desktop generation, opaque route, and viewer-session
 identities into an Agent Browser-owned retention record keyed by the exact
 browser. The binding is idempotent across viewer-list ordering, survives a
 SQLite restart, and rejects duplicate public identity across active browsers.
-Release changes state only when the released assignment, desktop generation,
-route, and complete viewer-session set match exactly. The retained record has
-no provider URL, display number, credential, or provider-private state.
+That one-placement-per-browser mapping is now an adaptation target: the Remote
+View assignment belongs to Agent Browser's use of the desktop and may be
+referenced by multiple Agent Browser browsers. Release changes state only when
+the desktop reference count reaches zero and the released assignment, desktop
+generation, route, and complete viewer-session set match exactly. The retained
+record has no provider URL, display number, credential, or provider-private
+state.
 Follow-up `fd4264ec` makes bind and release single `BEGIN IMMEDIATE`
 transactions over the complete Browser Session aggregate, preventing a future
 runtime adapter from losing concurrent session or presentation updates.
@@ -156,10 +172,11 @@ resource admission selected from P219. Immediately before the first local
 Chrome effect, the Browser Session worker observes available memory, profile
 filesystem capacity, host PID capacity, and Agent Browser root-process count.
 Pressure returns a typed `browser_launch_resource_pressure` error without a
-launch. Unsupported Remote View placement still reaches its exact
-`remote_view_application_placement_contract_unavailable` stop before local
-admission, so this extraction neither masks the missing provider contract nor
-restores presentation authority.
+launch. The current
+`remote_view_application_placement_contract_unavailable` pre-launch stop is
+obsolete and must be replaced by exact assignment plus launch-environment
+acquisition before the existing admission and Agent Browser-owned browser
+launch.
 
 Checkpoint `e36f7d42` exposes additive, read-only Browser Runtime operational
 health through Service status, the generated client contract, and install
@@ -205,6 +222,56 @@ Remote View owns:
 Neither product imports the other product's private state authority. The
 initial operating model is one trusted privileged user in one WSL instance.
 
+## Accepted interaction model
+
+- Remote View configuration provides a desktop pool reserved from general-use
+  allocation for Agent Browser. Agent Browser chooses desired capacity; Remote
+  View performs and reports physical growth, draining, shrinkage, and cleanup.
+- One Remote View assignment represents Agent Browser service use of one
+  desktop. It is not a one-browser reservation. An open desktop with no
+  observed applications is preferred, but a healthy occupied desktop remains
+  eligible when Agent Browser resource admission and correlation are safe.
+- Agent Browser obtains the exact generation-bound desktop launch environment
+  from a local authenticated Remote View contract, then launches and stops its
+  own browser. Launch-environment paths, sockets, tokens, and provider details
+  never enter handoffs or ordinary diagnostics.
+- Remote View automatically inventories applications and top-level windows.
+  Agent Browser persists only minimal locators correlated to its own process
+  families. A window ID is a generation-scoped hint; focus-sensitive actions
+  refresh inventory and perform bounded reacquisition before failing on absence
+  or ambiguity.
+- A durable Agent Browser handoff identifies one logical session and tab, not a
+  desktop. Resolution locates or boundedly recovers the browser, selects its
+  current Remote View desktop, activates the exact CDP target, and raises the
+  current top-level window. Restoration covers durable URL intent and logical
+  metadata, never volatile DOM, form, scroll, or page-effect state.
+- Agent Browser owns a heartbeat- and TTL-bound foreground lease. CDP target
+  activation and Remote View window raise form one serialized per-desktop
+  focus transaction fenced by the same lease epoch. The lease authorizes focus
+  at handoff activation and immediately before addressed interaction; it does
+  not continuously fight operator focus changes.
+- Viewer presence, foreground control, and logical-session activity remain
+  separate. Passive viewing does not refresh session activity. Authenticated
+  input refreshes it only when the current foreground lease and target are
+  confirmed.
+- Deliberate tab close terminates only that tab handoff and requires explicit
+  **Reopen tab**. An attributable operator browser stop creates durable,
+  browser-generation-scoped recovery suppression; loading a handoff remains
+  non-mutating until explicit reopen. An unattributed disappearance follows
+  bounded demand-driven recovery.
+- Browser recovery may relocate onto another reserved desktop while preserving
+  session, tab, and handoff identities. The prior assignment remains
+  quarantined until absence or exact cleanup is established. Remote View
+  presentation failure does not invalidate a healthy browser or CDP path.
+- Remote View durable events provide prompt changes and attribution; a periodic
+  full reconciliation remains the correctness backstop. Remote View reports
+  operator action and OS identities but does not interpret Agent Browser
+  session or tab identity.
+- Assignment release returns a clean desktop to the Agent Browser-reserved
+  pool. Automatic scale-in removes only desktops with no live browser
+  references, foreground lease, or unresolved cleanup or recovery. Routine
+  scale-in never migrates or terminates a browser solely to reduce capacity.
+
 ## Consolidated batch
 
 The first delivery batch contains four related outcomes:
@@ -213,14 +280,19 @@ The first delivery batch contains four related outcomes:
    retire, or evidence-only.
 2. Freeze a provider-neutral Agent Browser presentation-client boundary against
    the current Remote View F0 identities and observations.
-3. Prove two fixed desktops can carry distinct Agent Browser-owned browser
-   associations without moving process, profile, CDP, or session authority.
+3. Prove one Agent Browser-reserved desktop can carry multiple distinct
+   Agent Browser-owned browsers and that a browser can recover onto another
+   reserved desktop without moving process, profile, CDP, or session authority
+   into Remote View.
 4. Produce an integration candidate that removes dependency on the retired
    Agent Browser-owned XRDP/Guacamole installation path without activating a
    live Remote View runtime.
 
-Dynamic capacity, iframe embedding, generalized IAM, cross-principal policy,
-multi-tenant isolation, and a formal release are deferred.
+Remote View internal capacity implementation, iframe embedding, generalized
+IAM, cross-principal policy, multi-tenant isolation, and a formal release are
+deferred. P220 consumes current pool growth and shrinkage contracts and keeps
+presentation behind an adapter so later embedding does not change handoff or
+browser semantics.
 
 ## Delivery sequence and budget
 
@@ -239,18 +311,19 @@ Add an Agent Browser-owned Remote View client boundary and fixtures for public
 identity, observation, desktop selection, opaque handoff, status, and release
 shapes. Use no Remote View internal modules and perform no runtime effects.
 
-Exit: the F0-shaped fixture proves two fixed desktop selections and distinct
-browser associations while Agent Browser retains its domain authority.
+Exit: the F0-shaped fixture proves reserved-desktop selection, multiple
+distinct browser associations on one desktop, and browser relocation across
+desktops while Agent Browser retains its domain authority.
 
 Status: F0 and J1 complete at source checkpoint `8f753da0`; strict J3 public
-wire consumption is complete at `552c8162`. Public identity,
-foundation observation, lifecycle observation, durable operation status,
-allocated fixed-desktop selection, distinct browser association, and exact
-UUID-plus-generation release targeting are covered. J2 and J3 are now
-canonical. Registration, assignment, ready placement, viewing-route,
-viewer-session status, and joined-release records are consumed through the
-existing boundary. The next packet must bind those records to the CLI runtime,
-including placement-stop and truthful reacquisition behavior. Operator handoff
+wire consumption is complete at `552c8162`. Public identity, foundation
+observation, lifecycle observation, durable operation status, allocated
+desktop selection, distinct browser association, and exact
+UUID-plus-generation release targeting are covered. J2 and J3 are canonical.
+The existing placement-shaped fixture must now be adapted to the accepted
+consumer boundary: one service-level assignment may host several Agent Browser
+browsers, application/window inventory is observed rather than registered by
+Agent Browser, and assignment release is reference-safe. Operator handoff
 materialization remains Agent Browser-owned and must preserve the route-ID
 versus handoff-URL distinction.
 
@@ -261,16 +334,18 @@ presentation calls behind the new client boundary. Exclude or remove the
 retired XRDP user, Guacamole provider-rebuild, route-pool, and
 presentation-helper path from the successor candidate.
 
-Exit: changed-surface tests pass and architecture checks reject reintroduction
-of the retired presentation ownership.
+Exit: changed-surface tests pass; architecture checks reject reintroduction of
+the retired presentation ownership and reject use of Remote View managed
+application placement for Agent Browser browsers.
 
 Status: partial. The initial session, durable store, and runtime spine plus
 named-tab, reaping, focus, addressed-command, disposable-retention, and exact
 URL compaction behaviors are extracted and locally qualified. The quota model
 accepts protected session identities without importing the retired
-viewer/controller tables. The J2/J3 join must now map exact public assignment,
-placement, route, and viewer-session observations into Agent Browser's own
-retention policy and fail closed on ambiguity. Checkpoint `ca3709e1` replaces
+viewer/controller tables. The J2/J3 join must now map exact public pool,
+assignment, desktop, route, viewer-session, and application/window observations
+into Agent Browser's own retention policy and fail closed on ambiguity.
+Checkpoint `ca3709e1` replaces
 the supported JSON persistence path with SQLite WAL authority for the session
 and profile aggregates. Migration stages the database atomically, archives
 legacy inputs read-only, makes an existing database authoritative even when it
@@ -298,9 +373,11 @@ both the batch baseline and current source use
 `capture_service_request_provenance`.
 Checkpoint `b47f7a0c` completes the provider-neutral retention mapping for one
 validated public presentation binding and its exact joined release. Runtime
-ingress still needs to invoke that pure mutation after real Remote View
-placement; it cannot do so until the installed application-placement effect
-exists.
+ingress must adapt that browser-keyed prototype into a desktop-assignment
+binding shared by all Agent Browser browsers currently associated with the
+desktop. It then invokes the pure mutation from authenticated Remote View pool,
+desktop, route, viewer, and observation records without using application
+placement.
 The store adapter is transaction-ready at `fd4264ec`; transport ingress remains
 intentionally absent rather than accepting caller-forged public identities.
 The durable-link output contract is ready at `d3e31c6f`, but readiness and
@@ -325,10 +402,11 @@ Checkpoint `c1f5fe27` directly proves the already-implemented final-session
 browser cleanup invariant for explicit close. Agent Browser removes its active
 browser/session/tab records only after the browser close succeeds and preserves
 terminal history. The test intentionally does not release Remote View state:
-that mutation must consume the authenticated assignment, generation, route,
-and complete viewer-session result that the missing runtime ingress must
-supply. There is no remaining independently safe local cleanup adapter to
-invent around that dependency.
+that mutation must decrement Agent Browser's exact desktop-assignment
+references. Remote View assignment and presentation release occurs only after
+the final browser reference and every cleanup, recovery, and foreground
+obligation are gone, using the authenticated assignment, generation, route,
+and complete viewer-session result supplied by runtime ingress.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
@@ -346,40 +424,45 @@ No installed acceptance begins merely because S0 through S3 source work passes.
 Status: J1 replay complete against Remote View source checkpoint
 `f674518e34fea346002c72c4adc3966b628d0b78`. The fixture rejects unversioned
 shape drift and tampered operation payload evidence. The J3 Agent Browser wire
-fixture now passes at `552c8162`, including strict private-state exclusion and
-exact joined cleanup. Inspection of Remote View `origin/main@30f3e37` confirms
-that the corrected CLI, HTTP, and MCP entrypoints still terminate in
-provider-free host, application-effect, and control implementations. The
-remaining runtime replay therefore depends on a real installed
-application-placement effect, not merely another Agent Browser transport
-adapter. Remote View's provider-free fixture is compatibility
-evidence, not a substitute for proving Agent Browser's browser launch,
-recovery, durable handoff, retention mapping, or cleanup adapter.
+fixture passes at `552c8162`, including strict private-state exclusion and
+exact joined cleanup. The earlier conclusion that the provider-free
+application effect blocked P220 was incorrect because Agent Browser does not
+delegate browser launch to `application place`. The next runtime replay must
+first consume the existing production pool, assignment, desktop-environment,
+window-inventory, events, viewing, and window-action surfaces. Only a concrete
+failure in that spike can establish a narrower Remote View dependency. Remote
+View's provider-free fixture remains compatibility evidence, not a substitute
+for proving Agent Browser's browser launch, recovery, durable handoff,
+retention mapping, focus transaction, or cleanup adapter.
 
 ### Separately gated installed-acceptance packet
 
 This packet is prepared but not executable under the plan's current authority.
 It becomes eligible only after all of the following are true:
 
-- Remote View publishes an exact source checkpoint whose production
-  `ControlRuntime` uses an installed application-placement effect rather than
-  the provider-free effect. That contract remains neutral to Agent Browser's
-  private CDP behavior;
-- Agent Browser binds that exact contract through its provider-neutral runtime
-  adapter and the provider-free replay passes at both pinned source heads;
+- the source integration spike binds an exact Remote View reserved-pool
+  assignment, generation-bound desktop launch environment, live
+  application/window inventory, durable event cursor, viewing route, and
+  window-raise operation without using `application place` or `application
+  stop`;
+- provider-free replay proves service-level assignment sharing, multiple
+  browsers on one desktop, browser relocation, window-locator reacquisition,
+  foreground-lease fencing, operator-stop suppression, and reference-safe
+  release;
 - the development runtime identifies exact Agent Browser and Remote View
-  binaries, contract versions, fixed desktop UUIDs and generations, listener
-  owners, and an isolated disposable profile root; and
+  binaries, contract versions, reserved pool, desktop UUIDs and generations,
+  listener owners, and an isolated disposable profile root; and
 - the operator separately authorizes the installed Remote View and browser
   effects. Readiness or source completion alone does not grant that authority.
 
-The execution target is exactly two reviewed fixed Remote View desktops and two
-disposable Agent Browser profiles in the isolated development runtime. Record
-their desktop UUIDs, generations, browser IDs, process identities, CDP endpoint
-identities, logical session and tab IDs, assignment IDs, route IDs, viewer
-session IDs, handoff IDs, and runtime operation IDs before interpreting any
-result. No default or production profile, installed production binary, shared
-operator browser, or unlisted desktop is in scope.
+The execution target is one reviewed Agent Browser-reserved Remote View pool,
+at least two desktops, and disposable Agent Browser profiles in the isolated
+development runtime. Record the pool, desktop UUIDs and generations,
+service-level assignments, browser IDs, process identities, CDP endpoint
+identities, logical session and tab IDs, foreground-lease epochs, route IDs,
+viewer-session IDs, handoff IDs, event cursors, and runtime operation IDs before
+interpreting any result. No default or production profile, installed production
+binary, shared operator browser, or unlisted desktop is in scope.
 
 Run the acceptance axes in this order, stopping before the next effect whenever
 the current axis is not proved:
@@ -388,26 +471,38 @@ the current axis is not proved:
    filesystem-capacity, PID-capacity, and memory census evidence. Require clean
    development-runtime doctors, Browser Runtime integrity, a verified backup,
    and exact installed binary and contract provenance.
-2. **Single association.** Open one logical session on the first fixed desktop.
-   Require one Agent Browser-owned browser, one exact profile, one adopted CDP
-   endpoint, an active retained presentation binding, and
-   `operatorVisible.state=ready`. Return only the durable
-   `/remote-view/<handoff-id>` path.
-3. **Many-to-many isolation.** Open the second profile on the second desktop and
-   prove distinct desktop, browser, process, profile, CDP, session, tab,
-   assignment, route, and handoff identities. Reopen both durable handoffs from
-   independent viewers without creating replacement logical sessions.
-4. **Generation-safe recovery.** Induce only the reviewed synthetic browser
-   failure. Require exact demand plus unusable-browser evidence, one bounded
-   replacement, a higher browser generation, the same durable handoff, and
-   authenticated reacquisition of the current desktop generation. Do not infer
-   readiness from URL presence or provider transport reachability.
-5. **Exact cleanup.** Close a non-final shared logical session and prove the
-   browser and presentation remain. Close the final session and prove the exact
-   Agent Browser browser closes. Apply Remote View presentation release only
-   from its authenticated joined-release outcome, matching assignment, desktop
-   generation, route, and the complete viewer-session set.
-6. **Fresh residue census.** Repeat the baseline census from a fresh process.
+2. **Tab-bound handoff.** Open Alice and Bob on one exact-profile browser.
+   Require distinct logical session, tab, target, handoff, activity, and expiry
+   identities. Each handoff must resolve the addressed tab, locate the
+   browser's current desktop, activate the exact CDP target, raise the current
+   top-level window, and publish ready only after both layers agree.
+3. **Desktop co-location.** Launch a second Agent Browser browser on the same
+   service-assigned desktop. Prove distinct process, profile, CDP, browser, and
+   handoff identities without acquiring a second assignment for that desktop.
+   Pool exhaustion alone must not reject the launch when resource admission and
+   observation remain unambiguous.
+4. **Foreground arbitration.** Transfer focus between sessions and browsers.
+   Serialize CDP target activation and Remote View window raise per desktop;
+   fence both with one Agent Browser foreground-lease epoch. Passive viewer
+   heartbeats do not extend logical-session activity. Attributable input extends
+   it only when the current foreground target is confirmed.
+5. **Close and recovery policy.** Prove a deliberate tab close affects only its
+   handoff and requires explicit **Reopen tab**. Prove an attributable operator
+   browser stop suppresses automatic recovery until explicit reopen. Prove an
+   unattributed synthetic loss performs one bounded recovery under active
+   demand and restores only durable URL intent, not volatile page state.
+6. **Desktop relocation and presentation interruption.** Make the original
+   desktop unavailable and recover the browser once onto another reserved
+   desktop while preserving logical session, tab, and handoff identities.
+   Separately interrupt Remote View presentation and prove healthy CDP
+   automation continues while viewing and OS-input readiness fail truthfully.
+7. **Pool elasticity and exact cleanup.** Grow the pool only when current
+   desktops cannot safely absorb demand. Release an idle assignment back to the
+   reserved pool without exposing it to general allocation. Shrink only a clean
+   desktop with no browser references, foreground lease, or unresolved cleanup
+   or recovery state. Close a non-final shared session without closing its peer
+   and terminate the browser only after its final active obligation ends.
+8. **Fresh residue census.** Repeat the baseline census from a fresh process.
    Accept only when no unexplained Agent Browser browser, runtime daemon,
    listener, unit, Remote View operation, assignment, viewer session, or owned
    desktop resource remains. Historical terminal records and the reviewed
@@ -421,19 +516,22 @@ or any effect not attributable to the exact development-runtime custody. A
 partial axis is diagnostic evidence only and cannot validate later axes.
 
 Recovery is forward and identity-bound. Reinspect the same durable operation
-and handoff after an unknown outcome; do not submit a second open, placement,
-release, or cleanup request. A quarantined result retains its exact cleanup
-obligation. Release only from the authenticated joined-release record, and
-close a browser only through the addressed Agent Browser session path. Never
-delete by slot, PID alone, display, window title, process-name sweep, or guessed
-ownership. If the exact owner cannot be proved, stop with the resource intact
-and record the unavailable-work impact plus the supported recovery action.
+and handoff after an unknown outcome; do not submit a second open, assignment,
+release, or cleanup request. A cached window ID is only a fast-path hint: stale
+locators trigger bounded reacquisition from a fresh Remote View inventory and
+Agent Browser process-family evidence. A quarantined result retains its exact
+cleanup obligation. Release only from authenticated assignment and viewing
+records after Agent Browser's reference count reaches zero, and close a browser
+only through the addressed Agent Browser session path. Never delete by slot,
+PID alone, display, window title, process-name sweep, or guessed ownership. If
+the exact owner cannot be proved, stop with the resource intact and record the
+unavailable-work impact plus the supported recovery action.
 
 | Acceptance axis | Current evidence | Installed proof still required |
 | --- | --- | --- |
-| Contract and boundary | F0/J1/J3 provider-free replay and architecture guard pass | Exact production runtime contract and installed adapter provenance |
-| Browser behavior | Session, tab, recovery, launch-admission, and final-close fixtures pass | Two real fixed-desktop browser/CDP associations and synthetic recovery |
-| Presentation | Retention, handoff projection, and exact release fixtures pass | Authenticated ready handoff resolution and joined release from installed runtime |
+| Contract and boundary | F0/J1/J3 provider-free replay and architecture guard pass | Exact pool, environment, observation, event, viewing, and window-action adapter provenance |
+| Browser behavior | Session, tab, recovery, launch-admission, and final-close fixtures pass | Shared-browser tabs, co-located browsers, operator-stop policy, and relocation |
+| Presentation | Retention, handoff projection, and exact release fixtures pass | Tab-bound ready handoff, fenced focus transfer, presentation interruption, and reference-safe release |
 | Resources | Read-only launch admission and Browser Runtime health pass | Before-and-after fresh OS census around the separately authorized run |
 | Integration | Branch checkpoints are pushed and issue #202 is current | Changed-surface batch qualification, protected review, and merge |
 
@@ -447,7 +545,9 @@ and final reconciliation. Read-only commit classification and provider-free
 fixture design are parallelizable after branch admission because they write
 separate audit and test surfaces. Client-contract implementation, extraction
 of mixed P219 commits, schema generation, and shared documentation remain on
-the serialized critical path.
+the serialized critical path. The next critical-path packet is the bounded
+runtime integration spike over existing Remote View public surfaces. It must
+finish before opening any new Remote View dependency.
 
 Remote View retains authority over its repository. Issue #70 and RV-014 are
 closed from Remote View's J3 fixture; Agent Browser consumes the published J2,
@@ -461,9 +561,9 @@ View source as part of this plan.
 | Custody | Exact P219 commit and file disposition with preserved branch and artifacts | Missing or silently discarded unpublished work |
 | Boundary | Tests prove Agent Browser and Remote View retain the ownership split above | Either product becomes authoritative for the other's private state |
 | Contract | Provider-free fixtures consume only published Remote View contracts | Importing Remote View internals or inventing a second control plane |
-| Browser behavior | Two desktop associations retain distinct browser/process/profile/CDP identities and addressed sessions | Duplicate association, profile substitution, or Remote View browser ownership |
-| Presentation | Only opaque handoffs leave the boundary; readiness and failures remain layered | Raw provider URLs, credentials, or fabricated viewer readiness |
-| Cleanup | Release targets exact associations and ambiguity fails visibly | Cleanup by slot, PID, window title, or guessed ownership |
+| Browser behavior | Shared-browser tabs and co-located browsers retain distinct browser/process/profile/CDP/session identities | Duplicate association, profile substitution, fixed one-browser-per-desktop admission, or Remote View browser ownership |
+| Presentation | Handoffs resolve one logical tab through its browser's current desktop; readiness and failures remain layered | Handoff bound permanently to a desktop, raw provider URLs, credentials, stale focus publication, or fabricated viewer readiness |
+| Cleanup | Operator-stop intent, browser references, assignment release, and pool shrink remain distinct and ambiguity fails visibly | Automatic reversal of operator stop, cleanup by slot/PID/title, or assignment release while references remain |
 | Resources | Fresh process/resource census after separately authorized installed acceptance | Unexplained browser, desktop, daemon, listener, unit, or container residue |
 
 ## Acceptance criteria
@@ -472,12 +572,24 @@ View source as part of this plan.
   disposition.
 - Agent Browser uses a versioned provider-neutral consumer boundary for Remote
   View operations and observations.
-- Two fixed desktops support distinct Agent Browser-owned browsers with no
-  transfer of profile, process, CDP, session, or recovery authority.
-- The same opaque handoff reconnects to the current desktop generation without
+- One reserved Remote View desktop can support multiple Agent Browser-owned
+  browsers without transferring profile, process, CDP, session, focus, or
+  recovery authority; pool exhaustion alone is not a refusal reason.
+- The same opaque Agent Browser handoff resolves its exact logical tab through
+  the browser's current desktop and survives bounded relocation without
   exposing provider credentials or raw Guacamole routes.
-- Diagnostics independently report desktop, browser/CDP, transport, viewer,
-  and application readiness.
+- Agent Browser serializes tab activation plus Remote View window raise under
+  one foreground-lease epoch and reacquires stale window locators before
+  publishing readiness.
+- Attributable operator stop suppresses automatic recovery until explicit
+  reopen; deliberate tab close affects only that handoff; unattributed loss
+  follows bounded demand-driven recovery.
+- Viewer presence, logical-session activity, and foreground control remain
+  separate clocks. Passive viewing does not indefinitely retain a session.
+- Assignment release returns a clean desktop to the Agent Browser-reserved
+  pool. Only explicit clean scale-in returns it to general Remote View use.
+- Diagnostics independently report pool/desktop, browser/CDP, tab/focus,
+  transport, viewer, and cleanup readiness.
 - Provider-free probe replays pass at applicable Remote View F0/J1/J2/J3
   checkpoints; each result is compatibility evidence at that checkpoint only.
 - Exact release and cleanup leave no unexplained owned resources, while
@@ -490,7 +602,10 @@ View source as part of this plan.
 - Repairing or accepting the P219 Agent Browser-owned XRDP/Guacamole cold
   installation.
 - Moving browser lifecycle or browser-private state into Remote View.
-- Implementing Remote View dynamic capacity or embedding from Agent Browser.
+- Implementing Remote View's internal desktop provider, application-placement
+  effect, or embedding architecture. Agent Browser may consume current pool
+  growth/shrink and viewing contracts behind adapters that can adopt embedding
+  later.
 - Adding generalized multi-user security to the present single-user proof of
   concept.
 - Treating a provider-free test as installed, public, production, or release
@@ -504,6 +619,9 @@ View source as part of this plan.
 - Do not delete, rewrite, or clean the P219 branch, failed overlays, serial
   logs, or receipts without an explicit custody disposition.
 - Do not repair the retired XRDP/Guacamole presentation path under this plan.
+- Do not use Remote View `application place` or `application stop` for Agent
+  Browser browsers, and do not add a second Agent Browser desktop-reservation
+  ledger beside Remote View's pool assignment authority.
 - Stop on ownership ambiguity, raw provider credential exposure, contract drift
   without an explicit checkpoint decision, or any required live effect without
   exact authority.
@@ -512,9 +630,12 @@ View source as part of this plan.
 
 Plan 0220 is complete when the selected presentation-neutral P219 work is
 integrated through protected review; Agent Browser consumes Remote View public
+pool, desktop-environment, observation, event, viewing, and window-action
 contracts through one provider-neutral boundary; provider-free F0/J1/J2/J3
 evidence and final installed acceptance are source-bound and truthful; the
-Alice/Bob browser/session behavior survives the presentation replacement; the
-retired XRDP/Guacamole ownership does not remain on the supported path; exact
-cleanup and a fresh resource census pass; and roadmap, runbook, plan, work item,
-lane, Git, validation, and installed identities agree.
+Alice/Bob tab-bound handoffs, co-located browsers, fenced focus transfer,
+operator-stop policy, bounded recovery, and desktop relocation survive the
+presentation replacement; the retired XRDP/Guacamole ownership does not remain
+on the supported path; exact reference-safe cleanup and a fresh resource census
+pass; and roadmap, runbook, plan, work item, lane, Git, validation, and installed
+identities agree.
