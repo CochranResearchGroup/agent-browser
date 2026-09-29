@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 19
+Plan version: 20
 
 State: OPEN
 
@@ -92,8 +92,9 @@ Browser route inventory. Real Remote View placement still fails closed at
 `remote_view_application_placement_contract_unavailable`. Current Remote View
 production entrypoints reach one `ControlRuntime`, but that runtime still uses
 `ProviderFreeHost`, `ProviderFreeApplicationEffect`, and `ProviderFreeControl`.
-The public record contract is complete; the installed application effect,
-browser launch, and CDP adoption contract required by Agent Browser is not.
+The public record contract is complete; the installed application-placement
+effect required to run an Agent Browser-owned browser in the exact Remote View
+desktop context is not.
 P220 therefore continues independent retained-domain work without pretending
 that transport reachability supplies a usable runtime adapter.
 
@@ -103,11 +104,10 @@ Remote View's roadmap says application deployment launches an application under
 an owned service and cgroup, while Plan 0015 correctly leaves browser process,
 profile, CDP, and recovery ownership with the consumer. The missing public seam
 must bind an exact desktop and generation to an idempotent allowlisted
-application effect, return process-start evidence for Agent Browser CDP
-adoption, keep application-effect readiness distinct from browser readiness,
-make unknown outcomes inspectable, and fence release while the consumer-owned
-browser association remains live. P220 will not resolve that custody gap with
-caller-supplied shell execution or local-display inference.
+application-placement effect. It must return only Remote View-owned operation,
+placement, application-instance, and effect-status evidence. Agent Browser
+independently owns browser launch or adoption, CDP, browser readiness, and
+recovery after placement. Remote View neither authorizes nor inspects CDP.
 
 Remote View's opaque `routeId` is a provider route identity, not by itself the
 Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep
@@ -299,8 +299,8 @@ both the batch baseline and current source use
 Checkpoint `b47f7a0c` completes the provider-neutral retention mapping for one
 validated public presentation binding and its exact joined release. Runtime
 ingress still needs to invoke that pure mutation after real Remote View
-placement; it cannot do so until the installed application effect and
-browser/CDP adoption contract exists.
+placement; it cannot do so until the installed application-placement effect
+exists.
 The store adapter is transaction-ready at `fd4264ec`; transport ingress remains
 intentionally absent rather than accepting caller-forged public identities.
 The durable-link output contract is ready at `d3e31c6f`, but readiness and
@@ -350,9 +350,9 @@ fixture now passes at `552c8162`, including strict private-state exclusion and
 exact joined cleanup. Inspection of Remote View `origin/main@30f3e37` confirms
 that the corrected CLI, HTTP, and MCP entrypoints still terminate in
 provider-free host, application-effect, and control implementations. The
-remaining runtime replay therefore depends on a real installed application
-effect plus a browser/CDP adoption contract, not merely another Agent Browser
-transport adapter. Remote View's provider-free fixture is compatibility
+remaining runtime replay therefore depends on a real installed
+application-placement effect, not merely another Agent Browser transport
+adapter. Remote View's provider-free fixture is compatibility
 evidence, not a substitute for proving Agent Browser's browser launch,
 recovery, durable handoff, retention mapping, or cleanup adapter.
 
@@ -362,8 +362,9 @@ This packet is prepared but not executable under the plan's current authority.
 It becomes eligible only after all of the following are true:
 
 - Remote View publishes an exact source checkpoint whose production
-  `ControlRuntime` uses an installed application effect and a public
-  browser-launch/CDP-adoption contract rather than the provider-free effect;
+  `ControlRuntime` uses an installed application-placement effect rather than
+  the provider-free effect. That contract remains neutral to Agent Browser's
+  private CDP behavior;
 - Agent Browser binds that exact contract through its provider-neutral runtime
   adapter and the provider-free replay passes at both pinned source heads;
 - the development runtime identifies exact Agent Browser and Remote View

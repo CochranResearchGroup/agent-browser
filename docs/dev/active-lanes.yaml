@@ -20,8 +20,8 @@ lanes:
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Remote View public source records are complete, but its production ControlRuntime still uses provider-free host, application-effect, and control implementations; a real installed application launch and CDP adoption contract is required for the runtime join; runtime recovery wiring, reacquisition, runtime invocation of the retained public binding, operator handoff, cleanup, remaining admission and observability, protected integration, and separately authorized installed acceptance remain
-    updated_at: 2026-09-28
+    blocker: Remote View public source records are complete, but its production ControlRuntime still uses provider-free host, application-effect, and control implementations; a real installed application-placement effect is required for the runtime join, while browser launch, CDP, and browser readiness remain Agent Browser-owned; runtime recovery wiring, reacquisition, runtime invocation of the retained public binding, operator handoff, cleanup, protected integration, and separately authorized installed acceptance remain
+    updated_at: 2026-09-29
   - id: P204
     product_lane: PL-PLATFORM
     objective: Disable GitHub CI while retaining a reviewed path-selected workflow for explicit future re-enablement

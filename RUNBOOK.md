@@ -10,15 +10,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 403 | 2026-09-29
+
+P220 Plan version 20 corrects the Remote View ownership boundary. Remote View
+does not allow, disallow, expose, adopt, inspect, or validate CDP. Its missing
+runtime contribution is only the installed, generation-bound, allowlisted
+application-placement effect and its own operation, placement,
+application-instance, and effect-status evidence. Agent Browser independently
+owns browser launch or adoption, process identity, profile, CDP, targets,
+readiness, and recovery after placement. The existing Remote View issue #62
+comment was edited in place to preserve its locator while removing the broader
+CDP request. No browser, Remote View, installed, provider, privilege,
+production, or release effect occurred.
+
 ## Turn 402 | 2026-09-29
 
 P220 Plan version 19 records the exact external custody seam on Remote View
 issue #62. Remote View Milestone 5 currently launches applications under an
 owned service/cgroup, while Plan 0015 leaves browser process, profile, CDP, and
-recovery ownership with the consumer. Agent Browser requested a provider-neutral
-contract for exact generation-bound allowlisted launch, process-start evidence
-for CDP adoption, layered readiness, inspectable unknown outcomes, and release
-fencing while the consumer browser remains live. It did not request embedding,
+recovery ownership with the consumer. Agent Browser requested an exact,
+generation-bound, allowlisted application-placement effect with inspectable
+unknown outcomes. Remote View returns only its own placement and effect
+evidence; Agent Browser owns CDP independently. It did not request embedding,
 dynamic capacity, live effects, caller-supplied shell execution, or ownership
 of Remote View internals. No browser, Remote View, installed, provider,
 privilege, production, or release effect occurred.
@@ -32,8 +45,8 @@ single-association, many-to-many, recovery, exact-cleanup, and fresh-census
 axes; binds required identities; and records hard stops plus forward-only
 unknown-outcome recovery. The evidence table keeps source qualification,
 installed proof, protected integration, and operator authorization distinct.
-Remote View's installed application effect and browser/CDP adoption contract
-remain the next external dependency. No browser, Remote View, installed,
+Remote View's installed application-placement effect remains the next external
+dependency. No browser, Remote View, installed,
 provider, privilege, production, or release effect occurred.
 
 ## Turn 400 | 2026-09-29
@@ -75,8 +88,8 @@ available memory, profile-filesystem space, host PID capacity, and Agent
 Browser root-process count immediately before `BrowserManager::launch`.
 Resource pressure returns a typed error without a browser effect. Unsupported
 Remote View desktop placement retains its exact earlier fail-closed error, so
-the packet does not mask or invent the missing installed application-effect
-and browser/CDP adoption contract. Both focused admission tests, the runtime
+the packet does not mask or invent the missing installed application-placement
+effect. Both focused admission tests, the runtime
 no-launch test, version sync, P220 architecture guard, P219 custody ledger,
 formatting, strict workspace Clippy, and diff hygiene pass. No live Remote
 View, browser, provider, install, privilege, production, or release effect
@@ -116,8 +129,8 @@ The record survives a SQLite restart and contains no provider URL, display
 number, credential, or provider-private state. The full 228-test service-model
 unit suite and all integration tests, the focused CLI restart test, P220
 architecture guard, formatting, and strict workspace Clippy pass. Runtime
-invocation remains blocked on Remote View's missing installed application
-effect and browser/CDP adoption contract. No live runtime effect occurred.
+invocation remains blocked on Remote View's missing installed
+application-placement effect. No live runtime effect occurred.
 
 ## Turn 394 | 2026-09-28
 
@@ -176,10 +189,11 @@ creation remain to be adapted from P219.
 Remote View `origin/main@30f3e37` has transport-reachable CLI, HTTP, and MCP
 entrypoints, but its `ControlRuntime` still instantiates `ProviderFreeHost`,
 `ProviderFreeApplicationEffect`, and `ProviderFreeControl`. This clears the
-public contract wait but does not provide the installed application effect,
-browser launch, or CDP adoption endpoint needed to replace Agent Browser's
-placement-unavailable stop. Independent P220 extraction continues; no legacy
-display inference or Agent Browser-owned presentation provider is restored.
+public contract wait but does not provide the installed application-placement
+effect needed to replace Agent Browser's placement-unavailable stop. Agent
+Browser retains browser launch and CDP ownership. Independent P220 extraction
+continues; no legacy display inference or Agent Browser-owned presentation
+provider is restored.
 No live Remote View, browser, provider, install, privilege, production, or
 release effect occurred.
 
