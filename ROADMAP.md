@@ -79,6 +79,12 @@ creation through CLI plus the generic HTTP and MCP request transport. The
 generated client carries typed backup responses. Restore and the separate
 Service State store remain outside this surface.
 
+Checkpoint `b47f7a0c` retains Remote View public registration, pool,
+assignment, placement, desktop generation, opaque route, and viewer-session
+identity against the exact Agent Browser browser, profile, session, tab, and
+target. Exact joined release is generation, route, and viewer-set fenced and
+survives SQLite restart without retaining provider URLs or display numbers.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

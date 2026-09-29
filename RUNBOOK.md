@@ -10,6 +10,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 395 | 2026-09-29
+
+P220 checkpoint `b47f7a0c` retains one validated Remote View public
+registration, pool, assignment, placement, desktop generation, opaque route,
+and viewer-session set against the exact Agent Browser browser, profile,
+session, tab, and target. Binding is idempotent across viewer-list ordering and
+rejects active identity reuse. Joined release mutates only when assignment,
+desktop generation, route, and the complete viewer-session set match exactly.
+The record survives a SQLite restart and contains no provider URL, display
+number, credential, or provider-private state. The full 228-test service-model
+unit suite and all integration tests, the focused CLI restart test, P220
+architecture guard, formatting, and strict workspace Clippy pass. Runtime
+invocation remains blocked on Remote View's missing installed application
+effect and browser/CDP adoption contract. No live runtime effect occurred.
+
 ## Turn 394 | 2026-09-28
 
 P220 checkpoint `d7c43915` exposes verified Browser Runtime SQLite backup

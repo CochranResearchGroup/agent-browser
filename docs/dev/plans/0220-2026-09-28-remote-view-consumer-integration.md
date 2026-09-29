@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 11
+Plan version: 12
 
 State: OPEN
 
@@ -121,6 +121,15 @@ one previous copy. Neither surface restores data or includes the separate
 Service State store. The generated client publishes typed status and manifest
 responses. Disposable smoke cleanup now accommodates the intentionally
 read-only migration archives.
+
+Checkpoint `b47f7a0c` maps the validated Remote View public registration, pool,
+assignment, placement, desktop generation, opaque route, and viewer-session
+identities into an Agent Browser-owned retention record keyed by the exact
+browser. The binding is idempotent across viewer-list ordering, survives a
+SQLite restart, and rejects duplicate public identity across active browsers.
+Release changes state only when the released assignment, desktop generation,
+route, and complete viewer-session set match exactly. The retained record has
+no provider URL, display number, credential, or provider-private state.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -241,6 +250,11 @@ documentation links, and the production documentation build pass. The broad
 source-literal oracle that expects `ServiceRequestProvenance::capture` while
 both the batch baseline and current source use
 `capture_service_request_provenance`.
+Checkpoint `b47f7a0c` completes the provider-neutral retention mapping for one
+validated public presentation binding and its exact joined release. Runtime
+ingress still needs to invoke that pure mutation after real Remote View
+placement; it cannot do so until the installed application effect and
+browser/CDP adoption contract exists.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

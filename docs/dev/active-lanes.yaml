@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: d7c43915
+    checkpoint: b47f7a0c
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
     integration: merge through the protected pull-request workflow after J2/J3 consumer replay, retained-domain reconciliation, and changed-surface validation
-    validation_status: Remote View F0, source-bound J1, and strict J3 consumer fixtures pass; SQLite migration, verified backup rotation, generation-fenced recovery, and typed operator backup status and creation pass; the self-testing P220 ownership architecture guard, focused Rust backup and service-contract tests, generated-client contract and type checks, API and MCP parity, no-launch contract smoke, documentation links and build, formatting, and strict workspace Clippy pass; the broad service-client umbrella retains one pre-existing stale P157 source-literal oracle; runtime recovery wiring, Agent Browser runtime replay, and complete batch validation remain pending
-    validation_ref: d7c43915
+    validation_status: Remote View F0, source-bound J1, and strict J3 consumer fixtures pass; SQLite migration, verified backup rotation, generation-fenced recovery, typed operator backup status and creation, exact public presentation retention, joined-release fencing, and SQLite restart retention pass; the complete service-model suite, self-testing P220 ownership architecture guard, focused Rust backup and service-contract tests, generated-client contract and type checks, API and MCP parity, no-launch contract smoke, documentation links and build, formatting, and strict workspace Clippy pass; the broad service-client umbrella retains one pre-existing stale P157 source-literal oracle; runtime recovery wiring, Agent Browser runtime replay, and complete batch validation remain pending
+    validation_ref: b47f7a0c
     work_items: [CochranResearchGroup/agent-browser#202, CochranResearchGroup/remote-view#70]
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Remote View public source records are complete, but its production ControlRuntime still uses provider-free host, application-effect, and control implementations; a real installed application launch and CDP adoption contract is required for the runtime join; runtime recovery wiring, reacquisition, retention mapping, operator handoff, cleanup, remaining admission and observability, protected integration, and separately authorized installed acceptance remain
+    blocker: Remote View public source records are complete, but its production ControlRuntime still uses provider-free host, application-effect, and control implementations; a real installed application launch and CDP adoption contract is required for the runtime join; runtime recovery wiring, reacquisition, runtime invocation of the retained public binding, operator handoff, cleanup, remaining admission and observability, protected integration, and separately authorized installed acceptance remain
     updated_at: 2026-09-28
   - id: P204
     product_lane: PL-PLATFORM
