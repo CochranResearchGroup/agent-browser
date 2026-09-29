@@ -711,6 +711,56 @@ fn closing_one_shared_session_preserves_browser_for_other_session() {
 }
 
 #[test]
+fn closing_final_session_closes_browser_and_clears_active_state() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-alice".to_string(),
+            target_id: "target-alice".to_string(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+        },
+    );
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    manager
+        .tab_for_navigation(&alice.session_id, 2_000)
+        .unwrap();
+
+    let closed = manager
+        .close_session(&alice.session_id, SessionEndReason::ExplicitClose, 3_000)
+        .unwrap();
+    drop(manager);
+
+    assert_eq!(closed.disposition, SessionCloseDisposition::BrowserClosed);
+    assert_eq!(effects.closes, [alice.browser_id.clone()]);
+    assert!(effects.tab_closes.is_empty());
+    assert!(state.sessions.is_empty());
+    assert!(state.browsers.is_empty());
+    assert!(state.tabs.is_empty());
+    assert_eq!(state.session_history.len(), 1);
+    assert_eq!(state.session_history[0].id, alice.session_id);
+    assert_eq!(state.tab_history.len(), 1);
+    assert_eq!(state.tab_history[0].browser_id, alice.browser_id);
+    assert_eq!(state.tab_history[0].target_id, "target-alice");
+}
+
+#[test]
 fn closing_shared_session_closes_only_its_attributed_tabs() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
