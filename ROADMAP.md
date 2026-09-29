@@ -68,6 +68,12 @@ and ambiguous old-browser health cannot launch a replacement; retry, observed
 live, failure, and success transitions remain exact across restart. Runtime
 effect wiring is still pending.
 
+Checkpoint `a2080250` makes the P220 ownership split executable. Its
+self-testing architecture guard rejects Remote View provider internals in the
+pure consumer and session model, retired presentation authorities in the
+supported CLI path, local-display inference from public desktop identity, and
+SQLite ownership outside the CLI adapter.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

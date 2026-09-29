@@ -10,6 +10,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 393 | 2026-09-28
+
+P220 checkpoint `a2080250` adds a deterministic, self-testing architecture
+guard for the successor path. It rejects Remote View provider-private types in
+the service model, retired Guacamole, XRDP, route-keeper, or presentation-queue
+authority in the supported P220 modules, local-display inference from public
+desktop identity, persistence dependencies in the pure model crate, canonical
+J3 checkpoint drift, and loss of strict private-field or joined-cleanup
+validation. The guard, its four negative fixtures, the 63-file P219 custody
+ledger, validation-selection suite, release-asset fixture, documentation links,
+and diff hygiene pass. No runtime or provider effect occurred.
+
 ## Turn 392 | 2026-09-28
 
 P220 checkpoint `64f75821` extracts the retained browser-recovery model without

@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 9
+Plan version: 10
 
 State: OPEN
 
@@ -213,8 +213,12 @@ client or authenticated-viewer demand and proof that the old browser is
 unusable; retry timing is bounded, and observed-live, failure, and success
 transitions reject stale generations. Runtime launch and observation wiring,
 operator exposure for backup status and creation, operator-handoff integration,
-final-session cleanup, remaining P219 admission and observability work, and the
-architecture guard remain.
+final-session cleanup, remaining P219 admission and observability work, and
+protected integration remain. Checkpoint `a2080250` adds the architecture guard
+for this boundary. It rejects provider-private types in the pure model, local
+display inference from Remote View identity, retired route-keeper authority in
+the new CLI store, persistence dependencies in the service-model crate, J3
+checkpoint drift, and loss of strict private-field or cleanup validation.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
