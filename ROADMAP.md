@@ -92,6 +92,12 @@ Browser handoff ID and `/remote-view/<handoff-id>` path. It rejects released
 bindings and path-unsafe IDs, and structurally excludes Remote View route,
 desktop, provider, display, and credential identity from operator output.
 
+Checkpoint `496c25f8` restores provider-neutral browser-launch resource
+admission. Memory, disk, PID, and Agent Browser root-process capacity are
+observed immediately before the local Chrome effect; pressure fails without a
+launch. The unresolved Remote View application-placement stop remains exact,
+and no retired presentation authority enters the adapter.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

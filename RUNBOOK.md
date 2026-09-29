@@ -10,6 +10,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 398 | 2026-09-29
+
+P220 checkpoint `496c25f8` restores the provider-neutral browser-launch
+resource admission selected from P219. The Browser Session worker now checks
+available memory, profile-filesystem space, host PID capacity, and Agent
+Browser root-process count immediately before `BrowserManager::launch`.
+Resource pressure returns a typed error without a browser effect. Unsupported
+Remote View desktop placement retains its exact earlier fail-closed error, so
+the packet does not mask or invent the missing installed application-effect
+and browser/CDP adoption contract. Both focused admission tests, the runtime
+no-launch test, version sync, P220 architecture guard, P219 custody ledger,
+formatting, strict workspace Clippy, and diff hygiene pass. No live Remote
+View, browser, provider, install, privilege, production, or release effect
+occurred.
+
 ## Turn 397 | 2026-09-29
 
 P220 checkpoint `d3e31c6f` adds the provider-neutral operator-handoff

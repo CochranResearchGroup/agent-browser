@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 14
+Plan version: 15
 
 State: OPEN
 
@@ -139,6 +139,16 @@ then returns exactly `handoffId` and `/remote-view/<handoff-id>`. Released
 bindings and slash-bearing IDs fail closed. Route, desktop, provider, display,
 and credential identity cannot enter the projection body.
 
+Checkpoint `496c25f8` restores the presentation-neutral browser-launch
+resource admission selected from P219. Immediately before the first local
+Chrome effect, the Browser Session worker observes available memory, profile
+filesystem capacity, host PID capacity, and Agent Browser root-process count.
+Pressure returns a typed `browser_launch_resource_pressure` error without a
+launch. Unsupported Remote View placement still reaches its exact
+`remote_view_application_placement_contract_unavailable` stop before local
+admission, so this extraction neither masks the missing provider contract nor
+restores presentation authority.
+
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
 the published topic ref at audit start and contains both reusable Agent Browser
@@ -242,8 +252,8 @@ rules plus a restart-safe SQLite recovery registry. Replacement requires exact
 client or authenticated-viewer demand and proof that the old browser is
 unusable; retry timing is bounded, and observed-live, failure, and success
 transitions reject stale generations. Runtime launch and observation wiring,
-operator-handoff integration, final-session cleanup, remaining P219 admission
-and observability work, and protected integration remain. Checkpoint
+operator-handoff resolution, final-session cleanup, remaining P219
+observability work, and protected integration remain. Checkpoint
 `a2080250` adds the architecture guard
 for this boundary. It rejects provider-private types in the pure model, local
 display inference from Remote View identity, retired route-keeper authority in
@@ -268,6 +278,12 @@ intentionally absent rather than accepting caller-forged public identities.
 The durable-link output contract is ready at `d3e31c6f`, but readiness and
 resolution still require authenticated runtime evidence and are not inferred
 from link construction.
+Checkpoint `496c25f8` completes the independently extractable browser-launch
+resource gate. Focused pure and runtime-worker tests prove that zero capacity
+fails before Chrome launch; the architecture guard requires admission to
+precede `BrowserManager::launch` and rejects provider vocabulary in the
+admission adapter. Installed capacity projection remains separate from this
+effect fence.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
