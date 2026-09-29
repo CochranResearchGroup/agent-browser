@@ -177,14 +177,21 @@ pub use profile_seeding::{
 };
 pub use remote_view_consumer::{
     allocated_desktop_candidate, exact_release_reference, validate_fixed_desktop_associations,
-    validate_remote_view_foundation, validate_remote_view_operation,
-    AgentBrowserDesktopAssociation, RemoteViewConsumerError, RemoteViewDesktopRecord,
-    RemoteViewDesktopReference, RemoteViewDesktopResources, RemoteViewEffectBoundary,
-    RemoteViewEffectEvidence, RemoteViewFixedDesktop, RemoteViewFoundationCommand,
-    RemoteViewFoundationObservation, RemoteViewJ1ConsumerFixture, RemoteViewLifecycleObservation,
-    RemoteViewOperationRecord, RemoteViewOperationState, RemoteViewResourceKind,
-    RemoteViewResourceState, REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION,
+    validate_remote_view_foundation, validate_remote_view_j3_agent_browser_fixture,
+    validate_remote_view_operation, AgentBrowserDesktopAssociation,
+    RemoteViewApplicationRegistration, RemoteViewAssignmentRecord, RemoteViewAssignmentState,
+    RemoteViewConsumerError, RemoteViewDesktopPresentationBinding, RemoteViewDesktopRecord,
+    RemoteViewDesktopReference, RemoteViewDesktopResources, RemoteViewDesktopViewingRetirement,
+    RemoteViewEffectBoundary, RemoteViewEffectEvidence, RemoteViewFixedDesktop,
+    RemoteViewFoundationCommand, RemoteViewFoundationObservation, RemoteViewJ1ConsumerFixture,
+    RemoteViewJ3AgentBrowserFixture, RemoteViewJoinedReleaseOutcome,
+    RemoteViewLifecycleObservation, RemoteViewOperationRecord, RemoteViewOperationState,
+    RemoteViewPlacementAttempt, RemoteViewPlacementRecord, RemoteViewPlacementState,
+    RemoteViewResourceKind, RemoteViewResourceState, RemoteViewViewerDevice,
+    RemoteViewViewerLiveState, RemoteViewViewerSession, RemoteViewViewerSessionState,
+    RemoteViewViewerSessionStatus, RemoteViewViewingRoute, REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION,
     REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION, REMOTE_VIEW_J1_SOURCE_CHECKPOINT,
+    REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
 };
 pub use request_provenance::{
     normalize_identity_assurance, stable_self_declared_subject, ServiceRequestProvenance,
