@@ -14,18 +14,22 @@ use super::browser_session_runtime::{
     BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
     ManagedBrowserCommandEffects,
 };
-use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionJsonStore};
+#[cfg(test)]
+use super::browser_session_store::BrowserSessionJsonStore;
+use super::browser_session_store::{BrowserProfileCatalogLoad, BrowserSessionSqliteStore};
 
 const DEFAULT_SESSION_IDLE_TIMEOUT_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_CLEANUP_DELAY_MS: u64 = 300_000;
 const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
 
-pub(crate) type DefaultBrowserSessionHost =
-    BrowserSessionHost<BrowserSessionJsonStore, BrowserSessionEffectAdapter<BrowserManagerRuntime>>;
+pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
+    BrowserSessionSqliteStore,
+    BrowserSessionEffectAdapter<BrowserManagerRuntime>,
+>;
 
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
     let legacy_state_path = super::service_store::default_service_state_path()?;
-    let store = BrowserSessionJsonStore::default_json()?;
+    let store = BrowserSessionSqliteStore::default_sqlite()?;
     let session_idle_timeout_ms = configured_u64(
         "AGENT_BROWSER_SESSION_IDLE_TIMEOUT_MS",
         DEFAULT_SESSION_IDLE_TIMEOUT_MS,
@@ -93,24 +97,46 @@ pub(crate) trait BrowserSessionPersistence {
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String>;
 }
 
-impl BrowserSessionPersistence for BrowserSessionJsonStore {
+impl BrowserSessionPersistence for BrowserSessionSqliteStore {
     fn load_session_state(&self) -> Result<BrowserSessionState, String> {
-        BrowserSessionJsonStore::load_session_state(self)
+        BrowserSessionSqliteStore::load_session_state(self)
     }
 
     fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
-        BrowserSessionJsonStore::save_session_state(self, state)
+        BrowserSessionSqliteStore::save_session_state(self, state)
+    }
+
+    fn load_or_import_profile_catalog(
+        &self,
+        _legacy_service_state_path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String> {
+        BrowserSessionSqliteStore::load_profile_catalog(self)
+    }
+
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
+        BrowserSessionSqliteStore::save_profile_catalog(self, catalog)
+    }
+}
+
+#[cfg(test)]
+impl BrowserSessionPersistence for super::browser_session_store::BrowserSessionJsonStore {
+    fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        self.load_session_state()
+    }
+
+    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+        self.save_session_state(state)
     }
 
     fn load_or_import_profile_catalog(
         &self,
         legacy_service_state_path: &Path,
     ) -> Result<BrowserProfileCatalogLoad, String> {
-        BrowserSessionJsonStore::load_or_import_profile_catalog(self, legacy_service_state_path)
+        self.load_or_import_profile_catalog(legacy_service_state_path)
     }
 
     fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
-        BrowserSessionJsonStore::save_profile_catalog(self, catalog)
+        self.save_profile_catalog(catalog)
     }
 }
 
