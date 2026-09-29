@@ -1,0 +1,124 @@
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+
+const repoRoot = resolve(import.meta.dirname, '../..');
+const paths = {
+  cliManifest: 'cli/Cargo.toml',
+  modelManifest: 'crates/agent-browser-service-model/Cargo.toml',
+  consumer: 'crates/agent-browser-service-model/src/remote_view_consumer.rs',
+  manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
+  recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
+  host: 'cli/src/native/browser_session_host.rs',
+  runtime: 'cli/src/native/browser_session_runtime.rs',
+  store: 'cli/src/native/browser_session_store.rs',
+};
+
+function read(root, path) {
+  return readFileSync(join(root, path), 'utf8');
+}
+
+function check(root) {
+  const source = Object.fromEntries(
+    Object.entries(paths).map(([name, path]) => [name, read(root, path)]),
+  );
+  const failures = [];
+  const requireCondition = (condition, message) => {
+    if (!condition) failures.push(message);
+  };
+  const modelSources = [source.consumer, source.manager, source.recovery].join('\n');
+  const supportedCliSources = [source.host, source.runtime, source.store].join('\n');
+  const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
+
+  requireCondition(
+    !retiredProviderTerms.test(modelSources),
+    'service-model consumer, session, and recovery modules must remain provider-neutral',
+  );
+  requireCondition(
+    !retiredProviderTerms.test(supportedCliSources),
+    'supported P220 CLI modules must not restore retired presentation authority',
+  );
+  requireCondition(
+    !/^\s*rusqlite\s*=/m.test(source.modelManifest),
+    'service-model crate must not own SQLite persistence',
+  );
+  requireCondition(
+    /^\s*rusqlite\s*=.*features\s*=\s*\[[^\]]*"backup"[^\]]*"bundled"/m.test(
+      source.cliManifest,
+    ),
+    'CLI adapter must own the reviewed bundled SQLite backup dependency',
+  );
+  requireCondition(
+    source.runtime.includes('remote_view_application_placement_contract_unavailable'),
+    'runtime must fail closed until a real Remote View application-effect adapter exists',
+  );
+  requireCondition(
+    !/desktop\s*\.\s*(?:route_label|desktop_id)[\s\S]{0,160}(?:display|DISPLAY)/i.test(
+      source.runtime,
+    ),
+    'runtime must not infer a local display from Remote View public identity',
+  );
+  requireCondition(
+    /REMOTE_VIEW_J3_SOURCE_CHECKPOINT\s*:\s*&str\s*=\s*"018d3d752f9d99805242f99c00034f0caabc53d1"/.test(
+      source.consumer,
+    ),
+    'Remote View J3 consumer must stay bound to the canonical source checkpoint',
+  );
+  requireCondition(
+    /deny_unknown_fields/.test(source.consumer) &&
+      /rejects_j3_private_browser_state_and_inexact_joined_cleanup/.test(source.consumer),
+    'Remote View consumer must reject private fields and inexact cleanup',
+  );
+  requireCondition(
+    /Self::Dormant/.test(source.recovery) &&
+      /OldBrowserUsability::Unknown/.test(source.recovery) &&
+      /browser_recovery_observed_live_fence_mismatch/.test(source.recovery),
+    'browser recovery must retain demand, proof, and generation fences',
+  );
+  requireCondition(
+    /BROWSER_RECOVERY_REGISTRY_DOCUMENT/.test(source.store) &&
+      /transaction_with_behavior\(TransactionBehavior::Immediate\)/.test(source.store),
+    'recovery state must remain under transactional CLI persistence authority',
+  );
+  return failures;
+}
+
+function requireClean(root, label) {
+  const failures = check(root);
+  if (failures.length) {
+    throw new Error(`${label}:\n${failures.map((failure) => `  - ${failure}`).join('\n')}`);
+  }
+}
+
+function copyFixture(root) {
+  for (const path of Object.values(paths)) {
+    const destination = join(root, path);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, read(repoRoot, path));
+  }
+}
+
+function selfTest() {
+  const root = mkdtempSync(join(tmpdir(), 'agent-browser-p220-architecture-'));
+  try {
+    copyFixture(root);
+    requireClean(root, 'valid fixture rejected');
+    const cases = [
+      [paths.consumer, '\npub struct ProviderFreeHost;\n', 'provider-private model'],
+      [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
+      [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],
+      [paths.modelManifest, '\nrusqlite = "0.40"\n', 'model persistence'],
+    ];
+    for (const [path, mutation, label] of cases) {
+      copyFixture(root);
+      writeFileSync(join(root, path), `${read(root, path)}${mutation}`);
+      if (check(root).length === 0) throw new Error(`self-test missed ${label}`);
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+selfTest();
+requireClean(repoRoot, 'P220 architecture contract failed');
+console.log('P220 architecture contract passed');
