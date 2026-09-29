@@ -87,6 +87,11 @@ survives SQLite restart without retaining provider URLs or display numbers.
 Follow-up `fd4264ec` makes bind and release immediate SQLite transactions over
 the full Browser Session aggregate.
 
+Checkpoint `d3e31c6f` projects an active retained binding to exactly an Agent
+Browser handoff ID and `/remote-view/<handoff-id>` path. It rejects released
+bindings and path-unsafe IDs, and structurally excludes Remote View route,
+desktop, provider, display, and credential identity from operator output.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

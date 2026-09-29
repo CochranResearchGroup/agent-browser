@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 13
+Plan version: 14
 
 State: OPEN
 
@@ -133,6 +133,11 @@ no provider URL, display number, credential, or provider-private state.
 Follow-up `fd4264ec` makes bind and release single `BEGIN IMMEDIATE`
 transactions over the complete Browser Session aggregate, preventing a future
 runtime adapter from losing concurrent session or presentation updates.
+Checkpoint `d3e31c6f` adds the pure operator-handoff projection. It accepts only
+an active retained binding and a bounded path-safe Agent Browser handoff ID,
+then returns exactly `handoffId` and `/remote-view/<handoff-id>`. Released
+bindings and slash-bearing IDs fail closed. Route, desktop, provider, display,
+and credential identity cannot enter the projection body.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -260,6 +265,9 @@ placement; it cannot do so until the installed application effect and
 browser/CDP adoption contract exists.
 The store adapter is transaction-ready at `fd4264ec`; transport ingress remains
 intentionally absent rather than accepting caller-forged public identities.
+The durable-link output contract is ready at `d3e31c6f`, but readiness and
+resolution still require authenticated runtime evidence and are not inferred
+from link construction.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

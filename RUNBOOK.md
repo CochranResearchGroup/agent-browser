@@ -10,6 +10,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 397 | 2026-09-29
+
+P220 checkpoint `d3e31c6f` adds the provider-neutral operator-handoff
+projection. An active retained public binding and a bounded path-safe Agent
+Browser handoff ID produce exactly `handoffId` and
+`/remote-view/<handoff-id>`. Released bindings and slash-bearing IDs fail
+closed. A self-testing architecture rule rejects any route, desktop, provider,
+display, or credential reference in the projection body. Focused retention
+tests, the P220 architecture guard, formatting, and strict workspace Clippy
+pass. Link construction does not claim viewer readiness or perform a runtime
+effect.
+
 ## Turn 396 | 2026-09-29
 
 P220 follow-up `fd4264ec` wraps public Remote View presentation bind and joined
