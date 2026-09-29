@@ -10,6 +10,28 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 405 | 2026-09-29
+
+P220 version 22 records the bounded Remote View source integration result and
+checkpoint `716ef3a5`. Remote View `origin/main` at `0a42bff5` now exposes exact
+live launch resources in installed desktop lifecycle observations. Agent
+Browser projects the selected desktop UUID and generation to an authoritative
+display name, rejects missing, stale, or invalid context before admission or
+Chrome launch, and no longer requires managed application placement. The
+default host remains fail-closed until the public adapter supplies context.
+
+The spike also demonstrated one narrower Remote View gap: installed dynamic
+control and gateway viewing use different desktop UUID projections, while
+public window actions remain slot-addressed. Agent Browser cannot infer the
+join from route labels, display numbers, capacity order, or local conventions.
+Remote View issue #146 requests one authenticated generation-bound join for
+viewing, window inventory, and exact window activation. It does not request
+browser launch, process/profile/CDP ownership, application placement,
+embedding, or one browser per desktop. Focused service-model and CLI tests,
+the self-testing P220 architecture guard, formatting, and strict workspace
+Clippy pass. No live Remote View, browser, provider, install, privilege,
+production, or release effect occurred.
+
 ## Turn 404 | 2026-09-29
 
 P220 version 21 corrects the Remote View consumer boundary after the

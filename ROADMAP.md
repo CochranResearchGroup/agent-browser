@@ -31,7 +31,8 @@ State: OPEN
 
 Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md),
 [issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202),
-and the closed [Remote View issue #70](https://github.com/CochranResearchGroup/remote-view/issues/70)
+the closed [Remote View issue #70](https://github.com/CochranResearchGroup/remote-view/issues/70),
+and narrow [Remote View issue #146](https://github.com/CochranResearchGroup/remote-view/issues/146)
 own the `PL-PLATFORM` migration from Agent Browser-owned presentation
 infrastructure to Remote View public contracts. Source checkpoint `f695c545`
 includes the complete F0 observation, two-desktop association invariant, and
@@ -71,8 +72,8 @@ effect wiring is still pending.
 Checkpoint `a2080250` makes the P220 ownership split executable. Its
 self-testing architecture guard rejects Remote View provider internals in the
 pure consumer and session model, retired presentation authorities in the
-supported CLI path, local-display inference from public desktop identity, and
-SQLite ownership outside the CLI adapter.
+supported CLI path, route-label display inference, and SQLite ownership
+outside the CLI adapter.
 
 Checkpoint `d7c43915` exposes verified Browser Runtime backup status and online
 creation through CLI plus the generic HTTP and MCP request transport. The
@@ -95,8 +96,15 @@ desktop, provider, display, and credential identity from operator output.
 Checkpoint `496c25f8` restores provider-neutral browser-launch resource
 admission. Memory, disk, PID, and Agent Browser root-process capacity are
 observed immediately before the local Chrome effect; pressure fails without a
-launch. The unresolved Remote View application-placement stop remains exact,
-and no retired presentation authority enters the adapter.
+launch. No retired presentation authority enters the adapter.
+
+Checkpoint `716ef3a5` replaces the obsolete application-placement stop with an
+exact Remote View desktop runtime-context seam. The browser worker requires a
+matching desktop UUID and generation before using Remote View's authoritative
+display and fails before launch when context is missing, stale, or invalid.
+Remote View's installed lifecycle record now supplies the launch-side resource;
+issue #146 tracks the distinct public join from that dynamic desktop identity
+to viewing and slot-addressed window actions.
 
 Checkpoint `e36f7d42` exposes additive Browser Runtime operational health in
 Service status and install doctor. The read-only, path-redacted projection

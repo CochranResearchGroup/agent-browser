@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 21
+Plan version: 22
 
 State: OPEN
 
@@ -16,7 +16,7 @@ Predecessor: Agent Browser Issue #195 and the linked P219 supersession audit, ca
 
 Work item: [CochranResearchGroup/agent-browser#202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
 
-Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, and corrective Plan 0028
+Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, corrective Plan 0028, and narrow installed join request [CochranResearchGroup/remote-view#146](https://github.com/CochranResearchGroup/remote-view/issues/146)
 
 Target: `main`
 
@@ -112,9 +112,19 @@ One Remote View assignment reserves a desktop for the Agent Browser service;
 Agent Browser may associate multiple browsers with that desktop. Empty
 desktops are preferred, not required. Assignment release returns an empty
 desktop to the Agent Browser-reserved pool, while a distinct clean scale-in
-operation may return it to general Remote View capacity. A short integration
-spike must consume these public surfaces before any narrower provider gap is
-claimed.
+operation may return it to general Remote View capacity. A bounded integration
+spike against Remote View `origin/main` at
+`0a42bff5202858a452848a781376caac66667a2f` confirms that installed dynamic
+desktop lifecycle observations now supply exact live launch resources. The
+record joins `desktopId`, `generation`, `resources.display`,
+`resources.vncPort`, and `readinessScope: live_resource`, so launch does not
+require application placement. The same spike found one narrower public join
+gap: installed-control lifecycle uses a random desktop UUID while
+`GatewayDesktopProjection` independently derives a fixed UUID and the public
+window operations remain slot-addressed. Agent Browser cannot infer that join
+from friendly route, display, capacity order, or local configuration. Remote
+View issue #146 records the exact generation-bound viewing and window-action
+need without requesting browser or CDP ownership.
 
 Remote View's opaque `routeId` is a provider route identity, not by itself the
 Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep
@@ -193,6 +203,15 @@ active browser, session, and tab records, and retains terminal session and tab
 history. This is browser cleanup only. Remote View presentation release remains
 an exact, separate transaction that requires an authenticated joined-release
 outcome from runtime ingress.
+
+Checkpoint `716ef3a5` replaces the obsolete application-placement launch stop
+with a provider-neutral runtime-context contract. A ready allocated Remote
+View lifecycle observation projects exact desktop UUID, generation, and
+authoritative display name. The browser worker accepts that display only when
+both UUID and generation match, rejects missing, stale, or invalid context
+before resource admission or Chrome launch, and never derives display from a
+route label. The default host supplies no fabricated context, so production
+Remote View launch remains fail-closed until its public adapter is wired.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -407,6 +426,14 @@ references. Remote View assignment and presentation release occurs only after
 the final browser reference and every cleanup, recovery, and foreground
 obligation are gone, using the authenticated assignment, generation, route,
 and complete viewer-session result supplied by runtime ingress.
+Checkpoint `716ef3a5` completes the launch-side context seam. Focused
+service-model and CLI tests prove projection from the source-bound lifecycle
+fixture, exact generation matching, authoritative display use, and a
+pre-launch failure when context is absent. The self-testing P220 architecture
+guard now rejects restoration of the application-placement stop, loss of the
+generation fence, or route-label display inference. Workspace formatting and
+strict Clippy pass. The production adapter, dynamic refresh, viewing/window
+join, and live launch remain pending.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
@@ -427,10 +454,13 @@ shape drift and tampered operation payload evidence. The J3 Agent Browser wire
 fixture passes at `552c8162`, including strict private-state exclusion and
 exact joined cleanup. The earlier conclusion that the provider-free
 application effect blocked P220 was incorrect because Agent Browser does not
-delegate browser launch to `application place`. The next runtime replay must
-first consume the existing production pool, assignment, desktop-environment,
-window-inventory, events, viewing, and window-action surfaces. Only a concrete
-failure in that spike can establish a narrower Remote View dependency. Remote
+delegate browser launch to `application place`. The source spike consumed the
+installed desktop lifecycle and established that its exact live resource
+observation is sufficient for Agent Browser-owned launch. It also demonstrated
+the concrete identity discontinuity between the dynamic installed-control
+desktop UUID and the separately derived gateway desktop UUID plus
+slot-addressed window surface. Remote View issue #146 now tracks only that
+generation-bound viewing and window-action join. Remote
 View's provider-free fixture remains compatibility evidence, not a substitute
 for proving Agent Browser's browser launch, recovery, durable handoff,
 retention mapping, focus transaction, or cleanup adapter.
@@ -545,9 +575,10 @@ and final reconciliation. Read-only commit classification and provider-free
 fixture design are parallelizable after branch admission because they write
 separate audit and test surfaces. Client-contract implementation, extraction
 of mixed P219 commits, schema generation, and shared documentation remain on
-the serialized critical path. The next critical-path packet is the bounded
-runtime integration spike over existing Remote View public surfaces. It must
-finish before opening any new Remote View dependency.
+the serialized critical path. The launch half of the runtime integration spike
+is complete at `716ef3a5`. The next critical-path packets are the Agent Browser
+installed-control adapter and shared desktop-assignment retention; viewing and
+window-action resolution depends on the narrow Remote View issue #146 join.
 
 Remote View retains authority over its repository. Issue #70 and RV-014 are
 closed from Remote View's J3 fixture; Agent Browser consumes the published J2,
