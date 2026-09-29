@@ -10,10 +10,13 @@ use std::time::Duration;
 use agent_browser_service_model::BrowserRecoveryPhase;
 use agent_browser_service_model::{
     decide_browser_recovery, record_browser_recovery_failure,
-    record_browser_recovery_observed_live, record_browser_recovery_success, BrowserProfileCatalog,
+    record_browser_recovery_observed_live, record_browser_recovery_success,
+    release_remote_view_presentation, retain_remote_view_presentation, BrowserProfileCatalog,
     BrowserProfileCatalogDiagnostic, BrowserRecoveryAdmissionPolicy, BrowserRecoveryDecision,
     BrowserRecoveryDemand, BrowserRecoveryState, BrowserSessionState, OldBrowserUsability,
-    BROWSER_PROFILE_CATALOG_SCHEMA_V1, BROWSER_SESSION_STATE_SCHEMA_V1,
+    RemoteViewDesktopPresentationBinding, RemoteViewJoinedReleaseOutcome,
+    RemoteViewPresentationRetention, BROWSER_PROFILE_CATALOG_SCHEMA_V1,
+    BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{backup, params, Connection, OpenFlags, OptionalExtension, TransactionBehavior};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -218,6 +221,54 @@ impl BrowserSessionSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
             state,
         )
+    }
+
+    pub(crate) fn retain_remote_view_presentation(
+        &mut self,
+        browser_id: &str,
+        session_id: &str,
+        tab_id: &str,
+        binding: &RemoteViewDesktopPresentationBinding,
+    ) -> Result<RemoteViewPresentationRetention, String> {
+        self.mutate_session_state(|state| {
+            retain_remote_view_presentation(state, browser_id, session_id, tab_id, binding)
+        })
+    }
+
+    pub(crate) fn release_remote_view_presentation(
+        &mut self,
+        browser_id: &str,
+        release: &RemoteViewJoinedReleaseOutcome,
+    ) -> Result<RemoteViewPresentationRetention, String> {
+        self.mutate_session_state(|state| {
+            release_remote_view_presentation(state, browser_id, release)
+        })
+    }
+
+    fn mutate_session_state<T>(
+        &mut self,
+        mutate: impl FnOnce(&mut BrowserSessionState) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|error| format!("browser_session_mutation_begin_failed:{error}"))?;
+        let mut state = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        let result = mutate(&mut state)?;
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            &state,
+        )?;
+        transaction
+            .commit()
+            .map_err(|error| format!("browser_session_mutation_commit_failed:{error}"))?;
+        Ok(result)
     }
 
     pub(crate) fn load_profile_catalog(&self) -> Result<BrowserProfileCatalogLoad, String> {
@@ -974,7 +1025,9 @@ fn atomic_replace(source: &Path, destination: &Path) -> Result<(), String> {
 mod tests {
     use super::*;
     use agent_browser_service_model::{
-        BrowserProfileKind, RemoteViewPresentationRetention, RemoteViewPresentationRetentionState,
+        BrowserProfileKind, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+        RemoteViewAssignmentRecord, RemoteViewAssignmentState, RemoteViewDesktopViewingRetirement,
+        RemoteViewFixedDesktop, RemoteViewPresentationRetentionState,
     };
 
     struct TempDirectory(PathBuf);
@@ -1112,38 +1165,112 @@ mod tests {
     fn sqlite_session_document_retains_remote_view_public_identity_across_restart() {
         let directory = TempDirectory::new("remote-view-retention-restart");
         let legacy_path = directory.0.join("state.json");
-        let (store, _) =
+        let (mut store, _) =
             BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
         let mut state = store.load_session_state().unwrap();
-        state.remote_view_presentations.insert(
+        state.browsers.insert(
             "browser-a".into(),
-            RemoteViewPresentationRetention {
-                browser_id: "browser-a".into(),
+            ManagedBrowserInstance {
                 profile_id: "profile-a".into(),
-                session_id: "session-a".into(),
-                tab_id: "tab-a".into(),
+                id: "browser-a".into(),
+                pid: 42,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                    friendly_route_label: "desktop-a".into(),
+                    generation: 7,
+                }),
+                active_session_ids: vec!["session-a".into()],
+            },
+        );
+        state.sessions.insert(
+            "session-a".into(),
+            ManagedBrowserSession {
+                id: "session-a".into(),
+                name: "work".into(),
+                profile_id: "profile-a".into(),
+                browser_id: "browser-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
+                expires_at_ms: 10,
+                current_tab_id: Some("tab-a".into()),
+            },
+        );
+        state.tabs.insert(
+            "tab-a".into(),
+            ManagedBrowserTab {
+                id: "tab-a".into(),
                 target_id: "target-a".into(),
-                registration_id: "registration-a".into(),
-                pool_id: "pool-a".into(),
-                desktop_id: "11111111-1111-1111-1111-111111111111".into(),
-                generation: 7,
-                assignment_id: "assignment-a".into(),
-                placement_id: "placement-a".into(),
-                route_id: "22222222-2222-2222-2222-222222222222".into(),
-                viewer_session_ids: vec!["viewer-a".into()],
-                state: RemoteViewPresentationRetentionState::Active,
+                browser_id: "browser-a".into(),
+                session_id: "session-a".into(),
+                created_at_ms: 1,
+                last_activity_at_ms: 2,
             },
         );
         store.save_session_state(&state).unwrap();
+        let retained = store
+            .retain_remote_view_presentation(
+                "browser-a",
+                "session-a",
+                "tab-a",
+                &RemoteViewDesktopPresentationBinding {
+                    registration_id: "registration-a".into(),
+                    pool_id: "pool-a".into(),
+                    desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                    generation: 7,
+                    assignment_id: "assignment-a".into(),
+                    placement_id: "placement-a".into(),
+                    route_id: "22222222-2222-2222-2222-222222222222".into(),
+                    viewer_session_ids: vec!["viewer-a".into()],
+                },
+            )
+            .unwrap();
+        assert_eq!(retained.state, RemoteViewPresentationRetentionState::Active);
         drop(store);
 
-        let restarted = BrowserSessionSqliteStore::open(&directory.0).unwrap();
+        let mut restarted = BrowserSessionSqliteStore::open(&directory.0).unwrap();
         assert_eq!(
             restarted
                 .load_session_state()
                 .unwrap()
-                .remote_view_presentations,
-            state.remote_view_presentations
+                .remote_view_presentations["browser-a"],
+            retained
+        );
+        let released = restarted
+            .release_remote_view_presentation(
+                "browser-a",
+                &RemoteViewJoinedReleaseOutcome {
+                    assignment: RemoteViewAssignmentRecord {
+                        assignment_id: "assignment-a".into(),
+                        registration_id: "registration-a".into(),
+                        pool_id: "pool-a".into(),
+                        desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                        generation: 7,
+                        state: RemoteViewAssignmentState::Released,
+                    },
+                    retirement: RemoteViewDesktopViewingRetirement {
+                        schema_version: 1,
+                        desktop_id: "11111111-1111-1111-1111-111111111111".into(),
+                        generation: 7,
+                        routes: vec!["22222222-2222-2222-2222-222222222222".into()],
+                        sessions: vec!["viewer-a".into()],
+                    },
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            released.state,
+            RemoteViewPresentationRetentionState::Released
+        );
+        drop(restarted);
+        assert_eq!(
+            BrowserSessionSqliteStore::open(&directory.0)
+                .unwrap()
+                .load_session_state()
+                .unwrap()
+                .remote_view_presentations["browser-a"]
+                .state,
+            RemoteViewPresentationRetentionState::Released
         );
     }
 

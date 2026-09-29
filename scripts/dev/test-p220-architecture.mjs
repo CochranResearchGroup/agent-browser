@@ -86,6 +86,8 @@ function check(root) {
     /remote_view_presentations/.test(source.manager) &&
       /release_remote_view_presentation/.test(source.retention) &&
       /RemoteViewPresentationRetentionState::Released/.test(source.retention) &&
+      /pub\(crate\) fn retain_remote_view_presentation/.test(source.store) &&
+      /fn mutate_session_state/.test(source.store) &&
       !/(?:provider_url|display_number|credential)/i.test(source.retention),
     'Remote View retention must stay exact, provider-neutral, and release-fenced',
   );
