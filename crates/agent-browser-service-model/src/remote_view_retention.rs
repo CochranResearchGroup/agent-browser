@@ -35,6 +35,35 @@ pub struct RemoteViewPresentationRetention {
     pub state: RemoteViewPresentationRetentionState,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewOperatorHandoffLink {
+    pub handoff_id: String,
+    pub handoff_url: String,
+}
+
+pub fn project_remote_view_operator_handoff(
+    retained: &RemoteViewPresentationRetention,
+    handoff_id: &str,
+) -> Result<RemoteViewOperatorHandoffLink, String> {
+    let id_is_safe = !handoff_id.is_empty()
+        && handoff_id.len() <= 128
+        && !matches!(handoff_id, "." | "..")
+        && handoff_id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~'));
+    if retained.state != RemoteViewPresentationRetentionState::Active {
+        return Err("remote_view_operator_handoff_binding_not_active".to_string());
+    }
+    if !id_is_safe {
+        return Err("remote_view_operator_handoff_id_invalid".to_string());
+    }
+    Ok(RemoteViewOperatorHandoffLink {
+        handoff_id: handoff_id.to_string(),
+        handoff_url: format!("/remote-view/{handoff_id}"),
+    })
+}
+
 pub fn retain_remote_view_presentation(
     state: &mut BrowserSessionState,
     browser_id: &str,

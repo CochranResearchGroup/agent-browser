@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use agent_browser_service_model::{
-    release_remote_view_presentation, retain_remote_view_presentation, BrowserSessionState,
-    ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab, RemoteViewAssignmentRecord,
+    project_remote_view_operator_handoff, release_remote_view_presentation,
+    retain_remote_view_presentation, BrowserSessionState, ManagedBrowserInstance,
+    ManagedBrowserSession, ManagedBrowserTab, RemoteViewAssignmentRecord,
     RemoteViewAssignmentState, RemoteViewDesktopPresentationBinding,
     RemoteViewDesktopViewingRetirement, RemoteViewFixedDesktop, RemoteViewJoinedReleaseOutcome,
     RemoteViewPresentationRetentionState,
@@ -131,4 +132,28 @@ fn release_requires_the_exact_assignment_generation_route_and_viewer_set() {
         stale.remote_view_presentations["browser-a"].state,
         RemoteViewPresentationRetentionState::Active
     );
+}
+
+#[test]
+fn operator_handoff_projection_returns_only_agent_browser_durable_identity() {
+    let mut state = fixture_state();
+    let retained =
+        retain_remote_view_presentation(&mut state, "browser-a", "session-a", "tab-a", &binding())
+            .unwrap();
+
+    let link = project_remote_view_operator_handoff(&retained, "handoff-123").unwrap();
+    assert_eq!(link.handoff_id, "handoff-123");
+    assert_eq!(link.handoff_url, "/remote-view/handoff-123");
+    assert_eq!(
+        serde_json::to_value(&link).unwrap(),
+        serde_json::json!({
+            "handoffId": "handoff-123",
+            "handoffUrl": "/remote-view/handoff-123"
+        })
+    );
+    assert!(project_remote_view_operator_handoff(&retained, "route/id").is_err());
+
+    let mut released = retained;
+    released.state = RemoteViewPresentationRetentionState::Released;
+    assert!(project_remote_view_operator_handoff(&released, "handoff-123").is_err());
 }

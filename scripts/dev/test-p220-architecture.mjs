@@ -31,6 +31,10 @@ function check(root) {
   const modelSources = [source.consumer, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [source.host, source.runtime, source.store, source.backup].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
+  const handoffProjection = source.retention.slice(
+    source.retention.indexOf('pub fn project_remote_view_operator_handoff'),
+    source.retention.indexOf('pub fn retain_remote_view_presentation'),
+  );
 
   requireCondition(
     !retiredProviderTerms.test(modelSources),
@@ -92,6 +96,11 @@ function check(root) {
     'Remote View retention must stay exact, provider-neutral, and release-fenced',
   );
   requireCondition(
+    /\/remote-view\/\{handoff_id\}/.test(handoffProjection) &&
+      !/(?:route_id|desktop_id|provider|display|credential)/i.test(handoffProjection),
+    'operator handoff projection must return only Agent Browser durable identity',
+  );
+  requireCondition(
     /handle_service_runtime_backup_status/.test(source.backup) &&
       /handle_service_runtime_backup_create/.test(source.backup) &&
       !/restore/i.test(source.backup.replace(/do not restore/gi, '')),
@@ -133,6 +142,13 @@ function selfTest() {
       writeFileSync(join(root, path), `${read(root, path)}${mutation}`);
       if (check(root).length === 0) throw new Error(`self-test missed ${label}`);
     }
+    copyFixture(root);
+    const retention = read(root, paths.retention).replace(
+      'handoff_url: format!("/remote-view/{handoff_id}"),',
+      'handoff_url: retained.route_id.clone(),',
+    );
+    writeFileSync(join(root, paths.retention), retention);
+    if (check(root).length === 0) throw new Error('self-test missed route identity handoff leak');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
