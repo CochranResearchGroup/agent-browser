@@ -98,6 +98,12 @@ observed immediately before the local Chrome effect; pressure fails without a
 launch. The unresolved Remote View application-placement stop remains exact,
 and no retired presentation authority enters the adapter.
 
+Checkpoint `e36f7d42` exposes additive Browser Runtime operational health in
+Service status and install doctor. The read-only, path-redacted projection
+reports SQLite integrity and size, migration archive state, verified-backup
+state, and current launch admission. Storage failure returns a stable code;
+status never migrates the database or creates a backup.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

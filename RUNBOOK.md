@@ -10,6 +10,24 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 399 | 2026-09-29
+
+P220 checkpoint `e36f7d42` adds additive, read-only Browser Runtime health to
+Service status, the generated client type, and install doctor. It reports
+redacted SQLite integrity and size, migration archive state, verified-backup
+state, and current browser-launch admission. Missing or invalid storage
+returns a stable failure code and never its path; status does not migrate the
+database or create a backup. Focused available and unavailable Rust tests,
+Service-status no-persistence coverage, generated-client checks, TypeScript,
+observability helpers, cross-seam schema tests, API/MCP parity, install-doctor
+provenance tests, P220 architecture and custody guards, documentation links,
+remote-view docs contracts, formatting, strict workspace Clippy, and the
+production docs build pass. A browser-launching collection smoke timed out
+before status assertions and is not acceptance evidence. Its exact
+`sc-24089` process tree and empty disposable directory were removed; no
+matching residue remained. No production, installed, provider, privilege, or
+release effect occurred.
+
 ## Turn 398 | 2026-09-29
 
 P220 checkpoint `496c25f8` restores the provider-neutral browser-launch

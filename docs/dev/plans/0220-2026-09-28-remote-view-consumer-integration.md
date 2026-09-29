@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 15
+Plan version: 16
 
 State: OPEN
 
@@ -149,6 +149,14 @@ launch. Unsupported Remote View placement still reaches its exact
 admission, so this extraction neither masks the missing provider contract nor
 restores presentation authority.
 
+Checkpoint `e36f7d42` exposes additive, read-only Browser Runtime operational
+health through Service status, the generated client contract, and install
+doctor. The projection reports redacted SQLite integrity and size, migration
+archive state, verified-backup state, and current launch admission. Missing or
+invalid storage collapses to a stable failure code and never exposes its path.
+The status adapter opens only an existing regular database with SQLite
+read-only flags; it performs no migration or backup effect.
+
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
 the published topic ref at audit start and contains both reusable Agent Browser
@@ -252,8 +260,8 @@ rules plus a restart-safe SQLite recovery registry. Replacement requires exact
 client or authenticated-viewer demand and proof that the old browser is
 unusable; retry timing is bounded, and observed-live, failure, and success
 transitions reject stale generations. Runtime launch and observation wiring,
-operator-handoff resolution, final-session cleanup, remaining P219
-observability work, and protected integration remain. Checkpoint
+operator-handoff resolution, final-session cleanup, and protected integration
+remain. Checkpoint
 `a2080250` adds the architecture guard
 for this boundary. It rejects provider-private types in the pure model, local
 display inference from Remote View identity, retired route-keeper authority in
@@ -284,6 +292,15 @@ fails before Chrome launch; the architecture guard requires admission to
 precede `BrowserManager::launch` and rejects provider vocabulary in the
 admission adapter. Installed capacity projection remains separate from this
 effect fence.
+Checkpoint `e36f7d42` completes the independently extractable read-only
+Browser Runtime health projection. Focused Rust tests prove available and
+missing-database results, path redaction, unchanged database digest, and no
+backup creation. Schema, generated-client, cross-seam, API/MCP parity,
+install-doctor provenance, documentation, architecture, formatting, strict
+Clippy, and production docs-build checks pass. The browser-launching collection
+smoke timed out before reaching status assertions; its exact `sc-24089`
+process tree and empty disposable directory were removed, so it supplies no
+acceptance evidence and leaves no matching residue.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
