@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 16
+Plan version: 17
 
 State: OPEN
 
@@ -157,6 +157,14 @@ invalid storage collapses to a stable failure code and never exposes its path.
 The status adapter opens only an existing regular database with SQLite
 read-only flags; it performs no migration or backup effect.
 
+Checkpoint `c1f5fe27` closes the last ambiguity in Agent Browser-owned
+final-session cleanup. An explicit close of the only logical session invokes
+the exact browser close once, does not issue a separate tab close, clears the
+active browser, session, and tab records, and retains terminal session and tab
+history. This is browser cleanup only. Remote View presentation release remains
+an exact, separate transaction that requires an authenticated joined-release
+outcome from runtime ingress.
+
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
 the published topic ref at audit start and contains both reusable Agent Browser
@@ -260,8 +268,8 @@ rules plus a restart-safe SQLite recovery registry. Replacement requires exact
 client or authenticated-viewer demand and proof that the old browser is
 unusable; retry timing is bounded, and observed-live, failure, and success
 transitions reject stale generations. Runtime launch and observation wiring,
-operator-handoff resolution, final-session cleanup, and protected integration
-remain. Checkpoint
+authenticated operator-handoff resolution, joined presentation release, and
+protected integration remain. Checkpoint
 `a2080250` adds the architecture guard
 for this boundary. It rejects provider-private types in the pure model, local
 display inference from Remote View identity, retired route-keeper authority in
@@ -301,6 +309,14 @@ Clippy, and production docs-build checks pass. The browser-launching collection
 smoke timed out before reaching status assertions; its exact `sc-24089`
 process tree and empty disposable directory were removed, so it supplies no
 acceptance evidence and leaves no matching residue.
+Checkpoint `c1f5fe27` directly proves the already-implemented final-session
+browser cleanup invariant for explicit close. Agent Browser removes its active
+browser/session/tab records only after the browser close succeeds and preserves
+terminal history. The test intentionally does not release Remote View state:
+that mutation must consume the authenticated assignment, generation, route,
+and complete viewer-session result that the missing runtime ingress must
+supply. There is no remaining independently safe local cleanup adapter to
+invent around that dependency.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

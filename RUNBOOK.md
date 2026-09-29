@@ -10,6 +10,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 400 | 2026-09-29
+
+P220 checkpoint `c1f5fe27` proves the existing explicit final-session browser
+cleanup path directly. Closing the only logical session invokes one exact
+browser close, issues no redundant tab-close effect, clears active browser,
+session, and tab records, and preserves terminal histories. The focused
+service-model test and workspace formatting pass. This resolves the stale plan
+item for Agent Browser-owned final-session cleanup; it does not fabricate a
+Remote View release. Joined presentation cleanup still requires authenticated
+assignment, generation, route, and complete viewer-session evidence from the
+missing runtime ingress. No browser, Remote View, installed, provider,
+privilege, production, or release effect occurred.
+
 ## Turn 399 | 2026-09-29
 
 P220 checkpoint `e36f7d42` adds additive, read-only Browser Runtime health to

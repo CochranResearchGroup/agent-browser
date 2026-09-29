@@ -104,6 +104,12 @@ reports SQLite integrity and size, migration archive state, verified-backup
 state, and current launch admission. Storage failure returns a stable code;
 status never migrates the database or creates a backup.
 
+Checkpoint `c1f5fe27` proves explicit final-session browser cleanup: the last
+logical session closes its exact Agent Browser browser once, clears active
+browser/session/tab state, and preserves terminal history. Remote View
+presentation release remains separate and cannot run until authenticated
+runtime ingress returns the exact joined-release outcome.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED
