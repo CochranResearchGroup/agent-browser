@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 10
+Plan version: 11
 
 State: OPEN
 
@@ -18,11 +18,15 @@ Work item: [CochranResearchGroup/agent-browser#202](https://github.com/CochranRe
 
 Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, and corrective Plan 0028
 
-Target: `origin/main` at `a3848e16`
+Target: `main`
+
+Baseline: `origin/main` at `a3848e16`
 
 Branch: `platform/p220-remote-view-consumer`
 
 Owner: primary P220 implementation owner
+
+Integration: merge through the protected pull-request workflow after J2/J3 consumer replay, retained-domain reconciliation, and changed-surface validation
 
 Authority: the operator directed creation and execution preparation on 2026-09-28. This plan authorizes repository planning, provider-free fixtures, and ordinary source implementation after branch admission. Installed, privileged, public-ingress, production, merge, release, destructive cleanup, and Remote View runtime effects remain separately gated.
 
@@ -108,6 +112,15 @@ route and both sessions. Unknown browser-private fields, partial retirement,
 identity mismatch, and generation mismatch fail closed. This completes the
 J3 wire-consumption tracer, not the CLI placement adapter or installed
 acceptance.
+
+Checkpoint `d7c43915` exposes the P220-owned SQLite backup boundary through
+`service runtime-backup status|create` and the generic HTTP and MCP
+`service_request` transport. Status verifies without mutation; create performs
+one online SQLite backup, validates integrity and digest, and rotates at most
+one previous copy. Neither surface restores data or includes the separate
+Service State store. The generated client publishes typed status and manifest
+responses. Disposable smoke cleanup now accommodates the intentionally
+read-only migration archives.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -212,13 +225,22 @@ rules plus a restart-safe SQLite recovery registry. Replacement requires exact
 client or authenticated-viewer demand and proof that the old browser is
 unusable; retry timing is bounded, and observed-live, failure, and success
 transitions reject stale generations. Runtime launch and observation wiring,
-operator exposure for backup status and creation, operator-handoff integration,
-final-session cleanup, remaining P219 admission and observability work, and
-protected integration remain. Checkpoint `a2080250` adds the architecture guard
+operator-handoff integration, final-session cleanup, remaining P219 admission
+and observability work, and protected integration remain. Checkpoint
+`a2080250` adds the architecture guard
 for this boundary. It rejects provider-private types in the pure model, local
 display inference from Remote View identity, retired route-keeper authority in
 the new CLI store, persistence dependencies in the service-model crate, J3
 checkpoint drift, and loss of strict private-field or cleanup validation.
+Checkpoint `d7c43915` completes operator backup status and creation across CLI,
+HTTP, MCP, schema, and generated-client surfaces. Focused Rust backup and
+contract tests, strict Clippy, formatting, client contract and type checks,
+API/MCP parity, the no-launch contract smoke, P220 architecture guard,
+documentation links, and the production documentation build pass. The broad
+`test:service-client` umbrella remains blocked by a pre-existing stale P157
+source-literal oracle that expects `ServiceRequestProvenance::capture` while
+both the batch baseline and current source use
+`capture_service_request_provenance`.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 

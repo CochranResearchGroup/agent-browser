@@ -74,6 +74,11 @@ pure consumer and session model, retired presentation authorities in the
 supported CLI path, local-display inference from public desktop identity, and
 SQLite ownership outside the CLI adapter.
 
+Checkpoint `d7c43915` exposes verified Browser Runtime backup status and online
+creation through CLI plus the generic HTTP and MCP request transport. The
+generated client carries typed backup responses. Restore and the separate
+Service State store remain outside this surface.
+
 ## P216 | Service Model Extraction Landing
 
 State: CLOSED

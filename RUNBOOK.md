@@ -10,6 +10,22 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 394 | 2026-09-28
+
+P220 checkpoint `d7c43915` exposes verified Browser Runtime SQLite backup
+status and creation through `service runtime-backup status|create` and the
+generic HTTP and MCP `service_request` transport. The generated client carries
+typed status and manifest responses. Status is read-only; creation performs an
+online integrity-checked backup and rotates at most one previous copy. Neither
+surface restores data or includes the separate Service State store. Focused
+Rust backup and contract tests, formatting, strict Clippy, generated-client
+contract and type checks, request-client tests, API/MCP parity, the no-launch
+contract smoke, P220 architecture guard, documentation links, and the
+production documentation build pass. The umbrella service-client gate stops
+at a pre-existing stale P157 source-literal oracle that disagrees with both
+the checkpoint baseline and current provenance helper name. No browser,
+provider, install, privilege, production, or release effect occurred.
+
 ## Turn 393 | 2026-09-28
 
 P220 checkpoint `a2080250` adds a deterministic, self-testing architecture
