@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 18
+Plan version: 19
 
 State: OPEN
 
@@ -96,6 +96,18 @@ The public record contract is complete; the installed application effect,
 browser launch, and CDP adoption contract required by Agent Browser is not.
 P220 therefore continues independent retained-domain work without pretending
 that transport reachability supplies a usable runtime adapter.
+
+The remaining provider dependency is now recorded on
+[Remote View issue #62](https://github.com/CochranResearchGroup/remote-view/issues/62#issuecomment-5884721315).
+Remote View's roadmap says application deployment launches an application under
+an owned service and cgroup, while Plan 0015 correctly leaves browser process,
+profile, CDP, and recovery ownership with the consumer. The missing public seam
+must bind an exact desktop and generation to an idempotent allowlisted
+application effect, return process-start evidence for Agent Browser CDP
+adoption, keep application-effect readiness distinct from browser readiness,
+make unknown outcomes inspectable, and fence release while the consumer-owned
+browser association remains live. P220 will not resolve that custody gap with
+caller-supplied shell execution or local-display inference.
 
 Remote View's opaque `routeId` is a provider route identity, not by itself the
 Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep

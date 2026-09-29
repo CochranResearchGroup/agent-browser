@@ -10,6 +10,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 402 | 2026-09-29
+
+P220 Plan version 19 records the exact external custody seam on Remote View
+issue #62. Remote View Milestone 5 currently launches applications under an
+owned service/cgroup, while Plan 0015 leaves browser process, profile, CDP, and
+recovery ownership with the consumer. Agent Browser requested a provider-neutral
+contract for exact generation-bound allowlisted launch, process-start evidence
+for CDP adoption, layered readiness, inspectable unknown outcomes, and release
+fencing while the consumer browser remains live. It did not request embedding,
+dynamic capacity, live effects, caller-supplied shell execution, or ownership
+of Remote View internals. No browser, Remote View, installed, provider,
+privilege, production, or release effect occurred.
+
 ## Turn 401 | 2026-09-29
 
 P220 Plan version 18 prepares the separately gated installed-acceptance packet
