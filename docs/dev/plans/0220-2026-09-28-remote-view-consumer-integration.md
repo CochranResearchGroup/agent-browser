@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 17
+Plan version: 18
 
 State: OPEN
 
@@ -343,6 +343,89 @@ effect plus a browser/CDP adoption contract, not merely another Agent Browser
 transport adapter. Remote View's provider-free fixture is compatibility
 evidence, not a substitute for proving Agent Browser's browser launch,
 recovery, durable handoff, retention mapping, or cleanup adapter.
+
+### Separately gated installed-acceptance packet
+
+This packet is prepared but not executable under the plan's current authority.
+It becomes eligible only after all of the following are true:
+
+- Remote View publishes an exact source checkpoint whose production
+  `ControlRuntime` uses an installed application effect and a public
+  browser-launch/CDP-adoption contract rather than the provider-free effect;
+- Agent Browser binds that exact contract through its provider-neutral runtime
+  adapter and the provider-free replay passes at both pinned source heads;
+- the development runtime identifies exact Agent Browser and Remote View
+  binaries, contract versions, fixed desktop UUIDs and generations, listener
+  owners, and an isolated disposable profile root; and
+- the operator separately authorizes the installed Remote View and browser
+  effects. Readiness or source completion alone does not grant that authority.
+
+The execution target is exactly two reviewed fixed Remote View desktops and two
+disposable Agent Browser profiles in the isolated development runtime. Record
+their desktop UUIDs, generations, browser IDs, process identities, CDP endpoint
+identities, logical session and tab IDs, assignment IDs, route IDs, viewer
+session IDs, handoff IDs, and runtime operation IDs before interpreting any
+result. No default or production profile, installed production binary, shared
+operator browser, or unlisted desktop is in scope.
+
+Run the acceptance axes in this order, stopping before the next effect whenever
+the current axis is not proved:
+
+1. **Baseline and identity.** Capture fresh process, listener, unit, container,
+   filesystem-capacity, PID-capacity, and memory census evidence. Require clean
+   development-runtime doctors, Browser Runtime integrity, a verified backup,
+   and exact installed binary and contract provenance.
+2. **Single association.** Open one logical session on the first fixed desktop.
+   Require one Agent Browser-owned browser, one exact profile, one adopted CDP
+   endpoint, an active retained presentation binding, and
+   `operatorVisible.state=ready`. Return only the durable
+   `/remote-view/<handoff-id>` path.
+3. **Many-to-many isolation.** Open the second profile on the second desktop and
+   prove distinct desktop, browser, process, profile, CDP, session, tab,
+   assignment, route, and handoff identities. Reopen both durable handoffs from
+   independent viewers without creating replacement logical sessions.
+4. **Generation-safe recovery.** Induce only the reviewed synthetic browser
+   failure. Require exact demand plus unusable-browser evidence, one bounded
+   replacement, a higher browser generation, the same durable handoff, and
+   authenticated reacquisition of the current desktop generation. Do not infer
+   readiness from URL presence or provider transport reachability.
+5. **Exact cleanup.** Close a non-final shared logical session and prove the
+   browser and presentation remain. Close the final session and prove the exact
+   Agent Browser browser closes. Apply Remote View presentation release only
+   from its authenticated joined-release outcome, matching assignment, desktop
+   generation, route, and the complete viewer-session set.
+6. **Fresh residue census.** Repeat the baseline census from a fresh process.
+   Accept only when no unexplained Agent Browser browser, runtime daemon,
+   listener, unit, Remote View operation, assignment, viewer session, or owned
+   desktop resource remains. Historical terminal records and the reviewed
+   verified backup are evidence, not live occupancy.
+
+Stop immediately on any raw provider URL or credential in operator output;
+provider-private state crossing the consumer boundary; desktop, generation,
+process, CDP, route, viewer-set, or owner ambiguity; a stale or unknown runtime
+operation; launch-resource pressure; a mutation aimed at production identity;
+or any effect not attributable to the exact development-runtime custody. A
+partial axis is diagnostic evidence only and cannot validate later axes.
+
+Recovery is forward and identity-bound. Reinspect the same durable operation
+and handoff after an unknown outcome; do not submit a second open, placement,
+release, or cleanup request. A quarantined result retains its exact cleanup
+obligation. Release only from the authenticated joined-release record, and
+close a browser only through the addressed Agent Browser session path. Never
+delete by slot, PID alone, display, window title, process-name sweep, or guessed
+ownership. If the exact owner cannot be proved, stop with the resource intact
+and record the unavailable-work impact plus the supported recovery action.
+
+| Acceptance axis | Current evidence | Installed proof still required |
+| --- | --- | --- |
+| Contract and boundary | F0/J1/J3 provider-free replay and architecture guard pass | Exact production runtime contract and installed adapter provenance |
+| Browser behavior | Session, tab, recovery, launch-admission, and final-close fixtures pass | Two real fixed-desktop browser/CDP associations and synthetic recovery |
+| Presentation | Retention, handoff projection, and exact release fixtures pass | Authenticated ready handoff resolution and joined release from installed runtime |
+| Resources | Read-only launch admission and Browser Runtime health pass | Before-and-after fresh OS census around the separately authorized run |
+| Integration | Branch checkpoints are pushed and issue #202 is current | Changed-surface batch qualification, protected review, and merge |
+
+This packet completes acceptance preparation only. Every installed-proof cell
+remains incomplete until the exact runtime evidence exists.
 
 ## Worker assignments
 

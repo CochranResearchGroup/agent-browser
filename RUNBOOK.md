@@ -10,6 +10,19 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 401 | 2026-09-29
+
+P220 Plan version 18 prepares the separately gated installed-acceptance packet
+without authorizing or performing effects. It fixes the target to two reviewed
+Remote View desktops and two disposable development profiles; orders baseline,
+single-association, many-to-many, recovery, exact-cleanup, and fresh-census
+axes; binds required identities; and records hard stops plus forward-only
+unknown-outcome recovery. The evidence table keeps source qualification,
+installed proof, protected integration, and operator authorization distinct.
+Remote View's installed application effect and browser/CDP adoption contract
+remain the next external dependency. No browser, Remote View, installed,
+provider, privilege, production, or release effect occurred.
+
 ## Turn 400 | 2026-09-29
 
 P220 checkpoint `c1f5fe27` proves the existing explicit final-session browser
