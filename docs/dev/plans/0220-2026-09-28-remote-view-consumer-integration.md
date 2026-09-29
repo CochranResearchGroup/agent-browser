@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 7
+Plan version: 8
 
 State: OPEN
 
@@ -74,9 +74,10 @@ opaque viewing-route identity, viewer admission and layered live status,
 generation-safe reacquisition, placement stop, and joined release that retires
 the exact route and viewer sessions.
 
-Retained-domain extraction is active through `f695c545`. The extracted
+Retained-domain extraction is active through `ca3709e1`. The extracted
 presentation-neutral spine owns named browser sessions and tabs, independent
-durable persistence, restart reattachment, idle reaping, focus, and addressed
+durable SQLite persistence, one-time archived JSON migration, verified
+rotating backups, restart reattachment, idle reaping, focus, and addressed
 ordinary-command routing. It now also bounds disposable profile count and
 regular-file bytes with oldest-first protected-session-aware eviction, rejects
 pin or promotion bypass fields, and compacts exact URL history into
@@ -84,9 +85,13 @@ restart-safe daily identity summaries under a fixed byte ceiling. Desktop
 selection consumes Remote View UUID, route
 label, generation, and readiness observations instead of the legacy Agent
 Browser route inventory. Real Remote View placement still fails closed at
-`remote_view_application_placement_contract_unavailable`; the contract now
-exists, so replacing that temporary boundary is the next source packet rather
-than an external dependency wait.
+`remote_view_application_placement_contract_unavailable`. Current Remote View
+production entrypoints reach one `ControlRuntime`, but that runtime still uses
+`ProviderFreeHost`, `ProviderFreeApplicationEffect`, and `ProviderFreeControl`.
+The public record contract is complete; the installed application effect,
+browser launch, and CDP adoption contract required by Agent Browser is not.
+P220 therefore continues independent retained-domain work without pretending
+that transport reachability supplies a usable runtime adapter.
 
 Remote View's opaque `routeId` is a provider route identity, not by itself the
 Agent Browser operator-facing `/remote-view/<handoff-id>` URL. P220 will keep
@@ -197,10 +202,14 @@ URL compaction behaviors are extracted and locally qualified. The quota model
 accepts protected session identities without importing the retired
 viewer/controller tables. The J2/J3 join must now map exact public assignment,
 placement, route, and viewer-session observations into Agent Browser's own
-retention policy and fail closed on ambiguity. SQLite migration and backup
-authority, recovery fencing, operator-handoff integration, final-session
-cleanup, remaining P219 admission and observability work, and the architecture
-guard remain.
+retention policy and fail closed on ambiguity. Checkpoint `ca3709e1` replaces
+the supported JSON persistence path with SQLite WAL authority for the session
+and profile aggregates. Migration stages the database atomically, archives
+legacy inputs read-only, makes an existing database authoritative even when it
+is corrupt, and provides integrity-checked current-plus-previous online backup
+rotation. Operator exposure for backup status and creation, recovery fencing,
+operator-handoff integration, final-session cleanup, remaining P219 admission
+and observability work, and the architecture guard remain.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
@@ -219,11 +228,14 @@ Status: J1 replay complete against Remote View source checkpoint
 `f674518e34fea346002c72c4adc3966b628d0b78`. The fixture rejects unversioned
 shape drift and tampered operation payload evidence. The J3 Agent Browser wire
 fixture now passes at `552c8162`, including strict private-state exclusion and
-exact joined cleanup. The remaining replay work is the Agent Browser runtime
-join against Remote View's corrected production-adapter contract. Remote
-View's provider-free fixture is compatibility evidence, not a substitute for
-proving Agent Browser's browser launch, recovery, durable handoff, retention
-mapping, or cleanup adapter.
+exact joined cleanup. Inspection of Remote View `origin/main@30f3e37` confirms
+that the corrected CLI, HTTP, and MCP entrypoints still terminate in
+provider-free host, application-effect, and control implementations. The
+remaining runtime replay therefore depends on a real installed application
+effect plus a browser/CDP adoption contract, not merely another Agent Browser
+transport adapter. Remote View's provider-free fixture is compatibility
+evidence, not a substitute for proving Agent Browser's browser launch,
+recovery, durable handoff, retention mapping, or cleanup adapter.
 
 ## Worker assignments
 

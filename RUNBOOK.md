@@ -10,6 +10,29 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 391 | 2026-09-28
+
+P220 checkpoint `ca3709e1` replaces the supported browser-session JSON path
+with a bounded SQLite authority for session state and the profile catalog. A
+one-time migration stages and validates the database before atomic publication,
+archives all legacy inputs read-only, and treats any existing database as
+authoritative rather than falling back on stale JSON. Online backup creation
+verifies SQLite integrity and schema before publication, binds a manifest to
+the exact digest and byte count, and retains one previous copy. Focused store
+and session tests, both anomalous broad-suite tests under the supported runner,
+formatting, and strict workspace Clippy pass. Operator-facing backup status and
+creation remain to be adapted from P219.
+
+Remote View `origin/main@30f3e37` has transport-reachable CLI, HTTP, and MCP
+entrypoints, but its `ControlRuntime` still instantiates `ProviderFreeHost`,
+`ProviderFreeApplicationEffect`, and `ProviderFreeControl`. This clears the
+public contract wait but does not provide the installed application effect,
+browser launch, or CDP adoption endpoint needed to replace Agent Browser's
+placement-unavailable stop. Independent P220 extraction continues; no legacy
+display inference or Agent Browser-owned presentation provider is restored.
+No live Remote View, browser, provider, install, privilege, production, or
+release effect occurred.
+
 ## Turn 390 | 2026-09-28
 
 P220 source checkpoint `552c8162` consumes Remote View's strict public J3

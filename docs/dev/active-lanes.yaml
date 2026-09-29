@@ -10,17 +10,17 @@ lanes:
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 552c8162
+    checkpoint: ca3709e1
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
     integration: merge through the protected pull-request workflow after J2/J3 consumer replay, retained-domain reconciliation, and changed-surface validation
-    validation_status: Remote View F0, source-bound J1, and strict J3 consumer fixtures pass; J3 proves two placements, four viewer sessions, private-state exclusion, and exact joined cleanup; complete service-model package, formatting, and strict workspace Clippy pass; Agent Browser runtime replay and complete batch validation remain pending
-    validation_ref: 552c8162
+    validation_status: Remote View F0, source-bound J1, and strict J3 consumer fixtures pass; SQLite session and profile migration, fail-closed database precedence, and verified two-generation backup rotation pass focused tests; formatting and strict workspace Clippy pass; operator backup exposure, Agent Browser runtime replay, and complete batch validation remain pending
+    validation_ref: ca3709e1
     work_items: [CochranResearchGroup/agent-browser#202, CochranResearchGroup/remote-view#70]
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P220 writes only its own bounded planning sections and catalog entry; P204 and P214 retain their own records]
-    blocker: No external Remote View source-contract blocker remains; Agent Browser runtime placement, reacquisition, retention mapping, operator handoff, cleanup, SQLite backup authority, recovery, admission, observability, protected integration, and separately authorized installed acceptance remain
+    blocker: Remote View public source records are complete, but its production ControlRuntime still uses provider-free host, application-effect, and control implementations; a real installed application launch and CDP adoption contract is required for the runtime join; operator backup exposure, reacquisition, retention mapping, operator handoff, cleanup, recovery, admission, observability, protected integration, and separately authorized installed acceptance remain
     updated_at: 2026-09-28
   - id: P204
     product_lane: PL-PLATFORM

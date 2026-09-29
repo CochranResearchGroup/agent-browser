@@ -35,8 +35,8 @@ and the closed [Remote View issue #70](https://github.com/CochranResearchGroup/r
 own the `PL-PLATFORM` migration from Agent Browser-owned presentation
 infrastructure to Remote View public contracts. Source checkpoint `f695c545`
 includes the complete F0 observation, two-desktop association invariant, and
-the first retained browser/session spine: named sessions and tabs, independent
-SQLite state, restart reattachment, idle reaping, focus, and addressed ordinary
+the first retained browser/session spine: named sessions and tabs, restart
+reattachment, idle reaping, focus, and addressed ordinary
 commands. It also consumes Remote View J1 lifecycle and durable operation
 status at exact upstream checkpoint
 `f674518e34fea346002c72c4adc3966b628d0b78`, including exact UUID and
@@ -53,6 +53,14 @@ Browser's durable operator handoff URL, and complete the
 remaining P219 domain extraction, protected integration, and separately
 authorized installed acceptance. No live Remote View, browser, provider,
 install, privilege, production, or release effect has occurred.
+
+Checkpoint `ca3709e1` now makes SQLite the supported session/profile authority,
+with staged one-time JSON migration, read-only source archives, fail-closed
+database precedence, and a verified current-plus-previous online backup. The
+Remote View public record contract is complete, but its current production
+entrypoints still use provider-free host, application-effect, and control
+implementations. Agent Browser must not infer an installed application launch
+or CDP endpoint from that transport reachability.
 
 ## P216 | Service Model Extraction Landing
 
