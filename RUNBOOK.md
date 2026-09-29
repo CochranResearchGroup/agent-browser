@@ -10,6 +10,16 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 396 | 2026-09-29
+
+P220 follow-up `fd4264ec` wraps public Remote View presentation bind and joined
+release in immediate SQLite transactions over the complete Browser Session
+aggregate. This closes the lost-update gap before runtime ingress exists. The
+focused close/reopen test proves both active bind and released state persist;
+the architecture guard and strict workspace Clippy pass. No caller-facing
+mutation endpoint was added, so untrusted callers cannot forge provider
+identity while the real Remote View runtime adapter remains unavailable.
+
 ## Turn 395 | 2026-09-29
 
 P220 checkpoint `b47f7a0c` retains one validated Remote View public

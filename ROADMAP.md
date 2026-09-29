@@ -84,6 +84,8 @@ assignment, placement, desktop generation, opaque route, and viewer-session
 identity against the exact Agent Browser browser, profile, session, tab, and
 target. Exact joined release is generation, route, and viewer-set fenced and
 survives SQLite restart without retaining provider URLs or display numbers.
+Follow-up `fd4264ec` makes bind and release immediate SQLite transactions over
+the full Browser Session aggregate.
 
 ## P216 | Service Model Extraction Landing
 

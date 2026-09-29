@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 12
+Plan version: 13
 
 State: OPEN
 
@@ -130,6 +130,9 @@ SQLite restart, and rejects duplicate public identity across active browsers.
 Release changes state only when the released assignment, desktop generation,
 route, and complete viewer-session set match exactly. The retained record has
 no provider URL, display number, credential, or provider-private state.
+Follow-up `fd4264ec` makes bind and release single `BEGIN IMMEDIATE`
+transactions over the complete Browser Session aggregate, preventing a future
+runtime adapter from losing concurrent session or presentation updates.
 
 Agent Browser Plan 0219 is cancelled as superseded while incomplete after its
 authorized final cold-install attempt failed. Its branch is 36 commits ahead of
@@ -255,6 +258,8 @@ validated public presentation binding and its exact joined release. Runtime
 ingress still needs to invoke that pure mutation after real Remote View
 placement; it cannot do so until the installed application effect and
 browser/CDP adoption contract exists.
+The store adapter is transaction-ready at `fd4264ec`; transport ingress remains
+intentionally absent rather than accepting caller-forged public identities.
 
 ### S3 — Checkpoint replay and final acceptance preparation
 
