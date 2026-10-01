@@ -35,6 +35,11 @@ mod profile_readiness;
 mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
+mod remote_view_browser_launch;
+pub use remote_view_browser_launch::{
+    launch_remote_view_browser, RemoteViewBrowserLaunchError, RemoteViewBrowserProcessEffects,
+    RemoteViewBrowserProcessError,
+};
 mod remote_view_application;
 mod remote_view_application_adapter;
 mod remote_view_application_cleanup;

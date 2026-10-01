@@ -151,6 +151,17 @@ Strict workspace Clippy, format, architecture, documentation links and diff
 checks pass. These are source/storage guarantees,
 not physical absence, owner coordination or installed consumer acceptance.
 
+The fresh launch coordinator connects durable intent to public assignment and
+private environment reads, a final independent-generation check and injectable
+process effect. It records exact observation before returning and leaves session
+publication separate. Two provider-free tests pass for full environment
+consumption, custody-before-read, one launch, viewing drift, unknown process
+outcome, wrong returned generation and failed observation commit. Existing
+intent always requires readback. Architecture and documentation checks pass;
+strict workspace Clippy, format and diff checks pass. No installed process
+driver or Session Manager atomic
+publication path is wired yet, and no browser or provider effect was run.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

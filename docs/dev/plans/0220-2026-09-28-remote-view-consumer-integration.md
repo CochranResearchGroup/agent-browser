@@ -82,6 +82,12 @@ retirement completion and full-aggregate publication. Strict workspace Clippy,
 format, architecture and documentation checks pass for this source increment. Independent
 cleanup inventories supplied by a caller are not fresh owner proof by themselves.
 
+The next source increment connects durable launch admission to fresh private
+environment acquisition and an injectable process effect. Existing intent requires
+readback rather than another process. Exact returned process identity is recorded
+before handing a launch to the session owner. Production process-driver wiring,
+atomic Session Manager publication and installed acceptance remain pending.
+
 ## Current State
 
 ### October 1 provider reconciliation and amendment review

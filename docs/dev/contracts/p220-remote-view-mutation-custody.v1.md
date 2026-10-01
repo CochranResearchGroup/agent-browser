@@ -154,3 +154,21 @@ aggregate after marking its own intent published in the transaction. It cannot
 smuggle a browser onto an unrelated fenced desktop. These are durable identity
 checks; physical process identity and complete runtime ownership remain separate
 acceptance requirements.
+
+
+## Fresh launch coordinator
+
+`launch_remote_view_browser` verifies profile intent and durably admits launch
+custody before any provider read or process effect. Existing intent returns
+ReadbackRequired. Fresh inputs use observe, environment, observe and one final
+observation immediately before process invocation. Independent lifecycle and
+viewing joins must still match. The injectable process receives the consumed
+private environment wrapper and exact assignment intent; it must consume that
+wrapper against the supplied observation. No display is inferred from a label.
+
+The coordinator validates returned browser identity and persists observation
+before returning the launch. A provider error, viewing drift, unknown process
+outcome, wrong returned identity or failed observation commit retains intent and
+never authorizes an automatic retry. It does not publish the session aggregate.
+The production process driver and Session Manager atomic publication wiring
+remain pending; tests use synthetic transport and process effects only.

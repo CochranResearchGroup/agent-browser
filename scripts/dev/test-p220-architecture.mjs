@@ -12,6 +12,7 @@ const paths = {
   applicationAdapter: 'crates/agent-browser-service-model/src/remote_view_application_adapter.rs',
   applicationRecords: 'crates/agent-browser-service-model/src/remote_view_application_records.rs',
   applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
+  browserLaunch: 'crates/agent-browser-service-model/src/remote_view_browser_launch.rs',
   applicationCleanup: 'crates/agent-browser-service-model/src/remote_view_application_cleanup.rs',
   applicationStore: 'cli/src/native/remote_view_application_store.rs',
   launchCustodyStore: 'cli/src/native/browser_launch_custody_store.rs',
@@ -38,7 +39,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.browserLaunch, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
@@ -192,6 +193,7 @@ function selfTest() {
       [paths.applicationCleanup, '\npub struct ProviderFreeHost;\n', 'provider-private cleanup'],
       [paths.launchCustody, '\npub struct ProviderFreeHost;\n', 'provider-private launch custody'],
       [paths.launchCustodyStore, '\nstruct RouteKeeperAuthority;\n', 'retired launch custody authority'],
+      [paths.browserLaunch, '\npub struct ProviderFreeHost;\n', 'provider-private launch coordinator'],
       [paths.applicationStore, '\nstruct RouteKeeperAuthority;\n', 'retired application store authority'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
