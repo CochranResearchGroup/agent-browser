@@ -204,6 +204,15 @@ mode: the consumer driver must still admit launches against the supplied
 baseline, retain unknown outcomes and expose its intent to this publication
 bridge. No installed, provider, browser or production effects were executed.
 
+The operator-requested pre-one-million token checkpoint stops at the clean,
+published source checkpoint `1483b504`. Goal readback reported 863,019 used
+tokens before preparing the restart locator. P220 remains OPEN. The branch-local
+lane projection now points to that source qualification checkpoint; this does
+not update the canonical default-branch catalog or grant runtime authority.
+Next on explicit resumption, connect consumer launch admission and unresolved
+intent retention to the host baseline and atomic publication bridge. Retain all
+remaining handoff, focus, recovery, cleanup and installed acceptance criteria.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146
