@@ -135,10 +135,22 @@ The additive `release_fences` field defaults to empty when reading earlier v1
 launch ledgers; present malformed values fail. Launch admission, launch
 observation, launch publication and ordinary aggregate publication reject a
 retained fence. The fence survives restart and is not cleared by timeout or
-unknown provider outcome. Qualified retirement completion is still pending, so
-this checkpoint deliberately has no fence deletion or automatic reopening.
+unknown provider outcome. Completion validates and retains the entire exact joined retirement outcome;
+a conflicting result cannot replace it. The historical fence remains. A fresh
+assignment may use the same desktop and lifecycle generation after exact
+completion, because assignment return is separate from physical scale-in. The
+retired assignment and lower-generation contexts remain fenced. No timeout,
+fence deletion or automatic provider retry is introduced.
 
 Recovery, foreground and cleanup owner admission are not yet coordinated with
 this fence. Caller-supplied complete inventories do not prove current external
 owner absence or stop a concurrent new owner. Actual runtime wiring and a
 fresh physical process census remain required before release acceptance.
+
+Completed-fence publication requires a published launch-custody record for the
+new assignment with exact browser ID, PID, profile, desktop and generation.
+Atomic launch publication applies the same check to the entire proposed session
+aggregate after marking its own intent published in the transaction. It cannot
+smuggle a browser onto an unrelated fenced desktop. These are durable identity
+checks; physical process identity and complete runtime ownership remain separate
+acceptance requirements.

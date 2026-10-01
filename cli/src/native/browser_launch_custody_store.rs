@@ -6,7 +6,8 @@ use agent_browser_service_model::{
     BrowserLaunchCustodyStore, BrowserLaunchIntent, BrowserReleaseCustodyStore,
     BrowserSessionState, LaunchCustodyAdmission, LaunchCustodyStoreError,
     RemoteViewApplicationCleanupPermit, RemoteViewApplicationCleanupSnapshot,
-    RemoteViewApplicationReleaseTarget, BROWSER_SESSION_STATE_SCHEMA_V1,
+    RemoteViewApplicationReleaseTarget, RemoteViewJoinedReleaseOutcome,
+    BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 use rusqlite::{Connection, TransactionBehavior};
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,8 @@ struct Ledger {
     records: BTreeMap<String, BrowserLaunchCustodyRecord>,
     #[serde(default)]
     release_fences: BTreeMap<String, RemoteViewApplicationReleaseTarget>,
+    #[serde(default)]
+    release_outcomes: BTreeMap<String, RemoteViewJoinedReleaseOutcome>,
 }
 
 fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
@@ -42,7 +45,26 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }
+    for (id, outcome) in &ledger.release_outcomes {
+        ledger
+            .release_fences
+            .get(id)
+            .ok_or(LaunchCustodyStoreError::InvalidRecord)?
+            .validate_outcome(outcome)
+            .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    }
     Ok(ledger)
+}
+fn assignment_fenced(
+    ledger: &Ledger,
+    assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+) -> bool {
+    ledger.release_fences.iter().any(|(id, target)| {
+        target.assignment.assignment_id == assignment.assignment_id
+            || (target.assignment.desktop_id == assignment.desktop_id
+                && (!ledger.release_outcomes.contains_key(id)
+                    || assignment.generation < target.assignment.generation))
+    })
 }
 fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustodyStoreError> {
     load_optional_document::<Option<BrowserSessionState>>(
@@ -72,10 +94,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         let mut records = ledger(&transaction)?;
-        if records.release_fences.values().any(|target| {
-            target.assignment.assignment_id == intent.assignment.assignment_id
-                || target.assignment.desktop_id == intent.assignment.desktop_id
-        }) {
+        if assignment_fenced(&records, &intent.assignment) {
             return Err(Error::ReleaseFenced);
         }
 
@@ -125,10 +144,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
-        if records.release_fences.values().any(|target| {
-            target.assignment.assignment_id == intent.assignment.assignment_id
-                || target.assignment.desktop_id == intent.assignment.desktop_id
-        }) {
+        if assignment_fenced(&records, &intent.assignment) {
             return Err(Error::ReleaseFenced);
         }
         let record = records
@@ -157,10 +173,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         let mut records = ledger(&transaction)?;
-        if records.release_fences.values().any(|target| {
-            target.assignment.assignment_id == intent.assignment.assignment_id
-                || target.assignment.desktop_id == intent.assignment.desktop_id
-        }) {
+        if assignment_fenced(&records, &intent.assignment) {
             return Err(Error::ReleaseFenced);
         }
         let record = records
@@ -173,6 +186,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         record
             .confirm_publication(state)
             .map_err(|_| Error::Conflict)?;
+        validate_browser_publication(&records, state)?;
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -186,6 +200,36 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
 }
 
 impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
+    fn complete_assignment_release(
+        &mut self,
+        target: &RemoteViewApplicationReleaseTarget,
+        release_id: &str,
+        outcome: &RemoteViewJoinedReleaseOutcome,
+    ) -> Result<(), LaunchCustodyStoreError> {
+        use LaunchCustodyStoreError as Error;
+        target
+            .validate_outcome(outcome)
+            .map_err(|_| Error::Conflict)?;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        if records.release_fences.get(release_id) != Some(target) {
+            return Err(Error::Conflict);
+        }
+        if let Some(existing) = records.release_outcomes.get(release_id) {
+            if existing != outcome {
+                return Err(Error::Conflict);
+            }
+            return Ok(());
+        }
+        records
+            .release_outcomes
+            .insert(release_id.into(), outcome.clone());
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
     fn admit_assignment_release(
         &mut self,
         target: &RemoteViewApplicationReleaseTarget,
@@ -210,7 +254,9 @@ impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
         if records.release_fences.iter().any(|(id, other)| {
             id != release_id
                 && (other.assignment.assignment_id == target.assignment.assignment_id
-                    || other.assignment.desktop_id == target.assignment.desktop_id)
+                    || (other.assignment.desktop_id == target.assignment.desktop_id
+                        && (!records.release_outcomes.contains_key(id)
+                            || target.assignment.generation < other.assignment.generation)))
         }) {
             return Err(Error::Conflict);
         }
@@ -232,22 +278,44 @@ impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
     }
 }
 
-pub(super) fn reject_fenced_browser_publication(
-    connection: &Connection,
+fn validate_browser_publication(
+    records: &Ledger,
     state: &BrowserSessionState,
 ) -> Result<(), LaunchCustodyStoreError> {
-    let records = ledger(connection)?;
     if state.browsers.values().any(|browser| {
         browser.desktop.as_ref().is_some_and(|desktop| {
-            records
-                .release_fences
-                .values()
-                .any(|target| target.assignment.desktop_id == desktop.desktop_id)
+            records.release_fences.iter().any(|(id, target)| {
+                if target.assignment.desktop_id != desktop.desktop_id {
+                    return false;
+                }
+                if !records.release_outcomes.contains_key(id)
+                    || desktop.generation < target.assignment.generation
+                {
+                    return true;
+                }
+                !records.records.values().any(|record| {
+                    record.published
+                        && record.intent.assignment.assignment_id != target.assignment.assignment_id
+                        && record.intent.assignment.desktop_id == desktop.desktop_id
+                        && record.intent.assignment.generation == desktop.generation
+                        && record.intent.profile_id == browser.profile_id
+                        && record.observed_browser_id.as_ref() == Some(&browser.id)
+                        && record.observed_pid == Some(browser.pid)
+                })
+            })
         })
     }) {
         return Err(LaunchCustodyStoreError::ReleaseFenced);
     }
+
     Ok(())
+}
+
+pub(super) fn reject_fenced_browser_publication(
+    connection: &Connection,
+    state: &BrowserSessionState,
+) -> Result<(), LaunchCustodyStoreError> {
+    validate_browser_publication(&ledger(connection)?, state)
 }
 
 #[cfg(test)]
@@ -310,6 +378,125 @@ mod tests {
             },
         )
     }
+    #[test]
+    fn sqlite_release_completion_retains_exact_history_and_allows_fresh_same_generation_assignment()
+    {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let old = intent();
+        let (target, snapshot) = release_evidence(&old);
+        let release_id = uuid::Uuid::new_v4().to_string();
+        let initial = store.load_session_state().unwrap();
+        store
+            .admit_assignment_release(&target, &snapshot, &release_id)
+            .unwrap();
+        let mut released = target.assignment.clone();
+        released.state = agent_browser_service_model::RemoteViewAssignmentState::Released;
+        let outcome = RemoteViewJoinedReleaseOutcome {
+            assignment: released,
+            retirement: agent_browser_service_model::RemoteViewDesktopViewingRetirement {
+                schema_version: 1,
+                desktop_id: target.assignment.desktop_id.clone(),
+                generation: target.assignment.generation,
+                routes: vec![],
+                sessions: vec![],
+            },
+        };
+        let mut invalid = outcome.clone();
+        invalid.retirement.generation += 1;
+        assert_eq!(
+            store
+                .complete_assignment_release(&target, &release_id, &invalid)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        assert_eq!(
+            store.admit_launch_intent(&old, &initial).unwrap_err(),
+            LaunchCustodyStoreError::ReleaseFenced
+        );
+        store
+            .complete_assignment_release(&target, &release_id, &outcome)
+            .unwrap();
+        store
+            .complete_assignment_release(&target, &release_id, &outcome)
+            .unwrap();
+        assert_eq!(
+            store.admit_launch_intent(&old, &initial).unwrap_err(),
+            LaunchCustodyStoreError::ReleaseFenced
+        );
+        let mut fresh = old.clone();
+        fresh.intent_id = uuid::Uuid::new_v4().to_string();
+        fresh.assignment.assignment_id = "fresh-assignment".into();
+        assert_eq!(
+            store.admit_launch_intent(&fresh, &initial).unwrap(),
+            LaunchCustodyAdmission::New
+        );
+        let launch = BrowserLaunch {
+            browser_id: "fresh-browser".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: fresh.assignment.desktop_id.clone(),
+                generation: fresh.assignment.generation,
+                friendly_route_label: "synthetic".into(),
+            }),
+        };
+        store.observe_launch_intent(&fresh, &launch).unwrap();
+        let mut second = fresh.clone();
+        second.assignment.assignment_id = "other-assignment".into();
+        second.assignment.desktop_id = uuid::Uuid::new_v4().to_string();
+        let (other_target, other_snapshot) = release_evidence(&second);
+        store
+            .admit_assignment_release(
+                &other_target,
+                &other_snapshot,
+                &uuid::Uuid::new_v4().to_string(),
+            )
+            .unwrap();
+        let mut proposed = initial.clone();
+        proposed.browsers.insert(
+            launch.browser_id.clone(),
+            ManagedBrowserInstance {
+                id: launch.browser_id,
+                profile_id: fresh.profile_id.clone(),
+                pid: launch.pid,
+                cdp_endpoint: launch.cdp_endpoint,
+                desktop: launch.desktop,
+                active_session_ids: vec![],
+            },
+        );
+        let mut rogue = proposed.browsers["fresh-browser"].clone();
+        rogue.id = "rogue-browser".into();
+        rogue.desktop.as_mut().unwrap().desktop_id = second.assignment.desktop_id;
+        proposed.browsers.insert(rogue.id.clone(), rogue);
+        assert_eq!(
+            store
+                .publish_launch_intent(&fresh, &initial, &proposed)
+                .unwrap_err(),
+            LaunchCustodyStoreError::ReleaseFenced
+        );
+        assert_eq!(store.load_session_state().unwrap(), initial);
+        proposed.browsers.remove("rogue-browser");
+        store
+            .publish_launch_intent(&fresh, &initial, &proposed)
+            .unwrap();
+        store
+            .compare_and_save_session_state(&proposed, &proposed)
+            .unwrap();
+        drop(store);
+        let mut reopened = fixture.open(false);
+        assert_eq!(
+            reopened.admit_launch_intent(&old, &proposed).unwrap_err(),
+            LaunchCustodyStoreError::ReleaseFenced
+        );
+        assert_eq!(
+            ledger(reopened.remote_view_mutation_connection())
+                .unwrap()
+                .release_outcomes[&release_id],
+            outcome
+        );
+    }
+
     #[test]
     fn sqlite_release_custody_excludes_unknown_launch_and_survives_restart() {
         let fixture = Fixture::new();

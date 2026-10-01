@@ -74,8 +74,12 @@ The model contains no environment or provider process ownership.
 Release admission source work checks current durable session references and
 unpublished launch intents under the custody transaction, then retains an exact
 assignment fence. Launch admission and ordinary session publication reject that
-fence. Qualified retirement completion, recovery and foreground owner admission,
-runtime effect wiring and physical absence proof remain pending. Independent
+fence. Retirement completion source work retains exact joined outcomes and allows
+a fresh assignment after completion, including unchanged lifecycle generation.
+Recovery and foreground owner admission, runtime effect wiring and physical
+absence proof remain pending. Four focused SQLite custody tests qualify
+retirement completion and full-aggregate publication. Strict workspace Clippy,
+format, architecture and documentation checks pass for this source increment. Independent
 cleanup inventories supplied by a caller are not fresh owner proof by themselves.
 
 ## Current State

@@ -204,6 +204,12 @@ pub fn prepare_remote_view_application_cleanup(
 /// one transaction and retain its assignment fence across ambiguous outcomes.
 /// Independent inventories still require scoped owner evidence from the caller.
 pub trait BrowserReleaseCustodyStore {
+    fn complete_assignment_release(
+        &mut self,
+        target: &RemoteViewApplicationReleaseTarget,
+        release_id: &str,
+        outcome: &crate::RemoteViewJoinedReleaseOutcome,
+    ) -> Result<(), crate::LaunchCustodyStoreError>;
     fn admit_assignment_release(
         &mut self,
         target: &RemoteViewApplicationReleaseTarget,

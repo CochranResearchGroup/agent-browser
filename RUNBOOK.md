@@ -138,6 +138,19 @@ serialization fixed it. Seven related mutation tests, strict workspace Clippy,
 format, architecture, documentation links and diff checks pass. No fence completion or deletion is implemented yet. Recovery,
 foreground and cleanup owner admission plus actual runtime wiring remain pending.
 
+Retirement completion now retains the exact immutable joined outcome alongside
+its historical fence. Fresh assignment identity may reuse the same desktop and
+lifecycle generation after exact completion; retired assignment and stale
+generation remain excluded. Ordinary publication requires a qualified published
+launch record for that fresh assignment. Atomic launch publication validates
+the whole aggregate, blocking unrelated fenced desktop resurrection. Four
+SQLite custody tests pass, including partial retirement rejection, exact replay,
+same-generation reuse, rollback and reopen. An initial test build failed because
+a broad edit changed a two-value fixture return signature; its correction passed.
+Strict workspace Clippy, format, architecture, documentation links and diff
+checks pass. These are source/storage guarantees,
+not physical absence, owner coordination or installed consumer acceptance.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146
