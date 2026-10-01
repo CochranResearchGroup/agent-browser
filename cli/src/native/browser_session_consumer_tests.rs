@@ -389,3 +389,6 @@ fn consumer_host_stale_baseline_rejects_before_provider_read_or_process() {
         .unwrap()
         .is_empty());
 }
+
+#[path = "browser_session_pool_tests.rs"]
+mod pool_tests;

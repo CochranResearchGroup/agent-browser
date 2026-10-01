@@ -11,9 +11,9 @@ use super::browser_session_store::{
     load_optional_document, save_document, BrowserSessionSqliteStore,
 };
 
-const SCHEMA: &str = "agent-browser.remote-view-mutation.v1";
+pub(super) const SCHEMA: &str = "agent-browser.remote-view-mutation.v1";
 
-fn matching_kind(
+pub(super) fn matching_kind(
     envelope: &RemoteViewApplicationEnvelope,
     outcome: &RemoteViewApplicationMutationOutcome,
 ) -> bool {
@@ -29,7 +29,7 @@ fn matching_kind(
     )
 }
 
-fn document(
+pub(super) fn document(
     envelope: &RemoteViewApplicationEnvelope,
 ) -> Result<String, RemoteViewApplicationMutationStoreError> {
     Ok(format!(

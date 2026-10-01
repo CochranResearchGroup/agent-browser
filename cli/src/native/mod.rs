@@ -72,6 +72,7 @@ pub(crate) mod desktop_evidence_action;
 pub(crate) mod desktop_evidence_cdp;
 pub(crate) mod remote_view_application_http;
 mod remote_view_application_store;
+mod remote_view_pool_request_store;
 pub(crate) mod service_authentication_run;
 pub(crate) mod service_challenge_task;
 pub(crate) mod service_connection_lifetime;

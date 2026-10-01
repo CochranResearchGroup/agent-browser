@@ -58,9 +58,9 @@ local completed replay, unknown and partial release, failed custody/completion,
 simulated restart, and cached-acquisition drift. Disposable real SQLite tests
 prove restart persistence, conflicting payload rejection, immutable completion,
 and one claim winner across two connections. These prove source/storage
-behavior only. Network transport, actual consumer integration, complete
-runtime cleanup collection, transactional release admission and installed
-acceptance remain pending.
+behavior only. Installed consumer acceptance, complete runtime cleanup collection and physical
+release qualification remain pending. Native transport and demand-driven
+consumer composition are described below.
 
 
 ## Runtime release admission integration seam
@@ -254,7 +254,8 @@ do not launch Chrome or exercise live Remote View transport.
 
 Default runtime construction now selects the composed owner when explicit
 Remote View origin and pool settings are present. Stable tab-specific handoff
-materialization and empty-pool acquisition remain in milestone one. Replacement
+materialization remains in milestone one; automatic capacity shrink remains in
+the everyday lifecycle work. Replacement
 of a dead browser must reconcile and durably detach its old profile association
 before fresh admission; this composition does not implement that milestone-two
 recovery transition or authorize clearing an unresolved claim.
@@ -280,16 +281,42 @@ pool. These tests do not contact an installed Remote View service.
 
 ## Runtime construction and managed commands
 
-The ordinary host uses the native HTTP transport when origin and pool are
-configured together. Application selector defaults to `agent-browser`. It reads
-public inventory, selects the named pool's active assignments and validates each
-against fresh live-resource observation. Desktop UUID and lifecycle generation
-come from that join; no environment or display is cached during setup. Missing,
-empty or stale configured pools return stable errors. Setup currently requires
-existing assignments; it does not acquire resources or grow capacity.
+The ordinary host uses native HTTP when origin and pool are configured together.
+Application defaults to `agent-browser`; desired desktop count defaults to one.
+Construction validates settings without contacting the provider. Local runtime
+construction remains the unconfigured path.
 
 The runtime effect owner dispatches local or composed Remote View effects. Both
 share the provider-neutral managed-command trait. Before executing a command on
 the current manager-owned tab, the host supplies its published baseline again
 because tab acquisition may have committed and acknowledged a launch. The
 composed owner rejects unknown pending launches before command forwarding.
+
+## Demand-driven pool acquisition
+
+The ordinary manager asks its effect owner for fresh desktop candidates only
+when a new browser needs placement. Healthy browser reuse and status do not
+prepare capacity. The configured target count must be positive and within
+Remote View's maximum reserved pool policy. Missing active assignments are
+acquired through the existing custody adapter, then verified in fresh public
+inventory before launch. Each successful acquisition must increase observed
+capacity; a stale cached result stops the operation instead of spinning.
+
+The SQLite owner retains one request-head pointer per application and pool,
+with a UUID client key. This tracks request continuity, not desktop allocation.
+Unsubmitted and pending keys are shared across connections. Pending acquisition
+records block another capacity operation before provider reads, including after
+restart when an assignment is visible but its client request remains unknown.
+Completed request history stays immutable. Another acquisition key can follow
+an exact currently active outcome, or the existing launch-custody ledger's
+confirmed exact assignment retirement. Missing provider inventory is insufficient
+retirement evidence. The request head and all mutation outcomes share the
+existing transactional runtime database and backup boundary.
+
+Fresh window reads validate independent lifecycle and viewing generations.
+Unavailable assignments are omitted from candidates while healthy peers remain
+eligible. Window-free desktops precede occupied peers when ordinary browser
+counts tie. Titles and window inventories are not persisted by pool preparation.
+Actual launch still refreshes the full private environment under durable process
+admission. Lowering desired capacity does not release assignments; final cleanup
+collection and automatic shrink remain separate lifecycle work.

@@ -5712,12 +5712,17 @@ with the Remote View HTTP origin on a literal loopback address, such as
 `http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured
 pool name. Set `AGENT_BROWSER_REMOTE_VIEW_APPLICATION` when the application
 selector differs from the default `agent-browser`. Set origin and pool together.
-The selected pool must already contain an active assignment with live resources.
-An empty pool returns `remote_view_runtime_assignment_required`.
+Set `AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT` to the desired desktop count
+(default: `1`), within the application's Remote View pool policy. A new browser
+request acquires missing assignments before selecting a live desktop. Status,
+healthy session reuse and runtime construction do not allocate desktops.
+An interrupted acquisition returns `remote_view_pool_acquisition_readback_required`
+and retains its request for reconciliation across restart.
 
-Runtime setup reads public assignment inventory and refreshes exact desktop
-identity before browser launch. Managed commands address the session's current
+Browser placement reads current public inventory and windows, then refreshes
+exact desktop identity before launch. Window-free desktops win occupancy ties;
+healthy occupied desktops remain eligible. Managed commands address the session's current
 tab. Agent Browser launches its own browser with fresh private environment inputs
 from Remote View. Local sessions use their existing runtime when these settings
-are absent. Provider acquisition, capacity growth and stable tab handoffs remain
-under development in Plan 220.
+are absent. Stable tab handoffs and automatic capacity shrink remain under development
+in Plan 220. Reducing the desired count does not immediately return assignments.

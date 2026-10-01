@@ -7803,8 +7803,9 @@ Environment:
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
-  AGENT_BROWSER_REMOTE_VIEW_POOL   Existing active application pool (required with origin)
+  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
+  AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.

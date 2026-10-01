@@ -39,6 +39,14 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Refresh provider-owned candidates only when a browser launch needs
+    /// placement. None retains the configured candidates for local adapters.
+    fn remote_view_desktop_candidates(
+        &mut self,
+    ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+        Ok(None)
+    }
+
     /// Receive the host's durable baseline before any operation effects. A
     /// custody adapter must retain unresolved launch intent across failures.
     fn begin_operation(&mut self, _expected: &BrowserSessionState) -> Result<(), String> {
@@ -771,7 +779,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         profile: &BrowserProfileCatalogEntry,
     ) -> Result<BrowserLaunch, String> {
-        let desktop = if self.config.remote_view_desktops.is_empty() {
+        let refreshed = self.effects.remote_view_desktop_candidates()?;
+        let candidates = refreshed
+            .as_deref()
+            .unwrap_or(&self.config.remote_view_desktops);
+        let desktop = if candidates.is_empty() {
             None
         } else {
             let live_desktop_ids = self
@@ -785,13 +797,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         .map(|desktop| desktop.desktop_id.clone())
                 })
                 .collect::<Vec<_>>();
-            Some(
-                select_least_crowded_remote_view_desktop(
-                    &self.config.remote_view_desktops,
-                    &live_desktop_ids,
-                )?
-                .desktop,
-            )
+            Some(select_least_crowded_remote_view_desktop(candidates, &live_desktop_ids)?.desktop)
         };
         let mut launch = self.effects.launch_browser(profile, desktop.as_ref())?;
         if launch.desktop != desktop {

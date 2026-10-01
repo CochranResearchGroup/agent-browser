@@ -55,6 +55,18 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
     }
     Ok(ledger)
 }
+/// Exact terminal retirement evidence, used to advance acquisition request
+/// custody. Provider inventory absence alone cannot establish this condition.
+pub(super) fn assignment_release_completed(
+    connection: &Connection,
+    assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+) -> Result<bool, LaunchCustodyStoreError> {
+    let records = ledger(connection)?;
+    Ok(records.release_fences.iter().any(|(id, target)| {
+        target.assignment == *assignment && records.release_outcomes.contains_key(id)
+    }))
+}
+
 fn assignment_fenced(
     ledger: &Ledger,
     assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,

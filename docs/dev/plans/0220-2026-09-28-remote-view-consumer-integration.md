@@ -97,11 +97,16 @@ launch. The ordinary consumer effect composition now joins host baseline,
 coordinator admission, fresh process ingress and publication intent. Real SQLite
 composition tests prove first open, healthy reuse, co-location, restart reuse and
 failure without duplicate process effects. Native HTTP transport and ordinary
-runtime construction now join explicitly configured application pools with live
-active assignments. Managed command dispatch passes through the same composed
-owner. Empty-pool acquisition, capacity changes and stable tab-specific handoffs
-still need connection before milestone one is complete. Installed acceptance
-remains pending.
+runtime construction now join explicitly configured application pools. New
+browser demand prepares the desired capacity through durable acquisition
+requests, then joins live assignment and window observations. Construction,
+status and healthy reuse allocate no provider resources. Interrupted acquisition
+remains pending across restart even when provider inventory shows an assignment;
+completed request history advances only with exact active or retired evidence.
+Managed command dispatch passes through the same composed owner. Stable
+tab-specific handoffs and the complete ordinary request journey remain before
+milestone one is complete. Automatic capacity shrink remains in the everyday
+lifecycle work. Installed acceptance remains pending.
 
 ## Current State
 

@@ -14,6 +14,8 @@ const paths = {
   applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
   browserLaunch: 'crates/agent-browser-service-model/src/remote_view_browser_launch.rs',
   sessionEffects: 'crates/agent-browser-service-model/src/remote_view_session_effects.rs',
+  sessionPool: 'crates/agent-browser-service-model/src/remote_view_session_pool.rs',
+  poolRequestStore: 'cli/src/native/remote_view_pool_request_store.rs',
   applicationCleanup: 'crates/agent-browser-service-model/src/remote_view_application_cleanup.rs',
   applicationStore: 'cli/src/native/remote_view_application_store.rs',
   launchCustodyStore: 'cli/src/native/browser_launch_custody_store.rs',
@@ -43,7 +45,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.browserLaunch, source.sessionEffects, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.browserLaunch, source.sessionEffects, source.sessionPool, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
@@ -53,6 +55,7 @@ function check(root) {
     source.backup,
     source.launchAdmission,
     source.applicationStore,
+    source.poolRequestStore,
     source.launchCustodyStore,
   ].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;

@@ -10,6 +10,38 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 413 | 2026-10-01
+
+P220 now prepares configured pool capacity only when a new managed browser
+needs placement. Runtime construction, status, healthy reuse and restart reuse
+allocate nothing. Desired desktop count defaults to one and is bounded by the
+Remote View pool policy. SQLite retains a shared acquisition request head and
+exact mutation history before provider effects. Unknown acquisition blocks
+another capacity operation across restart, even when provider inventory shows
+an assignment. Completed request continuity advances with exact active evidence
+or the existing ledger's confirmed assignment retirement; disappearance alone
+cannot retire a request. Fresh window observations omit unavailable peers and
+prefer window-free desktops when browser counts tie.
+
+Focused provider-free qualification passed 41 CLI session tests with one ignored
+real-Chrome test, plus all 26 tests in the model's `browser_session_manager`
+integration target. The initial model symbol filter selected zero tests and was
+corrected to the explicit integration target. Six new SQLite composition cases
+cover demand, restart, unknown result, policy bounds, shared request identity,
+retirement continuity and healthy peer selection. Strict workspace Clippy,
+format, architecture, documentation links, remote-view guidance and the docs
+production build passed. Required guidance was updated in all five source
+documentation surfaces. No installed provider or browser was contacted.
+
+P220 v26 remains open. Next is the complete ordinary open and durable tab-handoff
+journey; everyday focus, recovery, relocation and final cleanup, installed
+Alice/Bob acceptance and release-candidate qualification retain their original
+scope. This source increment is not installed acceptance or merge readiness.
+The fresh active goal meter read 310,061, below the requested one-million
+checkpoint ceiling. Memory disposition: `not_durable`, because the owning
+contract and runbook retain this routine increment; machine-readable local
+receipt: `/tmp/p220-pool-memory-disposition-2026-10-01.json`.
+
 ## Turn 412 | 2026-10-01
 
 P220 milestone one now connects native loopback HTTP to ordinary runtime

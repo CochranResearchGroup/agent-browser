@@ -11,6 +11,7 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     adapter: RemoteViewApplicationAdapter<T>,
     store: S,
     assignments: BTreeMap<String, RemoteViewAssignmentRecord>,
+    pool: Option<RemoteViewSessionPool>,
     next_intent_id: fn() -> String,
     expected: Option<BrowserSessionState>,
     pending: Option<(BrowserLaunchIntent, bool)>,
@@ -49,11 +50,21 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
             adapter,
             store,
             assignments: by_desktop,
+            pool: None,
             next_intent_id,
             expected: None,
             pending: None,
         })
     }
+    /// Configure demand-driven capacity. This performs no provider request.
+    pub fn with_pool(mut self, pool: RemoteViewSessionPool) -> Result<Self, String> {
+        if pool.name.is_empty() || pool.desired_desktops == 0 {
+            return Err("remote_view_session_pool_invalid".into());
+        }
+        self.pool = Some(pool);
+        Ok(self)
+    }
+
     fn require_clear_custody(store: &mut S) -> Result<(), String> {
         if !store
             .unpublished_launch_records()
@@ -78,9 +89,25 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
 impl<
         E: BrowserSessionEffects + RemoteViewBrowserProcessEffects,
         T: RemoteViewApplicationTransport,
-        S: BrowserLaunchCustodyStore,
+        S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn remote_view_desktop_candidates(
+        &mut self,
+    ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {
+        self.require_operation()?;
+        let Some(pool) = &self.pool else {
+            return Ok(None);
+        };
+        let prepared = prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+        self.assignments = prepared
+            .assignments
+            .into_iter()
+            .map(|assignment| (assignment.desktop_id.clone(), assignment))
+            .collect();
+        Ok(Some(prepared.desktops))
+    }
+
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
         if self.pending.is_some() {
             return Err("remote_view_session_launch_readback_required".into());

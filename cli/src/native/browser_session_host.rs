@@ -53,10 +53,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     // Remote View desktop candidates must arrive through its public consumer
     // contract. Never reconstruct them from Agent Browser's legacy route pool.
     let remote_view = super::browser_session_remote_view::configured_remote_view()?;
-    let remote_view_desktops = remote_view
-        .as_ref()
-        .map(|context| context.desktops.clone())
-        .unwrap_or_default();
+    let remote_view_desktops = Vec::new();
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
         executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
