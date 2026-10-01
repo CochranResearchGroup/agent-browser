@@ -588,6 +588,14 @@ pub(crate) async fn handle_service_remote_view_handoff_resolve(
     state: &mut DaemonState,
     mut attribution: RouteBoundOpenAttribution,
 ) -> Result<Value, String> {
+    if let Some(host) = state.managed_session_host.clone() {
+        if let Some(data) =
+            crate::native::browser_session_host::resolve_shared_handoff_command(host, cmd.clone())
+                .await?
+        {
+            return Ok(data);
+        }
+    }
     let handoff_id = optional_command_or_params_string(cmd, "handoffId")
         .or_else(|| optional_command_or_params_string(cmd, "remoteViewHandoffId"))
         .ok_or_else(|| "service_remote_view_handoff_resolve requires handoffId".to_string())?;

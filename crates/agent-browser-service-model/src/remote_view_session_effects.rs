@@ -110,54 +110,16 @@ impl<
         {
             return Err("remote_view_tab_view_identity_conflict".into());
         }
-        let desktop = target
-            .browser
-            .desktop
-            .as_ref()
-            .ok_or("remote_view_tab_view_desktop_missing")?;
-        let inventory = self
-            .adapter
-            .inventory()
-            .map_err(|_| "remote_view_tab_view_inventory_unavailable")?;
-        let matching = inventory
-            .assignments
-            .iter()
-            .filter(|assignment| {
-                assignment.desktop_id == desktop.desktop_id
-                    && assignment.generation == desktop.generation
-            })
-            .collect::<Vec<_>>();
-        let assignment = match matching.as_slice() {
-            [assignment] => (*assignment).clone(),
-            _ => return Err("remote_view_tab_view_assignment_unavailable".into()),
-        };
-        let published = self
-            .store
-            .published_launch_assignment(&target.browser)
-            .map_err(|_| "remote_view_tab_view_launch_custody_unavailable")?;
-        if assignment != published {
-            return Err("remote_view_tab_view_assignment_conflict".into());
+        if view.issuance.is_some() {
+            return resolve_published_remote_view_tab_view(
+                &mut self.adapter,
+                &mut self.store,
+                target,
+                view,
+                now_ms,
+            );
         }
-        if let Some(issuance) = &view.issuance {
-            if issuance.grant.request.idempotency_key != view.idempotency_key {
-                return Err("remote_view_tab_view_request_conflict".into());
-            }
-            let resolved = self
-                .adapter
-                .resolve_view(&assignment, &issuance.grant, || now_ms, false)
-                .map_err(|_| "remote_view_tab_view_resolution_failed")?;
-            issuance
-                .validate_target(
-                    &resolved.request.target,
-                    &resolved.request.application,
-                    "remote_view",
-                    RemoteViewApplicationViewCapability::Control,
-                    300,
-                    now_ms,
-                )
-                .map_err(|_| "remote_view_tab_view_issuance_invalid")?;
-            return Ok(issuance.clone());
-        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
         self.adapter
             .issue_view(
                 &assignment,
@@ -347,4 +309,73 @@ impl<
         self.effects
             .execute_command(browser, tab, session_id, session_name, command)
     }
+}
+
+fn remote_view_tab_assignment<T: RemoteViewApplicationTransport>(
+    adapter: &mut RemoteViewApplicationAdapter<T>,
+    store: &mut impl BrowserLaunchCustodyStore,
+    target: &RemoteViewTabHandoffTarget,
+) -> Result<RemoteViewAssignmentRecord, String> {
+    let desktop = target
+        .browser
+        .desktop
+        .as_ref()
+        .ok_or("remote_view_tab_view_desktop_missing")?;
+    let inventory = adapter
+        .inventory()
+        .map_err(|_| "remote_view_tab_view_inventory_unavailable")?;
+    let matching = inventory
+        .assignments
+        .iter()
+        .filter(|assignment| {
+            assignment.desktop_id == desktop.desktop_id
+                && assignment.generation == desktop.generation
+        })
+        .collect::<Vec<_>>();
+    let assignment = match matching.as_slice() {
+        [assignment] => (*assignment).clone(),
+        _ => return Err("remote_view_tab_view_assignment_unavailable".into()),
+    };
+    let published = store
+        .published_launch_assignment(&target.browser)
+        .map_err(|_| "remote_view_tab_view_launch_custody_unavailable")?;
+    if assignment != published {
+        return Err("remote_view_tab_view_assignment_conflict".into());
+    }
+    Ok(assignment)
+}
+
+/// Refresh one already-published presentation without issuing or persisting a
+/// new grant. Authenticated presentation endpoints use this read-only path.
+pub fn resolve_published_remote_view_tab_view<T: RemoteViewApplicationTransport>(
+    adapter: &mut RemoteViewApplicationAdapter<T>,
+    store: &mut impl BrowserLaunchCustodyStore,
+    target: &RemoteViewTabHandoffTarget,
+    view: &RemoteViewTabView,
+    now_ms: u64,
+) -> Result<RemoteViewApplicationViewIssuance, String> {
+    if view.issuance.is_none() {
+        return Err("remote_view_tab_view_unpublished".into());
+    }
+    let assignment = remote_view_tab_assignment(adapter, store, target)?;
+    if let Some(issuance) = &view.issuance {
+        if issuance.grant.request.idempotency_key != view.idempotency_key {
+            return Err("remote_view_tab_view_request_conflict".into());
+        }
+        let resolved = adapter
+            .resolve_view(&assignment, &issuance.grant, || now_ms, false)
+            .map_err(|_| "remote_view_tab_view_resolution_failed")?;
+        issuance
+            .validate_target(
+                &resolved.request.target,
+                &resolved.request.application,
+                "remote_view",
+                RemoteViewApplicationViewCapability::Control,
+                300,
+                now_ms,
+            )
+            .map_err(|_| "remote_view_tab_view_issuance_invalid")?;
+        return Ok(issuance.clone());
+    }
+    Err("remote_view_tab_view_unpublished".into())
 }

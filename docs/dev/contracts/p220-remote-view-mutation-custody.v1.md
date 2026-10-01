@@ -361,8 +361,11 @@ publication. Native action data remains unchanged. Local unconfigured responses
 do not acquire a Remote View handoff identity.
 
 The managed daemon now routes `service_remote_view_handoff_resolve` for these
-retained IDs to the current SQLite host. Historical IDs continue through their
-existing resolver. Before issuance, the host atomically retains one view request
+retained IDs to the current SQLite host. Each runtime lane's control-plane
+worker receives the same host handle as socket dispatch. Queued handoff
+resolution borrows that owner after the normal action policy path, preventing
+the dashboard service queue from falling into the historical resolver for these
+IDs. Historical IDs continue through their existing resolver. Before issuance, the host atomically retains one view request
 key in the handoff. The public adapter joins fresh assignment inventory to the
 browser's exact published launch-custody assignment, including registration and
 assignment identity, before issuing or resolving a control grant. Release-fenced
@@ -378,7 +381,34 @@ shape. Tab close remains terminal for ordinary resolution.
 
 This initial view join uses the provider's top-level `remote_view` audience and
 300-second lifetime. Renewal, foreground focus and authenticated operator
-presentation remain subsequent work. The managed response reports
+visible-tab proof remain subsequent work. The managed response reports
 `status=converging`, `presentationState=grant_issued` and pending operator
-visibility, with no raw provider URL or operator URL. Issuance proves admission,
-not pixels or installed presentation readiness.
+visibility. Issuance proves admission, not pixels or installed presentation
+readiness.
+
+## Authenticated top-level presentation
+
+Ordinary responses now include the dashboard-relative
+`browserSession.handoffUrl` at `/remote-view/<handoff-id>`. The authenticated
+handoff page offers **Open desktop** after grant publication and stops automatic
+convergence polling for that state. Its explicit click opens the same-origin
+`/api/remote-view/<handoff-id>/presentation` endpoint in a new tab.
+
+The endpoint runs after dashboard authentication and requires the separately
+configured `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, a reviewed external HTTPS
+origin without credentials, path, query or fragment. Configuration is validated
+before provider reads. Browser admission does not depend on this viewing setting.
+The endpoint resolves only an already-published grant against fresh inventory,
+exact launch custody and provider validity. It does not issue grants or mutate
+the session aggregate, preserving the daemon's single mutable host. A changed
+aggregate during resolution rejects the redirect. No request value supplies an
+external origin or provider path.
+
+After qualification, the endpoint returns a noncached 303 to the exact opaque
+`/view/<route-id>` on the configured Remote View origin. Its existing ingress
+login governs the top-level viewer. This is an explicit presentation action,
+not an automatic redirect from the durable handoff. Unpublished, expired,
+closed or unavailable targets cannot be substituted; the endpoint reports
+unavailability. Keep the Agent Browser handoff as the operator bookmark.
+Foreground selection, expiry renewal and installed visible-tab proof remain
+open. The new button does not satisfy those acceptance criteria.

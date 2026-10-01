@@ -5735,10 +5735,21 @@ profile. Later requests reuse its browser and current tab. JSON responses includ
 `browserSession` with the session, profile, browser, tab and target identities.
 Configured Remote View responses also retain a stable `browserSession.handoffId`
 for that logical tab before responding. It survives restart and is reused on
-subsequent commands. This development identity does not yet include an operator
-URL; authenticated viewing remains pending in Plan 220.
+subsequent commands. `browserSession.handoffUrl` is its durable
+`/remote-view/<handoff-id>` path on the authenticated Agent Browser dashboard.
+Resolve relative paths against that dashboard's HTTPS origin.
 For this identity, `service_remote_view_handoff_resolve` retains a view request
 before provider issuance and reuses a qualified grant after restart. It reports
-`status=converging` and `operatorVisible.state=pending` while the operator route
-join remains incomplete. Grant issuance alone does not mean the tab is visible.
+`status=converging` and `operatorVisible.state=pending` until tab-specific
+presentation is proved. Grant issuance alone does not mean the tab is visible.
+
+Set `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` to Remote View's reviewed external
+HTTPS origin to enable the handoff page's **Open desktop** button. Its click
+passes through the authenticated Agent Browser presentation endpoint, refreshes
+only an already-published grant and opens the current top-level provider viewer
+in a new tab through its existing ingress login. It does not issue another grant
+or alter session state. Keep the Agent Browser handoff as the bookmark. Missing
+viewing configuration does not block browser lifecycle. The granted-view page
+waits for operator action instead of continuously polling. Tab focus, renewal
+and installed visible-tab acceptance remain pending in Plan 220.
 Successful navigations retain their URL in durable session history.

@@ -493,6 +493,10 @@ fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_histo
     let handoff_id = opened["browserSession"]["handoffId"].as_str().unwrap();
     let persisted = fixture.store(false).load_session_state().unwrap();
     assert_eq!(persisted.remote_view_tab_handoffs.len(), 1);
+    assert_eq!(
+        opened["browserSession"]["handoffUrl"],
+        format!("/remote-view/{handoff_id}")
+    );
     let retained =
         agent_browser_service_model::resolve_remote_view_tab_handoff(&persisted, handoff_id)
             .unwrap();
@@ -624,6 +628,27 @@ fn handoff_view_issuance_and_resolution_survive_host_restart_without_launch_or_n
     assert_eq!(provider.borrow().view_requests.len(), 1);
     assert_eq!(calls.get(), 1);
     assert_eq!(restarted.state().navigation_history.len(), 1);
+    let before_view = fixture.store(false).load_session_state().unwrap();
+    let target =
+        agent_browser_service_model::resolve_remote_view_tab_handoff(&before_view, id).unwrap();
+    let view = before_view.remote_view_tab_handoffs[id]
+        .view
+        .as_ref()
+        .unwrap();
+    let read_only = agent_browser_service_model::resolve_published_remote_view_tab_view(
+        &mut adapter(&fixture, provider.clone()),
+        &mut fixture.store(false),
+        &target,
+        view,
+        2001,
+    )
+    .unwrap();
+    assert_eq!(read_only, issuance);
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        before_view
+    );
+    assert_eq!(provider.borrow().view_requests.len(), 1);
     let reused = restarted
         .execute_managed_command(
             "Alice",
@@ -703,4 +728,154 @@ fn completed_view_with_failed_publication_reuses_ledger_outcome_after_restart() 
     assert_eq!(recovered.presentation_state, "grant_issued");
     assert_eq!(provider.borrow().view_requests.len(), 1);
     assert_eq!(calls.get(), 1);
+}
+
+#[tokio::test]
+async fn queued_action_executor_resolves_managed_handoff_through_the_registered_host() {
+    use crate::native::browser_session_remote_view::RuntimeSessionEffects;
+    use crate::native::browser_session_runtime::{
+        BrowserManagerRuntime, BrowserManagerRuntimeConfig, BrowserSessionEffectAdapter,
+    };
+    use crate::native::remote_view_application_http::RemoteViewApplicationHttp;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut source = host(&fixture, provider.clone(), calls.clone());
+    let opened = source.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    drop(source);
+    let before = fixture.store(false).load_session_state().unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let origin = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let fixture = wire();
+        let mut issued_grant: Option<Value> = None;
+        for _ in 0..6 {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let (header_end, length) = loop {
+                let mut chunk = [0_u8; 4096];
+                let count = stream.read(&mut chunk).await.unwrap();
+                assert!(count > 0 && bytes.len() + count < 65536);
+                bytes.extend_from_slice(&chunk[..count]);
+                if let Some(end) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
+                    let header = std::str::from_utf8(&bytes[..end]).unwrap();
+                    let length = header
+                        .lines()
+                        .find_map(|line| {
+                            let (key, value) = line.split_once(':')?;
+                            key.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap();
+                    if bytes.len() >= end + 4 + length {
+                        break (end + 4, length);
+                    }
+                }
+            };
+            let envelope: Value =
+                serde_json::from_slice(&bytes[header_end..header_end + length]).unwrap();
+            let response = match envelope["request"]["operation"].as_str().unwrap() {
+                "inventory" => fixture["inventory"].clone(),
+                "observe_assignment" => fixture["assignmentObservation"].clone(),
+                "issue_view" => {
+                    assert!(
+                        issued_grant.is_none(),
+                        "one queued handoff must issue one grant"
+                    );
+                    let mut issued = fixture["viewIssuance"].clone();
+                    issued["grant"]["request"]["idempotencyKey"] =
+                        envelope["request"]["idempotency_key"].clone();
+                    issued_grant = Some(issued["grant"].clone());
+                    issued
+                }
+                "resolve_view" => issued_grant.clone().unwrap(),
+                _ => panic!("queued resolver must not launch or acquire"),
+            }
+            .to_string();
+            stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
+        }
+    });
+    let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+        headless: true,
+        executable_path: None,
+        display: None,
+        remote_headed: false,
+        maximum_browser_processes: None,
+        remote_view_desktop_contexts: Vec::new(),
+    })
+    .unwrap();
+    let transport =
+        RemoteViewApplicationHttp::new(&origin, std::time::Duration::from_secs(2)).unwrap();
+    let effects = RemoteViewSessionEffects::new(
+        BrowserSessionEffectAdapter::new(runtime),
+        RemoteViewApplicationAdapter::new("agent-browser".into(), transport).unwrap(),
+        fixture.store(false),
+        Vec::new(),
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    let registered = BrowserSessionHost::load(
+        fixture.store(false),
+        RuntimeSessionEffects::Remote(Box::new(effects)),
+        &fixture.root.join("unused.json"),
+        BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 1024,
+        },
+    )
+    .unwrap();
+    let shared = std::sync::Arc::new(std::sync::Mutex::new(Some(registered)));
+    let mut state =
+        crate::native::action_runtime::DaemonState::new().with_managed_session_host(shared.clone());
+    let response = crate::native::actions::execute_command(
+        &serde_json::json!({
+            "id":"queued-resolve", "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "activityAtMs":2001,
+        }),
+        &mut state,
+    )
+    .await;
+    assert_eq!(response["success"], true, "{response}");
+    assert_eq!(response["data"]["handoffId"], id);
+    assert_eq!(response["data"]["presentationState"], "grant_issued");
+    let after = fixture.store(false).load_session_state().unwrap();
+    assert!(after.remote_view_tab_handoffs[&id]
+        .view
+        .as_ref()
+        .unwrap()
+        .issuance
+        .is_some());
+    assert_eq!(after.browsers, before.browsers);
+    assert_eq!(after.sessions, before.sessions);
+    assert_eq!(after.tabs, before.tabs);
+    assert_eq!(after.navigation_history, before.navigation_history);
+    assert_eq!(shared.lock().unwrap().as_ref().unwrap().state(), &after);
+    let repeated = crate::native::actions::execute_command(
+        &serde_json::json!({
+            "id":"queued-repeat", "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "activityAtMs":2002,
+        }),
+        &mut state,
+    )
+    .await;
+    assert_eq!(repeated["success"], true, "{repeated}");
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), after);
+    tokio::time::timeout(std::time::Duration::from_secs(2), server)
+        .await
+        .unwrap()
+        .unwrap();
 }

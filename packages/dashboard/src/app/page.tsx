@@ -82,6 +82,7 @@ type DashboardAuthStatus = {
 };
 
 type RemoteViewHandoffResolution = {
+  presentationState?: string;
   status?: string;
   resolved?: boolean;
   reopenRequired?: boolean;
@@ -624,10 +625,10 @@ function RemoteViewHandoffGate({
   }, [handoffId, resolveHandoff]);
 
   useEffect(() => {
-    if (resolution?.status !== "converging") return;
+    if (resolution?.status !== "converging" || resolution.presentationState === "grant_issued") return;
     const retry = window.setTimeout(() => void resolveHandoff(false), 1_000);
     return () => window.clearTimeout(retry);
-  }, [resolution?.status, resolveHandoff]);
+  }, [resolution?.status, resolution?.presentationState, resolveHandoff]);
 
   if (!handoffId) {
     return <DashboardExperience initialSection={initialSection} user={user} onLogout={onLogout} />;
@@ -659,11 +660,18 @@ function RemoteViewHandoffGate({
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-6">
         <section className="w-full max-w-lg space-y-4 rounded-xl border bg-card p-6 shadow-sm">
-          <h1 className="text-xl font-semibold">Restoring remote view</h1>
+          <h1 className="text-xl font-semibold">{resolution.presentationState === "grant_issued" ? "Open remote desktop" : "Restoring remote view"}</h1>
           <p className="text-sm text-muted-foreground">
-            {resolution.message || "The requested presentation is still converging."}
+            {resolution.presentationState === "grant_issued" ? "Open the current desktop in a new tab." : resolution.message || "The requested presentation is still converging."}
           </p>
           <div className="flex gap-3">
+            {resolution.presentationState === "grant_issued" ? (
+              <Button asChild>
+                <a href={`/api/remote-view/${encodeURIComponent(handoffId)}/presentation`} target="_blank" rel="noopener noreferrer">
+                  Open desktop
+                </a>
+              </Button>
+            ) : null}
             <Button onClick={() => void resolveHandoff(false)}>Retry now</Button>
             <Button variant="outline" onClick={onLogout}>Sign out</Button>
           </div>

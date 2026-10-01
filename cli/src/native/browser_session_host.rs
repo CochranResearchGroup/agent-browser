@@ -28,6 +28,41 @@ pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
     super::browser_session_remote_view::RuntimeSessionEffects,
 >;
 
+pub(crate) type SharedBrowserSessionHost =
+    std::sync::Arc<std::sync::Mutex<Option<DefaultBrowserSessionHost>>>;
+
+/// Both socket dispatch and queued service resolution borrow the same owner.
+pub(crate) async fn resolve_shared_handoff_command(
+    shared: SharedBrowserSessionHost,
+    command: serde_json::Value,
+) -> Result<Option<serde_json::Value>, String> {
+    let Some(id) = optional_string(&command, "handoffId").map(str::to_string) else {
+        return Ok(None);
+    };
+    tokio::task::spawn_blocking(move || {
+        let mut host = shared
+            .lock()
+            .map_err(|_| "browser_session_host_lock_poisoned")?;
+        if host.is_none() {
+            if !BrowserSessionSqliteStore::default_sqlite()?
+                .load_session_state()?
+                .remote_view_tab_handoffs
+                .contains_key(&id)
+            {
+                return Ok(None);
+            }
+            *host = Some(load_default_browser_session_host()?);
+        }
+        let host = host.as_mut().ok_or("browser_session_host_missing")?;
+        if !host.state().remote_view_tab_handoffs.contains_key(&id) {
+            return Ok(None);
+        }
+        host.handle_command_result(&command).map(Some)
+    })
+    .await
+    .map_err(|_| "browser_session_host_join_failed")?
+}
+
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
     let legacy_state_path = super::service_store::default_service_state_path()?;
     let store = BrowserSessionSqliteStore::default_sqlite()?;
@@ -738,6 +773,8 @@ where
             if let Some(handoff) = handoff {
                 if let Some(identity) = object.get_mut("browserSession") {
                     identity["handoffId"] = serde_json::json!(handoff.id);
+                    identity["handoffUrl"] =
+                        serde_json::json!(format!("/remote-view/{}", handoff.id));
                 }
             }
         }

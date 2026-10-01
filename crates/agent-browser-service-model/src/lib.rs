@@ -328,7 +328,9 @@ pub use terminal_outcome::{
 };
 
 mod remote_view_session_effects;
-pub use remote_view_session_effects::RemoteViewSessionEffects;
+pub use remote_view_session_effects::{
+    resolve_published_remote_view_tab_view, RemoteViewSessionEffects,
+};
 
 mod remote_view_session_pool;
 pub use remote_view_session_pool::{

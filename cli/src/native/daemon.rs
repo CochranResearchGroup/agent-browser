@@ -445,6 +445,7 @@ impl RuntimeHostRouter {
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
             crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
         ));
+        let browser_sessions = Arc::new(std::sync::Mutex::new(None));
         let initial_state = match initial_config.as_ref() {
             Some(config) => DaemonState::new_for_runtime_lane_with_stream(
                 initial_session,
@@ -459,7 +460,7 @@ impl RuntimeHostRouter {
             ),
         };
         let control_plane = ControlPlaneWorker::start_with_options(
-            initial_state,
+            initial_state.with_managed_session_host(browser_sessions.clone()),
             options.service_reconcile_interval_ms,
             options.service_job_timeout_ms,
             options.service_monitor_interval_ms,
@@ -477,7 +478,7 @@ impl RuntimeHostRouter {
         )?;
         Ok(Self {
             lanes,
-            browser_sessions: Arc::new(std::sync::Mutex::new(None)),
+            browser_sessions,
             creation_lock: Arc::new(Mutex::new(())),
             socket_dir,
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
@@ -531,7 +532,8 @@ impl RuntimeHostRouter {
                             old.stream_client.clone(),
                             old.stream_server.clone(),
                             config,
-                        )?,
+                        )?
+                        .with_managed_session_host(self.browser_sessions.clone()),
                         config.service_reconcile_interval_ms,
                         config.service_job_timeout_ms,
                         config.service_monitor_interval_ms,
@@ -587,7 +589,8 @@ impl RuntimeHostRouter {
                     stream_client.clone(),
                     stream_server.clone(),
                     &config,
-                )?,
+                )?
+                .with_managed_session_host(self.browser_sessions.clone()),
                 config.service_reconcile_interval_ms,
                 config.service_job_timeout_ms,
                 config.service_monitor_interval_ms,
@@ -656,49 +659,16 @@ impl RuntimeHostRouter {
         }
     }
     async fn try_handle_browser_session_handoff(&self, command: Value) -> Option<Value> {
-        let handoff_id = command
-            .get("handoffId")
-            .or_else(|| {
-                command
-                    .get("params")
-                    .and_then(|params| params.get("handoffId"))
-            })
-            .and_then(Value::as_str)?
-            .to_string();
-        let browser_sessions = self.browser_sessions.clone();
-        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
-            let mut host = browser_sessions
-                .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if host.is_none() {
-                let store =
-                    super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?;
-                if !store
-                    .load_session_state()?
-                    .remote_view_tab_handoffs
-                    .contains_key(&handoff_id)
-                {
-                    return Ok(None);
-                }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
-            }
-            let host = host.as_mut().ok_or("browser_session_host_missing")?;
-            if !host
-                .state()
-                .remote_view_tab_handoffs
-                .contains_key(&handoff_id)
-            {
-                return Ok(None);
-            }
-            Ok(Some(host.handle_command(&command)))
-        })
+        let id = command.get("id").cloned().unwrap_or(Value::Null);
+        match super::browser_session_host::resolve_shared_handoff_command(
+            self.browser_sessions.clone(),
+            command,
+        )
         .await
         {
-            Ok(Ok(response)) => response,
-            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
-            Err(_) => Some(
-                serde_json::json!({ "success": false, "error": "browser_session_host_join_failed" }),
-            ),
+            Ok(Some(data)) => Some(serde_json::json!({ "id":id, "success":true, "data":data })),
+            Ok(None) => None,
+            Err(error) => Some(serde_json::json!({ "id":id, "success":false, "error":error })),
         }
     }
 

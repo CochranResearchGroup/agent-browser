@@ -301,3 +301,31 @@ mod tests {
         assert!(runtime_context(Some("http://example.test".into()), pool, None, None).is_err());
     }
 }
+
+/// Read a qualified published grant without changing the session aggregate.
+/// Dashboard viewing must not introduce another mutable Session Manager owner.
+pub(crate) fn resolve_published_handoff_view(
+    id: &str,
+    now_ms: u64,
+) -> Result<RemoteViewApplicationViewIssuance, String> {
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    let state = store.load_session_state()?;
+    let target = resolve_remote_view_tab_handoff(&state, id)?;
+    let view = state
+        .remote_view_tab_handoffs
+        .get(id)
+        .and_then(|record| record.view.as_ref())
+        .ok_or("remote_view_tab_view_unpublished")?;
+    let mut context = configured_remote_view()?.ok_or("remote_view_runtime_config_missing")?;
+    let issuance = resolve_published_remote_view_tab_view(
+        &mut context.adapter,
+        &mut store,
+        &target,
+        view,
+        now_ms,
+    )?;
+    if store.load_session_state()? != state {
+        return Err("remote_view_tab_view_state_changed".into());
+    }
+    Ok(issuance)
+}

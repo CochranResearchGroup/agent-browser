@@ -10,6 +10,41 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 419 | 2026-10-01
+
+Ordinary responses now carry the durable dashboard-relative
+`browserSession.handoffUrl`. The authenticated handoff page offers an explicit
+Open desktop action for a published grant and stops continuously polling that
+state. The click uses an authenticated same-origin endpoint, which refreshes an
+already-published grant and returns a noncached redirect to its current top-level
+Remote View viewer. The external HTTPS origin is explicit viewing configuration;
+it does not block browser admission when absent.
+
+Presentation resolution reads the existing SQLite owner and public adapter
+without issuing grants or replacing the daemon's aggregate. A concurrent
+aggregate change rejects the redirect. The endpoint authenticates before any
+provider resolution. Its origin and path cannot come from handoff input.
+The top-level viewer uses Remote View's existing ingress login. This source join
+preserves the Agent Browser bookmark. A discovered dashboard queue bypass was
+also repaired: runtime lanes share the socket host with their control-plane
+worker, and queued handoff resolution borrows that same owner through the
+normal action executor. Ordinary queued browser-command admission remains a
+milestone-one join to audit and complete. This increment does not prove selected-tab focus,
+renewal or installed visible pixels. Those behaviors and candidate qualification
+remain open. No installed or provider effects were performed.
+
+The focused presentation selection passed 63 tests, including the new unauthenticated
+endpoint and origin/path cases. Strict workspace Clippy, architecture,
+documentation links, existing dashboard handoff checks and the final dashboard
+and docs production builds passed. Final consumer composition and formatting
+checks passed before the queue fix; those unchanged composition behaviors
+retain their evidence. The new queue regression qualifies first grant issuance
+and repeated resolution through the native action executor, real HTTP transport
+and SQLite. Final formatting passed. A test-only private import error was corrected
+before the passing queue regression. All five guidance surfaces describe
+the viewing setting and pending tab visibility. The goal meter read 701,748.
+Memory disposition: `not_durable`; source behavior is retained in the contract.
+
 ## Turn 418 | 2026-10-01
 
 P220's managed daemon resolves retained tab handoff IDs through the current
