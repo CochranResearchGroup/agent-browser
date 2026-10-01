@@ -445,6 +445,14 @@ fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_histo
     assert_eq!(opened["data"]["headers"], command["headers"]);
     assert_eq!(opened["data"]["waitUntil"], "domcontentloaded");
     assert_eq!(opened["browserSession"]["profileId"], "profile-a");
+    let handoff_id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let persisted = fixture.store(false).load_session_state().unwrap();
+    assert_eq!(persisted.remote_view_tab_handoffs.len(), 1);
+    let retained =
+        agent_browser_service_model::resolve_remote_view_tab_handoff(&persisted, handoff_id)
+            .unwrap();
+    assert_eq!(retained.tab.id, opened["browserSession"]["tabId"]);
+    assert!(opened.get("handoffUrl").is_none());
     assert_eq!(consumer.state().navigation_history.len(), 1);
     assert_eq!(
         consumer.state().navigation_history[0].url,

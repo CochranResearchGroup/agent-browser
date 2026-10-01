@@ -354,6 +354,12 @@ a desktop or provider route, navigate, launch a browser or replace a closed
 target. Missing and inconsistent joins return errors. Reassociation can move
 the logical tab to a replacement browser without changing the handoff ID.
 
-This pure model is not yet connected to ordinary response publication or the
-authenticated operator resolver. It issues no provider view and proves no
-installed presentation readiness. Those joins remain the next delivery work.
+Configured ordinary requests now retain this binding through the host's SQLite
+aggregate publication before executing the addressed action and returning
+`browserSession.handoffId`. Existing bindings reuse their ID without another
+publication. Native action data remains unchanged. Local unconfigured responses
+do not acquire a Remote View handoff identity.
+
+Authenticated operator resolution and provider view issuance remain unconnected.
+The response therefore carries no operator URL for this new binding. The ID is
+logical custody evidence, not proof of route or installed presentation readiness.

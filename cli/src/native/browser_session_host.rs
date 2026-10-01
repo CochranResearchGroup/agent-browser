@@ -630,6 +630,29 @@ where
             .get(&tab.tab_id)
             .cloned()
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        // Retain the logical target before returning an identity to a client.
+        // Provider route issuance and the operator URL are separate joins.
+        let handoff = if automatic {
+            let id = self
+                .state
+                .remote_view_tab_handoffs
+                .values()
+                .find(|record| record.session_id == session.id && record.tab_id == tab.id)
+                .map(|record| record.id.clone())
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+            let record = agent_browser_service_model::retain_remote_view_tab_handoff(
+                &mut self.state,
+                &id,
+                &session.id,
+                &tab.id,
+            )?;
+            if self.state != self.persisted_state {
+                self.commit_state()?;
+            }
+            Some(record)
+        } else {
+            None
+        };
         self.effects.begin_operation(&self.persisted_state)?;
         let mut response =
             self.effects
@@ -646,6 +669,11 @@ where
                 "sessionId": session.id, "sessionName": session.name, "profileId": session.profile_id,
                 "browserId": browser.id, "tabId": tab.id, "targetId": tab.target_id,
             }));
+            if let Some(handoff) = handoff {
+                if let Some(identity) = object.get_mut("browserSession") {
+                    identity["handoffId"] = serde_json::json!(handoff.id);
+                }
+            }
         }
         Ok(Some(response))
     }

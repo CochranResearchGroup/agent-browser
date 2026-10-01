@@ -10,6 +10,21 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 417 | 2026-10-01
+
+Configured ordinary managed responses now include `browserSession.handoffId`
+after the host publishes the logical tab binding to SQLite. Repeated commands
+and restart reuse preserve that ID without another browser launch. The native
+action result remains intact. Unconfigured local responses retain their prior
+identity shape. No operator URL is advertised for this incomplete viewing join.
+
+The focused actual-host SQLite restart test, strict workspace Clippy,
+architecture, documentation links and docs production build passed. All 12
+consumer composition tests and final formatting also passed. All five required guidance surfaces describe the development identity.
+Provider view issuance and authenticated resolver routing remain the next joined
+outcome. No installed or provider effects were performed. Memory disposition:
+`not_durable`; source behavior is retained in the owning contract.
+
 ## Turn 416 | 2026-10-01
 
 P220 now has durable logical tab handoff records in the Browser Runtime

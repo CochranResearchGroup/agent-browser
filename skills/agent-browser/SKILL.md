@@ -3583,4 +3583,8 @@ may name a catalog profile or its recorded directory. Conflicting selectors fail
 before allocation. Without a profile selector, the session uses a disposable
 profile. Later requests reuse its browser and current tab. JSON responses include
 `browserSession` with the session, profile, browser, tab and target identities.
+Configured Remote View responses also retain a stable `browserSession.handoffId`
+for that logical tab before responding. It survives restart and is reused on
+subsequent commands. This development identity does not yet include an operator
+URL; authenticated viewing remains pending in Plan 220.
 Successful navigations retain their URL in durable session history.
