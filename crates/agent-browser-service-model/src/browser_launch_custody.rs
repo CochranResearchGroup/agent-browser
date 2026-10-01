@@ -138,6 +138,9 @@ pub enum LaunchCustodyStoreError {
     InvalidRecord,
     Conflict,
     ProfileOccupied,
+    ReleaseFenced,
+    LaunchPending,
+    CleanupBlocked,
 }
 
 #[derive(Debug, Eq, PartialEq)]

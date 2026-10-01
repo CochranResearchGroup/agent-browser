@@ -120,3 +120,25 @@ Release-claim fencing, process readback and runtime invocation remain pending. U
 unpublished records must remain cleanup obligations across restart; absence
 cannot be inferred from an empty observation. No failure-to-absent transition or
 automatic retry is introduced by this checkpoint.
+
+
+## Assignment release fence
+
+`BrowserReleaseCustodyStore` admits an opaque stable release UUID against a full
+retirement target. The SQLite transaction loads current session state and the
+launch ledger, rejects any unpublished launch on that assignment or desktop,
+validates scoped cleanup evidence, and persists the assignment fence before
+returning a cleanup permit. Exact replay must preserve the entire target. A
+second release identity for the same assignment or desktop conflicts.
+
+The additive `release_fences` field defaults to empty when reading earlier v1
+launch ledgers; present malformed values fail. Launch admission, launch
+observation, launch publication and ordinary aggregate publication reject a
+retained fence. The fence survives restart and is not cleared by timeout or
+unknown provider outcome. Qualified retirement completion is still pending, so
+this checkpoint deliberately has no fence deletion or automatic reopening.
+
+Recovery, foreground and cleanup owner admission are not yet coordinated with
+this fence. Caller-supplied complete inventories do not prove current external
+owner absence or stop a concurrent new owner. Actual runtime wiring and a
+fresh physical process census remain required before release acceptance.

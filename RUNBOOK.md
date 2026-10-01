@@ -127,6 +127,17 @@ profiles. Both final SQLite tests, strict workspace Clippy, architecture, format
 documentation links and diff checks pass. Runtime effect
 wiring, release-claim exclusion and physical process reconciliation remain open.
 
+Release admission now reads durable session and launch custody in one SQLite
+transaction and persists the exact assignment fence before returning a cleanup
+permit. Unknown launch intent blocks release; the retained fence blocks new
+launch admission, observation, publication and ordinary aggregate publication.
+Three custody tests pass across reopen, exact replay, conflicting release UUID
+and generation, both admission orders and fenced browser publication. Initial
+compile failure exposed missing target serialization; strict public target
+serialization fixed it. Seven related mutation tests, strict workspace Clippy,
+format, architecture, documentation links and diff checks pass. No fence completion or deletion is implemented yet. Recovery,
+foreground and cleanup owner admission plus actual runtime wiring remain pending.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

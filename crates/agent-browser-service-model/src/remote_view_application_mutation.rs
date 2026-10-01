@@ -127,7 +127,8 @@ pub struct RemoteViewApplicationViewOptions {
 
 /// Complete expected retirement set from Agent Browser's retained public join.
 /// This does not prove application references or process absence.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RemoteViewApplicationReleaseTarget {
     pub assignment: RemoteViewAssignmentRecord,
     pub route_ids: Vec<String>,

@@ -199,3 +199,15 @@ pub fn prepare_remote_view_application_cleanup(
         },
     })
 }
+
+/// Release admission must check current durable session and launch custody under
+/// one transaction and retain its assignment fence across ambiguous outcomes.
+/// Independent inventories still require scoped owner evidence from the caller.
+pub trait BrowserReleaseCustodyStore {
+    fn admit_assignment_release(
+        &mut self,
+        target: &RemoteViewApplicationReleaseTarget,
+        snapshot: &RemoteViewApplicationCleanupSnapshot,
+        release_id: &str,
+    ) -> Result<RemoteViewApplicationCleanupPermit, crate::LaunchCustodyStoreError>;
+}

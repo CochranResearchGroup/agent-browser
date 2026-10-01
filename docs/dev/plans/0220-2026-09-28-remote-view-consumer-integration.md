@@ -71,6 +71,13 @@ and custody publication together. Runtime effect wiring and release-claim
 exclusion are still pending.
 The model contains no environment or provider process ownership.
 
+Release admission source work checks current durable session references and
+unpublished launch intents under the custody transaction, then retains an exact
+assignment fence. Launch admission and ordinary session publication reject that
+fence. Qualified retirement completion, recovery and foreground owner admission,
+runtime effect wiring and physical absence proof remain pending. Independent
+cleanup inventories supplied by a caller are not fresh owner proof by themselves.
+
 ## Current State
 
 ### October 1 provider reconciliation and amendment review

@@ -347,6 +347,8 @@ impl BrowserSessionSqliteStore {
         if current != *expected {
             return Err("browser_session_publication_conflict".into());
         }
+        super::browser_launch_custody_store::reject_fenced_browser_publication(&transaction, state)
+            .map_err(|_| "browser_session_publication_release_fenced".to_string())?;
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,

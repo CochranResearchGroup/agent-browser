@@ -204,9 +204,9 @@ pub use remote_view_application_adapter::{
     RemoteViewApplicationTransport, RemoteViewApplicationTransportError,
 };
 pub use remote_view_application_cleanup::{
-    prepare_remote_view_application_cleanup, RemoteViewApplicationCleanupError,
-    RemoteViewApplicationCleanupPermit, RemoteViewApplicationCleanupSnapshot,
-    RemoteViewApplicationObligationInventory,
+    prepare_remote_view_application_cleanup, BrowserReleaseCustodyStore,
+    RemoteViewApplicationCleanupError, RemoteViewApplicationCleanupPermit,
+    RemoteViewApplicationCleanupSnapshot, RemoteViewApplicationObligationInventory,
 };
 pub use remote_view_application_mutation::{
     RemoteViewApplicationMutationClaim, RemoteViewApplicationMutationOutcome,
