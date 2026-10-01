@@ -19,6 +19,19 @@ pub(super) struct RemoteViewRuntimeContext {
     pool: RemoteViewSessionPool,
 }
 
+/// Detect an explicitly selected Remote View lane before loading the host.
+/// Partial settings enter validation rather than falling back to local launch.
+pub(super) fn remote_view_settings_present() -> bool {
+    [
+        "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+        "AGENT_BROWSER_REMOTE_VIEW_POOL",
+        "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
+        "AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT",
+    ]
+    .iter()
+    .any(|name| std::env::var_os(name).is_some())
+}
+
 /// Runtime setup validates explicit settings without reading or mutating the
 /// provider. Capacity preparation belongs to a new browser's placement demand.
 pub(super) fn configured_remote_view() -> Result<Option<RemoteViewRuntimeContext>, String> {
@@ -94,6 +107,12 @@ pub(super) fn runtime_effects(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn admits_ordinary_sessions(&self) -> bool {
+        match self {
+            Self::Local(effects) => effects.admits_ordinary_sessions(),
+            Self::Remote(effects) => effects.admits_ordinary_sessions(),
+        }
+    }
     fn remote_view_desktop_candidates(
         &mut self,
     ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {

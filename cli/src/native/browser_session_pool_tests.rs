@@ -148,7 +148,17 @@ fn host(
         BrowserSessionHostConfig {
             session_idle_timeout_ms: 300_000,
             remote_view_desktops: Vec::new(),
-            default_disposable_policy: None,
+            default_disposable_policy: Some(BrowserDisposableProfilePolicy {
+                id: "default".into(),
+                user_data_root: fixture
+                    .root
+                    .join("disposable")
+                    .to_string_lossy()
+                    .into_owned(),
+                cleanup_delay_ms: 300_000,
+                maximum_retained_profiles: 20,
+                maximum_total_bytes: 1024 * 1024,
+            }),
             exact_url_history_maximum_bytes: 1024,
         },
     )
@@ -416,4 +426,109 @@ fn pool_demand_prefers_window_free_desktops_and_retains_healthy_occupied_peers()
     assert_eq!(prepared.desktops.len(), 1);
     assert_eq!(prepared.desktops[0].desktop.desktop_id, second.desktop_id);
     assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_history() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let command = serde_json::json!({"id": "first-open", "action": "navigate", "runtimeProfile": "profile-a",
+        "url": "https://synthetic.example/first", "headers": {"X-Test":"fixture"}, "waitUntil":"domcontentloaded", "activityAtMs": 100});
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened["success"], true);
+    assert_eq!(opened["id"], "first-open");
+    assert_eq!(opened["data"]["headers"], command["headers"]);
+    assert_eq!(opened["data"]["waitUntil"], "domcontentloaded");
+    assert_eq!(opened["browserSession"]["profileId"], "profile-a");
+    assert_eq!(consumer.state().navigation_history.len(), 1);
+    assert_eq!(
+        consumer.state().navigation_history[0].url,
+        "https://synthetic.example/first"
+    );
+    let mut second = command.clone();
+    second["url"] = "https://synthetic.example/second".into();
+    second["activityAtMs"] = 101.into();
+    second.as_object_mut().unwrap().remove("runtimeProfile");
+    second["profile"] = fixture
+        .root
+        .join("profile-a")
+        .to_string_lossy()
+        .into_owned()
+        .into();
+    let reopened = consumer
+        .execute_managed_command("Alice", &second)
+        .unwrap()
+        .unwrap();
+    assert_eq!(reopened["browserSession"], opened["browserSession"]);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert_eq!(consumer.state().navigation_history.len(), 2);
+    second["url"] = "https://synthetic.example/failure".into();
+    let failed = consumer
+        .execute_managed_command("Alice", &second)
+        .unwrap()
+        .unwrap();
+    assert_eq!(failed["success"], false);
+    assert_eq!(consumer.state().navigation_history.len(), 2);
+    drop(consumer);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let result = restarted
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["browserSession"], opened["browserSession"]);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn ordinary_profile_selector_conflict_precedes_allocation_and_default_is_disposable() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let command = serde_json::json!({"action":"navigate", "url":"https://synthetic.example/", "activityAtMs":100,
+        "runtimeProfile":"profile-a", "profileId":"profile-b"});
+    assert_eq!(
+        consumer
+            .execute_managed_command("Alice", &command)
+            .unwrap_err(),
+        "browser_session_profile_selector_conflict"
+    );
+    assert!(provider.borrow().operations.is_empty());
+    assert_eq!(calls.get(), 0);
+    for (invalid, expected) in [
+        (
+            serde_json::json!({"action":"navigate", "url":"https://synthetic.example/", "profileId":4}),
+            "browser_session_profile_selector_invalid",
+        ),
+        (
+            serde_json::json!({"action":"navigate", "url":"https://synthetic.example/", "profileId":"unknown"}),
+            "browser_session_profile_selector_unknown",
+        ),
+        (
+            serde_json::json!({"action":"navigate", "profileId":"profile-a"}),
+            "browser_session_field_missing:url",
+        ),
+    ] {
+        assert_eq!(
+            consumer
+                .execute_managed_command("Alice", &invalid)
+                .unwrap_err(),
+            expected
+        );
+        assert!(provider.borrow().operations.is_empty());
+    }
+    let command = serde_json::json!({"id":"default-open", "action":"navigate", "url":"https://synthetic.example/", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened["success"], true);
+    assert_eq!(consumer.state().disposable_profiles.len(), 1);
+    assert_eq!(calls.get(), 1);
 }

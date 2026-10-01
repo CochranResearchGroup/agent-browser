@@ -238,11 +238,19 @@ impl BrowserSessionEffects for Process {
     }
     fn allocate_disposable_profile(
         &mut self,
-        _policy: &BrowserDisposableProfilePolicy,
-        _allocation: &str,
-        _session: &str,
+        policy: &BrowserDisposableProfilePolicy,
+        allocation: &str,
+        session: &str,
     ) -> Result<BrowserProfileCatalogEntry, String> {
-        Err("not used by named fixture".into())
+        Ok(BrowserProfileCatalogEntry {
+            id: allocation.into(),
+            name: session.into(),
+            user_data_dir: std::path::Path::new(&policy.user_data_root)
+                .join(allocation.replace(':', "-"))
+                .to_string_lossy()
+                .into_owned(),
+            kind: BrowserProfileKind::Disposable,
+        })
     }
     fn delete_disposable_profile(
         &mut self,
@@ -264,6 +272,11 @@ impl ManagedBrowserCommandEffects for Process {
         assert_eq!(tab.target_id, format!("target:{}", browser.id));
         assert!(!session_id.is_empty());
         assert_eq!(session_name, "Alice");
+        if command["action"] == "navigate" {
+            return Ok(
+                serde_json::json!({"id": command["id"], "success": command["url"] != "https://synthetic.example/failure", "data": {"url": command["url"], "headers": command["headers"], "waitUntil": command["waitUntil"]}}),
+            );
+        }
         assert_eq!(command["action"], "get_url");
         Ok(serde_json::json!({"targetId": tab.target_id, "url": "https://synthetic.example/"}))
     }

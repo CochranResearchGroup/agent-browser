@@ -10,6 +10,35 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 414 | 2026-10-01
+
+Configured Remote View now selects the managed-session host before an ordinary
+browser request has any session. The owner admits its first request with an
+exact catalog profile or the default disposable policy. Repeated requests and
+restart preserve browser and current-tab identity. Commands retain their original
+navigation headers, wait policy and request ID; responses add `browserSession`
+identity beside the native action result. Successful ordinary navigation records
+exact URL history through host publication. Failed navigation adds no success
+row. Invalid, unknown and conflicting selectors stop before allocation.
+
+Focused provider-free qualification passed 43 CLI session tests, with one
+ignored real-Chrome test. After test-only additions for recorded-directory
+selection and malformed input, all 12 consumer composition tests passed again.
+Production code remained unchanged, so strict workspace Clippy and the earlier
+session selection remain applicable. Final formatting, architecture, guidance,
+documentation links and the docs production build passed. All five required
+source documentation surfaces describe the admission behavior. Installed skill
+publication and installed browser/provider acceptance were not performed.
+
+P220 v26 remains open. Stable tab-specific handoffs remain in milestone one;
+explicit tab lifecycle routing, foreground ownership, recovery, relocation and
+final cleanup retain milestone-two scope. Installed Alice/Bob proof and candidate
+qualification remain ahead. This is source qualification, not merge readiness.
+The fresh active goal meter read 391,649, below the requested one-million
+checkpoint ceiling. Memory disposition: `not_durable`, with routine source
+behavior retained in the owning contract and runbook and a machine-readable
+receipt at `/tmp/p220-open-memory-disposition-2026-10-01.json`.
+
 ## Turn 413 | 2026-10-01
 
 P220 now prepares configured pool capacity only when a new managed browser

@@ -92,6 +92,10 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn admits_ordinary_sessions(&self) -> bool {
+        self.pool.is_some()
+    }
+
     fn remote_view_desktop_candidates(
         &mut self,
     ) -> Result<Option<Vec<RemoteViewDesktopCandidate>>, String> {

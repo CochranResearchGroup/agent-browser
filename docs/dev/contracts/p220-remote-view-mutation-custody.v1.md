@@ -320,3 +320,21 @@ counts tie. Titles and window inventories are not persisted by pool preparation.
 Actual launch still refreshes the full private environment under durable process
 admission. Lowering desired capacity does not release assignments; final cleanup
 collection and automatic shrink remain separate lifecycle work.
+
+
+## Ordinary request admission
+
+Explicit Remote View settings select the managed owner even before a session
+exists. Partial settings enter validation instead of falling back to local
+launch. The configured owner admits ordinary browser commands through Session
+Manager, using an exact catalog profile or the default disposable policy.
+Catalog identity, name or recorded directory resolves an explicit selector;
+conflicting, malformed and unknown selectors fail before admission.
+
+The native action executor still receives the complete command, preserving
+navigation headers, wait policy and request identity. Responses add a separate
+`browserSession` identity object without rewriting the action's data. Successful
+ordinary navigation appends exact URL history through host publication; failed
+navigation does not fabricate a successful history row. Repeated requests and
+restart reuse preserve the current managed tab. Explicit tab lifecycle commands
+and stable handoff resolution remain separate remaining work.

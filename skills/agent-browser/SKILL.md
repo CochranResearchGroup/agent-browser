@@ -3576,3 +3576,11 @@ tab. Agent Browser launches its own browser with fresh private environment input
 from Remote View. Local sessions use their existing runtime when these settings
 are absent. Stable tab handoffs and automatic capacity shrink remain under development
 in Plan 220. Reducing the desired count does not immediately return assignments.
+
+With Remote View configured, an ordinary `open` request admits a managed session
+automatically. Use `--runtime-profile` for an exact catalog profile; `--profile`
+may name a catalog profile or its recorded directory. Conflicting selectors fail
+before allocation. Without a profile selector, the session uses a disposable
+profile. Later requests reuse its browser and current tab. JSON responses include
+`browserSession` with the session, profile, browser, tab and target identities.
+Successful navigations retain their URL in durable session history.

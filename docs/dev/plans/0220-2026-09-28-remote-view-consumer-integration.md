@@ -103,9 +103,10 @@ requests, then joins live assignment and window observations. Construction,
 status and healthy reuse allocate no provider resources. Interrupted acquisition
 remains pending across restart even when provider inventory shows an assignment;
 completed request history advances only with exact active or retired evidence.
-Managed command dispatch passes through the same composed owner. Stable
-tab-specific handoffs and the complete ordinary request journey remain before
-milestone one is complete. Automatic capacity shrink remains in the everyday
+Managed command dispatch passes through the same composed owner. Configured
+ordinary requests now admit their first managed session and retain successful
+URL navigation history. Stable tab-specific handoffs remain before milestone
+one is complete; explicit tab lifecycle routing remains in everyday behavior. Automatic capacity shrink remains in the everyday
 lifecycle work. Installed acceptance remains pending.
 
 ## Current State

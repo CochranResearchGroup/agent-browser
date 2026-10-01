@@ -674,7 +674,9 @@ impl RuntimeHostRouter {
                     .sessions
                     .values()
                     .any(|session| session.name == session_name);
-                if !has_session {
+                if !has_session
+                    && !super::browser_session_remote_view::remote_view_settings_present()
+                {
                     return Ok(None);
                 }
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);

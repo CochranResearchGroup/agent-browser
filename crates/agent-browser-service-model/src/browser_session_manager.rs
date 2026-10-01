@@ -39,6 +39,12 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Whether ordinary browser requests may create sessions through this
+    /// owner. Local legacy adapters keep explicit session admission.
+    fn admits_ordinary_sessions(&self) -> bool {
+        false
+    }
+
     /// Refresh provider-owned candidates only when a browser launch needs
     /// placement. None retains the configured candidates for local adapters.
     fn remote_view_desktop_candidates(

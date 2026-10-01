@@ -556,16 +556,32 @@ where
     P: BrowserSessionPersistence,
     E: BrowserSessionEffects + ManagedBrowserCommandEffects,
 {
-    /// Route an ordinary browser command through an already active managed
-    /// session. `Ok(None)` means this lane has no manager-owned session and the
-    /// caller may continue through the legacy lane.
+    /// Admit ordinary requests through the configured Remote View owner, or
+    /// route to an existing managed session. Only unconfigured, unowned lanes
+    /// return None for legacy routing.
     pub(crate) fn execute_managed_command(
         &mut self,
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
-        let profile_id = optional_string(command, "profileId")
-            .or_else(|| optional_string(command, "runtimeProfile"));
+        let automatic = self.effects.admits_ordinary_sessions();
+        if automatic
+            && command.get("action").and_then(serde_json::Value::as_str) == Some("navigate")
+        {
+            required_string(command, "url")?;
+        }
+        let requested_profile = if automatic {
+            self.ordinary_profile_selector(command)?
+        } else {
+            optional_string(command, "profileId")
+                .or_else(|| optional_string(command, "runtimeProfile"))
+                .map(str::to_string)
+        };
+        let profile_id = requested_profile.as_deref();
+        let now_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
         let matching_ids = self
             .state
             .sessions
@@ -577,14 +593,24 @@ where
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
+            [] if automatic => {
+                let request = match profile_id {
+                    Some(profile_id) => {
+                        OpenBrowserSession::exact_profile(session_name, profile_id, now_ms)
+                    }
+                    None => OpenBrowserSession::disposable(
+                        session_name,
+                        optional_string(command, "disposablePolicyId")
+                            .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
+                        now_ms,
+                    ),
+                };
+                self.open(request)?.session_id
+            }
             [] => return Ok(None),
             [session_id] => session_id.clone(),
             _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
         };
-        let now_ms = command
-            .get("activityAtMs")
-            .and_then(serde_json::Value::as_u64)
-            .unwrap_or_else(current_unix_ms);
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
             .state
@@ -605,9 +631,62 @@ where
             .cloned()
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
         self.effects.begin_operation(&self.persisted_state)?;
-        self.effects
-            .execute_command(&browser, &tab, &session.id, &session.name, command)
-            .map(Some)
+        let mut response =
+            self.effects
+                .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if command.get("action").and_then(serde_json::Value::as_str) == Some("navigate")
+            && response.get("success").and_then(serde_json::Value::as_bool) == Some(true)
+        {
+            if let Some(url) = optional_string(command, "url") {
+                self.record_navigation(&session.id, url, now_ms)?;
+            }
+        }
+        if let Some(object) = response.as_object_mut() {
+            object.insert("browserSession".into(), serde_json::json!({
+                "sessionId": session.id, "sessionName": session.name, "profileId": session.profile_id,
+                "browserId": browser.id, "tabId": tab.id, "targetId": tab.target_id,
+            }));
+        }
+        Ok(Some(response))
+    }
+
+    /// Exact catalog selection; a raw profile path must already belong to a
+    /// catalog entry. Conflicting explicit selectors fail before admission.
+    fn ordinary_profile_selector(
+        &self,
+        command: &serde_json::Value,
+    ) -> Result<Option<String>, String> {
+        let mut selected: Option<String> = None;
+        for field in ["profileId", "runtimeProfile", "profile"] {
+            let Some(raw) = command.get(field) else {
+                continue;
+            };
+            let value = raw
+                .as_str()
+                .filter(|value| !value.is_empty())
+                .ok_or_else(|| "browser_session_profile_selector_invalid".to_string())?;
+            let matches = self
+                .catalog
+                .profiles
+                .values()
+                .filter(|profile| {
+                    profile.id == value
+                        || (field == "profile"
+                            && (profile.name == value || profile.user_data_dir == value))
+                })
+                .map(|profile| profile.id.clone())
+                .collect::<Vec<_>>();
+            let id = match matches.as_slice() {
+                [id] => id.clone(),
+                [] => return Err("browser_session_profile_selector_unknown".into()),
+                _ => return Err("browser_session_profile_selector_ambiguous".into()),
+            };
+            if selected.as_ref().is_some_and(|current| *current != id) {
+                return Err("browser_session_profile_selector_conflict".into());
+            }
+            selected = Some(id);
+        }
+        Ok(selected)
     }
 }
 

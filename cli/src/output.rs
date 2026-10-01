@@ -7806,6 +7806,9 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
+                                 Configured Remote View admits ordinary open requests as managed sessions.
+                                 Select an exact catalog profile with --runtime-profile, or use a disposable profile by default.
+                                 Managed JSON responses include browserSession identity; successful navigation records durable URL history.
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.
