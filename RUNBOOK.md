@@ -10,6 +10,37 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 416 | 2026-10-01
+
+P220 now has durable logical tab handoff records in the Browser Runtime
+aggregate. Resolution uses the retained tab's current session and browser,
+independent of selected-tab changes and provider route identity. Conflicting
+IDs, missing tabs and inconsistent joins cannot silently rebind. Old aggregate
+documents default to an empty handoff map. Three focused model tests passed for
+restart, browser reassociation, conflict and closed-target behavior. The 26
+Session Manager and five existing retention tests also passed, along with
+strict workspace Clippy, formatting, architecture and documentation links.
+
+Ordinary response publication, provider view issuance and authenticated resolver
+routing remain next; this model does not yet produce a working operator link.
+No installed or provider effects were performed. Memory disposition:
+`not_durable`; routine source behavior is retained in the owning contract.
+
+## Turn 415 | 2026-10-01
+
+At operator direction, P220 revision 27 clarifies the production-focused scope
+of the existing four-milestone delivery sequence. Reliability checks address
+duplicate launches, profile preservation, durable handoffs and exact owned
+cleanup. They do not create a separate security program. Additional hardening
+must answer a demonstrated defect or a named release requirement. The existing
+million-token ceiling and checkpoint rule remain in force; this documentation
+amendment does not start or reset a resumption meter.
+
+The current source checkpoint remains Turn 414. Stable tab-specific handoffs
+remain next, followed by everyday lifecycle behavior, installed Alice/Bob
+acceptance and candidate qualification. This turn changes documentation only.
+Memory disposition: `not_durable`; the decision is retained in the owning plan.
+
 ## Turn 414 | 2026-10-01
 
 Configured Remote View now selects the managed-session host before an ordinary

@@ -388,6 +388,8 @@ pub struct BrowserSessionState {
     pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
     pub remote_view_presentations: BTreeMap<String, RemoteViewPresentationRetention>,
+    /// Logical tab bindings survive provider route and desktop changes.
+    pub remote_view_tab_handoffs: BTreeMap<String, crate::RemoteViewTabHandoff>,
     pub sessions: BTreeMap<String, ManagedBrowserSession>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
@@ -406,6 +408,7 @@ impl Default for BrowserSessionState {
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
+            remote_view_tab_handoffs: BTreeMap::new(),
             sessions: BTreeMap::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),

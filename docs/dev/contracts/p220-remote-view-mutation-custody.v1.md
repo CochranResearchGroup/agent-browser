@@ -338,3 +338,22 @@ ordinary navigation appends exact URL history through host publication; failed
 navigation does not fabricate a successful history row. Repeated requests and
 restart reuse preserve the current managed tab. Explicit tab lifecycle commands
 and stable handoff resolution remain separate remaining work.
+
+
+## Logical tab handoff custody
+
+Browser Runtime's aggregate now includes `remoteViewTabHandoffs`, keyed by an
+opaque URL-safe ID and bound to logical session and tab IDs. Documents predating
+this field deserialize with an empty map. Retention reuses the existing binding
+for the same tab and rejects an ID already bound elsewhere without mutation.
+The host must publish retention through its existing aggregate transaction.
+
+Resolution joins the retained tab to its current session and browser, checking
+profile and active-session membership. It does not follow `currentTabId`, cache
+a desktop or provider route, navigate, launch a browser or replace a closed
+target. Missing and inconsistent joins return errors. Reassociation can move
+the logical tab to a replacement browser without changing the handoff ID.
+
+This pure model is not yet connected to ordinary response publication or the
+authenticated operator resolver. It issues no provider view and proves no
+installed presentation readiness. Those joins remain the next delivery work.
