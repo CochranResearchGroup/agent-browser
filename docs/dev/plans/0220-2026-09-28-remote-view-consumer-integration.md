@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 27
+Plan version: 28
 
 State: OPEN
 
@@ -105,11 +105,37 @@ remains pending across restart even when provider inventory shows an assignment;
 completed request history advances only with exact active or retired evidence.
 Managed command dispatch passes through the same composed owner. Configured
 ordinary requests now admit their first managed session and retain successful
-URL navigation history. Stable tab-specific handoffs remain before milestone
-one is complete; explicit tab lifecycle routing remains in everyday behavior. Automatic capacity shrink remains in the everyday
+URL navigation history. Durable tab-specific handoffs and authenticated
+top-level presentation opening are now implemented in source. Exact tab/window
+focus and installed viewing remain unproved; explicit tab lifecycle routing
+remains in everyday behavior. Automatic capacity shrink remains in the everyday
 lifecycle work. Installed acceptance remains pending.
 
 ## Current State
+
+### Revision 28: plain-English release path
+
+The current source has the Remote View consumer adapter, durable browser/session
+storage, launch custody, desktop-pool selection, ordinary socket request
+routing, and stable tab-bound handoffs. An authenticated dashboard action can
+open a retained provider view. These are source-qualified building blocks;
+they do not yet establish a working installed release candidate.
+
+The next delivery batch finishes ordinary service-queue routing through the
+same Session Manager, preserving command policy and profile selection. Then
+complete the remaining everyday behavior in outcome 2, prove the real installed
+Alice/Bob experience in outcome 3, and freeze and qualify the candidate in
+outcome 4. The installer must meet the existing exactly-once sudo first-install
+requirement and the doctor must diagnose the supported remote-operation path.
+Current execution evidence and unfinished source edits belong in RUNBOOK.
+
+Use “reliability” for the specific requirements below: prevent duplicate browser
+launches, preserve profiles and logical identity, reconnect the same handoff,
+and clean up the addressed browser and desktop references. Keep production
+work tied to those observed behaviors and release requirements. The four
+outcomes below are the single delivery sequence; derive implementation detail
+only for the next batch.
+
 
 ### October 1 provider reconciliation and amendment review
 
@@ -555,15 +581,15 @@ packet; do not maintain another infrastructure backlog beside these outcomes.
 Do not expand into generalized IAM, multi-tenancy, provider implementation,
 unrelated architecture extraction or repairs to unrelated historical tests.
 
-An additional one-million-token resumption is a ceiling, not a delivery estimate
-or an instruction to consume it. On explicit resumption, record its actual goal
-starting meter and stop with a restart checkpoint before the additional allowance
-is exhausted. Plan versions and packet boundaries do not reset cumulative
-accounting. Assess progress by
-completed user behavior and remaining release gates. Reuse passed checks when
-covered executable inputs have not changed; widen validation for an actual
-changed surface or demonstrated regression. Stop earlier when the authorized
-outcome is achieved or a genuine external dependency prevents further progress.
+The active resumption's instruction is to stop and checkpoint before the goal
+meter reaches 1,000,000 tokens. Use the actual cumulative goal meter, and leave
+room to write a restartable checkpoint with source custody, passed checks,
+unfinished behavior and the next bounded packet. This ceiling is neither a
+completion estimate nor a target to consume. Plan revisions and packet
+boundaries do not reset it. Finish earlier if the authorized outcome is proved.
+Reuse passed checks when covered executable inputs have not changed; widen
+validation for a changed surface or demonstrated regression. A checkpoint
+must preserve every unfinished release gate rather than redefine completion.
 
 ### Earlier delivery sequence and retained evidence
 
