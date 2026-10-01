@@ -290,6 +290,7 @@ impl BrowserSessionSqliteStore {
         )
     }
 
+    #[cfg(test)]
     pub(crate) fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
         if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
             return Err(format!(
@@ -303,6 +304,39 @@ impl BrowserSessionSqliteStore {
             BROWSER_SESSION_STATE_SCHEMA_V1,
             state,
         )
+    }
+
+    /// Publish only against the state loaded by this host. A concurrent
+    /// retention or session writer must not be erased by a stale host snapshot.
+    pub(crate) fn compare_and_save_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), String> {
+        if state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1 {
+            return Err("browser_session_state_schema_unsupported".into());
+        }
+        let transaction = self
+            .connection
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "browser_session_publication_begin_failed".to_string())?;
+        let current: BrowserSessionState = load_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+        )?;
+        if current != *expected {
+            return Err("browser_session_publication_conflict".into());
+        }
+        save_document(
+            &transaction,
+            SESSION_STATE_DOCUMENT,
+            BROWSER_SESSION_STATE_SCHEMA_V1,
+            state,
+        )?;
+        transaction
+            .commit()
+            .map_err(|_| "browser_session_publication_commit_failed".to_string())
     }
 
     pub(crate) fn retain_remote_view_presentation(
@@ -1153,6 +1187,37 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn sqlite_session_publication_rejects_stale_snapshot_without_overwriting_current_state() {
+        let directory = TempDirectory::new("session-publication");
+        let database_path = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&database_path).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let mut peer = BrowserSessionSqliteStore {
+            connection: Connection::open(&database_path).unwrap(),
+        };
+        let initial = BrowserSessionState::default();
+        store.save_session_state(&initial).unwrap();
+        let mut current = initial.clone();
+        current.next_session_sequence = 7;
+        store
+            .compare_and_save_session_state(&initial, &current)
+            .unwrap();
+        let mut stale = initial.clone();
+        stale.next_session_sequence = 99;
+        assert_eq!(
+            peer.compare_and_save_session_state(&initial, &stale)
+                .unwrap_err(),
+            "browser_session_publication_conflict"
+        );
+        assert_eq!(store.load_session_state().unwrap(), current);
+        store
+            .compare_and_save_session_state(&current, &stale)
+            .unwrap();
+        assert_eq!(store.load_session_state().unwrap(), stale);
     }
 
     #[test]

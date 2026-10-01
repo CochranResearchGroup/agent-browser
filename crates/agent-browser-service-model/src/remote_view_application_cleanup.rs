@@ -48,6 +48,19 @@ pub enum RemoteViewApplicationCleanupError {
 
 /// Constructible only by the evidence gate. Neither clonable nor deserializable;
 /// raw wire booleans are not release admission.
+///
+/// Persisted wire acknowledgements cannot restore release admission:
+/// ```compile_fail
+/// use agent_browser_service_model::RemoteViewApplicationCleanupPermit;
+/// let _: RemoteViewApplicationCleanupPermit = serde_json::from_str("{}").unwrap();
+/// ```
+/// A consumed permit cannot be duplicated for another release:
+/// ```compile_fail
+/// use agent_browser_service_model::RemoteViewApplicationCleanupPermit;
+/// fn duplicate(permit: RemoteViewApplicationCleanupPermit) {
+///     let _ = permit.clone();
+/// }
+/// ```
 #[derive(Debug)]
 pub struct RemoteViewApplicationCleanupPermit {
     target: RemoteViewApplicationReleaseTarget,

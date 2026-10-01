@@ -79,6 +79,16 @@ strict workspace Clippy, format and diff checks pass. Runtime collection,
 transactional release fencing, physical absence readback and installed acceptance
 remain pending; this source gate grants no runtime effect authority.
 
+The host-publication increment replaces unconditional ordinary host saves with
+a SQLite aggregate comparison under `BEGIN IMMEDIATE`. A stale host cannot erase
+newer session or retained presentation state. The host advances its persisted
+baseline only after commit. The unconditional SQLite helper is test-only.
+The compile check and initial stale-state and host restart tests passed; the
+strengthened two-connection test and final strict workspace Clippy passed.
+Architecture, format, documentation links and diff checks pass.
+The cleanup permit also has two passing compile-fail doctests preventing cloning
+and deserialization. Pre-launch custody and release-claim fencing remain pending.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

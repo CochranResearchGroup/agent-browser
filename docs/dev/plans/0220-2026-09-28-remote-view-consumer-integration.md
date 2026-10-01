@@ -54,8 +54,10 @@ stop` for those browsers.
 Cleanup evidence checkpoint: the external release adapter now requires a private
 permit generated from current Browser Runtime references and complete, clear
 scoped recovery, foreground and cleanup inventories. The permit binds the full
-release target. Runtime collection, association fencing, transactional final
-release and physical residue readback remain unimplemented. This source-only
+release target. The ordinary host now compares its last persisted aggregate against current
+SQLite state before publishing, preventing stale snapshot replacement. Runtime
+collection, pre-launch association fencing, transactional final release and
+physical residue readback remain unimplemented. This source-only
 increment does not qualify installed cleanup or the broader Alice/Bob acceptance.
 
 ## Current State

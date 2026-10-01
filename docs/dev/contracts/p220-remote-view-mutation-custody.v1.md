@@ -61,3 +61,29 @@ and one claim winner across two connections. These prove source/storage
 behavior only. Network transport, actual consumer integration, complete
 runtime cleanup collection, transactional release admission and installed
 acceptance remain pending.
+
+
+## Runtime release admission integration seam
+
+`BrowserSessionSqliteStore::mutate_session_state` already loads and saves retained
+presentation changes under `BEGIN IMMEDIATE`. Ordinary
+`BrowserSessionPersistence::compare_and_save_session_state` now compares the
+host's last persisted aggregate with current SQLite state under `BEGIN IMMEDIATE`
+before publishing its entire in-memory snapshot. A stale host receives
+`browser_session_publication_conflict` and cannot overwrite newer session or
+retention state. This comparison does not inspect a separate release claim, so
+adding a release claim only to the presentation path would still leave ordinary
+browser association publication able to race it. Launch effects also precede publication
+of their resulting browser records, so a save-time check alone is insufficient.
+
+The integration must durably admit a generation-bound launch intent before the
+browser effect, include those intents in cleanup evidence, and compare release
+admission in every association writer. Final release must claim custody in the
+same transaction that loads current session and obligation state. It must then
+retain that fence across provider transport and ambiguous outcomes. A confirmed
+exact retirement can terminalize the claim; an interrupted send cannot silently
+reopen the assignment. The host must refresh current durable state before new effects and check
+release claims as well as the session aggregate. Aggregate comparison now rejects
+stale whole-state publication, but does not yet fence pre-publication effects
+or separate release claims. These are pending requirements, not behavior provided by the
+pure permit or existing mutation store.

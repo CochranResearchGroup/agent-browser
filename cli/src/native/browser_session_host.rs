@@ -91,7 +91,11 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 
 pub(crate) trait BrowserSessionPersistence {
     fn load_session_state(&self) -> Result<BrowserSessionState, String>;
-    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String>;
+    fn compare_and_save_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), String>;
     fn load_or_import_profile_catalog(
         &self,
         legacy_service_state_path: &Path,
@@ -104,8 +108,12 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
         BrowserSessionSqliteStore::load_session_state(self)
     }
 
-    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
-        BrowserSessionSqliteStore::save_session_state(self, state)
+    fn compare_and_save_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), String> {
+        BrowserSessionSqliteStore::compare_and_save_session_state(self, expected, state)
     }
 
     fn load_or_import_profile_catalog(
@@ -126,7 +134,14 @@ impl BrowserSessionPersistence for super::browser_session_store::BrowserSessionJ
         self.load_session_state()
     }
 
-    fn save_session_state(&self, state: &BrowserSessionState) -> Result<(), String> {
+    fn compare_and_save_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), String> {
+        if self.load_session_state()? != *expected {
+            return Err("browser_session_publication_conflict".into());
+        }
         self.save_session_state(state)
     }
 
@@ -155,6 +170,7 @@ pub(crate) struct BrowserSessionHost<P, E> {
     effects: E,
     catalog: BrowserProfileCatalog,
     state: BrowserSessionState,
+    persisted_state: BrowserSessionState,
     manager_config: BrowserSessionManagerConfig,
     exact_url_history_maximum_bytes: u64,
 }
@@ -190,6 +206,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             persistence,
             effects,
             catalog: catalog_load.catalog,
+            persisted_state: state.clone(),
             state,
             manager_config: BrowserSessionManagerConfig {
                 session_idle_timeout_ms: config.session_idle_timeout_ms,
@@ -443,8 +460,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(())
     }
 
-    fn commit_state(&self) -> Result<(), String> {
-        self.persistence.save_session_state(&self.state)
+    fn commit_state(&mut self) -> Result<(), String> {
+        self.persistence
+            .compare_and_save_session_state(&self.persisted_state, &self.state)?;
+        self.persisted_state = self.state.clone();
+        Ok(())
     }
 
     fn open_request_from_command(
