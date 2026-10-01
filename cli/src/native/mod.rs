@@ -32,6 +32,8 @@ pub mod browser_locator;
 pub mod browser_navigation;
 #[allow(dead_code)]
 pub mod browser_session_authority;
+#[cfg(test)]
+mod browser_session_consumer_tests;
 #[allow(dead_code)]
 pub(crate) mod browser_session_host;
 #[allow(dead_code)]

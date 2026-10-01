@@ -77,6 +77,15 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
 }
 
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
+    fn unpublished_launch_records(
+        &mut self,
+    ) -> Result<Vec<BrowserLaunchCustodyRecord>, LaunchCustodyStoreError> {
+        Ok(ledger(self.remote_view_mutation_connection())?
+            .records
+            .into_values()
+            .filter(|record| !record.published)
+            .collect())
+    }
     fn admit_launch_intent(
         &mut self,
         intent: &BrowserLaunchIntent,

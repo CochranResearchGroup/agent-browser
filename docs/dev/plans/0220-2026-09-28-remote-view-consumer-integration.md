@@ -93,8 +93,12 @@ before the failure journal. Runtime browser-sequence overflow is checked before
 process effects. The ordinary host now accepts an observed adapter intent for
 atomic custody-and-session publication, advances its baseline and acknowledges
 only after success. Generic publication cannot bypass an unpublished matching
-launch. Consumer driver admission/intent retention and installed acceptance
-remain pending.
+launch. The ordinary consumer effect composition now joins host baseline,
+coordinator admission, fresh process ingress and publication intent. Real SQLite
+composition tests prove first open, healthy reuse, co-location, restart reuse and
+failure without duplicate process effects. Default live transport and runtime
+bootstrap, managed command dispatch and stable tab-specific handoffs still need
+connection before milestone one is complete. Installed acceptance remains pending.
 
 ## Current State
 
@@ -475,8 +479,9 @@ The operator approved this amendment on October 1 after the source checkpoint
 at `1483b504`. This sequence governs remaining execution. Earlier S0 through S3
 sections below preserve implementation history and supporting requirements;
 they are not competing queues of new work. The original acceptance criteria,
-P219 dispositions and ownership boundaries remain in force. Implementation
-remains paused at the requested token checkpoint. This amendment authorizes
+P219 dispositions and ownership boundaries remain in force. At amendment time, implementation
+was paused at the requested token checkpoint. Subsequent explicit resumption is
+recorded in RUNBOOK. This amendment authorizes
 planning changes only; it does not resume the goal or authorize installed effects.
 
 The next explicit resumption follows four outcomes in order:

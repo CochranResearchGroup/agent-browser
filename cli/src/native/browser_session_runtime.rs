@@ -127,6 +127,21 @@ impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEff
     }
 }
 
+impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
+    for BrowserSessionEffectAdapter<D>
+{
+    fn launch(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        intent: &BrowserLaunchIntent,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        self.runtime
+            .launch(profile, intent, environment, observation)
+    }
+}
+
 impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdapter<D> {
     fn begin_operation(
         &mut self,

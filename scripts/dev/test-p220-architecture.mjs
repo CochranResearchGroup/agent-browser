@@ -13,6 +13,7 @@ const paths = {
   applicationRecords: 'crates/agent-browser-service-model/src/remote_view_application_records.rs',
   applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
   browserLaunch: 'crates/agent-browser-service-model/src/remote_view_browser_launch.rs',
+  sessionEffects: 'crates/agent-browser-service-model/src/remote_view_session_effects.rs',
   applicationCleanup: 'crates/agent-browser-service-model/src/remote_view_application_cleanup.rs',
   applicationStore: 'cli/src/native/remote_view_application_store.rs',
   launchCustodyStore: 'cli/src/native/browser_launch_custody_store.rs',
@@ -40,7 +41,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.browserLaunch, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.browserLaunch, source.sessionEffects, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
@@ -181,6 +182,12 @@ function check(root) {
       source.launchCustodyStore.includes('return Err(LaunchCustodyStoreError::LaunchPending)'),
     'ordinary host must publish observed launch custody atomically before acknowledgement',
   );
+  requireCondition(
+    source.sessionEffects.includes('launch_remote_view_browser(') &&
+      source.sessionEffects.includes('unpublished_launch_records()') &&
+      source.sessionEffects.includes('fn pending_launch_intent('),
+    'ordinary consumer effects must join durable launch admission and retained publication intent',
+  );
   return failures;
 }
 
@@ -215,6 +222,7 @@ function selfTest() {
       [paths.launchCustody, '\npub struct ProviderFreeHost;\n', 'provider-private launch custody'],
       [paths.launchCustodyStore, '\nstruct RouteKeeperAuthority;\n', 'retired launch custody authority'],
       [paths.browserLaunch, '\npub struct ProviderFreeHost;\n', 'provider-private launch coordinator'],
+      [paths.sessionEffects, '\npub struct ProviderFreeHost;\n', 'provider-private session effects'],
       [paths.applicationStore, '\nstruct RouteKeeperAuthority;\n', 'retired application store authority'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
@@ -232,6 +240,7 @@ function selfTest() {
       [paths.runtime, '.into_environment(observation, &intent.assignment)'],
       [paths.chrome, 'command.envs(environment)'],
       [paths.host, 'self.publish_launch_intent(intent, expected, state)'],
+      [paths.sessionEffects, 'launch_remote_view_browser('],
     ]) {
       copyFixture(root);
       writeFileSync(join(root, path), read(root, path).replaceAll(needle, 'removed_boundary'));

@@ -320,3 +320,6 @@ pub use terminal_outcome::{
     ServiceTerminalOutcome, ServiceTerminalPhase, ServiceTerminalState,
     SERVICE_TERMINAL_OUTCOME_SCHEMA_VERSION,
 };
+
+mod remote_view_session_effects;
+pub use remote_view_session_effects::RemoteViewSessionEffects;

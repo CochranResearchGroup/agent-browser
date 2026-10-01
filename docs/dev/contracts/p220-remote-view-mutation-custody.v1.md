@@ -223,3 +223,38 @@ runtime still supplies no intent; a consumer driver must implement durable
 launch admission, retain ambiguous outcomes, expose its observed intent and
 prevent further effects until publication or exact reconciliation. Default
 methods preserve the ordinary local path and do not qualify external mode.
+
+
+## Ordinary consumer effect composition
+
+`RemoteViewSessionEffects` composes the existing browser effect owner, public
+application adapter and durable launch store. It accepts transient exact active
+assignment context by desktop UUID, validates generation at selection, and uses
+the host's durable baseline for coordinated launch admission. It preserves the
+selected descriptive label for the ordinary manager's full-value comparison
+after custody has qualified actual UUID and lifecycle generation. Labels do not
+provide identity or placement authority.
+
+The store exposes unresolved launch readback. Constructor and operation entry
+reject unresolved records, including unknown process outcomes after restart.
+Within an operation, the adapter retains its exact intent before invoking the
+coordinator. Only an observed intent is exposed for host publication; unknown
+outcomes cannot become a fabricated browser record. Failure retains the intent
+and blocks later effects. Host acknowledgement clears observed intent only
+after atomic publication. A new intent cannot bypass an unresolved durable
+claim. Other ordinary browser and profile effects remain owned by the underlying
+Agent Browser implementation.
+
+Three provider-free composition tests run actual host, Session Manager,
+coordinator and real SQLite with injectable transport/process effects. They
+prove healthy reuse, two profiles on one assignment, restart reuse, unknown
+process outcome, competing publication and stale admission baseline. In every
+failed-effect case, retry and restart do not start another process. The tests
+do not launch Chrome or exercise live Remote View transport.
+
+Default runtime construction and live transport are not connected to this
+adapter yet. Stable tab-specific handoff materialization and managed raw-command
+dispatch through the composed owner also remain in milestone one. Replacement
+of a dead browser must reconcile and durably detach its old profile association
+before fresh admission; this composition does not implement that milestone-two
+recovery transition or authorize clearing an unresolved claim.

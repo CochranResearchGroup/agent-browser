@@ -155,6 +155,13 @@ pub enum LaunchCustodyAdmission {
 /// current session state and commits session state plus custody together.
 /// Implementations must retain unknown outcomes for explicit reconciliation.
 pub trait BrowserLaunchCustodyStore {
+    /// Read unresolved process claims before accepting effects after restart.
+    /// A store without this readback cannot construct a consumer session adapter.
+    fn unpublished_launch_records(
+        &mut self,
+    ) -> Result<Vec<BrowserLaunchCustodyRecord>, LaunchCustodyStoreError> {
+        Err(LaunchCustodyStoreError::Unavailable)
+    }
     fn admit_launch_intent(
         &mut self,
         intent: &BrowserLaunchIntent,

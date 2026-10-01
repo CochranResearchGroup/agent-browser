@@ -1,7 +1,7 @@
 # Roadmap
 
 Date: 2026-05-26
-Updated: 2026-09-28
+Updated: 2026-10-01
 
 This file is the top-level planning index for durable agent-browser lanes.
 Detailed research notes and validation reports remain under `docs/dev/notes/`;
@@ -30,14 +30,15 @@ field evidence and acceptance records into the same model.
 State: OPEN
 
 October 1 reconciliation: Plan 0220 v26 consumes accepted Remote View RV-011
-revision 3; issues #62 and #146 are closed. Implementation remains paused.
-Next is consumer launch admission and intent retention connected to the atomic
-host publication path. See RUNBOOK.md for current custody and evidence limits.
+revision 3; issues #62 and #146 are closed. Implementation explicitly resumed
+under v26. The host/manager/consumer composition now joins launch admission and
+atomic publication. Next are live transport and runtime bootstrap, normal command
+dispatch and tab-specific handoffs. See RUNBOOK.md for custody and evidence limits.
 
 The remaining delivery sequence is normal browser-request integration, everyday
 browser behavior, installed Alice/Bob validation and release-candidate
 qualification. Checkpoint each outcome, reuse unchanged validation and avoid
-unrelated infrastructure expansion. Implementation remains paused; candidate
+unrelated infrastructure expansion. Milestone one is in progress; candidate
 preparation and formal release retain their separate authority boundaries.
 
 Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md),

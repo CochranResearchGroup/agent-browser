@@ -10,6 +10,35 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 410 | 2026-10-01
+
+The operator explicitly resumed P220 v26 with a new goal meter starting at zero
+and requested a checkpoint before it reaches one million. Startup verified the
+clean published amendment checkpoint `682872b0`. Milestone one now composes the
+ordinary host and Session Manager with public transport, durable launch
+admission, private process inputs and atomic session publication. The consumer
+effect adapter retains exact intent and exposes it only after observation;
+unresolved records block restart effects. Process/runtime delegation stays with
+Agent Browser, and selected descriptive labels do not become placement identity.
+
+Three provider-free real-SQLite composition tests pass: open/reuse/co-location
+and restart reuse; unknown process or competing publication without retry;
+and stale admission baseline before provider read or process effect. All 26
+tests in the focused Session Manager test binary pass. Strict workspace Clippy,
+format, self-testing architecture guard, documentation links and diff checks
+pass. Cargo admission briefly waited for memory pressure and then completed;
+no failed test or automatic effect retry occurred. No Chrome, provider, install
+or production effect was executed.
+
+Milestone one remains incomplete until default live transport/runtime bootstrap,
+managed command dispatch and stable tab-specific handoffs are connected. Dead
+browser replacement still needs durable old-association reconciliation before
+fresh admission in milestone two. The current tests prove synthetic composition,
+not installed viewing, focus or recovery. Advisory Graphiti discovery returned
+three old July route facts and supplied no useful current recall. Memory closeout
+is not_durable: this increment is recorded in the owning contract and runbook;
+no memory write was performed.
+
 ## Turn 409 | 2026-10-01
 
 The operator requested a planning amendment while the implementation goal remains
