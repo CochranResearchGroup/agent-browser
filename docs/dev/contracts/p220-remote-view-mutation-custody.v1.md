@@ -82,8 +82,11 @@ admission in every association writer. Final release must claim custody in the
 same transaction that loads current session and obligation state. It must then
 retain that fence across provider transport and ambiguous outcomes. A confirmed
 exact retirement can terminalize the claim; an interrupted send cannot silently
-reopen the assignment. The host must refresh current durable state before new effects and check
-release claims as well as the session aggregate. Aggregate comparison now rejects
+reopen the assignment. The host now compares current durable session state with its baseline before
+constructing each ordinary Session Manager operation. A detected competing writer
+blocks that operation. This read does not hold a launch reservation and therefore
+does not close the read-to-effect race. The host must still admit durable intent
+and check release claims as well as the session aggregate. Aggregate comparison now rejects
 stale whole-state publication, but does not yet fence pre-publication effects
 or separate release claims. These are pending requirements, not behavior provided by the
 pure permit or existing mutation store.

@@ -220,7 +220,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
-        let result = self.manager().open(request)?;
+        let result = self.manager()?.open(request)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -231,7 +231,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserTabAcquisition, String> {
         let result = self
-            .manager()
+            .manager()?
             .tab_for_navigation(session_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
@@ -244,7 +244,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         visited_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
         let result = self
-            .manager()
+            .manager()?
             .record_navigation(session_id, url, visited_at_ms)?;
         self.compact_navigation_history()?;
         self.commit_state()?;
@@ -257,7 +257,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         url: &str,
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserNavigationRecord, String> {
-        let result = self.manager().navigate(session_id, url, activity_at_ms)?;
+        let result = self.manager()?.navigate(session_id, url, activity_at_ms)?;
         self.compact_navigation_history()?;
         self.commit_state()?;
         Ok(result)
@@ -270,7 +270,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::FocusBrowserResult, String> {
         let result = self
-            .manager()
+            .manager()?
             .focus_browser(browser_id, target_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
@@ -281,7 +281,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         session_id: &str,
         activity_at_ms: u64,
     ) -> Result<agent_browser_service_model::BrowserTabAcquisition, String> {
-        let result = self.manager().new_tab(session_id, activity_at_ms)?;
+        let result = self.manager()?.new_tab(session_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -292,7 +292,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         activity_at_ms: u64,
     ) -> Result<CloseBrowserTabResult, String> {
         let result = self
-            .manager()
+            .manager()?
             .close_current_tab(session_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
@@ -305,14 +305,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         ended_at_ms: u64,
     ) -> Result<CloseBrowserSessionResult, String> {
         let result = self
-            .manager()
+            .manager()?
             .close_session(session_id, reason, ended_at_ms)?;
         self.commit_state()?;
         Ok(result)
     }
 
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
-        let result = self.manager().reap(now_ms)?;
+        let result = self.manager()?.reap(now_ms)?;
         self.commit_state()?;
         Ok(result)
     }
@@ -445,13 +445,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         }
     }
 
-    fn manager(&mut self) -> BrowserSessionManager<'_, E> {
-        BrowserSessionManager::new(
+    fn manager(&mut self) -> Result<BrowserSessionManager<'_, E>, String> {
+        if self.persistence.load_session_state()? != self.persisted_state {
+            return Err("browser_session_publication_conflict".into());
+        }
+        Ok(BrowserSessionManager::new(
             &mut self.state,
             &self.catalog,
             &mut self.effects,
             self.manager_config.clone(),
-        )
+        ))
     }
 
     fn compact_navigation_history(&mut self) -> Result<(), String> {
@@ -876,5 +879,21 @@ mod tests {
         assert_eq!(response["data"]["sessionId"], first.session_id);
         assert_eq!(response["data"]["disposition"], "browser_closed");
         assert!(restarted.state().sessions.is_empty());
+
+        // A different persistence owner advances state after this host loaded it.
+        // Refuse the next manager operation before it can launch a browser.
+        let peer = BrowserSessionJsonStore::new(&directory.0);
+        let mut newer = peer.load_session_state().unwrap();
+        newer.next_session_sequence += 1;
+        peer.save_session_state(&newer).unwrap();
+        let before = restarted.state().clone();
+        assert_eq!(
+            restarted
+                .open(OpenBrowserSession::exact_profile("alice", "work", 4_000))
+                .unwrap_err(),
+            "browser_session_publication_conflict"
+        );
+        assert_eq!(*restarted.state(), before);
+        assert_eq!(peer.load_session_state().unwrap(), newer);
     }
 }

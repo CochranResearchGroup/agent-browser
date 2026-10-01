@@ -89,6 +89,15 @@ Architecture, format, documentation links and diff checks pass.
 The cleanup permit also has two passing compile-fail doctests preventing cloning
 and deserialization. Pre-launch custody and release-claim fencing remain pending.
 
+The ordinary host now checks its durable aggregate baseline before each Session
+Manager operation. A competing writer makes the next operation return a
+publication conflict before mutating local session state. The existing restart
+fixture now advances a peer persistence owner, checks rejection of a fresh open,
+and verifies both local and durable state remain intact. That focused host test,
+strict workspace Clippy, architecture and documentation checks pass. This check
+detects existing drift; durable intent is still required to close the concurrent
+read-to-effect window. It is not final release admission or installed proof.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146
