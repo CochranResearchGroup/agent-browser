@@ -677,39 +677,15 @@ impl RuntimeHostRouter {
         session_name: &str,
         command: Value,
     ) -> Option<Value> {
-        let browser_sessions = self.browser_sessions.clone();
-        let session_name = session_name.to_string();
-        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
-            let mut host = browser_sessions
-                .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if host.is_none() {
-                let store =
-                    super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?;
-                let state = store.load_session_state()?;
-                let has_session = state
-                    .sessions
-                    .values()
-                    .any(|session| session.name == session_name);
-                if !has_session
-                    && !super::browser_session_remote_view::remote_view_settings_present()
-                {
-                    return Ok(None);
-                }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
-            }
-            host.as_mut()
-                .ok_or_else(|| "browser_session_host_missing".to_string())?
-                .execute_managed_command(&session_name, &command)
-        })
+        match super::browser_session_host::execute_shared_managed_command(
+            self.browser_sessions.clone(),
+            session_name.to_string(),
+            command,
+        )
         .await
         {
-            Ok(Ok(response)) => response,
-            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
-            Err(error) => Some(serde_json::json!({
-                "success": false,
-                "error": format!("browser_session_host_join_failed:{error}"),
-            })),
+            Ok(response) => response,
+            Err(error) => Some(serde_json::json!({ "success":false, "error":error })),
         }
     }
 
@@ -1180,8 +1156,7 @@ async fn handle_connection<S>(
                     continue;
                 }
                 if action.as_deref().is_some_and(|action| {
-                    !super::actions::action_skips_browser_launch(action)
-                        && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+                    super::browser_session_host::ordinary_managed_action(action)
                 }) {
                     if let Some(response) = router
                         .try_handle_managed_browser_command(&lane_session, cmd.clone())

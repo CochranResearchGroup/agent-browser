@@ -7807,6 +7807,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
                                  Configured Remote View admits ordinary open requests as managed sessions.
+                                 Socket and queued commands share the managed owner; queued policy and confirmation still apply.
                                  Select an exact catalog profile with --runtime-profile, or use a disposable profile by default.
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.

@@ -20,7 +20,7 @@ lanes:
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Plan v26 milestone one active; HTTP transport, demand-driven pool acquisition and ordinary request admission are connected through the composed host in RUNBOOK Turn 414; stable tab-specific handoffs remain before milestone one completion; everyday lifecycle, installed acceptance and candidate qualification remain open; installed effects remain separately gated
+    blocker: Plan v28 milestone one active; ordinary socket and queued request dispatch plus stable handoff and authenticated presentation opening are source-connected in RUNBOOK Turn 420; upstream HTTP/MCP normalization and executable development-candidate qualification remain before milestone one completion; everyday lifecycle, installed Alice/Bob acceptance and candidate qualification remain open
     updated_at: 2026-10-01
   - id: P204
     product_lane: PL-PLATFORM

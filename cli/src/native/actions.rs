@@ -591,6 +591,26 @@ async fn execute_command_after_navigation_admission(
             }
         }
     }
+    let managed_session_name =
+        super::browser_session_host::managed_command_session_name(&state.session_id, cmd);
+    let managed_request = if !state.browser_session_manager_owned {
+        if let Some(host) = state.managed_session_host.clone() {
+            match super::browser_session_host::shared_managed_request_selected(
+                host,
+                managed_session_name.clone(),
+                cmd.clone(),
+            )
+            .await
+            {
+                Ok(selected) => selected,
+                Err(error) => return error_response(&id, &error),
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
     if !state.browser_session_manager_owned
         && crate::runtime_owner_transfer::action_requires_runtime_admission(action)
     {
@@ -605,6 +625,7 @@ async fn execute_command_after_navigation_admission(
         }
     }
     if !state.browser_session_manager_owned
+        && !managed_request
         && crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
     {
         if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
@@ -698,6 +719,22 @@ async fn execute_command_after_navigation_admission(
                 );
             }
         }
+    }
+    if managed_request {
+        let Some(host) = state.managed_session_host.clone() else {
+            return error_response(&id, "browser_session_managed_route_changed");
+        };
+        return match super::browser_session_host::execute_shared_managed_command(
+            host,
+            managed_session_name,
+            cmd.clone(),
+        )
+        .await
+        {
+            Ok(Some(response)) => response,
+            Ok(None) => error_response(&id, "browser_session_managed_route_changed"),
+            Err(error) => error_response(&id, &error),
+        };
     }
     if action == "dependent_batch" {
         let action_started = std::time::Instant::now();

@@ -1980,7 +1980,16 @@ async fn run_worker(
                             let _ = request.response_tx.send(response);
                             continue;
                         }
-                        match scheduler_profile_lease_gate(&mut request, &state.session_id) {
+                        let managed_selection = if let Some(host) = state.managed_session_host.clone() {
+                            let name = super::browser_session_host::managed_command_session_name(&state.session_id, &request.command);
+                            super::browser_session_host::shared_managed_request_selected(host, name, request.command.clone()).await
+                        } else { Ok(false) };
+                        let lease_decision = match managed_selection {
+                            Ok(true) => SchedulerLeaseDecision::Ready,
+                            Ok(false) => scheduler_profile_lease_gate(&mut request, &state.session_id),
+                            Err(error) => SchedulerLeaseDecision::Reject(error),
+                        };
+                        match lease_decision {
                             SchedulerLeaseDecision::Ready => {
                                 if request.profile_lease_wait_started_at.is_some() {
                                     record_profile_lease_wait_ended_event(&request, "ready", None);

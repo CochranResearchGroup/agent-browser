@@ -31,6 +31,93 @@ pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
 pub(crate) type SharedBrowserSessionHost =
     std::sync::Arc<std::sync::Mutex<Option<DefaultBrowserSessionHost>>>;
 
+/// One route definition shared by sockets, scheduler admission and execution.
+pub(crate) fn ordinary_managed_action(action: &str) -> bool {
+    !super::actions::action_skips_browser_launch(action)
+        && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+}
+
+pub(crate) fn managed_command_session_name(lane: &str, command: &serde_json::Value) -> String {
+    optional_string(command, "sessionName")
+        .unwrap_or(lane)
+        .to_string()
+}
+
+fn matching_ordinary_session(
+    state: &BrowserSessionState,
+    name: &str,
+    command: &serde_json::Value,
+) -> bool {
+    let profile = optional_string(command, "profileId")
+        .or_else(|| optional_string(command, "runtimeProfile"));
+    state.sessions.values().any(|session| {
+        session.name == name && profile.is_none_or(|profile| session.profile_id == profile)
+    })
+}
+
+/// Metadata-only selection. No host construction, provider read or browser launch.
+pub(crate) async fn shared_managed_request_selected(
+    shared: SharedBrowserSessionHost,
+    name: String,
+    command: serde_json::Value,
+) -> Result<bool, String> {
+    let action = command
+        .get("action")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or("");
+    if !ordinary_managed_action(action) {
+        return Ok(false);
+    }
+    tokio::task::spawn_blocking(move || {
+        let host = shared
+            .lock()
+            .map_err(|_| "browser_session_host_lock_poisoned")?;
+        if let Some(host) = host.as_ref() {
+            return Ok(host.effects.admits_ordinary_sessions()
+                || matching_ordinary_session(host.state(), &name, &command));
+        }
+        if super::browser_session_remote_view::remote_view_settings_present() {
+            return Ok(true);
+        }
+        Ok(matching_ordinary_session(
+            &BrowserSessionSqliteStore::default_sqlite()?.load_session_state()?,
+            &name,
+            &command,
+        ))
+    })
+    .await
+    .map_err(|_| "browser_session_host_join_failed")?
+}
+
+pub(crate) async fn execute_shared_managed_command(
+    shared: SharedBrowserSessionHost,
+    name: String,
+    command: serde_json::Value,
+) -> Result<Option<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut host = shared
+            .lock()
+            .map_err(|_| "browser_session_host_lock_poisoned")?;
+        if host.is_none() {
+            if !super::browser_session_remote_view::remote_view_settings_present()
+                && !matching_ordinary_session(
+                    &BrowserSessionSqliteStore::default_sqlite()?.load_session_state()?,
+                    &name,
+                    &command,
+                )
+            {
+                return Ok(None);
+            }
+            *host = Some(load_default_browser_session_host()?);
+        }
+        host.as_mut()
+            .ok_or("browser_session_host_missing")?
+            .execute_managed_command(&name, &command)
+    })
+    .await
+    .map_err(|_| "browser_session_host_join_failed")?
+}
+
 /// Both socket dispatch and queued service resolution borrow the same owner.
 pub(crate) async fn resolve_shared_handoff_command(
     shared: SharedBrowserSessionHost,

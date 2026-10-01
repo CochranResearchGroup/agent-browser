@@ -331,13 +331,29 @@ Manager, using an exact catalog profile or the default disposable policy.
 Catalog identity, name or recorded directory resolves an explicit selector;
 conflicting, malformed and unknown selectors fail before admission.
 
+Sockets and the control-plane queue borrow the same registered host. Metadata-only
+selection precedes legacy scheduler profile acquisition, so selected managed
+requests retain their original profile selector. The action executor keeps global
+runtime admission, action policy and confirmation checks. Selected requests use
+Session Manager admission instead of the legacy default-profile owner claim;
+a changed route returns an explicit error without falling back to local launch.
+The internal browser worker is manager-owned and does not recursively select
+this host. Explicit tab/window creation and switching, and no-launch actions
+such as close, still require their everyday-lifecycle join.
+
+The focused native queue regression rejects an unknown profile through the
+Session Manager, preserves the aggregate and proves policy and confirmation
+precede dispatch. Existing actual-host composition tests prove first launch
+with injected process effects. A successful first browser request through the
+installed HTTP/MCP service remains unproved.
+
 The native action executor still receives the complete command, preserving
 navigation headers, wait policy and request identity. Responses add a separate
 `browserSession` identity object without rewriting the action's data. Successful
 ordinary navigation appends exact URL history through host publication; failed
 navigation does not fabricate a successful history row. Repeated requests and
 restart reuse preserve the current managed tab. Explicit tab lifecycle commands
-and stable handoff resolution remain separate remaining work.
+remain separate remaining work; retained handoff resolution is described below.
 
 
 ## Logical tab handoff custody

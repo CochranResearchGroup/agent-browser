@@ -878,4 +878,33 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
         .await
         .unwrap()
         .unwrap();
+    let cold = serde_json::json!({
+        "id":"queued-cold", "action":"snapshot", "runtimeProfile":"missing-profile",
+        "sessionName":"ColdService", "serviceName":"synthetic-service", "agentName":"fixture", "taskName":"selector-check",
+    });
+    state.confirm_actions = Some(crate::native::policy::ConfirmActions {
+        categories: std::collections::HashSet::from(["snapshot".to_string()]),
+    });
+    let confirmation = crate::native::actions::execute_command(&cold, &mut state).await;
+    assert_eq!(confirmation["data"]["confirmation_required"], true);
+    state.confirm_actions = None;
+    let policy_path = fixture.root.join("deny-snapshot.json");
+    std::fs::write(&policy_path, r#"{"default":"allow","deny":["snapshot"]}"#).unwrap();
+    state.policy =
+        Some(crate::native::policy::ActionPolicy::load(policy_path.to_str().unwrap()).unwrap());
+    let denied = crate::native::actions::execute_command(&cold, &mut state).await;
+    assert_eq!(denied["success"], false);
+    assert!(denied["error"]
+        .as_str()
+        .unwrap()
+        .contains("denied by policy"));
+    state.policy = None;
+    let queue = crate::native::control_plane::ControlPlaneWorker::start(state);
+    let rejected = queue.submit(cold).await;
+    assert_eq!(
+        rejected["error"], "browser_session_profile_selector_unknown",
+        "{rejected}"
+    );
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), after);
+    queue.shutdown().await;
 }

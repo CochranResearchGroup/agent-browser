@@ -10,6 +10,36 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 420 | 2026-10-01
+
+Plan v28 now states the plain-English production path and the cumulative
+1,000,000-token checkpoint ceiling. Source work connects queued ordinary browser
+commands to the same host used by socket requests. Metadata-only selection
+precedes legacy scheduler profile acquisition; Session Manager owns the
+selected profile admission. Global runtime admission, command policy and
+confirmation remain in the normal executor. Manager-owned native workers do
+not recursively dispatch into the host, and route changes return an error
+instead of a local launch fallback.
+
+The native queue regression proves an unknown profile reaches the managed
+selector error, confirmation and policy precede dispatch, and session state is
+unchanged. Its earlier private queue-depth assertion failed compilation and was
+removed without widening the production API. The final focused consumer
+composition selection passed all 16 tests, including ordinary first launch
+with injected process effects, healthy reuse, co-location, restart, uncertain
+outcomes and retained viewing. Strict workspace Clippy, final formatting,
+architecture, documentation links and the docs production build passed.
+All five guidance surfaces describe queued managed dispatch. No installed,
+Chrome or Remote View runtime effects were performed.
+
+Successful first admission through installed HTTP/MCP ingress remains unproved;
+upstream service normalization and route hints are the next source audit.
+Executable development-candidate qualification, tab/window focus and lifecycle,
+view renewal, deliberate close, bounded recovery/relocation, final cleanup,
+installed Alice/Bob proof and final release-candidate gates remain open.
+The goal meter read 797,714 before closeout. Memory disposition: `not_durable`;
+the canonical contract and runbook retain this routine source increment.
+
 ## Turn 419 | 2026-10-01
 
 Ordinary responses now carry the durable dashboard-relative
