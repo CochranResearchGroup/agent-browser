@@ -391,6 +391,17 @@ pub struct TerminalBrowserSession {
     pub reason: SessionEndReason,
 }
 
+/// A normal tab request is retained before its first browser effect. A missing
+/// result requires reconciliation; it never permits another creation attempt.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ManagedBrowserTabRequest {
+    pub session_name: String,
+    pub command_digest: String,
+    pub profile_id: Option<String>,
+    pub response: Option<serde_json::Value>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
@@ -401,6 +412,7 @@ pub struct BrowserSessionState {
     pub remote_view_presentations: BTreeMap<String, RemoteViewPresentationRetention>,
     /// Logical tab bindings survive provider route and desktop changes.
     pub remote_view_tab_handoffs: BTreeMap<String, crate::RemoteViewTabHandoff>,
+    pub managed_tab_requests: BTreeMap<String, ManagedBrowserTabRequest>,
     pub sessions: BTreeMap<String, ManagedBrowserSession>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
@@ -420,6 +432,7 @@ impl Default for BrowserSessionState {
             browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
             remote_view_tab_handoffs: BTreeMap::new(),
+            managed_tab_requests: BTreeMap::new(),
             sessions: BTreeMap::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),

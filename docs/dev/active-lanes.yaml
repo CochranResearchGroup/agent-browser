@@ -20,7 +20,7 @@ lanes:
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Plan v28 milestone one active; ordinary HTTP/MCP normalization and optimized development-candidate build are source-qualified in RUNBOOK Turn 421; positive installed first request remains unproved; tab_new still needs managed lifecycle admission and durable tab/handoff publication; focus, renewal, close, recovery, cleanup, installed Alice/Bob acceptance and candidate qualification remain open
+    blocker: Plan v28 remains OPEN at requested token checkpoint in RUNBOOK Turn 422; managed tab_new and exact completed replay are source-qualified; native service tab handles, pending creation readback, focus/renewal, explicit lifecycle, recovery and cleanup remain open; installed Alice/Bob proof and final release-candidate gates are unproved; earlier optimized binary predates this source change
     updated_at: 2026-10-01
   - id: P204
     product_lane: PL-PLATFORM

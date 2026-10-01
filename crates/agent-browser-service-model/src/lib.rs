@@ -108,10 +108,10 @@ pub use browser_session_manager::{
     BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition, BrowserTabEndReason,
     BrowserTabSource, CloseBrowserSessionResult, CloseBrowserTabResult, FocusBrowserResult,
     ManagedBrowserCommandEffects, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
-    ManagedDisposableProfile, OpenBrowserSession, OpenBrowserSessionResult,
-    ReapBrowserSessionsResult, SessionBrowserDisposition, SessionCloseDisposition,
-    SessionEndReason, SessionRecordDisposition, TerminalBrowserSession, TerminalBrowserTab,
-    BROWSER_SESSION_STATE_SCHEMA_V1,
+    ManagedBrowserTabRequest, ManagedDisposableProfile, OpenBrowserSession,
+    OpenBrowserSessionResult, ReapBrowserSessionsResult, SessionBrowserDisposition,
+    SessionCloseDisposition, SessionEndReason, SessionRecordDisposition, TerminalBrowserSession,
+    TerminalBrowserTab, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
 pub use crash_regeneration::{
     apply_phase_receipt, begin_or_resume, crash_regeneration_statuses, finish_ready, interrupt,

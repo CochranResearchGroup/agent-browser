@@ -9,6 +9,7 @@ use std::{cell::Cell, path::PathBuf, rc::Rc};
 enum Mode {
     Success,
     UnknownProcess,
+    UnknownTab,
     StaleBaseline,
     CompetingPublication,
 }
@@ -200,18 +201,31 @@ impl BrowserSessionEffects for Process {
     fn acquire_initial_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
-        _attributed: &[String],
+        attributed: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
-        self.create_tab(browser)
+        let suffix = if attributed.is_empty() {
+            String::new()
+        } else {
+            format!(":{}", uuid::Uuid::new_v4())
+        };
+        Ok(BrowserTabAcquisition {
+            tab_id: format!("tab:{}{suffix}", browser.id),
+            target_id: format!("target:{}{suffix}", browser.id),
+            source: BrowserTabSource::SessionInitial,
+        })
     }
     fn create_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<BrowserTabAcquisition, String> {
+        if matches!(self.mode, Mode::UnknownTab) {
+            return Err("synthetic_tab_reply_lost".into());
+        }
+        let suffix = uuid::Uuid::new_v4();
         Ok(BrowserTabAcquisition {
-            tab_id: format!("tab:{}", browser.id),
-            target_id: format!("target:{}", browser.id),
-            source: BrowserTabSource::SessionInitial,
+            tab_id: format!("tab:{}:{suffix}", browser.id),
+            target_id: format!("target:{}:{suffix}", browser.id),
+            source: BrowserTabSource::ExplicitNew,
         })
     }
     fn close_tab(
@@ -269,7 +283,7 @@ impl ManagedBrowserCommandEffects for Process {
         session_name: &str,
         command: &Value,
     ) -> Result<Value, String> {
-        assert_eq!(tab.target_id, format!("target:{}", browser.id));
+        assert!(tab.target_id.starts_with(&format!("target:{}", browser.id)));
         assert!(!session_id.is_empty());
         assert_eq!(session_name, "Alice");
         if command["action"] == "navigate" {
@@ -278,7 +292,9 @@ impl ManagedBrowserCommandEffects for Process {
             );
         }
         assert_eq!(command["action"], "get_url");
-        Ok(serde_json::json!({"targetId": tab.target_id, "url": "https://synthetic.example/"}))
+        Ok(serde_json::json!({"id":command["id"], "success":true,
+            "data":{"targetId":tab.target_id, "url":"https://synthetic.example/"},
+            "targetId": tab.target_id, "url": "https://synthetic.example/"}))
     }
 }
 

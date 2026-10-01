@@ -169,9 +169,20 @@ fn host(
     BrowserSessionSqliteStore,
     RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
 > {
+    host_mode(fixture, provider, calls, Mode::Success)
+}
+fn host_mode(
+    fixture: &Fixture,
+    provider: Rc<RefCell<Provider>>,
+    calls: Rc<Cell<u32>>,
+    mode: Mode,
+) -> BrowserSessionHost<
+    BrowserSessionSqliteStore,
+    RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
+> {
     let effects = RemoteViewSessionEffects::new(
         Process {
-            mode: Mode::Success,
+            mode,
             root: fixture.root.clone(),
             calls,
         },
@@ -926,6 +937,145 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
             "{rejected}"
         );
     }
+    let mut tab_request = request.clone();
+    tab_request["action"] = "tab_new".into();
+    tab_request["params"] = serde_json::json!({"tabRequestId":"stable-client-retry"});
+    let saved_origin = std::env::var_os("AGENT_BROWSER_REMOTE_VIEW_ORIGIN");
+    std::env::set_var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:1");
+    let service_state = ServiceState::default();
+    let normalized = crate::native::service_request::normalize_service_request(
+        crate::native::service_request::ServiceRequestNormalization {
+            request: &tab_request,
+            service_state: Some(&service_state),
+            authenticated_principal: None,
+            fallback_principal: None,
+            request_id: "normalized-tab-request",
+            effective_session: Some("service-default"),
+        },
+    );
+    match saved_origin {
+        Some(value) => std::env::set_var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", value),
+        None => std::env::remove_var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN"),
+    }
+    let mut normalized = normalized.unwrap().command;
+    normalized["id"] = "normalized-tab-request".into();
+    assert_eq!(normalized["runtimeProfile"], "missing-profile");
+    assert_eq!(normalized["sessionName"], "ColdService");
+    assert_eq!(normalized["tabRequestId"], "stable-client-retry");
+    let rejected = queue.submit(normalized).await;
+    assert_eq!(
+        rejected["error"], "browser_session_profile_selector_unknown",
+        "{rejected}"
+    );
     assert_eq!(fixture.store(false).load_session_state().unwrap(), after);
     queue.shutdown().await;
+}
+
+#[test]
+fn ordinary_tab_creation_replays_exact_result_and_retains_unknown_outcome_across_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let first = serde_json::json!({"id":"tab-first", "action":"tab_new", "runtimeProfile":"profile-a",
+        "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &first)
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened["success"], true);
+    assert_eq!(consumer.state().tabs.len(), 1);
+    assert!(consumer.state().navigation_history.is_empty());
+    let mut next = first.clone();
+    next["id"] = "tab-next".into();
+    next["tabRequestId"] = "stable-next".into();
+    next["url"] = "https://synthetic.example/second".into();
+    next["activityAtMs"] = 101.into();
+    let second = consumer
+        .execute_managed_command("Alice", &next)
+        .unwrap()
+        .unwrap();
+    assert_eq!(second["success"], true);
+    assert_ne!(
+        opened["browserSession"]["tabId"],
+        second["browserSession"]["tabId"]
+    );
+    assert_ne!(
+        opened["browserSession"]["handoffId"],
+        second["browserSession"]["handoffId"]
+    );
+    assert_eq!(consumer.state().tabs.len(), 2);
+    assert_eq!(calls.get(), 1);
+    let state = consumer.state().clone();
+    drop(consumer);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap()
+            .unwrap(),
+        second
+    );
+    assert_eq!(restarted.state(), &state);
+    next["id"] = "transport-retry".into();
+    let mut replay = second.clone();
+    replay["id"] = "transport-retry".into();
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap()
+            .unwrap(),
+        replay
+    );
+    assert_eq!(restarted.state(), &state);
+    let session_id = second["browserSession"]["sessionId"].as_str().unwrap();
+    restarted.close_current_tab(session_id, 102).unwrap();
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap_err(),
+        "browser_session_tab_request_target_closed"
+    );
+    assert_eq!(restarted.state().tabs.len(), 1);
+    next["url"] = "https://synthetic.example/changed".into();
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap_err(),
+        "browser_session_tab_request_conflict"
+    );
+    drop(restarted);
+    let mut unknown = host_mode(&fixture, provider.clone(), calls.clone(), Mode::UnknownTab);
+    next["id"] = "tab-unknown".into();
+    next.as_object_mut().unwrap().remove("tabRequestId");
+    assert_eq!(
+        unknown.execute_managed_command("Alice", &next).unwrap_err(),
+        "synthetic_tab_reply_lost"
+    );
+    let pending = fixture.store(false).load_session_state().unwrap();
+    assert!(pending.managed_tab_requests["tab-unknown"]
+        .response
+        .is_none());
+    assert_eq!(pending.tabs.len(), 1);
+    drop(unknown);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap_err(),
+        "browser_session_tab_creation_readback_required"
+    );
+    next["id"] = "another-attempt".into();
+    assert_eq!(
+        restarted
+            .execute_managed_command("Alice", &next)
+            .unwrap_err(),
+        "browser_session_tab_creation_readback_required"
+    );
+    assert_eq!(
+        restarted.execute_managed_command("Bob", &next).unwrap_err(),
+        "browser_session_tab_creation_readback_required"
+    );
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), pending);
+    assert_eq!(calls.get(), 1);
 }

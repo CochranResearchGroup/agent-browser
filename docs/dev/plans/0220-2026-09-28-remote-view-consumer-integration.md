@@ -116,14 +116,15 @@ lifecycle work. Installed acceptance remains pending.
 ### Revision 28: plain-English release path
 
 The current source has the Remote View consumer adapter, durable browser/session
-storage, launch custody, desktop-pool selection, ordinary socket request
-routing, and stable tab-bound handoffs. An authenticated dashboard action can
+storage, launch custody, desktop-pool selection, ordinary socket and queued
+request routing, managed tab creation with retained retry requests, and stable
+tab-bound handoffs. An authenticated dashboard action can
 open a retained provider view. These are source-qualified building blocks;
 they do not yet establish a working installed release candidate.
 
-The next delivery batch finishes ordinary service-queue routing through the
-same Session Manager, preserving command policy and profile selection. Then
-complete the remaining everyday behavior in outcome 2, prove the real installed
+The next delivery batch completes native service tab-handle interoperability
+and exact pending tab-creation readback through the same Session Manager.
+Then complete the remaining everyday behavior in outcome 2, prove the real installed
 Alice/Bob experience in outcome 3, and freeze and qualify the candidate in
 outcome 4. The installer must meet the existing exactly-once sudo first-install
 requirement and the doctor must diagnose the supported remote-operation path.

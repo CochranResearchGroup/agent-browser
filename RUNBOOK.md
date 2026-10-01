@@ -10,6 +10,50 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 422 | 2026-10-01 | Requested resumption checkpoint
+
+Configured ordinary `tab_new` now routes through the managed host and Session
+Manager. Its first request uses the initial tab; later requests create one new
+tab and distinct handoff. The aggregate retains a request and command digest
+before creation, and completed results support exact replay using
+`params.tabRequestId` even when the transport command ID changes. A changed
+request conflicts; a closed target does not reopen. Unknown creation remains
+pending across restart and blocks another creation or new session admission on
+the same named profile. Exact pending-request reconciliation, history retention
+bounds and cleanup collection for these requests remain unfinished. Legacy
+service tab handles return an explicit join-unavailable error for tab creation.
+Unconfigured local tab creation keeps its legacy route.
+
+Final focused composition passed all 17 tests. The configured service
+normalizer/queue test proves tab selectors and the client retry key reach the
+managed profile error without a browser or provider effect. The tab fixture
+proves no-URL first admission, distinct tabs/handoffs, changed transport-ID
+replay, closed-target rejection, conflicting input and lost-reply restart
+behavior. A first test failure used a nonautomatic fixture for the lost-reply
+case; it was corrected to the same configured pool host before passing. Final
+formatting passed after test extensions. Strict workspace Clippy passed for the
+final production source; the later changes were fixture-only extensions. The
+26 Session Manager, five retention and three handoff model tests passed.
+Architecture, documentation links and the docs production build passed. All
+five guidance surfaces describe the new tab path and its limitations.
+
+| Release requirement | Current proof | Remaining work |
+| --- | --- | --- |
+| Normal admission and handoffs | Socket/queue routing, HTTP/MCP normalization, actual-host SQLite composition and retained provider grants | Native service tab-handle interoperability and successful installed first request |
+| Everyday browser use | Source tab creation/replay and existing session model fixtures | Exact CDP target plus OS window focus, foreground arbitration, grant renewal/reconnect, explicit tab/window/close routing and independent activity |
+| Recovery and cleanup | Launch/mutation custody, release fences and pure reference checks | Exact process identity, pending-operation readback, operator-stop policy, bounded recovery/relocation, complete cleanup collection and final release/shrink |
+| Installed acceptance | Provider receipts only; no Agent Browser installed proof in this resumption | Exact isolated development binaries, Alice/Bob axes and fresh process/resource census |
+| Release candidate | Earlier optimized build at c5291d69, version 0.28.0 | Rebuild after current source change, installer with exactly-once first-install sudo, diagnostic doctor, many-to-many operational proof, changed-surface qualification and protected integration |
+
+Plan v28 remains OPEN. The earlier candidate hash in Turn 421 is historical
+for this new source and must not be described as the final installed candidate.
+No installed, provider, privileged, ingress, production, merge or release effect
+was performed. The source branch is checkpointed for explicit continuation;
+the full remaining delivery scope is preserved. The goal meter read 934,806
+before final closeout; the final tool readback owns the stopping counter.
+Memory disposition: `not_durable`; canonical source and execution records retain
+this increment and its remaining release gates.
+
 ## Turn 421 | 2026-10-01
 
 The HTTP/MCP normalization audit found no ordinary navigation/snapshot redirect

@@ -434,3 +434,39 @@ closed or unavailable targets cannot be substituted; the endpoint reports
 unavailability. Keep the Agent Browser handoff as the operator bookmark.
 Foreground selection, expiry renewal and installed visible-tab proof remain
 open. The new button does not satisfy those acceptance criteria.
+
+## Managed ordinary tab creation
+
+Configured `tab_new` joins socket and queued dispatch through the same host.
+Normal service normalization leaves its catalog profile selectors for Session
+Manager instead of applying the historical profile-route acquisition. Command
+policy, confirmation and runtime admission remain in the action executor.
+Unconfigured local tab creation retains its legacy route.
+
+Browser Runtime retains `managedTabRequests` in the existing aggregate before
+session admission or CDP creation. A record binds request key, session name,
+profile and a SHA-256 command digest; it stores no raw command inputs. The optional
+`params.tabRequestId` is the stable HTTP/MCP retry key; native requests without
+it use their command ID. Transport-generated identity fields do not change the
+digest. Completed results return with the current response ID and require the
+retained logical handoff target to remain present. Changed input conflicts;
+closed targets do not reopen. A missing result retains a creation/readback
+obligation across restart, blocking another creation or new session admission
+on that profile. No current owner readback clears that obligation yet.
+
+First admission uses the session's initial tab rather than creating a second.
+Existing sessions invoke the manager's explicit tab creation once, publish the
+new current tab, then dispatch optional navigation against that exact tab and
+retain the result. Every tab receives its own durable handoff. A later
+publication or navigation failure keeps the request pending instead of another
+creation attempt. Old aggregate documents default to an empty request map.
+Completed records remain retained; request-history compaction is not qualified.
+These pending requests must enter final cleanup evidence before installed
+release acceptance. Explicit legacy service tab handles currently return a
+join-unavailable error; they are not silently bypassed or fabricated.
+
+Provider-free SQLite composition covers first admission, distinct second tab,
+exact replay with changed transport ID, conflicting input and unknown creation
+across restart, including a peer session selecting the same profile. This
+source join does not establish installed tab focus, native Service State tab
+handle interoperability or final cleanup.

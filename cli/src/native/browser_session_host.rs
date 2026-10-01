@@ -34,7 +34,7 @@ pub(crate) type SharedBrowserSessionHost =
 /// One route definition shared by sockets, scheduler admission and execution.
 pub(crate) fn ordinary_managed_action(action: &str) -> bool {
     !super::actions::action_skips_browser_launch(action)
-        && !matches!(action, "tab_new" | "tab_switch" | "window_new")
+        && !matches!(action, "tab_switch" | "window_new")
 }
 
 pub(crate) fn managed_command_session_name(lane: &str, command: &serde_json::Value) -> String {
@@ -73,6 +73,9 @@ pub(crate) async fn shared_managed_request_selected(
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if let Some(host) = host.as_ref() {
+            if command["action"] == "tab_new" && !host.effects.admits_ordinary_sessions() {
+                return Ok(false);
+            }
             return Ok(host.effects.admits_ordinary_sessions()
                 || matching_ordinary_session(host.state(), &name, &command));
         }
@@ -110,9 +113,11 @@ pub(crate) async fn execute_shared_managed_command(
             }
             *host = Some(load_default_browser_session_host()?);
         }
-        host.as_mut()
-            .ok_or("browser_session_host_missing")?
-            .execute_managed_command(&name, &command)
+        let host = host.as_mut().ok_or("browser_session_host_missing")?;
+        if command["action"] == "tab_new" && !host.effects.admits_ordinary_sessions() {
+            return Ok(None);
+        }
+        host.execute_managed_command(&name, &command)
     })
     .await
     .map_err(|_| "browser_session_host_join_failed")?
@@ -753,6 +758,11 @@ where
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
         let automatic = self.effects.admits_ordinary_sessions();
+        if automatic && command["action"] == "tab_new" {
+            return self
+                .execute_managed_tab_new(session_name, command)
+                .map(Some);
+        }
         if automatic
             && command.get("action").and_then(serde_json::Value::as_str) == Some("navigate")
         {
@@ -782,6 +792,14 @@ where
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
             [] if automatic => {
+                if self.state.managed_tab_requests.values().any(|request| {
+                    request.response.is_none()
+                        && (request.session_name == session_name
+                            || profile_id
+                                .is_some_and(|id| request.profile_id.as_deref() == Some(id)))
+                }) {
+                    return Err("browser_session_tab_creation_readback_required".into());
+                }
                 let request = match profile_id {
                     Some(profile_id) => {
                         OpenBrowserSession::exact_profile(session_name, profile_id, now_ms)
@@ -866,6 +884,171 @@ where
             }
         }
         Ok(Some(response))
+    }
+
+    /// Retain one request before session admission or CDP tab creation. Completed
+    /// responses replay without navigation; unknown outcomes require readback.
+    fn execute_managed_tab_new(
+        &mut self,
+        session_name: &str,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        use sha2::{Digest, Sha256};
+        let response_id = required_string(command, "id")?;
+        let id = if command.get("tabRequestId").is_some() {
+            required_string(command, "tabRequestId")?
+        } else {
+            response_id
+        };
+        if id.len() > 256 {
+            return Err("browser_session_tab_request_id_invalid".into());
+        }
+        let mut identity = command.clone();
+        for field in [
+            "id",
+            "jobId",
+            "serviceJobId",
+            "connectionInstanceId",
+            "requestId",
+            "callerId",
+            "requestPrincipalSource",
+            "dashboardDeploymentGeneration",
+        ] {
+            identity
+                .as_object_mut()
+                .ok_or("browser_session_command_invalid")?
+                .remove(field);
+        }
+        let digest = format!(
+            "{:x}",
+            Sha256::digest(
+                serde_json::to_vec(&identity).map_err(|_| "browser_session_command_invalid")?
+            )
+        );
+        self.effects.begin_operation(&self.persisted_state)?;
+        if let Some(retained) = self.state.managed_tab_requests.get(id) {
+            if retained.session_name != session_name || retained.command_digest != digest {
+                return Err("browser_session_tab_request_conflict".into());
+            }
+            let response = retained
+                .response
+                .clone()
+                .ok_or("browser_session_tab_creation_readback_required")?;
+            let handoff = response
+                .pointer("/browserSession/handoffId")
+                .and_then(serde_json::Value::as_str)
+                .ok_or("browser_session_tab_request_invalid")?;
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff)
+                .map_err(|_| "browser_session_tab_request_target_closed")?;
+            let mut response = response;
+            response["id"] = serde_json::json!(response_id);
+            return Ok(response);
+        }
+        let profile = self.ordinary_profile_selector(command)?;
+        if command.get("url").is_some() {
+            required_string(command, "url")?;
+        }
+        if command.get("serviceTabHandle").is_some() {
+            return Err("browser_session_tab_handle_join_unavailable".into());
+        }
+        let matches = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                session.name == session_name
+                    && profile.as_ref().is_none_or(|id| &session.profile_id == id)
+            })
+            .map(|session| session.id.clone())
+            .collect::<Vec<_>>();
+        let existing = match matches.as_slice() {
+            [] => None,
+            [id] => Some(id.clone()),
+            _ => return Err("browser_session_name_ambiguous".into()),
+        };
+        if let Some(browser_id) = optional_string(command, "browserId") {
+            if existing
+                .as_ref()
+                .and_then(|id| self.state.sessions.get(id))
+                .is_none_or(|session| session.browser_id != browser_id)
+            {
+                return Err("browser_session_browser_selector_conflict".into());
+            }
+        }
+        if self.state.managed_tab_requests.values().any(|request| {
+            request.response.is_none()
+                && (request.session_name == session_name
+                    || profile
+                        .as_ref()
+                        .is_some_and(|id| request.profile_id.as_ref() == Some(id)))
+        }) {
+            return Err("browser_session_tab_creation_readback_required".into());
+        }
+        self.state.managed_tab_requests.insert(
+            id.to_string(),
+            agent_browser_service_model::ManagedBrowserTabRequest {
+                session_name: session_name.to_string(),
+                profile_id: profile.clone().or_else(|| {
+                    existing
+                        .as_ref()
+                        .and_then(|id| self.state.sessions.get(id))
+                        .map(|session| session.profile_id.clone())
+                }),
+                command_digest: digest,
+                response: None,
+            },
+        );
+        self.commit_state()?;
+        let now_ms = command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms);
+        let session_id = match existing {
+            Some(session_id) => {
+                self.new_tab(&session_id, now_ms)?;
+                session_id
+            }
+            None => {
+                let request = match profile {
+                    Some(profile) => {
+                        OpenBrowserSession::exact_profile(session_name, profile, now_ms)
+                    }
+                    None => OpenBrowserSession::disposable(
+                        session_name,
+                        optional_string(command, "disposablePolicyId")
+                            .unwrap_or(DEFAULT_DISPOSABLE_POLICY_ID),
+                        now_ms,
+                    ),
+                };
+                self.open(request)?.session_id
+            }
+        };
+        // Execute against the selected tab, never another native tab_new.
+        let mut addressed = command.clone();
+        addressed["action"] = serde_json::json!(if command.get("url").is_some() {
+            "navigate"
+        } else {
+            "get_url"
+        });
+        let mut response = self
+            .execute_managed_command(session_name, &addressed)?
+            .ok_or("browser_session_managed_route_changed")?;
+        if let Some(data) = response
+            .get_mut("data")
+            .and_then(serde_json::Value::as_object_mut)
+        {
+            data.insert(
+                "tabId".into(),
+                response_identity_tab(&self.state, &session_id)?,
+            );
+        }
+        self.state
+            .managed_tab_requests
+            .get_mut(id)
+            .ok_or("browser_session_tab_request_missing")?
+            .response = Some(response.clone());
+        self.commit_state()?;
+        Ok(response)
     }
 
     /// Exact catalog selection; a raw profile path must already belong to a
@@ -1344,4 +1527,16 @@ mod tests {
         assert_eq!(*restarted.state(), before);
         assert_eq!(peer.load_session_state().unwrap(), newer);
     }
+}
+
+fn response_identity_tab(
+    state: &BrowserSessionState,
+    session_id: &str,
+) -> Result<serde_json::Value, String> {
+    let tab = state
+        .sessions
+        .get(session_id)
+        .and_then(|session| session.current_tab_id.as_ref())
+        .ok_or("browser_session_current_tab_missing")?;
+    Ok(serde_json::json!(tab))
 }

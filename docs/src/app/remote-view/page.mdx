@@ -550,4 +550,15 @@ or alter session state. Keep the Agent Browser handoff as the bookmark. Missing
 viewing configuration does not block browser lifecycle. The granted-view page
 waits for operator action instead of continuously polling. Tab focus, renewal
 and installed visible-tab acceptance remain pending in Plan 220.
+With Remote View configured, `tab_new` uses the managed owner. Its first request
+uses the new session's initial tab; later requests create a distinct tab and
+handoff. Service callers can supply `params.tabRequestId` as a stable retry key.
+An exact completed retry returns the retained result with the current transport
+request ID, without another tab or navigation. Changed input conflicts with the
+retained key. An unknown result returns
+`browser_session_tab_creation_readback_required`; it remains pending across
+restart and prevents another creation on that profile. Automatic reconciliation
+of these pending requests remains unfinished. Legacy service tab handles still
+require their explicit managed join; this path does not fabricate one.
+
 Successful navigations retain their URL in durable session history.
