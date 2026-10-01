@@ -4,10 +4,11 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use agent_browser_service_model::{
-    BrowserDisposableProfilePolicy, BrowserProfileCatalog, BrowserSessionEffects,
-    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
-    CloseBrowserSessionResult, CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult,
-    ReapBrowserSessionsResult, RemoteViewDesktopCandidate, SessionEndReason,
+    BrowserDisposableProfilePolicy, BrowserLaunchCustodyStore, BrowserLaunchIntent,
+    BrowserProfileCatalog, BrowserSessionEffects, BrowserSessionManager,
+    BrowserSessionManagerConfig, BrowserSessionState, CloseBrowserSessionResult,
+    CloseBrowserTabResult, OpenBrowserSession, OpenBrowserSessionResult, ReapBrowserSessionsResult,
+    RemoteViewDesktopCandidate, SessionEndReason,
 };
 
 use super::browser_session_runtime::{
@@ -90,6 +91,19 @@ fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
 }
 
 pub(crate) trait BrowserSessionPersistence {
+    /// Publish observed launch custody and the aggregate in one transaction.
+    /// Persistence implementations without that facility fail closed.
+    fn publish_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+    ) -> Result<(), String> {
+        if intent.is_some() {
+            return Err("browser_session_launch_publication_unsupported".to_string());
+        }
+        self.compare_and_save_session_state(expected, state)
+    }
     fn load_session_state(&self) -> Result<BrowserSessionState, String>;
     fn compare_and_save_session_state(
         &mut self,
@@ -104,6 +118,19 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn publish_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+    ) -> Result<(), String> {
+        if let Some(intent) = intent {
+            self.publish_launch_intent(intent, expected, state)
+                .map_err(|_| "browser_session_launch_publication_conflict".to_string())
+        } else {
+            self.compare_and_save_session_state(expected, state)
+        }
+    }
     fn load_session_state(&self) -> Result<BrowserSessionState, String> {
         BrowserSessionSqliteStore::load_session_state(self)
     }
@@ -449,6 +476,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if self.persistence.load_session_state()? != self.persisted_state {
             return Err("browser_session_publication_conflict".into());
         }
+        self.effects.begin_operation(&self.persisted_state)?;
         Ok(BrowserSessionManager::new(
             &mut self.state,
             &self.catalog,
@@ -464,9 +492,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     fn commit_state(&mut self) -> Result<(), String> {
-        self.persistence
-            .compare_and_save_session_state(&self.persisted_state, &self.state)?;
+        let intent = self.effects.pending_launch_intent();
+        self.persistence.publish_session_state(
+            &self.persisted_state,
+            &self.state,
+            intent.as_ref(),
+        )?;
         self.persisted_state = self.state.clone();
+        self.effects.acknowledge_launch_publication();
         Ok(())
     }
 
@@ -621,9 +654,19 @@ mod tests {
         launches: usize,
         live: bool,
         next_tab: usize,
+        pending_intent: Option<BrowserLaunchIntent>,
+        acknowledgements: std::rc::Rc<std::cell::Cell<u32>>,
     }
 
     impl BrowserRuntimeDriver for FixtureRuntime {
+        fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
+            self.pending_intent.clone()
+        }
+        fn acknowledge_launch_publication(&mut self) {
+            if self.pending_intent.take().is_some() {
+                self.acknowledgements.set(self.acknowledgements.get() + 1);
+            }
+        }
         fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
             Ok(self.live)
         }
@@ -735,6 +778,107 @@ mod tests {
     }
 
     #[test]
+    fn host_publishes_observed_launch_and_aggregate_atomically_before_acknowledgement() {
+        use agent_browser_service_model::{LaunchCustodyAdmission, RemoteViewFixedDesktop};
+        let directory = TempDirectory::new();
+        let database = directory.0.join("runtime.sqlite3");
+        let open_store = |initialize| {
+            BrowserSessionSqliteStore::launch_custody_fixture(
+                rusqlite::Connection::open(&database).unwrap(),
+                initialize,
+            )
+            .unwrap()
+        };
+        let mut store = open_store(true);
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let intent = BrowserLaunchIntent {
+            intent_id: uuid::Uuid::new_v4().to_string(),
+            profile_id: "profile-a".into(),
+            assignment: serde_json::from_value(fixture["assignment"].clone()).unwrap(),
+        };
+        let initial = store.load_session_state().unwrap();
+        let mut unsupported = BrowserSessionJsonStore::new(&directory.0.join("unsupported"));
+        assert_eq!(
+            unsupported
+                .publish_session_state(&initial, &initial, Some(&intent))
+                .unwrap_err(),
+            "browser_session_launch_publication_unsupported"
+        );
+        store.admit_launch_intent(&intent, &initial).unwrap();
+        let launch = BrowserLaunch {
+            browser_id: "host-browser".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: intent.assignment.desktop_id.clone(),
+                generation: intent.assignment.generation,
+                friendly_route_label: String::new(),
+            }),
+        };
+        store.observe_launch_intent(&intent, &launch).unwrap();
+        let acknowledgements = std::rc::Rc::new(std::cell::Cell::new(0));
+        let mut host = BrowserSessionHost {
+            persistence: store,
+            effects: BrowserSessionEffectAdapter::new(FixtureRuntime {
+                pending_intent: Some(intent.clone()),
+                acknowledgements: acknowledgements.clone(),
+                ..FixtureRuntime::default()
+            }),
+            catalog: BrowserProfileCatalog::default(),
+            state: initial.clone(),
+            persisted_state: initial.clone(),
+            manager_config: BrowserSessionManagerConfig::default(),
+            exact_url_history_maximum_bytes: 1024,
+        };
+        host.state.browsers.insert(
+            launch.browser_id.clone(),
+            ManagedBrowserInstance {
+                id: launch.browser_id.clone(),
+                profile_id: intent.profile_id.clone(),
+                pid: launch.pid + 1,
+                cdp_endpoint: launch.cdp_endpoint,
+                desktop: launch.desktop,
+                active_session_ids: vec![],
+            },
+        );
+        assert_eq!(
+            host.commit_state().unwrap_err(),
+            "browser_session_launch_publication_conflict"
+        );
+        assert_eq!(acknowledgements.get(), 0);
+        assert_eq!(host.persisted_state, initial);
+        assert!(host.effects.pending_launch_intent().is_some());
+        let mut peer = open_store(false);
+        assert_eq!(peer.load_session_state().unwrap(), initial);
+        host.state.browsers.get_mut(&launch.browser_id).unwrap().pid = launch.pid;
+        assert!(peer
+            .compare_and_save_session_state(&initial, &host.state)
+            .is_err());
+        assert_eq!(peer.load_session_state().unwrap(), initial);
+        let mut competing = initial.clone();
+        competing.next_session_sequence += 1;
+        peer.compare_and_save_session_state(&initial, &competing)
+            .unwrap();
+        assert!(host.commit_state().is_err());
+        assert_eq!(acknowledgements.get(), 0);
+        assert_eq!(peer.load_session_state().unwrap(), competing);
+        peer.compare_and_save_session_state(&competing, &initial)
+            .unwrap();
+        host.commit_state().unwrap();
+        assert_eq!(acknowledgements.get(), 1);
+        assert!(host.effects.pending_launch_intent().is_none());
+        assert_eq!(host.persisted_state, host.state);
+        assert_eq!(peer.load_session_state().unwrap(), host.state);
+        match peer.admit_launch_intent(&intent, &host.state).unwrap() {
+            LaunchCustodyAdmission::Existing(record) => assert!(record.published),
+            LaunchCustodyAdmission::New => panic!("publication must retain the original intent"),
+        }
+    }
+
+    #[test]
     fn restart_loads_independent_state_and_reuses_healthy_session() {
         let directory = TempDirectory::new();
         let legacy_path = directory.0.join("state.json");
@@ -774,6 +918,7 @@ mod tests {
             launches: 0,
             live: true,
             next_tab: 0,
+            ..FixtureRuntime::default()
         });
         let mut restarted = BrowserSessionHost::load(store, effects, &legacy_path, config).unwrap();
         let resumed = restarted

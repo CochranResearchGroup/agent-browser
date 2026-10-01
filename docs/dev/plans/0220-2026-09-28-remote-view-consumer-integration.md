@@ -90,8 +90,11 @@ implements that process boundary, consuming the complete fresh environment with
 independent viewing validation and exact assignment lifecycle identity. Private
 launches make one Chrome attempt, suppress persisted stderr and redact failures
 before the failure journal. Runtime browser-sequence overflow is checked before
-process effects. Ordinary Session Manager coordinator wiring, atomic publication
-and installed acceptance remain pending.
+process effects. The ordinary host now accepts an observed adapter intent for
+atomic custody-and-session publication, advances its baseline and acknowledges
+only after success. Generic publication cannot bypass an unpublished matching
+launch. Consumer driver admission/intent retention and installed acceptance
+remain pending.
 
 ## Current State
 

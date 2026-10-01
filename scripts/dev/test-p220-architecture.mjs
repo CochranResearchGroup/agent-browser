@@ -173,6 +173,14 @@ function check(root) {
       source.chrome.includes('let requested_stderr_log_path = if options.private_launch_environment.is_some()'),
     'private process launches must preserve complete inputs without retries or persisted stderr',
   );
+  requireCondition(
+    source.host.includes('self.effects.begin_operation(&self.persisted_state)?') &&
+      source.host.includes('self.effects.pending_launch_intent()') &&
+      source.host.includes('self.publish_launch_intent(intent, expected, state)') &&
+      source.host.includes('self.effects.acknowledge_launch_publication()') &&
+      source.launchCustodyStore.includes('return Err(LaunchCustodyStoreError::LaunchPending)'),
+    'ordinary host must publish observed launch custody atomically before acknowledgement',
+  );
   return failures;
 }
 
@@ -223,6 +231,7 @@ function selfTest() {
     for (const [path, needle] of [
       [paths.runtime, '.into_environment(observation, &intent.assignment)'],
       [paths.chrome, 'command.envs(environment)'],
+      [paths.host, 'self.publish_launch_intent(intent, expected, state)'],
     ]) {
       copyFixture(root);
       writeFileSync(join(root, path), read(root, path).replaceAll(needle, 'removed_boundary'));

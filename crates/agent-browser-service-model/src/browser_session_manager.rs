@@ -27,6 +27,20 @@ pub struct BrowserLaunch {
 }
 
 pub trait BrowserSessionEffects {
+    /// Receive the host's durable baseline before any operation effects. A
+    /// custody adapter must retain unresolved launch intent across failures.
+    fn begin_operation(&mut self, _expected: &BrowserSessionState) -> Result<(), String> {
+        Ok(())
+    }
+
+    /// An observed launch awaiting atomic session-and-custody publication.
+    fn pending_launch_intent(&self) -> Option<crate::BrowserLaunchIntent> {
+        None
+    }
+
+    /// Called only after durable session-and-custody publication succeeds.
+    fn acknowledge_launch_publication(&mut self) {}
+
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
 
     fn launch_browser(

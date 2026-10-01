@@ -185,6 +185,25 @@ constructors changed. Those edits only initialize the internal field to `None`;
 installer, workstation, provider assets and service API/client contracts were
 not changed. Their broad recommendations are not new qualification claims.
 
+The host publication bridge now receives the durable aggregate baseline before
+operation effects. Effect adapters can retain one observed launch intent, and
+SQLite publishes that intent with the resulting session aggregate under the
+existing custody transaction. The host advances its baseline and acknowledges
+only after commit; unsupported persistence fails closed. Ordinary whole-state
+publication rejects a browser matching an unpublished intent's profile or
+observed browser identity, closing the generic-save bypass.
+
+Provider-free qualification passes: two isolated host tests, four real SQLite
+custody tests and all 26 tests in the focused service-model Session Manager
+binary. The new host test uses real SQLite and covers wrong process identity,
+competing writer, generic-save bypass, failed publication without acknowledgement
+and successful atomic publication with terminal custody. Existing ordinary
+restart/reuse remains covered. Strict workspace Clippy, format, architecture,
+documentation links and diff checks pass. This does not qualify default external
+mode: the consumer driver must still admit launches against the supplied
+baseline, retain unknown outcomes and expose its intent to this publication
+bridge. No installed, provider, browser or production effects were executed.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

@@ -36,6 +36,16 @@ pub(crate) struct BrowserManagerRuntimeConfig {
 }
 
 pub(crate) trait BrowserRuntimeDriver {
+    fn begin_operation(
+        &mut self,
+        _expected: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+    fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
+        None
+    }
+    fn acknowledge_launch_publication(&mut self) {}
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -118,6 +128,18 @@ impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEff
 }
 
 impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdapter<D> {
+    fn begin_operation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<(), String> {
+        self.runtime.begin_operation(expected)
+    }
+    fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
+        self.runtime.pending_launch_intent()
+    }
+    fn acknowledge_launch_publication(&mut self) {
+        self.runtime.acknowledge_launch_publication();
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         self.runtime.browser_is_live(browser)
     }

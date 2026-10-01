@@ -282,6 +282,18 @@ fn validate_browser_publication(
     records: &Ledger,
     state: &BrowserSessionState,
 ) -> Result<(), LaunchCustodyStoreError> {
+    // An observed or ambiguous launch cannot bypass atomic custody publication
+    // through the ordinary whole-state writer. Co-located other profiles remain
+    // admissible; assignment return is governed separately below.
+    if records.records.values().any(|record| {
+        !record.published
+            && state.browsers.values().any(|browser| {
+                browser.profile_id == record.intent.profile_id
+                    || record.observed_browser_id.as_ref() == Some(&browser.id)
+            })
+    }) {
+        return Err(LaunchCustodyStoreError::LaunchPending);
+    }
     if state.browsers.values().any(|browser| {
         browser.desktop.as_ref().is_some_and(|desktop| {
             records.release_fences.iter().any(|(id, target)| {

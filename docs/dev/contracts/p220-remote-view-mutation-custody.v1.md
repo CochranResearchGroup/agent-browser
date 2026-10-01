@@ -193,6 +193,33 @@ is checked before admission and process construction, avoiding another
 deterministic post-effect publication failure.
 
 This is source ingress, not installed adoption. The ordinary Session Manager
-must still invoke the custody coordinator and publish the resulting session
-aggregate atomically with the observed intent. Real headed success, CDP attach,
+must still invoke the custody coordinator. Its host publication path now joins
+an adapter-provided observed intent and the session aggregate atomically. Real headed success, CDP attach,
 owner recovery and installed acceptance remain unqualified.
+
+
+## Session host publication bridge
+
+Before constructing an ordinary Session Manager operation, the host checks its
+durable baseline and supplies that baseline to the effect adapter. This is the
+expected aggregate for launch custody admission, even if the manager later
+removes stale browser references in memory. An adapter may expose one observed
+launch intent awaiting publication. The host asks persistence to publish that
+intent and the resulting aggregate together, then advances its local baseline
+and acknowledges the adapter only after transaction success.
+
+SQLite uses the existing custody publication transaction for this path. An
+unsupported persistence implementation rejects a pending intent rather than
+falling back to the ordinary save. Ordinary whole-state publication also rejects
+browser records matching an unpublished intent's profile or observed browser
+identity. The atomic path marks its own qualified intent published within the
+transaction before validating the aggregate, preventing a fallback writer from
+creating published browser references without terminal custody. Other profiles
+may still share the desktop. Failed publication preserves durable baseline and
+intent, and does not acknowledge the adapter.
+
+This bridge is source-qualified independently of effect admission. The default
+runtime still supplies no intent; a consumer driver must implement durable
+launch admission, retain ambiguous outcomes, expose its observed intent and
+prevent further effects until publication or exact reconciliation. Default
+methods preserve the ordinary local path and do not qualify external mode.
