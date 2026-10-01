@@ -32,6 +32,7 @@ mod profile_reset_receipt;
 mod profile_seeding;
 mod remote_view_application;
 mod remote_view_application_adapter;
+mod remote_view_application_records;
 mod remote_view_application_response;
 mod remote_view_consumer;
 mod remote_view_retention;
@@ -194,6 +195,15 @@ pub use remote_view_application::{
 pub use remote_view_application_adapter::{
     RemoteViewApplicationAdapter, RemoteViewApplicationAdapterError,
     RemoteViewApplicationTransport, RemoteViewApplicationTransportError,
+};
+pub use remote_view_application_records::{
+    RemoteViewApplicationActivation, RemoteViewApplicationDesktop,
+    RemoteViewApplicationDesktopLifecycle, RemoteViewApplicationDesktopViewing,
+    RemoteViewApplicationEvent, RemoteViewApplicationEventBinding,
+    RemoteViewApplicationEventObservation, RemoteViewApplicationEvents, RemoteViewApplicationGrant,
+    RemoteViewApplicationGrantRequest, RemoteViewApplicationInventory, RemoteViewApplicationPolicy,
+    RemoteViewApplicationPool, RemoteViewApplicationPoolPolicy, RemoteViewApplicationViewIssuance,
+    RemoteViewApplicationViewRevocation, RemoteViewApplicationWindow, RemoteViewApplicationWindows,
 };
 pub use remote_view_application_response::{
     RemoteViewApplicationReadinessScope, RemoteViewApplicationResponseError,

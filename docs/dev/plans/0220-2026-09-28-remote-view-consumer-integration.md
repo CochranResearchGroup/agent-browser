@@ -115,8 +115,9 @@ operator-stop and installed Alice/Bob gates remain unchanged.
 Revision 25 implementation starts with the focused `remote_view_application`
 service-model module and the source-bound synthetic
 [revision 3 request fixture](../contracts/remote-view-application-r3.v1.fixture.json).
-The fixture covers all 12 external-mode public request operations and the exact
-assignment/environment responses. It excludes managed placement/stop and
+The fixture covers all 12 external-mode public request operations and exact
+assignment/environment, inventory, window/action, event, view/grant/revocation
+and joined-release response shapes. It excludes managed placement/stop and
 principal setup. The injectable launch adapter observes the assignment, fetches
 the private full environment with both generations, and observes again before
 returning a non-serializable, non-cloneable, debug-redacted launch value. Every
@@ -125,15 +126,20 @@ again at actual launch consumption; a stored value is not freshness evidence.
 
 | Revision 3 adapter requirement | Current provider-free evidence | Remaining proof and next action |
 | --- | --- | --- |
-| External request shapes | All 12 operations round-trip the source-bound synthetic fixture; managed verbs and obsolete fields rejected | Remaining operation response types and transport replay |
+| External wire shapes | All 12 request operations and public response records round-trip the source-bound synthetic fixture; managed verbs and obsolete fields rejected | Mutation transport and exact release result validation |
 | Assignment join | Exact acquisition and independent desktop/generation join validated; missing or record-only readiness rejected | Wire runtime ingress to fresh observation |
 | Private launch environment | Full synthetic map preserved; malformed/incomplete/stale inputs rejected; debug redaction and compile-fail serialization check | Consume through actual browser launch adapter |
 | Launch freshness | Injectable observe/environment/observe transcript; changed target invalidates environment; unknown outcomes return without retry | Complete effect journal and ambiguous-effect readback for acquire/activate/view/release |
+| Read-side integration | Injectable inventory, windows, events and retained view resolution consume exact request/response transcripts; event payloads reject private environment fields, binding drift and invalid cursors; grants reject expiry, revocation and wrong target/path | Connect mutation replay and runtime consumers; issuance/resolution does not prove pixels or input readiness |
 | Cleanup acknowledgement | Every false/missing assertion and mismatched assignment/generation rejected | Construct from all current Agent Browser references, recovery, foreground and cleanup evidence; qualify joined provider release |
 
 This is an intermediate source checkpoint, not the completed adapter packet,
-installed acceptance, or merge readiness. Window/event/view/inventory/release
-responses and mutation replay remain pending. Runtime evidence must construct
+installed acceptance, or merge readiness. Mutation submission, exact joined-release semantic validation and durable
+ambiguous-outcome replay remain pending. Acquisition keys are absent from public
+inventory and client replay keys are absent from assignment events. These
+records cannot correlate an unknown mutation by timing or target similarity;
+retain the exact unresolved request until authoritative operation readback or
+explicit exact-key owner replay qualifies its outcome. Runtime evidence must construct
 cleanup acknowledgements; the wire validator does not establish actual
 reference or process absence.
 

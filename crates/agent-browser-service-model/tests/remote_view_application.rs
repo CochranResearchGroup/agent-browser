@@ -88,6 +88,65 @@ fn fixture() -> Value {
 }
 
 #[test]
+fn read_adapter_consumes_exact_inventory_windows_events_and_retained_views() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let steps = Rc::new(RefCell::new(VecDeque::from([
+        (
+            fixture["requests"][0].clone(),
+            Ok(fixture["inventory"].clone()),
+        ),
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+        (
+            fixture["requests"][4].clone(),
+            Ok(fixture["windows"].clone()),
+        ),
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+        (
+            fixture["requests"][6].clone(),
+            Ok(fixture["events"].clone()),
+        ),
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+        (fixture["requests"][8].clone(), Ok(fixture["grant"].clone())),
+    ])));
+    let mut adapter =
+        RemoteViewApplicationAdapter::new("agent-browser".into(), ScriptedTransport(steps.clone()))
+            .unwrap();
+    assert_eq!(
+        serde_json::to_value(adapter.inventory().unwrap()).unwrap(),
+        fixture["inventory"]
+    );
+    assert_eq!(
+        serde_json::to_value(adapter.windows(&assignment).unwrap()).unwrap(),
+        fixture["windows"]
+    );
+    assert_eq!(
+        serde_json::to_value(adapter.events(&assignment, Some(0), 32).unwrap()).unwrap(),
+        fixture["events"]
+    );
+    let grant = serde_json::from_value(fixture["grant"].clone()).unwrap();
+    assert_eq!(
+        serde_json::to_value(
+            adapter
+                .resolve_view(&assignment, &grant, 2000, false)
+                .unwrap()
+        )
+        .unwrap(),
+        fixture["grant"]
+    );
+    assert!(steps.borrow().is_empty());
+}
+
+#[test]
 fn joins_independent_generations_and_preserves_private_full_environment() {
     let fixture = fixture();
     let assignment: RemoteViewAssignmentRecord =

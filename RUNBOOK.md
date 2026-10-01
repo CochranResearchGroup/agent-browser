@@ -40,6 +40,16 @@ was simplified; the exact changed source passes strict workspace Clippy and
 focused tests. Formatting, architecture and documentation link checks pass. Other operation response
 models and durable ambiguous-effect reconciliation remain incomplete.
 
+The read-side increment models all published response shapes and injects
+inventory, windows, events and retained view resolution. Twelve focused tests
+pass. Released assignment history remains valid after pool membership changes;
+window IDs remain locator hints rather than browser identity. View grant
+issuance and resolution remain distinct from visible/input readiness. Public
+inventory/events omit mutation-key correlation, so they are not proof for an
+unknown acquisition or action inferred by target/timing. Mutation custody,
+exact joined release validation and authoritative reconciliation remain next.
+No source-backed memory write is warranted for these intermediate fixtures.
+
 The current goal meter starts at zero; the earlier handoff's 286,939 tokens are
 historical accounting. Checkpoint before the requested 1 million token bound.
 

@@ -2,9 +2,11 @@
 use serde_json::Value;
 
 use crate::{
-    RemoteViewApplicationEnvelope, RemoteViewApplicationRequest,
-    RemoteViewApplicationResponseError, RemoteViewAssignmentObservation,
-    RemoteViewAssignmentRecord, RemoteViewPrivateLaunchEnvironment,
+    RemoteViewApplicationEnvelope, RemoteViewApplicationEvents, RemoteViewApplicationGrant,
+    RemoteViewApplicationInventory, RemoteViewApplicationRequest,
+    RemoteViewApplicationResponseError, RemoteViewApplicationWindows,
+    RemoteViewAssignmentObservation, RemoteViewAssignmentRecord,
+    RemoteViewPrivateLaunchEnvironment,
 };
 
 /// Transport errors contain no response bodies, environment values or secrets.
@@ -89,6 +91,105 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
             .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
         observation.validate_live_assignment(assignment)?;
         Ok(observation)
+    }
+
+    pub fn inventory(
+        &mut self,
+    ) -> Result<RemoteViewApplicationInventory, RemoteViewApplicationAdapterError> {
+        let response = self.request(RemoteViewApplicationRequest::Inventory {})?;
+        let inventory: RemoteViewApplicationInventory = serde_json::from_value(response)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        inventory.validate_external(&self.application)?;
+        Ok(inventory)
+    }
+
+    /// Window IDs are locator hints, not browser identity. Runtime callers join
+    /// these observations to their own exact process-family evidence.
+    pub fn windows(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+    ) -> Result<RemoteViewApplicationWindows, RemoteViewApplicationAdapterError> {
+        let before = self.observe_assignment(assignment)?;
+        let response = self.request(RemoteViewApplicationRequest::Windows {
+            assignment_id: assignment.assignment_id.clone(),
+            expected_generation: before.target.lifecycle_generation,
+            expected_viewing_generation: before.target.viewing_generation,
+        })?;
+        let windows: RemoteViewApplicationWindows = serde_json::from_value(response)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        windows.validate_target(&before.target)?;
+        let after = self.observe_assignment(assignment)?;
+        if after.target != before.target {
+            return Err(RemoteViewApplicationResponseError::StaleTarget.into());
+        }
+        Ok(windows)
+    }
+
+    /// Assignment-scoped durable events. No operation identity is inferred from
+    /// event timing, a shared window ID or the current foreground target.
+    pub fn events(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+        after: Option<u64>,
+        limit: usize,
+    ) -> Result<RemoteViewApplicationEvents, RemoteViewApplicationAdapterError> {
+        if limit == 0 {
+            return Err(RemoteViewApplicationResponseError::InvalidShape.into());
+        }
+        let response = self.request(RemoteViewApplicationRequest::Events {
+            assignment_id: assignment.assignment_id.clone(),
+            expected_generation: assignment.generation,
+            after,
+            limit,
+        })?;
+        let events: RemoteViewApplicationEvents = serde_json::from_value(response)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        events.validate_assignment(assignment, after, limit)?;
+        Ok(events)
+    }
+
+    /// Resolve one retained opaque route against a freshly observed assignment.
+    /// Resolution proves route validity; it does not prove visible pixels.
+    pub fn resolve_view(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+        expected: &RemoteViewApplicationGrant,
+        now_ms: u64,
+        embed: bool,
+    ) -> Result<RemoteViewApplicationGrant, RemoteViewApplicationAdapterError> {
+        let observed = self.observe_assignment(assignment)?;
+        expected.validate_target(
+            &observed.target,
+            &self.application,
+            &expected.request.audience,
+            now_ms,
+        )?;
+        if embed && expected.request.audience == "remote_view" {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        let request = if embed {
+            RemoteViewApplicationRequest::ResolveEmbedView {
+                route_id: expected.route_id.clone(),
+            }
+        } else {
+            RemoteViewApplicationRequest::ResolveView {
+                route_id: expected.route_id.clone(),
+                audience: expected.request.audience.clone(),
+            }
+        };
+        let response = self.request(request)?;
+        let grant: RemoteViewApplicationGrant = serde_json::from_value(response)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        grant.validate_target(
+            &observed.target,
+            &self.application,
+            &expected.request.audience,
+            now_ms,
+        )?;
+        if grant != *expected {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        Ok(grant)
     }
 
     /// Refresh both generations before reading the full private environment,
