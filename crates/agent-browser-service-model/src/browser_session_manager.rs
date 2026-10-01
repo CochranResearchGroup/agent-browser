@@ -26,6 +26,18 @@ pub struct BrowserLaunch {
     pub desktop: Option<RemoteViewFixedDesktop>,
 }
 
+/// Executes a command for an exact manager-owned browser and tab.
+pub trait ManagedBrowserCommandEffects {
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String>;
+}
+
 pub trait BrowserSessionEffects {
     /// Receive the host's durable baseline before any operation effects. A
     /// custody adapter must retain unresolved launch intent across failures.

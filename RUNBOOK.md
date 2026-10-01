@@ -10,6 +10,49 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 412 | 2026-10-01
+
+P220 milestone one now connects native loopback HTTP to ordinary runtime
+construction through explicit origin, pool and optional application settings.
+Public inventory supplies active assignments and fresh live observations qualify
+exact desktop UUID and lifecycle generation. Local construction remains the
+unconfigured path. Managed commands use the composed owner after the host
+supplies its published baseline again following current-tab acquisition.
+
+Focused validation: `browser_session` passed 35 tests with one ignored real-Chrome
+restart test; HTTP transport passed three disposable loopback tests, including
+lost-response handling without another POST. Strict workspace Clippy passed.
+Formatting, P220 architecture, documentation links, remote-view guidance checks
+and the docs production build passed. This is source qualification, not installed
+acceptance or merge readiness. No installed browser or Remote View service was
+contacted. Repository guidance changed across all five required documentation
+surfaces; installed skill publication was not performed.
+
+Empty-pool durable acquisition, capacity changes, stable tab handoffs and the
+remaining everyday lifecycle work remain open under P220 v26. The fresh goal
+meter was 138,520 at this continuation, well below the one-million checkpoint
+ceiling. Memory disposition: `not_durable`; this routine increment is retained
+in the owning contract and runbook, with a local machine-readable receipt at
+`/tmp/p220-runtime-memory-disposition-2026-10-01.json`.
+
+## Turn 411 | 2026-10-01
+
+P220 milestone one now includes a native loopback HTTP transport for Remote
+View's direct JSON application endpoint. Disposable server tests prove the
+actual envelope, operation response, invocation inside an existing Tokio
+runtime, redirect refusal and bounded malformed-response handling. Both
+focused tests passed. Runtime construction, managed dispatch and stable tab
+handoffs remain open; installed-provider acceptance has not run.
+
+Implementation compilation caught an empty struct-variant fixture error,
+which was corrected before the passing focused run. Format, architecture and
+documentation-link checks passed; workspace strict Clippy found the unused
+transport connection, which Turn 412 resolves. No installed runtime or provider was contacted. Memory disposition:
+`not_durable`, recorded by the local machine-readable receipt at
+`/tmp/p220-http-memory-disposition-2026-10-01.json`; the owning contract retains
+this routine increment. P220 v26 remains active under the fresh one-million
+checkpoint ceiling.
+
 ## Turn 410 | 2026-10-01
 
 The operator explicitly resumed P220 v26 with a new goal meter starting at zero

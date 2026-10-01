@@ -252,6 +252,49 @@ impl BrowserSessionEffects for Process {
     }
 }
 
+impl ManagedBrowserCommandEffects for Process {
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &Value,
+    ) -> Result<Value, String> {
+        assert_eq!(tab.target_id, format!("target:{}", browser.id));
+        assert!(!session_id.is_empty());
+        assert_eq!(session_name, "Alice");
+        assert_eq!(command["action"], "get_url");
+        Ok(serde_json::json!({"targetId": tab.target_id, "url": "https://synthetic.example/"}))
+    }
+}
+
+#[test]
+fn consumer_host_managed_dispatch_uses_current_tab_after_publication() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let result = host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action": "get_url", "activityAtMs": 101}),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["targetId"], format!("target:{}", opened.browser_id));
+    assert_eq!(calls.get(), 1);
+    assert_eq!(requests.get(), 4);
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+}
+
 #[test]
 fn consumer_host_open_reuse_and_colocation_publish_real_custody() {
     let fixture = Fixture::new();

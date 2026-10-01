@@ -102,16 +102,7 @@ impl<D> BrowserSessionEffectAdapter<D> {
     }
 }
 
-pub(crate) trait ManagedBrowserCommandEffects {
-    fn execute_command(
-        &mut self,
-        browser: &ManagedBrowserInstance,
-        tab: &ManagedBrowserTab,
-        session_id: &str,
-        session_name: &str,
-        command: &Value,
-    ) -> Result<Value, String>;
-}
+pub(crate) use agent_browser_service_model::ManagedBrowserCommandEffects;
 
 impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEffectAdapter<D> {
     fn execute_command(

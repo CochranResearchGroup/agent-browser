@@ -216,3 +216,23 @@ impl<
         self.effects.disposable_profile_size_bytes(allocation)
     }
 }
+
+impl<
+        E: ManagedBrowserCommandEffects,
+        T: RemoteViewApplicationTransport,
+        S: BrowserLaunchCustodyStore,
+    > ManagedBrowserCommandEffects for RemoteViewSessionEffects<E, T, S>
+{
+    fn execute_command(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        tab: &ManagedBrowserTab,
+        session_id: &str,
+        session_name: &str,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        self.require_operation()?;
+        self.effects
+            .execute_command(browser, tab, session_id, session_name, command)
+    }
+}

@@ -252,9 +252,44 @@ process outcome, competing publication and stale admission baseline. In every
 failed-effect case, retry and restart do not start another process. The tests
 do not launch Chrome or exercise live Remote View transport.
 
-Default runtime construction and live transport are not connected to this
-adapter yet. Stable tab-specific handoff materialization and managed raw-command
-dispatch through the composed owner also remain in milestone one. Replacement
+Default runtime construction now selects the composed owner when explicit
+Remote View origin and pool settings are present. Stable tab-specific handoff
+materialization and empty-pool acquisition remain in milestone one. Replacement
 of a dead browser must reconcile and durably detach its old profile association
 before fresh admission; this composition does not implement that milestone-two
 recovery transition or authorize clearing an unresolved claim.
+
+
+## Loopback application HTTP transport
+
+The native transport sends the application envelope to `POST /v1/consumer`
+and decodes the direct JSON response, matching Remote View source revision
+`da540f22a6ff851272c5e9b91d7e3117a28bf6cd`. Construction requires an explicit
+HTTP origin with a literal loopback address and a nonzero timeout. Requests
+use no proxy, redirect, credential header or application retry. A joined worker
+runs asynchronous HTTP so ordinary synchronous effects can call it inside an
+existing Tokio runtime. Responses are bounded to four MiB. Non-200, malformed,
+oversized or interrupted responses return a static unknown-outcome error;
+provider response text is never surfaced as an error.
+
+Disposable loopback-server tests exercise the actual transport and application
+adapter, including wire format and redirect refusal. This is source transport
+coverage. Runtime setup selects this transport for an explicitly configured application
+pool. These tests do not contact an installed Remote View service.
+
+
+## Runtime construction and managed commands
+
+The ordinary host uses the native HTTP transport when origin and pool are
+configured together. Application selector defaults to `agent-browser`. It reads
+public inventory, selects the named pool's active assignments and validates each
+against fresh live-resource observation. Desktop UUID and lifecycle generation
+come from that join; no environment or display is cached during setup. Missing,
+empty or stale configured pools return stable errors. Setup currently requires
+existing assignments; it does not acquire resources or grow capacity.
+
+The runtime effect owner dispatches local or composed Remote View effects. Both
+share the provider-neutral managed-command trait. Before executing a command on
+the current manager-owned tab, the host supplies its published baseline again
+because tab acquisition may have committed and acknowledged a launch. The
+composed owner rejects unknown pending launches before command forwarding.

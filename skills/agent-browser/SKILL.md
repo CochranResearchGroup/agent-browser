@@ -3553,3 +3553,21 @@ projection’s `bindingWarnings` report the cause; admitted capacity becomes zer
 and new presentation effects are refused with `inventory_admission`. Restore
 the configured inventory and its ownership evidence to requalify capacity.
 Ordinary browser diagnostics remain available during the outage.
+
+
+## Remote View application runtime
+
+For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
+with the Remote View HTTP origin on a literal loopback address, such as
+`http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured
+pool name. Set `AGENT_BROWSER_REMOTE_VIEW_APPLICATION` when the application
+selector differs from the default `agent-browser`. Set origin and pool together.
+The selected pool must already contain an active assignment with live resources.
+An empty pool returns `remote_view_runtime_assignment_required`.
+
+Runtime setup reads public assignment inventory and refreshes exact desktop
+identity before browser launch. Managed commands address the session's current
+tab. Agent Browser launches its own browser with fresh private environment inputs
+from Remote View. Local sessions use their existing runtime when these settings
+are absent. Provider acquisition, capacity growth and stable tab handoffs remain
+under development in Plan 220.

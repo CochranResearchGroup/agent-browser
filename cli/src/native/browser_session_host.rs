@@ -25,7 +25,7 @@ const DEFAULT_DISPOSABLE_POLICY_ID: &str = "default";
 
 pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
     BrowserSessionSqliteStore,
-    BrowserSessionEffectAdapter<BrowserManagerRuntime>,
+    super::browser_session_remote_view::RuntimeSessionEffects,
 >;
 
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
@@ -52,7 +52,11 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
     let display = std::env::var("AGENT_BROWSER_SESSION_DISPLAY").ok();
     // Remote View desktop candidates must arrive through its public consumer
     // contract. Never reconstruct them from Agent Browser's legacy route pool.
-    let remote_view_desktops = Vec::new();
+    let remote_view = super::browser_session_remote_view::configured_remote_view()?;
+    let remote_view_desktops = remote_view
+        .as_ref()
+        .map(|context| context.desktops.clone())
+        .unwrap_or_default();
     let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
         headless: display.is_none(),
         executable_path: std::env::var("AGENT_BROWSER_EXECUTABLE_PATH").ok(),
@@ -61,9 +65,13 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         maximum_browser_processes: None,
         remote_view_desktop_contexts: Vec::new(),
     })?;
+    let effects = super::browser_session_remote_view::runtime_effects(
+        BrowserSessionEffectAdapter::new(runtime),
+        remote_view,
+    )?;
     BrowserSessionHost::load(
         store,
-        BrowserSessionEffectAdapter::new(runtime),
+        effects,
         &legacy_state_path,
         BrowserSessionHostConfig {
             session_idle_timeout_ms,
@@ -599,6 +607,7 @@ where
             .get(&tab.tab_id)
             .cloned()
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        self.effects.begin_operation(&self.persisted_state)?;
         self.effects
             .execute_command(&browser, &tab, &session.id, &session.name, command)
             .map(Some)

@@ -96,9 +96,12 @@ only after success. Generic publication cannot bypass an unpublished matching
 launch. The ordinary consumer effect composition now joins host baseline,
 coordinator admission, fresh process ingress and publication intent. Real SQLite
 composition tests prove first open, healthy reuse, co-location, restart reuse and
-failure without duplicate process effects. Default live transport and runtime
-bootstrap, managed command dispatch and stable tab-specific handoffs still need
-connection before milestone one is complete. Installed acceptance remains pending.
+failure without duplicate process effects. Native HTTP transport and ordinary
+runtime construction now join explicitly configured application pools with live
+active assignments. Managed command dispatch passes through the same composed
+owner. Empty-pool acquisition, capacity changes and stable tab-specific handoffs
+still need connection before milestone one is complete. Installed acceptance
+remains pending.
 
 ## Current State
 

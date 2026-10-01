@@ -24,6 +24,8 @@ const paths = {
   launchAdmission: 'cli/src/native/browser_launch_admission.rs',
   host: 'cli/src/native/browser_session_host.rs',
   runtime: 'cli/src/native/browser_session_runtime.rs',
+  runtimeRemoteView: 'cli/src/native/browser_session_remote_view.rs',
+  applicationHttp: 'cli/src/native/remote_view_application_http.rs',
   chrome: 'cli/src/native/cdp/chrome.rs',
   store: 'cli/src/native/browser_session_store.rs',
   backup: 'cli/src/native/service_runtime_backup.rs',
@@ -45,6 +47,8 @@ function check(root) {
   const supportedCliSources = [
     source.host,
     source.runtime,
+    source.runtimeRemoteView,
+    source.applicationHttp,
     source.store,
     source.backup,
     source.launchAdmission,

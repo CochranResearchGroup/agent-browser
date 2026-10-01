@@ -36,6 +36,7 @@ pub mod browser_session_authority;
 mod browser_session_consumer_tests;
 #[allow(dead_code)]
 pub(crate) mod browser_session_host;
+pub(crate) mod browser_session_remote_view;
 #[allow(dead_code)]
 pub(crate) mod browser_session_runtime;
 #[allow(dead_code)]
@@ -69,6 +70,7 @@ pub(crate) mod desktop_evidence;
 pub(crate) mod desktop_evidence_action;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_cdp;
+pub(crate) mod remote_view_application_http;
 mod remote_view_application_store;
 pub(crate) mod service_authentication_run;
 pub(crate) mod service_challenge_task;
