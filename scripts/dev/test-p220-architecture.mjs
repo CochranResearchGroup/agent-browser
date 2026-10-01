@@ -8,6 +8,8 @@ const paths = {
   modelManifest: 'crates/agent-browser-service-model/Cargo.toml',
   consumer: 'crates/agent-browser-service-model/src/remote_view_consumer.rs',
   application: 'crates/agent-browser-service-model/src/remote_view_application.rs',
+  applicationResponse: 'crates/agent-browser-service-model/src/remote_view_application_response.rs',
+  applicationAdapter: 'crates/agent-browser-service-model/src/remote_view_application_adapter.rs',
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
   retention: 'crates/agent-browser-service-model/src/remote_view_retention.rs',
@@ -30,7 +32,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
@@ -175,6 +177,8 @@ function selfTest() {
     const cases = [
       [paths.consumer, '\npub struct ProviderFreeHost;\n', 'provider-private model'],
       [paths.application, '\npub struct ProviderFreeHost;\n', 'provider-private application'],
+      [paths.applicationResponse, '\npub struct ProviderFreeHost;\n', 'provider-private application response'],
+      [paths.applicationAdapter, '\npub struct ProviderFreeHost;\n', 'provider-private application adapter'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
       [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],

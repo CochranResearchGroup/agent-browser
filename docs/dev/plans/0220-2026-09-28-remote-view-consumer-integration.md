@@ -115,14 +115,27 @@ operator-stop and installed Alice/Bob gates remain unchanged.
 Revision 25 implementation starts with the focused `remote_view_application`
 service-model module and the source-bound synthetic
 [revision 3 request fixture](../contracts/remote-view-application-r3.v1.fixture.json).
-The fixture covers all 12 external-mode public request operations. It excludes
-managed placement/stop and principal setup. Focused request round-trip and
-cleanup tests pass; cleanup rejects missing/false obligations and mismatched
-assignment or lifecycle generation. This is request-shape qualification only.
-Response qualification, live-resource generation checks, private full launch
-environment, injectable transport and ambiguous-effect reconciliation remain
-pending. Runtime evidence must construct cleanup acknowledgements; the wire
-validator does not establish actual reference or process absence.
+The fixture covers all 12 external-mode public request operations and the exact
+assignment/environment responses. It excludes managed placement/stop and
+principal setup. The injectable launch adapter observes the assignment, fetches
+the private full environment with both generations, and observes again before
+returning a non-serializable, non-cloneable, debug-redacted launch value. Every
+field of the target join must match. Runtime callers must refresh observations
+again at actual launch consumption; a stored value is not freshness evidence.
+
+| Revision 3 adapter requirement | Current provider-free evidence | Remaining proof and next action |
+| --- | --- | --- |
+| External request shapes | All 12 operations round-trip the source-bound synthetic fixture; managed verbs and obsolete fields rejected | Remaining operation response types and transport replay |
+| Assignment join | Exact acquisition and independent desktop/generation join validated; missing or record-only readiness rejected | Wire runtime ingress to fresh observation |
+| Private launch environment | Full synthetic map preserved; malformed/incomplete/stale inputs rejected; debug redaction and compile-fail serialization check | Consume through actual browser launch adapter |
+| Launch freshness | Injectable observe/environment/observe transcript; changed target invalidates environment; unknown outcomes return without retry | Complete effect journal and ambiguous-effect readback for acquire/activate/view/release |
+| Cleanup acknowledgement | Every false/missing assertion and mismatched assignment/generation rejected | Construct from all current Agent Browser references, recovery, foreground and cleanup evidence; qualify joined provider release |
+
+This is an intermediate source checkpoint, not the completed adapter packet,
+installed acceptance, or merge readiness. Window/event/view/inventory/release
+responses and mutation replay remain pending. Runtime evidence must construct
+cleanup acknowledgements; the wire validator does not establish actual
+reference or process absence.
 
 Historical checkpoints below retain their original evidence bounds. The full
 service-model replay preceded the final wire-compatibility and detached-conflict

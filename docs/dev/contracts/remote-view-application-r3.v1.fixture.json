@@ -4,9 +4,12 @@
   "sourcePaths": [
     "src/consumer_policy.rs",
     "src/control_runtime.rs",
-    "src/foundation.rs"
+    "src/foundation.rs",
+    "src/viewing.rs",
+    "src/desktop_join.rs",
+    "src/desktop/lifecycle.rs"
   ],
-  "scope": "Synthetic external-mode request shapes; no installed acceptance or response qualification",
+  "scope": "Synthetic external-mode request and assignment/environment response shapes; no installed acceptance",
   "requests": [
     {
       "application": "agent-browser",
@@ -123,5 +126,44 @@
         }
       }
     }
-  ]
+  ],
+  "assignment": {
+    "assignmentId": "assignment-external-1",
+    "registrationId": "registration-agent-browser",
+    "poolId": "pool-main",
+    "desktopId": "22222222-2222-4222-8222-222222222222",
+    "generation": 7,
+    "state": "active"
+  },
+  "assignmentObservation": {
+    "schemaVersion": 1,
+    "target": {
+      "assignmentId": "assignment-external-1",
+      "registrationId": "registration-agent-browser",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "lifecycleGeneration": 7,
+      "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+      "viewingGeneration": 19
+    },
+    "readinessScope": "live_resource"
+  },
+  "launchEnvironment": {
+    "schemaVersion": 1,
+    "target": {
+      "assignmentId": "assignment-external-1",
+      "registrationId": "registration-agent-browser",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "lifecycleGeneration": 7,
+      "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+      "viewingGeneration": 19
+    },
+    "environment": {
+      "DISPLAY": ":41",
+      "XAUTHORITY": "/synthetic/private/Xauthority",
+      "REMOTE_VIEW_SLOT_GENERATION": "19",
+      "DBUS_SESSION_BUS_ADDRESS": "unix:path=/synthetic/private/bus",
+      "PULSE_SERVER": "unix:/synthetic/private/audio"
+    },
+    "readinessScope": "live_resource"
+  }
 }

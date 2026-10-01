@@ -29,6 +29,17 @@ Clippy, format verification, API/MCP parity and generated client contract checks
 pass. This is not adapter acceptance. No live effects occurred. Graphiti recall
 was historical route evidence only; no memory write is warranted for this
 intermediate request-shape checkpoint.
+The next implementation increment adds exact independent assignment joins,
+private full launch environment and injectable observe/environment/observe
+coordination. Six focused tests pass, including generation change and unknown
+outcome behavior. A compile-fail doctest proves launch values are not
+serializable. Initial redaction testing failed because its oracle confused a
+public generation with a secret environment value; the corrected oracle passes.
+Initial strict Clippy rejected a nonminimal boolean expression; that expression
+was simplified; the exact changed source passes strict workspace Clippy and
+focused tests. Formatting, architecture and documentation link checks pass. Other operation response
+models and durable ambiguous-effect reconciliation remain incomplete.
+
 The current goal meter starts at zero; the earlier handoff's 286,939 tokens are
 historical accounting. Checkpoint before the requested 1 million token bound.
 

@@ -1,14 +1,249 @@
 use agent_browser_service_model::{
-    RemoteViewApplicationCleanup, RemoteViewApplicationEnvelope,
-    REMOTE_VIEW_APPLICATION_SOURCE_CHECKPOINT,
+    RemoteViewApplicationAdapter, RemoteViewApplicationAdapterError, RemoteViewApplicationCleanup,
+    RemoteViewApplicationEnvelope, RemoteViewApplicationResponseError,
+    RemoteViewApplicationTransport, RemoteViewApplicationTransportError,
+    RemoteViewAssignmentObservation, RemoteViewAssignmentRecord,
+    RemoteViewPrivateLaunchEnvironment, REMOTE_VIEW_APPLICATION_SOURCE_CHECKPOINT,
 };
 use serde_json::{json, Value};
+use std::{cell::RefCell, collections::VecDeque, rc::Rc};
+
+type TransportStep = (Value, Result<Value, RemoteViewApplicationTransportError>);
+struct ScriptedTransport(Rc<RefCell<VecDeque<TransportStep>>>);
+
+impl RemoteViewApplicationTransport for ScriptedTransport {
+    fn request(
+        &mut self,
+        envelope: &RemoteViewApplicationEnvelope,
+    ) -> Result<Value, RemoteViewApplicationTransportError> {
+        let (expected, response) = self
+            .0
+            .borrow_mut()
+            .pop_front()
+            .expect("unexpected additional request");
+        assert_eq!(serde_json::to_value(envelope).unwrap(), expected);
+        response
+    }
+}
+
+#[test]
+fn launch_transport_refreshes_exact_join_and_never_retries_unknown_outcomes() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    for changed_after in [false, true] {
+        let mut after = fixture["assignmentObservation"].clone();
+        if changed_after {
+            after["target"]["viewingGeneration"] = json!(20);
+        }
+        let steps = Rc::new(RefCell::new(VecDeque::from([
+            (
+                fixture["requests"][2].clone(),
+                Ok(fixture["assignmentObservation"].clone()),
+            ),
+            (
+                fixture["requests"][3].clone(),
+                Ok(fixture["launchEnvironment"].clone()),
+            ),
+            (fixture["requests"][2].clone(), Ok(after)),
+        ])));
+        let mut adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            ScriptedTransport(steps.clone()),
+        )
+        .unwrap();
+        let result = adapter.launch_environment(&assignment);
+        if changed_after {
+            assert_eq!(
+                result.unwrap_err(),
+                RemoteViewApplicationAdapterError::Response(
+                    RemoteViewApplicationResponseError::StaleTarget
+                )
+            );
+        } else {
+            assert!(result.is_ok());
+        }
+        assert!(steps.borrow().is_empty());
+    }
+    let steps = Rc::new(RefCell::new(VecDeque::from([(
+        fixture["requests"][2].clone(),
+        Err(RemoteViewApplicationTransportError::OutcomeUnknown),
+    )])));
+    let mut adapter =
+        RemoteViewApplicationAdapter::new("agent-browser".into(), ScriptedTransport(steps.clone()))
+            .unwrap();
+    assert_eq!(
+        adapter.launch_environment(&assignment).unwrap_err(),
+        RemoteViewApplicationAdapterError::Transport(
+            RemoteViewApplicationTransportError::OutcomeUnknown
+        )
+    );
+    assert!(steps.borrow().is_empty());
+}
 
 fn fixture() -> Value {
     serde_json::from_str(include_str!(
         "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
     ))
     .unwrap()
+}
+
+#[test]
+fn joins_independent_generations_and_preserves_private_full_environment() {
+    let fixture = fixture();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let observed: RemoteViewAssignmentObservation =
+        serde_json::from_value(fixture["assignmentObservation"].clone()).unwrap();
+    observed.validate_live_assignment(&assignment).unwrap();
+    assert_ne!(
+        observed.target.lifecycle_generation,
+        observed.target.viewing_generation
+    );
+    assert_ne!(
+        observed.target.desktop_id,
+        observed.target.viewing_desktop_id
+    );
+    let environment = RemoteViewPrivateLaunchEnvironment::from_response(
+        fixture["launchEnvironment"].clone(),
+        &observed,
+        &assignment,
+    )
+    .unwrap();
+    let debug = format!("{environment:?}");
+    for field in [
+        "DISPLAY",
+        "XAUTHORITY",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "PULSE_SERVER",
+    ] {
+        assert!(!debug.contains(
+            fixture["launchEnvironment"]["environment"][field]
+                .as_str()
+                .unwrap()
+        ));
+    }
+    assert!(debug.contains("environment: \"redacted\""));
+    assert_eq!(
+        serde_json::to_value(
+            environment
+                .into_environment(&observed, &assignment)
+                .unwrap()
+        )
+        .unwrap(),
+        fixture["launchEnvironment"]["environment"]
+    );
+}
+
+#[test]
+fn rejects_stale_target_and_record_only_launch_at_each_boundary() {
+    let fixture = fixture();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let observed: RemoteViewAssignmentObservation =
+        serde_json::from_value(fixture["assignmentObservation"].clone()).unwrap();
+    for (field, replacement) in [
+        ("assignmentId", json!("assignment-other")),
+        ("registrationId", json!("registration-other")),
+        ("desktopId", json!("44444444-4444-4444-8444-444444444444")),
+        ("lifecycleGeneration", json!(8)),
+        (
+            "viewingDesktopId",
+            json!("55555555-5555-4555-8555-555555555555"),
+        ),
+        ("viewingGeneration", json!(20)),
+    ] {
+        let mut stale = fixture["launchEnvironment"].clone();
+        stale["target"][field] = replacement.clone();
+        assert_eq!(
+            RemoteViewPrivateLaunchEnvironment::from_response(stale, &observed, &assignment)
+                .unwrap_err(),
+            RemoteViewApplicationResponseError::StaleTarget,
+            "{field}"
+        );
+
+        let environment = RemoteViewPrivateLaunchEnvironment::from_response(
+            fixture["launchEnvironment"].clone(),
+            &observed,
+            &assignment,
+        )
+        .unwrap();
+        let mut current = fixture["assignmentObservation"].clone();
+        current["target"][field] = replacement;
+        let current: RemoteViewAssignmentObservation = serde_json::from_value(current).unwrap();
+        assert_eq!(
+            environment
+                .into_environment(&current, &assignment)
+                .unwrap_err(),
+            RemoteViewApplicationResponseError::StaleTarget,
+            "{field}"
+        );
+    }
+    for location in ["assignmentObservation", "launchEnvironment"] {
+        let mut changed = fixture.clone();
+        changed[location]["readinessScope"] = json!("provider_record");
+        let observed = serde_json::from_value(changed["assignmentObservation"].clone()).unwrap();
+        assert_eq!(
+            RemoteViewPrivateLaunchEnvironment::from_response(
+                changed["launchEnvironment"].clone(),
+                &observed,
+                &assignment
+            )
+            .unwrap_err(),
+            RemoteViewApplicationResponseError::LiveResourceRequired
+        );
+        changed[location]
+            .as_object_mut()
+            .unwrap()
+            .remove("readinessScope");
+        if location == "assignmentObservation" {
+            assert!(serde_json::from_value::<RemoteViewAssignmentObservation>(
+                changed[location].clone()
+            )
+            .is_err());
+        } else {
+            assert_eq!(
+                RemoteViewPrivateLaunchEnvironment::from_response(
+                    changed[location].clone(),
+                    &observed,
+                    &assignment
+                )
+                .unwrap_err(),
+                RemoteViewApplicationResponseError::InvalidShape
+            );
+        }
+    }
+}
+
+#[test]
+fn rejects_incomplete_environment_without_exposing_private_values_in_errors() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let observed = serde_json::from_value(fixture["assignmentObservation"].clone()).unwrap();
+    for field in ["DISPLAY", "XAUTHORITY", "REMOTE_VIEW_SLOT_GENERATION"] {
+        let mut response = fixture["launchEnvironment"].clone();
+        response["environment"]
+            .as_object_mut()
+            .unwrap()
+            .remove(field);
+        assert_eq!(
+            RemoteViewPrivateLaunchEnvironment::from_response(response, &observed, &assignment)
+                .unwrap_err(),
+            RemoteViewApplicationResponseError::InvalidEnvironment
+        );
+    }
+    let mut response = fixture["launchEnvironment"].clone();
+    response["environment"]["REMOTE_VIEW_SLOT_GENERATION"] = json!("7");
+    assert_eq!(
+        RemoteViewPrivateLaunchEnvironment::from_response(response, &observed, &assignment)
+            .unwrap_err(),
+        RemoteViewApplicationResponseError::InvalidEnvironment
+    );
+    let mut response = fixture["launchEnvironment"].clone();
+    response["privateCredential"] = json!("synthetic-do-not-echo");
+    let error = RemoteViewPrivateLaunchEnvironment::from_response(response, &observed, &assignment)
+        .unwrap_err();
+    assert_eq!(error, RemoteViewApplicationResponseError::InvalidShape);
+    assert!(!format!("{error:?}").contains("synthetic-do-not-echo"));
 }
 
 #[test]
