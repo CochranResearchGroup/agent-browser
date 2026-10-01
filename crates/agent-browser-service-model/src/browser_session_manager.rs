@@ -590,6 +590,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
+        let expires_at_ms = request
+            .activity_at_ms
+            .checked_add(self.config.session_idle_timeout_ms)
+            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
         let profile = self.resolve_profile_for_open(&request)?;
         let expired_matching_sessions = self
             .state
@@ -627,10 +631,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .cloned()
                 .ok_or_else(|| "browser_session_browser_missing".to_string())?;
             if self.effects.browser_is_live(&browser)? {
-                let expires_at_ms = request
-                    .activity_at_ms
-                    .checked_add(self.config.session_idle_timeout_ms)
-                    .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
                 let stored = self
                     .state
                     .sessions
@@ -653,6 +653,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 request.activity_at_ms,
             )?;
         }
+        let next_session_sequence = self
+            .state
+            .next_session_sequence
+            .checked_add(1)
+            .ok_or_else(|| "browser_session_sequence_exhausted".to_string())?;
         let reusable_browser = self
             .state
             .browsers
@@ -684,19 +689,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             )
         };
 
-        self.state.next_session_sequence = self
-            .state
-            .next_session_sequence
-            .checked_add(1)
-            .ok_or_else(|| "browser_session_sequence_exhausted".to_string())?;
+        self.state.next_session_sequence = next_session_sequence;
         let session_id = format!(
             "session:{}:{}:{}",
             request.session_name, profile.id, self.state.next_session_sequence
         );
-        let expires_at_ms = request
-            .activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
 
         if let Some(launch) = launched {
             self.state.browsers.insert(

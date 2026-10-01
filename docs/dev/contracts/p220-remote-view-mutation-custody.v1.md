@@ -90,3 +90,10 @@ and check release claims as well as the session aggregate. Aggregate comparison 
 stale whole-state publication, but does not yet fence pre-publication effects
 or separate release claims. These are pending requirements, not behavior provided by the
 pure permit or existing mutation store.
+
+
+Deterministic session admission validates expiry arithmetic before profile
+resolution and validates a new session sequence before launching a browser.
+Exhausted fields cannot create a process that lacks a publishable session.
+Healthy existing-session reuse does not require another sequence value. These
+checks do not replace durable launch intent or ambiguous-process reconciliation.

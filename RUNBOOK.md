@@ -98,6 +98,13 @@ strict workspace Clippy, architecture and documentation checks pass. This check
 detects existing drift; durable intent is still required to close the concurrent
 read-to-effect window. It is not final release admission or installed proof.
 
+Session admission now checks expiry and new-session sequence arithmetic before
+browser launch. The focused Session Manager binary passes all 26 tests, including
+no launch or close for exhausted fields and healthy reuse at exhausted sequence.
+This removes deterministic post-launch failures but does not provide durable
+launch custody. Strict workspace Clippy, format, architecture, documentation links and diff
+checks pass for this source increment.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

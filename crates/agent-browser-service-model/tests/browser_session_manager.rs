@@ -1424,3 +1424,64 @@ fn serialized_state_reuses_healthy_session_after_service_restart() {
     );
     assert!(restarted_effects.launches.is_empty());
 }
+
+#[test]
+fn exhausted_new_session_fields_do_not_launch_and_sequence_exhaustion_allows_healthy_reuse() {
+    let catalog = catalog_with_named_profile();
+    for (sequence, activity, error) in [
+        (u64::MAX, 1_000, "browser_session_sequence_exhausted"),
+        (0, u64::MAX, "browser_session_expiry_exhausted"),
+    ] {
+        let mut state = BrowserSessionState {
+            next_session_sequence: sequence,
+            ..BrowserSessionState::default()
+        };
+        let before = state.clone();
+        let mut effects = FixtureEffects::default();
+        let result = BrowserSessionManager::new(
+            &mut state,
+            &catalog,
+            &mut effects,
+            BrowserSessionManagerConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+            },
+        )
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            activity,
+        ));
+        assert_eq!(result.unwrap_err(), error);
+        assert!(effects.launches.is_empty());
+        assert!(effects.closes.is_empty());
+        assert_eq!(state, before);
+    }
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_view_desktops: vec![],
+    };
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    state.next_session_sequence = u64::MAX;
+    let reused = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            2_000,
+        ))
+        .unwrap();
+    assert_eq!(reused.session_id, first.session_id);
+    assert_eq!(reused.session_disposition, SessionRecordDisposition::Reused);
+    assert_eq!(effects.launches.len(), 1);
+}
