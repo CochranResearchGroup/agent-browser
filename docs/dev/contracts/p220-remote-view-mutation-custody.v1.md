@@ -344,8 +344,14 @@ such as close, still require their everyday-lifecycle join.
 The focused native queue regression rejects an unknown profile through the
 Session Manager, preserves the aggregate and proves policy and confirmation
 precede dispatch. Existing actual-host composition tests prove first launch
-with injected process effects. A successful first browser request through the
-installed HTTP/MCP service remains unproved.
+with injected process effects. The actual HTTP and MCP normalizers now feed this same queue regression,
+preserving profile, session, task and request identity. The positive composition
+fixture uses HTTP-normalized first admission and MCP-normalized healthy reuse
+with injected process effects and real SQLite. Normalizer route hints do not
+rewrite ordinary navigate or snapshot commands; legacy shared-profile hints
+apply to tab creation and the historical remote-view open action. Those
+lifecycle actions still need the managed join. A successful first browser
+request through the installed HTTP/MCP service remains unproved.
 
 The native action executor still receives the complete command, preserving
 navigation headers, wait policy and request identity. Responses add a separate

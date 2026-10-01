@@ -479,14 +479,16 @@ fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_histo
     let provider = Rc::new(RefCell::new(Provider::default()));
     let calls = Rc::new(Cell::new(0));
     let mut consumer = host(&fixture, provider.clone(), calls.clone());
-    let command = serde_json::json!({"id": "first-open", "action": "navigate", "runtimeProfile": "profile-a",
-        "url": "https://synthetic.example/first", "headers": {"X-Test":"fixture"}, "waitUntil":"domcontentloaded", "activityAtMs": 100});
+    let request = serde_json::json!({"action": "navigate", "runtimeProfile": "profile-a", "sessionName":"Alice",
+        "params":{"url": "https://synthetic.example/first", "headers": {"X-Test":"fixture"}, "waitUntil":"domcontentloaded", "activityAtMs": 100}});
+    let command =
+        crate::native::stream::service_request_adapter_fixture(&request.to_string()).unwrap();
     let opened = consumer
         .execute_managed_command("Alice", &command)
         .unwrap()
         .unwrap();
     assert_eq!(opened["success"], true);
-    assert_eq!(opened["id"], "first-open");
+    assert_eq!(opened["id"], command["id"]);
     assert_eq!(opened["data"]["headers"], command["headers"]);
     assert_eq!(opened["data"]["waitUntil"], "domcontentloaded");
     assert_eq!(opened["browserSession"]["profileId"], "profile-a");
@@ -507,16 +509,15 @@ fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_histo
         consumer.state().navigation_history[0].url,
         "https://synthetic.example/first"
     );
-    let mut second = command.clone();
-    second["url"] = "https://synthetic.example/second".into();
-    second["activityAtMs"] = 101.into();
-    second.as_object_mut().unwrap().remove("runtimeProfile");
-    second["profile"] = fixture
-        .root
-        .join("profile-a")
-        .to_string_lossy()
-        .into_owned()
-        .into();
+    let mut second = crate::mcp::service_request_adapter_fixture_for_session(
+        &serde_json::json!({
+            "action":"navigate", "sessionName":"Alice",
+            "profile":fixture.root.join("profile-a").to_string_lossy().into_owned(),
+            "params":{"url":"https://synthetic.example/second", "activityAtMs":101},
+        }),
+        "service-default",
+    )
+    .unwrap();
     let reopened = consumer
         .execute_managed_command("Alice", &second)
         .unwrap()
@@ -905,6 +906,26 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
         rejected["error"], "browser_session_profile_selector_unknown",
         "{rejected}"
     );
+    let request = serde_json::json!({
+        "action":"snapshot", "runtimeProfile":"missing-profile", "sessionName":"ColdService",
+        "serviceName":"synthetic-service", "agentName":"fixture", "taskName":"selector-check",
+    });
+    let http =
+        crate::native::stream::service_request_adapter_fixture(&request.to_string()).unwrap();
+    let mcp = crate::mcp::service_request_adapter_fixture_for_session(&request, "service-default")
+        .unwrap();
+    for command in [http, mcp] {
+        assert_eq!(command["runtimeProfile"], "missing-profile");
+        assert_eq!(command["sessionName"], "ColdService");
+        assert_eq!(command["taskName"], "selector-check");
+        let id = command["id"].clone();
+        let rejected = queue.submit(command).await;
+        assert_eq!(rejected["id"], id);
+        assert_eq!(
+            rejected["error"], "browser_session_profile_selector_unknown",
+            "{rejected}"
+        );
+    }
     assert_eq!(fixture.store(false).load_session_state().unwrap(), after);
     queue.shutdown().await;
 }

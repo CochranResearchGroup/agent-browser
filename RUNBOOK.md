@@ -10,6 +10,38 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 421 | 2026-10-01
+
+The HTTP/MCP normalization audit found no ordinary navigation/snapshot redirect
+through historical presentation routing. The existing composition fixture now
+uses HTTP-normalized first admission and MCP-normalized reuse, preserving
+profile, headers, wait policy and handoff identity. The actual native queue
+regression receives both normalized transports and rejects an unknown profile
+with unchanged session state and preserved request identity. All 16 focused
+consumer composition tests pass. These are injected-process and local synthetic
+transport results, not a positive installed browser request.
+
+`pnpm build:development-candidate` completed in 2m 57s. The optimized executable
+is `cli/target/ci/agent-browser`, 56,908,648 bytes, version 0.28.0, SHA-256
+`544146350f6ef32d96944a8455e6f15a25eb7ed247a6ca18fd9860b70cb5c8ca`.
+Its production source is checkpoint `c5291d69`; subsequent changes in this
+packet are tests and documentation. It was not published or installed.
+The candidate build and test lane waited on the original live Cargo processes;
+no uncertain operation was restarted. Source scope excludes actual browser,
+provider and production effects.
+
+| Requirement | Evidence | Remaining proof / next action |
+| --- | --- | --- |
+| Ordinary HTTP/MCP selectors | Actual normalizers feed positive injected host admission/reuse and native queue rejection | Positive first request through installed service |
+| Executable development candidate | Optimized build and version readback, exact hash above | Isolated installed candidate and doctor after authorized runtime publication |
+| Normal tab creation | Legacy normalizer hints apply to tab_new/remote_view_open; these actions remain excluded from managed ordinary routing | Join tab_new to managed session and durable tab/handoff publication; avoid duplicate CDP creation |
+| Everyday operation and RC | Prior source checkpoints retained | Focus, renewal, close, bounded recovery/relocation, complete cleanup, Alice/Bob installed proof, installer/doctor and final candidate gates |
+
+Final formatting, strict workspace Clippy and documentation links passed. Prior architecture and docs production-build checks retain
+coverage because their executable surfaces did not change. The goal meter read
+865,059 during qualification. Memory disposition: `not_durable`; this bounded
+normalization qualification belongs in the contract and runbook.
+
 ## Turn 420 | 2026-10-01
 
 Plan v28 now states the plain-English production path and the cumulative
