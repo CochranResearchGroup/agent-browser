@@ -138,6 +138,7 @@ pub(crate) fn build_cdp_free_launch_plan(
         display: None,
         remote_headed: false,
         remote_headed_display_isolation: None,
+        private_launch_environment: None,
     };
     // CDP-free is a control-plane posture, not a request to abandon an
     // explicitly allocated remote-headed display or its operator view stream.

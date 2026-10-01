@@ -85,8 +85,13 @@ cleanup inventories supplied by a caller are not fresh owner proof by themselves
 The next source increment connects durable launch admission to fresh private
 environment acquisition and an injectable process effect. Existing intent requires
 readback rather than another process. Exact returned process identity is recorded
-before handing a launch to the session owner. Production process-driver wiring,
-atomic Session Manager publication and installed acceptance remain pending.
+before handing a launch to the session owner. The BrowserManager runtime now
+implements that process boundary, consuming the complete fresh environment with
+independent viewing validation and exact assignment lifecycle identity. Private
+launches make one Chrome attempt, suppress persisted stderr and redact failures
+before the failure journal. Runtime browser-sequence overflow is checked before
+process effects. Ordinary Session Manager coordinator wiring, atomic publication
+and installed acceptance remain pending.
 
 ## Current State
 

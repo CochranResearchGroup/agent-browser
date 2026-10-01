@@ -1053,6 +1053,7 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 display: None,
                 remote_headed: false,
                 remote_headed_display_isolation: None,
+                private_launch_environment: None,
             };
 
             if let Some(url) = first_runtime_positional(clean, 2) {

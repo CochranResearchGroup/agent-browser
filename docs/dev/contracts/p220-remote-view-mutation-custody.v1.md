@@ -172,3 +172,27 @@ outcome, wrong returned identity or failed observation commit retains intent and
 never authorizes an automatic retry. It does not publish the session aggregate.
 The production process driver and Session Manager atomic publication wiring
 remain pending; tests use synthetic transport and process effects only.
+
+
+## Private process ingress
+
+`BrowserManagerRuntime` implements the coordinator's process effect. It checks
+intent/profile identity and consumes the private environment against the supplied
+fresh observation before sending a worker command. The complete map reaches
+Chrome process construction; DISPLAY comes from that map, while the returned
+desktop affinity uses assignment desktop and lifecycle generation. Cached
+display contexts are used only by the older ordinary launch path. Neither a
+friendly label nor viewing generation becomes assignment identity.
+
+Presence of private inputs limits Chrome to one launch attempt. The process
+launcher suppresses persistent stderr capture for this path, and BrowserManager
+redacts errors before writing its failure journal. Worker/transport errors map
+to a static unknown outcome at the process boundary. Custody remains retained
+for reconciliation; no automatic second launch is authorized. Sequence capacity
+is checked before admission and process construction, avoiding another
+deterministic post-effect publication failure.
+
+This is source ingress, not installed adoption. The ordinary Session Manager
+must still invoke the custody coordinator and publish the resulting session
+aggregate atomically with the observed intent. Real headed success, CDP attach,
+owner recovery and installed acceptance remain unqualified.

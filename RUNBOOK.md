@@ -158,9 +158,32 @@ publication separate. Two provider-free tests pass for full environment
 consumption, custody-before-read, one launch, viewing drift, unknown process
 outcome, wrong returned generation and failed observation commit. Existing
 intent always requires readback. Architecture and documentation checks pass;
-strict workspace Clippy, format and diff checks pass. No installed process
-driver or Session Manager atomic
-publication path is wired yet, and no browser or provider effect was run.
+strict workspace Clippy, format and diff checks pass. At that checkpoint, no process
+driver or Session Manager atomic publication path was wired, and no browser or
+provider effect was run.
+
+The process ingress increment implements `RemoteViewBrowserProcessEffects` on
+BrowserManagerRuntime. It validates fresh private inputs before worker ingress,
+forwards the complete environment, uses exact assignment lifecycle identity and
+bypasses cached display lookup for this path. Chrome makes one attempt,
+suppresses persisted stderr, and BrowserManager redacts errors before journaling.
+The worker checks sequence capacity before process effects. Four ordinary
+LaunchOptions constructors initially failed compilation after the additive
+internal field; all now explicitly preserve their ordinary path with `None`.
+
+Focused isolated checks pass: two private-ingress tests, 58 `remote_view_d`
+matching CLI tests and one resource-pressure rejection test. The new process
+test uses only a disposable synthetic shell child, verifies complete inputs and
+one attempt, and checks the static diagnostic. The other new test rejects
+stale viewing generation before worker ingress. Strict workspace Clippy, format,
+architecture, documentation links and diff checks pass. No Chrome, provider,
+install or production effect was executed. Actual fresh headed success and
+CDP attach, ordinary Session Manager coordinator use and atomic publication
+remain pending alongside broader P220 acceptance.
+The validation selector returns its broad set because main and ordinary launch
+constructors changed. Those edits only initialize the internal field to `None`;
+installer, workstation, provider assets and service API/client contracts were
+not changed. Their broad recommendations are not new qualification claims.
 
 ## Turn 407 | 2026-10-01
 

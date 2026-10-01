@@ -23,6 +23,7 @@ const paths = {
   launchAdmission: 'cli/src/native/browser_launch_admission.rs',
   host: 'cli/src/native/browser_session_host.rs',
   runtime: 'cli/src/native/browser_session_runtime.rs',
+  chrome: 'cli/src/native/cdp/chrome.rs',
   store: 'cli/src/native/browser_session_store.rs',
   backup: 'cli/src/native/service_runtime_backup.rs',
 };
@@ -160,6 +161,18 @@ function check(root) {
       ),
     'Browser Runtime operational status must stay read-only and path-redacted',
   );
+  requireCondition(
+    source.runtime.includes('impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime') &&
+      source.runtime.includes('.into_environment(observation, &intent.assignment)') &&
+      source.runtime.includes('private_launch_environment: environment'),
+    'external process ingress must consume fresh complete private launch inputs',
+  );
+  requireCondition(
+    source.chrome.includes('command.envs(environment)') &&
+      source.chrome.includes('let max_attempts = if options.private_launch_environment.is_some()') &&
+      source.chrome.includes('let requested_stderr_log_path = if options.private_launch_environment.is_some()'),
+    'private process launches must preserve complete inputs without retries or persisted stderr',
+  );
   return failures;
 }
 
@@ -206,6 +219,14 @@ function selfTest() {
       copyFixture(root);
       writeFileSync(join(root, path), `${read(root, path)}${mutation}`);
       if (check(root).length === 0) throw new Error(`self-test missed ${label}`);
+    }
+    for (const [path, needle] of [
+      [paths.runtime, '.into_environment(observation, &intent.assignment)'],
+      [paths.chrome, 'command.envs(environment)'],
+    ]) {
+      copyFixture(root);
+      writeFileSync(join(root, path), read(root, path).replaceAll(needle, 'removed_boundary'));
+      if (check(root).length === 0) throw new Error(`self-test missed private launch boundary removal: ${path}`);
     }
     copyFixture(root);
     const runtimeWithoutContextFence = read(root, paths.runtime).replaceAll(

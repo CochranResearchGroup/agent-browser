@@ -8,10 +8,12 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use agent_browser_service_model::{
-    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserProfileCatalogEntry, BrowserProfileKind,
-    BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource, ManagedBrowserInstance,
-    ManagedBrowserTab, ManagedDisposableProfile, RemoteViewDesktopRuntimeContext,
-    RemoteViewFixedDesktop,
+    BrowserDisposableProfilePolicy, BrowserLaunch, BrowserLaunchIntent, BrowserProfileCatalogEntry,
+    BrowserProfileKind, BrowserSessionEffects, BrowserTabAcquisition, BrowserTabSource,
+    ManagedBrowserInstance, ManagedBrowserTab, ManagedDisposableProfile,
+    RemoteViewAssignmentObservation, RemoteViewBrowserProcessEffects,
+    RemoteViewBrowserProcessError, RemoteViewDesktopRuntimeContext, RemoteViewFixedDesktop,
+    RemoteViewPrivateLaunchEnvironment,
 };
 use serde_json::Value;
 
@@ -291,6 +293,7 @@ enum BrowserRuntimeCommand {
     Launch {
         profile: BrowserProfileCatalogEntry,
         desktop: Option<RemoteViewFixedDesktop>,
+        environment: Option<std::collections::BTreeMap<String, String>>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
     Close {
@@ -384,6 +387,41 @@ impl BrowserManagerRuntime {
     }
 }
 
+/// Fresh external-mode process ingress. Durable launch admission is owned by
+/// the coordinator; this adapter consumes private inputs and never retries.
+impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
+    fn launch(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        intent: &BrowserLaunchIntent,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        if intent.validate().is_err() || profile.id != intent.profile_id {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
+        let environment = environment
+            .into_environment(observation, &intent.assignment)
+            .map_err(|_| RemoteViewBrowserProcessError::Rejected)?;
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: intent.assignment.desktop_id.clone(),
+            generation: intent.assignment.generation,
+            friendly_route_label: String::new(),
+        };
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Launch {
+                profile: profile.clone(),
+                desktop: Some(desktop),
+                environment: Some(environment),
+                reply,
+            },
+        )
+        .map_err(|_| RemoteViewBrowserProcessError::OutcomeUnknown)
+    }
+}
+
 impl BrowserRuntimeDriver for BrowserManagerRuntime {
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         let (reply, receiver) = mpsc::channel();
@@ -407,6 +445,7 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             BrowserRuntimeCommand::Launch {
                 profile: profile.clone(),
                 desktop: desktop.cloned(),
+                environment: None,
                 reply,
             },
         )
@@ -551,18 +590,28 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Launch {
                 profile,
                 desktop,
+                environment,
                 reply,
             } => {
                 let result = runtime.block_on(async {
-                    let remote_display = desktop
-                        .as_ref()
-                        .map(|desktop| {
-                            resolve_remote_view_display(
-                                desktop,
-                                &config.remote_view_desktop_contexts,
-                            )
-                        })
-                        .transpose()?;
+                    let sequence = next_browser_sequence
+                        .checked_add(1)
+                        .ok_or_else(|| "browser_session_browser_sequence_exhausted".to_string())?;
+                    let remote_display = if let Some(environment) = &environment {
+                        Some(environment.get("DISPLAY").cloned().ok_or_else(|| {
+                            "browser_private_launch_environment_invalid".to_string()
+                        })?)
+                    } else {
+                        desktop
+                            .as_ref()
+                            .map(|desktop| {
+                                resolve_remote_view_display(
+                                    desktop,
+                                    &config.remote_view_desktop_contexts,
+                                )
+                            })
+                            .transpose()?
+                    };
                     super::browser_launch_admission::observe_browser_launch_admission(
                         Path::new(&profile.user_data_dir),
                         config.maximum_browser_processes,
@@ -576,6 +625,7 @@ fn run_browser_worker(
                             profile: Some(profile.user_data_dir.clone()),
                             display,
                             remote_headed: config.remote_headed || desktop.is_some(),
+                            private_launch_environment: environment,
                             ..LaunchOptions::default()
                         },
                         Some("chrome"),
@@ -585,9 +635,7 @@ fn run_browser_worker(
                     let pid = manager
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
-                    next_browser_sequence = next_browser_sequence
-                        .checked_add(1)
-                        .ok_or_else(|| "browser_session_browser_sequence_exhausted".to_string())?;
+                    next_browser_sequence = sequence;
                     let browser_id = format!("browser:{}:{next_browser_sequence}", profile.id);
                     let launch = BrowserLaunch {
                         browser_id: browser_id.clone(),
@@ -1000,6 +1048,48 @@ mod tests {
 
         browser.pid = u32::MAX;
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    fn private_external_runtime_rejects_stale_viewing_generation_before_process_ingress() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+        let observation: RemoteViewAssignmentObservation =
+            serde_json::from_value(fixture["assignmentObservation"].clone()).unwrap();
+        let intent = BrowserLaunchIntent {
+            intent_id: "33333333-3333-3333-3333-333333333333".to_string(),
+            profile_id: "profile-a".to_string(),
+            assignment,
+        };
+        let environment = RemoteViewPrivateLaunchEnvironment::from_response(
+            fixture["launchEnvironment"].clone(),
+            &observation,
+            &intent.assignment,
+        )
+        .unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: intent.profile_id.clone(),
+            name: "Synthetic".to_string(),
+            user_data_dir: "/synthetic/profile-a".to_string(),
+            kind: BrowserProfileKind::Named,
+        };
+        let mut stale = observation;
+        stale.target.viewing_generation += 1;
+        let mut runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig::default())
+            .expect("runtime starts without launching a browser");
+        assert_eq!(
+            RemoteViewBrowserProcessEffects::launch(
+                &mut runtime,
+                &profile,
+                &intent,
+                environment,
+                &stale,
+            ),
+            Err(RemoteViewBrowserProcessError::Rejected)
+        );
     }
 
     #[test]
