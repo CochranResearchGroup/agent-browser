@@ -97,3 +97,21 @@ resolution and validates a new session sequence before launching a browser.
 Exhausted fields cannot create a process that lacks a publishable session.
 Healthy existing-session reuse does not require another sequence value. These
 checks do not replace durable launch intent or ambiguous-process reconciliation.
+
+
+## Launch intent record
+
+`BrowserLaunchCustodyRecord` retains an active assignment and exact profile under
+an opaque intent UUID. Before observation it retains an unknown process outcome.
+Observation binds one nonzero PID and browser ID to the assignment desktop and
+lifecycle generation; a conflicting observation cannot replace it. Publication
+requires that exact browser ID, PID, profile and desktop generation in current
+Browser Session state. The record contains no launch environment or CDP endpoint.
+
+The pure model validates source joins only. Its `published` field is qualified
+by an adapter's atomic session-and-record commit, not by deserialization or a
+standalone model call. SQLite admission, profile exclusion, release-claim fencing,
+process readback and runtime invocation are pending. Unobserved and observed but
+unpublished records must remain cleanup obligations across restart; absence
+cannot be inferred from an empty observation. No failure-to-absent transition or
+automatic retry is introduced by this checkpoint.

@@ -14,6 +14,7 @@ const paths = {
   applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
   applicationCleanup: 'crates/agent-browser-service-model/src/remote_view_application_cleanup.rs',
   applicationStore: 'cli/src/native/remote_view_application_store.rs',
+  launchCustody: 'crates/agent-browser-service-model/src/browser_launch_custody.rs',
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
   retention: 'crates/agent-browser-service-model/src/remote_view_retention.rs',
@@ -36,7 +37,7 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.applicationCleanup, source.launchCustody, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
@@ -187,6 +188,7 @@ function selfTest() {
       [paths.applicationRecords, '\npub struct ProviderFreeHost;\n', 'provider-private application records'],
       [paths.applicationMutation, '\npub struct ProviderFreeHost;\n', 'provider-private application mutation'],
       [paths.applicationCleanup, '\npub struct ProviderFreeHost;\n', 'provider-private cleanup'],
+      [paths.launchCustody, '\npub struct ProviderFreeHost;\n', 'provider-private launch custody'],
       [paths.applicationStore, '\nstruct RouteKeeperAuthority;\n', 'retired application store authority'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],

@@ -3,6 +3,10 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_launch_custody;
+pub use browser_launch_custody::{
+    BrowserLaunchCustodyError, BrowserLaunchCustodyRecord, BrowserLaunchIntent,
+};
 mod abandoned_browser_retirement;
 mod browser_capability_registry;
 mod browser_desktop_selector;

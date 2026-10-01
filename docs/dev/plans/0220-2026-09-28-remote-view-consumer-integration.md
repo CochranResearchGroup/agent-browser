@@ -63,6 +63,12 @@ collection, pre-launch association fencing, transactional final release and
 physical residue readback remain unimplemented. This source-only
 increment does not qualify installed cleanup or the broader Alice/Bob acceptance.
 
+Launch custody source work now models a pending process intent with exact
+profile and active assignment identity, plus observed browser PID and subsequent
+session publication. Unknown outcomes remain obligations. Transactional SQLite
+admission, runtime effect wiring and release-claim exclusion are still pending.
+The model contains no environment or provider process ownership.
+
 ## Current State
 
 ### October 1 provider reconciliation and amendment review

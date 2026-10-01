@@ -105,6 +105,15 @@ This removes deterministic post-launch failures but does not provide durable
 launch custody. Strict workspace Clippy, format, architecture, documentation links and diff
 checks pass for this source increment.
 
+The launch-custody source model retains exact active assignment and profile
+intent, preserves an unknown process outcome, binds a nonzero PID and browser ID,
+and confirms exact session-state publication. Two focused provider-free tests
+pass for interrupted records, duplicate and conflicting observation, generation
+drift, partial records and profile mismatch. Environment and CDP endpoint are
+excluded from this record. Architecture and documentation checks pass; final
+strict workspace Clippy and format checks pass. SQLite admission and runtime
+wiring remain pending.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146
