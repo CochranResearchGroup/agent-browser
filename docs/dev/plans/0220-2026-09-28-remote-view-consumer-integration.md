@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 26
+Plan version: 27
 
 State: OPEN
 
@@ -482,7 +482,7 @@ browser semantics.
 
 ## Delivery sequence and budget
 
-### Revision 26: delivery path to a working candidate
+### Revision 27: production-focused delivery path to a working candidate
 
 The operator approved this amendment on October 1 after the source checkpoint
 at `1483b504`. This sequence governs remaining execution. Earlier S0 through S3
@@ -492,6 +492,24 @@ P219 dispositions and ownership boundaries remain in force. At amendment time, i
 was paused at the requested token checkpoint. Subsequent explicit resumption is
 recorded in RUNBOOK. This amendment authorizes
 planning changes only; it does not resume the goal or authorize installed effects.
+
+Revision 27 makes the operator's production focus explicit. The four outcomes
+below remain the critical path. Here, reliability means concrete browser
+behavior: avoid duplicate launches after a lost reply, preserve profiles and
+session identity, keep handoffs working after reconnect or relocation, and
+close only the processes and desktop references owned by the addressed session.
+These are functional requirements, not a separate safety workstream. The trusted
+single-user application model and existing authenticated ingress remain the
+scope; do not introduce hostile-client isolation, principal provisioning,
+generalized security machinery or new approval ceremonies.
+
+Implement the smallest coherent change that advances the next outcome. Group
+related defects into that delivery batch, reuse current adapters and custody
+stores, and validate the changed behavior. Additional hardening enters the
+critical path only when a reproducible defect or a named release requirement
+makes it necessary. Keep unrelated improvements as deferred work. Report
+progress in plain English as working behavior, demonstrated limitations and
+the next release blocker.
 
 The next explicit resumption follows four outcomes in order:
 
