@@ -65,8 +65,10 @@ increment does not qualify installed cleanup or the broader Alice/Bob acceptance
 
 Launch custody source work now models a pending process intent with exact
 profile and active assignment identity, plus observed browser PID and subsequent
-session publication. Unknown outcomes remain obligations. Transactional SQLite
-admission, runtime effect wiring and release-claim exclusion are still pending.
+session publication. Unknown outcomes remain obligations. The SQLite adapter
+now admits exact intents, excludes unresolved profile peers and commits session
+and custody publication together. Runtime effect wiring and release-claim
+exclusion are still pending.
 The model contains no environment or provider process ownership.
 
 ## Current State

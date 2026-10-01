@@ -110,8 +110,13 @@ Browser Session state. The record contains no launch environment or CDP endpoint
 
 The pure model validates source joins only. Its `published` field is qualified
 by an adapter's atomic session-and-record commit, not by deserialization or a
-standalone model call. SQLite admission, profile exclusion, release-claim fencing,
-process readback and runtime invocation are pending. Unobserved and observed but
+standalone model call. The SQLite adapter commits admission under `BEGIN IMMEDIATE`, compares current
+session state, excludes another unresolved intent or current browser for the same
+profile, and returns Existing for exact replay. Different profiles may share an
+exact assignment; contradictory unresolved assignment identity or generation is
+a conflict. Stored null or malformed ledger evidence is rejected. Observation is immutable. Session
+and custody publication commit together after a fresh aggregate comparison.
+Release-claim fencing, process readback and runtime invocation remain pending. Unobserved and observed but
 unpublished records must remain cleanup obligations across restart; absence
 cannot be inferred from an empty observation. No failure-to-absent transition or
 automatic retry is introduced by this checkpoint.

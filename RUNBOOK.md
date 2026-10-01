@@ -114,6 +114,19 @@ excluded from this record. Architecture and documentation checks pass; final
 strict workspace Clippy and format checks pass. SQLite admission and runtime
 wiring remain pending.
 
+Launch custody now has an injectable persistence contract and a SQLite adapter.
+Admission commits pending intent after exact current-state comparison and excludes
+another unresolved intent or current browser for that profile. Exact replay
+returns Existing and grants no second launch. Observation binds the same intent;
+publication commits session state and custody together. Two disposable SQLite
+tests passed across connections and reopen. Initial compilation failed on the
+document loader's generic return shape; explicit optional session loading fixed
+it. The ledger rejects stored null rather than treating it as absent and rejects
+contradictory assignment generations while allowing exact co-location across
+profiles. Both final SQLite tests, strict workspace Clippy, architecture, format,
+documentation links and diff checks pass. Runtime effect
+wiring, release-claim exclusion and physical process reconciliation remain open.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

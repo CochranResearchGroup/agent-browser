@@ -32,7 +32,7 @@ const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
 const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
 const BROWSER_RUNTIME_BACKUP_MANIFEST: &str = "manifest.json";
-const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
+pub(super) const SESSION_STATE_DOCUMENT: &str = "browser_session_state";
 const PROFILE_CATALOG_DOCUMENT: &str = "browser_profile_catalog";
 const BROWSER_RECOVERY_REGISTRY_DOCUMENT: &str = "browser_recovery_registry";
 const BROWSER_RECOVERY_REGISTRY_SCHEMA_V1: &str = "agent-browser.browser-recovery-registry.v1";
@@ -77,6 +77,25 @@ pub(crate) struct BrowserSessionSqliteStore {
 }
 
 impl BrowserSessionSqliteStore {
+    #[cfg(test)]
+    pub(super) fn launch_custody_fixture(
+        connection: Connection,
+        initialize: bool,
+    ) -> Result<Self, String> {
+        if initialize {
+            initialize_runtime_schema(&connection)?;
+            save_document(
+                &connection,
+                SESSION_STATE_DOCUMENT,
+                BROWSER_SESSION_STATE_SCHEMA_V1,
+                &BrowserSessionState::default(),
+            )?;
+        } else {
+            validate_runtime_schema(&connection)?;
+        }
+        Ok(Self { connection })
+    }
+
     /// The operation adapter uses this exact Browser Runtime connection for
     /// durable request custody; it creates no desktop allocation authority.
     pub(super) fn remote_view_mutation_connection(&mut self) -> &mut Connection {

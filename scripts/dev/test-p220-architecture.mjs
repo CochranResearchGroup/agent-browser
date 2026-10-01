@@ -14,6 +14,7 @@ const paths = {
   applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
   applicationCleanup: 'crates/agent-browser-service-model/src/remote_view_application_cleanup.rs',
   applicationStore: 'cli/src/native/remote_view_application_store.rs',
+  launchCustodyStore: 'cli/src/native/browser_launch_custody_store.rs',
   launchCustody: 'crates/agent-browser-service-model/src/browser_launch_custody.rs',
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
@@ -45,6 +46,7 @@ function check(root) {
     source.backup,
     source.launchAdmission,
     source.applicationStore,
+    source.launchCustodyStore,
   ].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
   const handoffProjection = source.retention.slice(
@@ -189,6 +191,7 @@ function selfTest() {
       [paths.applicationMutation, '\npub struct ProviderFreeHost;\n', 'provider-private application mutation'],
       [paths.applicationCleanup, '\npub struct ProviderFreeHost;\n', 'provider-private cleanup'],
       [paths.launchCustody, '\npub struct ProviderFreeHost;\n', 'provider-private launch custody'],
+      [paths.launchCustodyStore, '\nstruct RouteKeeperAuthority;\n', 'retired launch custody authority'],
       [paths.applicationStore, '\nstruct RouteKeeperAuthority;\n', 'retired application store authority'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],

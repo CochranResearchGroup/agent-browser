@@ -131,3 +131,41 @@ impl BrowserLaunchCustodyRecord {
         Ok(())
     }
 }
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum LaunchCustodyStoreError {
+    Unavailable,
+    InvalidRecord,
+    Conflict,
+    ProfileOccupied,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+pub enum LaunchCustodyAdmission {
+    New,
+    Existing(BrowserLaunchCustodyRecord),
+}
+
+/// Injectable durable launch boundary. Admission commits the exact pending
+/// intent before returning New. Existing never authorizes another process launch.
+/// Observation is immutable by intent and process identity. Publication compares
+/// current session state and commits session state plus custody together.
+/// Implementations must retain unknown outcomes for explicit reconciliation.
+pub trait BrowserLaunchCustodyStore {
+    fn admit_launch_intent(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+        expected: &BrowserSessionState,
+    ) -> Result<LaunchCustodyAdmission, LaunchCustodyStoreError>;
+    fn observe_launch_intent(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+        launch: &BrowserLaunch,
+    ) -> Result<(), LaunchCustodyStoreError>;
+    fn publish_launch_intent(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), LaunchCustodyStoreError>;
+}
