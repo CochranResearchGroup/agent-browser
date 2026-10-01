@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 25
+Plan version: 26
 
 State: OPEN
 
@@ -468,6 +468,72 @@ presentation behind an adapter so later embedding does not change handoff or
 browser semantics.
 
 ## Delivery sequence and budget
+
+### Revision 26: delivery path to a working candidate
+
+The operator approved this amendment on October 1 after the source checkpoint
+at `1483b504`. This sequence governs remaining execution. Earlier S0 through S3
+sections below preserve implementation history and supporting requirements;
+they are not competing queues of new work. The original acceptance criteria,
+P219 dispositions and ownership boundaries remain in force. Implementation
+remains paused at the requested token checkpoint. This amendment authorizes
+planning changes only; it does not resume the goal or authorize installed effects.
+
+The next explicit resumption follows four outcomes in order:
+
+1. **Connect normal browser requests.** Wire consumer launch admission and intent
+   retention into the ordinary Session Manager and atomic host publication.
+   Connect assignment selection, fresh launch inputs and stable tab-specific
+   handoff resolution through the existing public adapter. Exit with an
+   executable development-candidate path for open, session creation and handoff
+   resolution, plus provider-free composition tests that exercise the actual
+   host, manager and adapter together. Simulated results are source evidence;
+   working installed links are proved in milestone 3.
+2. **Finish everyday browser behavior.** Complete tab and window focus,
+   presentation renewal and reconnect, deliberate tab/browser close, independent
+   activity clocks, bounded demand-driven recovery, desktop relocation and
+   final-reference cleanup. Preserve multiple browsers per assigned desktop.
+   Exit with the user behavior implemented on the normal path and focused
+   regression coverage, including uncertain outcomes without duplicate effects.
+   Reuse existing mechanisms; add a new abstraction only when a named remaining
+   behavior cannot be implemented coherently through the current seams.
+3. **Prove the installed experience.** After the existing installed-acceptance
+   prerequisites and explicit effect authorization, run the Alice/Bob packet
+   below against exact development binaries. Prove real opening and tab-specific
+   viewing, multiple tabs and browsers, focus, reconnect, deliberate close,
+   recovery, relocation and cleanup. Exit with source-bound results for every
+   applicable axis and a fresh before/after resource census. Keep partial results
+   and diagnose demonstrated defects; simulated substitutes do not close a live
+   criterion. No additional permission is required merely for ordinary source
+   repairs within already authorized scope.
+4. **Prepare the release candidate.** Fix demonstrated acceptance defects,
+   freeze the candidate source and binary identities, complete changed-surface
+   checks and protected integration, and qualify the applicable installer,
+   diagnostic and many-to-many remote-operation requirements in AGENTS.md.
+   Exit with a reproducible candidate artifact and a compact release-readiness
+   report identifying every passed gate and any remaining blocker. A checkpoint
+   build or development publication alone is not a qualified release candidate.
+   Formal release, production promotion and publication remain separately
+   directed maintainer actions; candidate preparation does not authorize them.
+
+At each milestone, checkpoint code custody, demonstrated behavior, validation
+and remaining blockers before starting the next milestone. Use RUNBOOK as the
+single current execution record. Derive only the next bounded implementation
+packet; do not maintain another infrastructure backlog beside these outcomes.
+Do not expand into generalized IAM, multi-tenancy, provider implementation,
+unrelated architecture extraction or repairs to unrelated historical tests.
+
+An additional one-million-token resumption is a ceiling, not a delivery estimate
+or an instruction to consume it. On explicit resumption, record its actual goal
+starting meter and stop with a restart checkpoint before the additional allowance
+is exhausted. Plan versions and packet boundaries do not reset cumulative
+accounting. Assess progress by
+completed user behavior and remaining release gates. Reuse passed checks when
+covered executable inputs have not changed; widen validation for an actual
+changed surface or demonstrated regression. Stop earlier when the authorized
+outcome is achieved or a genuine external dependency prevents further progress.
+
+### Earlier delivery sequence and retained evidence
 
 ### S0 — Custody and semantic audit
 

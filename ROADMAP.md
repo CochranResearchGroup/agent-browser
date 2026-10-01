@@ -29,10 +29,16 @@ field evidence and acceptance records into the same model.
 
 State: OPEN
 
-October 1 reconciliation: Plan 0220 v24 consumes accepted Remote View RV-011
+October 1 reconciliation: Plan 0220 v26 consumes accepted Remote View RV-011
 revision 3; issues #62 and #146 are closed. Implementation remains paused.
-Next is a provider-free external-mode adapter and cleanup acknowledgement
-packet. See RUNBOOK.md for current custody and evidence limits.
+Next is consumer launch admission and intent retention connected to the atomic
+host publication path. See RUNBOOK.md for current custody and evidence limits.
+
+The remaining delivery sequence is normal browser-request integration, everyday
+browser behavior, installed Alice/Bob validation and release-candidate
+qualification. Checkpoint each outcome, reuse unchanged validation and avoid
+unrelated infrastructure expansion. Implementation remains paused; candidate
+preparation and formal release retain their separate authority boundaries.
 
 Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md),
 [issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202),

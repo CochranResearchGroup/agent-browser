@@ -10,6 +10,18 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 409 | 2026-10-01
+
+The operator requested a planning amendment while the implementation goal remains
+paused. P220 v26 makes four remaining outcomes the primary execution sequence:
+normal browser requests, everyday behavior, installed Alice/Bob validation and
+release-candidate qualification. Earlier delivery stages and evidence remain
+historical support. Each outcome has an exit and checkpoint; unrelated
+infrastructure expansion and repeated unchanged validation are excluded.
+An additional million tokens is a future resumption ceiling, not a delivery
+promise or new execution authority. Original acceptance, installed-effect and
+formal-release boundaries remain in force. No source or runtime work occurred.
+
 ## Turn 408 | 2026-10-01
 
 The operator explicitly resumed P220 implementation. Plan v25 continues the

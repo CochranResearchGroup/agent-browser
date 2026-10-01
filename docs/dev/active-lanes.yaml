@@ -20,7 +20,7 @@ lanes:
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Goal stopping at the requested pre-one-million token checkpoint; plan remains OPEN; next source packet connects consumer launch admission and intent retention to atomic host publication; runtime and installed acceptance remain separately gated
+    blocker: Goal stopping at the requested pre-one-million token checkpoint; plan remains OPEN; Plan v26 orders normal request integration, everyday behavior, installed validation and candidate qualification; next source packet connects consumer launch admission and intent retention to atomic host publication; implementation remains paused and installed effects remain separately gated
     updated_at: 2026-10-01
   - id: P204
     product_lane: PL-PLATFORM
