@@ -126,16 +126,19 @@ again at actual launch consumption; a stored value is not freshness evidence.
 
 | Revision 3 adapter requirement | Current provider-free evidence | Remaining proof and next action |
 | --- | --- | --- |
-| External wire shapes | All 12 request operations and public response records round-trip the source-bound synthetic fixture; managed verbs and obsolete fields rejected | Mutation transport and exact release result validation |
+| External wire shapes | All 12 request operations and public response records round-trip the source-bound synthetic fixture; all five mutation transcripts are injectable; managed verbs and obsolete fields rejected | Actual public transport and runtime integration |
 | Assignment join | Exact acquisition and independent desktop/generation join validated; missing or record-only readiness rejected | Wire runtime ingress to fresh observation |
 | Private launch environment | Full synthetic map preserved; malformed/incomplete/stale inputs rejected; debug redaction and compile-fail serialization check | Consume through actual browser launch adapter |
-| Launch freshness | Injectable observe/environment/observe transcript; changed target invalidates environment; unknown outcomes return without retry | Complete effect journal and ambiguous-effect readback for acquire/activate/view/release |
-| Read-side integration | Injectable inventory, windows, events and retained view resolution consume exact request/response transcripts; event payloads reject private environment fields, binding drift and invalid cursors; grants reject expiry, revocation and wrong target/path | Connect mutation replay and runtime consumers; issuance/resolution does not prove pixels or input readiness |
-| Cleanup acknowledgement | Every false/missing assertion and mismatched assignment/generation rejected | Construct from all current Agent Browser references, recovery, foreground and cleanup evidence; qualify joined provider release |
+| Launch freshness | Injectable observe/environment/observe transcript; changed target invalidates environment; unknown outcomes return without retry | Wire actual launch consumption and authoritative mutation readback |
+| Mutation custody | Atomic Browser Runtime SQLite claim precedes transport; restart persistence and competing-connection admission pass; unknown or inexact replies retain pending request; completed cached acquisition is checked against current inventory | Authoritative reconciliation of pending provider outcomes and runtime operation identity |
+| Read-side integration | Injectable inventory, windows, events and retained view resolution consume exact request/response transcripts; event payloads reject private environment fields, binding drift and invalid cursors; grants reject expiry, revocation and wrong target/path | Connect runtime consumers and authoritative pending-outcome reconciliation; issuance/resolution does not prove pixels or input readiness |
+| Cleanup acknowledgement | Every false/missing assertion and mismatched assignment/generation rejected | Exact provider release response identity and complete retirement sets pass provider-free validation; still construct acknowledgement from all current Agent Browser obligations and qualify installed release |
 
 This is an intermediate source checkpoint, not the completed adapter packet,
-installed acceptance, or merge readiness. Mutation submission, exact joined-release semantic validation and durable
-ambiguous-outcome replay remain pending. Acquisition keys are absent from public
+installed acceptance, or merge readiness. The [mutation custody contract](../contracts/p220-remote-view-mutation-custody.v1.md)
+qualifies injectable submission, exact release response validation and durable
+SQLite pending/completed records. Authoritative reconciliation of ambiguous
+provider outcomes remains pending. Acquisition keys are absent from public
 inventory and client replay keys are absent from assignment events. These
 records cannot correlate an unknown mutation by timing or target similarity;
 retain the exact unresolved request until authoritative operation readback or

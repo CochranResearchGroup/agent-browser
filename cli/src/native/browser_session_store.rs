@@ -77,6 +77,11 @@ pub(crate) struct BrowserSessionSqliteStore {
 }
 
 impl BrowserSessionSqliteStore {
+    /// The operation adapter uses this exact Browser Runtime connection for
+    /// durable request custody; it creates no desktop allocation authority.
+    pub(super) fn remote_view_mutation_connection(&mut self) -> &mut Connection {
+        &mut self.connection
+    }
     pub(crate) fn default_sqlite_path() -> Result<PathBuf, String> {
         let legacy_state_path = default_service_state_path()?;
         let service_directory = legacy_state_path
@@ -765,7 +770,7 @@ fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-fn save_document(
+pub(super) fn save_document(
     connection: &Connection,
     kind: &str,
     schema_version: &str,
@@ -804,7 +809,7 @@ fn load_document<T: DeserializeOwned>(
         .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
 }
 
-fn load_optional_document<T: DeserializeOwned + Default>(
+pub(super) fn load_optional_document<T: DeserializeOwned + Default>(
     connection: &Connection,
     kind: &str,
     expected_schema: &str,

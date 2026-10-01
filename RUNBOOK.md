@@ -50,6 +50,21 @@ unknown acquisition or action inferred by target/timing. Mutation custody,
 exact joined release validation and authoritative reconciliation remain next.
 No source-backed memory write is warranted for these intermediate fixtures.
 
+The mutation increment covers acquire, activate, issue-view, revoke-view and
+release through injectable transport with custody before send. Exact cleanup
+and complete retirement sets are enforced. Browser Runtime SQLite persists
+pending/completed public requests in atomic per-operation documents and gives
+competing connections one admission winner. Seventeen service-model focused
+tests and two real SQLite focused tests pass. Strict workspace Clippy passes.
+Clock-at-response expiry and cached-acquisition drift are covered. The first
+SQLite test failed in teardown on an intentionally read-only migration archive;
+exact synthetic residue was inspected and removed, and corrected teardown plus
+both SQLite tests pass. This is a fixture cleanup failure, not discarded
+storage evidence. Actual network transport, authoritative unknown-outcome
+reconciliation, complete cleanup evidence construction and runtime integration
+remain pending. The narrow mutation contract carries storage semantics; no live
+Remote View, browser, installation, ingress or production effect occurred.
+
 The current goal meter starts at zero; the earlier handoff's 286,939 tokens are
 historical accounting. Checkpoint before the requested 1 million token bound.
 

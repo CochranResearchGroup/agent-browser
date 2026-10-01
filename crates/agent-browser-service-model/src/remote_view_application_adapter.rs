@@ -27,6 +27,8 @@ pub trait RemoteViewApplicationTransport {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RemoteViewApplicationAdapterError {
     InvalidApplication,
+    MutationStore(crate::RemoteViewApplicationMutationStoreError),
+    MutationReadbackRequired,
     Transport(RemoteViewApplicationTransportError),
     Response(RemoteViewApplicationResponseError),
 }
@@ -46,7 +48,7 @@ impl From<RemoteViewApplicationResponseError> for RemoteViewApplicationAdapterEr
 /// Application is configured resource context. Transport implementations and
 /// runtime adapters retain effect authority and durable operation custody.
 pub struct RemoteViewApplicationAdapter<T> {
-    application: String,
+    pub(super) application: String,
     transport: T,
 }
 
@@ -69,7 +71,7 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         })
     }
 
-    fn request(
+    pub(super) fn request(
         &mut self,
         request: RemoteViewApplicationRequest,
     ) -> Result<Value, RemoteViewApplicationAdapterError> {
@@ -154,7 +156,7 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         &mut self,
         assignment: &RemoteViewAssignmentRecord,
         expected: &RemoteViewApplicationGrant,
-        now_ms: u64,
+        now_ms: impl Fn() -> u64,
         embed: bool,
     ) -> Result<RemoteViewApplicationGrant, RemoteViewApplicationAdapterError> {
         let observed = self.observe_assignment(assignment)?;
@@ -162,7 +164,7 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
             &observed.target,
             &self.application,
             &expected.request.audience,
-            now_ms,
+            now_ms(),
         )?;
         if embed && expected.request.audience == "remote_view" {
             return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
@@ -184,7 +186,7 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
             &observed.target,
             &self.application,
             &expected.request.audience,
-            now_ms,
+            now_ms(),
         )?;
         if grant != *expected {
             return Err(RemoteViewApplicationResponseError::InvalidTarget.into());

@@ -137,11 +137,39 @@ fn read_adapter_consumes_exact_inventory_windows_events_and_retained_views() {
     assert_eq!(
         serde_json::to_value(
             adapter
-                .resolve_view(&assignment, &grant, 2000, false)
+                .resolve_view(&assignment, &grant, || 2000, false)
                 .unwrap()
         )
         .unwrap(),
         fixture["grant"]
+    );
+    assert!(steps.borrow().is_empty());
+}
+
+#[test]
+fn resolution_rechecks_expiry_after_transport_using_current_clock() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let grant = serde_json::from_value(fixture["grant"].clone()).unwrap();
+    let steps = Rc::new(RefCell::new(VecDeque::from([
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+        (fixture["requests"][8].clone(), Ok(fixture["grant"].clone())),
+    ])));
+    let mut adapter =
+        RemoteViewApplicationAdapter::new("agent-browser".into(), ScriptedTransport(steps.clone()))
+            .unwrap();
+    let times = RefCell::new(VecDeque::from([2000, 301000]));
+    let clock = || times.borrow_mut().pop_front().unwrap();
+    assert_eq!(
+        adapter
+            .resolve_view(&assignment, &grant, clock, false)
+            .unwrap_err(),
+        RemoteViewApplicationAdapterError::Response(
+            RemoteViewApplicationResponseError::InvalidTarget
+        )
     );
     assert!(steps.borrow().is_empty());
 }

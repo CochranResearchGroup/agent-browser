@@ -11,6 +11,8 @@ const paths = {
   applicationResponse: 'crates/agent-browser-service-model/src/remote_view_application_response.rs',
   applicationAdapter: 'crates/agent-browser-service-model/src/remote_view_application_adapter.rs',
   applicationRecords: 'crates/agent-browser-service-model/src/remote_view_application_records.rs',
+  applicationMutation: 'crates/agent-browser-service-model/src/remote_view_application_mutation.rs',
+  applicationStore: 'cli/src/native/remote_view_application_store.rs',
   manager: 'crates/agent-browser-service-model/src/browser_session_manager.rs',
   recovery: 'crates/agent-browser-service-model/src/browser_recovery.rs',
   retention: 'crates/agent-browser-service-model/src/remote_view_retention.rs',
@@ -33,13 +35,14 @@ function check(root) {
   const requireCondition = (condition, message) => {
     if (!condition) failures.push(message);
   };
-  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.manager, source.recovery, source.retention].join('\n');
+  const modelSources = [source.consumer, source.application, source.applicationResponse, source.applicationAdapter, source.applicationRecords, source.applicationMutation, source.manager, source.recovery, source.retention].join('\n');
   const supportedCliSources = [
     source.host,
     source.runtime,
     source.store,
     source.backup,
     source.launchAdmission,
+    source.applicationStore,
   ].join('\n');
   const retiredProviderTerms = /\b(?:RouteKeeperAuthority|PresentationRequestQueue|ProviderFreeHost|ProviderFreeApplicationEffect|ProviderFreeControl)\b|\bguacamole\b|\bxrdp\b/i;
   const handoffProjection = source.retention.slice(
@@ -181,6 +184,8 @@ function selfTest() {
       [paths.applicationResponse, '\npub struct ProviderFreeHost;\n', 'provider-private application response'],
       [paths.applicationAdapter, '\npub struct ProviderFreeHost;\n', 'provider-private application adapter'],
       [paths.applicationRecords, '\npub struct ProviderFreeHost;\n', 'provider-private application records'],
+      [paths.applicationMutation, '\npub struct ProviderFreeHost;\n', 'provider-private application mutation'],
+      [paths.applicationStore, '\nstruct RouteKeeperAuthority;\n', 'retired application store authority'],
       [paths.retention, '\npub provider_url: String;\n', 'provider-private retention'],
       [paths.runtime, '\nfn infer() { let _ = desktop.route_label; let _ = DISPLAY; }\n', 'display inference'],
       [paths.store, '\nstruct RouteKeeperAuthority;\n', 'retired store authority'],
