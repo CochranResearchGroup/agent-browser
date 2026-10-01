@@ -29,6 +29,11 @@ field evidence and acceptance records into the same model.
 
 State: OPEN
 
+October 1 reconciliation: Plan 0220 v24 consumes accepted Remote View RV-011
+revision 3; issues #62 and #146 are closed. Implementation remains paused.
+Next is a provider-free external-mode adapter and cleanup acknowledgement
+packet. See RUNBOOK.md for current custody and evidence limits.
+
 Current state: [Plan 0220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md),
 [issue #202](https://github.com/CochranResearchGroup/agent-browser/issues/202),
 the closed [Remote View issue #70](https://github.com/CochranResearchGroup/remote-view/issues/70),

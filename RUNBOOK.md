@@ -10,6 +10,43 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 408 | 2026-10-01
+
+The operator explicitly resumed P220 implementation. Plan v25 continues the
+provider-free revision 3 external-mode adapter packet in the existing branch.
+Startup verified local and recorded remote HEAD `6274601e`, with only the four
+review-owned documentation amendments. Remote View's recorded canonical ref
+remains `da540f22`; its public request enum confirms snake_case operation
+arguments, camelCase cleanup acknowledgement, and independent lifecycle and
+viewing generations. Events use lifecycle generation alone. No runtime,
+provider, installation, ingress, production, merge or release effect is authorized
+by this resumption. The request-only checkpoint adds a source-bound fixture for all 12 external
+operations and rejects managed lifecycle and obsolete principal fields. Two
+focused contract tests, the extended self-testing architecture guard and
+documentation links pass. Response validation, environment privacy, injectable
+transport and ambiguous-effect reconciliation remain pending. Strict workspace
+Clippy, format verification, API/MCP parity and generated client contract checks
+pass. This is not adapter acceptance. No live effects occurred. Graphiti recall
+was historical route evidence only; no memory write is warranted for this
+intermediate request-shape checkpoint.
+The current goal meter starts at zero; the earlier handoff's 286,939 tokens are
+historical accounting. Checkpoint before the requested 1 million token bound.
+
+## Turn 407 | 2026-10-01
+
+P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146
+are closed. Provider receipts qualify installed external lifecycle, viewing,
+input, embedding and cleanup; Agent Browser adoption remains incomplete.
+The next packet after explicit continuation is the external-mode wire adapter,
+independent generation fences, private launch environment and versioned cleanup
+acknowledgement. No source implementation or runtime effect occurred here.
+The prior goal remains paused; its handoff recorded 286,939 tokens, while this
+session's goal tool returns no goal. Do not invent a current token-meter value.
+Prior comprehensive tests preceded final retention refinements; focused tests
+and strict Clippy qualified those refinements. Older entries retain historical
+status, including the former provider join blocker. Existing runbook length
+debt is unchanged by this bounded amendment review; no history is deleted.
+
 ## Turn 406 | 2026-09-29
 
 P220 version 23 and checkpoint `cfaf3f12` adapt presentation retention to the

@@ -2,7 +2,7 @@
 
 Date: 2026-09-28
 
-Plan version: 23
+Plan version: 25
 
 State: OPEN
 
@@ -16,7 +16,7 @@ Predecessor: Agent Browser Issue #195 and the linked P219 supersession audit, ca
 
 Work item: [CochranResearchGroup/agent-browser#202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
 
-Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, corrective Plan 0028, and narrow installed join request [CochranResearchGroup/remote-view#146](https://github.com/CochranResearchGroup/remote-view/issues/146)
+Provider evidence: closed [CochranResearchGroup/remote-view#70](https://github.com/CochranResearchGroup/remote-view/issues/70), J2/J3, corrective Plan 0028, closed RV-011 revision 3 [issue #62](https://github.com/CochranResearchGroup/remote-view/issues/62), and closed installed join [CochranResearchGroup/remote-view#146](https://github.com/CochranResearchGroup/remote-view/issues/146)
 
 Target: `main`
 
@@ -52,6 +52,83 @@ environment. It does not use Remote View `application place` or `application
 stop` for those browsers.
 
 ## Current State
+
+### October 1 provider reconciliation and amendment review
+
+Remote View canonical `main` at `da540f22a6ff851272c5e9b91d7e3117a28bf6cd`
+closes Plan 0015 revision 3 and issues #62 and #146. Its current
+[application integration guide](https://github.com/CochranResearchGroup/remote-view/blob/da540f22a6ff851272c5e9b91d7e3117a28bf6cd/docs/consumer-integration-guide.md),
+[single-user contract](https://github.com/CochranResearchGroup/remote-view/blob/da540f22a6ff851272c5e9b91d7e3117a28bf6cd/docs/design/0004-single-user-application-pools.md),
+and [canonical closeout](https://github.com/CochranResearchGroup/remote-view/blob/da540f22a6ff851272c5e9b91d7e3117a28bf6cd/docs/dev/notes/0011-2026-10-01-rv011-canonical-closeout.md)
+supersede the earlier provider-gap statements preserved below. The installed
+source receipt identifies `2dc51d776e0d92709d3ce0469c03e793b5de891d`, not the
+later documentation-only canonical head. Provider acceptance includes an
+external client launching and stopping its own xterm, exact window activation,
+rendered viewing, input, embedding, lifetime and release. These are reviewed
+provider receipts, not live checks or Agent Browser acceptance performed here.
+
+The operator explicitly resumed implementation on October 1. Revision 25
+continues the provider-free external-mode adapter packet under the existing
+source authority. Runtime effects remain separately gated. Revision 24 was a
+documentation-only review. The primary amendments are:
+
+- Consume the shared `remote_view_consumer` application envelope through a
+  provider-neutral adapter configured for external lifecycle. A configured
+  application selector is resource context, not a credential or principal.
+  Existing Authelia ingress remains separate; introduce no Remote View account,
+  delegated client token, role binding, or second login.
+- Retain exact assignment and lifecycle generation. `observe_assignment`
+  supplies an independent viewing generation. Require both for
+  `launch_environment`, window inventory, activation and view issuance; refresh
+  at effect boundaries and reject stale or missing observations. Carry the
+  authoritative full launch environment privately, rather than assuming a
+  cached display-only vector is sufficient.
+- Use current public operations for inventory/acquire, assignment observation,
+  launch environment, windows/activate/events, view issuance/resolution/revoke,
+  and acknowledged release. Freeze actual request/response fixtures against
+  revision 3; the older strict J1/J3 fixtures are historical compatibility
+  evidence, not a current installed-wire contract. Preserve idempotency and
+  ambiguous-outcome reconciliation without automatic duplicate effects.
+- Emit cleanup schema version 1 for the exact assignment and lifecycle generation
+  only after `applicationReferencesClear`, `pendingRecoveryClear`,
+  `foregroundLeasesClear`, and `cleanupTasksClear` are all proved. Retained peer
+  counting alone is insufficient: include every current browser association and
+  unresolved obligation. Remote View separately preflights its own records.
+  Pool return and physical scale-in remain separate.
+- Keep Remote View view-route expiry/revocation distinct from Agent Browser
+  logical session activity and durable handoff identity. Reissue provider views
+  when needed without replacing the tab-bound operator handoff. Embedding is
+  available but remains optional for this delivery.
+
+Next bounded packet after explicit implementation continuation: one primary
+owner reconciles the revision 3 external-mode wire model and implements an
+injectable adapter with provider-free request/response replay. Cover independent
+stale generations, missing live-resource readiness, environment privacy,
+external mode without placement, idempotent requests, and false or mismatched
+cleanup acknowledgements. Do not wire live transport effects in that packet.
+Exit when focused contract tests, architecture guards, Rust formatting/strict
+Clippy and applicable client/schema checks pass. Then connect fresh runtime
+observations, transactional detach and reference-safe final release before
+handoff/focus/recovery acceptance. Existing objective, ownership, co-location,
+operator-stop and installed Alice/Bob gates remain unchanged.
+
+Revision 25 implementation starts with the focused `remote_view_application`
+service-model module and the source-bound synthetic
+[revision 3 request fixture](../contracts/remote-view-application-r3.v1.fixture.json).
+The fixture covers all 12 external-mode public request operations. It excludes
+managed placement/stop and principal setup. Focused request round-trip and
+cleanup tests pass; cleanup rejects missing/false obligations and mismatched
+assignment or lifecycle generation. This is request-shape qualification only.
+Response qualification, live-resource generation checks, private full launch
+environment, injectable transport and ambiguous-effect reconciliation remain
+pending. Runtime evidence must construct cleanup acknowledgements; the wire
+validator does not establish actual reference or process absence.
+
+Historical checkpoints below retain their original evidence bounds. The full
+service-model replay preceded the final wire-compatibility and detached-conflict
+refinements; focused retention tests and strict Clippy passed afterward. Do not
+claim that comprehensive replay qualified the final exact implementation head.
+
 
 Remote View Plan 0017 is closed from corrected canonical evidence. J2
 integrated at `7298ae7f76626c61ba5086eb4f934699251009ce`; J3 integrated at
@@ -477,8 +554,9 @@ installed desktop lifecycle and established that its exact live resource
 observation is sufficient for Agent Browser-owned launch. It also demonstrated
 the concrete identity discontinuity between the dynamic installed-control
 desktop UUID and the separately derived gateway desktop UUID plus
-slot-addressed window surface. Remote View issue #146 now tracks only that
-generation-bound viewing and window-action join. Remote
+slot-addressed window surface. Remote View issue #146 tracked that
+generation-bound viewing and window-action join and is now closed; revision 24
+requires consuming its integrated successor application interface. Remote
 View's provider-free fixture remains compatibility evidence, not a substitute
 for proving Agent Browser's browser launch, recovery, durable handoff,
 retention mapping, focus transaction, or cleanup adapter.
@@ -596,7 +674,8 @@ of mixed P219 commits, schema generation, and shared documentation remain on
 the serialized critical path. The launch half of the runtime integration spike
 is complete at `716ef3a5`. The next critical-path packets are the Agent Browser
 installed-control adapter and shared desktop-assignment retention; viewing and
-window-action resolution depends on the narrow Remote View issue #146 join.
+window-action resolution now consumes the integrated revision 3 application
+interface; issue #146 is no longer an external blocker.
 
 Remote View retains authority over its repository. Issue #70 and RV-014 are
 closed from Remote View's J3 fixture; Agent Browser consumes the published J2,

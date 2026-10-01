@@ -30,6 +30,7 @@ mod profile_readiness;
 mod profile_recovery_receipt;
 mod profile_reset_receipt;
 mod profile_seeding;
+mod remote_view_application;
 mod remote_view_consumer;
 mod remote_view_retention;
 mod request_provenance;
@@ -183,6 +184,10 @@ pub use profile_seeding::{
     profile_seeding_handoff_id, ProfileSeedingHandoffRecord, ProfileSeedingHandoffState,
     ProfileSeedingMode, SERVICE_PROFILE_SEEDING_HANDOFF_STATE_VALUES,
     SERVICE_PROFILE_SEEDING_MODE_VALUES,
+};
+pub use remote_view_application::{
+    RemoteViewApplicationCleanup, RemoteViewApplicationEnvelope, RemoteViewApplicationRequest,
+    RemoteViewApplicationViewCapability, REMOTE_VIEW_APPLICATION_SOURCE_CHECKPOINT,
 };
 pub use remote_view_consumer::{
     allocated_desktop_candidate, allocated_desktop_runtime_context, exact_release_reference,
