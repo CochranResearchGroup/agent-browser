@@ -39,9 +39,16 @@ checkpoint adds no automatic replay or abandoned-operation deletion.
 
 Release requires schema version 1 cleanup acknowledgement for the exact
 assignment and lifecycle generation, with all four readiness assertions true.
-The caller must prove those assertions from current Agent Browser references,
-recovery, foreground leases and cleanup obligations. The wire validator cannot
-establish actual absence. The response must release that exact assignment and
+The adapter accepts a non-clonable, non-deserializable cleanup permit from
+the pure Agent Browser evidence gate rather than raw wire booleans. The permit
+binds the entire release target, including route and viewer sets. The gate checks
+current browser affinities, retained assignment joins, sessions and tabs. Detached
+presentation does not clear live references. Independent recovery, foreground
+and cleanup inventories must be explicitly complete and empty; unknown inventories
+fail closed. Conflicting identity and dangling current references also fail.
+The runtime collector must still establish completeness under transactional
+release admission and fence new associations. The pure gate does not establish
+OS process absence or eliminate a snapshot-to-send race. The response must release that exact assignment and
 retire the complete expected route and viewer sets. Duplicates, partial sets,
 wrong identities or generations fail. Empty replay retirement is not silently
 accepted as proof of a previously unknown nonempty retirement.
@@ -52,4 +59,5 @@ simulated restart, and cached-acquisition drift. Disposable real SQLite tests
 prove restart persistence, conflicting payload rejection, immutable completion,
 and one claim winner across two connections. These prove source/storage
 behavior only. Network transport, actual consumer integration, complete
-cleanup evidence and installed acceptance remain pending.
+runtime cleanup collection, transactional release admission and installed
+acceptance remain pending.

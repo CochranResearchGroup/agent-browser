@@ -6,11 +6,12 @@ use serde_json::Value;
 
 use crate::{
     RemoteViewApplicationActivation, RemoteViewApplicationAdapter,
-    RemoteViewApplicationAdapterError, RemoteViewApplicationCleanup, RemoteViewApplicationEnvelope,
-    RemoteViewApplicationGrant, RemoteViewApplicationRequest, RemoteViewApplicationResponseError,
-    RemoteViewApplicationTransport, RemoteViewApplicationViewCapability,
-    RemoteViewApplicationViewIssuance, RemoteViewApplicationViewRevocation,
-    RemoteViewAssignmentRecord, RemoteViewAssignmentState, RemoteViewJoinedReleaseOutcome,
+    RemoteViewApplicationAdapterError, RemoteViewApplicationCleanupPermit,
+    RemoteViewApplicationEnvelope, RemoteViewApplicationGrant, RemoteViewApplicationRequest,
+    RemoteViewApplicationResponseError, RemoteViewApplicationTransport,
+    RemoteViewApplicationViewCapability, RemoteViewApplicationViewIssuance,
+    RemoteViewApplicationViewRevocation, RemoteViewAssignmentRecord, RemoteViewAssignmentState,
+    RemoteViewJoinedReleaseOutcome,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -392,11 +393,14 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
     pub fn release(
         &mut self,
         target: &RemoteViewApplicationReleaseTarget,
-        cleanup: RemoteViewApplicationCleanup,
+        cleanup: RemoteViewApplicationCleanupPermit,
         idempotency_key: String,
         store: &mut impl RemoteViewApplicationMutationStore,
     ) -> Result<RemoteViewJoinedReleaseOutcome, RemoteViewApplicationAdapterError> {
         target.validate()?;
+        let cleanup = cleanup
+            .into_acknowledgement(target)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidTarget)?;
         let assignment = &target.assignment;
         if !cleanup.validates_target(&assignment.assignment_id, assignment.generation) {
             return Err(RemoteViewApplicationResponseError::InvalidTarget.into());

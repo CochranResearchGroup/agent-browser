@@ -32,6 +32,7 @@ mod profile_reset_receipt;
 mod profile_seeding;
 mod remote_view_application;
 mod remote_view_application_adapter;
+mod remote_view_application_cleanup;
 mod remote_view_application_mutation;
 mod remote_view_application_records;
 mod remote_view_application_response;
@@ -196,6 +197,11 @@ pub use remote_view_application::{
 pub use remote_view_application_adapter::{
     RemoteViewApplicationAdapter, RemoteViewApplicationAdapterError,
     RemoteViewApplicationTransport, RemoteViewApplicationTransportError,
+};
+pub use remote_view_application_cleanup::{
+    prepare_remote_view_application_cleanup, RemoteViewApplicationCleanupError,
+    RemoteViewApplicationCleanupPermit, RemoteViewApplicationCleanupSnapshot,
+    RemoteViewApplicationObligationInventory,
 };
 pub use remote_view_application_mutation::{
     RemoteViewApplicationMutationClaim, RemoteViewApplicationMutationOutcome,

@@ -68,6 +68,17 @@ Remote View, browser, installation, ingress or production effect occurred.
 The current goal meter starts at zero; the earlier handoff's 286,939 tokens are
 historical accounting. Checkpoint before the requested 1 million token bound.
 
+The cleanup increment replaces raw acknowledgement admission with a private,
+consumed permit bound to the complete release target. Current browser affinities,
+retained assignment joins, sessions and tabs are checked independently of
+retained-peer count. Recovery, foreground and cleanup inventories distinguish
+unknown from complete-empty evidence. Seven focused mutation and cleanup tests
+pass, including no-retention live affinity, detached live tab references,
+generation conflicts, dangling sessions and terminal history. Architecture,
+strict workspace Clippy, format and diff checks pass. Runtime collection,
+transactional release fencing, physical absence readback and installed acceptance
+remain pending; this source gate grants no runtime effect authority.
+
 ## Turn 407 | 2026-10-01
 
 P220 v24 reconciles Remote View revision 3 at `da540f22`. Issues #62/#146

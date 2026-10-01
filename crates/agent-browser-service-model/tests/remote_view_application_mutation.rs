@@ -124,8 +124,24 @@ fn release_target(f: &Value) -> RemoteViewApplicationReleaseTarget {
         viewer_session_ids: vec!["synthetic-viewer-1".into()],
     }
 }
-fn cleanup(f: &Value) -> RemoteViewApplicationCleanup {
-    serde_json::from_value(f["requests"][11]["request"]["cleanup"].clone()).unwrap()
+fn snapshot(target: &RemoteViewApplicationReleaseTarget) -> RemoteViewApplicationCleanupSnapshot {
+    RemoteViewApplicationCleanupSnapshot {
+        schema_version: 1,
+        assignment_id: target.assignment.assignment_id.clone(),
+        desktop_id: target.assignment.desktop_id.clone(),
+        lifecycle_generation: target.assignment.generation,
+        pending_recovery: RemoteViewApplicationObligationInventory::Complete(vec![]),
+        foreground_leases: RemoteViewApplicationObligationInventory::Complete(vec![]),
+        cleanup_tasks: RemoteViewApplicationObligationInventory::Complete(vec![]),
+    }
+}
+fn cleanup(target: &RemoteViewApplicationReleaseTarget) -> RemoteViewApplicationCleanupPermit {
+    prepare_remote_view_application_cleanup(
+        &BrowserSessionState::default(),
+        target,
+        &snapshot(target),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -179,7 +195,7 @@ fn external_mutations_record_custody_before_transport_and_replay_without_effects
         let revoked = adapter.revoke_view(&grant, &mut store).unwrap();
         assert_eq!(serde_json::to_value(revoked).unwrap(), f["viewRevocation"]);
         let released = adapter
-            .release(&target, cleanup(&f), "release-1".into(), &mut store)
+            .release(&target, cleanup(&target), "release-1".into(), &mut store)
             .unwrap();
         assert_eq!(serde_json::to_value(released).unwrap(), f["joinedRelease"]);
     }
@@ -201,7 +217,7 @@ fn interrupted_unknown_and_inexact_release_preserve_pending_identity_across_rest
             setup(vec![(f["requests"][11].clone(), response)], records.clone());
         let target = release_target(&f);
         assert!(adapter
-            .release(&target, cleanup(&f), "release-1".into(), &mut store)
+            .release(&target, cleanup(&target), "release-1".into(), &mut store)
             .is_err());
         assert!(steps.borrow().is_empty());
         assert!(records
@@ -214,14 +230,13 @@ fn interrupted_unknown_and_inexact_release_preserve_pending_identity_across_rest
         let (mut restarted, mut store, _) = setup(vec![], restored);
         assert_eq!(
             restarted
-                .release(&target, cleanup(&f), "release-1".into(), &mut store)
+                .release(&target, cleanup(&target), "release-1".into(), &mut store)
                 .unwrap_err(),
             RemoteViewApplicationAdapterError::MutationReadbackRequired
         );
         let mut changed = target.clone();
         changed.assignment.generation = 8;
-        let mut acknowledgement = cleanup(&f);
-        acknowledgement.lifecycle_generation = 8;
+        let acknowledgement = cleanup(&changed);
         assert_eq!(
             restarted
                 .release(&changed, acknowledgement, "release-1".into(), &mut store)
@@ -234,31 +249,24 @@ fn interrupted_unknown_and_inexact_release_preserve_pending_identity_across_rest
 }
 
 #[test]
-fn false_cleanup_and_unavailable_custody_send_no_release_and_completion_failure_blocks_replay() {
+fn mismatched_cleanup_and_unavailable_custody_send_no_release_and_completion_failure_blocks_replay()
+{
     let f = fixture();
     let target = release_target(&f);
-    for field in [
-        "applicationReferencesClear",
-        "pendingRecoveryClear",
-        "foregroundLeasesClear",
-        "cleanupTasksClear",
-    ] {
-        let records: Records = Rc::default();
-        let (mut adapter, mut store, _) = setup(vec![], records.clone());
-        let mut acknowledgement = f["requests"][11]["request"]["cleanup"].clone();
-        acknowledgement[field] = json!(false);
-        let acknowledgement = serde_json::from_value(acknowledgement).unwrap();
-        assert!(adapter
-            .release(&target, acknowledgement, "release-1".into(), &mut store)
-            .is_err());
-        assert!(records.borrow().is_empty());
-    }
+    let mut changed = target.clone();
+    changed.route_ids.clear();
+    let records: Records = Rc::default();
+    let (mut adapter, mut store, _) = setup(vec![], records.clone());
+    assert!(adapter
+        .release(&changed, cleanup(&target), "release-1".into(), &mut store)
+        .is_err());
+    assert!(records.borrow().is_empty());
     let records: Records = Rc::default();
     let (mut adapter, mut store, _) = setup(vec![], records.clone());
     store.fail_claim = true;
     assert_eq!(
         adapter
-            .release(&target, cleanup(&f), "release-1".into(), &mut store)
+            .release(&target, cleanup(&target), "release-1".into(), &mut store)
             .unwrap_err(),
         RemoteViewApplicationAdapterError::MutationStore(
             RemoteViewApplicationMutationStoreError::Unavailable
@@ -273,7 +281,7 @@ fn false_cleanup_and_unavailable_custody_send_no_release_and_completion_failure_
     store.fail_complete = true;
     assert_eq!(
         adapter
-            .release(&target, cleanup(&f), "release-1".into(), &mut store)
+            .release(&target, cleanup(&target), "release-1".into(), &mut store)
             .unwrap_err(),
         RemoteViewApplicationAdapterError::MutationStore(
             RemoteViewApplicationMutationStoreError::Unavailable
@@ -281,7 +289,7 @@ fn false_cleanup_and_unavailable_custody_send_no_release_and_completion_failure_
     );
     assert_eq!(
         adapter
-            .release(&target, cleanup(&f), "release-1".into(), &mut store)
+            .release(&target, cleanup(&target), "release-1".into(), &mut store)
             .unwrap_err(),
         RemoteViewApplicationAdapterError::MutationReadbackRequired
     );
@@ -315,4 +323,156 @@ fn cached_acquisition_cannot_restore_an_assignment_now_released_by_provider() {
             RemoteViewApplicationResponseError::StaleTarget
         )
     );
+}
+
+#[test]
+fn cleanup_requires_complete_clear_independent_obligation_inventories() {
+    use RemoteViewApplicationCleanupError as Error;
+    use RemoteViewApplicationObligationInventory as Inventory;
+    let f = fixture();
+    let target = release_target(&f);
+    let state = BrowserSessionState::default();
+    assert_eq!(
+        serde_json::to_value(cleanup(&target).acknowledgement()).unwrap(),
+        f["requests"][11]["request"]["cleanup"]
+    );
+    for (index, blocked) in [
+        Error::PendingRecoveryRemains,
+        Error::ForegroundLeasesRemain,
+        Error::CleanupTasksRemain,
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        for (inventory, expected) in [
+            (Inventory::Unknown, Error::EvidenceIncomplete),
+            (Inventory::Complete(vec!["obligation-1".into()]), blocked),
+            (
+                Inventory::Complete(vec!["duplicate".into(), "duplicate".into()]),
+                Error::InvalidEvidence,
+            ),
+        ] {
+            let mut evidence = snapshot(&target);
+            *match index {
+                0 => &mut evidence.pending_recovery,
+                1 => &mut evidence.foreground_leases,
+                _ => &mut evidence.cleanup_tasks,
+            } = inventory;
+            assert_eq!(
+                prepare_remote_view_application_cleanup(&state, &target, &evidence).unwrap_err(),
+                expected
+            );
+        }
+    }
+    let mut evidence = snapshot(&target);
+    evidence.lifecycle_generation += 1;
+    assert_eq!(
+        prepare_remote_view_application_cleanup(&state, &target, &evidence).unwrap_err(),
+        Error::IdentityConflict
+    );
+}
+
+#[test]
+fn cleanup_counts_live_browser_affinity_without_retained_presentation() {
+    use RemoteViewApplicationCleanupError as Error;
+    let target = release_target(&fixture());
+    let mut state = BrowserSessionState::default();
+    state.browsers.insert(
+        "browser-1".into(),
+        ManagedBrowserInstance {
+            id: "browser-1".into(),
+            profile_id: "profile-1".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            active_session_ids: vec![],
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: target.assignment.desktop_id.clone(),
+                friendly_route_label: "synthetic".into(),
+                generation: target.assignment.generation,
+            }),
+        },
+    );
+    assert!(state.remote_view_presentations.is_empty());
+    assert_eq!(
+        prepare_remote_view_application_cleanup(&state, &target, &snapshot(&target)).unwrap_err(),
+        Error::ApplicationReferencesRemain
+    );
+    state
+        .browsers
+        .get_mut("browser-1")
+        .unwrap()
+        .desktop
+        .as_mut()
+        .unwrap()
+        .generation += 1;
+    assert_eq!(
+        prepare_remote_view_application_cleanup(&state, &target, &snapshot(&target)).unwrap_err(),
+        Error::IdentityConflict
+    );
+    state.browsers.clear();
+    state.sessions.insert(
+        "session-1".into(),
+        ManagedBrowserSession {
+            id: "session-1".into(),
+            name: "synthetic".into(),
+            profile_id: "profile-1".into(),
+            browser_id: "browser-1".into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 2,
+            expires_at_ms: 10,
+            current_tab_id: None,
+        },
+    );
+    assert_eq!(
+        prepare_remote_view_application_cleanup(&state, &target, &snapshot(&target)).unwrap_err(),
+        Error::EvidenceIncomplete
+    );
+}
+
+#[test]
+fn detached_retention_does_not_clear_current_references_but_terminal_history_can_remain() {
+    use RemoteViewApplicationCleanupError as Error;
+    let target = release_target(&fixture());
+    let mut state = BrowserSessionState::default();
+    state.remote_view_presentations.insert(
+        "browser-1".into(),
+        RemoteViewPresentationRetention {
+            browser_id: "browser-1".into(),
+            profile_id: "profile-1".into(),
+            session_id: "session-1".into(),
+            tab_id: "tab-1".into(),
+            target_id: "target-1".into(),
+            registration_id: target.assignment.registration_id.clone(),
+            pool_id: target.assignment.pool_id.clone(),
+            desktop_id: target.assignment.desktop_id.clone(),
+            generation: target.assignment.generation,
+            assignment_id: target.assignment.assignment_id.clone(),
+            placement_id: String::new(),
+            route_id: target.route_ids[0].clone(),
+            viewer_session_ids: target.viewer_session_ids.clone(),
+            state: RemoteViewPresentationRetentionState::Detached,
+        },
+    );
+    state.tabs.insert(
+        "tab-1".into(),
+        ManagedBrowserTab {
+            id: "tab-1".into(),
+            target_id: "target-1".into(),
+            browser_id: "browser-1".into(),
+            session_id: "session-1".into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 2,
+        },
+    );
+    assert_eq!(
+        prepare_remote_view_application_cleanup(&state, &target, &snapshot(&target)).unwrap_err(),
+        Error::ApplicationReferencesRemain
+    );
+    state.tabs.clear();
+    state
+        .remote_view_presentations
+        .get_mut("browser-1")
+        .unwrap()
+        .state = RemoteViewPresentationRetentionState::Released;
+    assert!(prepare_remote_view_application_cleanup(&state, &target, &snapshot(&target)).is_ok());
 }
