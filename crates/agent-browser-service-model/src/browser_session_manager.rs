@@ -39,6 +39,17 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Issue or resolve a retained presentation without capacity or browser launch.
+    /// The host publishes the request before calling and the outcome afterward.
+    fn resolve_remote_view_tab_view(
+        &mut self,
+        _target: &crate::RemoteViewTabHandoffTarget,
+        _view: &crate::RemoteViewTabView,
+        _now_ms: u64,
+    ) -> Result<crate::RemoteViewApplicationViewIssuance, String> {
+        Err("remote_view_tab_view_unsupported".into())
+    }
+
     /// Whether ordinary browser requests may create sessions through this
     /// owner. Local legacy adapters keep explicit session admission.
     fn admits_ordinary_sessions(&self) -> bool {

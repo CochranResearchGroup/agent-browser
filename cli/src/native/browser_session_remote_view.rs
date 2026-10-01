@@ -107,6 +107,17 @@ pub(super) fn runtime_effects(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn resolve_remote_view_tab_view(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        view: &RemoteViewTabView,
+        now_ms: u64,
+    ) -> Result<RemoteViewApplicationViewIssuance, String> {
+        match self {
+            Self::Local(effects) => effects.resolve_remote_view_tab_view(target, view, now_ms),
+            Self::Remote(effects) => effects.resolve_remote_view_tab_view(target, view, now_ms),
+        }
+    }
     fn admits_ordinary_sessions(&self) -> bool {
         match self {
             Self::Local(effects) => effects.admits_ordinary_sessions(),

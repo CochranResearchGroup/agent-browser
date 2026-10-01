@@ -360,6 +360,25 @@ aggregate publication before executing the addressed action and returning
 publication. Native action data remains unchanged. Local unconfigured responses
 do not acquire a Remote View handoff identity.
 
-Authenticated operator resolution and provider view issuance remain unconnected.
-The response therefore carries no operator URL for this new binding. The ID is
-logical custody evidence, not proof of route or installed presentation readiness.
+The managed daemon now routes `service_remote_view_handoff_resolve` for these
+retained IDs to the current SQLite host. Historical IDs continue through their
+existing resolver. Before issuance, the host atomically retains one view request
+key in the handoff. The public adapter joins fresh assignment inventory to the
+browser's exact published launch-custody assignment, including registration and
+assignment identity, before issuing or resolving a control grant. Release-fenced
+or mismatched custody cannot supply a view. No browser launch, navigation or
+capacity acquisition occurs during this resolution.
+
+The existing mutation ledger owns the effect outcome. An unknown issuance keeps
+its key and requires readback rather than another provider request across
+restart. A completed issuance whose aggregate publication failed can reuse the
+ledger outcome. The handoff then retains its qualified issuance; repeated
+resolution refreshes provider validity and revalidates the retained issuance
+shape. Tab close remains terminal for ordinary resolution.
+
+This initial view join uses the provider's top-level `remote_view` audience and
+300-second lifetime. Renewal, foreground focus and authenticated operator
+presentation remain subsequent work. The managed response reports
+`status=converging`, `presentationState=grant_issued` and pending operator
+visibility, with no raw provider URL or operator URL. Issuance proves admission,
+not pixels or installed presentation readiness.

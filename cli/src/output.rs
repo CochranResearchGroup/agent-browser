@@ -7810,6 +7810,7 @@ Environment:
                                  Select an exact catalog profile with --runtime-profile, or use a disposable profile by default.
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId for the exact tab; operator URL resolution remains pending.
+                                 Resolving that ID retains provider view issuance; status stays converging until the operator route is connected.
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.

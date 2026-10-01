@@ -89,6 +89,37 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
 }
 
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
+    fn published_launch_assignment(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError>
+    {
+        let state = current(self.remote_view_mutation_connection())?;
+        if state.browsers.get(&browser.id) != Some(browser) {
+            return Err(LaunchCustodyStoreError::Conflict);
+        }
+        let ledger = ledger(self.remote_view_mutation_connection())?;
+        let records = ledger
+            .records
+            .values()
+            .filter(|record| {
+                record.published
+                    && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
+            })
+            .collect::<Vec<_>>();
+        let mut record = match records.as_slice() {
+            [record] => (*record).clone(),
+            _ => return Err(LaunchCustodyStoreError::Conflict),
+        };
+        record
+            .confirm_publication(&state)
+            .map_err(|_| LaunchCustodyStoreError::Conflict)?;
+        if assignment_fenced(&ledger, &record.intent.assignment) {
+            return Err(LaunchCustodyStoreError::ReleaseFenced);
+        }
+        Ok(record.intent.assignment)
+    }
+
     fn unpublished_launch_records(
         &mut self,
     ) -> Result<Vec<BrowserLaunchCustodyRecord>, LaunchCustodyStoreError> {

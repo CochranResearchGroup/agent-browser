@@ -8,6 +8,9 @@ struct Provider {
     acquisitions: Vec<String>,
     operations: Vec<&'static str>,
     lose_reply: bool,
+    view_requests: Vec<String>,
+    lose_view_reply: bool,
+    competing_view_publication: bool,
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
 }
@@ -98,6 +101,48 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 provider.operations.push("launch_environment");
                 assert_eq!(provider.assignments.len(), 1);
                 Ok(fixture["launchEnvironment"].clone())
+            }
+            RemoteViewApplicationRequest::IssueView {
+                idempotency_key,
+                audience,
+                capability,
+                lifetime_seconds,
+                ..
+            } => {
+                assert_eq!(audience, "remote_view");
+                assert_eq!(*capability, RemoteViewApplicationViewCapability::Control);
+                assert_eq!(*lifetime_seconds, 300);
+                let store = open_store(&self.root, false);
+                assert!(store
+                    .load_session_state()
+                    .unwrap()
+                    .remote_view_tab_handoffs
+                    .values()
+                    .any(|record| record
+                        .view
+                        .as_ref()
+                        .is_some_and(|view| view.idempotency_key == *idempotency_key
+                            && view.issuance.is_none())));
+                provider.operations.push("issue_view");
+                provider.view_requests.push(idempotency_key.clone());
+                if provider.competing_view_publication {
+                    competing_write(&self.root);
+                }
+                if provider.lose_view_reply {
+                    return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                }
+                let mut issuance = fixture["viewIssuance"].clone();
+                issuance["grant"]["request"]["idempotencyKey"] = idempotency_key.clone().into();
+                Ok(issuance)
+            }
+            RemoteViewApplicationRequest::ResolveView { route_id, audience } => {
+                provider.operations.push("resolve_view");
+                assert_eq!(audience, "remote_view");
+                assert_eq!(route_id, fixture["grant"]["routeId"].as_str().unwrap());
+                let mut grant = fixture["grant"].clone();
+                grant["request"]["idempotencyKey"] =
+                    provider.view_requests.last().unwrap().clone().into();
+                Ok(grant)
             }
             _ => panic!("unexpected provider mutation during capacity demand"),
         }
@@ -538,5 +583,124 @@ fn ordinary_profile_selector_conflict_precedes_allocation_and_default_is_disposa
         .unwrap();
     assert_eq!(opened["success"], true);
     assert_eq!(consumer.state().disposable_profiles.len(), 1);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn handoff_view_issuance_and_resolution_survive_host_restart_without_launch_or_navigation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let issuance = consumer.resolve_tab_handoff_view(id, 2000).unwrap();
+    assert_eq!(issuance.presentation_state, "grant_issued");
+    let stored = fixture.store(false).load_session_state().unwrap();
+    assert_eq!(
+        stored.remote_view_tab_handoffs[id]
+            .view
+            .as_ref()
+            .unwrap()
+            .issuance
+            .as_ref(),
+        Some(&issuance)
+    );
+    drop(consumer);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let response = restarted.handle_command(&serde_json::json!({
+        "id":"resolve", "action":"service_remote_view_handoff_resolve", "handoffId":id, "activityAtMs":2001,
+    }));
+    assert_eq!(response["success"], true);
+    assert_eq!(response["data"]["status"], "converging");
+    assert_eq!(response["data"]["operatorVisible"]["state"], "pending");
+    assert_eq!(
+        response["data"]["targetId"],
+        opened["browserSession"]["targetId"]
+    );
+    assert!(response["data"].get("providerExternalUrl").is_none());
+    assert_eq!(provider.borrow().view_requests.len(), 1);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(restarted.state().navigation_history.len(), 1);
+    let reused = restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "activityAtMs":2001,
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(reused["browserSession"]["handoffId"], id);
+    let original_assignment = provider.borrow().assignments[0].assignment_id.clone();
+    provider.borrow_mut().assignments[0].assignment_id = "replacement-assignment".into();
+    assert!(restarted.resolve_tab_handoff_view(id, 2001).is_err());
+    assert_eq!(provider.borrow().view_requests.len(), 1);
+    provider.borrow_mut().assignments[0].assignment_id = original_assignment;
+    let session_id = opened["browserSession"]["sessionId"].as_str().unwrap();
+    restarted.close_current_tab(session_id, 2002).unwrap();
+    let operations = provider.borrow().operations.len();
+    assert!(restarted.resolve_tab_handoff_view(id, 2003).is_err());
+    assert_eq!(provider.borrow().operations.len(), operations);
+}
+
+#[test]
+fn handoff_lost_view_reply_keeps_one_request_across_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    provider.borrow_mut().lose_view_reply = true;
+    assert!(consumer.resolve_tab_handoff_view(id, 2000).is_err());
+    let before = fixture
+        .store(false)
+        .load_session_state()
+        .unwrap()
+        .remote_view_tab_handoffs[id]
+        .view
+        .clone();
+    assert!(before.as_ref().unwrap().issuance.is_none());
+    drop(consumer);
+    provider.borrow_mut().lose_view_reply = false;
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert!(restarted.resolve_tab_handoff_view(id, 2001).is_err());
+    assert_eq!(restarted.state().remote_view_tab_handoffs[id].view, before);
+    assert_eq!(provider.borrow().view_requests.len(), 1);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn completed_view_with_failed_publication_reuses_ledger_outcome_after_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    provider.borrow_mut().competing_view_publication = true;
+    assert!(consumer.resolve_tab_handoff_view(id, 2000).is_err());
+    assert!(fixture
+        .store(false)
+        .load_session_state()
+        .unwrap()
+        .remote_view_tab_handoffs[id]
+        .view
+        .as_ref()
+        .unwrap()
+        .issuance
+        .is_none());
+    drop(consumer);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let recovered = restarted.resolve_tab_handoff_view(id, 2001).unwrap();
+    assert_eq!(recovered.presentation_state, "grant_issued");
+    assert_eq!(provider.borrow().view_requests.len(), 1);
     assert_eq!(calls.get(), 1);
 }

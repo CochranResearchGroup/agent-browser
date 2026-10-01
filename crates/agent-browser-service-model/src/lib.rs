@@ -51,7 +51,7 @@ mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
     resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff, RemoteViewTabHandoff,
-    RemoteViewTabHandoffTarget,
+    RemoteViewTabHandoffTarget, RemoteViewTabView,
 };
 mod request_provenance;
 mod runtime_owner_projection;

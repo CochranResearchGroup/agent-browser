@@ -10,6 +10,31 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 418 | 2026-10-01
+
+P220's managed daemon resolves retained tab handoff IDs through the current
+SQLite host and public provider adapter. The host retains an issuance key before
+requesting a control grant and publishes the qualified outcome afterward. Fresh
+inventory must match the browser's exact published launch assignment; release
+fences prevent reuse. Repeated resolution validates the retained grant without
+browser launch, navigation or pool acquisition. Unknown issuance remains one
+pending request across restart. A completed grant whose aggregate publication
+failed is recovered from the existing mutation ledger.
+
+The initial join uses a top-level Remote View grant with a 300-second lifetime.
+It reports converging and pending operator visibility, without a provider URL.
+Authenticated operator presentation, foreground focus, expiry renewal and real
+installed viewing remain unfinished. Historical handoffs retain their existing
+resolver. This source increment does not close milestone one or prove pixels.
+
+All 15 consumer composition tests and 34 Session Manager/retention/handoff model
+tests passed. Strict workspace Clippy, architecture, documentation links and
+the docs production build passed. The final focused extension for assignment
+replacement and ordinary reuse after grant retention also passed, as did final
+formatting. All five guidance surfaces describe pending visibility. No installed
+or provider effects were performed. The goal meter read 580,050. Memory
+disposition: `not_durable`; the owning contract and runbook retain this increment.
+
 ## Turn 417 | 2026-10-01
 
 Configured ordinary managed responses now include `browserSession.handoffId`

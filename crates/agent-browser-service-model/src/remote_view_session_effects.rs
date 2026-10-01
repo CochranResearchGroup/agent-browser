@@ -92,6 +92,87 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn resolve_remote_view_tab_view(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        view: &RemoteViewTabView,
+        now_ms: u64,
+    ) -> Result<RemoteViewApplicationViewIssuance, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+            || view.idempotency_key.is_empty()
+        {
+            return Err("remote_view_tab_view_identity_conflict".into());
+        }
+        let desktop = target
+            .browser
+            .desktop
+            .as_ref()
+            .ok_or("remote_view_tab_view_desktop_missing")?;
+        let inventory = self
+            .adapter
+            .inventory()
+            .map_err(|_| "remote_view_tab_view_inventory_unavailable")?;
+        let matching = inventory
+            .assignments
+            .iter()
+            .filter(|assignment| {
+                assignment.desktop_id == desktop.desktop_id
+                    && assignment.generation == desktop.generation
+            })
+            .collect::<Vec<_>>();
+        let assignment = match matching.as_slice() {
+            [assignment] => (*assignment).clone(),
+            _ => return Err("remote_view_tab_view_assignment_unavailable".into()),
+        };
+        let published = self
+            .store
+            .published_launch_assignment(&target.browser)
+            .map_err(|_| "remote_view_tab_view_launch_custody_unavailable")?;
+        if assignment != published {
+            return Err("remote_view_tab_view_assignment_conflict".into());
+        }
+        if let Some(issuance) = &view.issuance {
+            if issuance.grant.request.idempotency_key != view.idempotency_key {
+                return Err("remote_view_tab_view_request_conflict".into());
+            }
+            let resolved = self
+                .adapter
+                .resolve_view(&assignment, &issuance.grant, || now_ms, false)
+                .map_err(|_| "remote_view_tab_view_resolution_failed")?;
+            issuance
+                .validate_target(
+                    &resolved.request.target,
+                    &resolved.request.application,
+                    "remote_view",
+                    RemoteViewApplicationViewCapability::Control,
+                    300,
+                    now_ms,
+                )
+                .map_err(|_| "remote_view_tab_view_issuance_invalid")?;
+            return Ok(issuance.clone());
+        }
+        self.adapter
+            .issue_view(
+                &assignment,
+                RemoteViewApplicationViewOptions {
+                    audience: "remote_view".into(),
+                    capability: RemoteViewApplicationViewCapability::Control,
+                    lifetime_seconds: 300,
+                    idempotency_key: view.idempotency_key.clone(),
+                },
+                || now_ms,
+                &mut self.store,
+            )
+            .map_err(|_| "remote_view_tab_view_issuance_readback_required".into())
+    }
+
     fn admits_ordinary_sessions(&self) -> bool {
         self.pool.is_some()
     }

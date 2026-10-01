@@ -155,6 +155,14 @@ pub enum LaunchCustodyAdmission {
 /// current session state and commits session state plus custody together.
 /// Implementations must retain unknown outcomes for explicit reconciliation.
 pub trait BrowserLaunchCustodyStore {
+    /// Read the exact published launch assignment for a currently owned browser.
+    fn published_launch_assignment(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+    ) -> Result<crate::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
+        Err(LaunchCustodyStoreError::Unavailable)
+    }
+
     /// Read unresolved process claims before accepting effects after restart.
     /// A store without this readback cannot construct a consumer session adapter.
     fn unpublished_launch_records(

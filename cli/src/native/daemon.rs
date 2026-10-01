@@ -655,6 +655,53 @@ impl RuntimeHostRouter {
             }),
         }
     }
+    async fn try_handle_browser_session_handoff(&self, command: Value) -> Option<Value> {
+        let handoff_id = command
+            .get("handoffId")
+            .or_else(|| {
+                command
+                    .get("params")
+                    .and_then(|params| params.get("handoffId"))
+            })
+            .and_then(Value::as_str)?
+            .to_string();
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                let store =
+                    super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?;
+                if !store
+                    .load_session_state()?
+                    .remote_view_tab_handoffs
+                    .contains_key(&handoff_id)
+                {
+                    return Ok(None);
+                }
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            let host = host.as_mut().ok_or("browser_session_host_missing")?;
+            if !host
+                .state()
+                .remote_view_tab_handoffs
+                .contains_key(&handoff_id)
+            {
+                return Ok(None);
+            }
+            Ok(Some(host.handle_command(&command)))
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(_) => Some(
+                serde_json::json!({ "success": false, "error": "browser_session_host_join_failed" }),
+            ),
+        }
+    }
+
     async fn try_handle_managed_browser_command(
         &self,
         session_name: &str,
@@ -1120,6 +1167,18 @@ async fn handle_connection<S>(
                     .get("action")
                     .and_then(|value| value.as_str())
                     .map(str::to_owned);
+                if action.as_deref() == Some("service_remote_view_handoff_resolve") {
+                    if let Some(response) =
+                        router.try_handle_browser_session_handoff(cmd.clone()).await
+                    {
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
                 if action.as_deref() == Some("view_focus") {
                     if let Some(response) =
                         router.try_handle_browser_session_focus(cmd.clone()).await

@@ -13,6 +13,16 @@ pub struct RemoteViewTabHandoff {
     pub id: String,
     pub session_id: String,
     pub tab_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<RemoteViewTabView>,
+}
+
+/// A request retained before issuance, with its qualified outcome when known.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteViewTabView {
+    pub idempotency_key: String,
+    pub issuance: Option<crate::RemoteViewApplicationViewIssuance>,
 }
 
 /// Current joined browser identity; presentation issuance belongs to the adapter.
@@ -43,10 +53,14 @@ pub fn retain_remote_view_tab_handoff(
         id: handoff_id.into(),
         session_id: session_id.into(),
         tab_id: tab_id.into(),
+        view: None,
     };
     join(state, &proposed)?;
     if let Some(existing) = state.remote_view_tab_handoffs.get(handoff_id) {
-        return if existing == &proposed {
+        return if existing.id == proposed.id
+            && existing.session_id == proposed.session_id
+            && existing.tab_id == proposed.tab_id
+        {
             Ok(existing.clone())
         } else {
             Err("remote_view_tab_handoff_id_conflict".into())

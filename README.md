@@ -5737,4 +5737,8 @@ Configured Remote View responses also retain a stable `browserSession.handoffId`
 for that logical tab before responding. It survives restart and is reused on
 subsequent commands. This development identity does not yet include an operator
 URL; authenticated viewing remains pending in Plan 220.
+For this identity, `service_remote_view_handoff_resolve` retains a view request
+before provider issuance and reuses a qualified grant after restart. It reports
+`status=converging` and `operatorVisible.state=pending` while the operator route
+join remains incomplete. Grant issuance alone does not mean the tab is visible.
 Successful navigations retain their URL in durable session history.

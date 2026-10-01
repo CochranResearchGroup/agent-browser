@@ -349,6 +349,52 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(result)
     }
 
+    /// Resolve a logical tab's provider grant. Issuance is not pixel readiness.
+    /// An unresolved request keeps its durable key across host restart.
+    pub(crate) fn resolve_tab_handoff_view(
+        &mut self,
+        handoff_id: &str,
+        now_ms: u64,
+    ) -> Result<agent_browser_service_model::RemoteViewApplicationViewIssuance, String> {
+        if self.persistence.load_session_state()? != self.persisted_state {
+            return Err("browser_session_publication_conflict".into());
+        }
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
+        let record = self
+            .state
+            .remote_view_tab_handoffs
+            .get_mut(handoff_id)
+            .ok_or("remote_view_tab_handoff_missing")?;
+        if record.view.is_none() {
+            record.view = Some(agent_browser_service_model::RemoteViewTabView {
+                idempotency_key: uuid::Uuid::new_v4().to_string(),
+                issuance: None,
+            });
+            self.commit_state()?;
+        }
+        let view = self
+            .state
+            .remote_view_tab_handoffs
+            .get(handoff_id)
+            .and_then(|record| record.view.clone())
+            .ok_or("remote_view_tab_view_missing")?;
+        self.effects.begin_operation(&self.persisted_state)?;
+        let issuance = self
+            .effects
+            .resolve_remote_view_tab_view(&target, &view, now_ms)?;
+        if view.issuance.as_ref() != Some(&issuance) {
+            self.state
+                .remote_view_tab_handoffs
+                .get_mut(handoff_id)
+                .and_then(|record| record.view.as_mut())
+                .ok_or("remote_view_tab_view_missing")?
+                .issuance = Some(issuance.clone());
+            self.commit_state()?;
+        }
+        Ok(issuance)
+    }
+
     pub(crate) fn state(&self) -> &BrowserSessionState {
         &self.state
     }
@@ -382,6 +428,26 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .and_then(serde_json::Value::as_u64)
             .unwrap_or_else(current_unix_ms);
         match action {
+            "service_remote_view_handoff_resolve" => {
+                let handoff_id = required_string(command, "handoffId")?;
+                let view = self.resolve_tab_handoff_view(handoff_id, now_ms)?;
+                let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                    &self.state,
+                    handoff_id,
+                )?;
+                Ok(serde_json::json!({
+                    "handoffId": handoff_id,
+                    "status": "converging",
+                    "presentationState": view.presentation_state,
+                    "readinessScope": view.readiness_scope,
+                    "browserId": target.browser.id,
+                    "sessionId": target.session.id,
+                    "sessionName": target.session.name,
+                    "tabId": target.tab.id,
+                    "targetId": target.tab.target_id,
+                    "operatorVisible": { "state": "pending", "reason": "operator_route_join_pending" },
+                }))
+            }
             "browser_session_open" => {
                 let opened = self.open_request_from_command(command, now_ms)?;
                 Ok(serde_json::json!({
