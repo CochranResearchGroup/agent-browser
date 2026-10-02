@@ -10,6 +10,51 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 437 | 2026-10-02 | Installed browser selection and shared-session workflow
+
+Implementation checkpoint `80f9316e` makes explicit managed browser build
+selection choose the executable before launch, rejects incompatible profile
+reuse before navigation, and returns actual Linux process executable proof.
+The CLI, README, skill, remote-view docs and inline comments describe the change.
+This is a local source checkpoint, not a merge or formal release.
+
+Final isolated installed generation: `0.28.0-16137675e906`.
+Candidate SHA-256:
+`16137675e906e907984ca0bc3f76e6d0eef7630caade909f20e41a9687f01180`.
+The optimized candidate build and format check passed. Strict workspace Clippy
+passed before the final help-text-only update. The publisher reported production
+unchanged and installed without activation. No full suite or platform acceptance
+is claimed.
+
+Normal installed CLI calls proved both requested builds: stock Chrome matched
+`/opt/google/chrome/chrome`; Chromium Stealth matched the configured ready
+artifact. Stock clicked the example-domain link and URL readback proved actual
+navigation to IANA. Stealth evaluated JavaScript with `navigator.webdriver=false`,
+created a tab and read back `https://example.org/`. Two independent sessions
+shared the same Stealth browser with distinct tabs. Closing the peer returned
+browser_preserved; the original still read example.org. Closing the last session
+returned browser_closed. A fresh exact-profile process scan returned zero browser
+processes. Requesting stock on the existing Stealth profile returned
+browser_build_reuse_conflict without navigating it.
+
+Private evidence lives under
+`/home/ecochran76/.local/share/agent-browser-dev-p221/evidence/`:
+stock-selector-final.json, stealth-selector-final.json,
+conflict-selector-final.json and peer-selector-final.json. Initial stock proof
+failed because discovery resolved a shell launcher rather than the browser
+binary; that diagnostic remains retained, and the final binary correction was
+rebuilt and exercised on both builds.
+
+P221 remains OPEN. Operator viewing still reports
+remote_view_tab_view_issuance_readback_required and the actual AuraCall launcher
+still rejects converging. No authenticated-client workflow, operator-visible
+readiness, detection bypass or cross-platform executable proof is claimed.
+Read-only replay of the retained pending view mutation returned terminal grant
+unavailability; its stable key and private state were preserved. Captured-time
+validation and provider-scoped versus local grant-key comparison are follow-up
+diagnoses, not fixes in this checkpoint. Development provider and presentation
+resources remain deliberately retained. Production was not replaced.
+
 ## Turn 436 | 2026-10-02 | Requested pre-500k stop checkpoint
 
 Stopping under the operator's standing instruction before 500000 tokens.
