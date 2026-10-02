@@ -2,9 +2,9 @@
 
 Date: 2026-09-28
 
-Plan version: 28
+Plan version: 29
 
-State: OPEN
+State: CANCELLED
 
 Consolidation: required
 
@@ -29,6 +29,15 @@ Owner: primary P220 implementation owner
 Integration: merge through the protected pull-request workflow after J2/J3 consumer replay, retained-domain reconciliation, and changed-surface validation
 
 Authority: the operator directed creation and execution preparation on 2026-09-28. This plan authorizes repository planning, provider-free fixtures, and ordinary source implementation after branch admission. Installed, privileged, public-ingress, production, merge, release, destructive cleanup, and Remote View runtime effects remain separately gated.
+
+## Supersession
+
+On October 1 the operator approved a simpler product acceptance checklist.
+[P221](0221-2026-10-01-browser-product-acceptance.md) owns the remaining delivery.
+P220 is superseded while incomplete, not accepted or release-qualified. Its
+source, validation limits, custody and unproved requirements are preserved.
+The narrative below is historical; use P221 and RUNBOOK for current execution.
+The previous implementation goal remains paused at its requested checkpoint.
 
 ## Objective
 

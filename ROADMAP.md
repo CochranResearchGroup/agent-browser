@@ -25,9 +25,24 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
+## P221 | Browser Product Acceptance
+
+State: PLANNED
+
+[Plan 0221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md)
+succeeds P220 while incomplete. Its execution guide is eight product scenarios:
+known-client profiles, sessions/tabs, viewing/focus, reconnect/expiry, deliberate
+close, interrupted-operation recovery, capacity/cleanup and candidate install.
+Run the scenario, fix the owning code when it fails, and retain evidence of the
+result. RUNBOOK owns current results. Existing source custody is retained;
+implementation remains paused at the requested token checkpoint.
+
 ## P220 | Remote View Consumer Integration
 
-State: OPEN
+State: CANCELLED
+
+Superseded while incomplete by P221. The following checkpoints are preserved
+history, not the current execution queue.
 
 October 1 reconciliation: Plan 0220 v26 consumes accepted Remote View RV-011
 revision 3; issues #62 and #146 are closed. Implementation explicitly resumed

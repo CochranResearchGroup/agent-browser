@@ -8,7 +8,33 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P157 production identity](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md), [P157 desktop slots](docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [P157 profile reset](docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md), [P165](docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md), [P169 Turnstile leaf](docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md), and [P178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 - [P182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md), [P187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md), [P169 hCaptcha leaf](docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md), [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md), [P197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md), and [P204](docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
-- [P220](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
+- [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
+
+## Turn 423 | 2026-10-01 | Simple product acceptance successor
+
+P221 replaces P220's remaining execution queue with eight user-visible
+acceptance scenarios. P220 is CANCELLED as superseded while incomplete; its
+source and history remain intact. P221 is PLANNED, on the same branch/worktree.
+The implementation goal remains paused at 952,452 tokens. This documentation
+change does not restart implementation or reset the stop instruction.
+
+| Scenario | Installed result |
+| --- | --- |
+| Known-client profiles | NOT RUN |
+| Sessions and tabs | NOT RUN |
+| Viewing and focus | NOT RUN |
+| Reconnect and expiry | NOT RUN |
+| Deliberate close | NOT RUN |
+| Interrupted operations and recovery | NOT RUN |
+| Capacity and cleanup | NOT RUN |
+| Candidate installation | NOT RUN |
+
+Next on explicit continuation: capture two existing clients' actual profile
+requests and expected responses, reproduce the first failure through the normal
+interface, fix its owner and rerun the scenario plus affected regressions.
+Synthetic coverage at source eeb0703d remains useful preparation; the old binary
+predates it. No source or installed runtime changed in this planning slice.
+Memory disposition: not_durable; the canonical successor records the decision.
 
 ## Turn 422 | 2026-10-01 | Requested resumption checkpoint
 
