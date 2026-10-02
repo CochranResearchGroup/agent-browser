@@ -380,6 +380,45 @@ pub(crate) async fn handle_remote_view_open(
     state: &mut DaemonState,
     attribution: RouteBoundOpenAttribution,
 ) -> Result<Value, String> {
+    // Configured application pools own placement. Do not require a historical
+    // Guacamole route before the ordinary browser/session owner can launch.
+    if crate::native::browser_session_remote_view::remote_view_settings_present() {
+        if !attribution.authorization.is_authorized() {
+            return Err("remote_view_open_authorization_rejected".into());
+        }
+        let host = state
+            .managed_session_host
+            .clone()
+            .ok_or("browser_session_host_missing")?;
+        let mut navigation = cmd.clone();
+        navigation["action"] = json!("navigate");
+        let name = optional_command_string(cmd, "sessionName")
+            .or_else(|| optional_command_string(cmd, "session"))
+            .ok_or("browser_session_field_missing:sessionName")?;
+        let response = crate::native::browser_session_host::execute_shared_remote_view_open(
+            host, name, navigation,
+        )
+        .await?
+        .ok_or("browser_session_managed_open_not_selected")?;
+        if response.get("success").and_then(Value::as_bool) != Some(true) {
+            return Err(response
+                .get("error")
+                .and_then(Value::as_str)
+                .unwrap_or("browser_session_navigation_failed")
+                .to_string());
+        }
+        let identity = response
+            .get("browserSession")
+            .ok_or("browser_session_open_identity_missing")?;
+        let mut result = identity.clone();
+        result["status"] = json!("converging");
+        result["operatorVisible"] = json!({
+            "state": "pending",
+            "reason": "operator_route_join_pending",
+        });
+        result["navigation"] = response.get("data").cloned().unwrap_or(Value::Null);
+        return Ok(result);
+    }
     let invocation =
         RouteBoundOpenInvocation::direct(RouteBoundDirectOpenRequest::from_compatibility_command(
             cmd.clone(),

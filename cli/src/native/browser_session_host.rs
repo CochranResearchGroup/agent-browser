@@ -92,6 +92,64 @@ pub(crate) async fn shared_managed_request_selected(
     .map_err(|_| "browser_session_host_join_failed")?
 }
 
+/// Open a client-selected persistent profile through the application pool.
+/// Explicit paths are registered once; a changed ID/path binding fails closed.
+pub(crate) async fn execute_shared_remote_view_open(
+    shared: SharedBrowserSessionHost,
+    name: String,
+    command: serde_json::Value,
+) -> Result<Option<serde_json::Value>, String> {
+    tokio::task::spawn_blocking(move || {
+        let mut shared = shared
+            .lock()
+            .map_err(|_| "browser_session_host_lock_poisoned")?;
+        if shared.is_none() {
+            *shared = Some(load_default_browser_session_host()?);
+        }
+        let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        if let (Some(id), Some(path)) = (
+            optional_string(&command, "runtimeProfile"),
+            optional_string(&command, "profile"),
+        ) {
+            let path = Path::new(path);
+            if !path.is_absolute() || !path.is_dir() {
+                return Err("browser_session_explicit_profile_path_invalid".into());
+            }
+            let path = path
+                .canonicalize()
+                .map_err(|_| "browser_session_explicit_profile_path_invalid")?;
+            let path = path.to_string_lossy().into_owned();
+            if let Some(existing) = host.catalog.profiles.get(id) {
+                if existing.user_data_dir != path {
+                    return Err("browser_session_profile_selector_conflict".into());
+                }
+            } else {
+                if host
+                    .catalog
+                    .profiles
+                    .values()
+                    .any(|profile| profile.user_data_dir == path)
+                {
+                    return Err("browser_session_profile_selector_conflict".into());
+                }
+                host.catalog.profiles.insert(
+                    id.into(),
+                    agent_browser_service_model::BrowserProfileCatalogEntry {
+                        id: id.into(),
+                        name: id.into(),
+                        user_data_dir: path,
+                        kind: agent_browser_service_model::BrowserProfileKind::Named,
+                    },
+                );
+                host.persistence.save_profile_catalog(&host.catalog)?;
+            }
+        }
+        host.execute_managed_command(&name, &command)
+    })
+    .await
+    .map_err(|_| "browser_session_host_join_failed")?
+}
+
 pub(crate) async fn execute_shared_managed_command(
     shared: SharedBrowserSessionHost,
     name: String,

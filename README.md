@@ -5707,6 +5707,15 @@ Ordinary browser diagnostics remain available during the outage.
 
 ## Remote View application runtime
 
+With origin and pool configured, `remote-view open` uses the managed browser
+session owner instead of requiring a historical presentation route first. An
+explicit runtime profile and absolute existing profile directory register one
+persistent profile binding; conflicting IDs or paths are rejected. Opening
+returns `converging` with pending operator visibility until the presentation
+join is proved. This does not establish a ready viewer or matched browser-build
+proof for clients that require them.
+
+
 For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
 with the Remote View HTTP origin on a literal loopback address, such as
 `http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured
