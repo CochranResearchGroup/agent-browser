@@ -10,6 +10,49 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 426 | 2026-10-02 | Real client exposes placement and acquisition gaps
+
+Source b9d9f998 repairs the configured remote-view open entry point: it now
+uses the ordinary managed browser/session host rather than historical route
+preflight, accepts an explicit persistent runtime-profile/path binding and
+rejects conflicts. Presentation remains truthfully pending. All five guidance
+surfaces describe the behavior. Format, strict workspace Clippy and
+documentation links pass. Updated optimized candidate built in 2m 32s and was
+installed into isolated p221 without service activation; publisher reported
+production unchanged. Candidate SHA-256:
+`93e0f31bfdfdeed98c1d8191353f795c92cf8b0006e93a8b5a6da16827b9372a`.
+
+AuraCall's compiled launcher ran with its normal exec runner, stock_chrome and
+a disposable persistent development profile. It reached the new pool path and
+failed with remote_view_pool_acquisition_readback_required. Exact job readback
+and retained SQLite request identify the failed attempt; no browser or
+assignment exists. Reinspection used the same retained acquisition key and
+returned desktop_unavailable. This is an installed client failure, not a pass.
+
+Task-owned Remote View installation p221 now supplies a public consumer HTTP
+endpoint at loopback port 19103, separate from production. Its initial native
+provision failed because setup accidentally rewrote the immutable x11vnc tool
+path. The corrected private config was applied only to the task installation.
+Its exact native desktop now reports local_ready with four task-owned PIDs,
+but the public lifecycle record remains failed after explicit reconciliation.
+No new acquisition or browser launch is authorized by that native readiness
+alone. Next: resolve this exact failed provider operation through supported
+public recovery, then reconcile the retained Agent Browser acquisition and
+repeat the real client workflow. Do not drop the pending request, reset private
+stores or allocate another desktop to evade it.
+
+Private evidence selector: agent-browser-dev-p221/evidence/auracall-client.mjs
+and auracall-first-current.log. The former imports AuraCall's compiled launcher
+without injecting a runner. Task provider identity, configuration, receipts and
+control state remain in the same development namespace outside Git. Original
+control-server handle 63347 was stopped for the configuration repair; no
+replacement server is running. The P221 browser host and native task desktop
+remain retained for continuation; production desktops were not stopped.
+
+All eight installed scenarios remain NOT RUN in the acceptance table; the
+failed real-client run is diagnostic and provides no login/viewer proof.
+Memory disposition: not_durable; canonical checkpoint owns this ongoing repair.
+
 ## Turn 425 | 2026-10-02 | Current candidate installed for client workflow
 
 P221 implementation resumed under the user's new 500,000-token checkpoint
