@@ -145,7 +145,12 @@ impl<
                 || clock.map_or(now_ms, |clock| clock()),
                 &mut self.store,
             )
-            .map_err(|_| "remote_view_tab_view_issuance_readback_required".into())
+            .map_err(|error| match error {
+                RemoteViewApplicationAdapterError::ViewGrantTerminal => {
+                    "remote_view_tab_view_grant_terminal".into()
+                }
+                _ => "remote_view_tab_view_issuance_readback_required".into(),
+            })
     }
 
     fn admits_ordinary_sessions(&self) -> bool {

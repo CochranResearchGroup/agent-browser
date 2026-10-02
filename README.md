@@ -5707,6 +5707,13 @@ Ordinary browser diagnostics remain available during the outage.
 
 ## Remote View application runtime
 
+A retained view request is replayed with its original key after an interrupted
+reply. When the provider proves that grant terminal, the client records that
+outcome and renews the view once under the same durable handoff. Ambiguous
+responses preserve the pending request and do not select a replacement key.
+Grant issuance alone does not establish operator-visible readiness.
+
+
 With origin and pool configured, `remote-view open` uses the managed browser
 session owner instead of requiring a historical presentation route first. An
 explicit runtime profile and absolute existing profile directory register one

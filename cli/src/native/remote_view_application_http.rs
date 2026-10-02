@@ -43,6 +43,11 @@ impl RemoteViewApplicationHttp {
 impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
     fn request(&mut self, envelope: &RemoteViewApplicationEnvelope) -> Result<Value, Error> {
         let body = serde_json::to_vec(envelope).map_err(|_| Error::Rejected)?;
+        let envelope_operation = serde_json::to_value(&envelope.request)
+            .map_err(|_| Error::Rejected)?["operation"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned();
         let endpoint = self.endpoint.clone();
         let timeout = self.timeout;
         std::thread::Builder::new()
@@ -70,10 +75,10 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                         .send()
                         .await
                         .map_err(|_| Error::OutcomeUnknown)?;
-                    if response.status() != reqwest::StatusCode::OK
-                        || response
-                            .content_length()
-                            .is_some_and(|length| length > RESPONSE_LIMIT as u64)
+                    let status = response.status();
+                    if response
+                        .content_length()
+                        .is_some_and(|length| length > RESPONSE_LIMIT as u64)
                         || response
                             .headers()
                             .get(reqwest::header::CONTENT_TYPE)
@@ -91,7 +96,22 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                         }
                         bytes.extend_from_slice(&chunk);
                     }
-                    serde_json::from_slice(&bytes).map_err(|_| Error::OutcomeUnknown)
+                    let value: Value =
+                        serde_json::from_slice(&bytes).map_err(|_| Error::OutcomeUnknown)?;
+                    if status == reqwest::StatusCode::BAD_REQUEST
+                        && matches!(envelope_operation.as_str(), "issue_view")
+                        && value.get("schema_version").and_then(Value::as_u64) == Some(1)
+                        && value.get("code").and_then(Value::as_str)
+                            == Some("consumer_grant_unavailable")
+                        && value.get("message").and_then(Value::as_str) == Some("grant is terminal")
+                        && value.get("retryable").and_then(Value::as_bool) == Some(false)
+                    {
+                        return Err(Error::ViewGrantTerminal);
+                    }
+                    if status != reqwest::StatusCode::OK {
+                        return Err(Error::OutcomeUnknown);
+                    }
+                    Ok(value)
                 })
             })
             .map_err(|_| Error::Unavailable)?
@@ -108,6 +128,27 @@ mod tests {
         io::{Read, Write},
         net::{TcpListener, TcpStream},
     };
+
+    #[test]
+    fn terminal_grant_response_is_scoped_to_issue_view_and_exact_error() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        for (index, code, expected) in [
+            (7, "consumer_grant_unavailable", Error::ViewGrantTerminal),
+            (7, "provider_unavailable", Error::OutcomeUnknown),
+            (2, "consumer_grant_unavailable", Error::OutcomeUnknown),
+        ] {
+            let body = serde_json::json!({"schema_version":1,"code":code,"message":"grant is terminal","retryable":false}).to_string();
+            let (origin, handle) = server(format!("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+            let mut transport =
+                RemoteViewApplicationHttp::new(&origin, Duration::from_secs(5)).unwrap();
+            let envelope = serde_json::from_value(fixture["requests"][index].clone()).unwrap();
+            assert_eq!(transport.request(&envelope), Err(expected));
+            handle.join().unwrap();
+        }
+    }
 
     fn read_request(stream: &mut TcpStream) -> String {
         stream

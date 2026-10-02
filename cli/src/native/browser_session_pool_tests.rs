@@ -12,6 +12,8 @@ struct Provider {
     lose_view_reply: bool,
     competing_view_publication: bool,
     delayed_scoped_view: bool,
+    terminal_view_key: Option<String>,
+    all_views_terminal: bool,
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
 }
@@ -138,6 +140,11 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 provider.view_requests.push(idempotency_key.clone());
                 if provider.competing_view_publication {
                     competing_write(&self.root);
+                }
+                if provider.all_views_terminal
+                    || provider.terminal_view_key.as_ref() == Some(idempotency_key)
+                {
+                    return Err(RemoteViewApplicationTransportError::ViewGrantTerminal);
                 }
                 if provider.lose_view_reply {
                     return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
@@ -731,9 +738,91 @@ fn handoff_lost_view_reply_keeps_one_request_across_restart() {
     drop(consumer);
     provider.borrow_mut().lose_view_reply = false;
     let mut restarted = host(&fixture, provider.clone(), calls.clone());
-    assert!(restarted.resolve_tab_handoff_view(id, 2001).is_err());
-    assert_eq!(restarted.state().remote_view_tab_handoffs[id].view, before);
-    assert_eq!(provider.borrow().view_requests.len(), 1);
+    restarted.resolve_tab_handoff_view(id, 2001).unwrap();
+    assert_eq!(
+        restarted.state().remote_view_tab_handoffs[id]
+            .view
+            .as_ref()
+            .unwrap()
+            .idempotency_key,
+        before.as_ref().unwrap().idempotency_key
+    );
+    assert_eq!(provider.borrow().view_requests.len(), 2);
+    assert_eq!(
+        provider.borrow().view_requests[0],
+        provider.borrow().view_requests[1]
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn terminal_pending_view_renews_once_preserving_handoff_and_mutation_history() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    provider.borrow_mut().lose_view_reply = true;
+    assert!(consumer.resolve_tab_handoff_view(id, 2000).is_err());
+    let old_key = consumer.state().remote_view_tab_handoffs[id]
+        .view
+        .as_ref()
+        .unwrap()
+        .idempotency_key
+        .clone();
+    drop(consumer);
+    provider.borrow_mut().lose_view_reply = false;
+    provider.borrow_mut().terminal_view_key = Some(old_key.clone());
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    restarted.resolve_tab_handoff_view(id, 2001).unwrap();
+    let new_key = &restarted.state().remote_view_tab_handoffs[id]
+        .view
+        .as_ref()
+        .unwrap()
+        .idempotency_key;
+    assert_ne!(*new_key, old_key);
+    assert_eq!(
+        provider.borrow().view_requests,
+        vec![old_key.clone(), old_key.clone(), new_key.clone()]
+    );
+    let mut connection = fixture.store(false);
+    let terminal_records: i64 = connection
+        .remote_view_mutation_connection()
+        .query_row(
+            "SELECT count(*) FROM state_documents WHERE json LIKE '%issue_view_terminal%'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(terminal_records, 1);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn terminal_view_renewal_stops_after_one_replacement() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    provider.borrow_mut().all_views_terminal = true;
+    assert_eq!(
+        consumer.resolve_tab_handoff_view(id, 2000).unwrap_err(),
+        "remote_view_tab_view_grant_terminal"
+    );
+    assert_eq!(provider.borrow().view_requests.len(), 2);
+    assert!(consumer.state().remote_view_tab_handoffs[id]
+        .view
+        .as_ref()
+        .unwrap()
+        .issuance
+        .is_none());
     assert_eq!(calls.get(), 1);
 }
 

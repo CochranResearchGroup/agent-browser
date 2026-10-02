@@ -6314,6 +6314,8 @@ Examples:
         "remote-view" => {
             r##"
 agent-browser remote-view - Route-bound remote-headed browser handoff
+Retained view requests keep their key after interrupted replies. A provider-proven
+terminal grant renews once under the same handoff; ambiguous replies stay pending.
 
 Usage: agent-browser remote-view open [url] [options]
 

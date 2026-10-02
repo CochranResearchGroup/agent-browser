@@ -15,6 +15,8 @@ pub enum RemoteViewApplicationTransportError {
     Rejected,
     Unavailable,
     OutcomeUnknown,
+    /// Exact provider response proves the retained view grant is terminal.
+    ViewGrantTerminal,
 }
 
 pub trait RemoteViewApplicationTransport {
@@ -29,6 +31,7 @@ pub enum RemoteViewApplicationAdapterError {
     InvalidApplication,
     MutationStore(crate::RemoteViewApplicationMutationStoreError),
     MutationReadbackRequired,
+    ViewGrantTerminal,
     Transport(RemoteViewApplicationTransportError),
     Response(RemoteViewApplicationResponseError),
 }

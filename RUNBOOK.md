@@ -60,6 +60,21 @@ launch/navigation preserved. This is source qualification, not installed proof.
 Initial formatting completed; format-check handle 16160 is waiting on host
 memory admission. Strict workspace Clippy, terminal-pending recovery and final
 installed AuraCall demonstration remain pending. No candidate was published.
+Recovery batch in progress: the HTTP adapter distinguishes the exact nonretryable
+consumer_grant_unavailable terminal response for issue_view only. Exact pending
+issuance can replay its original key; qualified terminal proof is saved as an
+immutable mutation outcome before the host selects one renewal key. The same
+handoff/browser/tab remains retained. One replacement per call is the bound;
+other errors keep pending custody. Source tests cover terminal recovery/history,
+second-terminal stop, same-key lost-reply replay and response classification.
+The default admission wait (handle 6552) was explicitly cancelled before Cargo
+started. A bounded alternative kept the 16 GiB host reserve, used four jobs and
+an 8 GiB hard cap, and passed 254 view_ CLI tests (3064 filtered). Eight dedicated
+service-model mutation tests passed under a 2 GiB cap. Final workspace format
+check and strict workspace Clippy passed. These are focused source gates, not
+installed product acceptance. Next: one optimized development candidate build,
+then exact task-host replacement after proving no managed browser residue and
+actual AuraCall Stealth/view demonstration. Production remains excluded.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 

@@ -663,26 +663,47 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             });
             self.commit_state()?;
         }
-        let view = self
-            .state
-            .remote_view_tab_handoffs
-            .get(handoff_id)
-            .and_then(|record| record.view.clone())
-            .ok_or("remote_view_tab_view_missing")?;
-        self.effects.begin_operation(&self.persisted_state)?;
-        let issuance = self
-            .effects
-            .resolve_remote_view_tab_view(&target, &view, now_ms)?;
-        if view.issuance.as_ref() != Some(&issuance) {
-            self.state
+        for attempt in 0..2 {
+            let view = self
+                .state
                 .remote_view_tab_handoffs
-                .get_mut(handoff_id)
-                .and_then(|record| record.view.as_mut())
-                .ok_or("remote_view_tab_view_missing")?
-                .issuance = Some(issuance.clone());
-            self.commit_state()?;
+                .get(handoff_id)
+                .and_then(|record| record.view.clone())
+                .ok_or("remote_view_tab_view_missing")?;
+            self.effects.begin_operation(&self.persisted_state)?;
+            let issuance = match self
+                .effects
+                .resolve_remote_view_tab_view(&target, &view, now_ms)
+            {
+                Ok(issuance) => issuance,
+                Err(error) if error == "remote_view_tab_view_grant_terminal" && attempt == 0 => {
+                    // The adapter durably recorded terminal proof for the old key.
+                    // Keep that immutable history and the durable handoff identity.
+                    self.state
+                        .remote_view_tab_handoffs
+                        .get_mut(handoff_id)
+                        .ok_or("remote_view_tab_handoff_missing")?
+                        .view = Some(agent_browser_service_model::RemoteViewTabView {
+                        idempotency_key: uuid::Uuid::new_v4().to_string(),
+                        issuance: None,
+                    });
+                    self.commit_state()?;
+                    continue;
+                }
+                Err(error) => return Err(error),
+            };
+            if view.issuance.as_ref() != Some(&issuance) {
+                self.state
+                    .remote_view_tab_handoffs
+                    .get_mut(handoff_id)
+                    .and_then(|record| record.view.as_mut())
+                    .ok_or("remote_view_tab_view_missing")?
+                    .issuance = Some(issuance.clone());
+                self.commit_state()?;
+            }
+            return Ok(issuance);
         }
-        Ok(issuance)
+        Err("remote_view_tab_view_grant_terminal".into())
     }
 
     pub(crate) fn state(&self) -> &BrowserSessionState {

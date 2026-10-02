@@ -25,6 +25,8 @@ pub enum RemoteViewApplicationMutationOutcome {
     Acquire(RemoteViewAssignmentRecord),
     Activate(RemoteViewApplicationActivation),
     IssueView(RemoteViewApplicationViewIssuance),
+    /// Provider proved the exact retained grant terminal; no usable view remains.
+    IssueViewTerminal,
     RevokeView(RemoteViewApplicationViewRevocation),
     Release(RemoteViewJoinedReleaseOutcome),
 }
@@ -386,20 +388,70 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
             lifetime_seconds: options.lifetime_seconds,
             idempotency_key: options.idempotency_key,
         };
-        let outcome = self.mutate(request, store, |outcome, _| match outcome {
-            RemoteViewApplicationMutationOutcome::IssueView(view) => view.validate_target(
-                &observed.target,
-                &application,
-                &options.audience,
-                options.capability,
-                options.lifetime_seconds,
-                now_ms(),
-            ),
-            _ => Err(RemoteViewApplicationResponseError::InvalidShape),
-        })?;
+        let envelope = RemoteViewApplicationEnvelope {
+            application: application.clone(),
+            request,
+        };
+        envelope
+            .mutation_key()
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?;
+        let outcome = match store
+            .claim(&envelope)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?
+        {
+            RemoteViewApplicationMutationClaim::Existing(record) => {
+                if record.schema_version != 1 || record.envelope != envelope {
+                    return Err(RemoteViewApplicationAdapterError::MutationStore(
+                        RemoteViewApplicationMutationStoreError::Conflict,
+                    ));
+                }
+                record.outcome
+            }
+            RemoteViewApplicationMutationClaim::New => None,
+        };
+        let outcome = if let Some(outcome) = outcome {
+            outcome
+        } else {
+            // Replay only this exact durable intent. Provider idempotency keeps
+            // a lost reply from creating a second grant. Ambiguity retains custody.
+            let outcome = match self.request(envelope.request.clone()) {
+                Ok(response) => parse_outcome(&envelope.request, response)?,
+                Err(RemoteViewApplicationAdapterError::Transport(
+                    crate::RemoteViewApplicationTransportError::ViewGrantTerminal,
+                )) => RemoteViewApplicationMutationOutcome::IssueViewTerminal,
+                Err(error) => return Err(error),
+            };
+            if let RemoteViewApplicationMutationOutcome::IssueView(view) = &outcome {
+                view.validate_target(
+                    &observed.target,
+                    &application,
+                    &options.audience,
+                    options.capability,
+                    options.lifetime_seconds,
+                    now_ms(),
+                )?;
+            }
+            store
+                .complete(&envelope, &outcome)
+                .map_err(RemoteViewApplicationAdapterError::MutationStore)?;
+            outcome
+        };
         match outcome {
-            RemoteViewApplicationMutationOutcome::IssueView(view) => Ok(view),
-            _ => unreachable!(),
+            RemoteViewApplicationMutationOutcome::IssueView(view) => {
+                view.validate_target(
+                    &observed.target,
+                    &application,
+                    &options.audience,
+                    options.capability,
+                    options.lifetime_seconds,
+                    now_ms(),
+                )?;
+                Ok(view)
+            }
+            RemoteViewApplicationMutationOutcome::IssueViewTerminal => {
+                Err(RemoteViewApplicationAdapterError::ViewGrantTerminal)
+            }
+            _ => Err(RemoteViewApplicationResponseError::InvalidShape.into()),
         }
     }
 

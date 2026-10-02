@@ -23,7 +23,10 @@ pub(super) fn matching_kind(
         (&envelope.request, outcome),
         (Request::Acquire { .. }, Outcome::Acquire(_))
             | (Request::Activate { .. }, Outcome::Activate(_))
-            | (Request::IssueView { .. }, Outcome::IssueView(_))
+            | (
+                Request::IssueView { .. },
+                Outcome::IssueView(_) | Outcome::IssueViewTerminal
+            )
             | (Request::RevokeView { .. }, Outcome::RevokeView(_))
             | (Request::Release { .. }, Outcome::Release(_))
     )
