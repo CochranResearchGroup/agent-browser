@@ -216,6 +216,46 @@ fn parse_outcome(
 }
 
 impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
+    /// Resolve an interrupted acquisition using its original provider idempotency
+    /// key. Only acquisitions support this replay; all other uncertain effects
+    /// retain their existing readback requirement.
+    pub fn reconcile_acquisition(
+        &mut self,
+        record: &RemoteViewApplicationMutationRecord,
+        store: &mut impl RemoteViewApplicationMutationStore,
+    ) -> Result<(), RemoteViewApplicationAdapterError> {
+        let RemoteViewApplicationRequest::Acquire { pool_name, .. } = &record.envelope.request
+        else {
+            return Err(RemoteViewApplicationResponseError::InvalidShape.into());
+        };
+        if record.schema_version != 1 || record.envelope.application != self.application {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        match store
+            .claim(&record.envelope)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?
+        {
+            RemoteViewApplicationMutationClaim::Existing(current)
+                if *current == *record && current.outcome.is_none() => {}
+            _ => return Err(RemoteViewApplicationAdapterError::MutationReadbackRequired),
+        }
+        let outcome = parse_outcome(
+            &record.envelope.request,
+            self.request(record.envelope.request.clone())?,
+        )?;
+        let RemoteViewApplicationMutationOutcome::Acquire(assignment) = &outcome else {
+            return Err(RemoteViewApplicationResponseError::InvalidShape.into());
+        };
+        let inventory = self.inventory()?;
+        inventory.validate_acquisition(pool_name, assignment)?;
+        if !inventory.assignments.contains(assignment) {
+            return Err(RemoteViewApplicationResponseError::StaleTarget.into());
+        }
+        store
+            .complete(&record.envelope, &outcome)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)
+    }
+
     fn mutate(
         &mut self,
         request: RemoteViewApplicationRequest,

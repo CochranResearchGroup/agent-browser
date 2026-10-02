@@ -45,12 +45,18 @@ pub fn prepare_remote_view_session_pool<
     if pool.name.is_empty() || pool.desired_desktops == 0 {
         return Err("remote_view_session_pool_invalid".into());
     }
-    if !store
+    let pending = store
         .pending_pool_acquisitions(&adapter.application, &pool.name)
-        .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?
-        .is_empty()
-    {
-        return Err("remote_view_pool_acquisition_readback_required".into());
+        .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?;
+    for record in pending {
+        if !matches!(&record.envelope.request,
+            RemoteViewApplicationRequest::Acquire { pool_name, .. } if pool_name == &pool.name)
+        {
+            return Err("remote_view_pool_acquisition_readback_required".into());
+        }
+        adapter
+            .reconcile_acquisition(&record, store)
+            .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
     }
     let mut inventory = adapter
         .inventory()

@@ -522,6 +522,52 @@ pub(crate) async fn handle_dependent_batch(cmd: &Value, state: &mut DaemonState)
 /// recover, launch, or otherwise mutate browser/runtime state. The outer wrapper
 /// also retains that admission beside any later success or failure response.
 pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+    execute_command_with_target_custody(cmd, state, false).await
+}
+
+/// The managed-session owner has selected and verified this exact target in
+/// its own runtime. Do not infer a second target from the legacy tab catalog.
+pub(crate) async fn execute_managed_target_command(
+    cmd: &Value,
+    state: &mut DaemonState,
+    target_id: &str,
+) -> Value {
+    if cmd
+        .get("targetId")
+        .filter(|value| !value.is_null())
+        .is_some_and(|value| value.as_str() != Some(target_id))
+        || cmd
+            .get("tabId")
+            .filter(|value| !value.is_null())
+            .is_some_and(|value| {
+                value.as_str() != Some(target_id)
+                    && value.as_str() != Some(format!("target:{target_id}").as_str())
+            })
+    {
+        return error_response(
+            cmd["id"].as_str().unwrap_or(""),
+            "browser_session_target_selector_conflict",
+        );
+    }
+    if state
+        .browser
+        .as_ref()
+        .and_then(|browser| browser.active_target_id().ok())
+        != Some(target_id)
+    {
+        return error_response(
+            cmd["id"].as_str().unwrap_or(""),
+            "browser_session_target_unproven",
+        );
+    }
+    execute_command_with_target_custody(cmd, state, true).await
+}
+
+async fn execute_command_with_target_custody(
+    cmd: &Value,
+    state: &mut DaemonState,
+    managed_target: bool,
+) -> Value {
     let _service_state_lock_timeout_override =
         crate::native::service_store::service_state_lock_timeout_override(
             cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
@@ -536,8 +582,13 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     } else {
         None
     };
-    let mut response =
-        execute_command_after_navigation_admission(cmd, state, navigation_admission.clone()).await;
+    let mut response = execute_command_after_navigation_admission(
+        cmd,
+        state,
+        navigation_admission.clone(),
+        managed_target,
+    )
+    .await;
     attach_navigation_challenge_admission(&mut response, navigation_admission.as_ref());
     response
 }
@@ -556,6 +607,7 @@ async fn execute_command_after_navigation_admission(
     cmd: &Value,
     state: &mut DaemonState,
     navigation_admission: Option<Value>,
+    managed_target: bool,
 ) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
@@ -765,7 +817,7 @@ async fn execute_command_after_navigation_admission(
         return response;
     }
     let explicit_service_handle = cmd.get("serviceTabHandle").is_some();
-    let bound_command = if !action_skips_browser_launch(action) {
+    let bound_command = if !action_skips_browser_launch(action) && !managed_target {
         match super::action_runtime::runtime::bind_native_service_tab_command(cmd, state) {
             Ok(command) => command,
             Err(error) => return error_response(&id, &format!("{error}; source=native/action_runtime/runtime/cdp_free_execute.rs::bind_native_service_tab_command")),

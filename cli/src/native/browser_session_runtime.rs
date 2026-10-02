@@ -664,7 +664,7 @@ fn run_browser_worker(
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
                     next_browser_sequence = sequence;
-                    let browser_id = format!("browser:{}:{next_browser_sequence}", profile.id);
+                    let browser_id = format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4());
                     let launch = BrowserLaunch {
                         browser_id: browser_id.clone(),
                         pid,
@@ -824,7 +824,12 @@ fn run_browser_worker(
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         state.session_id = session_id;
                         state.session_name = Some(session_name);
-                        Ok(super::actions::execute_command(&command, state).await)
+                        Ok(super::actions::execute_managed_target_command(
+                            &command,
+                            state,
+                            &tab.target_id,
+                        )
+                        .await)
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
                 };

@@ -5725,13 +5725,16 @@ Set `AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT` to the desired desktop count
 (default: `1`), within the application's Remote View pool policy. A new browser
 request acquires missing assignments before selecting a live desktop. Status,
 healthy session reuse and runtime construction do not allocate desktops.
-An interrupted acquisition returns `remote_view_pool_acquisition_readback_required`
-and retains its request for reconciliation across restart.
+An interrupted acquisition retains its original request across restart. The next
+placement request reconciles that same provider idempotency key and requires the
+assignment in current inventory before launch. Failed reconciliation returns
+`remote_view_pool_acquisition_readback_required`; it does not allocate using a new key.
 
 Browser placement reads current public inventory and windows, then refreshes
 exact desktop identity before launch. Window-free desktops win occupancy ties;
 healthy occupied desktops remain eligible. Managed commands address the session's current
-tab. Agent Browser launches its own browser with fresh private environment inputs
+tab through its managed owner, without a second legacy tab-catalog lookup.
+Conflicting explicit target selectors are rejected. Agent Browser launches its own browser with fresh private environment inputs
 from Remote View. Local sessions use their existing runtime when these settings
 are absent. Tab focus, view renewal and automatic capacity shrink remain under development
 in Plan 220. Reducing the desired count does not immediately return assignments.

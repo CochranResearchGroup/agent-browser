@@ -296,6 +296,34 @@ fn mismatched_cleanup_and_unavailable_custody_send_no_release_and_completion_fai
 }
 
 #[test]
+fn interrupted_acquisition_reuses_original_key_and_requires_current_assignment() {
+    let f = fixture();
+    let envelope: RemoteViewApplicationEnvelope =
+        serde_json::from_value(f["requests"][1].clone()).unwrap();
+    let record = RemoteViewApplicationMutationRecord {
+        schema_version: 1,
+        envelope: envelope.clone(),
+        outcome: None,
+    };
+    let records: Records = Rc::default();
+    records
+        .borrow_mut()
+        .insert(envelope.mutation_key().unwrap(), record.clone());
+    let (mut adapter, mut store, steps) = setup(
+        vec![
+            (f["requests"][1].clone(), Ok(f["assignment"].clone())),
+            (f["requests"][0].clone(), Ok(f["inventory"].clone())),
+        ],
+        records.clone(),
+    );
+    adapter.reconcile_acquisition(&record, &mut store).unwrap();
+    assert!(steps.borrow().is_empty());
+    assert!(records.borrow()[&envelope.mutation_key().unwrap()]
+        .outcome
+        .is_some());
+}
+
+#[test]
 fn cached_acquisition_cannot_restore_an_assignment_now_released_by_provider() {
     let f = fixture();
     let envelope: RemoteViewApplicationEnvelope =

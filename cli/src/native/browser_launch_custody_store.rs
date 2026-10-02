@@ -105,6 +105,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .filter(|record| {
                 record.published
                     && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
+                    && record.observed_pid == Some(browser.pid)
             })
             .collect::<Vec<_>>();
         let mut record = match records.as_slice() {

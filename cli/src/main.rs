@@ -721,6 +721,20 @@ fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &
     let Some(action) = command.get("action").and_then(serde_json::Value::as_str) else {
         return false;
     };
+    if flags.cli_session
+        && crate::runtime_host::admission_enabled()
+        && native::browser_session_host::ordinary_managed_action(action)
+        && !matches!(
+            action,
+            "navigate" | "close" | "tab_new" | "tab_close" | "launch" | "connect"
+        )
+        && flags.cdp.is_none()
+        && flags.provider.is_none()
+        && !flags.auto_connect
+    {
+        command["sessionName"] = json!(&flags.session);
+        return true;
+    }
     if !matches!(action, "navigate" | "close" | "tab_new" | "tab_close")
         || !flags.cli_session
         || !crate::runtime_host::admission_enabled()
@@ -3681,6 +3695,14 @@ fn run_dependent_batch(flags: &Flags, bail: bool, commands: &[Vec<String>]) {
 }
 
 fn command_skips_browser_launch_for_prestart(cmd: &serde_json::Value) -> bool {
+    if let Some(name) = cmd.get("sessionName").and_then(serde_json::Value::as_str) {
+        let action = cmd["action"].as_str().unwrap_or("");
+        if native::browser_session_host::ordinary_managed_action(action)
+            && native::browser_session_host::retained_managed_session_selected(name, cmd)
+        {
+            return true;
+        }
+    }
     crate::native::actions::action_skips_browser_launch(
         cmd.get("action").and_then(|v| v.as_str()).unwrap_or(""),
     )

@@ -55,6 +55,13 @@ fn matching_ordinary_session(
     })
 }
 
+/// Read retained session routing without constructing a runtime or launching.
+pub(crate) fn retained_managed_session_selected(name: &str, command: &serde_json::Value) -> bool {
+    BrowserSessionSqliteStore::default_sqlite()
+        .and_then(|store| store.load_session_state())
+        .is_ok_and(|state| matching_ordinary_session(&state, name, command))
+}
+
 /// Metadata-only selection. No host construction, provider read or browser launch.
 pub(crate) async fn shared_managed_request_selected(
     shared: SharedBrowserSessionHost,
@@ -144,7 +151,27 @@ pub(crate) async fn execute_shared_remote_view_open(
                 host.persistence.save_profile_catalog(&host.catalog)?;
             }
         }
-        host.execute_managed_command(&name, &command)
+        let mut response = host.execute_managed_command(&name, &command)?;
+        if let Some(response) = response
+            .as_mut()
+            .filter(|response| response["success"] == true)
+        {
+            let identity = response["browserSession"].clone();
+            let browser_id = required_string(&identity, "browserId")?;
+            let target_id = required_string(&identity, "targetId")?;
+            let handoff_id = required_string(&identity, "handoffId")?;
+            let now_ms = current_unix_ms();
+            let presentation = host
+                .focus_browser(browser_id, Some(target_id), now_ms)
+                .and_then(|_| host.resolve_tab_handoff_view(handoff_id, now_ms));
+            match presentation {
+                Ok(view) => {
+                    response["presentationState"] = serde_json::json!(view.presentation_state)
+                }
+                Err(error) => response["presentationError"] = serde_json::json!(error),
+            }
+        }
+        Ok(response)
     })
     .await
     .map_err(|_| "browser_session_host_join_failed")?

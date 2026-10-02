@@ -7805,7 +7805,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
-  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin)
+  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; interrupted acquisitions reuse their key)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
                                  Configured Remote View admits ordinary open requests as managed sessions.

@@ -50,6 +50,16 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 assert_eq!(pending.len(), 1);
                 assert_eq!(pending[0].envelope, *envelope);
                 provider.operations.push("acquire");
+                if let Some(index) = provider
+                    .acquisitions
+                    .iter()
+                    .position(|key| key == idempotency_key)
+                {
+                    if provider.lose_reply {
+                        return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                    }
+                    return Ok(serde_json::to_value(&provider.assignments[index]).unwrap());
+                }
                 provider.acquisitions.push(idempotency_key.clone());
                 let mut assignment: RemoteViewAssignmentRecord =
                     serde_json::from_value(fixture["assignment"].clone()).unwrap();
@@ -263,7 +273,7 @@ fn pool_demand_empty_open_acquires_once_and_status_reuse_restart_do_not_allocate
 }
 
 #[test]
-fn pool_demand_lost_acquire_reply_retains_custody_even_when_provider_assignment_is_visible() {
+fn pool_demand_lost_acquire_reply_recovers_same_assignment_after_restart() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider {
         lose_reply: true,
@@ -277,28 +287,22 @@ fn pool_demand_lost_acquire_reply_retains_custody_even_when_provider_assignment_
             .unwrap_err(),
         "remote_view_pool_acquisition_readback_required"
     );
-    let requests = provider.borrow().operations.len();
     assert_eq!(provider.borrow().assignments.len(), 1);
     assert_eq!(provider.borrow().acquisitions.len(), 1);
     drop(consumer);
+    provider.borrow_mut().lose_reply = false;
     let mut restarted = host(&fixture, provider.clone(), calls.clone());
-    assert_eq!(
-        restarted
-            .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 101))
-            .unwrap_err(),
-        "remote_view_pool_acquisition_readback_required"
-    );
-    assert_eq!(provider.borrow().operations.len(), requests);
-    assert_eq!(calls.get(), 0);
-    let mut store = fixture.store(false);
-    assert_eq!(
-        store
-            .pending_pool_acquisitions("agent-browser", "main")
-            .unwrap()
-            .len(),
-        1
-    );
-    assert!(store.unpublished_launch_records().unwrap().is_empty());
+    restarted
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 101))
+        .unwrap();
+    assert_eq!(provider.borrow().assignments.len(), 1);
+    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert_eq!(calls.get(), 1);
+    assert!(fixture
+        .store(false)
+        .pending_pool_acquisitions("agent-browser", "main")
+        .unwrap()
+        .is_empty());
 }
 
 #[test]
