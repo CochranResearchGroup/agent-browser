@@ -10,6 +10,25 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 424 | 2026-10-02 | Product delivery correction
+
+P221 version 2 makes the next implementation deliverable a real existing client
+loading its intended profile, navigating and operating the page, reusing its
+browser, viewing the addressed tab and closing cleanly through an installed
+development candidate. Extend that demonstrated path to a second client and
+the remaining acceptance scenarios. P220 machinery may be simplified, replaced
+or removed when it obstructs delivery; tests and plans support the product and
+are not outcomes themselves.
+
+Implementation remains paused at the operator checkpoint. The prior stop
+reported 952,452 carried-forward tokens plus 60,293 continuation tokens, totaling
+1,012,745. This documentation amendment does not resume execution. All eight
+installed results below remain NOT RUN; no candidate was built or installed and
+no runtime acceptance was performed in this amendment.
+
+Memory disposition: not_durable; the amended plan and this checkpoint own the
+execution correction.
+
 ## Turn 423 | 2026-10-01 | Simple product acceptance successor
 
 P221 replaces P220's remaining execution queue with eight user-visible

@@ -2,7 +2,7 @@
 
 Date: 2026-10-01
 
-Plan version: 1
+Plan version: 2
 
 State: PLANNED
 
@@ -28,19 +28,32 @@ Deliver a browser experience we can demonstrate using our existing clients:
 load the right profile, operate its tabs, view the right tab, reconnect, recover
 and close cleanly. Finish with an installable, reproducible release candidate.
 
+The goal is working product behavior. Plans, contracts, tests and reports are
+tools for developing and verifying that behavior, not delivery outcomes. A
+passing synthetic suite or completed planning packet does not establish product
+progress without a demonstrated working workflow or removal of its observed
+blocker.
+
 ## Current State
 
 Source checkpoint `eeb0703d` connects ordinary requests, managed tab creation,
 profile selection and durable handoffs. Synthetic composition and model checks
 pass. No known-client authenticated profile load or installed Agent Browser
 acceptance has been proved. The earlier development binary predates that source.
-The previous implementation goal is paused at 952,452 tokens. This planning
-change does not resume it, reset its meter or authorize installed effects.
+The earlier implementation stopped at 952,452 tokens; the subsequent
+continuation crossed the cumulative one-million-token checkpoint and was
+paused. RUNBOOK owns the current execution record. This amendment does not
+resume implementation or reset cumulative effort.
 
 ## Consolidated batch
 
-Run the eight scenarios below and fix whatever prevents the expected product
-result. Some behavior still needs implementation. Keep the existing ownership
+Build and demonstrate one real existing-client workflow first, then extend
+that working product to the remaining scenarios below. Some behavior still
+needs implementation. P220 implementation and architecture are candidates for
+reuse, not requirements to preserve. Simplify, replace or remove machinery
+that obstructs the product result; preserve relevant evidence and safety
+boundaries rather than perpetuating an implementation because it has tests.
+Keep the existing ownership
 split: Agent Browser owns browsers/profiles/tabs; Remote View owns desktops and
 viewing. Preserve P219 custody and P220 evidence. No unrelated architecture,
 IAM, multi-tenant redesign or retired XRDP/Guacamole repair enters this batch.
@@ -54,7 +67,7 @@ All eight installed scenarios are currently NOT RUN.
 
 | Test | Run | Expected product result |
 | --- | --- | --- |
-| 1. Known-client profiles | Capture the real request shapes of at least two existing clients. Replay them through their normal CLI/HTTP/MCP entry points, first with synthetic inputs, then reviewed development copies of the intended profiles. Navigate, repeat and restart. | Correct profile and login state; same healthy browser reused; no silent disposable substitution; headers, wait options and client response/handle contracts work. |
+| 1. Known-client profiles | Capture the real request shapes of at least two existing clients. Replay them through their normal CLI/HTTP/MCP entry points, using reviewed development copies of the intended profiles. Navigate, repeat and restart. | Correct profile and login state; same healthy browser reused; no silent disposable substitution; headers, wait options and client response/handle contracts work. |
 | 2. Sessions and tabs | Open Alice and Bob in one profile, create another tab, then open a second profile's browser on the same desktop. Repeat one request with its stable key. | Separate sessions/tabs/handoffs; no duplicate creation; service tab handles remain usable; multiple browsers can share one desktop. |
 | 3. Viewing and focus | Open each handoff from desktop and mobile viewers. Switch between tabs and browsers; change operator focus; also interrupt presentation while CDP stays healthy. | The addressed tab is visible and controllable; focus does not fight the operator; passive viewing does not keep a session alive; viewing failure does not stop healthy automation. |
 | 4. Reconnect and expiry | Reopen the same bookmark after viewer reconnect, service restart, grant expiry and revocation. | Current presentation is renewed when appropriate; logical session/tab/handoff identity survives; unavailable presentation is reported accurately. |
@@ -65,16 +78,45 @@ All eight installed scenarios are currently NOT RUN.
 
 ## Delivery sequence and budget
 
-Start with test 1's real client request and expected response. Run the cheapest
-check that reproduces its failure, fix the owning code, then rerun that scenario
-and affected regressions. Work through the list; group failures sharing a cause.
-Do not create another planning backlog or count extra tests as product progress.
+The first deliverable is an installed demonstration through one existing
+client's normal interface: load its intended development profile with the
+expected login state, navigate, read or act on the page, repeat a request using
+the same healthy browser, open the handoff and see/control the addressed tab,
+then close the work cleanly. Record the exact client, source and installed
+binary identity and the observed result. This first demonstration advances the
+full objective; it does not replace the other acceptance requirements.
+
+On implementation resumption:
+
+1. Capture one existing client's actual request and expected response. Select
+   the reviewed isolated development target and profile needed to run it.
+2. Build and install a current development candidate, then run that workflow.
+   Use the earliest real failure to identify the missing product behavior.
+3. Implement the simplest complete repair in the owning code. Remove or bypass
+   unnecessary internal machinery when that better delivers the required
+   behavior while preserving applicable safety and ownership boundaries.
+4. Run focused regression checks and rebuild only affected artifacts, then
+   repeat the installed workflow. Do not replace the demonstration with a
+   synthetic analogue. If an input is unavailable, name that exact blocker and
+   advance independent product implementation rather than inventing scaffolding.
+5. Demonstrate a second existing client, then extend the working path through
+   sessions/tabs, viewing, reconnect, close, recovery and capacity. Group
+   observed failures sharing a cause. Qualify the final installable candidate
+   after the necessary product fixes are included.
+
+Tests should reproduce observed failures or protect consequential behavior.
+Do not expand models, contract layers, review rounds or test matrices without
+a concrete product need. Required repository gates still apply at their proper
+boundaries; they do not replace installed evidence. Before another expensive
+build or validation cycle, identify which missing user-visible result it will
+resolve. If repeated cycles yield only more scaffolding or test coverage, stop
+that approach and simplify the implementation instead of opening another plan.
 
 Keep one current results table in RUNBOOK. Reuse valid checks when their inputs
 have not changed. Mark unavailable runs NOT RUN with the exact missing input;
-never weaken a pass condition to fit the implementation. Freeze the candidate
-only after known blocking fixes are included. A successor does not reset prior
-cumulative effort or the user's stop instruction.
+never weaken a pass condition to fit the implementation. Report what a user can
+now do, what was actually demonstrated and what still fails. A successor does
+not reset prior cumulative effort or the user's stop instruction.
 
 Existing reviewed development-runtime and installed-effect boundaries carry
 forward from [P220](0220-2026-09-28-remote-view-consumer-integration.md#separately-gated-installed-acceptance-packet).
@@ -86,7 +128,9 @@ release remain separately directed actions.
 
 One primary owner drives the checklist and repairs the owning implementation.
 Reuse the current branch/worktree; no parallel workers or new infrastructure
-tracks are required. Change only the product surfaces needed for a failing row.
+tracks are required. The primary owns implementation, the installed demonstration and any
+simplification needed to deliver it. There is no separate contract-completion
+or test-count target.
 
 ## Evidence and exit
 
