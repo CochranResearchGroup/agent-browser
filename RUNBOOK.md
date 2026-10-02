@@ -36,12 +36,20 @@ history and all unresolved acceptance axes.
 Transition: PLANNED to OPEN. Progress classification: no_progress for product
 acceptance; execution authority and source locator reconciled. Graphiti returned
 five facts, three nodes and three episodes, none relevant to P222. Current repo
-sources govern. Fresh OS inspection finds installed Agent Browser host PID 2390519 and retained
-task desktop processes, but the task consumer endpoint at 127.0.0.1:19103
-refuses connections. Provider source is clean in remote-view-rv011. Historical
-grant receipts are not current readback. Next action: verify supported task
-provider restart configuration, restore only its endpoint, then inspect the
-retained pending view operation without changing its key.
+sources govern. Fresh inspection found the task consumer endpoint absent. Supported installed
+control serve-http restored it using the existing effective config, control
+home and capacity 930:60030. The private operator bearer is retained outside Git;
+application requests retain their existing consumer identity. Live exec handle
+39550 owns the restored endpoint. No desktop or pending envelope was replaced.
+Exact replay of mutation 43d231ed9bad42b2127318563c4280c290aab6c1fcfb61ccbbae474375582b1d
+returned HTTP 400 consumer_grant_unavailable, grant is terminal. Evidence:
+agent-browser-dev-p221/evidence/p222-retained-view-readback.json outside Git.
+Progress classification for endpoint recovery: blocker_reduction. First usable
+client remains FAIL. Source inspection identifies a captured pre-transport clock
+in RemoteViewSessionEffects issuance validation versus provider issue-time;
+this needs a discriminating regression and fresh-clock repair, alongside exact
+terminal-pending recovery. Do not replace keys or claim viewing from grant
+issuance. Next action: qualify the clock failure and implement the owning repair.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 
