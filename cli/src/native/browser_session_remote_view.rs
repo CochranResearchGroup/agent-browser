@@ -101,7 +101,8 @@ pub(super) fn runtime_effects(
                 Vec::new(),
                 || uuid::Uuid::new_v4().to_string(),
             )?
-            .with_pool(context.pool)?,
+            .with_pool(context.pool)?
+            .with_view_clock(current_view_time_ms),
         ))),
     }
 }
@@ -335,4 +336,11 @@ pub(crate) fn resolve_published_handoff_view(
         return Err("remote_view_tab_view_state_changed".into());
     }
     Ok(issuance)
+}
+
+fn current_view_time_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
+        .unwrap_or_default()
 }

@@ -11,6 +11,7 @@ struct Provider {
     view_requests: Vec<String>,
     lose_view_reply: bool,
     competing_view_publication: bool,
+    delayed_scoped_view: bool,
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
 }
@@ -142,7 +143,16 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
                 }
                 let mut issuance = fixture["viewIssuance"].clone();
-                issuance["grant"]["request"]["idempotencyKey"] = idempotency_key.clone().into();
+                issuance["grant"]["request"]["idempotencyKey"] = if provider.delayed_scoped_view {
+                    format!("provider-scoped-{idempotency_key}")
+                } else {
+                    idempotency_key.clone()
+                }
+                .into();
+                if provider.delayed_scoped_view {
+                    issuance["grant"]["issuedAt"] = 2001.into();
+                    issuance["grant"]["expiresAt"] = 302001.into();
+                }
                 Ok(issuance)
             }
             RemoteViewApplicationRequest::ResolveView { route_id, audience } => {
@@ -150,8 +160,17 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 assert_eq!(audience, "remote_view");
                 assert_eq!(route_id, fixture["grant"]["routeId"].as_str().unwrap());
                 let mut grant = fixture["grant"].clone();
-                grant["request"]["idempotencyKey"] =
-                    provider.view_requests.last().unwrap().clone().into();
+                let key = provider.view_requests.last().unwrap();
+                grant["request"]["idempotencyKey"] = if provider.delayed_scoped_view {
+                    format!("provider-scoped-{key}")
+                } else {
+                    key.clone()
+                }
+                .into();
+                if provider.delayed_scoped_view {
+                    grant["issuedAt"] = 2001.into();
+                    grant["expiresAt"] = 302001.into();
+                }
                 Ok(grant)
             }
             _ => panic!("unexpected provider mutation during capacity demand"),
@@ -206,7 +225,8 @@ fn host_mode(
         name: "main".into(),
         desired_desktops: 1,
     })
-    .unwrap();
+    .unwrap()
+    .with_view_clock(|| 2001);
     BrowserSessionHost::load(
         fixture.store(false),
         effects,
@@ -610,6 +630,7 @@ fn ordinary_profile_selector_conflict_precedes_allocation_and_default_is_disposa
 fn handoff_view_issuance_and_resolution_survive_host_restart_without_launch_or_navigation() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
+    provider.borrow_mut().delayed_scoped_view = true;
     let calls = Rc::new(Cell::new(0));
     let mut consumer = host(&fixture, provider.clone(), calls.clone());
     let opened = consumer.execute_managed_command("Alice", &serde_json::json!({

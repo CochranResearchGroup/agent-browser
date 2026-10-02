@@ -15,6 +15,7 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     next_intent_id: fn() -> String,
     expected: Option<BrowserSessionState>,
     pending: Option<(BrowserLaunchIntent, bool)>,
+    view_clock: Option<fn() -> u64>,
 }
 
 impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
@@ -54,6 +55,7 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
             next_intent_id,
             expected: None,
             pending: None,
+            view_clock: None,
         })
     }
     /// Configure demand-driven capacity. This performs no provider request.
@@ -63,6 +65,13 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
         }
         self.pool = Some(pool);
         Ok(self)
+    }
+
+    /// Supply a runtime clock sampled after provider transport returns. Tests
+    /// without a runtime clock retain their explicit logical timestamp.
+    pub fn with_view_clock(mut self, clock: fn() -> u64) -> Self {
+        self.view_clock = Some(clock);
+        self
     }
 
     fn require_clear_custody(store: &mut S) -> Result<(), String> {
@@ -123,6 +132,7 @@ impl<
             );
         }
         let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        let clock = self.view_clock;
         self.adapter
             .issue_view(
                 &assignment,
@@ -132,7 +142,7 @@ impl<
                     lifetime_seconds: 300,
                     idempotency_key: view.idempotency_key.clone(),
                 },
-                || now_ms,
+                || clock.map_or(now_ms, |clock| clock()),
                 &mut self.store,
             )
             .map_err(|_| "remote_view_tab_view_issuance_readback_required".into())
@@ -362,9 +372,9 @@ pub fn resolve_published_remote_view_tab_view<T: RemoteViewApplicationTransport>
     }
     let assignment = remote_view_tab_assignment(adapter, store, target)?;
     if let Some(issuance) = &view.issuance {
-        if issuance.grant.request.idempotency_key != view.idempotency_key {
-            return Err("remote_view_tab_view_request_conflict".into());
-        }
+        // The durable view binds the client request to this exact issuance.
+        // Provider grant keys are registration-scoped opaque identities and
+        // cannot be compared with the original client mutation key.
         let resolved = adapter
             .resolve_view(&assignment, &issuance.grant, || now_ms, false)
             .map_err(|_| "remote_view_tab_view_resolution_failed")?;

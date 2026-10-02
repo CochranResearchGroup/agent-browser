@@ -50,6 +50,16 @@ in RemoteViewSessionEffects issuance validation versus provider issue-time;
 this needs a discriminating regression and fresh-clock repair, alongside exact
 terminal-pending recovery. Do not replace keys or claim viewing from grant
 issuance. Next action: qualify the clock failure and implement the owning repair.
+Source increment: RemoteViewSessionEffects accepts an injected view clock;
+installed runtime samples wall time after issuance transport. Published readback
+uses the retained issuance and exact resolved grant rather than comparing opaque
+provider and client keys. The existing restart regression now models issuance
+at 2001 after request time 2000 and a provider-scoped key. Focused Rust lane
+passed one test (3314 filtered), with browser/tab identity and no duplicate
+launch/navigation preserved. This is source qualification, not installed proof.
+Initial formatting completed; format-check handle 16160 is waiting on host
+memory admission. Strict workspace Clippy, terminal-pending recovery and final
+installed AuraCall demonstration remain pending. No candidate was published.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 
