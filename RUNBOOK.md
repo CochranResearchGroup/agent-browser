@@ -10,6 +10,41 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md); [P221 superseded history](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 439 | 2026-10-02 | P222 execution resumed
+
+Operator authorized Plan 0222 execution and a checkpoint before the active goal
+meter reaches 750000 tokens. Initial meter read is 22690. Source custody remains
+platform/p220-remote-view-consumer in agent-browser-p220 at 928113a2; Remote View
+custody remains subject to fresh readback. Production effects remain excluded.
+First packet: inspect the retained view envelope and provider outcome, repair
+only the verified cause, then demonstrate the actual installed AuraCall path.
+Primary owner serializes the client/provider path. Use at most three work-unit
+attempts and one review/rework cycle; checkpoint at material transitions or
+30 minutes, and reassess after two checkpoints or 30 active minutes without
+outcome progress. The overall ceiling is the goal meter below 750000; begin the
+stop checkpoint by 730000 to retain closeout allowance. Preserve predecessor
+history and all unresolved acceptance axes.
+
+| Milestone | Current result | Missing evidence / next action |
+| --- | --- | --- |
+| First usable AuraCall | FAIL at predecessor checkpoint | Fresh grant readback, addressed-tab visibility/control, actual client success and cleanup census |
+| Persistent authentication | NOT RUN | Reviewed login and restart/reconnect observation |
+| Shared operation | NOT RUN | Second real client, stable-key replay and peer-preserving close |
+| Recovery and capacity | NOT RUN | Observed disruptions, desktop/mobile focus and elastic capacity |
+| Reproducible installation | NOT RUN | Clean install/update, doctor, platform and integration gates |
+
+Transition: PLANNED to OPEN. Progress classification: no_progress for product
+acceptance; execution authority and source locator reconciled. Graphiti returned
+five facts, three nodes and three episodes, none relevant to P222. Current repo
+sources govern. Fresh OS inspection finds installed Agent Browser host PID 2390519 and retained
+task desktop processes, but the task consumer endpoint at 127.0.0.1:19103
+refuses connections. Provider source is clean in remote-view-rv011. Historical
+grant receipts are not current readback. Next action: verify supported task
+provider restart configuration, restore only its endpoint, then inspect the
+retained pending view operation without changing its key.
+Memory disposition: not_durable; canonical execution record owns this transient
+resumption checkpoint.
+
 ## Turn 438 | 2026-10-02 | Product delivery successor
 
 P221 is CLOSED by supersession, not accepted. P222 is PLANNED and inherits every

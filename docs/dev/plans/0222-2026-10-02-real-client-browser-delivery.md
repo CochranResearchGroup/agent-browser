@@ -4,7 +4,7 @@ Date: 2026-10-02
 
 Plan version: 1
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -75,9 +75,9 @@ focused checks and installed demonstration. Commit a coherent working increment
 before moving on. Record unavailable inputs and continue independent work within
 scope; do not fabricate profile authentication or operator visibility.
 
-The discussed 750000 tokens are a proposed ceiling, not a spending target or an
-activated goal. This plan does not resume the paused goal or replace its stop
-instruction. Any subsequently authorized execution inherits cumulative effort,
+The operator authorized execution on 2026-10-02 with a stop and checkpoint
+before the active goal meter reaches 750000 tokens. This resumes execution;
+750000 is a ceiling, not a spending target. Any subsequently authorized execution inherits cumulative effort,
 accepted findings and no-progress history; successors do not reset them. Stop
 when the intended product is delivered even if budget remains.
 

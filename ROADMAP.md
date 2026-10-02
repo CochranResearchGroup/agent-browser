@@ -27,7 +27,7 @@ field evidence and acceptance records into the same model.
 
 ## P222 | Real Client Browser Delivery
 
-State: PLANNED
+State: OPEN
 
 [Plan 0222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md)
 succeeds P221 while incomplete. First deliver AuraCall using Chromium Stealth

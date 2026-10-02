@@ -8,9 +8,9 @@ lanes:
     plan_ref: refs/heads/platform/p220-remote-view-consumer
     branch: platform/p220-remote-view-consumer
     target: main
-    plan_state: PLANNED
+    plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
-    checkpoint: 0cc155d7
+    checkpoint: 928113a2
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
     integration: merge through the protected pull-request workflow after the Remote View runtime integration spike, retained-domain reconciliation, installed Alice/Bob acceptance, and changed-surface validation
@@ -20,7 +20,7 @@ lanes:
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: Operator-view grant issuance and readback prevent actual AuraCall acceptance; P222 is planned and does not resume the paused goal
+    blocker: Operator-view grant issuance and readback prevent actual AuraCall acceptance; P222 execution authorized; first milestone remains incomplete
     updated_at: 2026-10-02
   - id: P204
     product_lane: PL-PLATFORM
