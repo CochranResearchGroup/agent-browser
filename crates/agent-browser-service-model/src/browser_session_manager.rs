@@ -39,6 +39,11 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Select an executable for subsequent launches; existing browsers retain identity.
+    fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
+        Err("browser_build_selection_unsupported".into())
+    }
+
     /// Issue or resolve a retained presentation without capacity or browser launch.
     /// The host publishes the request before calling and the outcome afterward.
     fn resolve_remote_view_tab_view(

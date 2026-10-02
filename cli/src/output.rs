@@ -6377,6 +6377,8 @@ for journal correlation; retrySafe remains false.
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook
   --browser-build <build>      Browser build: stock_chrome, stealthcdp_chromium, or cdp_free_headed
+                              Linux managed opens verify the actual executable and reject incompatible reuse;
+                              stealthcdp_chromium requires a ready configured build manifest.
   --view-stream-provider rdp_gateway
                                Use the Guacamole/RDP gateway view stream
   --provider rdp_gateway       Compatibility alias for --view-stream-provider rdp_gateway

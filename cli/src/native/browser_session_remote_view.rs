@@ -107,6 +107,13 @@ pub(super) fn runtime_effects(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.select_browser_executable(path),
+            Self::Remote(effects) => effects.select_browser_executable(path),
+        }
+    }
+
     fn resolve_remote_view_tab_view(
         &mut self,
         target: &RemoteViewTabHandoffTarget,

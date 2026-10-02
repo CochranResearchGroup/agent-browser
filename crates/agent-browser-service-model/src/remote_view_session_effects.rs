@@ -92,6 +92,9 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
+        self.effects.select_browser_executable(path)
+    }
     fn resolve_remote_view_tab_view(
         &mut self,
         target: &RemoteViewTabHandoffTarget,

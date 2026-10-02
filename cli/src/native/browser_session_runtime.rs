@@ -36,6 +36,10 @@ pub(crate) struct BrowserManagerRuntimeConfig {
 }
 
 pub(crate) trait BrowserRuntimeDriver {
+    fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
+        Err("browser_build_selection_unsupported".into())
+    }
+
     fn begin_operation(
         &mut self,
         _expected: &agent_browser_service_model::BrowserSessionState,
@@ -134,6 +138,10 @@ impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
 }
 
 impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdapter<D> {
+    fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
+        self.runtime.select_browser_executable(path)
+    }
+
     fn begin_operation(
         &mut self,
         expected: &agent_browser_service_model::BrowserSessionState,
@@ -314,6 +322,10 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
 }
 
 enum BrowserRuntimeCommand {
+    SelectExecutable {
+        path: String,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     IsLive {
         browser: ManagedBrowserInstance,
         reply: mpsc::Sender<Result<bool, String>>,
@@ -451,6 +463,14 @@ impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
 }
 
 impl BrowserRuntimeDriver for BrowserManagerRuntime {
+    fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::SelectExecutable { path, reply },
+        )
+    }
+
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -605,12 +625,16 @@ impl Drop for BrowserManagerRuntime {
 fn run_browser_worker(
     runtime: tokio::runtime::Runtime,
     receiver: mpsc::Receiver<BrowserRuntimeCommand>,
-    config: BrowserManagerRuntimeConfig,
+    mut config: BrowserManagerRuntimeConfig,
 ) {
     let mut browsers = HashMap::<String, DaemonState>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
+            BrowserRuntimeCommand::SelectExecutable { path, reply } => {
+                config.executable_path = Some(path);
+                let _ = reply.send(Ok(()));
+            }
             BrowserRuntimeCommand::IsLive { browser, reply } => {
                 let result = runtime.block_on(recorded_browser_is_live(&mut browsers, &browser));
                 let _ = reply.send(result);

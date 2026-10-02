@@ -574,3 +574,10 @@ of these pending requests remains unfinished. Legacy service tab handles still
 require their explicit managed join; this path does not fabricate one.
 
 Successful navigations retain their URL in durable session history.
+
+On Linux, managed Remote View open honors explicit `stock_chrome` and
+`stealthcdp_chromium` selections. Chromium Stealth requires a ready configured
+build manifest. An incompatible executable already using the selected profile
+returns `browser_build_reuse_conflict` before navigation. Successful selection
+returns `browserBuildProof` from the actual process executable. This proof does
+not establish operator viewing readiness.

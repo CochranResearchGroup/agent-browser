@@ -114,6 +114,62 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        let selected_build = optional_string(&command, "browserBuild");
+        let selected_executable = match selected_build {
+            None => None,
+            Some("stock_chrome") => {
+                let launcher = super::cdp::chrome::find_chrome()
+                    .ok_or("browser_build_executable_unavailable:stock_chrome")?
+                    .canonicalize()
+                    .map_err(|_| "browser_build_executable_unavailable:stock_chrome")?;
+                // Linux Google Chrome discovery can return its shell wrapper.
+                // Launch the sibling browser binary so the process proof binds
+                // the executable itself rather than the wrapper script.
+                let binary = launcher.parent().map(|parent| parent.join("chrome"));
+                Some(
+                    if launcher
+                        .file_name()
+                        .is_some_and(|name| name.to_string_lossy().starts_with("google-chrome"))
+                        && binary.as_ref().is_some_and(|path| path.is_file())
+                    {
+                        binary.ok_or("browser_build_executable_unavailable:stock_chrome")?
+                    } else {
+                        launcher
+                    },
+                )
+            }
+            Some("stealthcdp_chromium") => {
+                let flags = crate::flags::parse_flags(&["agent-browser".into()]);
+                let manifest = flags
+                    .browser_build_manifest_status
+                    .get("stealthcdp_chromium")
+                    .filter(|status| status["ready"] == true)
+                    .ok_or("browser_build_manifest_unavailable:stealthcdp_chromium")?;
+                Some(PathBuf::from(required_string(manifest, "executablePath")?))
+            }
+            Some(_) => return Err("browser_build_selector_unsupported".into()),
+        };
+        if let Some(path) = &selected_executable {
+            let expected = path
+                .canonicalize()
+                .map_err(|_| "browser_build_executable_unavailable")?;
+            let profile = optional_string(&command, "runtimeProfile");
+            for browser in host
+                .state
+                .browsers
+                .values()
+                .filter(|browser| profile == Some(browser.profile_id.as_str()))
+            {
+                let actual = std::fs::read_link(format!("/proc/{}/exe", browser.pid))
+                    .map_err(|_| "browser_build_reuse_identity_unavailable")?;
+                if actual != expected {
+                    return Err("browser_build_reuse_conflict".into());
+                }
+            }
+            host.effects
+                .select_browser_executable(expected.to_string_lossy().into_owned())?;
+        }
+
         if let (Some(id), Some(path)) = (
             optional_string(&command, "runtimeProfile"),
             optional_string(&command, "profile"),
@@ -157,6 +213,28 @@ pub(crate) async fn execute_shared_remote_view_open(
             .filter(|response| response["success"] == true)
         {
             let identity = response["browserSession"].clone();
+            if let Some(build) = selected_build {
+                let browser = host
+                    .state
+                    .browsers
+                    .get(required_string(&identity, "browserId")?)
+                    .ok_or("browser_build_process_identity_missing")?;
+                let actual = std::fs::read_link(format!("/proc/{}/exe", browser.pid))
+                    .map_err(|_| "browser_build_process_identity_unavailable")?;
+                if selected_executable
+                    .as_ref()
+                    .and_then(|path| path.canonicalize().ok())
+                    .as_ref()
+                    != Some(&actual)
+                {
+                    return Err("browser_build_executable_mismatch".into());
+                }
+                response["browserBuildProof"] = serde_json::json!({
+                    "state":"matched", "requestedBrowserBuild":build,
+                    "selectedBrowserBuild":build, "actualExecutablePath":actual,
+                });
+            }
+
             let browser_id = required_string(&identity, "browserId")?;
             let target_id = required_string(&identity, "targetId")?;
             let handoff_id = required_string(&identity, "handoffId")?;
