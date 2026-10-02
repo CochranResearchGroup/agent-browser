@@ -25,17 +25,23 @@ plans select one product lane and use the active-lane catalog for branch and
 worktree custody. [The notes index](docs/dev/notes/README.md) routes current
 field evidence and acceptance records into the same model.
 
-## P221 | Browser Product Acceptance
+## P222 | Real Client Browser Delivery
 
 State: PLANNED
 
+[Plan 0222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md)
+succeeds P221 while incomplete. First deliver AuraCall using Chromium Stealth
+with working operator viewing, then persistent authentication, shared real-client
+operation, recovery/capacity and reproducible installation. RUNBOOK owns actual
+results. Existing source custody and execution stop instructions are retained.
+
+## P221 | Browser Product Acceptance
+
+State: CLOSED
+
 [Plan 0221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md)
-succeeds P220 while incomplete. Its execution guide is eight product scenarios:
-known-client profiles, sessions/tabs, viewing/focus, reconnect/expiry, deliberate
-close, interrupted-operation recovery, capacity/cleanup and candidate install.
-Run the scenario, fix the owning code when it fails, and retain evidence of the
-result. RUNBOOK owns current results. Existing source custody is retained;
-implementation remains paused at the requested token checkpoint.
+closed by supersession on 2026-10-02, not successful acceptance. P222 inherits
+all outstanding requirements and preserves its partial installed evidence.
 
 ## P220 | Remote View Consumer Integration
 

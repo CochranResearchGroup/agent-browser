@@ -1,27 +1,27 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
-  - id: P221
+  - id: P222
     product_lane: PL-PLATFORM
-    objective: Make eight real-client browser product acceptance scenarios pass and qualify an installable candidate
-    plan: docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md
+    objective: Deliver AuraCall with working operator viewing, persistent authentication, shared clients, recovery and reproducible installation
+    plan: docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md
     plan_ref: refs/heads/platform/p220-remote-view-consumer
     branch: platform/p220-remote-view-consumer
     target: main
     plan_state: PLANNED
     custody_state: ACTIVE_WORKTREE
-    checkpoint: eeb0703d
+    checkpoint: 0cc155d7
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
     integration: merge through the protected pull-request workflow after the Remote View runtime integration spike, retained-domain reconciliation, installed Alice/Bob acceptance, and changed-surface validation
-    validation_status: Inherited source checkpoint eeb0703d has passing focused composition and model checks; all eight installed product scenarios remain NOT RUN; earlier development binary predates this source; no release-candidate qualification
-    validation_ref: eeb0703d
+    validation_status: Installed Linux build selection, CLI operations, shared-session close and browser cleanup demonstrated; full AuraCall operator-view acceptance remains incomplete
+    validation_ref: 80f9316e
     work_items: [CochranResearchGroup/agent-browser#202, CochranResearchGroup/remote-view#70, CochranResearchGroup/remote-view#146]
     dependencies: []
     overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
     reconciled_overlaps: [P204:ROADMAP.md, P204:RUNBOOK.md, P204:docs/dev/active-lanes.yaml, P214:ROADMAP.md, P214:RUNBOOK.md, P214:docs/dev/active-lanes.yaml]
-    blocker: P221 succeeds P220 while incomplete; implementation remains paused at the requested token checkpoint; next is a real-client profile request and response reproducer, followed by fixes and acceptance evidence
-    updated_at: 2026-10-01
+    blocker: Operator-view grant issuance and readback prevent actual AuraCall acceptance; P222 is planned and does not resume the paused goal
+    updated_at: 2026-10-02
   - id: P204
     product_lane: PL-PLATFORM
     objective: Disable GitHub CI while retaining a reviewed path-selected workflow for explicit future re-enablement

@@ -2,9 +2,9 @@
 
 Date: 2026-10-01
 
-Plan version: 3
+Plan version: 4
 
-State: OPEN
+State: CLOSED
 
 Consolidation: required
 
@@ -21,6 +21,15 @@ Branch: platform/p220-remote-view-consumer (retain existing source custody)
 Target: main
 
 Owner: primary browser integration owner
+
+## Closure by supersession
+
+Closed 2026-10-02 at the operator's request. [P222](0222-2026-10-02-real-client-browser-delivery.md)
+supersedes this plan and carries every unproved requirement forward. This is
+not successful product acceptance. RUNBOOK Turn 437 records the installed
+capabilities delivered after the earlier checkpoint; full AuraCall and operator
+viewing remain incomplete. Existing branch/worktree and evidence are retained.
+The historical scope and acceptance criteria below are preserved.
 
 ## Objective
 
