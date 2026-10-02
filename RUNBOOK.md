@@ -10,6 +10,273 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 436 | 2026-10-02 | Requested pre-500k stop checkpoint
+
+Stopping under the operator's standing instruction before 500000 tokens.
+Last goal meter read: 436388; final pause readback owns the exact stopped count.
+P221 stays OPEN and incomplete; the goal is paused, not achieved.
+Agent Browser source custody: platform/p220-remote-view-consumer in
+agent-browser-p220, implementation commit 14f06754. Provider source custody:
+feature/rv011-consumer-platform in remote-view-rv011, commit 28b4ec1 (earlier
+lifecycle recovery cb8d955). No push or merge is claimed.
+
+Current isolated Agent Browser candidate SHA-256:
+`a7ba8e58121284d9008cf08098bfbf3ab86f56a842bf2d5bb8f6b67a42009c99`.
+Installed generation 0.28.0-a7ba8e581212. Optimized build, workspace Clippy,
+format and the one focused atomic launch-publication test pass. Earlier eight
+mutation tests, one lost-reply restart test and thirteen provider desktop-join
+tests cover their named repairs; none establishes full installed acceptance.
+Publisher reported production unchanged and did not activate task services.
+
+Actual AuraCall navigation succeeds but the client still rejects converging.
+Exact-profile readback now has unique browser ID
+browser:p221-auracall:ab216aaf-3563-4e8e-8ce3-0c0ea2206004 and handoff ID
+8cde39cb-67ca-48ce-87ce-0828b94277a0. Prior launch-custody ambiguity is removed.
+Current presentation failure is remote_view_tab_view_issuance_readback_required.
+Preserve the pending view request; do not issue a replacement key or rewrite
+private state. Evidence/unique-browser-readback.json and actual client log are
+under the private agent-browser-dev-p221 evidence directory.
+
+Fresh retained process census: task host 1950588, Chrome 1950693, task provider
+1922238 (live exec handle 22977, port 19103). Task desktop generation 2 is
+retained, with isolated task Guacamole/Postgres/guacd containers and network.
+Container census is evidence/checkpoint-containers.json. These are deliberate
+retained development resources for exact readback, not unexplained residue.
+Production runtime, profiles, provider, containers and ingress were not replaced.
+
+Restart instructions: read this checkpoint and current plan; verify these
+identities and the pending view envelope before any retry. Find the provider's
+exact view issuance outcome/error through supported readback, repair its owning
+cause, then finish actual focus/presentation readiness, durable dashboard URL,
+build proof and client browser/CDP inventory. Do not report opened/ready merely
+because navigation or grant issuance succeeds. Afterwards complete intended
+login state and the second real client, then the remaining eight-scenario
+requirements. All full scenarios remain unproved; this is partial product
+progress, not a completed development candidate or release.
+
+Memory disposition: not_durable; canonical checkpoint owns unfinished work.
+
+## Turn 435 | 2026-10-02 | Installed view attempt exposes browser ID collision
+
+Focus/view-grant candidate build 27504, Clippy 99099 and final format passed.
+Exact task browser close r844492 succeeded; old empty task host 1922604 was
+stopped and token retained. Publisher installed 0.28.0-f9973b9a2ed0 with no
+activation and production unchanged. Actual AuraCall still rejects converging.
+Repeated exact-profile request readback proves Example Domain navigation but
+reports remote_view_tab_view_launch_custody_unavailable. It retains handoff
+4e020146-5055-47b1-83fa-3e0d15955b3e and the current exact managed tab.
+
+The launch ledger has multiple historical published records for browser ID
+browser:p221-auracall:1 because the runtime's process-local sequence restarts.
+The owning repair now creates UUID-suffixed browser IDs and selects existing
+published custody by browser ID plus exact observed PID before full publication
+validation. Historical records are preserved. Clippy handle 74832 and the new
+candidate build are live; poll before publishing. Close the retained task
+browser through its owner first. Do not clear the ledger or substitute a grant.
+
+Provider control remains live under handle 22977; isolated Guacamole provisioning
+is complete. Ordinary reads, navigation and explicit close have installed
+proof; full AuraCall response, operator readiness, authenticated profiles and
+all remaining P221 acceptance remain incomplete. Cumulative resumed usage was
+410378 at this turn's start. Stop and checkpoint before 500000 as directed.
+
+Memory disposition: not_durable; final client workflow remains unfinished.
+
+## Turn 434 | 2026-10-02 | Installed ordinary reads work; viewing setup ready
+
+Current reuse candidate build 19211 completed; final format check passed.
+Publisher installed isolated generation 0.28.0-dfe3365ce968, without service
+activation, reporting production unchanged. Previous empty task host 1902638
+was stopped and its token retained. Actual AuraCall navigation still completes
+but client rejects status=converging. Ordinary installed get url r943980 returned
+https://example.com/ and get title r921245 returned Example Domain. This proves
+ordinary managed reads on the current task browser; it does not prove all client
+handles or actions.
+
+Initial task Guacamole provision failed before its stack existed. Explicit
+installation-scoped Compose up created only the task network, volume and three
+containers; provision 95675 then completed successfully. Task control server
+handle 22977 is live on 19103. No production container, ingress or desktop changed.
+
+Source now extends managed remote-view open to focus the exact managed browser
+and tab, then resolve and retain its provider view grant. Presentation failure
+is reported independently of successful navigation. Coordinator retains honest
+converging/pending until operator readiness is actually proved, with concrete
+presentation state or failure reason. Clippy handle 99099 and candidate build
+27504 are live; poll before replacing artifacts. Next run this installed path,
+then complete durable dashboard resolution and actual operator-visible proof.
+Do not substitute a raw provider URL or declare grant issuance pixel readiness.
+The full AuraCall workflow and the eight P221 scenarios remain incomplete.
+
+Memory disposition: not_durable; ongoing installed implementation iteration.
+
+## Turn 433 | 2026-10-02 | Ordinary reuse routing repaired; task gateway setup
+
+CLI source now adds sessionName to ordinary named-session read/action requests
+and skips independent prestart launch when exact retained managed-session
+routing exists. Runtime ownership remains with the managed host. Clippy passed
+after removing an unnecessary mut. Candidate build handle 19211 remains live;
+installed proof for get url is pending. The task browser was deliberately closed
+through its owner (r935558, browser_closed) before changing task desktop setup.
+
+The isolated viewing config copied production subnet 10.250.247.0/28. Reviewed
+Docker network census showed 10.250.246.0/28 has no overlap. All task subnet,
+bridge and guacd address fields were updated together; initial partial config
+validation failed without effect. Supported apply then required slot stopped.
+Only exact task server PID 1885788 was stopped, exact browser closed, and task
+slot 1 stopped through its owning CLI. Supported config apply completed with
+receipt evidence/subnet-apply.json. Task start handle 97097 is retained; poll it
+before another effect. Production subnet, desktop and gateway remain unchanged.
+
+Next finish isolated task Guacamole provisioning using generated compose and
+stack.env, bring up the task control server with its retained assignment, then
+publish the current Agent Browser candidate after gates and rerun actual client
+plus ordinary reads. Provider control is currently stopped intentionally for
+configuration change; do not treat the absent handle as an unexplained crash.
+No operator viewing or full client acceptance is claimed.
+
+Memory disposition: not_durable; implementation and setup are unfinished.
+
+## Turn 432 | 2026-10-02 | Installed navigation works; client presentation incomplete
+
+Before candidate replacement, exact managed close r479059 returned
+browser_closed for browser:p221-auracall:1. Fresh OS readback confirmed Chrome
+PID 1886334 absent. Exact previous task host PID 1866048 was then stopped and
+its stale token preserved. Build 80243 and final format check 93320 passed.
+Publisher installed generation 0.28.0-25182fd7800c without service activation,
+reporting production unchanged. Candidate SHA-256:
+`25182fd7800c919f5af87a826dbaf78919e530720beae3698a7958b3d69b9b94`.
+
+Actual AuraCall request job r447280 succeeded through managed navigation.
+AuraCall rejected status=converging, which is honest unfinished presentation,
+not client success. Independent read of the exact development profile's
+DevToolsActivePort and current CDP page inventory proves a page at
+https://example.com/ (target 8E7C63750E57BE360953F5BFFC91B982); another new-tab
+page remains. Chrome PID 1902750 and task host PID 1902638 are retained.
+Actual launcher evidence: evidence/auracall-target-repair.log outside repo.
+
+A subsequent ordinary CLI get url did not route to the managed owner; its
+prestart launch was correctly blocked by the retained profile lock. Job r316662
+is this separate failure, not evidence navigation failed. Next product batch
+must complete ordinary read/action reuse through the managed runtime and the
+real remote-view open response: focus, live viewing readiness, durable operator
+URL, selected-build proof and usable browser/CDP inventory. Do not falsify
+status=opened or readiness to satisfy AuraCall. Complete isolated gateway setup
+for actual presentation. Keep the full P221 scenarios open; authenticated state,
+second client, viewing and remaining lifecycle acceptance are still unproved.
+
+Memory disposition: not_durable; ongoing delivery, with bounded installed proof.
+
+## Turn 431 | 2026-10-02 | Actual client launches Chrome; navigation join repair
+
+The isolated consumer policy now explicitly grants windows and activate in
+addition to its original capabilities. Supported apply completed; task server
+handle 44499 serves the revised config. Only the task provider was restarted.
+Actual AuraCall job r507521 reached navigation and failed with
+service_tab_target_unproven from the legacy native tab binder. Fresh OS readback
+proves Chrome PID 1886334, executable /opt/google/chrome/chrome, on the exact
+p221-auracall development user-data directory. Legacy service browsers reports
+zero, so that inventory is not proof that this managed browser is absent. Do
+not replace the host until the managed browser is exactly closed or adopted.
+
+The owning runtime now calls a private managed-target execution entry point
+that verifies the selected CDP target before action execution, rejects
+conflicting selectors and avoids inferring a second target from the unrelated
+legacy tab catalog. Explicit service handles retain downstream handle checks.
+Workspace Clippy passes; format was applied. Current candidate build handle
+80243 is live. Before publishing, close the exact managed task through its
+owner and verify process residue; then replace only the task host and rerun
+AuraCall. Successful navigation, login state and viewing remain unproved.
+
+Memory disposition: not_durable; installed workflow is still incomplete.
+
+## Turn 430 | 2026-10-02 | Desktop automation no longer depends on gateway
+
+Remote View working-tree repair replaces DesktopJoinProjection's gateway
+transport dependency with exact installed desktop resource bindings. It retains
+configuration/installation identity, readiness, display/port and generation
+checks. GatewayDesktopProjection remains strict about connection_id, so the
+change does not claim viewing readiness. Thirteen desktop-join tests including
+missing-connection separation pass; strict all-target Clippy, format and build
+pass after correcting a private helper visibility compilation failure.
+
+Task provider candidate SHA-256:
+`a43fac3b72cb30926034efa2f23ec1bff64c45332698b96aff379f2a0620b0d6`.
+Exact prior task server PID 1826652 was stopped and replaced; exec handle 77641
+owns the live server on 19103. No production provider was changed.
+
+Actual AuraCall retry job r589025 still failed before browser launch. Read-only
+public observation now succeeds with readinessScope live_resource and the same
+assignment/desktop/generations. Windows returns consumer_access_denied because
+the task config grants inventory/acquire/release/observe/control but omits the
+separate windows capability. This is an isolated setup defect, not a new
+allocation or proof of browser functionality. Next correct the task consumer
+policy with windows (and activate for addressed-tab focus), apply that exact
+private config through the provider's supported path, restart only the task
+server and continue the actual launcher. Keep source changes and current
+resources; do not allocate a replacement desktop. All full product acceptance
+requirements remain open.
+
+Memory disposition: not_durable; unfinished product workflow.
+
+## Turn 429 | 2026-10-02 | Installed client advances to desktop observation
+
+Current optimized candidate SHA-256:
+`ff5281f19c6c708834d9b05c2d6ed70be727216f5bc0153da5fed2e993a2de7e`.
+Build 6654 and final format check 82610 completed successfully. The isolated
+publisher installed generation 0.28.0-ff5281f19c6c with no service activation and
+reported production unchanged. Before replacement, actual service inventory
+was empty; exact previous P221 host PID 1785543 was stopped and its leftover
+token retained under an evidence name. Current task host PID 1866048.
+
+AuraCall's actual launcher executed against that installed binary. Job r909308
+advanced beyond acquisition reconciliation and failed before browser launch
+with remote_view_runtime_assignment_unavailable. Evidence remains outside the
+repo in agent-browser-dev-p221/evidence/auracall-acquisition-repair.log and
+jobs-acquisition-repair.json. A read-only public ObserveAssignment request on
+/v1/consumer returned gateway_desktop_unavailable: ready slot has no gateway
+connection. An initial diagnostic request used the wrong endpoint and got 401;
+that is not a product authentication failure.
+
+Owning provider consumer_view_target uses DesktopJoinProjection::from_registry,
+which requires GatewayDesktopProjection and its connection_id even for desktop
+observation and launch. Next discriminate required isolated gateway setup from
+unwanted coupling of healthy desktop/browser automation to viewing availability.
+Preserve exact active assignment and desktop; do not allocate replacement demand.
+No real browser, login state or viewing capability has been demonstrated yet.
+
+Memory disposition: not_durable; the installed failure directs the next repair.
+
+## Turn 428 | 2026-10-02 | Pending acquisition recovery implemented
+
+P221 version 3 explicitly makes existing-client product delivery the objective.
+The owning service-model adapter now reconciles only a retained pending Acquire:
+it compares durable custody, reuses the original provider idempotency key,
+requires the returned assignment in fresh inventory and completes the same
+record. Placement uses this path before selecting a desktop. Other uncertain
+mutations retain their existing readback requirement. No private-store rewrite
+or new acquisition key is introduced.
+
+Eight focused application-mutation tests pass. The existing CLI restart fixture
+now models provider acquisition idempotency and requires recovery of the same
+assignment after a lost reply. Its focused CLI restart check passed (one selected test); strict workspace
+Clippy passed. Format was applied;
+final format check handle 82610 is waiting for admission. The initial optimized
+build handle 82144 completed, but predates the changed help text. Current
+candidate build handle 6654 remains live. Do not publish the older artifact as
+current source. All changes remain uncommitted in this worktree.
+
+Fresh installed inventory still reports zero browsers. P221 host PID 1785543
+runs the previous candidate, and task provider PID 1826652 serves port 19103.
+After current gates/build finish, verify empty host ownership, stop that exact
+old P221 host, publish the new candidate into namespace p221 without activating
+services, then run evidence/auracall-client.mjs with the task provider origin and
+pool. Retain and inspect the actual client response and service job error.
+Browser launch, intended authenticated profile and operator viewing remain
+unproved; the full acceptance scenarios are still open.
+
+Memory disposition: not_durable; this is an unfinished implementation iteration.
+
 ## Turn 427 | 2026-10-02 | Exact provider recovery unblocks acquisition
 
 The provider's explicit reconcile path omitted Failed + exact resource present

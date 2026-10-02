@@ -1,8 +1,8 @@
-# Plan 0221 | Browser Product Acceptance
+# Plan 0221 | Deliver Working Browser Workflows
 
 Date: 2026-10-01
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -34,12 +34,22 @@ passing synthetic suite or completed planning packet does not establish product
 progress without a demonstrated working workflow or removal of its observed
 blocker.
 
+This revision makes the operator's delivery priority explicit: implement missing
+product behavior and demonstrate it through existing clients. Do not spend the
+delivery budget completing plans, aligning internal layers or expanding tests
+as independent objectives. Compilation establishes a buildable artifact; it
+does not establish a usable development candidate or make testing the only
+remaining work.
+
 ## Current State
 
-Source checkpoint `eeb0703d` connects ordinary requests, managed tab creation,
-profile selection and durable handoffs. Synthetic composition and model checks
-pass. No known-client authenticated profile load or installed Agent Browser
-acceptance has been proved. The earlier development binary predates that source.
+Source checkpoint `14f06754` repairs interrupted placement, owned-tab command
+routing, ordinary read reuse and browser identity across restart. Installed
+partial evidence proves Chrome launch on the development profile, navigation to
+Example Domain, URL/title reads and explicit managed close. The actual AuraCall
+workflow still fails at operator presentation. No authenticated profile,
+operator-visible viewing or full acceptance scenario is proved. RUNBOOK binds
+the current installed candidate and retained resources.
 The earlier implementation stopped at 952,452 tokens; the subsequent
 continuation crossed the cumulative one-million-token checkpoint and was
 paused. RUNBOOK owns the current execution record. The operator subsequently resumed implementation with a new 500,000-token
@@ -134,6 +144,12 @@ simplification needed to deliver it. There is no separate contract-completion
 or test-count target.
 
 ## Evidence and exit
+
+For each delivery checkpoint, name the code change, the user behavior it enables,
+and the actual installed observation. Distinguish an implemented but unproved
+change from a demonstrated capability. Test counts, alignment work and document
+completion are not substitutes for that account. A failed real workflow directs
+the next implementation step; it must not trigger an unbounded testing project.
 
 Complete when all eight scenarios pass with source-bound installed evidence,
 known clients work through their normal interfaces, no unexplained owned
