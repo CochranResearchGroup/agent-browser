@@ -10,6 +10,41 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 427 | 2026-10-02 | Exact provider recovery unblocks acquisition
+
+The provider's explicit reconcile path omitted Failed + exact resource present
+for unfinished creation. The owning repair is Remote View commit cb8d955 on
+feature/rv011-consumer-platform. This primary is the sole writer for that
+observed dependency repair; no parallel provider changes were made. The source
+change permits only a still-pending create to reconcile an independently
+observed exact owned live resource. It does not revive completed operations.
+Fifteen focused lifecycle tests, including absent-resource rejection, repaired
+identity preservation and original-key replay, pass. Strict Clippy and format
+checks pass. An initial broad dynamic filter selected zero tests; it is not
+counted as coverage.
+
+The development provider candidate SHA-256 is
+`b549137bf40336970582342b9bbd84ff7afd798ecf04d7192c4be8cd27737fd5`.
+Its public reconcile changed the retained P221 desktop from failed to ready,
+preserving desktop ID and generation. The exact retained Agent Browser
+acquisition envelope was replayed through the public consumer HTTP API; it
+returned an active assignment on that same desktop. Private readback is retained
+as agent-browser-dev-p221/evidence/acquisition-readback.json. No replacement
+desktop or private-store rewrite was used. The provider candidate serves the
+P221 control endpoint; live exec handle 47227 owns it. Production provider
+package and services were not replaced.
+
+Agent Browser still has a pending local mutation because its pool path refuses
+all pending acquisitions rather than reconciling the retained operation. Next
+repair: qualify the exact provider replay through the existing mutation adapter
+and durably complete that same local claim, then launch using AuraCall's real
+client. Do not write an operator SQL workaround or generate another request
+key. The task desktop, assignment, control server and P221 browser host are
+retained for continuation. No actual browser or authenticated-profile/viewer
+acceptance is proved yet; all eight full scenarios remain NOT RUN.
+Memory disposition: not_durable; the source-backed iteration checkpoint owns
+the ongoing recovery work.
+
 ## Turn 426 | 2026-10-02 | Real client exposes placement and acquisition gaps
 
 Source b9d9f998 repairs the configured remote-view open entry point: it now
