@@ -4,7 +4,7 @@ Date: 2026-10-01
 
 Plan version: 2
 
-State: PLANNED
+State: OPEN
 
 Consolidation: required
 
@@ -42,8 +42,9 @@ pass. No known-client authenticated profile load or installed Agent Browser
 acceptance has been proved. The earlier development binary predates that source.
 The earlier implementation stopped at 952,452 tokens; the subsequent
 continuation crossed the cumulative one-million-token checkpoint and was
-paused. RUNBOOK owns the current execution record. This amendment does not
-resume implementation or reset cumulative effort.
+paused. RUNBOOK owns the current execution record. The operator subsequently resumed implementation with a new 500,000-token
+checkpoint instruction. RUNBOOK records that resumption and its candidate
+identity; prior effort remains historical.
 
 ## Consolidated batch
 

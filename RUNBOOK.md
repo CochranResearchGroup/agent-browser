@@ -10,6 +10,42 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P221](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## Turn 425 | 2026-10-02 | Current candidate installed for client workflow
+
+P221 implementation resumed under the user's new 500,000-token checkpoint
+instruction. Prior effort remains historical; the resumed goal counter starts
+at zero under the new objective. First deliverable remains the installed client
+workflow from plan version 2, not another synthetic qualification packet.
+
+Built source b0d9e27a with `pnpm build:development-candidate` in 5m 04s. Installed
+without service activation into the isolated p221 development namespace:
+version 0.28.0, SHA-256
+`cf99371b6b6c68dac4ea7e6a1a692affd0be1ee0a2e1371e3bdb611fbadede2c`.
+Publisher reported production unchanged. Candidate installation is an iteration
+artifact, not scenario 8 acceptance or a final release candidate.
+
+Read AuraCall's actual launcher: remote-view open must return opened, visible
+ready and matched build proof; service browsers must expose its exact CDP port.
+A disposable-profile client-shaped installed attempt failed at historical route
+preflight because no route pool entry/display allocation was configured. The
+attempt mistakenly used chrome rather than AuraCall's stock_chrome selector:
+it is diagnostic setup evidence, not a faithful client replay or product pass.
+Readback confirms the job terminal failed and browser inventory empty. Its
+isolated CLI daemon remains running; no browser was reported created.
+
+Installed Remote View hash matches its accepted revision-3 binary. Its gateway
+returns 403 for the consumer API and ingress listener returns 404; these are not
+the documented separate control HTTP endpoint. The original suspicion of an
+outdated provider binary is rejected. Next: establish a task-owned live-resource
+consumer control server and bounded external pool using the provider's public
+configuration, configure the P221 namespace and replay AuraCall's exact request
+with stock_chrome. Preserve existing provider resources and private state.
+All eight installed scenarios remain NOT RUN; there is no authenticated-profile
+or successful viewer proof yet.
+
+Memory disposition: not_durable; current iteration state is owned by this
+runbook checkpoint.
+
 ## Turn 424 | 2026-10-02 | Product delivery correction
 
 P221 version 2 makes the next implementation deliverable a real existing client
