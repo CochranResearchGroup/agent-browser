@@ -103,6 +103,15 @@ and strict Clippy pass. This repair requires a new installed candidate; prior
 installed evidence cannot qualify it. Runtime evidence remains outside Git under
 agent-browser-dev-p221/evidence. First usable client still FAIL; all later
 milestones remain NOT RUN. Meter at this packet start: 255647 of 750000.
+Opaque-ID repair source is ba1d52e1. Optimized candidate build remains live as
+exec handle 67819; poll before another build. A fresh task state inventory is
+empty and exact profile-argument census finds no task Chrome process. Supported
+close reports the named session absent; this does not prove why it disappeared.
+The installed host still exists at PID 3821767, executable under the task
+.local/lib generation. Host census must include that install location, not only
+the .local/share runtime root. Do not call the host absent from a partial scan.
+Next: complete build, recheck task ownership/inventory, publish only the task
+candidate, and execute actual AuraCall. No later milestone is qualified.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 
