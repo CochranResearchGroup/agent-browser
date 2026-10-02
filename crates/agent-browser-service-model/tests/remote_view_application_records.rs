@@ -146,6 +146,22 @@ fn view_grants_reject_expiry_revocation_target_drift_and_raw_route_urls() {
         )
     };
     validate(&issued).unwrap();
+    let mut opaque = issued.clone();
+    opaque.grant.route_id = "65ce32d6bbea4-c9e6243d89630364f8601d5694ef93e2".into();
+    opaque.path = format!("/view/{}", opaque.grant.route_id);
+    validate(&opaque).unwrap();
+    for invalid in [
+        "short",
+        "../route",
+        "https://provider.invalid/route",
+        "gggggggggggggggggggggggggggggggg",
+        &"a".repeat(129),
+    ] {
+        let mut invalid_grant = opaque.clone();
+        invalid_grant.grant.route_id = invalid.into();
+        invalid_grant.path = format!("/view/{invalid}");
+        assert!(validate(&invalid_grant).is_err());
+    }
     assert!(issued
         .grant
         .validate_target(&target, "agent-browser", "remote_view", 301000)

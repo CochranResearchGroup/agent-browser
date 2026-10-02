@@ -54,6 +54,14 @@ impl RemoteViewApplicationTarget {
     }
 }
 
+/// Provider viewing route identities are opaque hexadecimal tokens, not UUIDs.
+pub(crate) fn viewing_route_id(value: &str) -> bool {
+    (32..=128).contains(&value.len())
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() || byte == b'-')
+}
+
 pub(crate) fn uuid(value: &str) -> bool {
     value.len() == 36
         && value.bytes().enumerate().all(|(index, byte)| {

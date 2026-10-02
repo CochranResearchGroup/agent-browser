@@ -84,6 +84,25 @@ processes. Do not infer that from legacy inventory alone. Before publication,
 repeat the census and preserve production identity. Actual client configuration
 must use AuraCall browserFamily chromium, browserBuild stealthcdp_chromium and
 the reviewed artifact executable. Existing stock fixture is retained as history.
+Installed clock/terminal repair generation is 0.28.0-4ba060384237;
+SHA256 4ba0603842372449fe30eb25afe796eeb08bd658b53507b931847d04eee3de43.
+Publication preserved production and default-development identities. Exact empty
+old task host exited; its orphan token was retained under a recovery-evidence
+name after proving no other host metadata or task browser process. Actual
+AuraCall now launches the reviewed Stealth artifact, but remote viewing remains
+converging. Current task browser and session remain owned by the installed host;
+do not replace it before supported close or custody transfer.
+Exact pending-view replay returned HTTP 200 and live_resource readiness. The
+next verified blocker was local UUID-only route validation, while Remote View
+ViewingRouteId accepts 32 through 128 ASCII hexadecimal or hyphen bytes. A red
+record regression reproduced InvalidTarget on the actual opaque ID shape.
+The application adapter now accepts that shape for grant, revoke and release;
+desktop UUID validation and exact expiry/target checks remain. Five records and
+eight mutation tests pass, covering opaque-ID cleanup. Full workspace formatting
+and strict Clippy pass. This repair requires a new installed candidate; prior
+installed evidence cannot qualify it. Runtime evidence remains outside Git under
+agent-browser-dev-p221/evidence. First usable client still FAIL; all later
+milestones remain NOT RUN. Meter at this packet start: 255647 of 750000.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 

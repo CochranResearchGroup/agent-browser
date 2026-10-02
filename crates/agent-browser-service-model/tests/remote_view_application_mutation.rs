@@ -89,9 +89,14 @@ impl RemoteViewApplicationTransport for Transport {
 }
 
 fn fixture() -> Value {
-    serde_json::from_str(include_str!(
-        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
-    ))
+    // Exercise issuance, revocation, and retirement with the provider's opaque ID shape.
+    serde_json::from_str(
+        &include_str!("../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json")
+            .replace(
+                "11111111-1111-4111-8111-111111111111",
+                "65ce32d6bbea4-c9e6243d89630364f8601d5694ef93e2",
+            ),
+    )
     .unwrap()
 }
 fn setup(

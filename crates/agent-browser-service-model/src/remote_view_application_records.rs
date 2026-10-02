@@ -2,7 +2,7 @@
 //! These models contain no transport credentials or provider-private state.
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::remote_view_application_response::uuid;
+use crate::remote_view_application_response::{uuid, viewing_route_id};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -405,7 +405,7 @@ impl RemoteViewApplicationGrant {
         now_ms: u64,
     ) -> Result<(), RemoteViewApplicationResponseError> {
         if self.schema_version != 1
-            || !uuid(&self.route_id)
+            || !viewing_route_id(&self.route_id)
             || self.request.target != *target
             || self.request.application != application
             || self.request.audience != audience

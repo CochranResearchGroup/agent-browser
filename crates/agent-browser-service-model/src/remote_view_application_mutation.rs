@@ -108,7 +108,7 @@ impl RemoteViewApplicationEnvelope {
                 format!("key:{idempotency_key}")
             }
             RemoteViewApplicationRequest::RevokeView { route_id, .. } => {
-                if !crate::remote_view_application_response::uuid(route_id) {
+                if !crate::remote_view_application_response::viewing_route_id(route_id) {
                     return Err(RemoteViewApplicationMutationStoreError::InvalidRecord);
                 }
                 format!("revoke:{route_id}")
@@ -150,7 +150,7 @@ impl RemoteViewApplicationReleaseTarget {
             || self
                 .route_ids
                 .iter()
-                .any(|route| !crate::remote_view_application_response::uuid(route))
+                .any(|route| !crate::remote_view_application_response::viewing_route_id(route))
         {
             return Err(RemoteViewApplicationResponseError::InvalidTarget);
         }
