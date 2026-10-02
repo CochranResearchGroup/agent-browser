@@ -75,6 +75,15 @@ check and strict workspace Clippy passed. These are focused source gates, not
 installed product acceptance. Next: one optimized development candidate build,
 then exact task-host replacement after proving no managed browser residue and
 actual AuraCall Stealth/view demonstration. Production remains excluded.
+Qualified repair source: 313b1021. Optimized development build is live handle
+2466, admitted at four jobs with MemoryHigh 6 GiB and MemoryMax 8 GiB. This is
+the single candidate build for the repair batch; poll it before another build.
+Fresh Runtime SQLite inventory has no browsers or sessions; a fresh executable
+and exact profile-argument process census found zero task Chrome/Chromium
+processes. Do not infer that from legacy inventory alone. Before publication,
+repeat the census and preserve production identity. Actual client configuration
+must use AuraCall browserFamily chromium, browserBuild stealthcdp_chromium and
+the reviewed artifact executable. Existing stock fixture is retained as history.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 
