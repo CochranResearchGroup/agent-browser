@@ -2812,6 +2812,8 @@ and services pin `disabled`, and their doctor verifies the running processes.
 This is not a browser sandbox or a synthetic-only capture guarantee: retained
 Service records and displayed desktop content still require ownership checks.
 
+Development host activation preserves retained browser children and persistent private temporary storage, matching the canonical supervisor lifecycle. Managed issued-grant handoffs show **Open desktop** for opened and converging responses.
+
 Non-activating development publication (`install --no-activate`) requires all development host and dashboard units to be stopped. It refuses before changing selected manifests, units or launchers if a unit is running or its state is unknown. Use normal `pnpm development-runtime:install` to activate the complete host and dashboard group.
 
 For a separate development installation, set `AGENT_BROWSER_DEV_NAMESPACE` to

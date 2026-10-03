@@ -597,6 +597,11 @@ Missing or stale proof keeps open pending with an actionable reason. This route
 qualification does not prove connected viewer pixels or input; those require
 live acceptance after opening the authenticated handoff.
 
+Managed handoffs with an issued grant present **Open desktop** for both opened
+and converging responses. They keep the durable handoff page instead of opening
+an unselected legacy viewport. The button resolves the current authenticated
+provider presentation; its presence alone does not prove viewer pixels.
+
 Set `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` to Remote View's reviewed external
 HTTPS origin to enable the handoff page's **Open desktop** button. Its click
 passes through the authenticated Agent Browser presentation endpoint, refreshes

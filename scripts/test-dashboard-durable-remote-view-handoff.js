@@ -137,4 +137,16 @@ assert.match(
   'development route authority must retain the deterministic external-ingress binding',
 );
 
+// Execute the actual gate condition with the managed resolver's wire response.
+// An opened grant must keep the operator on the desktop action, never fall
+// through to an unselected legacy viewport.
+const desktopBranch = dashboardPage.match(/if \((resolution\?\.status === "converging"[^)]*)\) \{\s*return \(/);
+assert(desktopBranch, 'desktop handoff branch is present');
+const rendersDesktopAction = new Function('resolution', `return ${desktopBranch[1]};`);
+assert.equal(rendersDesktopAction({ status: 'opened', presentationState: 'grant_issued' }), true,
+  'managed opened handoff must present its authenticated desktop action');
+assert.equal(rendersDesktopAction({ status: 'converging', presentationState: 'grant_issued' }), true);
+assert.equal(rendersDesktopAction({ status: 'ready', resolved: true }), false,
+  'legacy ready resolution keeps its existing workspace selection path');
+
 console.log('dashboard durable remote-view handoff checks passed');

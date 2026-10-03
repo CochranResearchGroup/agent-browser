@@ -194,8 +194,12 @@ ${common}
 ExecStart=${generationBinary} session supervisor run-host
 Restart=on-failure
 RestartSec=2
+KillMode=process
 NoNewPrivileges=true
-PrivateTmp=true
+PrivateTmp=false
+StateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp
+StateDirectoryMode=0700
+BindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp
 
 [Install]
 WantedBy=default.target

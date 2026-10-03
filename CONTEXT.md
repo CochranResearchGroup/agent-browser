@@ -5,7 +5,7 @@ Agent Browser coordinates browser automation and operator-visible remote control
 ## Language
 
 **Development publication**:
-An isolated generation installation whose activation coordinates the runtime host and dashboard process group. Non-activating publication requires stopped units before changing executable bindings.
+An isolated generation installation whose activation coordinates the runtime host and dashboard process group. Non-activating publication requires stopped units before changing executable bindings. Host retirement preserves retained browser children and persistent private temporary storage.
 
 
 **Client subject**:

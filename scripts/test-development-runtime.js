@@ -262,6 +262,11 @@ try {
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
+  assert.match(units[descriptor.unitNames.runtimeHost], /^KillMode=process$/m,
+    'runtime host retirement must preserve owned browser children');
+  assert.match(units[descriptor.unitNames.runtimeHost], /^PrivateTmp=false$/m,
+    'retained browsers must not lose private temporary storage on host retirement');
+  assert.match(units[descriptor.unitNames.runtimeHost], /^StateDirectory=agent-browser\/runtime-tmp\/%N\/tmp agent-browser\/runtime-tmp\/%N\/var-tmp$/m);
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
   // Non-activating publication must not replace executable-bound files while
   // any member of the running host/dashboard group still owns the old binary.

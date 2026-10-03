@@ -1263,6 +1263,8 @@ unselected-generation cleanup. Development JSON status reports configured
 listener numbers under `ports`; service process identities remain under
 `units.*.mainPid`. Doctor prints configured ports while checking listener
 ownership separately.
+Development host activation preserves retained browser children and persistent private temporary storage, matching the canonical supervisor lifecycle. Managed issued-grant handoffs show **Open desktop** for opened and converging responses.
+
 Non-activating development publication (`install --no-activate`) requires all development host and dashboard units to be stopped. It refuses before changing selected manifests, units or launchers if a unit is running or its state is unknown. Use normal `pnpm development-runtime:install` to activate the complete host and dashboard group.
 
 The development doctor also verifies the shared root-owned protected lease
