@@ -122,7 +122,28 @@ impl<
         {
             return Err("remote_view_tab_view_identity_conflict".into());
         }
-        if view.issuance.is_some() {
+        if let Some(issuance) = &view.issuance {
+            if issuance.grant.expires_at <= now_ms {
+                let assignment =
+                    remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+                let observed = self
+                    .adapter
+                    .observe_assignment(&assignment)
+                    .map_err(|_| "remote_view_tab_view_resolution_failed")?;
+                // Validate the retained issuance at admission time before using
+                // its expiry. Revocation and changed target identity fail closed.
+                issuance
+                    .validate_target(
+                        &observed.target,
+                        &self.adapter.application,
+                        "remote_view",
+                        RemoteViewApplicationViewCapability::Control,
+                        300,
+                        issuance.grant.issued_at,
+                    )
+                    .map_err(|_| "remote_view_tab_view_issuance_invalid")?;
+                return Err("remote_view_tab_view_grant_terminal".into());
+            }
             return resolve_published_remote_view_tab_view(
                 &mut self.adapter,
                 &mut self.store,

@@ -12,6 +12,7 @@ struct Provider {
     lose_view_reply: bool,
     competing_view_publication: bool,
     delayed_scoped_view: bool,
+    view_issued_at: Option<u64>,
     terminal_view_key: Option<String>,
     all_views_terminal: bool,
     unavailable_assignment: Option<String>,
@@ -168,6 +169,10 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     issuance["grant"]["issuedAt"] = 2001.into();
                     issuance["grant"]["expiresAt"] = 302001.into();
                 }
+                if let Some(now) = provider.view_issued_at {
+                    issuance["grant"]["issuedAt"] = now.into();
+                    issuance["grant"]["expiresAt"] = (now + 300_000).into();
+                }
                 Ok(issuance)
             }
             RemoteViewApplicationRequest::ResolveView { route_id, audience } => {
@@ -224,6 +229,18 @@ fn host_mode(
     BrowserSessionSqliteStore,
     RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
 > {
+    host_mode_clock(fixture, provider, calls, mode, || 2001)
+}
+fn host_mode_clock(
+    fixture: &Fixture,
+    provider: Rc<RefCell<Provider>>,
+    calls: Rc<Cell<u32>>,
+    mode: Mode,
+    clock: fn() -> u64,
+) -> BrowserSessionHost<
+    BrowserSessionSqliteStore,
+    RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
+> {
     let effects = RemoteViewSessionEffects::new(
         Process {
             mode,
@@ -241,7 +258,7 @@ fn host_mode(
         desired_desktops: 1,
     })
     .unwrap()
-    .with_view_clock(|| 2001);
+    .with_view_clock(clock);
     BrowserSessionHost::load(
         fixture.store(false),
         effects,
@@ -759,6 +776,118 @@ fn handoff_lost_view_reply_keeps_one_request_across_restart() {
     assert_eq!(
         provider.borrow().view_requests[0],
         provider.borrow().view_requests[1]
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn published_view_expiry_renews_after_restart_without_relaunch_or_navigation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let issuance = consumer.resolve_tab_handoff_view(id, 2000).unwrap();
+    let before = consumer.state().remote_view_tab_handoffs[id].clone();
+    drop(consumer);
+    provider.borrow_mut().view_issued_at = Some(issuance.grant.expires_at);
+    let mut restarted = host_mode_clock(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::Success,
+        || 301000,
+    );
+    let replacement = restarted
+        .resolve_tab_handoff_view(id, issuance.grant.expires_at)
+        .unwrap();
+    let after = &restarted.state().remote_view_tab_handoffs[id];
+    assert_eq!(after.id, before.id);
+    assert_eq!(after.session_id, before.session_id);
+    assert_eq!(after.tab_id, before.tab_id);
+    assert_ne!(
+        after.view.as_ref().unwrap().idempotency_key,
+        before.view.as_ref().unwrap().idempotency_key
+    );
+    assert!(replacement.grant.expires_at > issuance.grant.expires_at);
+    assert_eq!(provider.borrow().view_requests.len(), 2);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(restarted.state().navigation_history.len(), 1);
+}
+
+#[test]
+fn published_view_expiry_rejects_invalid_or_revoked_issuance() {
+    for invalid in ["revoked", "application", "target"] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let issuance = consumer.resolve_tab_handoff_view(id, 2000).unwrap();
+        let before = consumer.state().clone();
+        drop(consumer);
+        let mut changed = before.clone();
+        let grant = &mut changed
+            .remote_view_tab_handoffs
+            .get_mut(id)
+            .unwrap()
+            .view
+            .as_mut()
+            .unwrap()
+            .issuance
+            .as_mut()
+            .unwrap()
+            .grant;
+        match invalid {
+            "revoked" => grant.revoked = true,
+            "application" => grant.request.application = "foreign".into(),
+            "target" => grant.request.target.viewing_generation += 1,
+            _ => unreachable!(),
+        }
+        fixture
+            .store(false)
+            .compare_and_save_session_state(&before, &changed)
+            .unwrap();
+        let mut restarted = host(&fixture, provider.clone(), calls.clone());
+        assert_eq!(
+            restarted
+                .resolve_tab_handoff_view(id, issuance.grant.expires_at)
+                .unwrap_err(),
+            "remote_view_tab_view_issuance_invalid"
+        );
+        assert_eq!(restarted.state(), &changed);
+        assert_eq!(provider.borrow().view_requests.len(), 1);
+    }
+}
+
+#[test]
+fn published_view_expiry_preserves_handoff_when_renewal_cannot_complete() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let issuance = consumer.resolve_tab_handoff_view(id, 2000).unwrap();
+    let retained = consumer.state().remote_view_tab_handoffs[id].clone();
+    provider.borrow_mut().all_views_terminal = true;
+    assert_eq!(
+        consumer
+            .resolve_tab_handoff_view(id, issuance.grant.expires_at)
+            .unwrap_err(),
+        "remote_view_tab_view_grant_terminal"
+    );
+    assert_eq!(
+        consumer.state().remote_view_tab_handoffs[id].id,
+        retained.id
     );
     assert_eq!(calls.get(), 1);
 }

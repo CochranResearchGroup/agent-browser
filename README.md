@@ -5711,6 +5711,10 @@ A retained view request is replayed with its original key after an interrupted
 reply. When the provider proves that grant terminal, the client records that
 outcome and renews the view once under the same durable handoff. Ambiguous
 responses preserve the pending request and do not select a replacement key.
+For an expired published grant, the session manager validates the retained
+issuance against the current assignment and renews once under the same handoff.
+Revocation, changed identity, or invalid issuance fails closed. Prior issuance
+history remains intact; dashboard presentation reads do not issue grants.
 Grant issuance alone does not establish operator-visible readiness.
 
 

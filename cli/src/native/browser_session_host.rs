@@ -677,8 +677,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             {
                 Ok(issuance) => issuance,
                 Err(error) if error == "remote_view_tab_view_grant_terminal" && attempt == 0 => {
-                    // The adapter durably recorded terminal proof for the old key.
-                    // Keep that immutable history and the durable handoff identity.
+                    // A qualified retained expiry or durable provider terminal
+                    // proof permits one replacement. Preserve issuance history
+                    // and the durable handoff identity.
                     self.state
                         .remote_view_tab_handoffs
                         .get_mut(handoff_id)

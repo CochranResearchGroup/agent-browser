@@ -6315,7 +6315,9 @@ Examples:
             r##"
 agent-browser remote-view - Route-bound remote-headed browser handoff
 Retained view requests keep their key after interrupted replies. A provider-proven
-terminal grant renews once under the same handoff; ambiguous replies stay pending.
+terminal grant or a qualified published expiry renews once under the same handoff.
+Revocation, identity mismatch and invalid issuance fail closed; ambiguous replies
+stay pending. Dashboard presentation reads do not issue grants.
 
 Usage: agent-browser remote-view open [url] [options]
 
