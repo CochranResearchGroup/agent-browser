@@ -5717,6 +5717,13 @@ Revocation, changed identity, or invalid issuance fails closed. Prior issuance
 history remains intact; dashboard presentation reads do not issue grants.
 Grant issuance alone does not establish operator-visible readiness.
 
+Use `agent-browser remote-view resolve <handoff-id>` to check an existing handoff
+without opening another browser or replacing its URL. It refuses closed sessions.
+A converging response is pending readiness; attach only after status is opened
+and operatorVisible.state is ready. The session manager may renew an expired
+grant while retaining the handoff identity.
+
+
 
 With origin and pool configured, `remote-view open` uses the managed browser
 session owner instead of requiring a historical presentation route first. An

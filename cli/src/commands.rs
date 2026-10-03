@@ -3541,13 +3541,30 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         "remote-view" | "remote_view" => match rest.first().copied() {
             Some("open") => parse_remote_view_open(id, &rest, flags),
+            Some("resolve") => {
+                if rest.len() != 2
+                    || rest[1].is_empty()
+                    || rest[1].len() > 128
+                    || !rest[1].bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
+                    })
+                {
+                    return Err(ParseError::InvalidValue {
+                        message: "Expected one opaque retained handoff ID".to_string(),
+                        usage: "remote-view resolve <handoff-id>",
+                    });
+                }
+                // Resolve only the retained identity; never reopen a closed tab.
+                Ok(json!({"id":id,"action":"service_remote_view_handoff_resolve",
+                    "handoffId":rest[1],"allowReopenClosed":false}))
+            }
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["open"],
+                valid_options: &["open", "resolve"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "remote-view".to_string(),
-                usage: "remote-view <open>",
+                usage: "remote-view <open|resolve>",
             }),
         },
 
@@ -9634,6 +9651,29 @@ mod tests {
         };
         assert!(message
             .contains("--provider rdp_gateway conflicts with --view-stream-provider external_url"));
+    }
+
+    #[test]
+    fn test_remote_view_resolve_addresses_retained_handoff_without_reopen() {
+        let raw = args("remote-view resolve handoff-123");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+        assert_eq!(cmd["action"], "service_remote_view_handoff_resolve");
+        assert_eq!(cmd["handoffId"], "handoff-123");
+        assert_eq!(cmd["allowReopenClosed"], false);
+        assert!(cmd.get("url").is_none());
+        for invalid in [
+            "remote-view resolve",
+            "remote-view resolve ../foreign",
+            "remote-view resolve https://foreign.example/view/x",
+            "remote-view resolve handoff-123 extra",
+        ] {
+            let raw = args(invalid);
+            let flags = crate::flags::parse_flags(&raw);
+            let clean = crate::flags::clean_args(&raw);
+            assert!(parse_command(&clean, &flags).is_err(), "{invalid}");
+        }
     }
 
     #[test]

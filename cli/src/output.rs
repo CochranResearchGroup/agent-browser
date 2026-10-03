@@ -6320,6 +6320,12 @@ Revocation, identity mismatch and invalid issuance fail closed; ambiguous replie
 stay pending. Dashboard presentation reads do not issue grants.
 
 Usage: agent-browser remote-view open [url] [options]
+       agent-browser remote-view resolve <handoff-id>
+
+Resolve addresses an existing logical handoff and refuses closed sessions.
+Converging means pending readiness. Require opened plus operatorVisible.state=ready
+before attachment. Expired grants may renew under the same handoff.
+
 
 `remote-view open` selects a service-owned remote-view route, launches or
 reuses a remote-headed browser on the bound display, opens the requested tab,
