@@ -24,6 +24,36 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Dashboard generation recovery | 2026-10-03 23:36 UTC
+
+Authenticated POST /api/service/request reproduced HTTP 502 and
+Durable handoff owner preparation failed for dashboard-service-backend.
+Both dashboard processes still ran 91d28506c445 while the host and installed
+manifest selected a0a18b271f31. Child preparation uses current_exe.
+Restarted only p221 dashboard backend and ingress units. Current processes
+93104 and 93105 now use a0a18b271f31; host 95196 and browser 97181 survived.
+The identical authenticated request returned HTTP 200, success true, opened,
+and operatorVisible ready. Private evidence:
+evidence/p222-dashboard-generation-recovery.json. This restores HTTP handoff
+resolution but does not establish public pixels/input or correct TTL semantics.
+
+### Operator contract correction | 2026-10-03
+
+Operator rejected indefinite browser retention in 8b596861. The default
+five-minute inactivity rule was correct. Durable handoffs must survive browser
+closure; a requestor may explicitly extend TTL. Hours, days and until handoff
+closure are candidate settings, not implemented or validated options.
+Browser closure and handoff closure must be separate lifecycle operations.
+The prior idle-survival proof demonstrates the implemented behavior only and
+is withdrawn as acceptance of the intended contract. The p221 candidate still
+contains the incorrect unconditional retention; production is unchanged.
+Next repair must restore default reaping and prove the same handoff recovers
+its logical profile/tab intent after browser closure, with bounded explicit
+retention and separate handoff expiration or closure. No runtime effects were
+performed during this correction readback. Memory disposition queued:
+20261003T233352Z-remember.json, job 0b981e5a-3584-4021-bd00-980620d8d224;
+queue acceptance is not retrieval proof.
+
 ### Idle retention repair | 2026-10-03 22:23 UTC
 
 Diagnosing-bugs loop reproduced remote_view_tab_handoff_session_unavailable for
