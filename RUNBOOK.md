@@ -52,8 +52,8 @@ zero Chrome processes with the exact task profile argument. The expired session'
 handoff preserves a live_resource issuance; issuance is not visible/control proof.
 Task runtime host was last observed at PID 392054 under the installed generation.
 Include .local/lib executable identity when checking hosts, not only .local/share.
-Provider control owner 3744560 listens on 19103. Task gateway 2571171 listens on
-19102; live exec handle 35667. Inspect existing identities before restart.
+Provider control owner 2667915 listens on 19103, exec handle 71812. Task gateway
+2666588 listens on 19102 and auth 19104, exec handle 58208. Inspect identities before restart.
 Retained task desktop and Guacamole containers are intentional provider resources.
 Do not kill unrelated processes, rewrite private ledgers or reset profile state.
 
@@ -74,9 +74,25 @@ Proposed service names are agent-browser-dev-p221 and remote-view-dev-p221,
 with dashboard 5048, gateway 19102 and private ingress auth 19104. Both pass the
 existing Cooper inventory validator in strict mode. These are draft service
 identities, not published routes, operator handoffs or reviewed deployment IDs.
-No shared inventory, Traefik or bastion state changed. Task dashboard and auth
-listeners were absent on fresh readback. External endpoint preference remains
-pending; task-specific defaults avoid borrowing the existing production routes.
+No shared inventory, Traefik or bastion state changed. Task dashboard is now
+running through its installed entry point: frontend 2650450 on 5048, backend
+2650449 on 5049. Dashboard auth status reports unauthenticated; provider gateway
+and forward-auth reject missing identity with 403. Task endpoint names remain the
+proposed defaults pending any operator correction.
+
+Supported Remote View apply qualified a public_origin/auth-only change with no
+conflicts or interruptions, then completed with no pending reconciliation.
+Config hash: 2c325acbbeccccff94aace9cf1c107b82b2e3b7819c33cac21d2f42423fc4cac.
+Receipt: task remote-view/receipts/65cf04b8d5237-0a1b50d36adec8f152a90ff874a9a77b-apply.json;
+rollback backup is retained under the matching task backups directory.
+Task provider now names https://remote-view-dev-p221.ecochran.dyndns.org and a
+new mode-0600 task secret outside its runtime home. It no longer references the
+production ingress secret or auth-recheck URL. Initial draft validation rejected
+a secret inside provider runtime home; corrected placement passes. Initial secret
+preparation failed on a missing directory; corrected before endpoint restart.
+Apply replaced the task executable inode; exact task process/config readback
+qualified stopping the two old deleted-inode endpoints. New endpoints use the
+retained control home and consumer policy; no private ledger was reset.
 Next: complete the viewer-readiness join and dashboard/auth listeners, then render
 and publish the task-only ingress with exact deployment identity, followed by one
 source-bound candidate and actual AuraCall acceptance. Do not publish a route
