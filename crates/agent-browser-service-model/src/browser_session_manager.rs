@@ -653,19 +653,28 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         effects: &'a mut E,
         config: BrowserSessionManagerConfig,
     ) -> Self {
+        // A valid retained operator handoff is current occupancy. Its grant may
+        // expire independently, but inactivity must not destroy its exact tab.
+        // Historical, closed and conflicting bindings confer no retention.
+        let protected_session_ids = state
+            .remote_view_tab_handoffs
+            .keys()
+            .filter_map(|id| crate::resolve_remote_view_tab_handoff(state, id).ok())
+            .map(|target| target.session.id)
+            .collect();
         Self {
             state,
             catalog,
             effects,
             config,
-            protected_session_ids: BTreeSet::new(),
+            protected_session_ids,
         }
     }
 
-    /// Protect sessions referenced by current external authority or a pending
-    /// operation from inactivity and quota cleanup for this manager action.
+    /// Add sessions referenced by current external authority or a pending
+    /// operation to the retained-handoff protection for this manager action.
     pub fn with_protected_sessions(mut self, session_ids: BTreeSet<String>) -> Self {
-        self.protected_session_ids = session_ids;
+        self.protected_session_ids.extend(session_ids);
         self
     }
 
@@ -686,6 +695,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 session.name == request.session_name
                     && session.profile_id == profile.id
                     && session.expires_at_ms <= request.activity_at_ms
+                    && !self.protected_session_ids.contains(&session.id)
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
@@ -703,7 +713,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .find(|session| {
                 session.name == request.session_name
                     && session.profile_id == profile.id
-                    && request.activity_at_ms < session.expires_at_ms
+                    && (request.activity_at_ms < session.expires_at_ms
+                        || self.protected_session_ids.contains(&session.id))
             })
             .cloned();
         if let Some(session) = existing_session {
@@ -1430,6 +1441,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         now_ms: u64,
         protected_session_ids: &BTreeSet<String>,
     ) -> Result<ReapBrowserSessionsResult, String> {
+        let protected_session_ids = self
+            .protected_session_ids
+            .union(protected_session_ids)
+            .cloned()
+            .collect::<BTreeSet<_>>();
         let expired_session_ids = self
             .state
             .sessions
@@ -1488,7 +1504,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .collect::<BTreeSet<_>>();
         for policy_id in policy_ids {
             let quota =
-                self.enforce_disposable_quota(&policy_id, protected_session_ids, 0, 0, now_ms)?;
+                self.enforce_disposable_quota(&policy_id, &protected_session_ids, 0, 0, now_ms)?;
             result
                 .quota_evicted_session_ids
                 .extend(quota.quota_evicted_session_ids);

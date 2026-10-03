@@ -920,6 +920,93 @@ fn reaper_expires_idle_session_and_closes_sessionless_browser() {
     assert_eq!(effects.closes, [alice.browser_id]);
 }
 
+#[test]
+fn retained_handoff_survives_idle_reap_and_reconnect_until_explicit_close() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "operator-tab".into(),
+            target_id: "operator-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&opened.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "operator-handoff",
+        &opened.session_id,
+        "operator-tab",
+    )
+    .unwrap();
+    // The same persisted aggregate and manager seam are used after host restart.
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let retained = state.clone();
+    let reaped = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_protected_sessions(BTreeSet::new())
+        .reap(20_000)
+        .unwrap();
+    assert!(
+        reaped.expired_session_ids.is_empty(),
+        "retained operator session was reaped"
+    );
+    assert_eq!(
+        resolve_remote_view_tab_handoff(&state, "operator-handoff")
+            .unwrap()
+            .tab
+            .id,
+        "operator-tab"
+    );
+    let resumed = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            30_000,
+        ))
+        .unwrap();
+    assert_eq!(resumed.session_id, opened.session_id);
+    assert_eq!(resumed.browser_id, opened.browser_id);
+    assert_eq!(effects.launches.len(), 1);
+    assert!(effects.closes.is_empty());
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 31_000)
+        .unwrap();
+    assert!(state.browsers.is_empty());
+    assert!(state.sessions.is_empty());
+    assert!(resolve_remote_view_tab_handoff(&state, "operator-handoff").is_err());
+    assert_eq!(effects.closes, [opened.browser_id]);
+    // A dangling historical handoff cannot pin a live browser indefinitely.
+    state = retained;
+    state
+        .remote_view_tab_handoffs
+        .get_mut("operator-handoff")
+        .unwrap()
+        .tab_id = "missing-tab".into();
+    let reaped = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(20_000)
+        .unwrap();
+    assert_eq!(reaped.expired_session_ids, [opened.session_id]);
+    assert!(state.sessions.is_empty());
+}
+
 fn catalog_with_named_profile() -> BrowserProfileCatalog {
     let profile = BrowserProfileCatalogEntry {
         id: "profile-a".to_string(),

@@ -6325,6 +6325,9 @@ Usage: agent-browser remote-view open [url] [options]
 Resolve addresses an existing logical handoff and refuses closed sessions.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Expired grants may renew under the same handoff.
+Valid retained handoffs preserve their exact sessions through inactivity and
+client reconnect. Close the tab or session explicitly; invalid or closed
+bindings do not prevent idle cleanup or grant additional access.
 
 
 `remote-view open` selects a service-owned remote-view route, launches or

@@ -114,6 +114,7 @@ _Avoid_: URL readiness, route health
 
 **Durable handoff**:
 An opaque public identity that can reacquire current route and browser evidence without exposing an ephemeral provider address.
+An exact live session/tab binding retains that session through inactivity until explicit closure or lifecycle failure; a dangling historical binding confers no retention or access authority.
 _Avoid_: Guacamole URL, provider URL
 
 **Desktop evidence episode**:

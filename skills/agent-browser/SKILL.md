@@ -3573,6 +3573,11 @@ A converging response is pending readiness; attach only after status is opened
 and operatorVisible.state is ready. The session manager may renew an expired
 grant while retaining the handoff identity.
 
+A valid retained operator handoff keeps its exact session and tab through
+inactivity and client reconnect; a separate keepalive command is unnecessary.
+Close the tab or session explicitly to release it. Invalid or closed handoff
+bindings do not prevent idle cleanup, and a handoff grants no additional access.
+
 
 
 With origin and pool configured, `remote-view open` uses the managed browser
