@@ -232,6 +232,7 @@ pub use remote_view_application_records::{
     RemoteViewApplicationEventObservation, RemoteViewApplicationEvents, RemoteViewApplicationGrant,
     RemoteViewApplicationGrantRequest, RemoteViewApplicationInventory, RemoteViewApplicationPolicy,
     RemoteViewApplicationPool, RemoteViewApplicationPoolPolicy, RemoteViewApplicationViewIssuance,
+    RemoteViewApplicationViewObservation, RemoteViewApplicationViewReadiness,
     RemoteViewApplicationViewRevocation, RemoteViewApplicationWindow, RemoteViewApplicationWindows,
 };
 pub use remote_view_application_response::{

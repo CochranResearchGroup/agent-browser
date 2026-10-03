@@ -3622,6 +3622,14 @@ before provider issuance and reuses a qualified grant after restart. It reports
 `status=converging` and `operatorVisible.state=pending` until tab-specific
 presentation is proved. Grant issuance alone does not mean the tab is visible.
 
+Managed open and handoff resolution report `operatorVisible.state=ready` only
+when the exact tab has owned foreground-window proof and Remote View reports
+current installed desktop and Guacamole transport readiness for the retained
+grant. The configured HTTPS public origin must match the provider observation.
+Missing or stale proof keeps open pending with an actionable reason. This route
+qualification does not prove connected viewer pixels or input; those require
+live acceptance after opening the authenticated handoff.
+
 Set `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` to Remote View's reviewed external
 HTTPS origin to enable the handoff page's **Open desktop** button. Its click
 passes through the authenticated Agent Browser presentation endpoint, refreshes
@@ -3629,8 +3637,7 @@ only an already-published grant and opens the current top-level provider viewer
 in a new tab through its existing ingress login. It does not issue another grant
 or alter session state. Keep the Agent Browser handoff as the bookmark. Missing
 viewing configuration does not block browser lifecycle. The granted-view page
-waits for operator action instead of continuously polling. Tab focus, renewal
-and installed visible-tab acceptance remain pending in Plan 220.
+waits for operator action instead of continuously polling. Installed visible-tab and input acceptance remain pending in Plan 222.
 With Remote View configured, `tab_new` uses the managed owner. Its first request
 uses the new session's initial tab; later requests create a distinct tab and
 handoff. Service callers can supply `params.tabRequestId` as a stable retry key.

@@ -477,3 +477,20 @@ pub struct RemoteViewApplicationViewRevocation {
     pub route_id: String,
     pub state: String,
 }
+
+/// Installed transport observation for one exact grant, never viewer pixel proof.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewApplicationViewObservation {
+    pub schema_version: u32,
+    pub state: RemoteViewApplicationViewReadiness,
+    pub grant: RemoteViewApplicationGrant,
+    pub public_origin: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewApplicationViewReadiness {
+    Pending,
+    Ready,
+}

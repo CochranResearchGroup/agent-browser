@@ -14,28 +14,7 @@ pub(super) fn handoff_id(path: &str) -> Option<&str> {
     .then_some(id)
 }
 
-fn public_origin(value: &str) -> Result<url::Url, String> {
-    let origin = url::Url::parse(value).map_err(|_| "remote_view_public_origin_invalid")?;
-    if origin.scheme() != "https"
-        || !origin.username().is_empty()
-        || origin.password().is_some()
-        || origin.query().is_some()
-        || origin.fragment().is_some()
-        || origin.path() != "/"
-        || origin.port() == Some(0)
-        || origin
-            .host_str()
-            .is_none_or(|host| host == "localhost" || host.ends_with(".localhost"))
-        || match origin.host() {
-            Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
-            Some(url::Host::Ipv6(ip)) => ip.is_loopback() || ip.is_unspecified(),
-            _ => false,
-        }
-    {
-        return Err("remote_view_public_origin_invalid".into());
-    }
-    Ok(origin)
-}
+use crate::native::browser_session_remote_view::public_origin;
 
 fn presentation_url(
     origin: &url::Url,

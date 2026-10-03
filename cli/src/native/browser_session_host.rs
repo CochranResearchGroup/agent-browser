@@ -235,16 +235,16 @@ pub(crate) async fn execute_shared_remote_view_open(
                 });
             }
 
-            let browser_id = required_string(&identity, "browserId")?;
-            let target_id = required_string(&identity, "targetId")?;
             let handoff_id = required_string(&identity, "handoffId")?;
             let now_ms = current_unix_ms();
-            let presentation = host
-                .focus_browser(browser_id, Some(target_id), now_ms)
-                .and_then(|_| host.resolve_tab_handoff_view(handoff_id, now_ms));
+            let presentation = host.resolve_tab_handoff_view(handoff_id, now_ms).and_then(|view| {
+                host.qualify_tab_handoff_presentation(handoff_id, &view, now_ms)?;
+                Ok(view)
+            });
             match presentation {
                 Ok(view) => {
-                    response["presentationState"] = serde_json::json!(view.presentation_state)
+                    response["presentationState"] = serde_json::json!(view.presentation_state);
+                    response["operatorVisible"] = serde_json::json!({"state":"ready","proofScope":"addressed_tab_owned_window_and_installed_transport"});
                 }
                 Err(error) => response["presentationError"] = serde_json::json!(error),
             }
@@ -706,6 +706,57 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Err("remote_view_tab_view_grant_terminal".into())
     }
 
+    /// Join the addressed foreground tab to the provider's current transport.
+    /// Ready means a qualified presentation route; viewer pixels/input require
+    /// independent live acceptance after opening the authenticated handoff.
+    fn qualify_tab_handoff_presentation(
+        &mut self,
+        handoff_id: &str,
+        issuance: &agent_browser_service_model::RemoteViewApplicationViewIssuance,
+        now_ms: u64,
+    ) -> Result<(), String> {
+        let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
+            .map_err(|_| "remote_view_public_origin_missing")?;
+        let origin = super::browser_session_remote_view::public_origin(&configured)?;
+        let target =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
+        self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+        let current =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
+        self.effects.begin_operation(&self.persisted_state)?;
+        let observation =
+            self.effects
+                .observe_remote_view_tab_view(&current, issuance, current_unix_ms())?;
+        if observation.state
+            != agent_browser_service_model::RemoteViewApplicationViewReadiness::Ready
+        {
+            return Err("remote_view_tab_transport_pending".into());
+        }
+        let observed_origin = observation
+            .public_origin
+            .as_deref()
+            .ok_or("remote_view_public_origin_missing")?;
+        if super::browser_session_remote_view::public_origin(observed_origin)? != origin {
+            return Err("remote_view_public_origin_mismatch".into());
+        }
+        // Check the exact owned foreground window again after provider transport.
+        self.focus_browser(
+            &current.browser.id,
+            Some(&current.tab.target_id),
+            current_unix_ms(),
+        )?;
+        issuance
+            .grant
+            .validate_target(
+                &observation.grant.request.target,
+                &observation.grant.request.application,
+                "remote_view",
+                current_unix_ms(),
+            )
+            .map_err(|_| "remote_view_tab_view_issuance_invalid")?;
+        Ok(())
+    }
+
     pub(crate) fn state(&self) -> &BrowserSessionState {
         &self.state
     }
@@ -742,13 +793,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             "service_remote_view_handoff_resolve" => {
                 let handoff_id = required_string(command, "handoffId")?;
                 let view = self.resolve_tab_handoff_view(handoff_id, now_ms)?;
+                let qualification =
+                    self.qualify_tab_handoff_presentation(handoff_id, &view, now_ms);
+                let operator_visible = match qualification {
+                    Ok(()) => {
+                        serde_json::json!({"state":"ready","proofScope":"addressed_tab_owned_window_and_installed_transport"})
+                    }
+                    Err(reason) => serde_json::json!({"state":"pending","reason":reason}),
+                };
+                let ready = operator_visible["state"] == "ready";
                 let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
                     &self.state,
                     handoff_id,
                 )?;
                 Ok(serde_json::json!({
                     "handoffId": handoff_id,
-                    "status": "converging",
+                    "status": if ready { "opened" } else { "converging" },
                     "presentationState": view.presentation_state,
                     "readinessScope": view.readiness_scope,
                     "browserId": target.browser.id,
@@ -756,7 +816,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     "sessionName": target.session.name,
                     "tabId": target.tab.id,
                     "targetId": target.tab.target_id,
-                    "operatorVisible": { "state": "pending", "reason": "operator_route_join_pending" },
+                    "operatorVisible": operator_visible,
                 }))
             }
             "browser_session_open" => {

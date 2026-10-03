@@ -341,7 +341,7 @@ fn replays_published_external_request_shapes_without_managed_lifecycle() {
         REMOTE_VIEW_APPLICATION_SOURCE_CHECKPOINT
     );
     let requests = fixture["requests"].as_array().unwrap();
-    assert_eq!(requests.len(), 12);
+    assert_eq!(requests.len(), 13);
     for request in requests {
         let envelope: RemoteViewApplicationEnvelope =
             serde_json::from_value(request.clone()).unwrap();
@@ -391,4 +391,77 @@ fn release_requires_every_obligation_and_exact_assignment_generation() {
     let mut invalid = cleanup;
     invalid.schema_version = 2;
     assert!(!invalid.validates_target("assignment-external-1", 7));
+}
+
+#[test]
+fn transport_observation_fences_retained_grant_generation_and_post_read_expiry() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let grant = serde_json::from_value(fixture["grant"].clone()).unwrap();
+    for case in [
+        "ready",
+        "pending",
+        "different_grant",
+        "missing_origin",
+        "generation_drift",
+        "expired_after_read",
+    ] {
+        let mut observation = json!({"schemaVersion":1,"state":"ready","grant":fixture["grant"],"publicOrigin":"https://remote-view.example"});
+        let mut after = fixture["assignmentObservation"].clone();
+        match case {
+            "pending" => {
+                observation["state"] = json!("pending");
+                observation["publicOrigin"] = Value::Null;
+            }
+            "different_grant" => {
+                observation["grant"]["routeId"] = json!("22222222222222222222222222222222")
+            }
+            "missing_origin" => observation["publicOrigin"] = Value::Null,
+            "generation_drift" => after["target"]["viewingGeneration"] = json!(20),
+            _ => {}
+        }
+        let mut script = VecDeque::from([
+            (
+                fixture["requests"][2].clone(),
+                Ok(fixture["assignmentObservation"].clone()),
+            ),
+            (
+                json!({"application":"agent-browser","request":{"operation":"observe_view","route_id":fixture["grant"]["routeId"],"audience":"remote_view"}}),
+                Ok(observation),
+            ),
+        ]);
+        if !matches!(case, "different_grant" | "missing_origin") {
+            script.push_back((fixture["requests"][2].clone(), Ok(after)));
+        }
+        let steps = Rc::new(RefCell::new(script));
+        let mut adapter = RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            ScriptedTransport(steps.clone()),
+        )
+        .unwrap();
+        let times = RefCell::new(VecDeque::from([
+            2000,
+            if case == "expired_after_read" {
+                301000
+            } else {
+                2000
+            },
+        ]));
+        let result = adapter.observe_view(&assignment, &grant, || {
+            times.borrow_mut().pop_front().unwrap()
+        });
+        assert_eq!(
+            result.is_ok(),
+            matches!(case, "ready" | "pending"),
+            "{case}"
+        );
+        if let Ok(observation) = result {
+            assert_eq!(
+                observation.state
+                    == agent_browser_service_model::RemoteViewApplicationViewReadiness::Ready,
+                case == "ready"
+            );
+        }
+        assert!(steps.borrow().is_empty(), "{case}");
+    }
 }

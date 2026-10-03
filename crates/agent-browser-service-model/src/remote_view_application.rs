@@ -65,6 +65,11 @@ pub enum RemoteViewApplicationRequest {
         route_id: String,
         audience: String,
     },
+    /// Current installed transport observation; grant validity alone is insufficient.
+    ObserveView {
+        route_id: String,
+        audience: String,
+    },
     ResolveEmbedView {
         route_id: String,
     },

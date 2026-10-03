@@ -28,6 +28,9 @@ fn replays_public_inventory_window_event_view_and_release_response_shapes() {
     round_trip::<RemoteViewApplicationActivation>(&fixture["activation"]);
     round_trip::<RemoteViewApplicationEvents>(&fixture["events"]);
     round_trip::<RemoteViewApplicationGrant>(&fixture["grant"]);
+    round_trip::<agent_browser_service_model::RemoteViewApplicationViewObservation>(
+        &fixture["viewObservation"],
+    );
     round_trip::<RemoteViewApplicationViewIssuance>(&fixture["viewIssuance"]);
     round_trip::<RemoteViewApplicationViewRevocation>(&fixture["viewRevocation"]);
     round_trip::<RemoteViewJoinedReleaseOutcome>(&fixture["joinedRelease"]);

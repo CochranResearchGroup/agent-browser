@@ -15,7 +15,7 @@ Current execution record. [Preserved history through the P222 foreground repair]
 Authority: execute Plan 0222; stop and checkpoint before 750000 cumulative tokens.
 Begin the stop checkpoint by 730000. Counter resets do not reset effort.
 Product lane: PL-PLATFORM. Plan state: OPEN; none of its five milestones accepted.
-Custody: agent-browser-p220, platform/p220-remote-view-consumer, source f2957896.
+Custody: agent-browser-p220, platform/p220-remote-view-consumer; this checkpoint owns the readiness source.
 Remote View custody: remote-view-rv011, retained installed provider source 28b4ec1.
 Production promotion, formal release and production ingress effects are excluded.
 Do not delegate this client/provider path or create a replacement acceptance goal.
@@ -34,8 +34,8 @@ authenticated presentation redirect, and current owned foreground-window check.
 The redirect regression failed before repair. The foreground regression failed
 when focus returned success for another PID. Corrected checks pass: redirect,
 five model record tests, sixteen pool tests, workspace formatting and strict
-Clippy. Source f2957896 is not yet installed. No new candidate build is running.
-Do not rebuild until remaining known readiness work is incorporated.
+Clippy. Source f2957896 is not yet installed. No Agent Browser candidate build is running.
+Readiness source is incorporated; installed adoption and live acceptance remain.
 
 Installed task generation: 0.28.0-a96de24ab02e; SHA256
 `a96de24ab02e69802834a209aae7176173c168d84804e33e697a6354677a827e`.
@@ -57,11 +57,27 @@ Provider control owner 2667915 listens on 19103, exec handle 71812. Task gateway
 Retained task desktop and Guacamole containers are intentional provider resources.
 Do not kill unrelated processes, rewrite private ledgers or reset profile state.
 
-Remaining implementation gap: configured managed open/handoff resolution emits
-converging/pending unconditionally. Focus now fences both desktop generations and
-requires one active positive-size window for the owned PID, but viewer connectivity
-and the authenticated operator join still need proof. Never map grant_issued to
-operatorVisible ready or give a raw provider URL as an operator handoff.
+Readiness repair now implemented and source-qualified, not installed. Remote View
+source 7a1dfe05d48e3ab227323b56fdd62b35e78ca2a0 adds observe_view: current exact
+installed desktop plus fresh Guacamole verification, followed by grant revalidation.
+Agent Browser fences grant, both generations, expiry after reads, matching reviewed
+HTTPS origin, addressed tab and owned foreground window. Missing proof stays pending.
+Handoff resolution preserves issuance even when public-origin configuration is absent.
+Viewer pixels/input remain independent live acceptance. No milestone accepted.
+
+Validation: Remote View library 89 passed, six opt-in exclusions; all-target strict
+Clippy and formatting passed. Agent Browser model library 228 passed; application
+contracts 9 plus response records 5 passed; focused browser_session CLI 51 passed,
+one browser-launch exclusion; workspace format check and strict Clippy passed.
+Preserve first failures: sccache connection reset, two missing-origin compatibility
+regressions, then fixture request-count mismatch. Corrected source checks passed;
+cache-disabled rerun avoided shared-cache infrastructure failure. No live retry ran.
+Task Guacamole verifier PID 2726757, exec handle 58244, reports ready. Gateway and
+control remain on the previous installed provider. New source provider debug build
+completed but was not adopted. Zero task browsers/sessions on fresh SQLite readback.
+Next: publish both qualified candidates within p221, set reviewed public origin on
+task dashboard/runtime, reconcile exact task process identities, and rerun the actual
+AuraCall fixture before authenticated viewer/control acceptance. Preserve all ledgers.
 
 Task ingress now has dedicated agent-browser-dev-p221 and remote-view-dev-p221
 service entries in cooper-webservices, branch platform/p222-task-ingress, source
@@ -184,3 +200,11 @@ Memory disposition: not_durable; this is unfinished transient execution evidence
 <a id="turn-371--2026-09-16"></a>[Turn 371 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-371--2026-09-16)
 <a id="turn-370--2026-09-16"></a>[Turn 370 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-370--2026-09-16)
 <a id="turn-369--2026-09-16"></a>[Turn 369 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-369--2026-09-16)
+
+## Token-limit stop checkpoint | 2026-10-03
+
+Stopped before the requested 750000 cumulative ceiling. Last verified active
+tracker 488459 plus retained prior floor 255647 equals 744106; closeout adds tokens.
+Plan 222 remains OPEN and incomplete. Goal paused at the operator-requested token
+boundary. No candidate publication, provider adoption or real-client acceptance
+was performed after this counter read. Production identity remains untouched.

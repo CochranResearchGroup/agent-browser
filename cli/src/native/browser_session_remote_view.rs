@@ -126,6 +126,17 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.resolve_remote_view_tab_view(target, view, now_ms),
         }
     }
+    fn observe_remote_view_tab_view(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        issuance: &RemoteViewApplicationViewIssuance,
+        now_ms: u64,
+    ) -> Result<RemoteViewApplicationViewObservation, String> {
+        match self {
+            Self::Local(effects) => effects.observe_remote_view_tab_view(target, issuance, now_ms),
+            Self::Remote(effects) => effects.observe_remote_view_tab_view(target, issuance, now_ms),
+        }
+    }
     fn admits_ordinary_sessions(&self) -> bool {
         match self {
             Self::Local(effects) => effects.admits_ordinary_sessions(),
@@ -343,4 +354,27 @@ fn current_view_time_ms() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64)
         .unwrap_or_default()
+}
+
+pub(crate) fn public_origin(value: &str) -> Result<url::Url, String> {
+    let origin = url::Url::parse(value).map_err(|_| "remote_view_public_origin_invalid")?;
+    if origin.scheme() != "https"
+        || !origin.username().is_empty()
+        || origin.password().is_some()
+        || origin.query().is_some()
+        || origin.fragment().is_some()
+        || origin.path() != "/"
+        || origin.port() == Some(0)
+        || origin
+            .host_str()
+            .is_none_or(|host| host == "localhost" || host.ends_with(".localhost"))
+        || match origin.host() {
+            Some(url::Host::Ipv4(ip)) => ip.is_loopback() || ip.is_unspecified(),
+            Some(url::Host::Ipv6(ip)) => ip.is_loopback() || ip.is_unspecified(),
+            _ => false,
+        }
+    {
+        return Err("remote_view_public_origin_invalid".into());
+    }
+    Ok(origin)
 }

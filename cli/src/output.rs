@@ -7822,7 +7822,7 @@ Environment:
                                  Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.
   AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN Reviewed external HTTPS origin for click-driven top-level viewing.
                                  The authenticated handoff page opens an already-published grant; browser lifecycle needs no public origin.
-                                 Managed focus requires current owned foreground-window proof; this alone does not prove viewer readiness.
+                                 Managed open readiness joins addressed-tab owned-window proof with current installed Remote View transport and matching public HTTPS origin. Viewer pixels/input require live acceptance.
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.

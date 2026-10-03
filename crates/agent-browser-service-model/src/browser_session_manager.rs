@@ -55,6 +55,17 @@ pub trait BrowserSessionEffects {
         Err("remote_view_tab_view_unsupported".into())
     }
 
+    /// Read installed transport readiness for a published grant without issuing.
+    /// Runtime callers separately prove the exact tab and owned foreground window.
+    fn observe_remote_view_tab_view(
+        &mut self,
+        _target: &crate::RemoteViewTabHandoffTarget,
+        _issuance: &crate::RemoteViewApplicationViewIssuance,
+        _now_ms: u64,
+    ) -> Result<crate::RemoteViewApplicationViewObservation, String> {
+        Err("remote_view_tab_observation_unsupported".into())
+    }
+
     /// Whether ordinary browser requests may create sessions through this
     /// owner. Local legacy adapters keep explicit session admission.
     fn admits_ordinary_sessions(&self) -> bool {

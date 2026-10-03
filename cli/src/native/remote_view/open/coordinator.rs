@@ -416,6 +416,10 @@ pub(crate) async fn handle_remote_view_open(
             "state": "pending",
             "reason": "operator_route_join_pending",
         });
+        if response["operatorVisible"]["state"] == "ready" {
+            result["status"] = json!("opened");
+            result["operatorVisible"] = response["operatorVisible"].clone();
+        }
         result["navigation"] = response.get("data").cloned().unwrap_or(Value::Null);
         if let Some(proof) = response.get("browserBuildProof") {
             result["browserBuildProof"] = proof.clone();

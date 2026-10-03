@@ -197,6 +197,52 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         Ok(grant)
     }
 
+    /// Join current transport readiness to the exact retained grant and both
+    /// assignment generations. The clock is sampled after each provider read.
+    pub fn observe_view(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+        expected: &RemoteViewApplicationGrant,
+        now_ms: impl Fn() -> u64,
+    ) -> Result<crate::RemoteViewApplicationViewObservation, RemoteViewApplicationAdapterError>
+    {
+        let before = self.observe_assignment(assignment)?;
+        expected.validate_target(
+            &before.target,
+            &self.application,
+            &expected.request.audience,
+            now_ms(),
+        )?;
+        let response = self.request(RemoteViewApplicationRequest::ObserveView {
+            route_id: expected.route_id.clone(),
+            audience: expected.request.audience.clone(),
+        })?;
+        let observation: crate::RemoteViewApplicationViewObservation =
+            serde_json::from_value(response)
+                .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        if observation.schema_version != 1
+            || observation.grant != *expected
+            || (observation.state == crate::RemoteViewApplicationViewReadiness::Ready
+                && observation
+                    .public_origin
+                    .as_ref()
+                    .is_none_or(|origin| origin.is_empty()))
+        {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        let after = self.observe_assignment(assignment)?;
+        if after.target != before.target {
+            return Err(RemoteViewApplicationResponseError::StaleTarget.into());
+        }
+        observation.grant.validate_target(
+            &after.target,
+            &self.application,
+            &expected.request.audience,
+            now_ms(),
+        )?;
+        Ok(observation)
+    }
+
     /// Refresh both generations before reading the full private environment,
     /// then observe again. A changed target invalidates the environment instead
     /// of attempting launch with cached context or inferring another display.

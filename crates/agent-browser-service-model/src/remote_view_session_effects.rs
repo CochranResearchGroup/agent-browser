@@ -153,6 +153,32 @@ impl<
             })
     }
 
+    fn observe_remote_view_tab_view(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        issuance: &RemoteViewApplicationViewIssuance,
+        now_ms: u64,
+    ) -> Result<RemoteViewApplicationViewObservation, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_tab_view_identity_conflict".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        let clock = self.view_clock;
+        self.adapter
+            .observe_view(&assignment, &issuance.grant, || {
+                clock.map_or(now_ms, |clock| clock())
+            })
+            .map_err(|_| "remote_view_tab_transport_readback_required".into())
+    }
+
     fn admits_ordinary_sessions(&self) -> bool {
         self.pool.is_some()
     }
