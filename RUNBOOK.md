@@ -63,43 +63,41 @@ requires one active positive-size window for the owned PID, but viewer connectiv
 and the authenticated operator join still need proof. Never map grant_issued to
 operatorVisible ready or give a raw provider URL as an operator handoff.
 
-Fresh ingress discovery: cooper-webservices has agent-browser-dev on 4948 and
-production remote-view on 19092. Neither is the task dashboard 5048 or gateway
-19102. There is no p221 ingress inventory and no task provider manifest binding.
-The task config's production Remote View external origin must not be borrowed.
-The pending endpoint question requests the intended isolated authenticated HTTPS
-dashboard and Remote View origins. No shared ingress inventory was changed.
-Private routing proposal now exists at task evidence/p222-ingress-proposal/services.
-Proposed service names are agent-browser-dev-p221 and remote-view-dev-p221,
-with dashboard 5048, gateway 19102 and private ingress auth 19104. Both pass the
-existing Cooper inventory validator in strict mode. These are draft service
-identities, not published routes, operator handoffs or reviewed deployment IDs.
-No shared inventory, Traefik or bastion state changed. Task dashboard is now
-running through its installed entry point: frontend 2650450 on 5048, backend
-2650449 on 5049. Dashboard auth status reports unauthenticated; provider gateway
-and forward-auth reject missing identity with 403. Task endpoint names remain the
-proposed defaults pending any operator correction.
+Task ingress now has dedicated agent-browser-dev-p221 and remote-view-dev-p221
+service entries in cooper-webservices, branch platform/p222-task-ingress, source
+3b7435b. Ports are dashboard 5048, gateway 19102 and private ingress auth 19104.
+Existing development 4948 and production 19092 entries are unchanged. Private
+render rehearsal proved the pre-existing generated local config matched source;
+strict task inventory validation and actual local routing passed. Local dashboard
+returns 200 login UI; task viewing rejects missing identity with 403.
 
-Supported Remote View apply qualified a public_origin/auth-only change with no
-conflicts or interruptions, then completed with no pending reconciliation.
+Task snippets were published to bastion without restarting Traefik. Two exact
+one_factor hostname rules validated; Authelia restarted once to load them. HTTPS
+requests with normal certificate verification now return 401 with the expected
+Authelia login Location for both task origins. This is protected ingress evidence,
+not authenticated viewer success. Bastion touched status: CODEX_LOG.md and
+Authelia configuration modified; two task snippets untracked. Pre-existing user
+store changes/backups remain untouched. The task ingress commit was moved to its
+own branch, preserving the unrelated SoyLei branch's former tip.
+
+Task dashboard uses the installed entry point: frontend 2650450 on 5048, backend
+2650449 on 5049. Provider gateway/auth owner 2666588 and control owner 2667915
+remain distinct from production. Supported public_origin/auth apply completed
+without conflicts, interruptions or pending reconciliation; rollback retained.
 Config hash: 2c325acbbeccccff94aace9cf1c107b82b2e3b7819c33cac21d2f42423fc4cac.
-Receipt: task remote-view/receipts/65cf04b8d5237-0a1b50d36adec8f152a90ff874a9a77b-apply.json;
-rollback backup is retained under the matching task backups directory.
-Task provider now names https://remote-view-dev-p221.ecochran.dyndns.org and a
-new mode-0600 task secret outside its runtime home. It no longer references the
-production ingress secret or auth-recheck URL. Initial draft validation rejected
-a secret inside provider runtime home; corrected placement passes. Initial secret
-preparation failed on a missing directory; corrected before endpoint restart.
-Apply replaced the task executable inode; exact task process/config readback
-qualified stopping the two old deleted-inode endpoints. New endpoints use the
-retained control home and consumer policy; no private ledger was reset.
-Next: complete the viewer-readiness join and dashboard/auth listeners, then render
-and publish the task-only ingress with exact deployment identity, followed by one
+Receipt: task remote-view/receipts/65cf04b8d5237-0a1b50d36adec8f152a90ff874a9a77b-apply.json.
+Task provider origin is https://remote-view-dev-p221.ecochran.dyndns.org. Its new
+mode-0600 secret is outside provider runtime home, distinct from production.
+The initial invalid secret placement and missing-directory preparation failure
+are preserved in the prior checkpoint history; corrected before endpoint restart.
+Retained control home, consumer policy and private ledgers were preserved.
+Next: complete the viewer-readiness join and dashboard/auth listeners, then configure
+the task presentation origin with ingress identity 3b7435b, followed by one
 source-bound candidate and actual AuraCall acceptance. Do not publish a route
 whose required backend is absent or use inventory validation as live acceptance.
 
 Progress classification: blocker_reduction; product acceptance remains incomplete.
-Active tracker read: 199684; prior tracker floor: 255647; combined floor: 455331.
+Active tracker at turn start: 243000; prior tracker floor 255647; combined floor 498647.
 Use the conservative combined count against the original ceiling and refresh it.
 Reassess after two no-outcome checkpoints or 30 active minutes; verified blocker
 removal does not reset cumulative no-outcome time. Do not spend cycles on isolated
