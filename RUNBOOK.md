@@ -22,6 +22,70 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Requested spending checkpoint | 2026-10-03 19:31 UTC
+
+Execution is stopping at the operator-requested checkpoint before the active
+500000-token meter ceiling. Last source-checkpoint readback: 469147. The goal
+pause receipt owns final accounting; preserve the historical 1040108 baseline.
+Full Plan 0222 scope is unchanged. No milestone is accepted. Resume requires
+operator direction and a new spending bound; do not continue effects merely
+because the previous goal was larger than this completed repair.
+
+| Milestone | Current evidence and remaining gate |
+| --- | --- |
+| 1 actual AuraCall browser | Normal launcher, canonical CDP attachment, retained CLI resolution, continued synthetic automation, normal close and clean browser census passed. Public authenticated viewer pixels/input are unproved. |
+| 2 persistent login | Manual account login and restart persistence unproved. |
+| 3 second client | Shared/separate tabs, multiple profiles, replay and peer-preserving closure unproved. |
+| 4 recovery/capacity/input | Real grant expiry renewed under the same handoff/session/tab. Other disruptions, revocation, operator stop, capacity growth/shrink and desktop/mobile input unproved. |
+| 5 reproducible delivery | Qualified p221 candidates published with protected production/default identities. Clean installation/update/doctor, target platforms and protected integration remain incomplete. |
+
+Source: Agent Browser 2b4fad71 on platform/p220-remote-view-consumer adds normal
+remote-view resolve for the existing handler with allowReopenClosed=false.
+AuraCall 939e7eda8 on fix/p222-agent-browser-cdp-endpoint adds bounded retained
+readiness waiting, preserving initial build proof and handoff identity.
+Compiled launcher SHA256:
+2e75ecb0848592f141e75da8c493cf93774c18179ac455aa36b7e980dc78bf37.
+Original regressions were red. Current gates: 21 AuraCall launcher tests,
+typecheck/compilation, 48 focused Agent Browser remote-view tests, strict
+workspace Clippy, format check, handoff docs check and docs build all passed.
+Earlier unchanged inventory and 19 pool/expiry gates retain their own receipts.
+
+P221 installed generation 0.28.0-91d28506c445, SHA256
+91d28506c445887a99a3c09092406de2be23ee2996c2020f6bd3d9c603144aa2.
+Task host 102413 owns 5051. Provider source/config/credentials are preserved.
+Publication receipt evidence/p222-readiness-resolve-install.json proves
+production and default development unchanged. The first publication failed its
+production guard because a systemd unit read returned a transport error;
+fresh productionSnapshot exactly reconciled with the original pre-publication
+snapshot before one guarded retry. Preserve failed receipt and reconciliation
+artifact evidence/p222-production-guard-reconciliation.json. No guard bypass.
+An initial retest was refused before browser effects by stale daemon custody;
+replaced only the positively identified empty task host after zero-process census.
+
+Actual normal-client job-20261003T192642Z-a097b9158c16 passed in 11.041 seconds.
+Browser browser:p221-auracall:a231fd91-e910-492f-8d8b-a7274e7efe2a returned canonical
+CDP port 55557 and durable handoff 41bd8345-8883-40e3-b0ca-7050d7340906.
+Normal CLI resolution passed for that same identity; real AuraCall CDP dependency
+attached, checked Example Domain and set/read a synthetic DOM marker.
+Task receipts: evidence/p222-normal-resolve-result.json,
+evidence/p222-client-continuation.json and evidence/p222-final-client-close.json.
+Normal close returned browser_closed for the exact session. Fresh OS and SQLite
+census evidence/p222-final-client-census.json shows zero browsers/sessions/tabs,
+no profile process residue and addressed PID absent. This closes the task browser,
+not the whole provider installation. The bounded keepalive also finished; no
+client/helper build job remains running. The now-closed operator URL is historical
+evidence and must not be presented as a live viewer link.
+
+Next bounded continuation: use the same qualified client path, establish actual
+operator authentication/viewing/input, then continuation/closure and acceptance
+for milestone 1. Preserve all remaining milestones and target p221 only. Do not
+change production, reset profiles, repeat completed source gates without cause,
+or open a successor plan to erase the unmet acceptance scope.
+
+Memory disposition: queued; qualified source and installed actual-client repair
+checkpoint. Queue receipt pending below; queue acceptance is not retrieval proof.
+
+
 ### Expiry repair installed and readiness blocker | 2026-10-03 19:01 UTC
 
 Source repair 09e2d8ea validates an expired published issuance against the current
@@ -80,10 +144,22 @@ use the existing live host's compatible resolve handler without restarting the
 retained browser. Check normal command round trip before another actual-client
 run. No milestone is accepted; all five remain open.
 
-Active goal meter at this checkpoint: 256459; stop before 500000. Keepalive
+Active goal meter at this checkpoint: 283710; stop before 500000. Keepalive
 remains a bounded diagnostic worker and must be polled by its exact job handle.
 Memory disposition: queued, source-backed expiry repair and installed elapsed-time
-renewal proof; queue receipt to be attached below.
+renewal proof. Receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T190725Z-remember.json,
+job 908cac61-0ec4-4aed-ac24-b9d23c9ff4ab. Queue acceptance only; persistence and
+retrieval were not polled.
+
+Readiness repair in progress: the AuraCall regression reproduces the real
+status=converging rejection in six milliseconds; its fix is not applied yet.
+CLI retained-resolution regression also went red. A narrow remote-view resolve
+parser entry now addresses the existing handler with allowReopenClosed=false;
+focused green confirmation passed: one test, job-20261003T190904Z-8226733210b3.
+This new command remains unqualified/unpublished: all five required documentation
+surfaces, malformed-ID regression, final format/Clippy/build and normal retained
+command round trip remain pending. Current installed runtime remains the fully
+qualified 09e2d8ea expiry candidate; do not confuse it with this parser draft.
 
 
 ### Full-goal client checkpoint | 2026-10-03 18:35 UTC
