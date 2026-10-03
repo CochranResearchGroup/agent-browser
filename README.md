@@ -5723,6 +5723,14 @@ join is proved. This does not establish a ready viewer or matched browser-build
 proof for clients that require them.
 
 
+Managed Remote View focus first selects the addressed CDP target, then reads
+current provider windows against the retained launch assignment. It requires
+exactly one active window with positive dimensions for the owned browser PID.
+Missing, inactive, ambiguous or stale window evidence prevents focus qualification;
+`remote_view_focus_window_readback_required` identifies unavailable readback and
+`remote_view_focus_owned_window_unproven` identifies missing owned foreground proof.
+This window check does not establish viewer connectivity or operator readiness.
+
 For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
 with the Remote View HTTP origin on a literal loopback address, such as
 `http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured

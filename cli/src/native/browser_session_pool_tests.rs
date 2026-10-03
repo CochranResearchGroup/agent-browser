@@ -16,6 +16,8 @@ struct Provider {
     all_views_terminal: bool,
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
+    window_pid: Option<u32>,
+    inactive_window: bool,
 }
 struct PoolTransport {
     provider: Rc<RefCell<Provider>>,
@@ -105,6 +107,12 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     .unwrap();
                 let mut windows = fixture["windows"].clone();
                 windows["desktopId"] = assignment.desktop_id.clone().into();
+                if let Some(pid) = provider.window_pid {
+                    windows["windows"][0]["pid"] = serde_json::json!(pid);
+                }
+                if provider.inactive_window {
+                    windows["windows"][0]["active"] = serde_json::json!(false);
+                }
                 if provider.empty_desktop.as_ref() == Some(&assignment.desktop_id) {
                     windows["windows"] = serde_json::json!([]);
                 }
@@ -1192,4 +1200,34 @@ fn ordinary_tab_creation_replays_exact_result_and_retains_unknown_outcome_across
     );
     assert_eq!(fixture.store(false).load_session_state().unwrap(), pending);
     assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn remote_view_focus_requires_the_owned_active_window() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut consumer = host(&fixture, provider.clone(), Rc::new(Cell::new(0)));
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let pid = consumer.state().browsers[&opened.browser_id].pid;
+    provider.borrow_mut().window_pid = Some(pid.saturating_add(1));
+    assert_eq!(
+        consumer
+            .focus_browser(&opened.browser_id, None, 101)
+            .unwrap_err(),
+        "remote_view_focus_owned_window_unproven"
+    );
+    provider.borrow_mut().window_pid = Some(pid);
+    provider.borrow_mut().inactive_window = true;
+    assert_eq!(
+        consumer
+            .focus_browser(&opened.browser_id, None, 102)
+            .unwrap_err(),
+        "remote_view_focus_owned_window_unproven"
+    );
+    provider.borrow_mut().inactive_window = false;
+    consumer
+        .focus_browser(&opened.browser_id, None, 103)
+        .unwrap();
 }

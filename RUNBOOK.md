@@ -42,6 +42,25 @@ Current active meter read: 128031. Prior tracker checkpoint: 255647. Conservativ
 combined floor: 383678; accounting reset must not erase cumulative effort or
 increase the operator's 750000 ceiling. Begin final checkpoint below 730000 using
 the conservative combined total. All five milestones remain unaccepted.
+Foreground prerequisite repair: RemoteViewSessionEffects previously returned
+local CDP focus success without checking Remote View window readback. A red
+regression demonstrated success with a different foreground PID. Focus now joins
+the owned browser to its retained published launch assignment, selects the CDP
+target, then reads provider windows with both desktop generations fenced by the
+existing adapter. It requires exactly one active positive-size window for the
+owned PID. Readback failure and unproved foreground are distinct typed errors.
+This proves the window axis only, not connected viewer or operator readiness.
+The regression covers wrong PID, inactive owned window and successful owned
+foreground. All 16 pool tests pass (3303 filtered); formatting and strict
+workspace Clippy pass. Required README, skill, MDX, help and inline guidance
+are updated. No installed acceptance or new candidate build is claimed.
+Fresh process/state census: zero task browsers/sessions and zero exact task-profile
+Chrome processes. Gateway 2571171 on 19102 and control 3744560 on 19103 remain live.
+Next source integration must prove the actual viewer axis before replacing the
+unconditional pending response. Intended isolated HTTPS origins remain requested;
+do not substitute the production origin or a synthetic readiness flag.
+Active meter read at this packet: 162875; prior tracker floor 255647 gives a
+conservative combined floor 418522. The original 750000 ceiling remains.
 Memory disposition: not_durable; transient packet evidence belongs in this runbook.
 
 ## Turn 439 | 2026-10-02 | P222 execution resumed

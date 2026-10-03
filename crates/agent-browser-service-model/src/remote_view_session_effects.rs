@@ -281,7 +281,41 @@ impl<
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String> {
         self.require_operation()?;
-        self.effects.focus_browser(browser, tab)
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or("remote_view_focus_desktop_missing")?;
+        let assignment = self
+            .store
+            .published_launch_assignment(browser)
+            .map_err(|_| "remote_view_focus_launch_custody_unavailable")?;
+        if assignment.desktop_id != desktop.desktop_id
+            || assignment.generation != desktop.generation
+        {
+            return Err("remote_view_focus_assignment_conflict".into());
+        }
+        // CDP selects the addressed target. Provider observations then fence the
+        // current desktop generations and prove the owned process is foreground.
+        // This is window proof only; it does not establish viewer connectivity.
+        self.effects.focus_browser(browser, tab)?;
+        let windows = self
+            .adapter
+            .windows(&assignment)
+            .map_err(|_| "remote_view_focus_window_readback_required")?;
+        let count = windows
+            .windows
+            .iter()
+            .filter(|window| {
+                window.pid == Some(browser.pid)
+                    && window.active
+                    && window.width > 0
+                    && window.height > 0
+            })
+            .count();
+        if browser.pid == 0 || count != 1 {
+            return Err("remote_view_focus_owned_window_unproven".into());
+        }
+        Ok(())
     }
     fn allocate_disposable_profile(
         &mut self,
