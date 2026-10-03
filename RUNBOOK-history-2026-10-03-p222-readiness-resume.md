@@ -12,78 +12,113 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
-Plan 0222 remains OPEN; none of five milestones accepted. Product lane PL-PLATFORM.
-Custody: agent-browser-p220, platform/p220-remote-view-consumer. No delegation.
-Previous checkpoint is preserved verbatim in
-[readiness resume history](RUNBOOK-history-2026-10-03-p222-readiness-resume.md).
-
-Operator resumed the same delivery sequence, requested Cargo Signal and progress
-checks every 25000 additional tokens, and a stop before 1000000 tokens. Latest
-new tracker 285778 plus prior retained checkpoint 748065 equals 1033843 before
-closeout overhead. The cumulative crossing was missed between reads; stop now.
-Do not reset this accounting. No runtime effects after the boundary read.
+Authority: execute Plan 0222; stop and checkpoint before 750000 cumulative tokens.
+Begin the stop checkpoint by 730000. Counter resets do not reset effort.
+Product lane: PL-PLATFORM. Plan state: OPEN; none of its five milestones accepted.
+Custody: agent-browser-p220, platform/p220-remote-view-consumer; this checkpoint owns the readiness source.
+Remote View custody: remote-view-rv011, retained installed provider source 28b4ec1.
+Production promotion, formal release and production ingress effects are excluded.
+Do not delegate this client/provider path or create a replacement acceptance goal.
 
 | Requirement | Current evidence | Remaining gate |
 | --- | --- | --- |
-| Actual AuraCall Stealth/view/control/close | Installed readiness got actual launcher past opened/ready/build/handoff validation; normal inventory returned zero | Publish inventory repair, repair canonical endpoint parsing, actual client success, connected viewer/input and close census |
-| Persistent authentication | NOT RUN | Reviewed login, automation and restart/reconnect with same handoff |
-| Shared operation | NOT RUN through real clients | Second client, stable-key replay, peer-preserving and final close |
-| Recovery/capacity/mobile | NOT RUN | Observed planned disruptions, capacity, retained URL and focus/input |
-| Install/update/doctor/platform/integration | Candidate publication and provider local doctor pass; launch smoke FAIL | Disposable profile smoke preparation, full clean-install/update/platform/integration proof |
+| Actual AuraCall Stealth/view/control/close | Actual launcher selects reviewed Stealth and navigates; last client result converging | Exact tab/window and connected viewer join; authenticated handoff, control and cleanup |
+| Persistent authentication | Not accepted | Reviewed login and restart/reconnect observation |
+| Shared operation | Predecessor CLI observations only | Second real client, replay and peer-preserving close |
+| Recovery/capacity/mobile | Not accepted | Observed disruption, stable logical identity, focus and elastic capacity |
+| Install/update/doctor/platform/integration | Isolated candidate publication only | Full reproducible-install and changed-surface qualification |
 
-Installed Agent Browser: source 9c499716, generation 0.28.0-d0c5bd7be0cd,
-SHA256 d0c5bd7be0cd62c189adca40d5a9d6ba8d6420ae0015feab25165fd372cb3a3a.
-Publication confirms production and default development unchanged. Candidate
-Cargo Signal job job-20261003T153354Z-966a2a8f3f47 passed in 212 seconds.
-First job stopped before compilation because MCP environment lacked user bus;
-explicit XDG runtime and DBUS address corrected that admission failure.
+Qualified source repairs: post-transport clock, scoped grant-key joins, exact
+terminal pending replay/one renewal, opaque grant/revoke/release route IDs,
+authenticated presentation redirect, and current owned foreground-window check.
+The redirect regression failed before repair. The foreground regression failed
+when focus returned success for another PID. Corrected checks pass: redirect,
+five model record tests, sixteen pool tests, workspace formatting and strict
+Clippy. Source f2957896 is not yet installed. No Agent Browser candidate build is running.
+Readiness source is incorporated; installed adoption and live acceptance remain.
 
-Installed Remote View: source 7a1dfe05d48e3ab227323b56fdd62b35e78ca2a0,
-SHA256 f7869224d96e56464153ec00e06d4ee334b35826c5b5c7ed0a5e4125acd0c685.
-Supported install and exact monitor adoption complete; package/local/native
-control/Guacamole/gateway doctor checks pass. Authenticated viewer remains unknown.
-Control exec handle 20721, gateway 90032, verifier 90894. Verify process identity
-before any restart. Desktop, audio and Guacamole resources are intentional.
-Task dashboard backend 3071904, frontend 3071905; public origin configured.
+Installed task generation: 0.28.0-a96de24ab02e; SHA256
+`a96de24ab02e69802834a209aae7176173c168d84804e33e697a6354677a827e`.
+Task wrapper: `/home/ecochran76/.local/bin/agent-browser-dev-p221`.
+Task state: `/home/ecochran76/.local/share/agent-browser-dev-p221`.
+Installed generations: `/home/ecochran76/.local/lib/agent-browser-dev-p221`.
+Both production and default-development unchanged publication checks passed.
+Private evidence: task `evidence/p222-opaque-route-install.json` and
+`evidence/p222-auracall-opaque-route.log`; the actual client uses no injected runner.
+Original pending provider requests and orphan host tokens remain preserved.
 
-State/evidence root: /home/ecochran76/.local/share/agent-browser-dev-p221.
-Wrapper: /home/ecochran76/.local/bin/agent-browser-dev-p221.
-Provider public origin: https://remote-view-dev-p221.ecochran.dyndns.org.
-Dashboard public origin: https://agent-browser-dev-p221.ecochran.dyndns.org.
-Share only returned authenticated /remote-view/<handoff-id> links when ready.
-Preserve private credentials, profiles, pending keys, ledgers and retained resources.
+Fresh census after foreground source repair: zero task browsers/sessions and
+zero Chrome processes with the exact task profile argument. The expired session's
+handoff preserves a live_resource issuance; issuance is not visible/control proof.
+Task runtime host was last observed at PID 392054 under the installed generation.
+Include .local/lib executable identity when checking hosts, not only .local/share.
+Provider control owner 2667915 listens on 19103, exec handle 71812. Task gateway
+2666588 listens on 19102 and auth 19104, exec handle 58208. Inspect identities before restart.
+Retained task desktop and Guacamole containers are intentional provider resources.
+Do not kill unrelated processes, rewrite private ledgers or reset profile state.
 
-Actual launcher job job-20261003T154305Z-142a89f8273e failed after open at inventory:
-agent-browser browser inventory did not identify one exact opened browser.
-Direct service browsers read returned zero although managed SQLite held the exact
-browser, proving the legacy-only collection gap. The task browser may have expired
-through normal 300-second idle cleanup; take a fresh census before resumption.
+Readiness repair now implemented and source-qualified, not installed. Remote View
+source 7a1dfe05d48e3ab227323b56fdd62b35e78ca2a0 adds observe_view: current exact
+installed desktop plus fresh Guacamole verification, followed by grant revalidation.
+Agent Browser fences grant, both generations, expiry after reads, matching reviewed
+HTTPS origin, addressed tab and owned foreground window. Missing proof stays pending.
+Handoff resolution preserves issuance even when public-origin configuration is absent.
+Viewer pixels/input remain independent live acceptance. No milestone accepted.
 
-Source inventory repair in this checkpoint reads existing managed SQLite through
-read-only open, projects exact IDs/PIDs/canonical cdpEndpoint and preserves legacy
-records. Metadata does not claim fresh health or effect authority. New source is
-not installed. Focused service_inventory 20 passed; formatting and strict workspace
-Clippy passed. Cargo Signal jobs job-20261003T155536Z-4d5a1bb1dedc and
-job-20261003T155634Z-267a9e861015 retain logs and receipts privately.
+Validation: Remote View library 89 passed, six opt-in exclusions; all-target strict
+Clippy and formatting passed. Agent Browser model library 228 passed; application
+contracts 9 plus response records 5 passed; focused browser_session CLI 51 passed,
+one browser-launch exclusion; workspace format check and strict Clippy passed.
+Preserve first failures: sccache connection reset, two missing-origin compatibility
+regressions, then fixture request-count mismatch. Corrected source checks passed;
+cache-disabled rerun avoided shared-cache infrastructure failure. No live retry ran.
+Task Guacamole verifier PID 2726757, exec handle 58244, reports ready. Gateway and
+control remain on the previous installed provider. New source provider debug build
+completed but was not adopted. Zero task browsers/sessions on fresh SQLite readback.
+Next: publish both qualified candidates within p221, set reviewed public origin on
+task dashboard/runtime, reconcile exact task process identities, and rerun the actual
+AuraCall fixture before authenticated viewer/control acceptance. Preserve all ledgers.
 
-AuraCall custody: auracall, fix/p222-agent-browser-cdp-endpoint. Unrelated .tmp/
-remains untouched. Expanded existing regression covers canonical cdpEndpoint and
-legacy cdpHost/cdpPort. Canonical case fails before fix, retained job
-job-20261003T155634Z-be788b1ab289. No production client runtime replaced.
-Next exact client repair: normalize canonical cdpEndpoint into host/port while
-retaining the existing compatibility shape, then run focused tests/typecheck.
-Publish the qualified browser inventory candidate and compiled task client, inspect
-fresh task ownership, and rerun the actual fixture without an injected runner.
+Task ingress now has dedicated agent-browser-dev-p221 and remote-view-dev-p221
+service entries in cooper-webservices, branch platform/p222-task-ingress, source
+3b7435b. Ports are dashboard 5048, gateway 19102 and private ingress auth 19104.
+Existing development 4948 and production 19092 entries are unchanged. Private
+render rehearsal proved the pre-existing generated local config matched source;
+strict task inventory validation and actual local routing passed. Local dashboard
+returns 200 login UI; task viewing rejects missing identity with 403.
 
-Required development launch smoke job job-20261003T154044Z-2b2d697d8aeb failed
-before browser launch with browser_profile_not_found for its disposable profile.
-Retain this installation gate; do not substitute its failure for actual-client
-profile readiness. The stopped smoke host and orphan tokens were preserved after
-positive empty-state and executable-identity checks. No broad process cleanup ran.
+Task snippets were published to bastion without restarting Traefik. Two exact
+one_factor hostname rules validated; Authelia restarted once to load them. HTTPS
+requests with normal certificate verification now return 401 with the expected
+Authelia login Location for both task origins. This is protected ingress evidence,
+not authenticated viewer success. Bastion touched status: CODEX_LOG.md and
+Authelia configuration modified; two task snippets untracked. Pre-existing user
+store changes/backups remain untouched. The task ingress commit was moved to its
+own branch, preserving the unrelated SoyLei branch's former tip.
 
-Cargo Signal is callable and used for builds/tests. Raw logs stay under the task
-evidence/cargo-signal tree; inspect only bounded diagnostics and relevant excerpts.
-Do not broaden implementation beyond the active first-client acceptance failure.
+Task dashboard uses the installed entry point: frontend 2650450 on 5048, backend
+2650449 on 5049. Provider gateway/auth owner 2666588 and control owner 2667915
+remain distinct from production. Supported public_origin/auth apply completed
+without conflicts, interruptions or pending reconciliation; rollback retained.
+Config hash: 2c325acbbeccccff94aace9cf1c107b82b2e3b7819c33cac21d2f42423fc4cac.
+Receipt: task remote-view/receipts/65cf04b8d5237-0a1b50d36adec8f152a90ff874a9a77b-apply.json.
+Task provider origin is https://remote-view-dev-p221.ecochran.dyndns.org. Its new
+mode-0600 secret is outside provider runtime home, distinct from production.
+The initial invalid secret placement and missing-directory preparation failure
+are preserved in the prior checkpoint history; corrected before endpoint restart.
+Retained control home, consumer policy and private ledgers were preserved.
+Next: complete the viewer-readiness join and dashboard/auth listeners, then configure
+the task presentation origin with ingress identity 3b7435b, followed by one
+source-bound candidate and actual AuraCall acceptance. Do not publish a route
+whose required backend is absent or use inventory validation as live acceptance.
+
+Progress classification: blocker_reduction; product acceptance remains incomplete.
+Active tracker at turn start: 243000; prior tracker floor 255647; combined floor 498647.
+Use the conservative combined count against the original ceiling and refresh it.
+Reassess after two no-outcome checkpoints or 30 active minutes; verified blocker
+removal does not reset cumulative no-outcome time. Do not spend cycles on isolated
+passing subsets when no evidence-backed path advances actual client acceptance.
+Memory disposition: not_durable; this is unfinished transient execution evidence.
 
 ## Historical anchor compatibility
 
@@ -166,3 +201,10 @@ Do not broaden implementation beyond the active first-client acceptance failure.
 <a id="turn-370--2026-09-16"></a>[Turn 370 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-370--2026-09-16)
 <a id="turn-369--2026-09-16"></a>[Turn 369 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-369--2026-09-16)
 
+## Token-limit stop checkpoint | 2026-10-03
+
+Stopped before the requested 750000 cumulative ceiling. Last verified active
+tracker 488459 plus retained prior floor 255647 equals 744106; closeout adds tokens.
+Plan 222 remains OPEN and incomplete. Goal paused at the operator-requested token
+boundary. No candidate publication, provider adoption or real-client acceptance
+was performed after this counter read. Production identity remains untouched.

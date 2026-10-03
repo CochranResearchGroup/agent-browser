@@ -3622,6 +3622,12 @@ before provider issuance and reuses a qualified grant after restart. It reports
 `status=converging` and `operatorVisible.state=pending` until tab-specific
 presentation is proved. Grant issuance alone does not mean the tab is visible.
 
+`service browsers` includes existing Browser Session Manager records using their
+exact browser ID, PID, active session IDs and canonical `cdpEndpoint`. This
+read-only projection creates no runtime state and does not establish fresh CDP
+health or operator visibility. Clients verify connection after resolving the
+endpoint; inventory IDs never grant lifecycle authority.
+
 Managed open and handoff resolution report `operatorVisible.state=ready` only
 when the exact tab has owned foreground-window proof and Remote View reports
 current installed desktop and Guacamole transport readiness for the retained

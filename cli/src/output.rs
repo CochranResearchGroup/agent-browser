@@ -7567,6 +7567,7 @@ Dashboard:
   dashboard [start]          Start the dashboard server (default port: 4848)
   dashboard start --port <n> Start on a specific port
   dashboard ingress status  Show stable-ingress and presentation readiness
+  service browsers           List legacy and managed browser identities with canonical CDP endpoints; inventory is not fresh health proof.
   dashboard stop             Stop the dashboard server
   Linux repo installs can run bash scripts/install-dashboard-user-service.sh
   to enable the dashboard, recurring runtime-health interlock, and daily

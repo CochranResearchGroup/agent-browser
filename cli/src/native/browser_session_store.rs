@@ -138,6 +138,17 @@ impl BrowserSessionSqliteStore {
         Ok(Self { connection })
     }
 
+    /// Read the current managed inventory without creating or migrating runtime state.
+    /// An absent database is an empty inventory; invalid existing state is an error.
+    pub(crate) fn default_session_state_read_only() -> Result<Option<BrowserSessionState>, String> {
+        let path = Self::default_sqlite_path()?;
+        match fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            Err(_) => Err("browser_runtime_inventory_readback_required".into()),
+            Ok(_) => Self::open_read_only(&path)?.load_session_state().map(Some),
+        }
+    }
+
     /// Produce a redacted read-only aggregate for Service status and install
     /// doctor. Failure details collapse to stable codes so filesystem paths do
     /// not cross the public status boundary.
