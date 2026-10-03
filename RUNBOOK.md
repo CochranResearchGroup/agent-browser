@@ -25,7 +25,7 @@ Current execution record. [Preserved history through the P222 foreground repair]
 ### Requested spending checkpoint | 2026-10-03 19:31 UTC
 
 Execution is stopping at the operator-requested checkpoint before the active
-500000-token meter ceiling. Last source-checkpoint readback: 469147. The goal
+500000-token meter ceiling. Last source-checkpoint readback: 476924. The goal
 pause receipt owns final accounting; preserve the historical 1040108 baseline.
 Full Plan 0222 scope is unchanged. No milestone is accepted. Resume requires
 operator direction and a new spending bound; do not continue effects merely
@@ -83,7 +83,9 @@ change production, reset profiles, repeat completed source gates without cause,
 or open a successor plan to erase the unmet acceptance scope.
 
 Memory disposition: queued; qualified source and installed actual-client repair
-checkpoint. Queue receipt pending below; queue acceptance is not retrieval proof.
+checkpoint. Receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T193411Z-remember.json,
+job 7615e63e-0e6d-4511-abd6-294974aa09db. Queue acceptance only; persistence and
+retrieval were not polled. Do not retry this write without receipt reconciliation.
 
 
 ### Expiry repair installed and readiness blocker | 2026-10-03 19:01 UTC
