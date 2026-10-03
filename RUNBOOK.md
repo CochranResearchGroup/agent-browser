@@ -2,7 +2,9 @@
 
 Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator
 resumed full Plan 0222 delivery on 2026-10-03, including in-scope repair/retest.
-Stop and checkpoint before this active goal meter reaches 500000 tokens.
+The operator resumed with 50000 additional tokens on 2026-10-03.
+Retain the prior stop/pause accounting of 511993; checkpoint before 561993
+on the same cumulative meter, or before 50000 new tokens if it stays paused.
 Historical consumption baseline 1040108 remains preserved; the new goal-meter
 ceiling does not erase earlier effort. Single primary, p221 runtime only.
 Check consumption at each substantive packet and before expensive follow-up;
@@ -21,6 +23,45 @@ Current execution record. [Preserved history through the P222 foreground repair]
 - [P222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md); [P221 superseded history](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
 ## P222 current checkpoint | 2026-10-03
+
+### Operator workflow resumed | 2026-10-03 20:00 UTC
+
+Operator accepted the recommendation to resume with 50000 additional tokens.
+Full Plan 0222 scope and all five unaccepted milestones remain unchanged.
+The goal API still reports paused at 511993 after explicit user resumption;
+this is accounting state, not a fresh allowance. Preserve that baseline and
+bound this continuation by 50000 additional tokens. Prior recommendation-only
+turn was no_progress; this run advances installed client evidence.
+
+Fresh census found the historical process IDs absent and p221 browser/session/tab
+state empty following machine restart. Restored the retained p221 desktop using
+normal start 1, installed control HTTP on 19103, gateway/verifier units, and
+Agent Browser dashboard units. No production unit was started, stopped or changed.
+The generated host unit lacked its previously standalone Remote View binding;
+a p221-only systemd drop-in now supplies the same origin/pool/public origin.
+Restarted only the empty p221 host. Provider local doctor passes, including
+native control, audio, private Guacamole verification and exact executable adoption.
+Public operator acceptance remains unproved.
+
+Actual unmodified AuraCall launcher passed with canonical CDP port 37291,
+PID 47160, browser 72c447c5-ee8e-48c6-ba66-d0ab22945e4f and session ordinal 19.
+Same qualified binaries: Agent Browser 91d28506c445 and Remote View f7869224d96e.
+Private evidence: p222-operator-run-client.json and p222-operator-run-census.json
+under the retained task evidence root. A synthetic BLUE 472 page/input test is
+prepared on the addressed Example Domain tab. Fresh authenticated opaque handoff
+46e0c328-5220-466e-b0df-148c2be57404 was supplied for operator sign-in/control.
+Unauthenticated public HTTP returned 401; this does not prove viewer failure.
+
+Bounded keeper exec session 18897 checks exact live browser ownership before
+profile-bound get url, refuses cold launch, and ends after 27 ticks/1175 seconds.
+Await operator observation, read the synthetic input result through the actual
+client CDP dependency, then continue automation and normal close with fresh census.
+Do not accept milestone 1 before the complete workflow succeeds.
+
+Memory disposition: queued; installed restart recovery and actual client evidence.
+Receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T202218Z-remember.json,
+job 2b0817f8-9961-486b-a707-4875e8364a6c. Queue acceptance only; no delivery polling.
+
 
 ### Requested spending checkpoint | 2026-10-03 19:31 UTC
 
