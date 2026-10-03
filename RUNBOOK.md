@@ -112,6 +112,20 @@ The installed host still exists at PID 3821767, executable under the task
 the .local/share runtime root. Do not call the host absent from a partial scan.
 Next: complete build, recheck task ownership/inventory, publish only the task
 candidate, and execute actual AuraCall. No later milestone is qualified.
+Operator directed isolated installation after status. Candidate build completed
+in 3m35s. Publication succeeded as generation 0.28.0-a96de24ab02e, SHA256
+a96de24ab02e69802834a209aae7176173c168d84804e33e697a6354677a827e.
+Production and default-development unchanged checks both passed. Fresh empty
+browser/session inventory and zero exact task-profile Chrome processes preceded
+stopping old task host PID 3821767. Its orphan token was retained under the
+opaque-route recovery-evidence name; pending provider history was not rewritten.
+Actual AuraCall replay against the new wrapper still reports converging.
+Evidence: p222-opaque-route-install.json and p222-auracall-opaque-route.log in
+the private task evidence folder. Current browser/session sequence 13 and one
+matching durable handoff are retained; operator readiness is unproven. Do not
+replace this host before resolving current browser custody. Next: inspect this
+handoff's retained view and provider acquisition/issuance outcome. Installation
+is complete; product acceptance remains incomplete.
 Memory disposition: not_durable; canonical execution record owns this transient
 resumption checkpoint.
 
