@@ -4,6 +4,10 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Development publication**:
+An isolated generation installation whose activation coordinates the runtime host and dashboard process group. Non-activating publication requires stopped units before changing executable bindings.
+
+
 **Client subject**:
 The stable identity to which access policy grants are assigned, together with an explicit assurance level such as locally self-declared or authenticated.
 _Avoid_: Runtime owner, daemon identity, session name

@@ -206,7 +206,7 @@ function printHelp() {
   console.log(`Usage: node scripts/development-runtime.js <command> [options]
 
 Commands:
-  install [--binary <path>] [--no-activate]  Stage and activate an isolated development generation
+  install [--binary <path>] [--no-activate]  Install and activate an isolated development generation; --no-activate requires stopped units
   status                                    Read development runtime identity and health
   doctor                                    Validate units, executable, and manifest identity
   gc [--retain <count>]                     Remove unselected, non-running old generations

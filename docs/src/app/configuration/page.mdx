@@ -147,6 +147,8 @@ development doctor checks the running process environments. This does not
 sandbox browsers or sanitize retained Service records and desktop content;
 verify those independently before synthetic-only visual capture.
 
+Non-activating development publication (`install --no-activate`) requires all development host and dashboard units to be stopped. It refuses before changing selected manifests, units or launchers if a unit is running or its state is unknown. Use normal `pnpm development-runtime:install` to activate the complete host and dashboard group.
+
 For parallel development publication, set
 <code>AGENT_BROWSER_DEV_NAMESPACE</code> to 1–8 lowercase letters or digits,
 starting with a letter. Namespaced runtime paths, launchers, service units,

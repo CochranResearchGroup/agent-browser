@@ -245,8 +245,21 @@ export function installDevelopmentRuntime({
   activate = true,
   snapshotProduction = productionSnapshot,
   verifyProduction = assertProductionUnchanged,
+  observeUnit = unitStatus,
 }) {
   const descriptor = developmentRuntimeDescriptor(env);
+  // A non-activating install changes selected manifests, launchers and units.
+  // Refuse before any write if the old process group can still use them.
+  if (!activate) {
+    const unsafeUnits = descriptor.units.filter((name) => {
+      const unit = observeUnit(name, env);
+      return unit.mainPid != null ||
+        !['inactive', 'failed', 'fixture'].includes(unit.activeState);
+    });
+    if (unsafeUnits.length) {
+      throw new Error(`Non-activating publication requires stopped development units: ${unsafeUnits.join(', ')}. Use install with activation to update the complete host/dashboard group.`);
+    }
+  }
   const sourceBinary = resolve(binary);
   if (!existsSync(sourceBinary)) throw new Error(`Development candidate does not exist: ${sourceBinary}`);
   const bytes = readFileSync(sourceBinary);

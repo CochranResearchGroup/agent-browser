@@ -263,6 +263,32 @@ try {
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  // Non-activating publication must not replace executable-bound files while
+  // any member of the running host/dashboard group still owns the old binary.
+  const replacementBinary = join(fixture, 'replacement-agent-browser');
+  writeFileSync(replacementBinary, readFileSync(fakeBinary, 'utf8') + '\n# replacement generation\n', { mode: 0o755 });
+  const selectedBefore = readlinkSync(descriptor.current);
+  const boundPaths = [descriptor.executable, descriptor.laneManifest,
+    ...descriptor.units.map((name) => join(descriptor.systemdDir, name))];
+  const boundBefore = boundPaths.map((path) => readFileSync(path, 'utf8'));
+  for (const liveUnit of descriptor.units) {
+    assert.throws(() => installDevelopmentRuntime({
+      binary: replacementBinary, env, activate: false,
+      observeUnit: (name) => name === liveUnit
+        ? { loadState: 'loaded', activeState: 'active', mainPid: 4242 }
+        : { loadState: 'loaded', activeState: 'inactive', mainPid: null },
+    }), /Non-activating publication requires stopped development units/,
+    'partial publication must refuse before replacing the running group binding');
+    assert.equal(readlinkSync(descriptor.current), selectedBefore);
+    assert.deepEqual(boundPaths.map((path) => readFileSync(path, 'utf8')), boundBefore);
+  }
+  assert.throws(() => installDevelopmentRuntime({
+    binary: replacementBinary, env, activate: false,
+    observeUnit: () => ({ loadState: 'unknown', activeState: 'unknown', mainPid: null }),
+  }), /Non-activating publication requires stopped development units/,
+  'unknown process ownership cannot admit partial publication');
+  assert.equal(readlinkSync(descriptor.current), selectedBefore);
+  assert.deepEqual(boundPaths.map((path) => readFileSync(path, 'utf8')), boundBefore);
   const installedStatus = developmentRuntimeStatus({ env });
   assert.deepEqual(installedStatus.ports, {
     dashboard: 4948,

@@ -24,6 +24,33 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Partial publication guard | 2026-10-03 23:42 UTC
+
+Diagnosing-bugs fixture reproduces the mismatch trigger through the actual
+installDevelopmentRuntime publisher with a disposable executable and injected
+unit observations. Before the fix, non-activating publication admitted a
+replacement while one old dashboard/host member remained live. Red command:
+pnpm test:development-runtime, Missing expected exception. The minimized seam
+requires only one live unit and one replacement binary.
+
+The publisher now refuses non-activating installation before any write when
+any development unit has a PID, is running, transitioning or has unknown state.
+Inactive installations remain supported. Ordinary coordinated activation and
+live-executable doctor checks are unchanged. Tests address each of the three
+unit roles and unknown state, assert selection and all executable-bound files
+unchanged, and retain existing activation ordering checks. Focused fixture
+passed. Live p221 guard refused all three active units and preserved bindings;
+private evidence script p222-live-partial-publication-guard.mjs. No binary was
+published, service restarted or browser launched by this verification.
+Documentation, script help and CLI help describe the new guard. Docs build,
+syntax and format checks passed; strict workspace Clippy passed in 16.81
+seconds with cache disabled. The first Clippy attempt was cancelled after cache
+startup delay (exit 143); it is not a passed check. This closes
+the demonstrated non-activating publication trigger; handoff browser-closure
+recovery and explicit TTL semantics remain pending independently.
+Memory disposition queued: 20261003T234422Z-remember.json, job
+553b0001-9def-49c7-934e-c8001d5eb45a; queue acceptance is not retrieval proof.
+
 ### Dashboard generation recovery | 2026-10-03 23:36 UTC
 
 Authenticated POST /api/service/request reproduced HTTP 502 and
