@@ -396,6 +396,12 @@ pub struct RemoteViewApplicationGrant {
 }
 
 impl RemoteViewApplicationGrant {
+    /// Match the provider's opaque route identity syntax independently of lifetime.
+    /// This does not establish current grant or viewer readiness.
+    pub fn has_valid_route_id(&self) -> bool {
+        viewing_route_id(&self.route_id)
+    }
+
     /// Issuance is route admission, not evidence that pixels or input are ready.
     pub fn validate_target(
         &self,
@@ -405,7 +411,7 @@ impl RemoteViewApplicationGrant {
         now_ms: u64,
     ) -> Result<(), RemoteViewApplicationResponseError> {
         if self.schema_version != 1
-            || !viewing_route_id(&self.route_id)
+            || !self.has_valid_route_id()
             || self.request.target != *target
             || self.request.application != application
             || self.request.audience != audience

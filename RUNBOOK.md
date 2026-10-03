@@ -10,6 +10,40 @@ Current index. [The September 13 archive](RUNBOOK-history-2026-09-13-through-tur
 - [P214](docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md)
 - [P222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md); [P221 superseded history](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
+## P222 continuation | 2026-10-03 | Presentation path qualification
+
+Current custody: platform/p220-remote-view-consumer in agent-browser-p220.
+Prior turn classification: blocker_reduction, installed opaque-ID candidate
+qualified issuance but actual AuraCall remained converging. Fresh task state has
+zero browsers/sessions after the retained session's expiry; its handoff keeps a
+live_resource issuance with the provider's opaque route ID. That is issuance
+proof, not operator viewing. Installed generation remains 0.28.0-a96de24ab02e.
+The configured managed remote-view open and handoff resolve paths unconditionally
+emit converging/pending. Do not promote grant issuance to ready. The missing
+join must combine exact addressed-tab/window proof with current viewer readiness.
+
+A second verified defect blocked the authenticated presentation redirect:
+remote_view_presentation::presentation_url required UUID route syntax. The
+existing test was extended with the observed provider ID shape and failed before
+repair. It now uses the service-model grant's shared opaque-route validator.
+Focused CLI test passes (3317 filtered), five model record tests pass, full
+workspace formatting and strict Clippy pass. These are source checks; no new
+candidate was built, because readiness integration remains unfinished.
+
+The task gateway was absent. Supported installed gateway serve now runs with the
+existing task config and consumer bridge on 19102, PID 2571171, exec handle 35667.
+Control owner 3744560 remains on 19103. No production ingress was changed.
+The task provider has no development-presentation provider manifest. Its existing
+Remote View config names the production external origin. Requested the intended
+isolated authenticated dashboard and Remote View HTTPS origins before changing
+external ingress. This input does not prevent independent source work.
+
+Current active meter read: 128031. Prior tracker checkpoint: 255647. Conservative
+combined floor: 383678; accounting reset must not erase cumulative effort or
+increase the operator's 750000 ceiling. Begin final checkpoint below 730000 using
+the conservative combined total. All five milestones remain unaccepted.
+Memory disposition: not_durable; transient packet evidence belongs in this runbook.
+
 ## Turn 439 | 2026-10-02 | P222 execution resumed
 
 Operator authorized Plan 0222 execution and a checkpoint before the active goal

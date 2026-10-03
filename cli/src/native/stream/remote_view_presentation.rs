@@ -43,7 +43,7 @@ fn presentation_url(
 ) -> Result<String, String> {
     if view.grant.request.audience != "remote_view"
         || view.path != format!("/view/{}", view.grant.route_id)
-        || uuid::Uuid::parse_str(&view.grant.route_id).is_err()
+        || !view.grant.has_valid_route_id()
     {
         return Err("remote_view_presentation_path_invalid".into());
     }
@@ -115,6 +115,12 @@ mod tests {
         assert_eq!(
             presentation_url(&origin, &view).unwrap(),
             "https://view.example/view/11111111-1111-4111-8111-111111111111"
+        );
+        view.grant.route_id = "65ce69abea0c3-1bf6ba08f07234c67f9f17826feb9594".into();
+        view.path = format!("/view/{}", view.grant.route_id);
+        assert_eq!(
+            presentation_url(&origin, &view).unwrap(),
+            "https://view.example/view/65ce69abea0c3-1bf6ba08f07234c67f9f17826feb9594"
         );
         view.path = "//foreign.example/".into();
         assert!(presentation_url(&origin, &view).is_err());
