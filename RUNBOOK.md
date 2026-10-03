@@ -24,6 +24,60 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Idle retention repair | 2026-10-03 22:23 UTC
+
+Diagnosing-bugs loop reproduced remote_view_tab_handoff_session_unavailable for
+handoff 46e0c328-5220-466e-b0df-148c2be57404. Exact session history proves
+heartbeat_expired, 311600 milliseconds after the final recorded activity.
+The temporary diagnostic keeper ended and ordinary five-minute cleanup removed
+the session/browser. Repeated replacement links did not satisfy stable operation.
+
+Source 8b596861 fixes the owning Browser Session Manager. A valid exact handoff
+join retains its session against inactivity and quota eviction; reconnect uses
+the original live session even past its idle deadline. Explicit close still
+releases the browser. Invalid, dangling and closed historical bindings confer
+no retention or additional access. The existing handoff join remains identity
+and access evidence, not automatic permission to recreate closed browsers.
+CONTEXT, help, README, agent skill and remote-view docs describe the behavior.
+
+Regression advances the real manager clock past expiry, reaps, reconnects the
+same session/tab after serialized state reload, explicitly closes, and checks
+that an invalid dangling handoff does not pin the browser. Original red:
+retained operator session was reaped. Cargo Signal red job 220906-a8e1aab209b1;
+27 focused manager tests passed in green job 221240-d0e8b34c0c97. Strict workspace
+Clippy 221352-9e3262c484eb, format check, handoff docs and docs build passed.
+Qualified candidate build 221536-c1f13d77b826 passed in 196.787 seconds.
+Private logs and receipts remain under the retained p221 evidence/cargo-signal.
+
+Published only p221 generation 0.28.0-a0a18b271f31, SHA256
+ a0a18b271f31a206a45bab2244b0626e6afeac4f8dc856958490ac6a59c9d2a9.
+Evidence/p222-handoff-retention-install.json confirms production/default unchanged.
+Old synthetic task session closed normally, with zero-browser/session/profile
+process census. Its keeper stopped with the intended refusal to cold-launch.
+First host restart used stale loaded unit metadata, causing executable_drift and
+systemd start-limit refusal. The manifest on disk already matched the new binary;
+daemon-reload and reset-failed restored the empty namespaced host without manual
+manifest edits or production unit changes. Two pre-launch failures are retained
+in p222-retention-live-launch.log and p222-retention-live-launch-2.log.
+Host 95196 live executable SHA matches the published candidate.
+
+Actual normal AuraCall launch p222-retention-live-launch-3.log passed. Browser
+9b763bf0-edf9-45b3-9558-b680c41d045e, PID 97181, CDP port 37595,
+handoff d31f27d9-fa86-4891-8a62-db8ddeaee290. Evidence/p222-retention-live-client.json
+owns the full returned identity. No keeper was started for this browser.
+Live proof exec session 40903 reads SQLite in read-only mode, checks unchanged
+activity and exact process/session identity until 65 seconds past recorded idle
+expiry, then resolves the same handoff once. Bound 430 seconds plus 90-second
+resolve. Passed at 22:28 UTC: 66393 milliseconds beyond the original idle
+deadline, unchanged last activity before resolve, same browser/session/handoff,
+and operatorVisible ready. Session ordinal 22. Receipt:
+evidence/p222-retention-live-proof.json. The browser remains intentionally live
+for the operator; no keeper is running. Public operator pixels/input remain unproved.
+All five milestones remain unaccepted; production and operator state preserved.
+Memory disposition queued: 20261003T222833Z-remember.json, job
+3d1c044f-069b-4bd7-8972-295b485fef1f. Queue acceptance is not retrieval proof.
+
+
 ### Operator workflow resumed | 2026-10-03 20:00 UTC
 
 Operator accepted the recommendation to resume with 50000 additional tokens.
