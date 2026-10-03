@@ -1,5 +1,15 @@
 # Runbook
 
+Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator
+resumed full Plan 0222 delivery on 2026-10-03, including in-scope repair/retest.
+Stop and checkpoint before this active goal meter reaches 500000 tokens.
+Historical consumption baseline 1040108 remains preserved; the new goal-meter
+ceiling does not erase earlier effort. Single primary, p221 runtime only.
+Check consumption at each substantive packet and before expensive follow-up;
+retain the stricter 25000-token no-blocker-removal checkpoint and 30-minute
+no-outcome reassessment. First-client view/control/automation/close precedes
+later milestones; all five milestones remain required and unaccepted.
+
 Current execution record. [Preserved history through the P222 foreground repair](RUNBOOK-history-2026-10-03-through-p222-focus.md) retains prior evidence, earlier archive links, and failed attempts without alteration.
 
 ## Active Plan Locator Index
@@ -11,6 +21,220 @@ Current execution record. [Preserved history through the P222 foreground repair]
 - [P222](docs/dev/plans/0222-2026-10-02-real-client-browser-delivery.md); [P221 superseded history](docs/dev/plans/0221-2026-10-01-browser-product-acceptance.md); [P220 preserved history](docs/dev/plans/0220-2026-09-28-remote-view-consumer-integration.md)
 
 ## P222 current checkpoint | 2026-10-03
+
+### Expiry repair installed and readiness blocker | 2026-10-03 19:01 UTC
+
+Source repair 09e2d8ea validates an expired published issuance against the current
+assignment at admission time, then permits the session manager's single bounded
+replacement. It preserves the handoff/session/tab identity and issuance history.
+Revoked, mismatched and invalid grants fail closed; dashboard reads remain
+read-only. Original real host/SQLite/provider regression failed with
+remote_view_tab_view_resolution_failed. After repair, all 19 pool tests passed,
+including restart renewal, bounded replacement failure and invalid/revoked
+issuance rejection. Strict workspace Clippy, format check, remote-view handoff
+documentation check and docs build passed. Candidate build passed in 203 seconds.
+Cargo resource configuration used four jobs, 10 GiB admission claim/process cap
+and 8 GiB MemoryHigh with the existing 16 GiB host reserve unchanged.
+
+Only p221 published: 0.28.0-35c7d911ab0e, SHA256
+35c7d911ab0ed996aaee767fb38998687172789b9b5b900db29ffff2dd77b5b5.
+Install receipt evidence/p222-expiry-install.json proves production and default
+development unchanged. Host 4113086 owns 5051 and its live executable digest
+matches the candidate. Old host 3637734 stopped after exact ownership and an
+empty browser/profile process census. Retained task provider is unchanged.
+
+Cleanup preflight found task disposable utility PID 4011042, start token
+24852233, orphaned after the earlier incorrect profile-free CLI probe. SIGKILL
+was pending while it was pinned to CPU 13. Cgroup was not frozen. Restoring this
+exact task process's affinity to the available CPUs caused immediate exit.
+Underlying CPU scheduling cause is not established. Probe GPU/crashpad also
+exited; fresh census was clear before host replacement. No production or
+operator process was targeted.
+
+New real AuraCall fixture job-20261003T185636Z-c84bf906725a failed because AuraCall
+rejects status=converging immediately. It retained browser
+browser:p221-auracall:b03cd54b-608e-40d7-abe0-515d9b234d02, PID 4115214, session
+session:auracall-p221-chatgpt:p221-auracall:17, handoff
+56f33e34-d813-4c63-bc08-5d5b9bc74e8d. Local authenticated resolution later passed:
+status=opened and addressed-tab operatorVisible.state=ready. Profile-bound
+keepalive job-20261003T185831Z-83d1ad675259 verifies the same live browser and
+Example Domain every 45 seconds, with 27 ticks total and a 1250-second command
+bound. Session expiry readback confirms activity refresh; this keeper refuses a
+cold launch when the addressed browser is missing. It is diagnostic custody,
+not a successful AuraCall launch result or clean final shutdown.
+
+Public operator viewing/input remain unproved. The updated authenticated handoff
+was supplied for operator sign-in. Actual elapsed-time expiry renewal PASSED:
+evidence/p222-expiry-live-renewal.json records old expiry 1791054100894 and new
+expiry 1791054404500 with the same handoff/session/tab, ready local resolution,
+and the exact installed source/digest. This is the original expiry symptom's
+installed green readback, not public pixel/input acceptance.
+
+Next source repair is a bounded same-handoff readiness wait in AuraCall,
+preserving initial build proof and verifying response identity. The CLI has no
+service request subcommand; an attempted call was rejected before effects.
+Expose the already-supported service_remote_view_handoff_resolve through a
+normal remote-view resolve CLI entry point, then use it to await readiness.
+Do not repeat remote-view open to poll readiness. This parser/client repair can
+use the existing live host's compatible resolve handler without restarting the
+retained browser. Check normal command round trip before another actual-client
+run. No milestone is accepted; all five remain open.
+
+Active goal meter at this checkpoint: 256459; stop before 500000. Keepalive
+remains a bounded diagnostic worker and must be polled by its exact job handle.
+Memory disposition: queued, source-backed expiry repair and installed elapsed-time
+renewal proof; queue receipt to be attached below.
+
+
+### Full-goal client checkpoint | 2026-10-03 18:35 UTC
+
+The active goal meter was 138453 tokens; the historical 1040108 baseline is
+unchanged. All five milestones remain open. AuraCall normal-client fixture
+job-20261003T181549Z-ab2b9726eb74 passed and returned the canonical CDP endpoint,
+selected stealth Chromium build, and handoff 070a42bd-268c-4c4e-ae93-b65c8c1055ca.
+Authenticated public pixels/input were not proved. The task viewer encountered
+the public authentication gateway; local authenticated resolve subsequently
+failed remote_view_tab_view_resolution_failed after the published grant expired.
+Later readback reports remote_view_tab_handoff_session_unavailable; the earlier
+operator link is no longer acceptance evidence. Retain both failed receipts.
+
+Diagnosis: published-grant resolution rejects expiry before provider resolve;
+manager renewal currently handles pending provider-terminal grants only.
+The read-only dashboard must stay read-only. A source expiry regression at the
+real host/SQLite/provider seam is pending in browser_session_pool_tests.rs.
+Cargo Signal job-20261003T183128Z-ee8388bcab42 waits for memory admission; no red
+or green test verdict exists yet. Candidate repair is a private draft only,
+not applied or published. Its exact assignment/application validation still
+needs qualification. No gate or runtime acceptance is claimed from that draft.
+
+Reassessment: simplify to this regression and expiry repair; do not branch into
+later milestones. Preserve the prior issuance ledger and handoff identity;
+validate current assignment and retained grant before bounded renewal. Next
+actual-client run must bind the viewer check and keepalive to the actual client,
+then prove automation and normal close. The current close command is pending;
+fresh cleanup/census is required, including retained task probe GPU/crashpad.
+
+Memory disposition: not_durable; incomplete diagnosis and unvalidated draft.
+
+
+### Gateway/auth service recovery | 2026-10-03
+
+Operator explicitly requested restoration. Linked and started the existing
+installation-generated p221 gateway/verifier user units without regenerating
+config, credentials, desktop, ledger or provider bytes. Gateway PID 3714419 owns
+19102 and authentication 19104; verifier PID 3714420 is active. Both exact unit
+cgroups and live executable SHA256 match installed provider f7869224. Control
+PID 3681458 remains on 19103. Production control remains separately on 19096.
+Readback artifact: task evidence/p222-gateway-auth-recovery.json.
+Installed `doctor --json` returned exit 0 and ok=true: config/ownership,
+three runtime-adoption checks, journal/registry, local desktop, native control,
+audio/package, private stack/permissions, Guacamole and gateway pass.
+Public routing remains unknown/not requested; authenticated viewer remains
+unknown/acceptance receipt required. Inventory probe passes with one retained
+assignment. Fresh managed state still has zero browsers and zero sessions.
+No client-launch fixture repeated; its prior single-run instruction remains
+respected. Next: a newly authorized actual client launch through this restored
+provider, then exact addressed-tab/viewer/input/automation/close evidence.
+This is local service readiness, not outcome-1 or full-plan acceptance.
+
+Memory disposition: not_durable; routine task-process recovery with transient readiness and no client/viewer acceptance. Receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T174418Z-remember.json.
+
+### Diagnosing-bugs inventory loop | 2026-10-03
+
+Applied the diagnosing-bugs skill. Original symptom is retained service job
+r538507 remote_view_runtime_inventory_unavailable. Minimized loop sends the same
+read-only application inventory envelope to the same /v1/consumer endpoint;
+no acquire/view/launch request is repeated. Command:
+python3 /home/ecochran76/.local/share/agent-browser-dev-p221/evidence/p222-inventory-probe.py.
+Two pre-fix runs failed in under one second with connection_refused.
+Ranked predictions: absent task control process, wrong bind/config, installed
+startup failure. Census found no task listener/process on 19103; production
+control 19096 remains distinct. Installed p221 digest still matches f7869224.
+Only variable changed: started retained installed control server with existing
+config/control home/token and capacity 930:60030 through host-adapter installed.
+Process 3681458 owns 19103. Two post-fix runs passed, observing p221 pool and one
+retained assignment. No identity, credentials, desktop or pending key replaced.
+Immediate cause confirmed: absent task control server. Why the previous server
+exited is NOT established; this recovery is not a persistence/clean-install gate.
+
+Regression seam is the retained live read-only inventory probe; no synthetic
+unit test was added for missing live process. Probe intentionally retained as a
+clearly named diagnostic artifact outside Git. No tagged instrumentation added.
+Original browser launch has NOT been repeated because the one-run boundary was
+consumed. Thus the provider inventory boundary is repaired, while original full
+client workflow remains unverified. Gateway/auth 19102/19104 remain absent;
+generated gateway systemd unit is inactive. Next: restore those retained task
+services, verify live readiness, and request another client run only after that
+concrete prerequisite is proved. Zero browser/session state remains retained.
+
+Memory disposition: queued; receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T173815Z-remember.json, job 113a71b5-ca27-4f5b-911e-d4a5f9b4d485. Queue acceptance only.
+
+### Packet publication and single-run result | 2026-10-03T17:27Z
+
+Existing candidate job job-20261003T165755Z-3973d85a7739 passed at 17:11:23Z
+(816.599 seconds including capacity wait). Installed source eefc26d1:
+0.28.0-5474ca235ca9, SHA256
+5474ca235ca92ea54ee7890033614515c6e3aa06b261107dadcc803deb34788a.
+Publication receipt evidence/p222-inventory-install.json proves production and
+default development unchanged. Successful publication job
+job-20261003T172504Z-f6f17dd10d32 used prior no-activation publication mode.
+First automatic-activation job job-20261003T172359Z-a7b799b9678e failed the
+systemd listener ownership gate and restored prior generation. Disabled/stopped
+only its p221 systemd units; retained standalone dashboard listeners preserved.
+After exact executable/home identity and read-only zero-browser checks, stopped
+old task host 3071968 and launched installed candidate as host 3637734.
+Port 5051 and fresh service response provenance bind to that exact new host.
+
+The existing actual-client fixture ran exactly once with the specified provider
+environment: job-20261003T172606Z-11e710aea592, exit 1. Service job r538507 failed
+at 17:26:06Z with remote_view_runtime_inventory_unavailable. Full failure receipt
+is evidence/p222-inventory-client-failure.json. No canonical attachment or ready
+handoff was reached. Provider ports 19102–19104 remain absent. Fresh post-run
+read-only state: zero browsers, zero sessions, no p221 profile process residue.
+Do not retry this fixture without reconciling the provider blocker. Next action:
+restore retained task control/gateway/auth through their supported entry points,
+verify exact installed provider identity/readiness, then obtain authority for
+another actual-client run if the single-run instruction still bounds the packet.
+No milestone accepted. Prior token baseline remains 1040108 plus new work;
+accounting is not reset by the publication or this checkpoint.
+
+Memory disposition: queued; receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T173010Z-remember.json, job da2a56db-46cb-47dc-8485-f60d9f7480fc. Queue acceptance only.
+
+### Bounded packet current evidence | 2026-10-03T17:06Z
+
+User explicitly authorized this packet. Retained cumulative token baseline remains
+1040108; the 25000 additional-token no-progress checkpoint still applies.
+AuraCall commit a74d06db7 consumes canonical CDP endpoint with legacy fallback
+only when absent. Tests cover precedence, explicit ports, prohibited protocol,
+credentials/query/fragment and malformed endpoints. All 17 focused tests passed;
+typecheck and tsconfig.build.json compilation passed. Initial typecheck caught a
+new logger mock type error; corrected before final qualification. Compiled launcher
+SHA256 b2e535e074e693465c959d8ecc3c97678412db7947735937246557a3ba770919.
+Unrelated AuraCall .tmp/ preserved; no user runtime installed.
+
+Agent Browser source remains eefc26d1 without Rust changes. Reuse the qualified
+20 service_inventory tests, format and strict workspace Clippy at that identity.
+Candidate build job job-20261003T165755Z-3973d85a7739 remains LIVE, waiting at
+Cargo admission reason memory_pressure, active=0. Host available memory roughly
+27 GiB versus required 30 GiB. Poll that same job; do not restart on timeout or
+bypass admission. Its 1800-second command timeout remains authoritative.
+Logs/receipts: task evidence/cargo-signal. No new inventory candidate installed.
+
+Fresh read-only managed store contains zero browsers; no p221-profile browser
+process was observed. Old host/dashboard PIDs 3071968/3071904/3071905 remain live.
+Provider control/gateway/auth ports 19103/19102/19104 have no listeners; earlier
+exec handles are stale locators. Retained desktop resources remain untouched.
+Prepared task evidence/p222-publish-inventory.mjs uses the prior publication's
+p221 namespace, paths and seven explicit ports, with unchanged-production/default
+checks. Run only after build succeeds and fresh ownership readback.
+The actual-client fixture has NOT run in this packet: publishing and running an
+old binary would not test the requested repair. Preserve the single-run boundary.
+Next: poll build, publish qualified p221 candidate, run fixture once and retain
+its full result. No outcome or milestone accepted.
+Memory disposition: queued, source-backed AuraCall endpoint repair;
+receipt /home/ecochran76/.graphiti-openclaw/state/closeout-memory/20261003T170928Z-remember.json,
+job 4f9c7c80-55aa-4b3a-aac5-fea2f2dbeb99. Queue acceptance is not retrieval proof.
+
 
 Plan 0222 remains OPEN; none of five milestones accepted. Product lane PL-PLATFORM.
 Custody: agent-browser-p220, platform/p220-remote-view-consumer. No delegation.
@@ -25,7 +249,7 @@ Do not reset this accounting. No runtime effects after the boundary read.
 
 | Requirement | Current evidence | Remaining gate |
 | --- | --- | --- |
-| Actual AuraCall Stealth/view/control/close | Installed readiness got actual launcher past opened/ready/build/handoff validation; normal inventory returned zero | Publish inventory repair, repair canonical endpoint parsing, actual client success, connected viewer/input and close census |
+| Actual AuraCall Stealth/view/control/close | AuraCall a74d06db7 qualified/compiled; Agent Browser eefc26d1 installed p221 0.28.0-5474ca235ca9; single actual-client run failed before launch with remote_view_runtime_inventory_unavailable (r538507) | Provider inventory and p221 gateway/auth restored; local doctor and inventory probe pass; public routing/authenticated viewer remain unknown; another client run remains pending; viewer/input and close unproved |
 | Persistent authentication | NOT RUN | Reviewed login, automation and restart/reconnect with same handoff |
 | Shared operation | NOT RUN through real clients | Second client, stable-key replay, peer-preserving and final close |
 | Recovery/capacity/mobile | NOT RUN | Observed planned disruptions, capacity, retained URL and focus/input |
@@ -165,4 +389,3 @@ Do not broaden implementation beyond the active first-client acceptance failure.
 <a id="turn-371--2026-09-16"></a>[Turn 371 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-371--2026-09-16)
 <a id="turn-370--2026-09-16"></a>[Turn 370 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-370--2026-09-16)
 <a id="turn-369--2026-09-16"></a>[Turn 369 | 2026-09-16](RUNBOOK-history-2026-10-03-through-p222-focus.md#turn-369--2026-09-16)
-
