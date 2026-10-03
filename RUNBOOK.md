@@ -69,11 +69,21 @@ production remote-view on 19092. Neither is the task dashboard 5048 or gateway
 The task config's production Remote View external origin must not be borrowed.
 The pending endpoint question requests the intended isolated authenticated HTTPS
 dashboard and Remote View origins. No shared ingress inventory was changed.
-Next: complete viewer-readiness integration and reviewed task ingress, then one
-source-bound candidate build/publication and actual AuraCall acceptance.
+Private routing proposal now exists at task evidence/p222-ingress-proposal/services.
+Proposed service names are agent-browser-dev-p221 and remote-view-dev-p221,
+with dashboard 5048, gateway 19102 and private ingress auth 19104. Both pass the
+existing Cooper inventory validator in strict mode. These are draft service
+identities, not published routes, operator handoffs or reviewed deployment IDs.
+No shared inventory, Traefik or bastion state changed. Task dashboard and auth
+listeners were absent on fresh readback. External endpoint preference remains
+pending; task-specific defaults avoid borrowing the existing production routes.
+Next: complete the viewer-readiness join and dashboard/auth listeners, then render
+and publish the task-only ingress with exact deployment identity, followed by one
+source-bound candidate and actual AuraCall acceptance. Do not publish a route
+whose required backend is absent or use inventory validation as live acceptance.
 
 Progress classification: blocker_reduction; product acceptance remains incomplete.
-Active tracker read: 187464; prior tracker floor: 255647; combined floor: 443111.
+Active tracker read: 199684; prior tracker floor: 255647; combined floor: 455331.
 Use the conservative combined count against the original ceiling and refresh it.
 Reassess after two no-outcome checkpoints or 30 active minutes; verified blocker
 removal does not reset cumulative no-outcome time. Do not spend cycles on isolated
