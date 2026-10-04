@@ -42,6 +42,16 @@ pub(super) fn document(
 }
 
 impl RemoteViewApplicationMutationStore for BrowserSessionSqliteStore {
+    fn read(
+        &mut self,
+        envelope: &RemoteViewApplicationEnvelope,
+    ) -> Result<Option<RemoteViewApplicationMutationRecord>, RemoteViewApplicationMutationStoreError>
+    {
+        let key = document(envelope)?;
+        load_optional_document(self.remote_view_mutation_connection(), &key, SCHEMA)
+            .map_err(|_| RemoteViewApplicationMutationStoreError::InvalidRecord)
+    }
+
     fn claim(
         &mut self,
         envelope: &RemoteViewApplicationEnvelope,

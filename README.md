@@ -5717,8 +5717,11 @@ outcome and renews the view once under the same durable handoff. Ambiguous
 responses preserve the pending request and do not select a replacement key.
 For an expired published grant, the session manager validates the retained
 issuance against the current assignment and renews once under the same handoff.
-Revocation, changed identity, or invalid issuance fails closed. Prior issuance
-history remains intact; dashboard presentation reads do not issue grants.
+A completed issuance whose reply was not published is read from its original
+durable mutation record. Its validated expiry permits one renewal after a
+desktop-generation change without rewriting that prior intent. Pending,
+unexpired, malformed or differently bound records still fail closed. Prior
+issuance history remains intact; dashboard presentation reads do not issue grants.
 Grant issuance alone does not establish operator-visible readiness.
 
 Use `agent-browser remote-view resolve <handoff-id>` to check an existing handoff

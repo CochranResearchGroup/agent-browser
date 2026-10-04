@@ -59,6 +59,12 @@ pub enum RemoteViewApplicationMutationStoreError {
 /// Completion compares the entire pending request before committing. Failed
 /// or ambiguous completion leaves the pending request intact for readback.
 pub trait RemoteViewApplicationMutationStore {
+    /// Read the immutable intent by mutation identity without changing custody.
+    /// A returned record may have a different payload and must be qualified.
+    fn read(
+        &mut self,
+        envelope: &RemoteViewApplicationEnvelope,
+    ) -> Result<Option<RemoteViewApplicationMutationRecord>, RemoteViewApplicationMutationStoreError>;
     fn claim(
         &mut self,
         envelope: &RemoteViewApplicationEnvelope,
@@ -395,6 +401,46 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         envelope
             .mutation_key()
             .map_err(RemoteViewApplicationAdapterError::MutationStore)?;
+        // A completed grant can outlive publication of its issuance into the
+        // handoff. Read its original intent before claiming a new generation's
+        // payload under the same key. Only qualified expiry permits renewal;
+        // pending or malformed records retain their custody and conflict.
+        if let Some(record) = store
+            .read(&envelope)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?
+        {
+            if let Some(RemoteViewApplicationMutationOutcome::IssueView(view)) = &record.outcome {
+                let mut prior_target = observed.target.clone();
+                prior_target.lifecycle_generation = view.grant.request.target.lifecycle_generation;
+                prior_target.viewing_generation = view.grant.request.target.viewing_generation;
+                let mut prior_envelope = envelope.clone();
+                if let RemoteViewApplicationRequest::IssueView {
+                    expected_generation,
+                    expected_viewing_generation,
+                    ..
+                } = &mut prior_envelope.request
+                {
+                    *expected_generation = prior_target.lifecycle_generation;
+                    *expected_viewing_generation = prior_target.viewing_generation;
+                }
+                if record.schema_version == 1
+                    && record.envelope == prior_envelope
+                    && view.grant.expires_at <= now_ms()
+                    && view
+                        .validate_target(
+                            &prior_target,
+                            &application,
+                            &options.audience,
+                            options.capability,
+                            options.lifetime_seconds,
+                            view.grant.issued_at,
+                        )
+                        .is_ok()
+                {
+                    return Err(RemoteViewApplicationAdapterError::ViewGrantTerminal);
+                }
+            }
+        }
         let outcome = match store
             .claim(&envelope)
             .map_err(RemoteViewApplicationAdapterError::MutationStore)?

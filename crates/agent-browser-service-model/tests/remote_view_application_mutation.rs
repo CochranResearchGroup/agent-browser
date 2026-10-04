@@ -15,6 +15,17 @@ struct Store {
     fail_complete: bool,
 }
 impl RemoteViewApplicationMutationStore for Store {
+    fn read(
+        &mut self,
+        envelope: &RemoteViewApplicationEnvelope,
+    ) -> Result<Option<RemoteViewApplicationMutationRecord>, RemoteViewApplicationMutationStoreError>
+    {
+        Ok(self
+            .records
+            .borrow()
+            .get(&envelope.mutation_key()?)
+            .cloned())
+    }
     fn claim(
         &mut self,
         envelope: &RemoteViewApplicationEnvelope,
@@ -147,6 +158,64 @@ fn cleanup(target: &RemoteViewApplicationReleaseTarget) -> RemoteViewApplication
         &snapshot(target),
     )
     .unwrap()
+}
+
+#[test]
+fn expired_completed_view_survives_generation_change_without_rewriting_intent() {
+    for case in ["expired", "pending", "unexpired", "malformed"] {
+        let f = fixture();
+        let mut observed = f["assignmentObservation"].clone();
+        observed["target"]["viewingGeneration"] = json!(21);
+        let records: Records = Rc::default();
+        let envelope: RemoteViewApplicationEnvelope =
+            serde_json::from_value(f["requests"][7].clone()).unwrap();
+        let mut issuance: RemoteViewApplicationViewIssuance =
+            serde_json::from_value(f["viewIssuance"].clone()).unwrap();
+        let now = if case == "unexpired" {
+            2000
+        } else {
+            issuance.grant.expires_at
+        };
+        if case == "malformed" {
+            issuance.path = "/view/wrong-route".into();
+        }
+        let record = RemoteViewApplicationMutationRecord {
+            schema_version: 1,
+            envelope: envelope.clone(),
+            outcome: if case == "pending" {
+                None
+            } else {
+                Some(RemoteViewApplicationMutationOutcome::IssueView(issuance))
+            },
+        };
+        let key = envelope.mutation_key().unwrap();
+        records.borrow_mut().insert(key.clone(), record.clone());
+        let (mut adapter, mut store, steps) = setup(
+            vec![(f["requests"][2].clone(), Ok(observed))],
+            records.clone(),
+        );
+        let result = adapter.issue_view(
+            &release_target(&f).assignment,
+            RemoteViewApplicationViewOptions {
+                audience: "remote_view".into(),
+                capability: RemoteViewApplicationViewCapability::Control,
+                lifetime_seconds: 300,
+                idempotency_key: "view-1".into(),
+            },
+            || now,
+            &mut store,
+        );
+        let expected = if case == "expired" {
+            RemoteViewApplicationAdapterError::ViewGrantTerminal
+        } else {
+            RemoteViewApplicationAdapterError::MutationStore(
+                RemoteViewApplicationMutationStoreError::Conflict,
+            )
+        };
+        assert_eq!(result, Err(expected), "{case}");
+        assert_eq!(records.borrow().get(&key), Some(&record), "{case}");
+        assert!(steps.borrow().is_empty(), "{case}");
+    }
 }
 
 #[test]
