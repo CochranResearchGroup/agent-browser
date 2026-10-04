@@ -2,7 +2,7 @@
 
 Date: 2026-10-02
 
-Plan version: 3
+Plan version: 4
 
 State: OPEN
 
@@ -37,83 +37,83 @@ site acceptance or detection bypass.
 
 ## Current State
 
-RUNBOOK Turn 437 binds source 80f9316e, installed candidate identity and partial
-workflow evidence. Requested stock and Stealth executable selection, navigation,
-clicking, JavaScript, tab creation, shared sessions and final browser cleanup
-were demonstrated through the installed CLI. Actual AuraCall acceptance still
-fails because operator viewing remains converging. Full authenticated-client,
-reconnect, recovery, capacity and installation acceptance are incomplete.
+P221 was closed by supersession while incomplete. Every unproved requirement
+remains in this plan. None of the five milestones is fully accepted.
+[RUNBOOK](../../../RUNBOOK.md) owns current results, evidence, installed identity,
+remaining failures and spending authority. Experimental validation targets p221.
+Historical failures and passing observations retain their original scope.
 
 ## Consolidated batch
 
-The first batch has one outcome: AuraCall opens the requested Stealth build on
-the intended development profile, returns its durable authenticated handoff,
-the operator sees and controls the addressed tab, automation continues, and
-closing work releases its owned browser resources. Fix the owning grant,
-readback, readiness and client integration code together when they share this
-failure. Captured-time validation and provider-scoped versus local grant-key
-comparison are diagnoses to verify, not accepted fixes.
+Finish the complete AuraCall workflow: launch the requested Stealth browser on
+the intended profile, navigate, return the authenticated durable handoff, use
+Remote View's full supported controls on the addressed tab, continue automation,
+and explicitly finish work through the real client. Confirm that closure releases
+owned resources and preserves any peers with a fresh process and resource census.
 
-Preserve the existing division: Agent Browser owns profiles, browsers and tabs;
-Remote View owns desktops and viewing. Reuse or simplify existing machinery
-according to the observed failure. Do not create another contract framework,
-simulator or independent test project to stand in for the client result.
+The next action is to reproduce the reported missing Remote View controls through
+an Agent Browser handoff, identify the supported controls absent from that path,
+and restore them. Verify each affected control in the installed p221 handoff and
+finish the AuraCall continuation and explicit close. Basic pixels and keyboard
+input alone do not establish the full controls outcome.
+
+Agent Browser owns profiles, browsers and tabs; Remote View owns desktops and
+viewing. Change the existing owning path only as needed to deliver this workflow.
 
 ## Delivery sequence and budget
 
 | Milestone | Demonstrated user outcome | Exit evidence |
 | --- | --- | --- |
-| 1. First usable client | AuraCall launches requested Stealth, navigates, returns a durable authenticated handoff, operator sees and controls the addressed tab, automation continues and close works. | Actual client success plus visible/control observation, executable identity and fresh owned-resource inventory. |
+| 1. First usable client | AuraCall launches requested Stealth, navigates, returns a durable authenticated handoff, operator uses the full supported Remote View controls on the addressed tab, automation continues and explicit end-of-work close releases owned resources. | Complete normal-client workflow, each supported handoff control, executable identity and fresh process/resource census after explicit close. |
 | 2. Persistent authentication | Reviewed manual login remains usable on subsequent automation and client/service restart; the same handoff reconnects. | Authenticated page operation before and after restart without exposing credentials or private page contents in tracked evidence. |
 | 3. Shared operation | A second existing client and AuraCall operate separate tabs; multiple profile browsers share a desktop; one session closing preserves peers; final close releases resources. | Real client requests and responses, tab/browser identity, stable-key replay without duplicate creation and fresh cleanup census. |
-| 4. Recovery and capacity | Browser, provider and viewer interruption restore the workflow or produce an actionable bounded failure; grant expiry/revocation and operator stop behave correctly; demand grows and empty capacity shrinks. | Separate observed disruptions, preserved logical identities and durable URL, no duplicate effects or unexplained retained resources. Desktop/mobile viewing and focus are included. |
+| 4. Recovery and capacity | Browser, provider and viewer interruption restore the workflow or produce an actionable bounded failure; finite handoff retention and requester-selected TTL extensions work; grant expiry/revocation and operator stop behave correctly; demand grows and empty capacity shrinks. | Separate observed disruptions, preserved logical identities and durable URL, no duplicate effects or unexplained retained resources. Desktop/mobile viewing and focus are included. |
 | 5. Reproducible installation | Clean development install and update run the same client workflows; doctor diagnoses broken dependencies; required supported-platform and changed-surface gates pass. | Source-bound artifacts, first-install sudo exactly once, update/doctor observations and protected integration readiness. Formal release remains separately directed. |
 
-Finish milestone 1 before broadening implementation. Derive only the next
-bounded packet from a real failure: outcome, owner, exact write surface, inputs,
-focused checks and installed demonstration. Commit a coherent working increment
-before moving on. Record unavailable inputs and continue independent work within
-scope; do not fabricate profile authentication or operator visibility.
+Finish milestone 1 before starting later milestone implementation. Each next
+packet names the user action that fails, expected behavior, existing owner,
+smallest repair and installed observation that will decide whether it works.
+Missing inputs remain explicit; continue only work that does not depend on them.
 
-The operator authorized execution on 2026-10-02 with a stop and checkpoint
-before the active goal meter reaches 750000 tokens. This resumes execution;
-750000 is a ceiling, not a spending target. Any subsequently authorized execution inherits cumulative effort,
-accepted findings and no-progress history; successors do not reset them. Stop
-when the intended product is delivered even if budget remains.
+RUNBOOK owns the current spending allowance and stop instructions. Preserve
+cumulative effort and no-progress history across revisions and successors.
+Stop when all required outcomes are delivered, even if allowance remains.
 
-During execution, use focused checks for observed failures and consequential
-invariants. Reuse passed gates with unchanged inputs; repeat installed acceptance
-only after relevant changes or unresolved failures. Required repository gates
-apply at coherent source/integration boundaries. Before an expensive cycle,
-state the user-visible result it should unlock. If consecutive cycles deliver no
-working increment or verified blocker removal, reassess and simplify before
-another cycle. Do not turn reassessment into a planning campaign.
+A build, publication, green test, commit, document or planning checkpoint cannot
+advance a user-workflow milestone by itself. A verified blocker removal is an
+intermediate result; acceptance requires the corresponding installed workflow.
+Before another expensive cycle, identify the unresolved failure it will resolve
+and the observation that will distinguish success from failure. If the previous
+cycle established neither working behavior nor a causal blocker, change the
+approach before repeating it. Reuse valid evidence for unchanged behavior and
+run the required checks for affected surfaces.
 
-## Retained browser recovery
+## Recovery and lifetime requirements
 
-The first-client recovery packet uses the existing Browser Session Manager,
-Remote View consumer adapter and SQLite launch-custody owner. Resolution must
-preserve logical browser, session, tab and handoff IDs after positive process
-and exact profile absence. Replace physical PID, CDP endpoint and target IDs,
-restore each retained tab's last recorded URL, and publish browser, targets and
-new launch custody atomically. Preserve prior launch and navigation history.
-An unresolved replacement claim requires readback and cannot authorize replay.
-Healthy or physically occupied browsers are not relaunched. Explicitly closed
-sessions and tabs remain closed. This packet does not accept the earlier
-indefinite idle-retention behavior or complete requester-selected TTL semantics.
-Installed same-link pixels, input and subsequent client automation remain the
-acceptance proof; provider-free tests alone do not satisfy it.
+Reopening the same retained handoff restores the intended profile and recorded
+tabs after positively established browser loss. Logical browser, session, tab
+and handoff identities survive; replacement process and transport identities may
+change. Preserve history and prevent duplicate launches. Healthy or occupied
+browsers are not relaunched, and explicitly closed targets remain closed.
+Acceptance includes same-link viewing, control and subsequent real-client use.
 
-## Browser idle closure and handoff retention
+The existing five-minute idle rule releases the physical browser without erasing
+an eligible retained handoff. Active peers or outstanding operations prevent
+premature closure. Explicit end-of-work closure is a separate required outcome;
+automatic idle cleanup does not substitute for it.
 
-The next first-client packet restores the existing five-minute browser idle
-rule without discarding logical handoff targets. The Browser Session Manager
-closes an idle physical owner once, retains its last identity for fenced recovery,
-and preserves sessions, tabs and navigation. Any active peer or current external
-operation custody prevents closure. Reconnect reuses the qualified recovery
-path; explicit logical session or tab closure still ends that target.
-Requester-selected finite handoff retention and browser TTL extension require
-separate contract and installed evidence; this packet does not accept them.
+Implement and demonstrate finite handoff retention and requester-selected TTL
+extensions through the normal interface. State the effective expiry to the
+requester and demonstrate extension, expiry and rejection of further access.
+Browser idle lifetime, viewer-grant lifetime and handoff retention must each
+behave as requested without silently extending another lifetime. Renewal and
+recovery observations do not accept indefinite retention.
+
+Recovery acceptance also covers interrupted operations, service/provider restart,
+desktop loss, revocation and operator stop. Show preserved peer work, bounded
+failure where recovery is impossible, and no duplicate effects or unexplained
+resources. Demonstrate demand-driven capacity growth, safe shrink after demand
+ends, and usable desktop and mobile controls.
 
 ## Worker assignments
 
@@ -122,14 +122,17 @@ necessary fixes in the existing Remote View custody. The client-to-viewing path
 is serialized. Documentation and installation work may become independent only
 after the actual interface works; no parallel agents or extra worktrees are
 required. Declare any shared-source writer and dependency before overlap.
-Use the least expensive capable validation route for the affected surface.
+Use focused checks for the affected behavior and complete required integration
+gates before claiming delivery readiness.
 
 ## Evidence and exit
 
-RUNBOOK owns one current milestone results table, with PASS, FAIL or NOT RUN,
+RUNBOOK owns one current milestone results table, with PASS, PARTIAL, FAIL or NOT RUN,
 source/binary identity, actual client and observation, evidence locator, and the
-next exact blocker. Plans and test counts are not product progress. Each
-checkpoint explains what the user can now do and which code enabled it.
+next exact blocker. Each
+checkpoint states what the user can now do, the actual installed observation,
+and the remaining acceptance gap. Preserve failures alongside subsequent passes.
+Implementation status and acceptance status remain separate.
 
 Completion requires all five milestones, carrying forward every unproved P221
 acceptance axis. Partial CLI success does not complete a real-client milestone.

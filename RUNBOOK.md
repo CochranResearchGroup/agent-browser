@@ -65,6 +65,13 @@ p222-startup-reaper-viewer-cleanup.json. The idle release red and near-expiry fr
 red remain preserved. The once-only original AuraCall fixture was not replayed.
 All five milestones remain required; this is outcome progress, not full completion.
 
+Next user outcome: restore the full supported Remote View controls through the
+Agent Browser handoff, then finish AuraCall continuation and explicit end-of-work
+closure with fresh owned-resource and peer-preservation observations. First
+reproduce and identify the missing controls; do not infer full-control acceptance
+from passing pixels/input. P222 version 4 preserves every remaining milestone.
+This plan correction supplies no new live acceptance evidence or spending allowance.
+
 Allowance checkpoint: latest readback 484275 of 500000, with 15725 remaining
 before final reporting overhead. Stop before the ceiling; the next finite-retention
 contract/build/live-proof packet cannot fit within the closeout reserve. Preserve
