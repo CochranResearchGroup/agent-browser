@@ -26,6 +26,56 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ### Reconciled interrupted viewer repair | 2026-10-04
 
+### Hard-limit checkpoint after installed expiry repair | 2026-10-04
+
+The goal meter resumed as active at 266642. Its final readback is 564191,
+exceeding the operator's checkpoint-before-500000 rule. Implementation stops
+here; this is not completion or a new allowance. Earlier frozen-meter statements
+below are historical. Explicit resumption and a spending bound are needed before
+further implementation or runtime effects.
+
+Source 60003cc2 repairs the observed old-view-generation mutation conflict.
+The new regression first failed with MutationStore(Conflict), then passed with
+ViewGrantTerminal. It reads the immutable prior intent, validates its completed
+issuance and expiry against the original request, and allows the existing one
+renewal path without rewriting history. Pending, unexpired and malformed records
+retain custody. All 318 Service Model tests, two SQLite custody tests, formatting,
+strict workspace Clippy and remote-view handoff documentation checks passed.
+One cache-backed model run failed before tests; the cache logged inherited
+environment data. Raw output is private and restricted; a redacted log is retained.
+The successful replay used a minimal environment and disabled sccache. No shared
+cache daemon was stopped or repository build-wrapper changes introduced.
+
+The optimized development build passed. Publication installed only p221
+generation 0.28.0-4ee413519df7, SHA256
+4ee413519df727feb9dcd5eec84559d89fc9270ed848bc8bd6e37d3ccf26621b.
+Fresh live roles match those bytes: host 99502, backend 99540, ingress 99548.
+Publisher reports production unchanged; no default-development publication was
+performed. Remote View remains installed at 4705985. The same durable handoff
+now resolves its provider issuance and opens the authenticated viewer using the
+actual Open desktop link. Dev-browser shows Connected Control, but the desktop
+is black because the original Chrome process was lost in reboot. CLI resolution
+reports operatorVisible.state=pending with browser_session_browser_not_live.
+This is not a valid pixel-latency comparison or successful browser handoff.
+
+Next bounded packet must recover the retained logical browser/session/tab after
+positive prior-boot absence while preserving its profile, intent, ownership and
+handoff URL. Ordinary manager open currently retires a dead browser and its
+sessions, so blindly opening another session is not durable-handoff recovery.
+Do not bypass fencing, manually rewrite SQLite, declare the black desktop ready,
+or replay the once-only AuraCall launcher without a qualified recovery decision.
+Then rebind the real pixel/input regression and compare on the healthy host.
+No later Plan 0222 milestone, browser-close TTL semantics or full-goal acceptance
+is claimed. AuraCall's missing main-branch fix and four local-only Remote View
+commits remain custody/integration gates from the re-anchor above.
+
+Private evidence: p222-generation-repair-model-clean.log,
+p222-generation-repair-sqlite-tests.log, p222-generation-repair-clippy-clean.log,
+p222-generation-repair-build.log, p222-generation-repair-install.json,
+p222-generation-repair-resolve.json. The install file contains human publisher
+output despite its extension; selected generation.json and fresh live hashes
+provide installed identity. Viewer screenshot is task-local p222-recovered-viewer.png.
+
 Recovery continuation: normal p221 start returned local_ready, desktop generation
 5 and native PIDs 44997, 45258, 45269, 45282. Restored the exact provider control,
 gateway/verifier and dashboard roles. PostgreSQL and Guacamole failed with stale
