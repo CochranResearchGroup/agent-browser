@@ -28,9 +28,19 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 The latest user goal requires diagnosing-bugs followed by independent dev-browser
 verification, with a checkpoint before the current goal meter reaches 500000.
-Current checkpoint is 165968 on that meter. Earlier accounting above is retained
-as history, not added to this new meter. The full viewer goal remains active and
-unaccepted while an authenticated Authelia session is unavailable to this task.
+The initial repair checkpoint was 165968 on that meter. Earlier accounting above
+is retained as history, not added to this new meter. Full viewer acceptance remains
+unproven while an authenticated Authelia session is unavailable to this task.
+The same dependency recurred across three consecutive goal turns. The blocked
+audit revalidated the public handoff's 302 redirect to Authelia, exact installed
+candidate across all three live roles and the retained AuraCall browser. No
+authenticated session or credential location has been supplied. The goal is
+checkpointed as blocked rather than replaying passing checks or claiming completion.
+Audit receipt: evidence/p222-viewer-blocked-audit.json. Resume requires an
+authorized existing SSO/CDP session or an Authelia credential-file location.
+A post-install repeat independently exercised a naturally expired grant, 92440 ms
+past expiry: endpoint 303, renewed grant, unchanged browser and session. Receipt:
+evidence/p222-presentation-expired-repeat.json.
 A pending text question requests an authorized existing CDP session or credential
 file location; no operator visual retest was requested.
 
