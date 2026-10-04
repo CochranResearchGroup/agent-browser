@@ -59,6 +59,14 @@ input alone do not establish the full controls outcome.
 
 Agent Browser owns profiles, browsers and tabs; Remote View owns desktops and
 viewing. Change the existing owning path only as needed to deliver this workflow.
+The existing Remote View consumer route owns its desktop controls as well as
+its transport. Share the normal viewer UI and constrain its desktop read/action
+paths to the fresh grant's assigned desktop, generation and capability. No
+caller-selected provider address, connection, unrelated slot or new account
+surface is part of this repair. The primary agent owns Remote View viewer and
+gateway changes; Agent Browser consumes that qualified provider before its
+handoff demonstration. The existing p220 and rv011 checkouts retain custody.
+
 
 ## Delivery sequence and budget
 

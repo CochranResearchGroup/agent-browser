@@ -1,6 +1,58 @@
 # Runbook
 
-## Current resumption | 2026-10-04 | Additional 500K allowance
+## Current resumption | 2026-10-04 | Complete P222
+
+The operator resumed full P222 delivery with a checkpoint before an additional
+1000000 tokens. The active thread goal meter starts at zero for this allowance;
+check it at material boundaries and reserve closeout before 1000000. Earlier
+usage and failures remain preserved. Single primary, p221 testing target only.
+All five milestones remain required. First restore the full handoff controls
+and finish actual AuraCall continuation and explicit cleanup. Reassess after
+30 minutes without a user outcome or two no-outcome checkpoints; change the
+failing tactic rather than repeat it. Current first-client evidence below
+remains partial. This resumption supersedes earlier stop and allowance instructions.
+
+### Controls repair checkpoint | 2026-10-04
+
+No milestone has advanced to accepted. Remote View consumer handoffs previously
+used a reduced viewer. Source custody 13275d8 repairs the owning route by sharing
+the full viewer and constraining desktop controls to the grant's assigned slot,
+generation and capability. Merge 7ce2d33 includes current Remote View main's
+View Only, recording and reconnect behavior. Custody reconciliation adaa335
+preserves the original RV-011 closed outcome while identifying P222's successor.
+These commits are local-only; protected integration remains open.
+
+The old viewer fails the full-controls browser regression. The repaired source
+passes the merged provider-free Rust suite, 49 JavaScript tests, real Guacamole
+browser controls and recording fixtures, and the native gateway browser check
+covering revocation, expiry, denied reconnect and actual input. Formatting and
+strict all-target Clippy pass. These checks qualify the candidate source; they
+do not demonstrate the installed AuraCall workflow.
+
+The optimized binary is bound to 7ce2d33. Its p221 installation preflight rejects
+the retained configuration with control_service_required_for_pools. The existing
+control writer uses the canonical private control directory at the existing
+p221 endpoint; a private candidate explicitly declares that endpoint and its
+one managed slot. Its dry-run requires the supported config-update path. No
+candidate installation, control-owner transfer or service restart has occurred.
+The retained runtime is unchanged. The next effect must preserve the existing
+control stores, installation identity, native desktop processes and handoff.
+
+Thirty-minute reassessment: user-visible acceptance has not advanced. Do not
+repeat synthetic checks as substitutes. Candidate source defects are resolved;
+the next causal gates are the supported retained-installation update and an
+authenticated same-handoff observation, followed by real AuraCall continuation
+and explicit closure. The private credential locator requested from the operator
+is still missing; source searches did not establish that no credentials exist.
+Do not create or reset accounts, bypass authentication, or report controls as
+installed and accepted while that input is unresolved.
+
+Private p221/evidence retains the baseline red, merged source checks, recording
+fixture, native gateway browser receipt, bound build and candidate install plan.
+Browser recovery and idle release retain their earlier narrower acceptance.
+All five milestones remain required. The current allowance at the top applies.
+
+### Preserved preceding allowance
 
 The operator authorized another 500000 tokens at 17:53:43 UTC. This supersedes
 prior stop instructions for continued P222 testing without erasing their usage.
@@ -82,17 +134,10 @@ This is queue acceptance, not persistence or retrieval proof.
 
 
 
-Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator
-resumed full Plan 0222 delivery on 2026-10-03, including in-scope repair/retest.
-The operator resumed with 50000 additional tokens on 2026-10-03.
-Retain the prior stop/pause accounting of 511993; checkpoint before 561993
-on the same cumulative meter, or before 50000 new tokens if it stays paused.
-Historical consumption baseline 1040108 remains preserved; the new goal-meter
-ceiling does not erase earlier effort. Single primary, p221 runtime only.
-Check consumption at each substantive packet and before expensive follow-up;
-retain the stricter 25000-token no-blocker-removal checkpoint and 30-minute
-no-outcome reassessment. First-client view/control/automation/close precedes
-later milestones; all five milestones remain required and unaccepted.
+Historical resumption and allowance instructions below preserve the earlier record.
+The current resumption at the top owns execution authority and spending. The
+untracked P222-HANDOFF.md is an older locator, not current authority. Re-anchor
+from P222, this current checkpoint and exact source/runtime readbacks.
 
 Current execution record. [Preserved history through the P222 foreground repair](RUNBOOK-history-2026-10-03-through-p222-focus.md) retains prior evidence, earlier archive links, and failed attempts without alteration.
 
