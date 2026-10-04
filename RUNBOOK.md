@@ -24,6 +24,74 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Presentation endpoint configuration and expired grant repair | 2026-10-04
+
+The latest user goal requires diagnosing-bugs followed by independent dev-browser
+verification, with a checkpoint before the current goal meter reaches 500000.
+Current checkpoint is 165968 on that meter. Earlier accounting above is retained
+as history, not added to this new meter. The full viewer goal remains active and
+unaccepted while an authenticated Authelia session is unavailable to this task.
+A pending text question requests an authorized existing CDP session or credential
+file location; no operator visual retest was requested.
+
+The exact authenticated presentation endpoint reproduced HTTP 503 and
+remote_view_presentation_unavailable. The runtime host carried all three reviewed
+Remote View settings while both dashboards lacked them. Copied the exact p221
+runtime-host drop-in into the two p221 dashboard role drop-ins, then restarted
+only those roles. The same endpoint returned 303. This is isolated operator
+configuration, not a new product flag or a production configuration change.
+
+A subsequent repeat reproduced 503 after the published 300-second viewer grant
+expired. Reloading the same handoff renewed it and returned 303, isolating the
+missing owner refresh in the presentation click. Source 6f4a0c8f now normalizes
+and relays the existing authenticated handoff resolver before its read-only
+publication lookup. The dashboard does not become another mutable session owner.
+The same browser, tab and handoff remain selected; allowReopenClosed is false.
+The prepare-before-read regression failed with remote_view_tab_view_expired,
+then both focused presentation tests passed. The HTTP authentication-order test
+passed. Formatting, strict workspace Clippy, handoff documentation checks,
+dashboard handoff checks, development runtime fixture and docs build passed.
+Source behavior and executable help changes are covered; unrelated workstation
+installer suggestions from validation selection do not change this slice's
+impact. Shared production skills were not overwritten.
+
+Candidate build completed in 3m 48s. Coordinated publication installed only p221
+generation 0.28.0-18e6370041d0, SHA256
+18e6370041d066c29834219c04c25d906bb981273f6bdaca81a9dea51928235c.
+Publication proves production and default development unchanged. All three live
+executables match: runtime host 85489, backend 85533, ingress 85534. The expired
+publication renewed and the original client browser PID 97181, browser ID,
+session ordinal 22 and durable handoff remain unchanged. No AuraCall relaunch.
+Final health is steady_current with dashboard 1, host 1, legacy 0, generation 1.
+Private evidence root remains the p221 install root's evidence directory:
+p222-before-presentation-install.json, p222-presentation-install.json,
+p222-presentation-repro.py, p222-presentation-green.json,
+p222-presentation-final-census.json and p222-presentation-click-installed.json.
+
+| Requirement | Installed evidence | Acceptance |
+| --- | --- | --- |
+| Exact presentation endpoint avoids JSON failure | Authenticated repeat returns 303 on final binary | Qualified |
+| Expired viewer grant refreshes through owner | Expired pre-install publication renewed, same browser/session | Qualified |
+| Actual desktop button navigation | dev-browser click reaches Authelia | Qualified through SSO gate |
+| Authenticated viewer pixels and input | Task lacks a working Authelia session | Incomplete; credential/session question pending |
+| Browser-close handoff survival and requestor TTL | Earlier correction still applies | Incomplete; existing unconditional retention acceptance remains withdrawn |
+
+Dev-browser used the configured Stealth 150 runtime and one task-owned
+p222-viewer-debug profile. An unresponsive task browser 78060 was terminated by
+exact profile ownership and recovered as 93438; the failed attempts remain
+diagnostic history. Final installed button test reached Authelia. The temporary
+loopback ingress fixture returned Unauthorized because the provider independently
+checks SSO; it did not prove viewer rendering. That proxy was stopped and its
+listener disappeared; its prototype is retained under evidence/debug. All owned
+viewer tabs closed, exact recovered browser 93438 exited, and temporary credential
+and provider-URL copies were removed. Shared daemon 81618 remains for existing
+p0208-terms-checkout and saber-usbank owners. AuraCall browser 97181 is intentionally
+retained for the operator. Cleanup receipt: p222-presentation-cleanup.json.
+Do not report connected viewer acceptance or ask the operator to look again.
+Memory disposition queued: 20261004T013051Z-remember.json, job
+965f007f-f558-47dd-9c4f-94b03b0d166d. Queue acceptance is not persistence
+or retrieval proof. No retry was attempted.
+
 ### Managed handoff page and namespace census repair | 2026-10-04
 
 Actual authenticated browser loop reproduced opened plus operatorVisible ready
