@@ -65,6 +65,14 @@ p222-startup-reaper-viewer-cleanup.json. The idle release red and near-expiry fr
 red remain preserved. The once-only original AuraCall fixture was not replayed.
 All five milestones remain required; this is outcome progress, not full completion.
 
+Allowance checkpoint: latest readback 484275 of 500000, with 15725 remaining
+before final reporting overhead. Stop before the ceiling; the next finite-retention
+contract/build/live-proof packet cannot fit within the closeout reserve. Preserve
+all prior accounting and the full objective. The final OS read found the recovered
+browser absent again after idle expiry, with the logical session still retained.
+Memory disposition: queued, job 4cf56459-b82a-4fa3-a3f5-c60354b0c73a.
+This is queue acceptance, not persistence or retrieval proof.
+
 
 
 Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator
