@@ -26,6 +26,30 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ### Reconciled interrupted viewer repair | 2026-10-04
 
+Recovery continuation: normal p221 start returned local_ready, desktop generation
+5 and native PIDs 44997, 45258, 45269, 45282. Restored the exact provider control,
+gateway/verifier and dashboard roles. PostgreSQL and Guacamole failed with stale
+Docker Desktop file bind mounts; recreated only those two p221 containers using
+the retained Compose configuration and database volume. The existing shared
+cooper-local-traefik container had the same bind-mount failure. The Cooper service
+ingress startup helper failed, then exact container recreation restored public
+routing without regenerating inventory or modifying bastion configuration.
+
+Fresh native status samples are 26, 30 and 42 ms. Provider doctor passes local
+checks; public_routing and authenticated_viewer remain unproved by that doctor.
+This supports host degradation as a contributor to earlier latency, but is not
+a successful viewer pixel comparison. The same authenticated handoff now fails
+with remote_view_tab_view_issuance_readback_required. Its durable issue_view
+mutation expects viewing generation 3; current observe_assignment returns 5.
+The mutation store rejects a changed envelope under the retained idempotency
+key. The cached prior issuance has already expired. Preserve the old mutation
+and grant as evidence; do not clear SQLite, bypass fencing, or rotate identity
+without a qualified recovery transition. Next is a red regression for renewal
+across changed viewing generation, followed by the same-link pixel/input loop.
+No AuraCall launcher replay, new handoff, source repair or binary publication
+occurred in this continuation. Receipt: evidence/p222-post-reboot-recovery.json;
+resolver response: evidence/p222-post-reboot-handoff-resolve.json.
+
 The operator requested reconciliation after filesystem degradation and two reboot
 cycles. This checkpoint supersedes earlier runtime PIDs and SSO-blocked status.
 Current boot is fe9e3104-98d1-42bc-b1fa-495780e0f891. The cgroup v2 mount is
