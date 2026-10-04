@@ -24,6 +24,82 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Reconciled interrupted viewer repair | 2026-10-04
+
+The operator requested reconciliation after filesystem degradation and two reboot
+cycles. This checkpoint supersedes earlier runtime PIDs and SSO-blocked status.
+Current boot is fe9e3104-98d1-42bc-b1fa-495780e0f891. The cgroup v2 mount is
+present, load is about 4 and repository reads respond. No runtime recovery,
+client fixture replay, build, install or production mutation was performed in
+this reconciliation packet.
+
+| Source surface | Current custody | Integration or remaining gate |
+| --- | --- | --- |
+| Agent Browser | platform/p220-remote-view-consumer, source checkpoint 606e9f48 | Installed source 6f4a0c8f; remote branch 6502b651 is an ancestor, 43 commits behind this source checkpoint |
+| Remote View | feature/rv011-consumer-platform, local 4705985, clean | Four repair commits are local-only; remote feature branch remains 7a1dfe0; main is 0dbb73c and does not contain 4705985 |
+| AuraCall | Root checkout main b662d5ac6; unrelated .tmp/ retained | Canonical CDP fix is absent from current main; preserved remote repair branch fix/p222-agent-browser-cdp-endpoint is 939e7eda8, including a74d06db7 |
+
+Agent Browser runtime host PID 68147 is active on 5051 and its live executable
+matches installed SHA256 18e6370041d066c29834219c04c25d906bb981273f6bdaca81a9dea51928235c.
+Dashboard ingress/backend are inactive. Provider control/gateway/verifier have
+no listeners on 19102 through 19105. Slot 1 retains generation 4 with historical
+PIDs 56572, 56580, 56591 and 56612; status is quarantined with
+ownership_unproven:xorg. No prior browser or dev-browser test process was found
+by the exact p221-auracall/p222-viewer-debug profile census.
+
+The preserved three-second frame result is pass=false: native red, viewer
+[0,255,0,255], Connected Control, grantRemainingMs=199658. Authentication and
+exact keyboard input were demonstrated before the interruption; post-reboot
+viewer acceptance remains unproved. The native status sampler was interrupted
+by host I/O stalls, so its missing result cannot establish the cause of the
+last native_desktop readiness failure. Do not repeat already qualified builds
+merely because the host rebooted.
+
+Next bounded packet: recover only the existing p221 provider/dashboard through
+supported startup and fresh identity checks, then resolve the same durable
+handoff. Its browser died with the reboot: determine the resolver's actual
+reopen/retention outcome before selecting a replacement browser fixture.
+Do not blindly replay the once-only AuraCall launcher or the pixel harness,
+which still pins the departed CDP port 37595 and target 74154D21E3D00A0B009778600C038E3A.
+Rebind the red-capable pixel/input loop only to a freshly verified task fixture.
+Canonical source integration is a separate gate: reconcile Remote View's
+advanced main and AuraCall's missing fix without borrowing another lane's work.
+Recovery hardening is tracked in Remote View #283; journal self-blocking stays
+in #272. This viewer repair does not accept either issue or all Plan 0222.
+
+The goal tool remains blocked at frozen meter 192634. It is not current spend;
+do not reset accounting, mark completion, or infer a new allowance. Preserve
+the existing checkpoint-before-500000 direction and historical accounting above.
+Private readback receipt: evidence/p222-reanchor-20261004.json. The older
+untracked P222-HANDOFF.md is preserved but its source/runtime/accounting instructions
+are superseded by this current checkpoint. The issue-review memory job
+1c2b85e4-3675-47c3-b925-1e5c4f3ae291 reconciled as completed_visible; no retry
+was performed. Reconciliation receipt: 20261004T152700Z-reconciliation.json.
+
+### Preserved first-reboot checkpoint | 2026-10-04
+
+Remote View source commits e55ce75, b712240, 582a46b and 4705985 are
+qualified by the provider-free suite, formatting and strict Clippy. The latest
+installed p221 provider is 4705985, SHA256
+265c97ec30cbbd00451f2c129f0f639ed172d24f490695e9b173472bb65c141e.
+These repairs batch fresh supervisor observations, keep display acknowledgements
+off native input probes, report bounded readiness failures, and bind verifier
+freshness to boot-relative elapsed time. Exact synthetic keyboard text reached
+both native and public views. A three-second frame regression still failed;
+viewer acceptance and all Plan 0222 milestones remain open. The final pre-reboot
+diagnosis was interrupted by filesystem stalls and load 155 on 20 CPUs.
+
+After the operator reboot, filesystem reads respond and load is about 4.
+The old browser and desktop processes are gone. Normal provider start retired
+the prior-boot process records, but Xorg failed with status 219/CGROUP and
+No medium found. Both PID 1 and this process mount tables have no cgroup
+filesystem; /sys/fs/cgroup reports filesystem type sysfs. Slot 1 is now stopped
+with no process IDs. No production runtime was changed. Host-wide mount recovery
+is awaiting explicit operator direction; noninteractive sudo is unavailable.
+Recover the existing p221 installation and the same durable handoff afterward.
+Do not treat historical PIDs, earlier viewer pixels or a URL as current readiness.
+
+
 ### Authenticated public viewer checkpoint | 2026-10-04
 
 The operator authorized borrowing Remote View Authelia credentials or creating a
@@ -130,7 +206,7 @@ p222-presentation-final-census.json and p222-presentation-click-installed.json.
 | Exact presentation endpoint avoids JSON failure | Authenticated repeat returns 303 on final binary | Qualified |
 | Expired viewer grant refreshes through owner | Expired pre-install publication renewed, same browser/session | Qualified |
 | Actual desktop button navigation | dev-browser click reaches Authelia | Qualified through SSO gate |
-| Authenticated viewer pixels and input | Task lacks a working Authelia session | Incomplete; credential/session question pending |
+| Authenticated viewer pixels and input | Borrowed SSO worked; exact native/viewer keyboard text observed; retained pixel regression fails at three seconds | Incomplete; restore p221 and reproduce against a verified current fixture |
 | Browser-close handoff survival and requestor TTL | Earlier correction still applies | Incomplete; existing unconditional retention acceptance remains withdrawn |
 
 Dev-browser used the configured Stealth 150 runtime and one task-owned
