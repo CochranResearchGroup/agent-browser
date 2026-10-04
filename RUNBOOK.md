@@ -24,6 +24,55 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Managed handoff page and namespace census repair | 2026-10-04
+
+Actual authenticated browser loop reproduced opened plus operatorVisible ready
+with no Open desktop action and an empty unselected legacy viewport. The
+managed resolver wire shape bypassed the legacy ready-only selection path.
+Source d7ccc6b9 presents the authenticated desktop action for issued grants,
+including opened and converging responses. Actual branch regression failed
+before correction and passed afterward. Dashboard build, handoff docs,
+development fixture, docs build, formatting and strict workspace Clippy passed.
+
+Development host units also lacked the canonical KillMode process and persistent
+private temporary-storage contract. Aligned the generator before coordinated
+activation. Installed only p221 c1abd0edd2a4; all three live executable hashes
+matched and original browser PID 97181 survived. Actual UI loop now finds one
+Open desktop action, no empty viewport, and the same handoff/browser. Receipts:
+evidence/p222-handoff-page-install.json and p222-handoff-ui-green.json.
+Standard browser-launch smoke stopped before launch with browser_profile_not_found
+for an unregistered named profile; p222-handoff-page-launch-smoke.log retains it.
+Equivalent managed-disposable launch/read/close checks passed three iterations,
+returned browser/session state to its baseline, and left no smoke browser PID.
+Fresh OS census accounts for Stealth's flattened argv and found only operator
+browser 97181. Receipt p222-managed-launch-smoke.json. No extra AuraCall launch.
+
+The generic dashboard census independently queried the default development
+backend instead of the namespace backend, falsely reporting Dashboard 0.
+Live health oracle failed with dashboard_process_count_not_one. Exact unit-name
+regression also failed, then five focused runtime_multiplicity tests passed.
+Source b11da1fa binds the read-only lookup to AGENT_BROWSER_DEV_NAMESPACE and
+preserves default-development and production bindings. Final format, strict
+workspace Clippy (18.14 seconds) and docs build passed. Qualified candidate built in 3m 05s. Final p221 generation 0.28.0-92d3d82e44e2,
+SHA256 92d3d82e44e2d3fdbedabac256e99f14f445793103e5f472479ea5d5efc611d6.
+Coordinated publication confirms production/default development unchanged.
+Final authenticated health oracle passes steady_current: dashboard 1, host 1,
+legacy 0, generation 1, no multiplicity issues, development_live_observation.
+Actual UI oracle again passes one desktop action and no empty viewport. Three
+managed-disposable launch/read/close checks again pass on this final binary;
+all exact smoke PIDs are gone, browser/session state returns to baseline, and
+fresh flattened-argv OS census finds only retained browser 97181. Final host
+3859, backend 4034 and ingress 4041 all match the final executable SHA.
+The same handoff, session ordinal 22, browser and target resolve opened/ready
+following both activations; no keeper or replacement AuraCall launch.
+Final private receipts: p222-handoff-census-install.json,
+p222-multiplicity-green.json, p222-handoff-ui-green.json,
+p222-managed-launch-smoke.json and p222-handoff-final-census.json.
+Memory disposition queued: 20261004T001651Z-remember.json, job
+8a578cee-36ce-4135-b23a-c871e16bb199; queue acceptance is not retrieval proof.
+Public viewer pixels/input and handoff survival after browser closure remain
+unaccepted. No production or default-development publication was performed.
+
 ### Partial publication guard | 2026-10-03 23:42 UTC
 
 Diagnosing-bugs fixture reproduces the mismatch trigger through the actual
