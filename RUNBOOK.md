@@ -13,52 +13,57 @@ using uncached input plus output, and reserve closeout before the new 500000 cei
 Private receipts: p222-token-budget-reconciliation.json and
 p222-additional-500k-accounting.json in p221/evidence.
 
-Current verified increment: source 55ea620f is published only to p221 as
-0.28.0-042dbf698167. Fresh host, backend and ingress executable hashes match
-042dbf6981679218b9717577bcec59cd30551b614502961f420bfdc24ad91f81.
-Production remained unchanged in the publisher receipt; default development was
-not published. The same durable handoff recovered its original logical browser,
-session and tab, replacing physical PID, target and CDP endpoint. Its executable
-is the reviewed Stealth 153 candidate. Independent authenticated dev-browser
-acceptance observed Connected Control, red and lime pixels within three seconds,
-and keyboard input matching the exact synthetic field in the addressed tab.
-AuraCall's compiled BrowserService.connectDevTools attached to that recovered
-target, evaluated its synthetic page and closed the client connection normally.
-Temporary DOM markers and input were removed. A client disconnect is not proof
-that the browser process was released. Preserve the once-only launch fixture.
+Current verified increment: source 412886a1 is published only to p221 as
+0.28.0-5221348e1acb. Host, backend and ingress hashes match
+5221348e1acb0e97d3b63ec4e0f6a6446d24782be9ba2d348d7572ef75636230.
+Publisher reports production unchanged; no default-development publication.
+Source 55ea620f first recovered the retained logical browser/session/tab and
+replaced physical PID, target and CDP identity using fenced launch custody.
+Source f04c586e separates physical idle closure from logical handoff retention.
+Its installed no-client check initially failed because the restarted router did
+not load the session host. Source 412886a1 fixes that startup loading. The normal
+reaper then closed the expired Chrome without a client request. A fresh process
+census found zero Chrome processes using that profile while the exact logical
+session, tab and handoff survived. No manual database edits or fixture replay.
 
-Next owning defect is browser idle lifetime: retained handoffs currently disable
-physical browser reaping. The new regression first failed with no browser close.
-The source repair separates idle process closure from retained logical targets,
-closes once, preserves active peers and external custody, recovers on reconnect,
-and prevents new peers from retiring retained sessions. All 324 Service Model
-tests pass. Strict workspace Clippy and handoff/docs-link gates pass. This idle
-repair was published to p221 as 0.28.0-1c451d5b21ef, then the installed
-no-client reaper check failed: the router did not load its session host after
-restart. The minimal startup regression reproduces this failure. The follow-up
-loads retained ownership on the reaper tick without launching a browser or
-creating a host when no browser or disposable allocation exists. Installed
-release/reconnect acceptance remains pending. The follow-up's startup regression
-first failed with the host left unloaded, then passed; four distinct host tests
-(including empty/error loading) pass. Model inputs are unchanged from the 324-test
-pass. Formatting, strict workspace Clippy and documentation checks pass.
-Requester-selected finite handoff
-retention and browser TTL extensions remain unimplemented. Full M1 closure/readback is pending.
+Same-handoff reconnect returned opened and operatorVisible.state ready, retaining
+the original logical identities. The recovered executable matches reviewed
+Stealth 153. Independent authenticated dev-browser verification passed lime and
+red pixel changes within three seconds with more than 230 seconds of viewer grant
+remaining. AuraCall's compiled BrowserService.connectDevTools attached to the
+exact retained target, read the complete synthetic keyboard input, evaluated the
+page and closed its connection normally. Temporary DOM fixtures are removed.
+All task-owned viewer pages and Chrome processes were cleaned up; the shared
+dev-browser daemon was preserved. The managed browser remains governed by its
+five-minute idle rule and can recover through the same durable URL.
+
+A near-expiry probe retained a real red three-second frame verdict with 24 seconds
+of grant remaining; the subsequent input attempt was invalid after expiry.
+One fresh-grant replay passed both frames and addressed input. This confirms
+current usability, not an explanation or resolution of every expiry-edge latency.
+Do not discard the preserved red or attribute historical latency solely to reboot.
+
+Validation: 324 Service Model tests, four distinct host tests, formatting, strict
+workspace Clippy, handoff documentation and documentation links pass. Two optimized
+builds and namespace-bound p221 publications passed. Startup's regression was red
+before the loader fix and green afterward. Model gates were reused only for
+unchanged inputs. Full Rust/platform, install/update and integration gates remain.
 
 | Milestone | Result | Current acceptance boundary |
 | --- | --- | --- |
-| 1 actual AuraCall | PARTIAL | Original launcher, recovered retained identity, authenticated pixels/input and compiled client continuation passed; current normal browser release and fresh residue proof remain. |
-| 2 persistent login | NOT RUN | Provider account login and restart persistence remain unproved. |
+| 1 actual AuraCall | PARTIAL | Original launch, executable, authenticated pixels/input, real compiled client continuation, automatic idle browser release and fresh no-residue census pass. Current explicit real-client end-of-work browser release is not separately accepted. |
+| 2 persistent login | NOT RUN | Reviewed provider account login and client/service restart persistence remain unproved. |
 | 3 second existing client | NOT RUN | Real-client sharing, multi-profile placement, replay and peer-preserving final closure remain unproved. |
-| 4 recovery and capacity | PARTIAL | Same-link browser recovery and expired viewer renewal passed; finite retention, TTL extensions, other interruptions, capacity and mobile gates remain. |
-| 5 reproducible delivery | PARTIAL | Source-qualified p221 publication passed; clean install/update/doctor, platform gates and protected integration remain. |
+| 4 recovery and capacity | PARTIAL | Same-URL browser recovery and expired viewer renewal pass. Finite handoff retention, requester-selected TTL extension, other interruptions, capacity and mobile gates remain. |
+| 5 reproducible delivery | PARTIAL | Source-qualified p221 publication passes; clean install/update/doctor, platform gates and protected integration remain. |
 
-Private evidence is in p221/evidence: p222-browser-recovery-installed.json,
-p222-browser-recovery-identity.json, p222-recovered-input-result.json,
-p222-auracall-recovery-attachment-result.json and p222-idle-reaper-*.log.
-Dev-browser temporary frame receipt preserves the final red sample; both color
-samples were observed in the session. Never use historical PID locators as current
-process authority. No milestone or the full goal is accepted.
+Private evidence under p221/evidence: p222-startup-reaper-installed.json,
+p222-startup-reaper-release-result.json, p222-startup-reaper-reconnect.json,
+p222-startup-reaper-identity.json, p222-startup-reaper-frames-result.json,
+p222-auracall-startup-reaper-attachment-result.json and
+p222-startup-reaper-viewer-cleanup.json. The idle release red and near-expiry frame
+red remain preserved. The once-only original AuraCall fixture was not replayed.
+All five milestones remain required; this is outcome progress, not full completion.
 
 
 
