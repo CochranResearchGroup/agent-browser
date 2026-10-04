@@ -13,17 +13,44 @@ using uncached input plus output, and reserve closeout before the new 500000 cei
 Private receipts: p222-token-budget-reconciliation.json and
 p222-additional-500k-accounting.json in p221/evidence.
 
-Current red: same handoff resolves with browser_session_browser_not_live.
-Source recovery is in progress on platform/p220-remote-view-consumer. The model
-regression first reproduced session replacement and peer-tab retirement, then
-passed with logical IDs preserved and replacement physical targets. All 320
-Service Model tests, five SQLite custody tests, nine native runtime tests and
-two host publication tests pass. One existing real-Chrome runtime test remains
-ignored in this provider-free lane. Formatting, strict workspace Clippy,
-remote-view handoff docs and documentation links pass. The absence fixture
-initially omitted its directory; its corrected replay passes. Installation and
-same-link live recovery remain pending. No recovery binary has been published. Preserve the once-only AuraCall fixture,
-production, default development, profile data and prior custody evidence.
+Current verified increment: source 55ea620f is published only to p221 as
+0.28.0-042dbf698167. Fresh host, backend and ingress executable hashes match
+042dbf6981679218b9717577bcec59cd30551b614502961f420bfdc24ad91f81.
+Production remained unchanged in the publisher receipt; default development was
+not published. The same durable handoff recovered its original logical browser,
+session and tab, replacing physical PID, target and CDP endpoint. Its executable
+is the reviewed Stealth 153 candidate. Independent authenticated dev-browser
+acceptance observed Connected Control, red and lime pixels within three seconds,
+and keyboard input matching the exact synthetic field in the addressed tab.
+AuraCall's compiled BrowserService.connectDevTools attached to that recovered
+target, evaluated its synthetic page and closed the client connection normally.
+Temporary DOM markers and input were removed. A client disconnect is not proof
+that the browser process was released. Preserve the once-only launch fixture.
+
+Next owning defect is browser idle lifetime: retained handoffs currently disable
+physical browser reaping. The new regression first failed with no browser close.
+The source repair separates idle process closure from retained logical targets,
+closes once, preserves active peers and external custody, recovers on reconnect,
+and prevents new peers from retiring retained sessions. All 324 Service Model
+tests pass. Strict workspace Clippy and handoff/docs-link gates pass. This idle
+repair is not yet installed; requester-selected finite handoff retention and
+browser TTL extensions remain unimplemented. Full M1 closure/readback is pending.
+
+| Milestone | Result | Current acceptance boundary |
+| --- | --- | --- |
+| 1 actual AuraCall | PARTIAL | Original launcher, recovered retained identity, authenticated pixels/input and compiled client continuation passed; current normal browser release and fresh residue proof remain. |
+| 2 persistent login | NOT RUN | Provider account login and restart persistence remain unproved. |
+| 3 second existing client | NOT RUN | Real-client sharing, multi-profile placement, replay and peer-preserving final closure remain unproved. |
+| 4 recovery and capacity | PARTIAL | Same-link browser recovery and expired viewer renewal passed; finite retention, TTL extensions, other interruptions, capacity and mobile gates remain. |
+| 5 reproducible delivery | PARTIAL | Source-qualified p221 publication passed; clean install/update/doctor, platform gates and protected integration remain. |
+
+Private evidence is in p221/evidence: p222-browser-recovery-installed.json,
+p222-browser-recovery-identity.json, p222-recovered-input-result.json,
+p222-auracall-recovery-attachment-result.json and p222-idle-reaper-*.log.
+Dev-browser temporary frame receipt preserves the final red sample; both color
+samples were observed in the session. Never use historical PID locators as current
+process authority. No milestone or the full goal is accepted.
+
 
 
 Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator

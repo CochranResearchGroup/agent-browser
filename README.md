@@ -5730,10 +5730,14 @@ A converging response is pending readiness; attach only after status is opened
 and operatorVisible.state is ready. The session manager may renew an expired
 grant while retaining the handoff identity.
 
-A valid retained operator handoff keeps its exact session and tab through
-inactivity and client reconnect; a separate keepalive command is unnecessary.
-Close the tab or session explicitly to release it. Invalid or closed handoff
-bindings do not prevent idle cleanup, and a handoff grants no additional access.
+A valid retained operator handoff keeps its exact logical session and tab
+through browser idle closure and client reconnect. It does not disable the
+browser's five-minute idle reaper. When every peer is idle and no active operation
+holds custody, the process closes once; reconnect through the same handoff
+recovers the retained identities after positive process and profile absence.
+Explicitly closing the tab or session ends that logical target. A handoff grants
+no additional access. Requester-selected retention and browser TTL extensions
+remain a separate delivery gate.
 
 
 

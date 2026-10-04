@@ -2,7 +2,7 @@
 
 Date: 2026-10-02
 
-Plan version: 2
+Plan version: 3
 
 State: OPEN
 
@@ -103,6 +103,17 @@ sessions and tabs remain closed. This packet does not accept the earlier
 indefinite idle-retention behavior or complete requester-selected TTL semantics.
 Installed same-link pixels, input and subsequent client automation remain the
 acceptance proof; provider-free tests alone do not satisfy it.
+
+## Browser idle closure and handoff retention
+
+The next first-client packet restores the existing five-minute browser idle
+rule without discarding logical handoff targets. The Browser Session Manager
+closes an idle physical owner once, retains its last identity for fenced recovery,
+and preserves sessions, tabs and navigation. Any active peer or current external
+operation custody prevents closure. Reconnect reuses the qualified recovery
+path; explicit logical session or tab closure still ends that target.
+Requester-selected finite handoff retention and browser TTL extension require
+separate contract and installed evidence; this packet does not accept them.
 
 ## Worker assignments
 

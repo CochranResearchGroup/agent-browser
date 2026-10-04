@@ -443,6 +443,9 @@ pub struct BrowserSessionState {
     pub next_session_sequence: u64,
     pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
+    /// Idle-closed physical browsers retain their last owner identity only for
+    /// fenced recovery. Logical sessions, tabs and handoffs remain resolvable.
+    pub idle_closed_browsers: BTreeMap<String, u64>,
     pub remote_view_presentations: BTreeMap<String, RemoteViewPresentationRetention>,
     /// Logical tab bindings survive provider route and desktop changes.
     pub remote_view_tab_handoffs: BTreeMap<String, crate::RemoteViewTabHandoff>,
@@ -464,6 +467,7 @@ impl Default for BrowserSessionState {
             next_session_sequence: 0,
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
+            idle_closed_browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
             remote_view_tab_handoffs: BTreeMap::new(),
             managed_tab_requests: BTreeMap::new(),
@@ -662,6 +666,7 @@ pub struct BrowserSessionManager<'a, E> {
     effects: &'a mut E,
     config: BrowserSessionManagerConfig,
     protected_session_ids: BTreeSet<String>,
+    externally_protected_session_ids: BTreeSet<String>,
 }
 
 impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
@@ -671,8 +676,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         effects: &'a mut E,
         config: BrowserSessionManagerConfig,
     ) -> Self {
-        // A valid retained operator handoff is current occupancy. Its grant may
-        // expire independently, but inactivity must not destroy its exact tab.
+        // A valid handoff retains logical identity, not a permanent process.
+        // External operation custody separately prevents physical idle closure.
         // Historical, closed and conflicting bindings confer no retention.
         let protected_session_ids = state
             .remote_view_tab_handoffs
@@ -686,13 +691,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             effects,
             config,
             protected_session_ids,
+            externally_protected_session_ids: BTreeSet::new(),
         }
     }
 
     /// Add sessions referenced by current external authority or a pending
     /// operation to the retained-handoff protection for this manager action.
     pub fn with_protected_sessions(mut self, session_ids: BTreeSet<String>) -> Self {
-        self.protected_session_ids.extend(session_ids);
+        self.protected_session_ids.extend(session_ids.clone());
+        self.externally_protected_session_ids.extend(session_ids);
         self
     }
 
@@ -797,6 +804,13 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         let (browser_id, disposition, launched) = if let Some(browser) = reusable_browser {
             if self.effects.browser_is_live(&browser)? {
                 (browser.id, SessionBrowserDisposition::Reused, None)
+            } else if browser
+                .active_session_ids
+                .iter()
+                .any(|id| self.protected_session_ids.contains(id))
+            {
+                self.recover_retained_browser(&browser.id)?;
+                (browser.id, SessionBrowserDisposition::Launched, None)
             } else {
                 self.retire_browser(
                     &browser,
@@ -934,6 +948,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         let mut current = browser;
         current.pid = recovered.launch.pid;
         current.cdp_endpoint = recovered.launch.cdp_endpoint;
+        self.state.idle_closed_browsers.remove(&current.id);
         self.state.browsers.insert(current.id.clone(), current);
         for tab in tabs {
             self.state
@@ -1088,7 +1103,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|tab| tab.session_id == session.id)
             .cloned()
             .collect::<Vec<_>>();
-        if !final_session && !tabs.is_empty() {
+        let idle_closed = self.state.idle_closed_browsers.contains_key(&browser.id);
+        if !idle_closed && !final_session && !tabs.is_empty() {
             let remaining_session_id = browser
                 .active_session_ids
                 .iter()
@@ -1139,9 +1155,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 remaining_session.current_tab_id = Some(acquisition.tab_id);
             }
         }
-        if final_session {
+        if !idle_closed && final_session {
             self.effects.close_browser(&browser)?;
-        } else {
+        } else if !idle_closed {
             for tab in &tabs {
                 self.effects.close_tab(&browser, tab)?;
             }
@@ -1176,6 +1192,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
 
         let disposition = if final_session {
             self.state.browsers.remove(&session.browser_id);
+            self.state.idle_closed_browsers.remove(&session.browser_id);
             SessionCloseDisposition::BrowserClosed
         } else {
             let stored_browser = self
@@ -1551,6 +1568,11 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         now_ms: u64,
         protected_session_ids: &BTreeSet<String>,
     ) -> Result<ReapBrowserSessionsResult, String> {
+        let externally_protected_session_ids = self
+            .externally_protected_session_ids
+            .union(protected_session_ids)
+            .cloned()
+            .collect::<BTreeSet<_>>();
         let protected_session_ids = self
             .protected_session_ids
             .union(protected_session_ids)
@@ -1573,6 +1595,34 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             if closed.disposition == SessionCloseDisposition::BrowserClosed {
                 result.closed_browser_ids.push(closed.browser_id);
             }
+        }
+        // Retained logical sessions can outlive the physical browser. Close
+        // once when every peer is idle and no current external operation pins
+        // the browser. Preserve the last PID for exact fenced recovery, not as
+        // proof of current occupancy.
+        let idle_browsers = self
+            .state
+            .browsers
+            .values()
+            .filter(|browser| {
+                !self.state.idle_closed_browsers.contains_key(&browser.id)
+                    && !browser.active_session_ids.is_empty()
+                    && browser.active_session_ids.iter().all(|id| {
+                        self.state
+                            .sessions
+                            .get(id)
+                            .is_some_and(|session| session.expires_at_ms <= now_ms)
+                            && !externally_protected_session_ids.contains(id)
+                    })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for browser in idle_browsers {
+            self.effects.close_browser(&browser)?;
+            self.state
+                .idle_closed_browsers
+                .insert(browser.id.clone(), now_ms);
+            result.closed_browser_ids.push(browser.id);
         }
         let disposable_profile_ids = self
             .state
@@ -1791,7 +1841,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         reason: SessionEndReason,
         ended_at_ms: u64,
     ) -> Result<(), String> {
-        self.effects.close_browser(browser)?;
+        if !self.state.idle_closed_browsers.contains_key(&browser.id) {
+            self.effects.close_browser(browser)?;
+        }
         let session_ids = browser.active_session_ids.clone();
         for session_id in session_ids {
             if let Some(session) = self.state.sessions.remove(&session_id) {
@@ -1831,6 +1883,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             }
         }
         self.state.browsers.remove(&browser.id);
+        self.state.idle_closed_browsers.remove(&browser.id);
         Ok(())
     }
 }

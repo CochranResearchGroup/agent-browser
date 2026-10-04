@@ -78,6 +78,7 @@ struct FixtureEffects {
     probes: Vec<String>,
     browser_live: bool,
     closes: Vec<String>,
+    close_error: Option<String>,
     initial_tab: Option<BrowserTabAcquisition>,
     initial_tabs: VecDeque<BrowserTabAcquisition>,
     initial_tab_requests: Vec<String>,
@@ -236,6 +237,9 @@ impl BrowserSessionEffects for FixtureEffects {
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
     ) -> Result<(), String> {
+        if let Some(error) = &self.close_error {
+            return Err(error.clone());
+        }
         self.closes.push(browser.id.clone());
         Ok(())
     }
@@ -943,7 +947,7 @@ fn reaper_expires_idle_session_and_closes_sessionless_browser() {
 }
 
 #[test]
-fn retained_handoff_survives_idle_reap_and_reconnect_until_explicit_close() {
+fn retained_handoff_survives_browser_idle_close_and_reconnect_until_explicit_close() {
     use agent_browser_service_model::{
         resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
     };
@@ -997,6 +1001,7 @@ fn retained_handoff_survives_idle_reap_and_reconnect_until_explicit_close() {
             .id,
         "operator-tab"
     );
+    effects.browser_live = false;
     let resumed = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
         .open(OpenBrowserSession::exact_profile(
             "alice",
@@ -1006,15 +1011,18 @@ fn retained_handoff_survives_idle_reap_and_reconnect_until_explicit_close() {
         .unwrap();
     assert_eq!(resumed.session_id, opened.session_id);
     assert_eq!(resumed.browser_id, opened.browser_id);
-    assert_eq!(effects.launches.len(), 1);
-    assert!(effects.closes.is_empty());
+    assert_eq!(effects.launches.len(), 2);
+    assert_eq!(effects.closes, [opened.browser_id.clone()]);
     BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
         .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 31_000)
         .unwrap();
     assert!(state.browsers.is_empty());
     assert!(state.sessions.is_empty());
     assert!(resolve_remote_view_tab_handoff(&state, "operator-handoff").is_err());
-    assert_eq!(effects.closes, [opened.browser_id]);
+    assert_eq!(
+        effects.closes,
+        [opened.browser_id.clone(), opened.browser_id]
+    );
     // A dangling historical handoff cannot pin a live browser indefinitely.
     state = retained;
     state
@@ -1653,6 +1661,287 @@ fn retained_handoff_recovers_dead_browser_without_retiring_logical_sessions_or_p
         ))
         .unwrap();
     assert_eq!(resumed.session_id, alice.session_id);
+    assert_eq!(resumed.browser_id, alice.browser_id);
+    let resolved = resolve_remote_view_tab_handoff(&state, "same-handoff").unwrap();
+    assert_eq!(resolved.tab.id, "retained-tab");
+    assert_eq!(resolved.tab.target_id, "recovered-dead-target");
+    assert_eq!(resolved.browser.pid, 5252);
+    assert_eq!(
+        state.tabs["peer-tab"].target_id,
+        "recovered-dead-peer-target"
+    );
+    assert_eq!(state.sessions[&bob.session_id].browser_id, alice.browser_id);
+    assert!(state.session_history.is_empty());
+    assert!(state.tab_history.is_empty());
+    assert!(effects.closes.is_empty());
+}
+
+#[test]
+fn retained_handoff_does_not_disable_browser_idle_reaper() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "operator-tab".into(),
+            target_id: "operator-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&opened.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "operator-handoff",
+        &opened.session_id,
+        "operator-tab",
+    )
+    .unwrap();
+    // The same persisted aggregate and manager seam are used after host restart.
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let reaped = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_protected_sessions(BTreeSet::new())
+        .reap(20_000)
+        .unwrap();
+    assert!(
+        reaped.expired_session_ids.is_empty(),
+        "retained operator session was reaped"
+    );
+    assert_eq!(
+        resolve_remote_view_tab_handoff(&state, "operator-handoff")
+            .unwrap()
+            .tab
+            .id,
+        "operator-tab"
+    );
+    assert_eq!(
+        effects.closes,
+        [opened.browser_id.clone()],
+        "a retained handoff must not pin its idle browser process"
+    );
+    assert_eq!(reaped.closed_browser_ids, [opened.browser_id.clone()]);
+    effects.browser_live = false;
+    let reaped_again =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+            .reap(21_000)
+            .unwrap();
+    assert!(
+        reaped_again.closed_browser_ids.is_empty(),
+        "idle closure must be idempotent after restart"
+    );
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let resumed = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            30_000,
+        ))
+        .unwrap();
+    assert_eq!(resumed.session_id, opened.session_id);
+    assert_eq!(resumed.browser_id, opened.browser_id);
+    assert_eq!(effects.launches.len(), 2);
+    assert_eq!(
+        resolve_remote_view_tab_handoff(&state, "operator-handoff")
+            .unwrap()
+            .tab
+            .id,
+        "operator-tab"
+    );
+}
+
+#[test]
+fn idle_browser_close_preserves_active_peers_and_external_operation_custody() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "operator-tab".into(),
+            target_id: "operator-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&opened.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "operator-handoff",
+        &opened.session_id,
+        "operator-tab",
+    )
+    .unwrap();
+    // The same persisted aggregate and manager seam are used after host restart.
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let peer = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "bob",
+            "profile-a",
+            19_500,
+        ))
+        .unwrap();
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .reap(20_000)
+        .unwrap();
+    assert!(result.closed_browser_ids.is_empty());
+    assert!(effects.closes.is_empty());
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .with_protected_sessions(BTreeSet::from([peer.session_id.clone()]))
+        .reap(30_000)
+        .unwrap();
+    assert!(result.closed_browser_ids.is_empty());
+    assert!(effects.closes.is_empty());
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(31_000)
+        .unwrap();
+    assert_eq!(result.closed_browser_ids, [opened.browser_id.clone()]);
+    assert_eq!(effects.closes, [opened.browser_id]);
+    assert!(resolve_remote_view_tab_handoff(&state, "operator-handoff").is_ok());
+}
+
+#[test]
+fn failed_idle_browser_close_does_not_publish_closed_state() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "operator-tab".into(),
+            target_id: "operator-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&opened.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "operator-handoff",
+        &opened.session_id,
+        "operator-tab",
+    )
+    .unwrap();
+    // The same persisted aggregate and manager seam are used after host restart.
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let before = state.clone();
+    effects.close_error = Some("exact owner close failed".into());
+    let error = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .reap(20_000)
+        .unwrap_err();
+    assert_eq!(error, "exact owner close failed");
+    assert_eq!(state, before);
+    effects.close_error = None;
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(20_000)
+        .unwrap();
+    assert_eq!(effects.closes, [opened.browser_id]);
+}
+
+#[test]
+fn a_new_peer_recovers_the_retained_browser_instead_of_retiring_existing_sessions() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_view_desktops: vec![],
+    };
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "retained-tab".into(),
+            target_id: "dead-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        new_tab: Some(BrowserTabAcquisition {
+            tab_id: "peer-tab".into(),
+            target_id: "dead-peer-target".into(),
+            source: BrowserTabSource::ExplicitNew,
+        }),
+        ..Default::default()
+    };
+    let alice = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&alice.session_id, 1_000)
+        .unwrap();
+    let bob = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .new_tab(&bob.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "same-handoff",
+        &alice.session_id,
+        "retained-tab",
+    )
+    .unwrap();
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    effects.browser_live = false;
+    let resumed = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::exact_profile(
+            "charlie",
+            "profile-a",
+            2_000,
+        ))
+        .unwrap();
+    assert_ne!(resumed.session_id, alice.session_id);
+    assert!(state.sessions.contains_key(&alice.session_id));
     assert_eq!(resumed.browser_id, alice.browser_id);
     let resolved = resolve_remote_view_tab_handoff(&state, "same-handoff").unwrap();
     assert_eq!(resolved.tab.id, "retained-tab");
