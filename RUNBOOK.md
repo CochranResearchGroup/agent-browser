@@ -24,13 +24,60 @@ Current execution record. [Preserved history through the P222 foreground repair]
 
 ## P222 current checkpoint | 2026-10-03
 
+### Authenticated public viewer checkpoint | 2026-10-04
+
+The operator authorized borrowing Remote View Authelia credentials or creating a
+bounded test account. Borrowed the existing test account successfully; no account
+or bastion configuration was changed. The earlier SSO block below is superseded.
+Public authentication now reaches the actual retained browser through dev-browser.
+
+The p221 gateway lacked REMOTE_VIEW_CONSUMER_CONTROL_ENDPOINT. Its existing binary
+returned 503 for consumer presentation because the bridge was absent. Added only
+its private systemd drop-in p222-consumer-control.conf with the existing p221
+loopback consumer owner endpoint, then restarted only that gateway. Public
+presentation returned 200 and rendered the retained Example Domain desktop.
+Gateway PID 47806 has the binding; its unchanged binary SHA256 is
+f7869224d96e56464153ec00e06d4ee334b35826c5b5c7ed0a5e4125acd0c685.
+All five protected desktop processes and original AuraCall browser PID 97181
+remain unchanged. Receipt: evidence/p222-authenticated-viewer-checkpoint.json.
+
+Acceptance still fails: mouse and keyboard reach the native Chrome window, but
+the public viewer can keep showing its preceding frame after a tab switch.
+Paired evidence/p222-second-fifteen.png and p222-native-fifteen.png shows the
+public viewer on example.com while native X11 has selected example.org. The
+CDP URL/visibility oracle was unsuitable for this native UI test. Direct RFB
+full and incremental framebuffer probes return changed pixel data. Disabling
+X DAMAGE on the same VNC process did not resolve the display mismatch and was
+reverted. Public status samples were 674 to 831 ms; the native consumer owner
+resolved the current grant in 1 to 4 ms. These observations locate the next
+probe at the Guacamole/public-render boundary, not authentication or browser
+launch. Long probes also reached the ordinary 300-second grant expiry; those
+expiry labels do not independently establish premature access revocation.
+
+No source or provider binary changed in this packet. Prior source validation
+remains scoped to the qualified presentation owner refresh, not this remaining
+stream failure. Do not claim the full viewer goal, Plan 0222, browser-close
+survival or TTL semantics accepted. Continue with a minimal active-frame
+regression and one variable stream probes; do not ask the operator to retest.
+
+Closed both owned viewer pages and terminated only the verified task-owned
+Chrome parent PID 4020. It exited; the shared dev-browser daemon and other
+owners remain. Removed copied temporary credentials and grant selector. Native
+X11 cleanup restored the original example.com tab; that restoration is cleanup,
+not evidence of viewer control success. Source secret files were preserved.
+The goal tool still reports its earlier blocked status and frozen meter 192634;
+this is not an accurate current consumption readback. Checkpoint without marking
+completion or inventing a resumed meter. Memory disposition: queued, receipt
+20261004T023138Z-remember.json, job aa70d128-398c-4e0d-8a0a-13248737daca.
+Queue acceptance does not prove processing or retrieval. No retry was attempted.
+
 ### Presentation endpoint configuration and expired grant repair | 2026-10-04
 
 The latest user goal requires diagnosing-bugs followed by independent dev-browser
 verification, with a checkpoint before the current goal meter reaches 500000.
 The initial repair checkpoint was 165968 on that meter. Earlier accounting above
-is retained as history, not added to this new meter. Full viewer acceptance remains
-unproven while an authenticated Authelia session is unavailable to this task.
+is retained as history, not added to this new meter. At that earlier checkpoint, full viewer acceptance remained
+unproven because an authenticated Authelia session was unavailable to this task.
 The same dependency recurred across three consecutive goal turns. The blocked
 audit revalidated the public handoff's 302 redirect to Authelia, exact installed
 candidate across all three live roles and the retained AuraCall browser. No
