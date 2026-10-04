@@ -26,6 +26,13 @@ pub struct BrowserLaunch {
     pub desktop: Option<RemoteViewFixedDesktop>,
 }
 
+/// Replacement physical targets for a retained logical browser and its tabs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrowserRecovery {
+    pub launch: BrowserLaunch,
+    pub target_ids: BTreeMap<String, String>,
+}
+
 /// Executes a command for an exact manager-owned browser and tab.
 pub trait ManagedBrowserCommandEffects {
     fn execute_command(
@@ -39,6 +46,17 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Recover only after positive process and profile absence. The adapter
+    /// retains launch custody until the host publishes the replacement atomically.
+    fn recover_browser(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<BrowserRecovery, String> {
+        Err("browser_session_recovery_unsupported".into())
+    }
     /// Select an executable for subsequent launches; existing browsers retain identity.
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
         Err("browser_build_selection_unsupported".into())
@@ -741,6 +759,24 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     session_disposition: SessionRecordDisposition::Reused,
                 });
             }
+            if self.protected_session_ids.contains(&session.id) {
+                self.recover_retained_browser(&browser.id)?;
+                let stored = self
+                    .state
+                    .sessions
+                    .get_mut(&session.id)
+                    .ok_or("browser_session_missing_during_recovery")?;
+                stored.last_activity_at_ms = request.activity_at_ms;
+                stored.expires_at_ms = expires_at_ms;
+                return Ok(OpenBrowserSessionResult {
+                    session_id: session.id,
+                    session_name: session.name,
+                    profile_id: session.profile_id,
+                    browser_id: session.browser_id,
+                    disposition: SessionBrowserDisposition::Launched,
+                    session_disposition: SessionRecordDisposition::Reused,
+                });
+            }
             self.retire_browser(
                 &browser,
                 SessionEndReason::BrowserUnresponsive,
@@ -833,6 +869,80 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             disposition,
             session_disposition: SessionRecordDisposition::Created,
         })
+    }
+
+    /// Recover a retained logical browser without ending sessions or tabs.
+    /// Physical absence and launch custody belong to the effect adapter.
+    pub fn recover_retained_browser(&mut self, browser_id: &str) -> Result<(), String> {
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .cloned()
+            .ok_or("browser_session_recovery_browser_missing")?;
+        if self.effects.browser_is_live(&browser)? {
+            return Ok(());
+        }
+        if !browser
+            .active_session_ids
+            .iter()
+            .any(|id| self.protected_session_ids.contains(id))
+        {
+            return Err("browser_session_recovery_not_retained".into());
+        }
+        let profile = self
+            .catalog
+            .profiles
+            .get(&browser.profile_id)
+            .or_else(|| {
+                self.state
+                    .disposable_profiles
+                    .get(&browser.profile_id)
+                    .map(|p| &p.profile)
+            })
+            .ok_or("browser_session_recovery_profile_missing")?
+            .clone();
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let recovered = self.effects.recover_browser(
+            &browser,
+            &profile,
+            &tabs,
+            &self.state.navigation_history,
+        )?;
+        let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
+        if recovered.launch.browser_id != browser.id
+            || recovered.launch.pid == 0
+            || recovered.launch.cdp_endpoint.is_empty()
+            || recovered.launch.desktop != browser.desktop
+            || recovered.target_ids.len() != tabs.len()
+            || targets.len() != tabs.len()
+            || tabs.iter().any(|tab| {
+                recovered
+                    .target_ids
+                    .get(&tab.id)
+                    .is_none_or(|id| id.is_empty())
+            })
+        {
+            return Err("browser_session_recovery_identity_conflict".into());
+        }
+        let mut current = browser;
+        current.pid = recovered.launch.pid;
+        current.cdp_endpoint = recovered.launch.cdp_endpoint;
+        self.state.browsers.insert(current.id.clone(), current);
+        for tab in tabs {
+            self.state
+                .tabs
+                .get_mut(&tab.id)
+                .expect("retained recovery tab")
+                .target_id = recovered.target_ids[&tab.id].clone();
+        }
+        Ok(())
     }
 
     fn launch_browser(

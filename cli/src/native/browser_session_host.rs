@@ -649,6 +649,11 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if self.persistence.load_session_state()? != self.persisted_state {
             return Err("browser_session_publication_conflict".into());
         }
+        let retained =
+            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
+        self.manager()?
+            .recover_retained_browser(&retained.browser.id)?;
+        self.commit_state()?;
         let target =
             agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff_id)?;
         let record = self

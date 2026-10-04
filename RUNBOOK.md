@@ -1,5 +1,31 @@
 # Runbook
 
+## Current resumption | 2026-10-04 | Additional 500K allowance
+
+The operator authorized another 500000 tokens at 17:53:43 UTC. This supersedes
+prior stop instructions for continued P222 testing without erasing their usage.
+Reconciliation proved that the preceding 264541 meter charge comprised 263897
+uncached input tokens and 644 output tokens. The first request alone reread
+231501 uncached context tokens. It was not 264541 tokens of new testing.
+The exposed goal API retains an unfinished blocked goal and rejects replacement;
+track this allowance from session token events beginning at the authorization,
+using uncached input plus output, and reserve closeout before the new 500000 ceiling.
+Private receipts: p222-token-budget-reconciliation.json and
+p222-additional-500k-accounting.json in p221/evidence.
+
+Current red: same handoff resolves with browser_session_browser_not_live.
+Source recovery is in progress on platform/p220-remote-view-consumer. The model
+regression first reproduced session replacement and peer-tab retirement, then
+passed with logical IDs preserved and replacement physical targets. All 320
+Service Model tests, five SQLite custody tests, nine native runtime tests and
+two host publication tests pass. One existing real-Chrome runtime test remains
+ignored in this provider-free lane. Formatting, strict workspace Clippy,
+remote-view handoff docs and documentation links pass. The absence fixture
+initially omitted its directory; its corrected replay passes. Installation and
+same-link live recovery remain pending. No recovery binary has been published. Preserve the once-only AuraCall fixture,
+production, default development, profile data and prior custody evidence.
+
+
 Fresh-session entry: [compact P222 handoff](P222-HANDOFF.md). The operator
 resumed full Plan 0222 delivery on 2026-10-03, including in-scope repair/retest.
 The operator resumed with 50000 additional tokens on 2026-10-03.

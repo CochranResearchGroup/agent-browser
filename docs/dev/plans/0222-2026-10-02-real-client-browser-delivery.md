@@ -2,7 +2,7 @@
 
 Date: 2026-10-02
 
-Plan version: 1
+Plan version: 2
 
 State: OPEN
 
@@ -88,6 +88,21 @@ apply at coherent source/integration boundaries. Before an expensive cycle,
 state the user-visible result it should unlock. If consecutive cycles deliver no
 working increment or verified blocker removal, reassess and simplify before
 another cycle. Do not turn reassessment into a planning campaign.
+
+## Retained browser recovery
+
+The first-client recovery packet uses the existing Browser Session Manager,
+Remote View consumer adapter and SQLite launch-custody owner. Resolution must
+preserve logical browser, session, tab and handoff IDs after positive process
+and exact profile absence. Replace physical PID, CDP endpoint and target IDs,
+restore each retained tab's last recorded URL, and publish browser, targets and
+new launch custody atomically. Preserve prior launch and navigation history.
+An unresolved replacement claim requires readback and cannot authorize replay.
+Healthy or physically occupied browsers are not relaunched. Explicitly closed
+sessions and tabs remain closed. This packet does not accept the earlier
+indefinite idle-retention behavior or complete requester-selected TTL semantics.
+Installed same-link pixels, input and subsequent client automation remain the
+acceptance proof; provider-free tests alone do not satisfy it.
 
 ## Worker assignments
 

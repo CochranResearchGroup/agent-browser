@@ -17,6 +17,26 @@ pub enum RemoteViewBrowserProcessError {
 /// must validate the supplied observation when consuming it and keep environment
 /// values out of public output, durable custody and diagnostic errors.
 pub trait RemoteViewBrowserProcessEffects {
+    /// Positive OS process and exact profile census; unavailable evidence fails closed.
+    fn prove_recovery_absence(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        Err(RemoteViewBrowserProcessError::Rejected)
+    }
+    /// Repeat absence qualification immediately before launching the retained logical ID.
+    fn recover_launch(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _intent: &BrowserLaunchIntent,
+        _environment: RemoteViewPrivateLaunchEnvironment,
+        _observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        Err(RemoteViewBrowserProcessError::Rejected)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,

@@ -125,6 +125,25 @@ impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEff
 impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
     for BrowserSessionEffectAdapter<D>
 {
+    fn prove_recovery_absence(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        self.runtime.prove_recovery_absence(browser, profile)
+    }
+    fn recover_launch(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        intent: &BrowserLaunchIntent,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        self.runtime
+            .recover_launch(browser, profile, intent, environment, observation)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -334,6 +353,7 @@ enum BrowserRuntimeCommand {
         profile: BrowserProfileCatalogEntry,
         desktop: Option<RemoteViewFixedDesktop>,
         environment: Option<std::collections::BTreeMap<String, String>>,
+        recovery_browser: Option<ManagedBrowserInstance>,
         reply: mpsc::Sender<Result<BrowserLaunch, String>>,
     },
     Close {
@@ -430,6 +450,51 @@ impl BrowserManagerRuntime {
 /// Fresh external-mode process ingress. Durable launch admission is owned by
 /// the coordinator; this adapter consumes private inputs and never retries.
 impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
+    fn prove_recovery_absence(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        prove_browser_recovery_absence(browser, profile)
+            .map_err(|_| RemoteViewBrowserProcessError::Rejected)
+    }
+    fn recover_launch(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        intent: &BrowserLaunchIntent,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        if intent.validate().is_err()
+            || profile.id != intent.profile_id
+            || profile.id != browser.profile_id
+        {
+            return Err(RemoteViewBrowserProcessError::Rejected);
+        }
+        self.prove_recovery_absence(browser, profile)?;
+        let environment = environment
+            .into_environment(observation, &intent.assignment)
+            .map_err(|_| RemoteViewBrowserProcessError::Rejected)?;
+        let desktop = RemoteViewFixedDesktop {
+            desktop_id: intent.assignment.desktop_id.clone(),
+            generation: intent.assignment.generation,
+            friendly_route_label: String::new(),
+        };
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::Launch {
+                profile: profile.clone(),
+                desktop: Some(desktop),
+                environment: Some(environment),
+                recovery_browser: Some(browser.clone()),
+                reply,
+            },
+        )
+        .map_err(|_| RemoteViewBrowserProcessError::OutcomeUnknown)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -455,6 +520,7 @@ impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
                 profile: profile.clone(),
                 desktop: Some(desktop),
                 environment: Some(environment),
+                recovery_browser: None,
                 reply,
             },
         )
@@ -494,6 +560,7 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
                 profile: profile.clone(),
                 desktop: desktop.cloned(),
                 environment: None,
+                recovery_browser: None,
                 reply,
             },
         )
@@ -643,9 +710,14 @@ fn run_browser_worker(
                 profile,
                 desktop,
                 environment,
+                recovery_browser,
                 reply,
             } => {
                 let result = runtime.block_on(async {
+                    if let Some(browser) = &recovery_browser {
+                        prove_browser_recovery_absence(browser, &profile)?;
+                        browsers.remove(&browser.id);
+                    }
                     let sequence = next_browser_sequence
                         .checked_add(1)
                         .ok_or_else(|| "browser_session_browser_sequence_exhausted".to_string())?;
@@ -688,7 +760,10 @@ fn run_browser_worker(
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
                     next_browser_sequence = sequence;
-                    let browser_id = format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4());
+                    let browser_id = recovery_browser.as_ref().map_or_else(
+                        || format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4()),
+                        |browser| browser.id.clone(),
+                    );
                     let launch = BrowserLaunch {
                         browser_id: browser_id.clone(),
                         pid,
@@ -976,6 +1051,48 @@ async fn close_reattached_browser(
             });
         }
         tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(())
+}
+
+fn prove_browser_recovery_absence(
+    browser: &ManagedBrowserInstance,
+    profile: &BrowserProfileCatalogEntry,
+) -> Result<(), String> {
+    if browser.profile_id != profile.id
+        || browser.pid == 0
+        || !matches!(
+            crate::process_identity::observe_process(browser.pid),
+            crate::process_identity::ProcessObservation::Missing
+        )
+    {
+        return Err("browser_session_recovery_process_absence_unproven".into());
+    }
+    let expected = fs::canonicalize(&profile.user_data_dir)
+        .map_err(|_| "browser_session_recovery_profile_unavailable")?;
+    let system = sysinfo::System::new_all();
+    for process in system.processes().values() {
+        let name = process.name().to_string_lossy().to_ascii_lowercase();
+        if !name.contains("chrome") && !name.contains("chromium") {
+            continue;
+        }
+        let args = process
+            .cmd()
+            .iter()
+            .map(|value| value.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        if args.is_empty() {
+            return Err("browser_session_recovery_profile_census_unavailable".into());
+        }
+        if let Some(path) =
+            crate::process_identity::command_line_option_value(&args, "--user-data-dir")
+        {
+            let observed = fs::canonicalize(path)
+                .map_err(|_| "browser_session_recovery_profile_census_unavailable")?;
+            if observed == expected {
+                return Err("browser_session_recovery_profile_occupied".into());
+            }
+        }
     }
     Ok(())
 }
@@ -1308,6 +1425,38 @@ mod tests {
         assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
+    }
+
+    #[test]
+    fn recovery_absence_rejects_live_pid_and_unavailable_profile() {
+        let root = TempDirectory::new();
+        fs::create_dir_all(&root.0).unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "profile-a".into(),
+            name: "Synthetic".into(),
+            user_data_dir: root.0.to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let mut browser = ManagedBrowserInstance {
+            id: "browser-a".into(),
+            profile_id: profile.id.clone(),
+            pid: std::process::id(),
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        assert_eq!(
+            prove_browser_recovery_absence(&browser, &profile).unwrap_err(),
+            "browser_session_recovery_process_absence_unproven"
+        );
+        browser.pid = u32::MAX;
+        let mut missing = profile.clone();
+        missing.user_data_dir = root.0.join("absent").to_string_lossy().into_owned();
+        assert_eq!(
+            prove_browser_recovery_absence(&browser, &missing).unwrap_err(),
+            "browser_session_recovery_profile_unavailable"
+        );
+        prove_browser_recovery_absence(&browser, &profile).unwrap();
     }
 
     #[test]

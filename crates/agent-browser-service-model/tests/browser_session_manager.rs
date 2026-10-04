@@ -183,6 +183,28 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
 }
 
 impl BrowserSessionEffects for FixtureEffects {
+    fn recover_browser(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        tabs: &[agent_browser_service_model::ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<agent_browser_service_model::BrowserRecovery, String> {
+        self.launches.push(profile.id.clone());
+        self.browser_live = true;
+        Ok(agent_browser_service_model::BrowserRecovery {
+            launch: BrowserLaunch {
+                browser_id: browser.id.clone(),
+                pid: 5252,
+                cdp_endpoint: "http://127.0.0.1:9522".into(),
+                desktop: browser.desktop.clone(),
+            },
+            target_ids: tabs
+                .iter()
+                .map(|tab| (tab.id.clone(), format!("recovered-{}", tab.target_id)))
+                .collect(),
+        })
+    }
     fn browser_is_live(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
@@ -1571,4 +1593,77 @@ fn exhausted_new_session_fields_do_not_launch_and_sequence_exhaustion_allows_hea
     assert_eq!(reused.session_id, first.session_id);
     assert_eq!(reused.session_disposition, SessionRecordDisposition::Reused);
     assert_eq!(effects.launches.len(), 1);
+}
+
+#[test]
+fn retained_handoff_recovers_dead_browser_without_retiring_logical_sessions_or_peer_tabs() {
+    use agent_browser_service_model::{
+        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    };
+    let catalog = catalog_with_named_profile();
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_view_desktops: vec![],
+    };
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "retained-tab".into(),
+            target_id: "dead-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        new_tab: Some(BrowserTabAcquisition {
+            tab_id: "peer-tab".into(),
+            target_id: "dead-peer-target".into(),
+            source: BrowserTabSource::ExplicitNew,
+        }),
+        ..Default::default()
+    };
+    let alice = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&alice.session_id, 1_000)
+        .unwrap();
+    let bob = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .new_tab(&bob.session_id, 1_000)
+        .unwrap();
+    retain_remote_view_tab_handoff(
+        &mut state,
+        "same-handoff",
+        &alice.session_id,
+        "retained-tab",
+    )
+    .unwrap();
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    effects.browser_live = false;
+    let resumed = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            2_000,
+        ))
+        .unwrap();
+    assert_eq!(resumed.session_id, alice.session_id);
+    assert_eq!(resumed.browser_id, alice.browser_id);
+    let resolved = resolve_remote_view_tab_handoff(&state, "same-handoff").unwrap();
+    assert_eq!(resolved.tab.id, "retained-tab");
+    assert_eq!(resolved.tab.target_id, "recovered-dead-target");
+    assert_eq!(resolved.browser.pid, 5252);
+    assert_eq!(
+        state.tabs["peer-tab"].target_id,
+        "recovered-dead-peer-target"
+    );
+    assert_eq!(state.sessions[&bob.session_id].browser_id, alice.browser_id);
+    assert!(state.session_history.is_empty());
+    assert!(state.tab_history.is_empty());
+    assert!(effects.closes.is_empty());
 }

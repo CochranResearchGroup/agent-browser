@@ -6325,6 +6325,10 @@ Usage: agent-browser remote-view open [url] [options]
 Resolve addresses an existing logical handoff and refuses closed sessions.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Expired grants may renew under the same handoff.
+A lost managed browser can recover after positive process and profile absence.
+Logical browser, session, tab and handoff IDs remain stable; physical targets
+and the CDP endpoint change. Interrupted recovery requires custody readback.
+Explicitly closed sessions and tabs remain closed.
 Valid retained handoffs preserve their exact sessions through inactivity and
 client reconnect. Close the tab or session explicitly; invalid or closed
 bindings do not prevent idle cleanup or grant additional access.

@@ -108,6 +108,19 @@ pub(super) fn runtime_effects(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn recover_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[BrowserNavigationRecord],
+    ) -> Result<BrowserRecovery, String> {
+        match self {
+            Self::Local(effects) => effects.recover_browser(browser, profile, tabs, navigation),
+            Self::Remote(effects) => effects.recover_browser(browser, profile, tabs, navigation),
+        }
+    }
+
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         match self {
             Self::Local(effects) => effects.select_browser_executable(path),

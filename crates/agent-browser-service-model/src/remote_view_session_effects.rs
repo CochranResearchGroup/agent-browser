@@ -101,6 +101,102 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn recover_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[BrowserNavigationRecord],
+    ) -> Result<BrowserRecovery, String> {
+        self.require_operation()?;
+        self.effects
+            .prove_recovery_absence(browser, profile)
+            .map_err(|_| "browser_session_recovery_absence_unproven")?;
+        let assignment = self
+            .store
+            .published_launch_assignment(browser)
+            .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
+        let desktop = browser
+            .desktop
+            .as_ref()
+            .ok_or("browser_session_recovery_desktop_missing")?;
+        if assignment.desktop_id != desktop.desktop_id
+            || assignment.generation != desktop.generation
+        {
+            return Err("browser_session_recovery_assignment_conflict".into());
+        }
+        let intent = BrowserLaunchIntent {
+            intent_id: (self.next_intent_id)(),
+            profile_id: profile.id.clone(),
+            assignment,
+        };
+        match self
+            .store
+            .admit_recovery_launch_intent(
+                &intent,
+                self.expected.as_ref().expect("qualified baseline"),
+                browser,
+            )
+            .map_err(|_| "browser_session_recovery_custody_conflict")?
+        {
+            LaunchCustodyAdmission::New => (),
+            LaunchCustodyAdmission::Existing(_) => {
+                return Err("browser_session_recovery_readback_required".into())
+            }
+        }
+        self.pending = Some((intent.clone(), false));
+        let environment = self
+            .adapter
+            .launch_environment(&intent.assignment)
+            .map_err(|_| "browser_session_recovery_environment_unavailable")?;
+        let observation = self
+            .adapter
+            .observe_assignment(&intent.assignment)
+            .map_err(|_| "browser_session_recovery_assignment_unavailable")?;
+        environment
+            .validate_observation(&observation, &intent.assignment)
+            .map_err(|_| "browser_session_recovery_assignment_conflict")?;
+        let mut launch = self
+            .effects
+            .recover_launch(browser, profile, &intent, environment, &observation)
+            .map_err(|_| "browser_session_recovery_launch_readback_required")?;
+        if launch.browser_id != browser.id {
+            return Err("browser_session_recovery_identity_conflict".into());
+        }
+        launch.desktop = Some(desktop.clone());
+        self.store
+            .observe_launch_intent(&intent, &launch)
+            .map_err(|_| "browser_session_recovery_observation_readback_required")?;
+        let mut restored_browser = browser.clone();
+        restored_browser.pid = launch.pid;
+        restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
+        let mut target_ids = BTreeMap::new();
+        // Custody remains unpublished throughout restoration. A crash or failed
+        // restoration cannot authorize another process or duplicate tab replay.
+        for (index, tab) in tabs.iter().enumerate() {
+            let acquired = if index == 0 {
+                self.effects.acquire_initial_tab(&restored_browser, &[])?
+            } else {
+                self.effects.create_tab(&restored_browser)?
+            };
+            let mut restored_tab = tab.clone();
+            restored_tab.target_id = acquired.target_id.clone();
+            let url = navigation
+                .iter()
+                .filter(|row| {
+                    row.tab_id == tab.id
+                        && row.session_id == tab.session_id
+                        && row.browser_id == browser.id
+                })
+                .max_by_key(|row| row.visited_at_ms)
+                .map_or("about:blank", |row| row.url.as_str());
+            self.effects
+                .navigate(&restored_browser, &restored_tab, url)?;
+            target_ids.insert(tab.id.clone(), acquired.target_id);
+        }
+        self.pending = Some((intent, true));
+        Ok(BrowserRecovery { launch, target_ids })
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.effects.select_browser_executable(path)
     }

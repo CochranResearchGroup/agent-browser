@@ -135,56 +135,15 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         intent: &BrowserLaunchIntent,
         expected: &BrowserSessionState,
     ) -> Result<LaunchCustodyAdmission, LaunchCustodyStoreError> {
-        use LaunchCustodyStoreError as Error;
-        let pending = BrowserLaunchCustodyRecord::pending(intent.clone())
-            .map_err(|_| Error::InvalidRecord)?;
-        let transaction = self
-            .remote_view_mutation_connection()
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|_| Error::Unavailable)?;
-        let state = current(&transaction)?;
-        if state != *expected {
-            return Err(Error::Conflict);
-        }
-        let mut records = ledger(&transaction)?;
-        if assignment_fenced(&records, &intent.assignment) {
-            return Err(Error::ReleaseFenced);
-        }
-
-        if let Some(record) = records.records.get(&intent.intent_id) {
-            if record.intent != *intent {
-                return Err(Error::Conflict);
-            }
-            return Ok(LaunchCustodyAdmission::Existing(record.clone()));
-        }
-        if records.records.values().any(|record| {
-            !record.published
-                && (record.intent.assignment.assignment_id == intent.assignment.assignment_id
-                    || record.intent.assignment.desktop_id == intent.assignment.desktop_id)
-                && record.intent.assignment != intent.assignment
-        }) || state.browsers.values().any(|browser| {
-            browser.desktop.as_ref().is_some_and(|desktop| {
-                desktop.desktop_id == intent.assignment.desktop_id
-                    && desktop.generation != intent.assignment.generation
-            })
-        }) {
-            return Err(Error::Conflict);
-        }
-        if state
-            .browsers
-            .values()
-            .any(|browser| browser.profile_id == intent.profile_id)
-            || records
-                .records
-                .values()
-                .any(|record| !record.published && record.intent.profile_id == intent.profile_id)
-        {
-            return Err(Error::ProfileOccupied);
-        }
-        records.records.insert(intent.intent_id.clone(), pending);
-        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
-        transaction.commit().map_err(|_| Error::Unavailable)?;
-        Ok(LaunchCustodyAdmission::New)
+        self.admit_launch_with_recovery(intent, expected, None)
+    }
+    fn admit_recovery_launch_intent(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+        expected: &BrowserSessionState,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<LaunchCustodyAdmission, LaunchCustodyStoreError> {
+        self.admit_launch_with_recovery(intent, expected, Some(browser))
     }
     fn observe_launch_intent(
         &mut self,
@@ -633,6 +592,116 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_recovery_launch_preserves_prior_custody_and_fences_competing_replay() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let old = intent();
+        let initial = store.load_session_state().unwrap();
+        store.admit_launch_intent(&old, &initial).unwrap();
+        let launch = BrowserLaunch {
+            browser_id: "retained-browser".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: old.assignment.desktop_id.clone(),
+                generation: old.assignment.generation,
+                friendly_route_label: "synthetic".into(),
+            }),
+        };
+        store.observe_launch_intent(&old, &launch).unwrap();
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            profile_id: old.profile_id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint.clone(),
+            desktop: launch.desktop.clone(),
+            active_session_ids: vec![],
+        };
+        let mut retained = initial.clone();
+        retained
+            .browsers
+            .insert(browser.id.clone(), browser.clone());
+        store
+            .publish_launch_intent(&old, &initial, &retained)
+            .unwrap();
+        let old_record = ledger(store.remote_view_mutation_connection())
+            .unwrap()
+            .records[&old.intent_id]
+            .clone();
+        let mut replacement = old.clone();
+        replacement.intent_id = uuid::Uuid::new_v4().to_string();
+        assert_eq!(
+            store
+                .admit_launch_intent(&replacement, &retained)
+                .unwrap_err(),
+            LaunchCustodyStoreError::ProfileOccupied
+        );
+        let mut stale = browser.clone();
+        stale.pid += 1;
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&replacement, &retained, &stale)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&replacement, &retained, &browser)
+                .unwrap(),
+            LaunchCustodyAdmission::New
+        );
+        let mut competing = replacement.clone();
+        competing.intent_id = uuid::Uuid::new_v4().to_string();
+        assert_eq!(
+            store
+                .admit_recovery_launch_intent(&competing, &retained, &browser)
+                .unwrap_err(),
+            LaunchCustodyStoreError::ProfileOccupied
+        );
+        assert_eq!(
+            store
+                .compare_and_save_session_state(&retained, &retained)
+                .unwrap_err(),
+            "browser_session_publication_release_fenced"
+        );
+        drop(store);
+        let mut store = fixture.open(false);
+        assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
+        assert!(matches!(
+            store
+                .admit_recovery_launch_intent(&replacement, &retained, &browser)
+                .unwrap(),
+            LaunchCustodyAdmission::Existing(_)
+        ));
+        let mut new_launch = launch.clone();
+        new_launch.pid = 43;
+        new_launch.cdp_endpoint = "http://127.0.0.1:9322".into();
+        store
+            .observe_launch_intent(&replacement, &new_launch)
+            .unwrap();
+        let mut recovered = retained.clone();
+        let current = recovered.browsers.get_mut(&browser.id).unwrap();
+        current.pid = new_launch.pid;
+        current.cdp_endpoint = new_launch.cdp_endpoint;
+        store
+            .publish_launch_intent(&replacement, &retained, &recovered)
+            .unwrap();
+        assert_eq!(
+            ledger(store.remote_view_mutation_connection())
+                .unwrap()
+                .records[&old.intent_id],
+            old_record
+        );
+        assert_eq!(
+            store
+                .published_launch_assignment(&recovered.browsers[&browser.id])
+                .unwrap(),
+            old.assignment
+        );
+        assert!(store.unpublished_launch_records().unwrap().is_empty());
+    }
+
+    #[test]
     fn sqlite_launch_custody_retains_unknown_claim_across_connections_and_restart() {
         let fixture = Fixture::new();
         let mut first = fixture.open(true);
@@ -762,5 +831,84 @@ mod tests {
         };
         assert!(record.published);
         assert_eq!(record.observed_pid, Some(42));
+    }
+}
+
+impl BrowserSessionSqliteStore {
+    fn admit_launch_with_recovery(
+        &mut self,
+        intent: &BrowserLaunchIntent,
+        expected: &BrowserSessionState,
+        recovery: Option<&agent_browser_service_model::ManagedBrowserInstance>,
+    ) -> Result<LaunchCustodyAdmission, LaunchCustodyStoreError> {
+        use LaunchCustodyStoreError as Error;
+        let pending = BrowserLaunchCustodyRecord::pending(intent.clone())
+            .map_err(|_| Error::InvalidRecord)?;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let state = current(&transaction)?;
+        if state != *expected {
+            return Err(Error::Conflict);
+        }
+        let mut records = ledger(&transaction)?;
+        if assignment_fenced(&records, &intent.assignment) {
+            return Err(Error::ReleaseFenced);
+        }
+
+        if let Some(browser) = recovery {
+            let prior = records
+                .records
+                .values()
+                .filter(|record| {
+                    record.published
+                        && record.observed_browser_id.as_ref() == Some(&browser.id)
+                        && record.observed_pid == Some(browser.pid)
+                })
+                .collect::<Vec<_>>();
+            if state.browsers.get(&browser.id) != Some(browser)
+                || browser.profile_id != intent.profile_id
+                || prior.len() != 1
+                || prior[0].intent.assignment != intent.assignment
+                || prior[0].clone().confirm_publication(&state).is_err()
+            {
+                return Err(Error::Conflict);
+            }
+        }
+        if let Some(record) = records.records.get(&intent.intent_id) {
+            if record.intent != *intent {
+                return Err(Error::Conflict);
+            }
+            return Ok(LaunchCustodyAdmission::Existing(record.clone()));
+        }
+        if records.records.values().any(|record| {
+            !record.published
+                && (record.intent.assignment.assignment_id == intent.assignment.assignment_id
+                    || record.intent.assignment.desktop_id == intent.assignment.desktop_id)
+                && record.intent.assignment != intent.assignment
+        }) || state.browsers.values().any(|browser| {
+            browser.desktop.as_ref().is_some_and(|desktop| {
+                desktop.desktop_id == intent.assignment.desktop_id
+                    && desktop.generation != intent.assignment.generation
+            })
+        }) {
+            return Err(Error::Conflict);
+        }
+        if state
+            .browsers
+            .values()
+            .any(|browser| browser.profile_id == intent.profile_id && recovery != Some(browser))
+            || records
+                .records
+                .values()
+                .any(|record| !record.published && record.intent.profile_id == intent.profile_id)
+        {
+            return Err(Error::ProfileOccupied);
+        }
+        records.records.insert(intent.intent_id.clone(), pending);
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)?;
+        Ok(LaunchCustodyAdmission::New)
     }
 }
