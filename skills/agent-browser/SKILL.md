@@ -3656,13 +3656,16 @@ Missing or stale proof keeps open pending with an actionable reason. This route
 qualification does not prove connected viewer pixels or input; those require
 live acceptance after opening the authenticated handoff.
 
-Set `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` to Remote View's reviewed external
-HTTPS origin to enable the handoff page's **Open desktop** button. Its click
-passes through the authenticated Agent Browser presentation endpoint, refreshes
-only an already-published grant and opens the current top-level provider viewer
-in a new tab through its existing ingress login. It does not issue another grant
-or alter session state. Keep the Agent Browser handoff as the bookmark. Missing
-viewing configuration does not block browser lifecycle. The granted-view page
+Configure the runtime host and both dashboard processes with the same reviewed
+`AGENT_BROWSER_REMOTE_VIEW_ORIGIN`, `AGENT_BROWSER_REMOTE_VIEW_POOL`, and
+`AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`. The public origin must be Remote View's
+external HTTPS origin. The **Open desktop** button authenticates the operator,
+asks the owning runtime to resolve the same handoff and renew an expired viewer
+grant, then opens the current provider viewer through its existing ingress login.
+The dashboard reads the resulting publication without becoming another mutable
+session owner. This does not create another browser, tab or handoff, and does not
+automatically reopen an explicitly closed handoff. Keep the Agent Browser handoff
+as the bookmark. Missing viewing configuration does not block browser lifecycle. The granted-view page
 waits for operator action instead of continuously polling. Installed visible-tab and input acceptance remain pending in Plan 222.
 With Remote View configured, `tab_new` uses the managed owner. Its first request
 uses the new session's initial tab; later requests create a distinct tab and

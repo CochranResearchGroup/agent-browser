@@ -388,7 +388,14 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             .await;
             return;
         };
-        match super::remote_view_presentation::resolve_location(id).await {
+        match super::remote_view_presentation::resolve_location(
+            id,
+            authenticated_dashboard_user
+                .as_deref()
+                .unwrap_or("operator"),
+        )
+        .await
+        {
             Ok(location) => {
                 let response = format!("HTTP/1.1 303 See Other\r\nLocation: {location}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
                 let _ = stream.write_all(response.as_bytes()).await;

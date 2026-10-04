@@ -1,6 +1,64 @@
 //! Authenticated, click-driven top-level presentation for logical tab handoffs.
 
 use agent_browser_service_model::RemoteViewApplicationViewIssuance;
+use std::future::Future;
+
+async fn prepare_then_read<P, R, F>(
+    prepare: P,
+    read: R,
+) -> Result<RemoteViewApplicationViewIssuance, String>
+where
+    P: Future<Output = Result<(), String>>,
+    R: FnOnce() -> F,
+    F: Future<Output = Result<RemoteViewApplicationViewIssuance, String>>,
+{
+    prepare.await?;
+    read().await
+}
+
+/// Refresh through the existing authenticated owner command path. The dashboard
+/// must not mutate the browser-session aggregate or launch a replacement tab.
+async fn prepare_owner_view(id: &str, operator: &str) -> Result<(), String> {
+    use super::http::{
+        ensure_service_daemon_session, load_service_state, relay_command_to_daemon,
+        service_request_command_with_dashboard_generation, service_request_relay_session,
+    };
+    let default_session = "dashboard-service-backend";
+    let body = serde_json::json!({
+        "action": "service_remote_view_handoff_resolve",
+        "serviceName": "agent-browser-dashboard",
+        "agentName": operator,
+        "taskName": "durable-remote-view-presentation",
+        "params": { "handoffId": id, "allowReopenClosed": false },
+        "serviceStateLockTimeoutMs": 30000,
+        "jobTimeoutMs": 90000,
+    })
+    .to_string();
+    let state = load_service_state();
+    let command = service_request_command_with_dashboard_generation(
+        &body,
+        Some(&state),
+        operator,
+        default_session,
+        std::env::var("AGENT_BROWSER_DASHBOARD_GENERATION")
+            .ok()
+            .as_deref(),
+    )
+    .map_err(|_| "remote_view_presentation_owner_request_invalid")?;
+    let session = service_request_relay_session(default_session, &body, &command);
+    tokio::time::timeout(std::time::Duration::from_secs(60), async {
+        ensure_service_daemon_session(&session, Some(&command)).await?;
+        let response = relay_command_to_daemon(&session, &command.to_string()).await?;
+        let response: serde_json::Value = serde_json::from_str(&response)
+            .map_err(|_| "remote_view_presentation_owner_response_invalid")?;
+        if response["success"].as_bool() != Some(true) {
+            return Err("remote_view_presentation_owner_resolve_failed".into());
+        }
+        Ok(())
+    })
+    .await
+    .map_err(|_| "remote_view_presentation_owner_timeout")?
+}
 
 pub(super) fn handoff_id(path: &str) -> Option<&str> {
     let id = path
@@ -35,28 +93,59 @@ fn presentation_url(
 /// The caller must authenticate the dashboard request before invoking this.
 /// Configuration is checked before any provider request. No raw request URL
 /// selects the external origin, assignment, tab, or provider route.
-pub(super) async fn resolve_location(id: &str) -> Result<String, String> {
+pub(super) async fn resolve_location(id: &str, operator: &str) -> Result<String, String> {
     let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
-    let id = id.to_string();
-    tokio::task::spawn_blocking(move || {
-        let now_ms = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|_| "remote_view_clock_unavailable")?
-            .as_millis()
-            .min(u128::from(u64::MAX)) as u64;
-        let view =
-            super::super::browser_session_remote_view::resolve_published_handoff_view(&id, now_ms)?;
-        presentation_url(&origin, &view)
+    let published_id = id.to_string();
+    let view = prepare_then_read(prepare_owner_view(id, operator), || async move {
+        tokio::task::spawn_blocking(move || {
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "remote_view_clock_unavailable")?
+                .as_millis()
+                .min(u128::from(u64::MAX)) as u64;
+            let view = super::super::browser_session_remote_view::resolve_published_handoff_view(
+                &published_id,
+                now_ms,
+            )?;
+            Ok(view)
+        })
+        .await
+        .map_err(|_| "remote_view_presentation_join_failed")?
     })
-    .await
-    .map_err(|_| "remote_view_presentation_join_failed")?
+    .await?;
+    presentation_url(&origin, &view)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn presentation_prepares_owner_before_reading_expired_publication() {
+        let refreshed = std::cell::Cell::new(false);
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let issuance: RemoteViewApplicationViewIssuance =
+            serde_json::from_value(fixture["viewIssuance"].clone()).unwrap();
+        let result = prepare_then_read(
+            async {
+                refreshed.set(true);
+                Ok(())
+            },
+            || async {
+                if !refreshed.get() {
+                    return Err("remote_view_tab_view_expired".into());
+                }
+                Ok(issuance.clone())
+            },
+        )
+        .await;
+        assert_eq!(result.unwrap(), issuance);
+    }
 
     #[test]
     fn presentation_origin_and_path_cannot_be_selected_by_handoff_input() {
