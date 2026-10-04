@@ -3582,7 +3582,8 @@ grant while retaining the handoff identity.
 
 A valid retained operator handoff keeps its exact logical session and tab
 through browser idle closure and client reconnect. It does not disable the
-browser's five-minute idle reaper. When every peer is idle and no active operation
+browser's five-minute idle reaper. After service restart, the reaper loads
+retained ownership without waiting for a client request. When every peer is idle and no active operation
 holds custody, the process closes once; reconnect through the same handoff
 recovers the retained identities after positive process and profile absence.
 Explicitly closing the tab or session ends that logical target. A handoff grants

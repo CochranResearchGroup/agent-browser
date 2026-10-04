@@ -33,8 +33,17 @@ The source repair separates idle process closure from retained logical targets,
 closes once, preserves active peers and external custody, recovers on reconnect,
 and prevents new peers from retiring retained sessions. All 324 Service Model
 tests pass. Strict workspace Clippy and handoff/docs-link gates pass. This idle
-repair is not yet installed; requester-selected finite handoff retention and
-browser TTL extensions remain unimplemented. Full M1 closure/readback is pending.
+repair was published to p221 as 0.28.0-1c451d5b21ef, then the installed
+no-client reaper check failed: the router did not load its session host after
+restart. The minimal startup regression reproduces this failure. The follow-up
+loads retained ownership on the reaper tick without launching a browser or
+creating a host when no browser or disposable allocation exists. Installed
+release/reconnect acceptance remains pending. The follow-up's startup regression
+first failed with the host left unloaded, then passed; four distinct host tests
+(including empty/error loading) pass. Model inputs are unchanged from the 324-test
+pass. Formatting, strict workspace Clippy and documentation checks pass.
+Requester-selected finite handoff
+retention and browser TTL extensions remain unimplemented. Full M1 closure/readback is pending.
 
 | Milestone | Result | Current acceptance boundary |
 | --- | --- | --- |

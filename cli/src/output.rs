@@ -6327,7 +6327,8 @@ Converging means pending readiness. Require opened plus operatorVisible.state=re
 before attachment. Expired grants may renew under the same handoff.
 Retained handoffs preserve logical tabs, not indefinite browser processes.
 The five-minute idle reaper closes a browser when all peers are idle and no
-active operation holds custody. Reconnect using the same handoff URL.
+active operation holds custody, including after service restart without a
+client request. Reconnect using the same handoff URL.
 A lost managed browser can recover after positive process and profile absence.
 Logical browser, session, tab and handoff IDs remain stable; physical targets
 and the CDP endpoint change. Interrupted recovery requires custody readback.

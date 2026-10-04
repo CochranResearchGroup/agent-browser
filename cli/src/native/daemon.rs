@@ -729,16 +729,10 @@ impl RuntimeHostRouter {
         }
     }
 
-    async fn reap_browser_sessions_if_loaded(&self) -> Result<(), String> {
+    async fn reap_browser_sessions(&self) -> Result<(), String> {
         let browser_sessions = self.browser_sessions.clone();
         tokio::task::spawn_blocking(move || {
-            let mut host = browser_sessions
-                .lock()
-                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
-            if let Some(host) = host.as_mut() {
-                host.reap_current()?;
-            }
-            Ok(())
+            super::browser_session_host::reap_shared_browser_sessions(browser_sessions)
         })
         .await
         .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
@@ -777,7 +771,7 @@ fn spawn_browser_session_reaper(router: RuntimeHostRouter) -> tokio::task::JoinH
         interval.tick().await;
         loop {
             interval.tick().await;
-            if let Err(error) = router.reap_browser_sessions_if_loaded().await {
+            if let Err(error) = router.reap_browser_sessions().await {
                 let _ = writeln!(std::io::stderr(), "Browser session reaper error: {error}");
             }
         }

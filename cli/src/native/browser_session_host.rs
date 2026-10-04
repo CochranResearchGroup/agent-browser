@@ -318,6 +318,34 @@ pub(crate) async fn resolve_shared_handoff_command(
     .map_err(|_| "browser_session_host_join_failed")?
 }
 
+/// Reaping loads retained physical ownership after restart, without admitting
+/// launches or creating an empty session host in an unused environment.
+pub(crate) fn reap_shared_browser_sessions(shared: SharedBrowserSessionHost) -> Result<(), String> {
+    let mut host = shared
+        .lock()
+        .map_err(|_| "browser_session_host_lock_poisoned")?;
+    reap_browser_session_host(&mut host, || {
+        let state = BrowserSessionSqliteStore::default_sqlite()?.load_session_state()?;
+        if state.browsers.is_empty() && state.disposable_profiles.is_empty() {
+            return Ok(None);
+        }
+        load_default_browser_session_host().map(Some)
+    })
+}
+
+fn reap_browser_session_host<P: BrowserSessionPersistence, E: BrowserSessionEffects>(
+    host: &mut Option<BrowserSessionHost<P, E>>,
+    load: impl FnOnce() -> Result<Option<BrowserSessionHost<P, E>>, String>,
+) -> Result<(), String> {
+    if host.is_none() {
+        *host = load()?;
+    }
+    if let Some(host) = host.as_mut() {
+        host.reap_current()?;
+    }
+    Ok(())
+}
+
 pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessionHost, String> {
     let legacy_state_path = super::service_store::default_service_state_path()?;
     let store = BrowserSessionSqliteStore::default_sqlite()?;
@@ -1612,6 +1640,91 @@ mod tests {
             LaunchCustodyAdmission::Existing(record) => assert!(record.published),
             LaunchCustodyAdmission::New => panic!("publication must retain the original intent"),
         }
+    }
+
+    #[test]
+    fn startup_reaper_preserves_empty_and_failed_loads_without_a_host() {
+        type FixtureHost = BrowserSessionHost<
+            BrowserSessionJsonStore,
+            BrowserSessionEffectAdapter<FixtureRuntime>,
+        >;
+        let mut host: Option<FixtureHost> = None;
+        reap_browser_session_host(&mut host, || Ok(None)).unwrap();
+        assert!(host.is_none());
+        assert_eq!(
+            reap_browser_session_host(&mut host, || Err("retained state unavailable".into()))
+                .unwrap_err(),
+            "retained state unavailable"
+        );
+        assert!(host.is_none());
+    }
+
+    #[test]
+    fn startup_reaper_loads_retained_sessions_without_a_client_request() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(&legacy_path, serde_json::json!({"profiles":{"work":{"id":"work","name":"Work","userDataDir":directory.0.join("work"),"profileClass":"durable_named"}}}).to_string()).unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 1024,
+        };
+        let mut initial = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+            &legacy_path,
+            config.clone(),
+        )
+        .unwrap();
+        let opened = initial
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let tab = initial
+            .manager()
+            .unwrap()
+            .new_tab(&opened.session_id, 1_000)
+            .unwrap();
+        agent_browser_service_model::retain_remote_view_tab_handoff(
+            &mut initial.state,
+            "startup-handoff",
+            &opened.session_id,
+            &tab.tab_id,
+        )
+        .unwrap();
+        initial.commit_state().unwrap();
+        drop(initial);
+        let mut restarted = None;
+        reap_browser_session_host(&mut restarted, || {
+            BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+                &legacy_path,
+                config,
+            )
+            .map(Some)
+        })
+        .unwrap();
+        let host = restarted
+            .as_ref()
+            .expect("restart reaping must load retained ownership without a client request");
+        assert!(host
+            .state
+            .idle_closed_browsers
+            .contains_key(&opened.browser_id));
+        assert!(
+            agent_browser_service_model::resolve_remote_view_tab_handoff(
+                &host.state,
+                "startup-handoff"
+            )
+            .is_ok()
+        );
+        assert_eq!(
+            BrowserSessionJsonStore::new(&directory.0)
+                .load_session_state()
+                .unwrap(),
+            host.state
+        );
     }
 
     #[test]
