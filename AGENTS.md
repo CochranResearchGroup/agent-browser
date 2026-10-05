@@ -2,6 +2,11 @@
 
 Instructions for AI coding agents working with this codebase.
 
+## Product Contract
+
+Make browser work easier to complete, hand to a person, and continue afterward. [The governing product contract](docs/dev/policies/0054-browser-product-contract.md) defines task-appropriate profiles, native Remote View ownership and handoff, and workflow-based acceptance. Every substantive change must demonstrate less effort or fewer failures in a concrete browser workflow.
+
+
 ## Package Manager
 
 This project uses **pnpm**. Always use `pnpm` instead of `npm` or `yarn` for installing dependencies, running scripts, etc. (e.g., `pnpm install`, `pnpm run build`).
@@ -40,10 +45,10 @@ Normal project work lands in this project's `origin` repository. Do not open rel
 
 Normal roadmap checkpoint work may update the local installed runtime and may
 advance workspace version metadata for validation, but it is not a formal
-release. Formal releases are reserved for explicit maintainer direction after a
-fully hardened and operational many-to-many Guacamole/RDP remote operation
-milestone is met. That milestone must include a robust installer that requires
-sudo exactly once on first install and a fully diagnostic doctor surface.
+release. Formal releases require explicit maintainer direction and qualification of
+the supported browser workflows, native Remote View handoff, installation,
+update and actionable diagnostics. Scope the release gate to promised behavior;
+do not inherit a historical many-to-many Guacamole/RDP milestone.
 
 To prepare a release:
 
@@ -107,6 +112,11 @@ The docs changelog at `docs/src/app/changelog/page.mdx` mirrors `CHANGELOG.md` b
 Match the existing style in that file.
 
 ## Architecture
+
+Agent Browser owns browser launch, automation, profile and session continuity,
+and the integration that locates its owned browser desktop. Remote View owns
+desktop operation and the native human viewer. Keep that seam explicit;
+integration work must not grow a second viewer or access layer.
 
 This is a Rust workspace. The `agent-browser` binary package lives in `cli/`,
 and the focused `agent-browser-cdp` library package owns the CDP websocket
@@ -190,6 +200,11 @@ Testing directly.
   process cleanup.
 
 ## RDP and Remote-View Handoffs
+
+The operator experience is a direct link to the native Remote View desktop,
+using its existing authentication. Dashboard diagnostics are optional. Do not
+introduce an extra Agent Browser viewer-grant ceremony. Distinguish current
+implementation gaps from this governing product contract.
 
 - Give operators only the authenticated, opaque
   `/remote-view/<handoff-id>` URL returned as `handoffUrl` or the durable

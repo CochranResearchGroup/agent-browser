@@ -6,6 +6,19 @@ allowed-tools: Bash(npx agent-browser:*), Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+## Product purpose
+
+Use Agent Browser when reusable browser operation, task-appropriate profiles,
+continuity, native Remote View human handoff and scoped cleanup make the task
+easier to complete. Existing client profiles, managed persistent profiles and
+disposable profiles are all valid choices. Preserve existing authentication
+when requested. Human assistance uses a direct native desktop link through
+Remote View authentication; the person and agent continue in the same browser.
+Keep returned context concise and diagnostics actionable. A simpler scripting
+workflow or specialized CDP code may already meet the task.
+
+## Installation and implementation reference
+
 On the `v0.28.0` release-candidate branch,
 `agent-browser install workstation --dry-run --json` previews the source-free
 installed payload and `--apply --json` installs and reconciles the binary,

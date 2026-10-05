@@ -48,12 +48,13 @@
     "docs/dev/policies/0050-collaborative-development-workflow.md",
     "docs/dev/policies/0051-shared-runtime-effect-custody.md",
     "docs/dev/policies/0052-session-and-worktree-admission.md",
-    "docs/dev/policies/0053-policy-context-pilot.md"
+    "docs/dev/policies/0053-policy-context-pilot.md",
+    "docs/dev/policies/0054-browser-product-contract.md"
   ],
   "governance_inventory": [
     {
       "path": "AGENTS.md",
-      "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6"
+      "sha256": "58ed85a865f21d4f9bc4691b3abe06aee001ccef96b7fa0b2157cf7fc2184883"
     },
     {
       "path": "docs/dev/policies/0001-policy-management.md",
@@ -242,6 +243,10 @@
     {
       "path": "docs/dev/policies/0053-policy-context-pilot.md",
       "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82"
+    },
+    {
+      "path": "docs/dev/policies/0054-browser-product-contract.md",
+      "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e"
     }
   ],
   "profiles": [
@@ -320,7 +325,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
+          "sha256": "58ed85a865f21d4f9bc4691b3abe06aee001ccef96b7fa0b2157cf7fc2184883",
           "sections": [
             {
               "heading_path": [
@@ -332,6 +337,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "Current Planning Context"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Product Contract"
               ]
             }
           ]
@@ -379,6 +390,17 @@
               ]
             }
           ]
+        },
+        {
+          "path": "docs/dev/policies/0054-browser-product-contract.md",
+          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sections": [
+            {
+              "heading_path": [
+                "Agent Browser Product Contract"
+              ]
+            }
+          ]
         }
       ],
       "fallback_paths": [
@@ -392,7 +414,8 @@
         "docs/dev/policies/0028-goal-execution-governance.md",
         "docs/dev/policies/0045-model-selection-and-calibration.md",
         "docs/dev/policies/0050-collaborative-development-workflow.md",
-        "docs/dev/policies/0052-session-and-worktree-admission.md"
+        "docs/dev/policies/0052-session-and-worktree-admission.md",
+        "docs/dev/policies/0054-browser-product-contract.md"
       ],
       "reread_triggers": [
         "Task scope, authority, effects, target, or validation changes",
@@ -544,6 +567,19 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-documentation.product-value",
+            "kind": "required_gate",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0054-browser-product-contract.md",
+                "heading_path": [
+                  "Agent Browser Product Contract"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -626,7 +662,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
+          "sha256": "58ed85a865f21d4f9bc4691b3abe06aee001ccef96b7fa0b2157cf7fc2184883",
           "sections": [
             {
               "heading_path": [
@@ -650,6 +686,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "Current Planning Context"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Product Contract"
               ]
             }
           ]
@@ -697,6 +739,17 @@
               ]
             }
           ]
+        },
+        {
+          "path": "docs/dev/policies/0054-browser-product-contract.md",
+          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sections": [
+            {
+              "heading_path": [
+                "Agent Browser Product Contract"
+              ]
+            }
+          ]
         }
       ],
       "fallback_paths": [
@@ -710,7 +763,8 @@
         "docs/dev/policies/0028-goal-execution-governance.md",
         "docs/dev/policies/0045-model-selection-and-calibration.md",
         "docs/dev/policies/0050-collaborative-development-workflow.md",
-        "docs/dev/policies/0052-session-and-worktree-admission.md"
+        "docs/dev/policies/0052-session-and-worktree-admission.md",
+        "docs/dev/policies/0054-browser-product-contract.md"
       ],
       "reread_triggers": [
         "Task scope, authority, effects, target, or validation changes",
@@ -883,6 +937,19 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-implementation.product-value",
+            "kind": "required_gate",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0054-browser-product-contract.md",
+                "heading_path": [
+                  "Agent Browser Product Contract"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -964,7 +1031,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
+          "sha256": "58ed85a865f21d4f9bc4691b3abe06aee001ccef96b7fa0b2157cf7fc2184883",
           "sections": [
             {
               "heading_path": [
@@ -976,6 +1043,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "Current Planning Context"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Product Contract"
               ]
             }
           ]
@@ -1023,6 +1096,17 @@
               ]
             }
           ]
+        },
+        {
+          "path": "docs/dev/policies/0054-browser-product-contract.md",
+          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sections": [
+            {
+              "heading_path": [
+                "Agent Browser Product Contract"
+              ]
+            }
+          ]
         }
       ],
       "fallback_paths": [
@@ -1036,7 +1120,8 @@
         "docs/dev/policies/0028-goal-execution-governance.md",
         "docs/dev/policies/0045-model-selection-and-calibration.md",
         "docs/dev/policies/0050-collaborative-development-workflow.md",
-        "docs/dev/policies/0052-session-and-worktree-admission.md"
+        "docs/dev/policies/0052-session-and-worktree-admission.md",
+        "docs/dev/policies/0054-browser-product-contract.md"
       ],
       "reread_triggers": [
         "Task scope, authority, effects, target, or validation changes",
@@ -1188,6 +1273,19 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-planning.product-value",
+            "kind": "required_gate",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0054-browser-product-contract.md",
+                "heading_path": [
+                  "Agent Browser Product Contract"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -1269,7 +1367,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
+          "sha256": "58ed85a865f21d4f9bc4691b3abe06aee001ccef96b7fa0b2157cf7fc2184883",
           "sections": [
             {
               "heading_path": [
@@ -1293,6 +1391,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "Current Planning Context"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Product Contract"
               ]
             }
           ]
@@ -1340,6 +1444,17 @@
               ]
             }
           ]
+        },
+        {
+          "path": "docs/dev/policies/0054-browser-product-contract.md",
+          "sha256": "f98141d041cde0284851ffc2519fbd5f162abc9a877b2463b759bbceb575717e",
+          "sections": [
+            {
+              "heading_path": [
+                "Agent Browser Product Contract"
+              ]
+            }
+          ]
         }
       ],
       "fallback_paths": [
@@ -1353,7 +1468,8 @@
         "docs/dev/policies/0028-goal-execution-governance.md",
         "docs/dev/policies/0045-model-selection-and-calibration.md",
         "docs/dev/policies/0050-collaborative-development-workflow.md",
-        "docs/dev/policies/0052-session-and-worktree-admission.md"
+        "docs/dev/policies/0052-session-and-worktree-admission.md",
+        "docs/dev/policies/0054-browser-product-contract.md"
       ],
       "reread_triggers": [
         "Task scope, authority, effects, target, or validation changes",
@@ -1541,6 +1657,19 @@
                 "heading_path": [
                   "AGENTS.md",
                   "Current Planning Context"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.product-value",
+            "kind": "required_gate",
+            "statement": "Every substantive product change must improve a concrete browser workflow with less effort or fewer failures. Support task-appropriate existing, managed persistent or disposable profiles; Remote View owns the native desktop/viewer. Human handoff and continued automation must not require a dashboard, duplicate viewer or additional viewer-grant ceremony. Keep current gaps distinct from the product direction.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0054-browser-product-contract.md",
+                "heading_path": [
+                  "Agent Browser Product Contract"
                 ]
               }
             ]
