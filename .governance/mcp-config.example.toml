@@ -1,0 +1,6 @@
+# Merge this stanza into local .codex/config.toml after installing
+# governance-context 0.0.5.dev0 or a validated compatible version.
+# Replace the command with the reviewed absolute installed executable path.
+[mcp_servers.governance]
+command = "/absolute/path/to/governance-context-mcp"
+args = ["--root", ".", "--include", "AGENTS.md", "--include", "docs/dev/policies/**/*.md", "--include", "docs/dev/plans/**/*.md", "--include", "docs/dev/notes/**/*.md", "--include", "RUNBOOK.md", "--include", "ROADMAP.md"]

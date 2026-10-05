@@ -526,96 +526,24 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 ## Policy Loading Contract
 
-- `AGENTS.md` is a routing surface, not a one-time pointer.
-- Re-read the relevant policy files under `docs/dev/policies/` at the start of any non-trivial turn.
-- Re-read the relevant policy files when task scope changes mid-session.
-- When behavior is ambiguous, prefer re-reading policy over improvising from stale assumptions.
+This repository opts into the bounded [policy-context pilot](docs/dev/policies/0053-policy-context-pilot.md). Canonical Markdown remains authoritative; `.governance/policy-context.json` declares reviewed, hash-bound decision packets.
 
-## Policy Re-read Triggers
+For a supported task, call governance MCP `gov_policy` with the matching profile and task kind before substantive work:
 
-- Before substantive bug hunting or feature work, read policies
-  `0028-goal-execution-governance.md`, `0042-code-testing-discipline.md`, and
-  `0045-model-selection-and-calibration.md` for delivery bounds, batch validation,
-  and economical task routing; read `0021-subagent-workflow-optimization.md`
-  when considering delegation. These apply to ongoing continuations too.
-- Read policy `0044-planning-discipline.md` before substantive planning, a
-  second related defect, or another expensive build, deployment, or acceptance
-  cycle. It routes consolidation, evidence, delivery budgeting, and worker
-  assignments.
-- Read policies `0047-multi-session-development-operating-model.md` and
-  `0050-collaborative-development-workflow.md` before
-  starting or resuming a substantive development lane, assigning top-level session ownership,
-  delegating work, creating a lane runtime, or integrating parallel branches.
-- Read policy `0051-shared-runtime-effect-custody.md` before any production or
-  staging install, recovery, reconcile, supervisor, ingress, browser, profile,
-  or Service State mutation. A prior chat checkpoint or file lock is not live
-  effect custody.
-- Read policy `0052-session-and-worktree-admission.md` at the start and closeout
-  of every top-level development session and before any primary, reviewer,
-  benchmark, fixture, red-team, or replacement worktree is created or
-  assigned. Serialize conflicting Git transitions; do not invent a permanent
-  coordinator or permission role.
-- Read policies `0048-forge-issue-reporting.md` and
-  `0049-github-issue-operations.md` before any issue provider mutation,
-  including settings, labels, issue creation, editing, assignment, planning,
-  closure, or transfer.
-- re-read planning-related policy before opening, revising, or closing a substantive plan
-- re-read documentation-related policy before changing docs, contracts, or canonical authorities
-- re-read validation and closeout policy before claiming work complete
-- re-read runtime or environment-boundary policy before touching live state, tenant state, deploy state, or off-repo operator data
-- re-read branch, commit, and integration policy before starting a multi-file or multi-step implementation slice
+| Profile | Task kinds |
+| --- | --- |
+| agent-browser-documentation | documentation |
+| agent-browser-implementation | implementation, review |
+| agent-browser-planning | planning |
+| agent-browser-runtime | runtime |
 
-## Policy Entry
+Retain the complete current packet and its decision digest. At a scope, authority, effect, target, or validation change, recheck with `known_decision_digest`; an unchanged response permits reuse of that retained packet. After context loss, request a full packet again. Check each applicable profile when work spans task kinds.
 
-This repo keeps its durable repo-local policy under `docs/dev/policies/`.
+Use compact packets by default. Read cited canonical sections when details are unresolved; request source text only when needed. Supply explicit, source-attributed action facts for authority and effects. A packet does not invent authorization or require renewed permission for an already authorized action.
 
-Read and follow:
-- `docs/dev/policies/0001-policy-management.md`
-- `docs/dev/policies/0002-policy-upgrade-management.md`
-- `docs/dev/policies/0003-policy-adoption-feedback-loop.md`
-- `docs/dev/policies/0004-git-worktree-hygiene.md`
-- `docs/dev/policies/0005-commit-history-discipline.md`
-- `docs/dev/policies/0006-branch-and-integration-strategy.md`
-- `docs/dev/policies/0007-commit-and-push-cadence.md`
-- `docs/dev/policies/0008-versioning-and-release.md`
-- `docs/dev/policies/0009-turn-closeout.md`
-- `docs/dev/policies/0010-validation-and-handoff.md`
-- `docs/dev/policies/0011-graph-backed-memory-usage.md`
-- `docs/dev/policies/0012-codegraph-usage.md`
-- `docs/dev/policies/0014-website-surface-targeting.md`
-- `docs/dev/policies/0015-db-backed-state-governance.md`
-- `docs/dev/policies/0016-live-drift-reconciliation.md`
-- `docs/dev/policies/0017-backup-and-recovery-operations.md`
-- `docs/dev/policies/0018-visual-release-qa.md`
-- `docs/dev/policies/0019-web-interface-quality.md`
-- `docs/dev/policies/0020-documentation-change-control.md`
-- `docs/dev/policies/0021-subagent-workflow-optimization.md`
-- `docs/dev/policies/0022-preview-artifact-review.md`
-- `docs/dev/policies/0023-upstream-fork-maintenance.md`
-- `docs/dev/policies/0024-notes-and-memories.md`
-- `docs/dev/policies/0026-subagent-runtime-governance.md`
-- `docs/dev/policies/0028-goal-execution-governance.md`
-- `docs/dev/policies/0029-parallel-plan-design.md`
-- `docs/dev/policies/0031-runtime-vs-product-boundary.md`
-- `docs/dev/policies/0032-runtime-state-governance.md`
-- `docs/dev/policies/0033-tenant-isolation-and-operator-state.md`
-- `docs/dev/policies/0034-fieldwork-productization.md`
-- `docs/dev/policies/0035-monolith-extraction-discipline.md`
-- `docs/dev/policies/0036-architecture-guardrails.md`
-- `docs/dev/policies/0037-active-lane-coordination.md`
-- `docs/dev/policies/0038-multi-agent-reconciliation.md`
-- `docs/dev/policies/0039-policy-harvest-loop.md`
-- `docs/dev/policies/0042-code-testing-discipline.md`
-- `docs/dev/policies/0043-roadmap-runbook-governance.md`
-- `docs/dev/policies/0044-planning-discipline.md`
-- `docs/dev/policies/0045-model-selection-and-calibration.md`
-- `docs/dev/policies/0046-work-item-traceability.md`
-- `docs/dev/policies/0047-multi-session-development-operating-model.md`
-- `docs/dev/policies/0048-forge-issue-reporting.md`
-- `docs/dev/policies/0049-github-issue-operations.md`
-- `docs/dev/policies/0050-collaborative-development-workflow.md`
-- `docs/dev/policies/0051-shared-runtime-effect-custody.md`
-- `docs/dev/policies/0052-session-and-worktree-admission.md`
+If MCP is unavailable, the packet is non-current, the task is unsupported, or a conflict remains unresolved, read the relevant canonical files directly. Follow returned `fallback_paths`; use `gov_list` or the real files under `docs/dev/policies/` to locate other applicable modules. Do not bulk-load the policy directory or follow nonexistent ordinal aliases.
+
+Review canonical changes before explicitly refreshing manifest hashes. Never automatically bless drift. The pilot covers one logical repository, including its worktrees; each checkout binds its own source hashes. It does not authorize runtime effects or resume paused work.
 
 ## Scope
 
