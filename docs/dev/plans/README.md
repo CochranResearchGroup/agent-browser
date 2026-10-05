@@ -1,7 +1,5 @@
 # Active plan index
 
-Start here rather than enumerating historical plans. Current direction lives in [ROADMAP](../../../ROADMAP.md); execution state lives in [RUNBOOK](../../../RUNBOOK.md).
+[P223 version 6](0223-2026-10-04-finish-agent-browser-acceptance.md) owns the bounded browser-workflow outcome. Execution is paused. [RUNBOOK](../../../RUNBOOK.md) owns current evidence and the next packet after explicit resume; [ROADMAP](../../../ROADMAP.md) owns product direction.
 
-P223 version 5 remains paused in the existing `platform/p220-remote-view-consumer` working checkout. This main-based archive does not publish or replace its unmerged scope.
-
-All predecessor plan entries in this checkout are [historical reference](../../history/2026-10-05-legacy-planning/README.md). An archived OPEN label is an original state, not a current assignment. Do not load predecessors as startup context or inherit their strategy and access ceremonies.
+[Historical plans](../../history/2026-10-05-legacy-planning/README.md), including P223 revision 5, are reference-only. Do not load them as startup instructions or infer execution authority from old OPEN states.
