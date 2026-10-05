@@ -1,4 +1,26 @@
-# Open and reconnect an RDP browser
+# Browser work with Remote View
+
+Agent Browser should make browser work easier to complete, hand to a person,
+and continue afterward. It owns browser automation and task-appropriate profiles;
+Remote View owns desktop operation and the native human viewer.
+
+The operator experience is a direct desktop link through Remote View's existing
+authentication, including production Authelia. Human interaction and automation
+continue in the same browser. Prefer a chooser showing Agent Browser-owned
+desktops. A dashboard, duplicate viewer, extra Open desktop step or additional
+Agent Browser viewer-grant ceremony is not part of the intended workflow.
+
+Use an existing client profile, a managed persistent profile or a disposable
+profile as the task requires. Preserve existing authentication where needed.
+Validate responsive viewing and controls, continued automation and predictable
+cleanup. This describes the governing direction; the repository RUNBOOK records
+current implementation and acceptance gaps.
+
+## Implementation reference
+
+The reference below documents existing integration details. Treat a detail that
+conflicts with the governing workflow as an implementation gap to resolve,
+rather than a new product requirement.
 
 This guide shows agents and operators how to open a browser through RDP or
 Guacamole and preserve one durable link across route changes. The operator

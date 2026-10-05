@@ -1,8 +1,19 @@
 # agent-browser
 
-Browser automation CLI for AI agents. Fast native Rust CLI.
+Make real browser work easier to complete, hand to a person, and continue afterward.
 
-## Shared browser work for agents
+Agent Browser provides reusable browser operation, task-appropriate disposable
+or persistent profiles, session continuity, clear results and scoped cleanup.
+Remote View supplies the native desktop and human viewer. A direct desktop
+link lets a person help in the same browser and then return work to the agent.
+
+Choose it when these capabilities reduce client code, agent context or workflow
+failures. A scripting workflow or direct CDP can remain the right choice for a
+simpler or specialized task. See the [governing product contract](docs/dev/policies/0054-browser-product-contract.md).
+
+Implementation and acceptance status live in [RUNBOOK](RUNBOOK.md).
+
+## Service integration reference
 
 For shared, authenticated, profile-sensitive, or operator-visible work, read
 `agent-browser://operating-guide` and call `service_access_plan` before

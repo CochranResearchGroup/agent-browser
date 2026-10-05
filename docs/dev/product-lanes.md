@@ -11,6 +11,10 @@ Every new substantive plan and active-lane catalog entry declares one primary
 product lane. A plan may name related lanes, but one lane owns integration and
 the final acceptance decision.
 
+## Product outcome
+
+All lanes serve [the browser product contract](policies/0054-browser-product-contract.md). A lane earns work through a concrete improvement to browser task completion, human handoff and continuation, or predictable operation. Architectural decomposition and governance are supporting work, not independent product outcomes.
+
 ## Lane Summary
 
 | ID | Product lane | Outcome | Default branch prefix |
@@ -94,15 +98,12 @@ plan adopts it.
 
 This lane owns the Agent Browser service authority, Service State persistence,
 runtime supervisor, browser lifecycle, leases, transport, installation,
-development runtime, build acceleration, remote-view infrastructure, shared
-desktop services, capability registry, observability, and architectural
-extractions.
+development runtime, build acceleration, the Remote View consumer integration,
+shared desktop adapters, capability registry, observability, and architectural
+extractions. Remote View owns the desktop provider and native viewer; this lane
+consumes them rather than constructing a parallel viewing or access system.
 
-[Plan 0161](../history/2026-10-05-legacy-planning/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
-belongs primarily here because it establishes the profile aggregate, sealed
-repair and reset transactions, lifecycle joins, and shared public adapters.
-`PL-AUTH` consumes its authentication-reset and readiness contracts but does
-not independently own profile repair, Service State, leases, or runtime reset.
+`PL-AUTH` consumes profile continuity and readiness contracts. Profile and browser lifecycle remain here. Historical plans are reference material and do not define current lane requirements.
 
 This lane also owns the fast development boundary: ordinary candidates use the
 isolated development runtime and optimized CI Cargo profile; full release builds

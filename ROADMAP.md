@@ -4,9 +4,11 @@ Updated: 2026-10-05
 
 ## Current direction
 
-Agent Browser launches and operates browsers for existing clients. The operator handoff is a deep link directly to a Remote View desktop. Use the real production Remote View origin and its existing Authelia authentication. Prefer a chooser restricted to Agent Browser-owned desktops.
+[The product contract](docs/dev/policies/0054-browser-product-contract.md) owns the value proposition: complete browser work, hand it to a person, and continue afterward with less effort and fewer failures.
 
-Keep the workflow simple: no copied Remote View service, dashboard detour, extra Open desktop click, or additional Agent Browser viewer-grant ceremony. Use the client's actual chosen profile, including AuraCall's default; do not invent a login requirement for a synthetic profile. Preserve existing profile data and authentication.
+Use an existing client profile, a managed persistent profile, or a disposable profile as the task requires. Remote View owns desktop operation and the native viewer; Agent Browser owns browser operation and their integration. The operator handoff opens the native desktop directly through existing Remote View authentication, including production Authelia. Prefer an Agent Browser-owned desktop chooser.
+
+Prioritize less plumbing, useful continuity, seamless human assistance, predictable operation and clear results. Each substantial change names its concrete workflow improvement and validates it. Current implementation gaps belong in RUNBOOK rather than becoming permanent product rituals.
 
 ## Current work and boundaries
 
