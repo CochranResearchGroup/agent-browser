@@ -2,7 +2,7 @@
 
 Date: 2026-09-13
 
-Plan: [0177](../plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+Plan: [0177](../../history/2026-10-05-legacy-planning/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
 
 Work item: [issue #65](https://github.com/CochranResearchGroup/agent-browser/issues/65)
 

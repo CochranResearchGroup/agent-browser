@@ -4,7 +4,7 @@ Sole current execution status. Plan0160 owns scope, strategy, frozen acceptance,
 
 ## Turn 312 | 2026-09-13
 
-[Plan0177](docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+[Plan0177](plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
 is PLANNED on `platform/plan-0177-development-readiness` from current
 `origin/main` at `d32919f8`. It freezes serious development until issue-backed
 multi-session policy, current worktree custody, 37 active planning findings,
@@ -19,7 +19,7 @@ tenant mutation is authorized by this planning checkpoint.
 
 ## Turn 311 | 2026-09-13
 
-[Plan0176](docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+[Plan0176](plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
 is CLOSED. PR60 passed every required check and merged as `1d12d1c4`. Five
 stable product lanes now govern numbered plans, reusable note routing,
 worktree limits, shared-writer arbitration, dependencies, and merge order.
@@ -29,7 +29,7 @@ credential, provider, tenant, installation, or release effect occurred.
 
 ## Turn 310 | 2026-09-13
 
-[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
+[Plan0175](plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
 is CLOSED. PR57 passed every required fast check and merged as `0e18b351`.
 Executable SHA-256 `d0186990d3758587c5c3e672330666362e1e3f077f7109a878052b242d677a50`
 is installed as generation `0.28.0-d0186990d375-3a6142188dd0` through accepted
@@ -57,7 +57,7 @@ through 309 are preserved in
 
 ## Turn 286 | 2026-09-09
 
-Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
+Authority: [Plan0160](plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 Operator authorized candidate installation and deferred standalone CLI compatibility
 to the next round. Installation began19:51:02 UTC with a local15-minute bound.
 Source052848aa is now installed; no new build or broad diagnosis was needed.
@@ -68,7 +68,7 @@ budget are ready. No consumer payment/CSV action or unrelated cleanup.
 
 Operator direction now makes profile remediation a first-class product surface.
 Plan0160 defines the objective and
-[Plan0161](docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
+[Plan0161](plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 owns the bounded implementation of read-only profile diagnosis, preserving plan/apply repair, and
 explicitly scoped reset across CLI, HTTP, MCP, generated client and dashboard.
 The next implementation milestone is diagnose plus preserving repair for the

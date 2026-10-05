@@ -524,6 +524,10 @@ npx opensrc <owner>/<repo>      # GitHub repo (e.g., npx opensrc vercel/ai)
 
 <!-- opensrc:end -->
 
+## Current Planning Context
+
+Start with [current direction](ROADMAP.md), [current execution](RUNBOOK.md), and the [active plan index](docs/dev/plans/README.md). `docs/history/` is preserved reference material, excluded from ordinary governance MCP discovery. Read a specific archived entry only for a present evidence question; never treat archived strategies, OPEN states, or access ceremonies as current instructions or authority to resume work.
+
 ## Policy Loading Contract
 
 This repository opts into the bounded [policy-context pilot](docs/dev/policies/0053-policy-context-pilot.md). Canonical Markdown remains authoritative; `.governance/policy-context.json` declares reviewed, hash-bound decision packets.

@@ -16,11 +16,11 @@ Integration: short-lived branch through the protected `main` workflow
 
 Corrective successor to: [Plan 0142](0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md)
 
-Related acceptance: [Plan 0142 final acceptance](../notes/0147-2026-08-29-plan-0142-final-acceptance.md)
+Related acceptance: [Plan 0142 final acceptance](../../../dev/notes/0147-2026-08-29-plan-0142-final-acceptance.md)
 
 Related program: [Plan 0160](0160-2026-09-06-production-profile-identity-and-operational-readiness.md), A1 and AX
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+Current execution status: [RUNBOOK.md](../RUNBOOK.md)
 
 Integration receipt: PR 29, merge
 `14fb3db060d8fb644665b0181ac8f2860b0af3f2`

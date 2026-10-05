@@ -18,7 +18,7 @@ Parent: [Plan 0160](0160-2026-09-06-production-profile-identity-and-operational-
 
 Blocks: [Plan 0162](0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md) implementation start
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+Current execution status: [RUNBOOK.md](../RUNBOOK.md)
 
 ## Objective and authority
 

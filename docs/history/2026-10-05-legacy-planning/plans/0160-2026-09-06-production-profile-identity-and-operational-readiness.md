@@ -6,7 +6,7 @@ State: OPEN
 
 Consolidation: required
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md). Historical
+Current execution status: [RUNBOOK.md](../RUNBOOK.md). Historical
 execution checkpoints below are retained evidence, not current status.
 
 Lane: P157
@@ -34,7 +34,7 @@ of repairing those blockers, starting with the first reproduction.
 The operator requested this plan and subsequently instructed execution. The
 primary now executes the work units under that authority. Existing authorization
 for candidate installation and the reviewed 77 policy writes remains recorded
-in the [delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md).
+in the [delivery proposal](../../../dev/notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md).
 During execution, apply that authority to its actual scope without requesting
 it again. Do not infer authority for unrelated client eviction, broader grants,
 private content capture, new external systems, or formal release.
@@ -46,7 +46,7 @@ or classify each warning against that permission contract. Physical browser,
 profile, session, process and target identity checks remain required; they are
 distinct from proving the client's declared identity.
 
-The operator also supplied [incident 0156](../notes/0156-2026-09-06-tab-release-skipped-close-and-wrong-tab-close.md).
+The operator also supplied [incident 0156](../../../dev/notes/0156-2026-09-06-tab-release-skipped-close-and-wrong-tab-close.md).
 It reports successful logical release despite skipped physical cleanup, followed
 by a close operation that apparently removed a different tab. Treat this as an
 A1/AX investigation case: establish the actual serialized selector and historical
@@ -491,7 +491,7 @@ contract remains open until each requirement has current evidence.
 
 [Plan 0159](0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md)
 closed a bounded repair/delivery contract; it did not establish whole production
-readiness. Its [acceptance audit](../notes/0155-2026-09-06-plan-0159-acceptance-audit.md)
+readiness. Its [acceptance audit](../../../dev/notes/0155-2026-09-06-plan-0159-acceptance-audit.md)
 and delivery proposal preserve that distinction. This plan cannot close merely
 because source tests, an older candidate, or a subset of user journeys pass.
 

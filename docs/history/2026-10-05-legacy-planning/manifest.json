@@ -1,0 +1,1652 @@
+{
+  "schema_version": 1,
+  "disposition": "historical_only",
+  "original_ref": "8dc137dbcb466a18b46f482c2e6763b0669f937c",
+  "entries": [
+    {
+      "original_path": "docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md",
+      "original_sha256": "2072427027c2c6cce69705373245a91c6cabfd92aeaee083ee7a560fd2e0b704",
+      "archived_sha256": "2072427027c2c6cce69705373245a91c6cabfd92aeaee083ee7a560fd2e0b704",
+      "prose_sha256": "2072427027c2c6cce69705373245a91c6cabfd92aeaee083ee7a560fd2e0b704"
+    },
+    {
+      "original_path": "docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md",
+      "original_sha256": "4294fa57ae0f472b318683f304f4e652e3b89d02485680cee799f2088c11a71c",
+      "archived_sha256": "4294fa57ae0f472b318683f304f4e652e3b89d02485680cee799f2088c11a71c",
+      "prose_sha256": "4294fa57ae0f472b318683f304f4e652e3b89d02485680cee799f2088c11a71c"
+    },
+    {
+      "original_path": "docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md",
+      "original_sha256": "b8de2690d6ec2acf7ce5e9ea67856c395862d47f5470b64db6954ee69a07c269",
+      "archived_sha256": "b8de2690d6ec2acf7ce5e9ea67856c395862d47f5470b64db6954ee69a07c269",
+      "prose_sha256": "b8de2690d6ec2acf7ce5e9ea67856c395862d47f5470b64db6954ee69a07c269"
+    },
+    {
+      "original_path": "docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0004-2026-05-29-release-candidate-install-validation-plan.md",
+      "original_sha256": "1c3e7adc49de94672d23fa5feecfc973448b33ccfe8c5869891535b413c293b0",
+      "archived_sha256": "1c3e7adc49de94672d23fa5feecfc973448b33ccfe8c5869891535b413c293b0",
+      "prose_sha256": "1c3e7adc49de94672d23fa5feecfc973448b33ccfe8c5869891535b413c293b0"
+    },
+    {
+      "original_path": "docs/dev/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md",
+      "original_sha256": "eab4f83f0071d849b6576af8c9df16eecd27d067ccce4ed83fdd333dad9de0ce",
+      "archived_sha256": "eab4f83f0071d849b6576af8c9df16eecd27d067ccce4ed83fdd333dad9de0ce",
+      "prose_sha256": "eab4f83f0071d849b6576af8c9df16eecd27d067ccce4ed83fdd333dad9de0ce"
+    },
+    {
+      "original_path": "docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md",
+      "original_sha256": "ce9d35385f4fcc29bf0fb9591094de07d82c4befaf7bec66b2094153c495cdc7",
+      "archived_sha256": "ce9d35385f4fcc29bf0fb9591094de07d82c4befaf7bec66b2094153c495cdc7",
+      "prose_sha256": "ce9d35385f4fcc29bf0fb9591094de07d82c4befaf7bec66b2094153c495cdc7"
+    },
+    {
+      "original_path": "docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md",
+      "original_sha256": "87c930605e819d9394f449e9df260cf247d2eb140bc6d81aba13a0fc90ecb2be",
+      "archived_sha256": "87c930605e819d9394f449e9df260cf247d2eb140bc6d81aba13a0fc90ecb2be",
+      "prose_sha256": "87c930605e819d9394f449e9df260cf247d2eb140bc6d81aba13a0fc90ecb2be"
+    },
+    {
+      "original_path": "docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md",
+      "original_sha256": "ccae9a80fc5abbf7f4384fa491e92ee7d966ab6f5cb221caa4fb0dd0519199eb",
+      "archived_sha256": "ccae9a80fc5abbf7f4384fa491e92ee7d966ab6f5cb221caa4fb0dd0519199eb",
+      "prose_sha256": "ccae9a80fc5abbf7f4384fa491e92ee7d966ab6f5cb221caa4fb0dd0519199eb"
+    },
+    {
+      "original_path": "docs/dev/plans/0009-2026-05-30-p08-packaging-and-integration-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0009-2026-05-30-p08-packaging-and-integration-plan.md",
+      "original_sha256": "712b22869e17c025c1150ccd7b09d4edab1580f92a59a89245da0983d82e323d",
+      "archived_sha256": "712b22869e17c025c1150ccd7b09d4edab1580f92a59a89245da0983d82e323d",
+      "prose_sha256": "712b22869e17c025c1150ccd7b09d4edab1580f92a59a89245da0983d82e323d"
+    },
+    {
+      "original_path": "docs/dev/plans/0010-2026-05-30-retained-orphan-profile-cleanup-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0010-2026-05-30-retained-orphan-profile-cleanup-plan.md",
+      "original_sha256": "7121d4b8b211a2d4b4cc1662cca191f3464e31e19442e8e949c58f7ec4d8d314",
+      "archived_sha256": "7121d4b8b211a2d4b4cc1662cca191f3464e31e19442e8e949c58f7ec4d8d314",
+      "prose_sha256": "7121d4b8b211a2d4b4cc1662cca191f3464e31e19442e8e949c58f7ec4d8d314"
+    },
+    {
+      "original_path": "docs/dev/plans/0011-2026-05-30-live-dashboard-runtime-publish-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0011-2026-05-30-live-dashboard-runtime-publish-plan.md",
+      "original_sha256": "bd047aad0890519a0efba91e44ad59b0035a60bdd3ec0cb1f28e05e62a14cfb8",
+      "archived_sha256": "bd047aad0890519a0efba91e44ad59b0035a60bdd3ec0cb1f28e05e62a14cfb8",
+      "prose_sha256": "bd047aad0890519a0efba91e44ad59b0035a60bdd3ec0cb1f28e05e62a14cfb8"
+    },
+    {
+      "original_path": "docs/dev/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md",
+      "original_sha256": "30fbe3af23c2b6ba11c2f96040bbb677f2379a9389a3bd056a11aeb1b6df0b2c",
+      "archived_sha256": "30fbe3af23c2b6ba11c2f96040bbb677f2379a9389a3bd056a11aeb1b6df0b2c",
+      "prose_sha256": "cc54ad7457fd192c59932b4451f3252d1e0189e04d7af58ed5c79c934d2cc30f"
+    },
+    {
+      "original_path": "docs/dev/plans/0013-2026-05-31-selected-workspace-context-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0013-2026-05-31-selected-workspace-context-plan.md",
+      "original_sha256": "42cce1c13b35371a01cdc2a21de5da053f3d5b60018c2cf7e49a34ce7ac40660",
+      "archived_sha256": "42cce1c13b35371a01cdc2a21de5da053f3d5b60018c2cf7e49a34ce7ac40660",
+      "prose_sha256": "42cce1c13b35371a01cdc2a21de5da053f3d5b60018c2cf7e49a34ce7ac40660"
+    },
+    {
+      "original_path": "docs/dev/plans/0014-2026-05-31-contextual-chat-codex-app-server-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0014-2026-05-31-contextual-chat-codex-app-server-plan.md",
+      "original_sha256": "d5ceebe7371243d2de0eb1040acbdd402e65042e560bac430c3c408652dd8264",
+      "archived_sha256": "d5ceebe7371243d2de0eb1040acbdd402e65042e560bac430c3c408652dd8264",
+      "prose_sha256": "d5ceebe7371243d2de0eb1040acbdd402e65042e560bac430c3c408652dd8264"
+    },
+    {
+      "original_path": "docs/dev/plans/0015-2026-05-31-codex-app-server-supervisor-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0015-2026-05-31-codex-app-server-supervisor-plan.md",
+      "original_sha256": "f3a169e2330817f94f7cf5e0e3f2a482ea2d009e8ecac329146b5f2bf61837fb",
+      "archived_sha256": "f3a169e2330817f94f7cf5e0e3f2a482ea2d009e8ecac329146b5f2bf61837fb",
+      "prose_sha256": "f3a169e2330817f94f7cf5e0e3f2a482ea2d009e8ecac329146b5f2bf61837fb"
+    },
+    {
+      "original_path": "docs/dev/plans/0016-2026-05-31-effective-stealth-remote-default-launch-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0016-2026-05-31-effective-stealth-remote-default-launch-plan.md",
+      "original_sha256": "b6210333ab2be5b774896e9f546d51485aeff3033dd3352f10145beeb14f9996",
+      "archived_sha256": "b6210333ab2be5b774896e9f546d51485aeff3033dd3352f10145beeb14f9996",
+      "prose_sha256": "b6210333ab2be5b774896e9f546d51485aeff3033dd3352f10145beeb14f9996"
+    },
+    {
+      "original_path": "docs/dev/plans/0017-2026-05-31-plan-0016-integration-checkpoint.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0017-2026-05-31-plan-0016-integration-checkpoint.md",
+      "original_sha256": "f414efe4d7d8e78ade4f33b3b013d1fe33f6250a117e474abe30294e51a975be",
+      "archived_sha256": "f414efe4d7d8e78ade4f33b3b013d1fe33f6250a117e474abe30294e51a975be",
+      "prose_sha256": "f414efe4d7d8e78ade4f33b3b013d1fe33f6250a117e474abe30294e51a975be"
+    },
+    {
+      "original_path": "docs/dev/plans/0018-2026-06-01-workspace-inspector-tabs-productization-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0018-2026-06-01-workspace-inspector-tabs-productization-plan.md",
+      "original_sha256": "8cbf05f8ae7e3eee34ad3e6b63aa97b4314a32c0419e998581be30e18b9f57ec",
+      "archived_sha256": "8cbf05f8ae7e3eee34ad3e6b63aa97b4314a32c0419e998581be30e18b9f57ec",
+      "prose_sha256": "954b193cf293fe5d9c692840e7088526ee8e3cade9964d23be3f63df36e21c04"
+    },
+    {
+      "original_path": "docs/dev/plans/0019-2026-06-01-workspace-tab-dense-inspector-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0019-2026-06-01-workspace-tab-dense-inspector-plan.md",
+      "original_sha256": "9a95e1bdcf2420aaf687c01d1564da2b2480cc559a099ff2b4ad952701cd26f3",
+      "archived_sha256": "9a95e1bdcf2420aaf687c01d1564da2b2480cc559a099ff2b4ad952701cd26f3",
+      "prose_sha256": "9a95e1bdcf2420aaf687c01d1564da2b2480cc559a099ff2b4ad952701cd26f3"
+    },
+    {
+      "original_path": "docs/dev/plans/0020-2026-06-01-chat-tab-selected-workspace-evidence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0020-2026-06-01-chat-tab-selected-workspace-evidence-plan.md",
+      "original_sha256": "37ff23794b862cb69e85c1db0b4d6596b6fe530d507e6fdd8fc6361c3b11a02c",
+      "archived_sha256": "37ff23794b862cb69e85c1db0b4d6596b6fe530d507e6fdd8fc6361c3b11a02c",
+      "prose_sha256": "37ff23794b862cb69e85c1db0b4d6596b6fe530d507e6fdd8fc6361c3b11a02c"
+    },
+    {
+      "original_path": "docs/dev/plans/0021-2026-06-01-activity-tab-selected-workspace-timeline-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0021-2026-06-01-activity-tab-selected-workspace-timeline-plan.md",
+      "original_sha256": "fb3d3a101d0e6553f6e199539a51da172e8fa77ac1050fc61001085993826a46",
+      "archived_sha256": "fb3d3a101d0e6553f6e199539a51da172e8fa77ac1050fc61001085993826a46",
+      "prose_sha256": "685237706f8d3783af18713fd8d8ea497788ec031b4430301beb1f9e599fc86b"
+    },
+    {
+      "original_path": "docs/dev/plans/0022-2026-06-01-superuser-codex-operator-agent-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0022-2026-06-01-superuser-codex-operator-agent-plan.md",
+      "original_sha256": "2b5b2a3da865854b5dbca11f4788ccad6500cd550dd1138e4f4de7ca275b256f",
+      "archived_sha256": "2b5b2a3da865854b5dbca11f4788ccad6500cd550dd1138e4f4de7ca275b256f",
+      "prose_sha256": "2b5b2a3da865854b5dbca11f4788ccad6500cd550dd1138e4f4de7ca275b256f"
+    },
+    {
+      "original_path": "docs/dev/plans/0023-2026-06-01-console-tab-selected-workspace-diagnostics-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0023-2026-06-01-console-tab-selected-workspace-diagnostics-plan.md",
+      "original_sha256": "83582e35d9ab97845f82ccec921c03037bcd972bcec18b35012448fc7d0d5cb5",
+      "archived_sha256": "83582e35d9ab97845f82ccec921c03037bcd972bcec18b35012448fc7d0d5cb5",
+      "prose_sha256": "83582e35d9ab97845f82ccec921c03037bcd972bcec18b35012448fc7d0d5cb5"
+    },
+    {
+      "original_path": "docs/dev/plans/0024-2026-06-01-console-tab-remediation-and-retest-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0024-2026-06-01-console-tab-remediation-and-retest-plan.md",
+      "original_sha256": "0d12a85fefbbd7ed6bb3dd17c0067a9a3ba08515d1c5d75e5fbd0b3e1a4356df",
+      "archived_sha256": "0d12a85fefbbd7ed6bb3dd17c0067a9a3ba08515d1c5d75e5fbd0b3e1a4356df",
+      "prose_sha256": "0d12a85fefbbd7ed6bb3dd17c0067a9a3ba08515d1c5d75e5fbd0b3e1a4356df"
+    },
+    {
+      "original_path": "docs/dev/plans/0025-2026-06-01-remote-view-target-attribution-and-idle-display-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0025-2026-06-01-remote-view-target-attribution-and-idle-display-plan.md",
+      "original_sha256": "2566cf2782ed84b1c9742405f6fcd0d24dd68143f7b1d662d039af6bcea002d7",
+      "archived_sha256": "2566cf2782ed84b1c9742405f6fcd0d24dd68143f7b1d662d039af6bcea002d7",
+      "prose_sha256": "2566cf2782ed84b1c9742405f6fcd0d24dd68143f7b1d662d039af6bcea002d7"
+    },
+    {
+      "original_path": "docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md",
+      "original_sha256": "36558d137031aaab0f7d33ed280a91469f0a9cfd0f22544c262ef2227ded3f6a",
+      "archived_sha256": "36558d137031aaab0f7d33ed280a91469f0a9cfd0f22544c262ef2227ded3f6a",
+      "prose_sha256": "36558d137031aaab0f7d33ed280a91469f0a9cfd0f22544c262ef2227ded3f6a"
+    },
+    {
+      "original_path": "docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md",
+      "original_sha256": "844afae0b25e92264f6d09088db1fc84ce8e30c8132602cd85e40043ccc2a808",
+      "archived_sha256": "844afae0b25e92264f6d09088db1fc84ce8e30c8132602cd85e40043ccc2a808",
+      "prose_sha256": "844afae0b25e92264f6d09088db1fc84ce8e30c8132602cd85e40043ccc2a808"
+    },
+    {
+      "original_path": "docs/dev/plans/0028-2026-06-06-review-validation-and-commit-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0028-2026-06-06-review-validation-and-commit-plan.md",
+      "original_sha256": "c313748aba1396d6bdf05f43d74ff7e424ee8e44a57fd811b06a2be7938753f1",
+      "archived_sha256": "c313748aba1396d6bdf05f43d74ff7e424ee8e44a57fd811b06a2be7938753f1",
+      "prose_sha256": "c313748aba1396d6bdf05f43d74ff7e424ee8e44a57fd811b06a2be7938753f1"
+    },
+    {
+      "original_path": "docs/dev/plans/0029-2026-06-07-live-retained-pressure-cleanup-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0029-2026-06-07-live-retained-pressure-cleanup-plan.md",
+      "original_sha256": "2d5a90a4e5275316405a7533cc7d2c04a660d66f57076844695e7b87fe865d2d",
+      "archived_sha256": "2d5a90a4e5275316405a7533cc7d2c04a660d66f57076844695e7b87fe865d2d",
+      "prose_sha256": "2d5a90a4e5275316405a7533cc7d2c04a660d66f57076844695e7b87fe865d2d"
+    },
+    {
+      "original_path": "docs/dev/plans/0030-2026-06-07-terminated-browser-history-boundary-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0030-2026-06-07-terminated-browser-history-boundary-plan.md",
+      "original_sha256": "c57b92cb3edf522059e2b51e4bf0c4d25c9044245f350bdd9c35d683da2a9b41",
+      "archived_sha256": "c57b92cb3edf522059e2b51e4bf0c4d25c9044245f350bdd9c35d683da2a9b41",
+      "prose_sha256": "c57b92cb3edf522059e2b51e4bf0c4d25c9044245f350bdd9c35d683da2a9b41"
+    },
+    {
+      "original_path": "docs/dev/plans/0031-2026-06-08-terminated-browser-operational-state-cleanup-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0031-2026-06-08-terminated-browser-operational-state-cleanup-plan.md",
+      "original_sha256": "1f6b6112f4c05e6e47950a7c4627218526f54d2afa742357a883286dca0eb484",
+      "archived_sha256": "1f6b6112f4c05e6e47950a7c4627218526f54d2afa742357a883286dca0eb484",
+      "prose_sha256": "1f6b6112f4c05e6e47950a7c4627218526f54d2afa742357a883286dca0eb484"
+    },
+    {
+      "original_path": "docs/dev/plans/0032-2026-06-08-historical-placeholder-prune-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0032-2026-06-08-historical-placeholder-prune-plan.md",
+      "original_sha256": "e015150379f99a21ddd46e44f26b4d428b5e64e497609b26631d4c41173b3844",
+      "archived_sha256": "e015150379f99a21ddd46e44f26b4d428b5e64e497609b26631d4c41173b3844",
+      "prose_sha256": "e015150379f99a21ddd46e44f26b4d428b5e64e497609b26631d4c41173b3844"
+    },
+    {
+      "original_path": "docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md",
+      "original_sha256": "c927a25fe90f109e5cca8d7e3729e6e2c685a5d96d5a42d9120a7bcfd4aac37f",
+      "archived_sha256": "c927a25fe90f109e5cca8d7e3729e6e2c685a5d96d5a42d9120a7bcfd4aac37f",
+      "prose_sha256": "c927a25fe90f109e5cca8d7e3729e6e2c685a5d96d5a42d9120a7bcfd4aac37f"
+    },
+    {
+      "original_path": "docs/dev/plans/0034-2026-06-14-generic-browser-service-routines-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0034-2026-06-14-generic-browser-service-routines-plan.md",
+      "original_sha256": "eddee7f9610fdcb8e8ed2245bc0b05d537944f85e673e6b529910a9444a0eecb",
+      "archived_sha256": "eddee7f9610fdcb8e8ed2245bc0b05d537944f85e673e6b529910a9444a0eecb",
+      "prose_sha256": "eddee7f9610fdcb8e8ed2245bc0b05d537944f85e673e6b529910a9444a0eecb"
+    },
+    {
+      "original_path": "docs/dev/plans/0035-2026-06-15-external-byop-browser-adoption-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0035-2026-06-15-external-byop-browser-adoption-plan.md",
+      "original_sha256": "2d59ed69c375a45c55583dccbdf36f7a783563b53ac12fa8ad95d02f67c72b40",
+      "archived_sha256": "2d59ed69c375a45c55583dccbdf36f7a783563b53ac12fa8ad95d02f67c72b40",
+      "prose_sha256": "2d59ed69c375a45c55583dccbdf36f7a783563b53ac12fa8ad95d02f67c72b40"
+    },
+    {
+      "original_path": "docs/dev/plans/0036-2026-06-18-rdp-ready-to-go-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0036-2026-06-18-rdp-ready-to-go-plan.md",
+      "original_sha256": "4b1a467b820df59bd5ea46ccda1e5611647966c28d6266f30f4d6e9cd30664da",
+      "archived_sha256": "4b1a467b820df59bd5ea46ccda1e5611647966c28d6266f30f4d6e9cd30664da",
+      "prose_sha256": "4b1a467b820df59bd5ea46ccda1e5611647966c28d6266f30f4d6e9cd30664da"
+    },
+    {
+      "original_path": "docs/dev/plans/0037-2026-06-19-runtime-profile-sharing-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0037-2026-06-19-runtime-profile-sharing-plan.md",
+      "original_sha256": "cb03baf3b969efd9a4a7bb109fd2525381998aac6f190b84800708de309044d4",
+      "archived_sha256": "cb03baf3b969efd9a4a7bb109fd2525381998aac6f190b84800708de309044d4",
+      "prose_sha256": "cb03baf3b969efd9a4a7bb109fd2525381998aac6f190b84800708de309044d4"
+    },
+    {
+      "original_path": "docs/dev/plans/0038-2026-06-19-remote-headed-cutover-proof-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0038-2026-06-19-remote-headed-cutover-proof-plan.md",
+      "original_sha256": "0267041ffd9c4849c01fcb591c0922cb411ddb89d07a6b6422b0e007e89534eb",
+      "archived_sha256": "0267041ffd9c4849c01fcb591c0922cb411ddb89d07a6b6422b0e007e89534eb",
+      "prose_sha256": "0267041ffd9c4849c01fcb591c0922cb411ddb89d07a6b6422b0e007e89534eb"
+    },
+    {
+      "original_path": "docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0039-2026-06-20-remote-control-ready-command-plan.md",
+      "original_sha256": "9e06ccfc8589fb803589007d16cbac4dd942461b5cb06f083ba7bf95bdeae204",
+      "archived_sha256": "9e06ccfc8589fb803589007d16cbac4dd942461b5cb06f083ba7bf95bdeae204",
+      "prose_sha256": "9e06ccfc8589fb803589007d16cbac4dd942461b5cb06f083ba7bf95bdeae204"
+    },
+    {
+      "original_path": "docs/dev/plans/0040-2026-06-21-dashboard-binary-harmonization-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0040-2026-06-21-dashboard-binary-harmonization-plan.md",
+      "original_sha256": "f627c29122da68124ec7241367177c4e8f788961cde69d4a1547ff28f0a226ab",
+      "archived_sha256": "f627c29122da68124ec7241367177c4e8f788961cde69d4a1547ff28f0a226ab",
+      "prose_sha256": "f627c29122da68124ec7241367177c4e8f788961cde69d4a1547ff28f0a226ab"
+    },
+    {
+      "original_path": "docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md",
+      "original_sha256": "43005ab3474ff587d3faaa0bc48861882e2698b0c27266201f16a24dceefc06e",
+      "archived_sha256": "43005ab3474ff587d3faaa0bc48861882e2698b0c27266201f16a24dceefc06e",
+      "prose_sha256": "43005ab3474ff587d3faaa0bc48861882e2698b0c27266201f16a24dceefc06e"
+    },
+    {
+      "original_path": "docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0042-2026-06-22-runtime-convergence-plan.md",
+      "original_sha256": "1b6be82a35c10f71ae6b3811dc55a5916cb01456b8e9577341c5b6bdb3ef0a16",
+      "archived_sha256": "1b6be82a35c10f71ae6b3811dc55a5916cb01456b8e9577341c5b6bdb3ef0a16",
+      "prose_sha256": "1b6be82a35c10f71ae6b3811dc55a5916cb01456b8e9577341c5b6bdb3ef0a16"
+    },
+    {
+      "original_path": "docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md",
+      "original_sha256": "880e54b85f84158f76924c0bb367fd1a3ea2503bc68f2b62240a5af8f218b71d",
+      "archived_sha256": "880e54b85f84158f76924c0bb367fd1a3ea2503bc68f2b62240a5af8f218b71d",
+      "prose_sha256": "880e54b85f84158f76924c0bb367fd1a3ea2503bc68f2b62240a5af8f218b71d"
+    },
+    {
+      "original_path": "docs/dev/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md",
+      "original_sha256": "f72b2a0178c712bfa1bf0403227ed1ccf877ffe179c31c6115b87f0178a71dc9",
+      "archived_sha256": "f72b2a0178c712bfa1bf0403227ed1ccf877ffe179c31c6115b87f0178a71dc9",
+      "prose_sha256": "f72b2a0178c712bfa1bf0403227ed1ccf877ffe179c31c6115b87f0178a71dc9"
+    },
+    {
+      "original_path": "docs/dev/plans/0045-2026-06-23-remote-view-architecture-consolidation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0045-2026-06-23-remote-view-architecture-consolidation-plan.md",
+      "original_sha256": "49ec7c280ada78ce22f4420657398b8efecf72b7ac16ebea888c294c0537abf0",
+      "archived_sha256": "49ec7c280ada78ce22f4420657398b8efecf72b7ac16ebea888c294c0537abf0",
+      "prose_sha256": "49ec7c280ada78ce22f4420657398b8efecf72b7ac16ebea888c294c0537abf0"
+    },
+    {
+      "original_path": "docs/dev/plans/0046-2026-06-24-remote-view-stress-hardening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0046-2026-06-24-remote-view-stress-hardening-plan.md",
+      "original_sha256": "187429a7aee25dcfcd6e864336e8da64bb560baa5dd448c1ed2b2e7689e19b4f",
+      "archived_sha256": "187429a7aee25dcfcd6e864336e8da64bb560baa5dd448c1ed2b2e7689e19b4f",
+      "prose_sha256": "187429a7aee25dcfcd6e864336e8da64bb560baa5dd448c1ed2b2e7689e19b4f"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-1-2026-06-24-viewer-client-target-browser-separation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-1-2026-06-24-viewer-client-target-browser-separation-plan.md",
+      "original_sha256": "c6326abc56b007a785c69ff0dca9a495363863784c97d1c8c52cf3273a10e61d",
+      "archived_sha256": "c6326abc56b007a785c69ff0dca9a495363863784c97d1c8c52cf3273a10e61d",
+      "prose_sha256": "c6326abc56b007a785c69ff0dca9a495363863784c97d1c8c52cf3273a10e61d"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-2-2026-06-24-route-bound-lease-ownership-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-2-2026-06-24-route-bound-lease-ownership-plan.md",
+      "original_sha256": "4ec8687d0c0322331ef3047cd33013b560926928583d48bf5e44888c6b5936b5",
+      "archived_sha256": "4ec8687d0c0322331ef3047cd33013b560926928583d48bf5e44888c6b5936b5",
+      "prose_sha256": "4ec8687d0c0322331ef3047cd33013b560926928583d48bf5e44888c6b5936b5"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-2026-06-24-remote-view-foundational-architecture-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-2026-06-24-remote-view-foundational-architecture-plan.md",
+      "original_sha256": "d73c8bbe339b3f8264cf90ff3a6c4b4a4b10e3e4922f3e922d5b25bca3770908",
+      "archived_sha256": "d73c8bbe339b3f8264cf90ff3a6c4b4a4b10e3e4922f3e922d5b25bca3770908",
+      "prose_sha256": "d73c8bbe339b3f8264cf90ff3a6c4b4a4b10e3e4922f3e922d5b25bca3770908"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-3-2026-06-24-canonical-workspace-inventory-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-3-2026-06-24-canonical-workspace-inventory-plan.md",
+      "original_sha256": "b8de68513b0abe1b61356ada85dde4e7a2d84fd7f0ecb24d1baed91bad4e8cd0",
+      "archived_sha256": "b8de68513b0abe1b61356ada85dde4e7a2d84fd7f0ecb24d1baed91bad4e8cd0",
+      "prose_sha256": "b8de68513b0abe1b61356ada85dde4e7a2d84fd7f0ecb24d1baed91bad4e8cd0"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-4-2026-06-24-operator-visible-proof-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-4-2026-06-24-operator-visible-proof-plan.md",
+      "original_sha256": "c852340c933ba90583dfb71b75fa424a6da3286240eacbaecd9cf6704afa88ad",
+      "archived_sha256": "c852340c933ba90583dfb71b75fa424a6da3286240eacbaecd9cf6704afa88ad",
+      "prose_sha256": "c852340c933ba90583dfb71b75fa424a6da3286240eacbaecd9cf6704afa88ad"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-5-2026-06-24-p46-scenario-harness-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-5-2026-06-24-p46-scenario-harness-plan.md",
+      "original_sha256": "18769b36da6aeeccad183ef8625435fb24e6105cd918110447e183e672b321bf",
+      "archived_sha256": "18769b36da6aeeccad183ef8625435fb24e6105cd918110447e183e672b321bf",
+      "prose_sha256": "18769b36da6aeeccad183ef8625435fb24e6105cd918110447e183e672b321bf"
+    },
+    {
+      "original_path": "docs/dev/plans/0047-6-2026-06-24-p46-s2-reaudit-and-unlock-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0047-6-2026-06-24-p46-s2-reaudit-and-unlock-plan.md",
+      "original_sha256": "b89a98ca1c333e930e6d79e0a4a837f09f58f8d8c166c4bb111b8a75c517867c",
+      "archived_sha256": "b89a98ca1c333e930e6d79e0a4a837f09f58f8d8c166c4bb111b8a75c517867c",
+      "prose_sha256": "b89a98ca1c333e930e6d79e0a4a837f09f58f8d8c166c4bb111b8a75c517867c"
+    },
+    {
+      "original_path": "docs/dev/plans/0048-2026-06-24-route-bound-finalization-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0048-2026-06-24-route-bound-finalization-deepening-plan.md",
+      "original_sha256": "f0d88854eaf1c9b5c3b9134b7834ac6a30ba94ff27ac03e225a910c791a1568c",
+      "archived_sha256": "f0d88854eaf1c9b5c3b9134b7834ac6a30ba94ff27ac03e225a910c791a1568c",
+      "prose_sha256": "f0d88854eaf1c9b5c3b9134b7834ac6a30ba94ff27ac03e225a910c791a1568c"
+    },
+    {
+      "original_path": "docs/dev/plans/0049-2026-06-26-p46-s3-remediation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0049-2026-06-26-p46-s3-remediation-plan.md",
+      "original_sha256": "531685d7beff367ec868862a98aa0aee01e21e4fc7873921a02d9e6293a75836",
+      "archived_sha256": "531685d7beff367ec868862a98aa0aee01e21e4fc7873921a02d9e6293a75836",
+      "prose_sha256": "531685d7beff367ec868862a98aa0aee01e21e4fc7873921a02d9e6293a75836"
+    },
+    {
+      "original_path": "docs/dev/plans/0050-2026-06-26-s3-binary-authority-visible-window-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0050-2026-06-26-s3-binary-authority-visible-window-plan.md",
+      "original_sha256": "c1c16f365027d184200e6513cf2a0ecd878a960a407dec6ee396482f15d77390",
+      "archived_sha256": "c1c16f365027d184200e6513cf2a0ecd878a960a407dec6ee396482f15d77390",
+      "prose_sha256": "c1c16f365027d184200e6513cf2a0ecd878a960a407dec6ee396482f15d77390"
+    },
+    {
+      "original_path": "docs/dev/plans/0051-2026-06-27-daemon-authority-guard-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0051-2026-06-27-daemon-authority-guard-plan.md",
+      "original_sha256": "e08abff43d44465599a7e3898ba061c6e5e4ccc94152416bedebd6834ef04ace",
+      "archived_sha256": "e08abff43d44465599a7e3898ba061c6e5e4ccc94152416bedebd6834ef04ace",
+      "prose_sha256": "e08abff43d44465599a7e3898ba061c6e5e4ccc94152416bedebd6834ef04ace"
+    },
+    {
+      "original_path": "docs/dev/plans/0052-2026-06-27-s3-clearance-pathway-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0052-2026-06-27-s3-clearance-pathway-plan.md",
+      "original_sha256": "1baeaada7bda20db8a6d971d321aac5453c03a02fb4f4f6c7e8adb102a74e853",
+      "archived_sha256": "1baeaada7bda20db8a6d971d321aac5453c03a02fb4f4f6c7e8adb102a74e853",
+      "prose_sha256": "1baeaada7bda20db8a6d971d321aac5453c03a02fb4f4f6c7e8adb102a74e853"
+    },
+    {
+      "original_path": "docs/dev/plans/0053-2026-06-27-s4-single-profile-window-topology-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0053-2026-06-27-s4-single-profile-window-topology-plan.md",
+      "original_sha256": "dfd765b20ab235327832e1287d22b5bf0efeb74b54396578286545487addc310",
+      "archived_sha256": "dfd765b20ab235327832e1287d22b5bf0efeb74b54396578286545487addc310",
+      "prose_sha256": "dfd765b20ab235327832e1287d22b5bf0efeb74b54396578286545487addc310"
+    },
+    {
+      "original_path": "docs/dev/plans/0054-2026-06-27-s5-viewer-client-port-allocation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0054-2026-06-27-s5-viewer-client-port-allocation-plan.md",
+      "original_sha256": "0164fa1e7f69f95ae6eb249749fa291b9cb98d01a9b6f21ed38ce8093911a66a",
+      "archived_sha256": "0164fa1e7f69f95ae6eb249749fa291b9cb98d01a9b6f21ed38ce8093911a66a",
+      "prose_sha256": "0164fa1e7f69f95ae6eb249749fa291b9cb98d01a9b6f21ed38ce8093911a66a"
+    },
+    {
+      "original_path": "docs/dev/plans/0055-2026-06-27-s6-dashboard-swap-navigation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0055-2026-06-27-s6-dashboard-swap-navigation-plan.md",
+      "original_sha256": "4c8986e2c2e252314d99b62e5e81e11b243a84d8a2d499a280353cf7f000e8f9",
+      "archived_sha256": "4c8986e2c2e252314d99b62e5e81e11b243a84d8a2d499a280353cf7f000e8f9",
+      "prose_sha256": "4c8986e2c2e252314d99b62e5e81e11b243a84d8a2d499a280353cf7f000e8f9"
+    },
+    {
+      "original_path": "docs/dev/plans/0056-2026-06-27-s6-dashboard-reconnect-and-reset-buffer-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0056-2026-06-27-s6-dashboard-reconnect-and-reset-buffer-plan.md",
+      "original_sha256": "1b0a35af373fa217012af23c633643d10a5eeeb42b480e3932a338058fcb1a2e",
+      "archived_sha256": "1b0a35af373fa217012af23c633643d10a5eeeb42b480e3932a338058fcb1a2e",
+      "prose_sha256": "1b0a35af373fa217012af23c633643d10a5eeeb42b480e3932a338058fcb1a2e"
+    },
+    {
+      "original_path": "docs/dev/plans/0057-2026-06-27-s6-viewer-client-cdp-swap-diagnostics-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0057-2026-06-27-s6-viewer-client-cdp-swap-diagnostics-plan.md",
+      "original_sha256": "ebe82856458f968e2095d07b75c89c72be2e7e5c5e208e3c6f78d46c77609111",
+      "archived_sha256": "ebe82856458f968e2095d07b75c89c72be2e7e5c5e208e3c6f78d46c77609111",
+      "prose_sha256": "ebe82856458f968e2095d07b75c89c72be2e7e5c5e208e3c6f78d46c77609111"
+    },
+    {
+      "original_path": "docs/dev/plans/0058-2026-06-27-s6-dashboard-page-url-stabilization-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0058-2026-06-27-s6-dashboard-page-url-stabilization-plan.md",
+      "original_sha256": "c3f36f582e0a0d536ff4409f756d0255904e3d97b28fad5952eac0c2c9bd3d5b",
+      "archived_sha256": "c3f36f582e0a0d536ff4409f756d0255904e3d97b28fad5952eac0c2c9bd3d5b",
+      "prose_sha256": "c3f36f582e0a0d536ff4409f756d0255904e3d97b28fad5952eac0c2c9bd3d5b"
+    },
+    {
+      "original_path": "docs/dev/plans/0059-2026-06-27-s6-dashboard-history-swap-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0059-2026-06-27-s6-dashboard-history-swap-plan.md",
+      "original_sha256": "124727a25ca651439452a5ff3b3f4b6b540fa05f0e74d6b3f4b1113bb2d2d23c",
+      "archived_sha256": "124727a25ca651439452a5ff3b3f4b6b540fa05f0e74d6b3f4b1113bb2d2d23c",
+      "prose_sha256": "124727a25ca651439452a5ff3b3f4b6b540fa05f0e74d6b3f4b1113bb2d2d23c"
+    },
+    {
+      "original_path": "docs/dev/plans/0060-2026-06-27-s7-route-pool-exhaustion-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0060-2026-06-27-s7-route-pool-exhaustion-plan.md",
+      "original_sha256": "d5d951bf9f10d59ec1d26f8ca6ed0d698f085ff80647511a49bd9685f5a72a43",
+      "archived_sha256": "d5d951bf9f10d59ec1d26f8ca6ed0d698f085ff80647511a49bd9685f5a72a43",
+      "prose_sha256": "d5d951bf9f10d59ec1d26f8ca6ed0d698f085ff80647511a49bd9685f5a72a43"
+    },
+    {
+      "original_path": "docs/dev/plans/0061-2026-06-27-s8-display-access-recovery-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0061-2026-06-27-s8-display-access-recovery-plan.md",
+      "original_sha256": "34c0eeabad30139d2ead4c702e593cd9d4dffad9ad15ae4d4e4b030f0c93250f",
+      "archived_sha256": "34c0eeabad30139d2ead4c702e593cd9d4dffad9ad15ae4d4e4b030f0c93250f",
+      "prose_sha256": "34c0eeabad30139d2ead4c702e593cd9d4dffad9ad15ae4d4e4b030f0c93250f"
+    },
+    {
+      "original_path": "docs/dev/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md",
+      "original_sha256": "4b9314de380801bc269eca3c0b7a64d5d9fe97e0c6995dd118dd29d7a6c1df25",
+      "archived_sha256": "4b9314de380801bc269eca3c0b7a64d5d9fe97e0c6995dd118dd29d7a6c1df25",
+      "prose_sha256": "4b9314de380801bc269eca3c0b7a64d5d9fe97e0c6995dd118dd29d7a6c1df25"
+    },
+    {
+      "original_path": "docs/dev/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md",
+      "original_sha256": "3a052decc808ac95a02ad141d4e11bf3e7ff682ffd2ceae98ea01917ef0c9464",
+      "archived_sha256": "3a052decc808ac95a02ad141d4e11bf3e7ff682ffd2ceae98ea01917ef0c9464",
+      "prose_sha256": "3a052decc808ac95a02ad141d4e11bf3e7ff682ffd2ceae98ea01917ef0c9464"
+    },
+    {
+      "original_path": "docs/dev/plans/0064-2026-06-27-s11-stale-url-live-target-recovery-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0064-2026-06-27-s11-stale-url-live-target-recovery-plan.md",
+      "original_sha256": "55cff2f72f7131acee3f0f9a8a6902acc97b5dea2b918bbee442b06885767136",
+      "archived_sha256": "55cff2f72f7131acee3f0f9a8a6902acc97b5dea2b918bbee442b06885767136",
+      "prose_sha256": "55cff2f72f7131acee3f0f9a8a6902acc97b5dea2b918bbee442b06885767136"
+    },
+    {
+      "original_path": "docs/dev/plans/0065-2026-06-28-retained-display-state-compaction-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0065-2026-06-28-retained-display-state-compaction-plan.md",
+      "original_sha256": "f557a6be582430e744982cbb22bc924d263b3a4ecf31cf5cfcd458e59c7315d5",
+      "archived_sha256": "f557a6be582430e744982cbb22bc924d263b3a4ecf31cf5cfcd458e59c7315d5",
+      "prose_sha256": "f557a6be582430e744982cbb22bc924d263b3a4ecf31cf5cfcd458e59c7315d5"
+    },
+    {
+      "original_path": "docs/dev/plans/0066-2026-06-28-rdp-browser-reattachment-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0066-2026-06-28-rdp-browser-reattachment-plan.md",
+      "original_sha256": "5bf5376e51984ff00bc822ee965a5797198b72e24859b46886dc3e1cfbbd6d6e",
+      "archived_sha256": "5bf5376e51984ff00bc822ee965a5797198b72e24859b46886dc3e1cfbbd6d6e",
+      "prose_sha256": "5bf5376e51984ff00bc822ee965a5797198b72e24859b46886dc3e1cfbbd6d6e"
+    },
+    {
+      "original_path": "docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md",
+      "original_sha256": "664a403fe15c4a1787db411173f22afaba88513808547ddc2d229f9d67c8a19f",
+      "archived_sha256": "664a403fe15c4a1787db411173f22afaba88513808547ddc2d229f9d67c8a19f",
+      "prose_sha256": "664a403fe15c4a1787db411173f22afaba88513808547ddc2d229f9d67c8a19f"
+    },
+    {
+      "original_path": "docs/dev/plans/0068-2026-07-06-operator-handoff-and-one-time-profile-hardening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0068-2026-07-06-operator-handoff-and-one-time-profile-hardening-plan.md",
+      "original_sha256": "b9b181e04f0c78fa6482ab6c44e05c2f454634877cf39c813512ea1222f95c8e",
+      "archived_sha256": "b9b181e04f0c78fa6482ab6c44e05c2f454634877cf39c813512ea1222f95c8e",
+      "prose_sha256": "b9b181e04f0c78fa6482ab6c44e05c2f454634877cf39c813512ea1222f95c8e"
+    },
+    {
+      "original_path": "docs/dev/plans/0069-2026-07-06-shared-profile-routing-and-handoff-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0069-2026-07-06-shared-profile-routing-and-handoff-deepening-plan.md",
+      "original_sha256": "30da9c5f96a53cbcbc1484ef0dd1ccb69c3202ceb9fb02842df517a00916058c",
+      "archived_sha256": "30da9c5f96a53cbcbc1484ef0dd1ccb69c3202ceb9fb02842df517a00916058c",
+      "prose_sha256": "30da9c5f96a53cbcbc1484ef0dd1ccb69c3202ceb9fb02842df517a00916058c"
+    },
+    {
+      "original_path": "docs/dev/plans/0070-2026-07-09-browser-session-authority-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0070-2026-07-09-browser-session-authority-plan.md",
+      "original_sha256": "e51f8302b33a06497a5266477d458e37f61dfcfb7f028f88116eb4ba026dbcdd",
+      "archived_sha256": "e51f8302b33a06497a5266477d458e37f61dfcfb7f028f88116eb4ba026dbcdd",
+      "prose_sha256": "e51f8302b33a06497a5266477d458e37f61dfcfb7f028f88116eb4ba026dbcdd"
+    },
+    {
+      "original_path": "docs/dev/plans/0071-2026-07-09-view-stream-readiness-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0071-2026-07-09-view-stream-readiness-plan.md",
+      "original_sha256": "f26735b9ac1ef75fe2f4294b3be42501118cb2fb81383f2d65f2d69b1b85e663",
+      "archived_sha256": "f26735b9ac1ef75fe2f4294b3be42501118cb2fb81383f2d65f2d69b1b85e663",
+      "prose_sha256": "f26735b9ac1ef75fe2f4294b3be42501118cb2fb81383f2d65f2d69b1b85e663"
+    },
+    {
+      "original_path": "docs/dev/plans/0072-2026-07-09-workspace-inventory-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0072-2026-07-09-workspace-inventory-plan.md",
+      "original_sha256": "3904393848f15bcca6919af40dc95fb381fc6b457c284e1139d818a81305def8",
+      "archived_sha256": "3904393848f15bcca6919af40dc95fb381fc6b457c284e1139d818a81305def8",
+      "prose_sha256": "3904393848f15bcca6919af40dc95fb381fc6b457c284e1139d818a81305def8"
+    },
+    {
+      "original_path": "docs/dev/plans/0073-2026-07-09-remote-viewport-controller-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0073-2026-07-09-remote-viewport-controller-plan.md",
+      "original_sha256": "9280445b704be4cbcf88e2da0ff1175d34a9aa7723d85da33028be40cad1cbe8",
+      "archived_sha256": "9280445b704be4cbcf88e2da0ff1175d34a9aa7723d85da33028be40cad1cbe8",
+      "prose_sha256": "9280445b704be4cbcf88e2da0ff1175d34a9aa7723d85da33028be40cad1cbe8"
+    },
+    {
+      "original_path": "docs/dev/plans/0074-2026-07-09-dashboard-gateway-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0074-2026-07-09-dashboard-gateway-plan.md",
+      "original_sha256": "cfb451e449371dc1927a1da2be1839a95e01c2880f93e30cebf7cbc72adb5b09",
+      "archived_sha256": "cfb451e449371dc1927a1da2be1839a95e01c2880f93e30cebf7cbc72adb5b09",
+      "prose_sha256": "cfb451e449371dc1927a1da2be1839a95e01c2880f93e30cebf7cbc72adb5b09"
+    },
+    {
+      "original_path": "docs/dev/plans/0075-2026-07-09-cross-seam-interlock-tests-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0075-2026-07-09-cross-seam-interlock-tests-plan.md",
+      "original_sha256": "b2fd2599d9b4238fb49d19db301d61ab674e6c610cf4a86e7a276f960834d68e",
+      "archived_sha256": "b2fd2599d9b4238fb49d19db301d61ab674e6c610cf4a86e7a276f960834d68e",
+      "prose_sha256": "b2fd2599d9b4238fb49d19db301d61ab674e6c610cf4a86e7a276f960834d68e"
+    },
+    {
+      "original_path": "docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md",
+      "original_sha256": "30ee13efd386197e7ec4086047e61f1d8c0f5a90fb72f8077676d96fde14f6ad",
+      "archived_sha256": "30ee13efd386197e7ec4086047e61f1d8c0f5a90fb72f8077676d96fde14f6ad",
+      "prose_sha256": "30ee13efd386197e7ec4086047e61f1d8c0f5a90fb72f8077676d96fde14f6ad"
+    },
+    {
+      "original_path": "docs/dev/plans/0077-2026-07-25-profile-discovery-and-manual-browser-launch-ux-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0077-2026-07-25-profile-discovery-and-manual-browser-launch-ux-plan.md",
+      "original_sha256": "25b6ddfb66cec6860044c908ffab06f7d5bd13069975c38d4e7c2953e0ffefc9",
+      "archived_sha256": "25b6ddfb66cec6860044c908ffab06f7d5bd13069975c38d4e7c2953e0ffefc9",
+      "prose_sha256": "25b6ddfb66cec6860044c908ffab06f7d5bd13069975c38d4e7c2953e0ffefc9"
+    },
+    {
+      "original_path": "docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md",
+      "original_sha256": "894540234084ff23b3e50a09f1ef969bf479ca24f9eb5341ecffd9e7250f9b04",
+      "archived_sha256": "894540234084ff23b3e50a09f1ef969bf479ca24f9eb5341ecffd9e7250f9b04",
+      "prose_sha256": "894540234084ff23b3e50a09f1ef969bf479ca24f9eb5341ecffd9e7250f9b04"
+    },
+    {
+      "original_path": "docs/dev/plans/0079-2026-07-28-route-specific-guacamole-rdp-isolation-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0079-2026-07-28-route-specific-guacamole-rdp-isolation-repair-plan.md",
+      "original_sha256": "649972aa6ce80a0ca8075cc754139464359ae4525121f0ae794b8bc6b833db9c",
+      "archived_sha256": "649972aa6ce80a0ca8075cc754139464359ae4525121f0ae794b8bc6b833db9c",
+      "prose_sha256": "649972aa6ce80a0ca8075cc754139464359ae4525121f0ae794b8bc6b833db9c"
+    },
+    {
+      "original_path": "docs/dev/plans/0080-2026-07-28-guacamole-postgres-durability-remediation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0080-2026-07-28-guacamole-postgres-durability-remediation-plan.md",
+      "original_sha256": "67ff06c968643b6b6901e298a336db1717c54a1ef1afb11ec0ceb1c0abefddd1",
+      "archived_sha256": "67ff06c968643b6b6901e298a336db1717c54a1ef1afb11ec0ceb1c0abefddd1",
+      "prose_sha256": "67ff06c968643b6b6901e298a336db1717c54a1ef1afb11ec0ceb1c0abefddd1"
+    },
+    {
+      "original_path": "docs/dev/plans/0081-2026-07-28-guacamole-route-pool-state-reconciliation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0081-2026-07-28-guacamole-route-pool-state-reconciliation-plan.md",
+      "original_sha256": "045e33763396ef1ea7672acc560c62b26f360b787bb8723db1ffd1355a96750d",
+      "archived_sha256": "045e33763396ef1ea7672acc560c62b26f360b787bb8723db1ffd1355a96750d",
+      "prose_sha256": "045e33763396ef1ea7672acc560c62b26f360b787bb8723db1ffd1355a96750d"
+    },
+    {
+      "original_path": "docs/dev/plans/0082-2026-07-29-fresh-install-productization-and-v0-28-0-release-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0082-2026-07-29-fresh-install-productization-and-v0-28-0-release-plan.md",
+      "original_sha256": "b7ab35cb6fa2ce855ac2280bf8541c2eff9f4a7af8d8ea0bf3decf74891f70a5",
+      "archived_sha256": "b7ab35cb6fa2ce855ac2280bf8541c2eff9f4a7af8d8ea0bf3decf74891f70a5",
+      "prose_sha256": "b7ab35cb6fa2ce855ac2280bf8541c2eff9f4a7af8d8ea0bf3decf74891f70a5"
+    },
+    {
+      "original_path": "docs/dev/plans/0083-2026-07-31-route-owned-live-gate-attribution-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0083-2026-07-31-route-owned-live-gate-attribution-plan.md",
+      "original_sha256": "819b23e3534a1cf808bbafb5d2463a8ada1c9c0424bc12f415a64fadfa8fb254",
+      "archived_sha256": "819b23e3534a1cf808bbafb5d2463a8ada1c9c0424bc12f415a64fadfa8fb254",
+      "prose_sha256": "819b23e3534a1cf808bbafb5d2463a8ada1c9c0424bc12f415a64fadfa8fb254"
+    },
+    {
+      "original_path": "docs/dev/plans/0084-2026-07-31-handle-bound-live-gate-readback-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0084-2026-07-31-handle-bound-live-gate-readback-plan.md",
+      "original_sha256": "2026b73abb5df3c2e170c357718800d7d18fdbf1572b1510ca10572789966cc8",
+      "archived_sha256": "2026b73abb5df3c2e170c357718800d7d18fdbf1572b1510ca10572789966cc8",
+      "prose_sha256": "2026b73abb5df3c2e170c357718800d7d18fdbf1572b1510ca10572789966cc8"
+    },
+    {
+      "original_path": "docs/dev/plans/0085-2026-07-31-service-tab-handle-profile-routing-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0085-2026-07-31-service-tab-handle-profile-routing-plan.md",
+      "original_sha256": "65f381957f278cb0809b425d0618e109ffceb026d0173c80a751102e933ec6f3",
+      "archived_sha256": "65f381957f278cb0809b425d0618e109ffceb026d0173c80a751102e933ec6f3",
+      "prose_sha256": "65f381957f278cb0809b425d0618e109ffceb026d0173c80a751102e933ec6f3"
+    },
+    {
+      "original_path": "docs/dev/plans/0086-2026-07-31-remote-view-open-job-timeout-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0086-2026-07-31-remote-view-open-job-timeout-plan.md",
+      "original_sha256": "d6bef668ce8dbbef103864747a5f9325547d6165a81f4fb9f5ee5ac3a15d30ff",
+      "archived_sha256": "d6bef668ce8dbbef103864747a5f9325547d6165a81f4fb9f5ee5ac3a15d30ff",
+      "prose_sha256": "d6bef668ce8dbbef103864747a5f9325547d6165a81f4fb9f5ee5ac3a15d30ff"
+    },
+    {
+      "original_path": "docs/dev/plans/0087-2026-07-31-remote-view-blank-target-acquisition-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0087-2026-07-31-remote-view-blank-target-acquisition-plan.md",
+      "original_sha256": "927e2ea2547e4714fb935c147e96c70cf2bb954f65c90e186e0fc8af51b5fadf",
+      "archived_sha256": "927e2ea2547e4714fb935c147e96c70cf2bb954f65c90e186e0fc8af51b5fadf",
+      "prose_sha256": "927e2ea2547e4714fb935c147e96c70cf2bb954f65c90e186e0fc8af51b5fadf"
+    },
+    {
+      "original_path": "docs/dev/plans/0088-2026-07-31-active-target-readback-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0088-2026-07-31-active-target-readback-plan.md",
+      "original_sha256": "8d304efa601d8820e79b8d7508bc281f4bb3da96243dfc8e55d3f6e9e190e923",
+      "archived_sha256": "8d304efa601d8820e79b8d7508bc281f4bb3da96243dfc8e55d3f6e9e190e923",
+      "prose_sha256": "8d304efa601d8820e79b8d7508bc281f4bb3da96243dfc8e55d3f6e9e190e923"
+    },
+    {
+      "original_path": "docs/dev/plans/0089-2026-07-31-native-focus-route-handoff-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0089-2026-07-31-native-focus-route-handoff-plan.md",
+      "original_sha256": "9940f0f7533f2bb31604ec42a10a687e946bcff7178f0b73189a278165dee97f",
+      "archived_sha256": "9940f0f7533f2bb31604ec42a10a687e946bcff7178f0b73189a278165dee97f",
+      "prose_sha256": "9940f0f7533f2bb31604ec42a10a687e946bcff7178f0b73189a278165dee97f"
+    },
+    {
+      "original_path": "docs/dev/plans/0090-2026-08-02-route-bound-display-proof-diagnostics-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0090-2026-08-02-route-bound-display-proof-diagnostics-plan.md",
+      "original_sha256": "57231cff9c61e58edef512c01efdf4bb597a12c78f2f5d69e77be448980b49db",
+      "archived_sha256": "57231cff9c61e58edef512c01efdf4bb597a12c78f2f5d69e77be448980b49db",
+      "prose_sha256": "57231cff9c61e58edef512c01efdf4bb597a12c78f2f5d69e77be448980b49db"
+    },
+    {
+      "original_path": "docs/dev/plans/0091-2026-08-03-systemd-interlock-self-quiesce-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0091-2026-08-03-systemd-interlock-self-quiesce-repair-plan.md",
+      "original_sha256": "12e0244b1515011e834fd6888a74073ca523d16716c9cca44707791ebe7404ad",
+      "archived_sha256": "12e0244b1515011e834fd6888a74073ca523d16716c9cca44707791ebe7404ad",
+      "prose_sha256": "12e0244b1515011e834fd6888a74073ca523d16716c9cca44707791ebe7404ad"
+    },
+    {
+      "original_path": "docs/dev/plans/0092-2026-08-03-passwordless-helper-compatibility-and-guacamole-text-input-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0092-2026-08-03-passwordless-helper-compatibility-and-guacamole-text-input-plan.md",
+      "original_sha256": "41574635b36ace1f6abe216c0b075cee6c995b64860d97c9a06881910d606da2",
+      "archived_sha256": "41574635b36ace1f6abe216c0b075cee6c995b64860d97c9a06881910d606da2",
+      "prose_sha256": "41574635b36ace1f6abe216c0b075cee6c995b64860d97c9a06881910d606da2"
+    },
+    {
+      "original_path": "docs/dev/plans/0093-2026-08-05-stored-profile-browser-opening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0093-2026-08-05-stored-profile-browser-opening-plan.md",
+      "original_sha256": "96cd7723f6cc2e561b6a134b7a32621c990ad9c2f9d465b025f08921399cefba",
+      "archived_sha256": "96cd7723f6cc2e561b6a134b7a32621c990ad9c2f9d465b025f08921399cefba",
+      "prose_sha256": "96cd7723f6cc2e561b6a134b7a32621c990ad9c2f9d465b025f08921399cefba"
+    },
+    {
+      "original_path": "docs/dev/plans/0094-2026-08-06-profile-lifecycle-ux-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0094-2026-08-06-profile-lifecycle-ux-plan.md",
+      "original_sha256": "74d313d7bbb16d0166628ddd5157ce61efcac996c5e1d4ef306803d2ca9573fe",
+      "archived_sha256": "74d313d7bbb16d0166628ddd5157ce61efcac996c5e1d4ef306803d2ca9573fe",
+      "prose_sha256": "74d313d7bbb16d0166628ddd5157ce61efcac996c5e1d4ef306803d2ca9573fe"
+    },
+    {
+      "original_path": "docs/dev/plans/0095-2026-08-07-remote-control-duplicate-pressure-readiness-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0095-2026-08-07-remote-control-duplicate-pressure-readiness-repair-plan.md",
+      "original_sha256": "64c3b17b05d1a5ab83e102347c5e9620884bedef886821537b173a4d7f1af02b",
+      "archived_sha256": "64c3b17b05d1a5ab83e102347c5e9620884bedef886821537b173a4d7f1af02b",
+      "prose_sha256": "64c3b17b05d1a5ab83e102347c5e9620884bedef886821537b173a4d7f1af02b"
+    },
+    {
+      "original_path": "docs/dev/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md",
+      "original_sha256": "2ea7d727cbebe36e05553417de751456ed6eed41860c680dee3e6673f353e705",
+      "archived_sha256": "2ea7d727cbebe36e05553417de751456ed6eed41860c680dee3e6673f353e705",
+      "prose_sha256": "2ea7d727cbebe36e05553417de751456ed6eed41860c680dee3e6673f353e705"
+    },
+    {
+      "original_path": "docs/dev/plans/0097-2026-08-08-cli-command-timeout-layering-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0097-2026-08-08-cli-command-timeout-layering-repair-plan.md",
+      "original_sha256": "927c927818b3345fab4b4d11ab5c9375e5d9b4141e88cbecc1b98a13357bf968",
+      "archived_sha256": "927c927818b3345fab4b4d11ab5c9375e5d9b4141e88cbecc1b98a13357bf968",
+      "prose_sha256": "927c927818b3345fab4b4d11ab5c9375e5d9b4141e88cbecc1b98a13357bf968"
+    },
+    {
+      "original_path": "docs/dev/plans/0098-2026-08-09-service-request-normalization-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0098-2026-08-09-service-request-normalization-deepening-plan.md",
+      "original_sha256": "1579cbba4fcf398f5f8563b298ae9415f69a335e5e83d501b63dcba9dd2ab680",
+      "archived_sha256": "1579cbba4fcf398f5f8563b298ae9415f69a335e5e83d501b63dcba9dd2ab680",
+      "prose_sha256": "1579cbba4fcf398f5f8563b298ae9415f69a335e5e83d501b63dcba9dd2ab680"
+    },
+    {
+      "original_path": "docs/dev/plans/0099-2026-08-09-workspace-view-projection-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0099-2026-08-09-workspace-view-projection-deepening-plan.md",
+      "original_sha256": "698052922136ce5608f3e54c2bfad3ebc6999ff6c698dbde31ae4cab52fa6514",
+      "archived_sha256": "698052922136ce5608f3e54c2bfad3ebc6999ff6c698dbde31ae4cab52fa6514",
+      "prose_sha256": "698052922136ce5608f3e54c2bfad3ebc6999ff6c698dbde31ae4cab52fa6514"
+    },
+    {
+      "original_path": "docs/dev/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md",
+      "original_sha256": "711896f5a3641629e6b15c09a635fa09e0723f468c19de256013e2a84a60b65a",
+      "archived_sha256": "711896f5a3641629e6b15c09a635fa09e0723f468c19de256013e2a84a60b65a",
+      "prose_sha256": "711896f5a3641629e6b15c09a635fa09e0723f468c19de256013e2a84a60b65a"
+    },
+    {
+      "original_path": "docs/dev/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md",
+      "original_sha256": "c2e1b3cb415f99a73de4ddb2a7990ebc16bddc969e1ffc457cde709cb359aca1",
+      "archived_sha256": "c2e1b3cb415f99a73de4ddb2a7990ebc16bddc969e1ffc457cde709cb359aca1",
+      "prose_sha256": "c2e1b3cb415f99a73de4ddb2a7990ebc16bddc969e1ffc457cde709cb359aca1"
+    },
+    {
+      "original_path": "docs/dev/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md",
+      "original_sha256": "65e9f3a464b5532b292efd74851586adcd8db2ae533ab41c1953413f9e5caa45",
+      "archived_sha256": "65e9f3a464b5532b292efd74851586adcd8db2ae533ab41c1953413f9e5caa45",
+      "prose_sha256": "65e9f3a464b5532b292efd74851586adcd8db2ae533ab41c1953413f9e5caa45"
+    },
+    {
+      "original_path": "docs/dev/plans/0103-2026-08-09-service-request-work-cycle2-residual-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0103-2026-08-09-service-request-work-cycle2-residual-repair-plan.md",
+      "original_sha256": "6a90b02fedca896ba1e97f9056fe0fbcb0d2e6aac7e4f60dc9454dbdb2eb53b1",
+      "archived_sha256": "6a90b02fedca896ba1e97f9056fe0fbcb0d2e6aac7e4f60dc9454dbdb2eb53b1",
+      "prose_sha256": "6a90b02fedca896ba1e97f9056fe0fbcb0d2e6aac7e4f60dc9454dbdb2eb53b1"
+    },
+    {
+      "original_path": "docs/dev/plans/0104-2026-08-10-workspace-view-work-cycle2-residual-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0104-2026-08-10-workspace-view-work-cycle2-residual-repair-plan.md",
+      "original_sha256": "cd6146b50b90e60472cd4d5f942ed417bbb9016ed486256b4002fa7b0f14b634",
+      "archived_sha256": "cd6146b50b90e60472cd4d5f942ed417bbb9016ed486256b4002fa7b0f14b634",
+      "prose_sha256": "cd6146b50b90e60472cd4d5f942ed417bbb9016ed486256b4002fa7b0f14b634"
+    },
+    {
+      "original_path": "docs/dev/plans/0105-2026-08-10-service-status-work-cycle2-residual-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0105-2026-08-10-service-status-work-cycle2-residual-repair-plan.md",
+      "original_sha256": "6ef950da4303cb1ea812fec5b9c930dc4b285cffdc82a9fc9abba6e63c2e3101",
+      "archived_sha256": "6ef950da4303cb1ea812fec5b9c930dc4b285cffdc82a9fc9abba6e63c2e3101",
+      "prose_sha256": "6ef950da4303cb1ea812fec5b9c930dc4b285cffdc82a9fc9abba6e63c2e3101"
+    },
+    {
+      "original_path": "docs/dev/plans/0106-2026-08-10-actions-work-cycle1-remediation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0106-2026-08-10-actions-work-cycle1-remediation-plan.md",
+      "original_sha256": "2e7575e20188242c4f184afa63e96f4217b63fdd6d5a4ea34543d9e7e36a9f1d",
+      "archived_sha256": "2e7575e20188242c4f184afa63e96f4217b63fdd6d5a4ea34543d9e7e36a9f1d",
+      "prose_sha256": "2e7575e20188242c4f184afa63e96f4217b63fdd6d5a4ea34543d9e7e36a9f1d"
+    },
+    {
+      "original_path": "docs/dev/plans/0107-2026-08-10-actions-work-cycle2-residual-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0107-2026-08-10-actions-work-cycle2-residual-repair-plan.md",
+      "original_sha256": "f858dd87e21541459629f56583e7571cc1905d2c52213d8e72f58ea8f7288dc5",
+      "archived_sha256": "f858dd87e21541459629f56583e7571cc1905d2c52213d8e72f58ea8f7288dc5",
+      "prose_sha256": "f858dd87e21541459629f56583e7571cc1905d2c52213d8e72f58ea8f7288dc5"
+    },
+    {
+      "original_path": "docs/dev/plans/0108-2026-08-10-runtime-process-identity-pid-reuse-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0108-2026-08-10-runtime-process-identity-pid-reuse-repair-plan.md",
+      "original_sha256": "2ee5b30833d6623a2bcd24a8c2108525bffe60dba9ba329f0246e5af95a2a99a",
+      "archived_sha256": "2ee5b30833d6623a2bcd24a8c2108525bffe60dba9ba329f0246e5af95a2a99a",
+      "prose_sha256": "2ee5b30833d6623a2bcd24a8c2108525bffe60dba9ba329f0246e5af95a2a99a"
+    },
+    {
+      "original_path": "docs/dev/plans/0109-2026-08-11-evaluation-deadline-propagation-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0109-2026-08-11-evaluation-deadline-propagation-repair-plan.md",
+      "original_sha256": "c6de252f16ed76791723cc3da5bfc91c0312e27bab7ab3330329d1d5b751ee64",
+      "archived_sha256": "c6de252f16ed76791723cc3da5bfc91c0312e27bab7ab3330329d1d5b751ee64",
+      "prose_sha256": "c6de252f16ed76791723cc3da5bfc91c0312e27bab7ab3330329d1d5b751ee64"
+    },
+    {
+      "original_path": "docs/dev/plans/0109-2026-08-11-runtime-dependability-handoff-remediation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0109-2026-08-11-runtime-dependability-handoff-remediation-plan.md",
+      "original_sha256": "2251e9c17de745180d5e8ddd1ecf1f631bb90dfbf50355f4367fc27c858e5fb7",
+      "archived_sha256": "2251e9c17de745180d5e8ddd1ecf1f631bb90dfbf50355f4367fc27c858e5fb7",
+      "prose_sha256": "2251e9c17de745180d5e8ddd1ecf1f631bb90dfbf50355f4367fc27c858e5fb7"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md",
+      "original_sha256": "716e27cc4dc83bdc9bbf4551bcba1cc697702899b463750c70d3ac9a2d6fdc07",
+      "archived_sha256": "716e27cc4dc83bdc9bbf4551bcba1cc697702899b463750c70d3ac9a2d6fdc07",
+      "prose_sha256": "716e27cc4dc83bdc9bbf4551bcba1cc697702899b463750c70d3ac9a2d6fdc07"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md",
+      "original_sha256": "19fb6e1454e375d551f17b7d124e9c584cd7a6b0ba966df4ed2b5e97d7e81d08",
+      "archived_sha256": "19fb6e1454e375d551f17b7d124e9c584cd7a6b0ba966df4ed2b5e97d7e81d08",
+      "prose_sha256": "19fb6e1454e375d551f17b7d124e9c584cd7a6b0ba966df4ed2b5e97d7e81d08"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-2026-08-11-cdp-input-page-scroll-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-2026-08-11-cdp-input-page-scroll-repair-plan.md",
+      "original_sha256": "1377a209865f4167a4639e671918a9757de30d3bd2bdb7d80edb6062fd87b9f3",
+      "archived_sha256": "1377a209865f4167a4639e671918a9757de30d3bd2bdb7d80edb6062fd87b9f3",
+      "prose_sha256": "1377a209865f4167a4639e671918a9757de30d3bd2bdb7d80edb6062fd87b9f3"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md",
+      "original_sha256": "9a7c05fd81610be5bf3b98f0d6a1f88b8e57e02e086e2675ccb7c53598c4f47c",
+      "archived_sha256": "9a7c05fd81610be5bf3b98f0d6a1f88b8e57e02e086e2675ccb7c53598c4f47c",
+      "prose_sha256": "9a7c05fd81610be5bf3b98f0d6a1f88b8e57e02e086e2675ccb7c53598c4f47c"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md",
+      "original_sha256": "be5f5b4f9f71f30380aed582d8f68d136db0d892b512fc5917fed7ca4720a197",
+      "archived_sha256": "be5f5b4f9f71f30380aed582d8f68d136db0d892b512fc5917fed7ca4720a197",
+      "prose_sha256": "be5f5b4f9f71f30380aed582d8f68d136db0d892b512fc5917fed7ca4720a197"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md",
+      "original_sha256": "2264956d163cabd8db1bfc3ab5c87a713685f194fb93a6ecd24dc09d5b99d9c7",
+      "archived_sha256": "2264956d163cabd8db1bfc3ab5c87a713685f194fb93a6ecd24dc09d5b99d9c7",
+      "prose_sha256": "2264956d163cabd8db1bfc3ab5c87a713685f194fb93a6ecd24dc09d5b99d9c7"
+    },
+    {
+      "original_path": "docs/dev/plans/0110-5-2026-08-12-p110-poc5-foundation-stress-and-entry-gate-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0110-5-2026-08-12-p110-poc5-foundation-stress-and-entry-gate-plan.md",
+      "original_sha256": "8c27d0e2bbecd713b609220498ee81db3913477f76b7a494e712bbe81aa956c4",
+      "archived_sha256": "8c27d0e2bbecd713b609220498ee81db3913477f76b7a494e712bbe81aa956c4",
+      "prose_sha256": "8c27d0e2bbecd713b609220498ee81db3913477f76b7a494e712bbe81aa956c4"
+    },
+    {
+      "original_path": "docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md",
+      "original_sha256": "4db082e734196bd8de15b7ba28d50b7ba232b6b39b4ea932cf0032d95fb98bee",
+      "archived_sha256": "4db082e734196bd8de15b7ba28d50b7ba232b6b39b4ea932cf0032d95fb98bee",
+      "prose_sha256": "5fb1483d883c73cb123ad337fb7e33ecab348b266c94b93d70484d61addf0c10"
+    },
+    {
+      "original_path": "docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md",
+      "original_sha256": "f31a19a6bb2084cd8640c769d118d7056900ebf6d283f8fadf75ecbdd121eaf6",
+      "archived_sha256": "f31a19a6bb2084cd8640c769d118d7056900ebf6d283f8fadf75ecbdd121eaf6",
+      "prose_sha256": "f31a19a6bb2084cd8640c769d118d7056900ebf6d283f8fadf75ecbdd121eaf6"
+    },
+    {
+      "original_path": "docs/dev/plans/0113-2026-08-14-workspace-viewport-just-works-ux-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0113-2026-08-14-workspace-viewport-just-works-ux-plan.md",
+      "original_sha256": "2cf1109f1d66ac43be108ab395301df04cbaf313166d4ba431eb135f90bb4fd2",
+      "archived_sha256": "2cf1109f1d66ac43be108ab395301df04cbaf313166d4ba431eb135f90bb4fd2",
+      "prose_sha256": "2cf1109f1d66ac43be108ab395301df04cbaf313166d4ba431eb135f90bb4fd2"
+    },
+    {
+      "original_path": "docs/dev/plans/0114-2026-08-14-terminal-route-quarantine-recovery-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0114-2026-08-14-terminal-route-quarantine-recovery-plan.md",
+      "original_sha256": "bcdab1534fe76e8c7175b8485a879e592bd29f353c7dab2587146cc1f45f715a",
+      "archived_sha256": "bcdab1534fe76e8c7175b8485a879e592bd29f353c7dab2587146cc1f45f715a",
+      "prose_sha256": "bcdab1534fe76e8c7175b8485a879e592bd29f353c7dab2587146cc1f45f715a"
+    },
+    {
+      "original_path": "docs/dev/plans/0115-2026-08-14-cdp-automation-etiquette-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0115-2026-08-14-cdp-automation-etiquette-plan.md",
+      "original_sha256": "80f63899aa5c7fb702c0b6896da45a37b2bfd2ea9fa0ecdcb570e8b2488ed0b7",
+      "archived_sha256": "80f63899aa5c7fb702c0b6896da45a37b2bfd2ea9fa0ecdcb570e8b2488ed0b7",
+      "prose_sha256": "80f63899aa5c7fb702c0b6896da45a37b2bfd2ea9fa0ecdcb570e8b2488ed0b7"
+    },
+    {
+      "original_path": "docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md",
+      "original_sha256": "3f24f3cea352e5cbdf3c7cd8cb66a4d3dc9d2eb056cc52401391fc5ec03e4592",
+      "archived_sha256": "3f24f3cea352e5cbdf3c7cd8cb66a4d3dc9d2eb056cc52401391fc5ec03e4592",
+      "prose_sha256": "8d1c24bcdb42b9dc13cd359fd957e685cb493a8d89ccfa703797fe886e2468a7"
+    },
+    {
+      "original_path": "docs/dev/plans/0117-2026-08-19-runtime-lifecycle-authority-and-convergence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0117-2026-08-19-runtime-lifecycle-authority-and-convergence-plan.md",
+      "original_sha256": "8f1a8369d03d279bca40a138057f17ae75f8f2b1d125aadea864569e25509222",
+      "archived_sha256": "8f1a8369d03d279bca40a138057f17ae75f8f2b1d125aadea864569e25509222",
+      "prose_sha256": "8f1a8369d03d279bca40a138057f17ae75f8f2b1d125aadea864569e25509222"
+    },
+    {
+      "original_path": "docs/dev/plans/0118-2026-08-21-agent-operating-knowledge-closure-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0118-2026-08-21-agent-operating-knowledge-closure-plan.md",
+      "original_sha256": "ab19ddab2eaeec1d35947a2a3e599d0f134aa14fb78337aac21ee8e662fa75fe",
+      "archived_sha256": "ab19ddab2eaeec1d35947a2a3e599d0f134aa14fb78337aac21ee8e662fa75fe",
+      "prose_sha256": "ab19ddab2eaeec1d35947a2a3e599d0f134aa14fb78337aac21ee8e662fa75fe"
+    },
+    {
+      "original_path": "docs/dev/plans/0119-2026-08-22-architecture-line-reconciliation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0119-2026-08-22-architecture-line-reconciliation-plan.md",
+      "original_sha256": "ee11b257e9a8be0bbf62620c3733af550d3265af8cbc7fbc99e74f86b2203e71",
+      "archived_sha256": "ee11b257e9a8be0bbf62620c3733af550d3265af8cbc7fbc99e74f86b2203e71",
+      "prose_sha256": "ee11b257e9a8be0bbf62620c3733af550d3265af8cbc7fbc99e74f86b2203e71"
+    },
+    {
+      "original_path": "docs/dev/plans/0120-2026-08-22-architecture-main-promotion-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0120-2026-08-22-architecture-main-promotion-plan.md",
+      "original_sha256": "e363dfeee68b30930f034238a9acaf8b8ab1182bbfaf0f2744e5d1a89fe47266",
+      "archived_sha256": "e363dfeee68b30930f034238a9acaf8b8ab1182bbfaf0f2744e5d1a89fe47266",
+      "prose_sha256": "e363dfeee68b30930f034238a9acaf8b8ab1182bbfaf0f2744e5d1a89fe47266"
+    },
+    {
+      "original_path": "docs/dev/plans/0121-2026-08-22-plan-0117-installed-acceptance-and-convergence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0121-2026-08-22-plan-0117-installed-acceptance-and-convergence-plan.md",
+      "original_sha256": "dbca028064f9b719e270d0f3ab5bf47d6844c1bea9a88cc03b30f014522ad788",
+      "archived_sha256": "dbca028064f9b719e270d0f3ab5bf47d6844c1bea9a88cc03b30f014522ad788",
+      "prose_sha256": "dbca028064f9b719e270d0f3ab5bf47d6844c1bea9a88cc03b30f014522ad788"
+    },
+    {
+      "original_path": "docs/dev/plans/0122-2026-08-23-exact-profile-capability-compatibility.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0122-2026-08-23-exact-profile-capability-compatibility.md",
+      "original_sha256": "43cdc2fa3fb0cef9909d6b491fd17d490022a2468fb8ad6c0d79da610bb83e71",
+      "archived_sha256": "43cdc2fa3fb0cef9909d6b491fd17d490022a2468fb8ad6c0d79da610bb83e71",
+      "prose_sha256": "43cdc2fa3fb0cef9909d6b491fd17d490022a2468fb8ad6c0d79da610bb83e71"
+    },
+    {
+      "original_path": "docs/dev/plans/0123-2026-08-23-exact-profile-compatibility-installed-admission.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0123-2026-08-23-exact-profile-compatibility-installed-admission.md",
+      "original_sha256": "4fc1546a264d86ffccd87c10c2dc291ab6ba65f0bfc07dcdfe2db58d74afd31e",
+      "archived_sha256": "4fc1546a264d86ffccd87c10c2dc291ab6ba65f0bfc07dcdfe2db58d74afd31e",
+      "prose_sha256": "4fc1546a264d86ffccd87c10c2dc291ab6ba65f0bfc07dcdfe2db58d74afd31e"
+    },
+    {
+      "original_path": "docs/dev/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation-capacity-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation-capacity-plan.md",
+      "original_sha256": "fdc0fdaa38f9f4c12ad1539353d19bc37258c565feefa536a35973c5c80dc7db",
+      "archived_sha256": "fdc0fdaa38f9f4c12ad1539353d19bc37258c565feefa536a35973c5c80dc7db",
+      "prose_sha256": "fdc0fdaa38f9f4c12ad1539353d19bc37258c565feefa536a35973c5c80dc7db"
+    },
+    {
+      "original_path": "docs/dev/plans/0125-2026-08-23-development-runtime-isolation-and-build-capacity-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0125-2026-08-23-development-runtime-isolation-and-build-capacity-plan.md",
+      "original_sha256": "502982a47283ad0c4f1c0afa35e74eb7703733f96876b62a1a5302fe353f19b6",
+      "archived_sha256": "502982a47283ad0c4f1c0afa35e74eb7703733f96876b62a1a5302fe353f19b6",
+      "prose_sha256": "502982a47283ad0c4f1c0afa35e74eb7703733f96876b62a1a5302fe353f19b6"
+    },
+    {
+      "original_path": "docs/dev/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md",
+      "original_sha256": "97cf7a952489ecf93776159098660656b89b5f1556a9c84f33977715ca33109e",
+      "archived_sha256": "97cf7a952489ecf93776159098660656b89b5f1556a9c84f33977715ca33109e",
+      "prose_sha256": "97cf7a952489ecf93776159098660656b89b5f1556a9c84f33977715ca33109e"
+    },
+    {
+      "original_path": "docs/dev/plans/0127-2026-08-23-development-presentation-provider-isolation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0127-2026-08-23-development-presentation-provider-isolation-plan.md",
+      "original_sha256": "9fc032c73ce274e263ad9c38257628eac118862d49206636607fed1e78de78b8",
+      "archived_sha256": "9fc032c73ce274e263ad9c38257628eac118862d49206636607fed1e78de78b8",
+      "prose_sha256": "9fc032c73ce274e263ad9c38257628eac118862d49206636607fed1e78de78b8"
+    },
+    {
+      "original_path": "docs/dev/plans/0128-0-2026-08-23-absent-closing-lifecycle-reconciliation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0128-0-2026-08-23-absent-closing-lifecycle-reconciliation.md",
+      "original_sha256": "27b30018c49eb407b31b6a39ef9f3c62a37f1e02ab81d73cd97632c9319e7d81",
+      "archived_sha256": "27b30018c49eb407b31b6a39ef9f3c62a37f1e02ab81d73cd97632c9319e7d81",
+      "prose_sha256": "27b30018c49eb407b31b6a39ef9f3c62a37f1e02ab81d73cd97632c9319e7d81"
+    },
+    {
+      "original_path": "docs/dev/plans/0128-2026-08-23-runtime-lifecycle-hotfix-collection.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0128-2026-08-23-runtime-lifecycle-hotfix-collection.md",
+      "original_sha256": "04c3f07b043c230dee1b83ce0e42be7ce205eaa7ceaf8ee17b500657fce1b4cf",
+      "archived_sha256": "04c3f07b043c230dee1b83ce0e42be7ce205eaa7ceaf8ee17b500657fce1b4cf",
+      "prose_sha256": "04c3f07b043c230dee1b83ce0e42be7ce205eaa7ceaf8ee17b500657fce1b4cf"
+    },
+    {
+      "original_path": "docs/dev/plans/0129-2026-08-24-request-lifecycle-and-cleanup-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0129-2026-08-24-request-lifecycle-and-cleanup-repair-plan.md",
+      "original_sha256": "2b1dc5081f05d2d4636605cc49522b320260ab4d40f3f6d7a2a147a76a4c41f2",
+      "archived_sha256": "2b1dc5081f05d2d4636605cc49522b320260ab4d40f3f6d7a2a147a76a4c41f2",
+      "prose_sha256": "2b1dc5081f05d2d4636605cc49522b320260ab4d40f3f6d7a2a147a76a4c41f2"
+    },
+    {
+      "original_path": "docs/dev/plans/0130-2026-08-24-access-plan-owner-reuse-coherence.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0130-2026-08-24-access-plan-owner-reuse-coherence.md",
+      "original_sha256": "241597008d83c8ac85c17b547aa4a9c288600bc2b21af842362303c608493672",
+      "archived_sha256": "241597008d83c8ac85c17b547aa4a9c288600bc2b21af842362303c608493672",
+      "prose_sha256": "241597008d83c8ac85c17b547aa4a9c288600bc2b21af842362303c608493672"
+    },
+    {
+      "original_path": "docs/dev/plans/0131-2026-08-25-controlled-x11-desktop-provider-foundation-acceptance-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0131-2026-08-25-controlled-x11-desktop-provider-foundation-acceptance-plan.md",
+      "original_sha256": "9e4b4c8f2cb641b26728a52256c09253cff1d6343222df37e649aadd439a0653",
+      "archived_sha256": "9e4b4c8f2cb641b26728a52256c09253cff1d6343222df37e649aadd439a0653",
+      "prose_sha256": "9e4b4c8f2cb641b26728a52256c09253cff1d6343222df37e649aadd439a0653"
+    },
+    {
+      "original_path": "docs/dev/plans/0132-2026-08-25-terminal-owner-supersession-route-coherence.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0132-2026-08-25-terminal-owner-supersession-route-coherence.md",
+      "original_sha256": "1eaa5933a30f058e594d66f10f1291205a2e057a848b5ccfac3648429f8f4141",
+      "archived_sha256": "1eaa5933a30f058e594d66f10f1291205a2e057a848b5ccfac3648429f8f4141",
+      "prose_sha256": "1eaa5933a30f058e594d66f10f1291205a2e057a848b5ccfac3648429f8f4141"
+    },
+    {
+      "original_path": "docs/dev/plans/0133-2026-08-25-operator-visible-window-focus-postcondition-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0133-2026-08-25-operator-visible-window-focus-postcondition-plan.md",
+      "original_sha256": "81975b7b43184eb04feae29bd4bba8fb7bdd39f224d6119927c5cddc5e2c87d1",
+      "archived_sha256": "81975b7b43184eb04feae29bd4bba8fb7bdd39f224d6119927c5cddc5e2c87d1",
+      "prose_sha256": "81975b7b43184eb04feae29bd4bba8fb7bdd39f224d6119927c5cddc5e2c87d1"
+    },
+    {
+      "original_path": "docs/dev/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md",
+      "original_sha256": "758469d5e250fda47f7df37c7c0cf8dc71685526e480ce796965a19b0ec6d7fe",
+      "archived_sha256": "758469d5e250fda47f7df37c7c0cf8dc71685526e480ce796965a19b0ec6d7fe",
+      "prose_sha256": "758469d5e250fda47f7df37c7c0cf8dc71685526e480ce796965a19b0ec6d7fe"
+    },
+    {
+      "original_path": "docs/dev/plans/0137-2026-08-28-profile-acquisition-recovery-and-lifecycle-reliability-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0137-2026-08-28-profile-acquisition-recovery-and-lifecycle-reliability-plan.md",
+      "original_sha256": "67432cb1d7734e686eedfdc2c92a9b1bab3b0c6bb3f1f1f76235b154e5c80a51",
+      "archived_sha256": "67432cb1d7734e686eedfdc2c92a9b1bab3b0c6bb3f1f1f76235b154e5c80a51",
+      "prose_sha256": "67432cb1d7734e686eedfdc2c92a9b1bab3b0c6bb3f1f1f76235b154e5c80a51"
+    },
+    {
+      "original_path": "docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md",
+      "original_sha256": "23a6d427396c4da24c7a588b3469233a2c2b42a0ff9227969f1c65b4021b9272",
+      "archived_sha256": "23a6d427396c4da24c7a588b3469233a2c2b42a0ff9227969f1c65b4021b9272",
+      "prose_sha256": "23a6d427396c4da24c7a588b3469233a2c2b42a0ff9227969f1c65b4021b9272"
+    },
+    {
+      "original_path": "docs/dev/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md",
+      "original_sha256": "5c04bfec466da53d5288ea7285d56a7eff09788f8bb830d805430adcc322c980",
+      "archived_sha256": "5c04bfec466da53d5288ea7285d56a7eff09788f8bb830d805430adcc322c980",
+      "prose_sha256": "5c04bfec466da53d5288ea7285d56a7eff09788f8bb830d805430adcc322c980"
+    },
+    {
+      "original_path": "docs/dev/plans/0143-2026-08-30-workstation-upgrade-self-admission-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0143-2026-08-30-workstation-upgrade-self-admission-repair-plan.md",
+      "original_sha256": "b257702fc9858c018bd450b7105eb44f3e5f1c8dfce6ef98c5da324914fcd645",
+      "archived_sha256": "b257702fc9858c018bd450b7105eb44f3e5f1c8dfce6ef98c5da324914fcd645",
+      "prose_sha256": "b257702fc9858c018bd450b7105eb44f3e5f1c8dfce6ef98c5da324914fcd645"
+    },
+    {
+      "original_path": "docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md",
+      "original_sha256": "5c89092fa0fa07e69938235171a7824e4215a4bb9011aa17ca7030008c9a1d33",
+      "archived_sha256": "5c89092fa0fa07e69938235171a7824e4215a4bb9011aa17ca7030008c9a1d33",
+      "prose_sha256": "de12f81ede66c80bfa76c3cec156e3abcb03f441a35337384b52fa0aee24c9c5"
+    },
+    {
+      "original_path": "docs/dev/plans/0145-2026-08-31-emergency-profile-lease-fail-open-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0145-2026-08-31-emergency-profile-lease-fail-open-plan.md",
+      "original_sha256": "055d10ce89329393a2a0355d4d9ef3213765aabd1cec66410005d1c5d58cda69",
+      "archived_sha256": "055d10ce89329393a2a0355d4d9ef3213765aabd1cec66410005d1c5d58cda69",
+      "prose_sha256": "055d10ce89329393a2a0355d4d9ef3213765aabd1cec66410005d1c5d58cda69"
+    },
+    {
+      "original_path": "docs/dev/plans/0146-2026-08-31-service-state-stale-revision-operability-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0146-2026-08-31-service-state-stale-revision-operability-repair-plan.md",
+      "original_sha256": "a04d3576983a7852fe4bd45b03865fb8fa7de3b2f8d6cb299a9a120350f0b6e4",
+      "archived_sha256": "a04d3576983a7852fe4bd45b03865fb8fa7de3b2f8d6cb299a9a120350f0b6e4",
+      "prose_sha256": "a04d3576983a7852fe4bd45b03865fb8fa7de3b2f8d6cb299a9a120350f0b6e4"
+    },
+    {
+      "original_path": "docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md",
+      "original_sha256": "23e60914d6d0f11641591219a6ebfb1dbd33c352b9ada15d199813a185eb3065",
+      "archived_sha256": "23e60914d6d0f11641591219a6ebfb1dbd33c352b9ada15d199813a185eb3065",
+      "prose_sha256": "23e60914d6d0f11641591219a6ebfb1dbd33c352b9ada15d199813a185eb3065"
+    },
+    {
+      "original_path": "docs/dev/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md",
+      "original_sha256": "59304ea31e58217a64f03e60b06d2881cb58e8b3049c6fd5c7705416fd9f4cd1",
+      "archived_sha256": "59304ea31e58217a64f03e60b06d2881cb58e8b3049c6fd5c7705416fd9f4cd1",
+      "prose_sha256": "59304ea31e58217a64f03e60b06d2881cb58e8b3049c6fd5c7705416fd9f4cd1"
+    },
+    {
+      "original_path": "docs/dev/plans/0149-2026-09-01-build-feedback-acceleration-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0149-2026-09-01-build-feedback-acceleration-plan.md",
+      "original_sha256": "1908cfaa33ec258ba090223e38bb4b05f418ed7ef32c91759fd9f8a7186f8fcb",
+      "archived_sha256": "1908cfaa33ec258ba090223e38bb4b05f418ed7ef32c91759fd9f8a7186f8fcb",
+      "prose_sha256": "1908cfaa33ec258ba090223e38bb4b05f418ed7ef32c91759fd9f8a7186f8fcb"
+    },
+    {
+      "original_path": "docs/dev/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md",
+      "original_sha256": "a6ec055a865b79d25b80fec474cbacdc9e9c92043c7a38e33a65e42f1e9f36eb",
+      "archived_sha256": "a6ec055a865b79d25b80fec474cbacdc9e9c92043c7a38e33a65e42f1e9f36eb",
+      "prose_sha256": "a6ec055a865b79d25b80fec474cbacdc9e9c92043c7a38e33a65e42f1e9f36eb"
+    },
+    {
+      "original_path": "docs/dev/plans/0151-2026-09-01-cdp-transport-crate-extraction-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0151-2026-09-01-cdp-transport-crate-extraction-plan.md",
+      "original_sha256": "17022cf86c64bc6d731a5f636266dd06b7e973839e30290e7df5d4ece450f050",
+      "archived_sha256": "17022cf86c64bc6d731a5f636266dd06b7e973839e30290e7df5d4ece450f050",
+      "prose_sha256": "17022cf86c64bc6d731a5f636266dd06b7e973839e30290e7df5d4ece450f050"
+    },
+    {
+      "original_path": "docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md",
+      "original_sha256": "c82d57cfe284348759aaf4f9e8d4f3bda9de8b72a88c34c74e2ef4a69a479095",
+      "archived_sha256": "c82d57cfe284348759aaf4f9e8d4f3bda9de8b72a88c34c74e2ef4a69a479095",
+      "prose_sha256": "c82d57cfe284348759aaf4f9e8d4f3bda9de8b72a88c34c74e2ef4a69a479095"
+    },
+    {
+      "original_path": "docs/dev/plans/0153-2026-09-01-lost-profile-capability-rotation-recovery-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0153-2026-09-01-lost-profile-capability-rotation-recovery-plan.md",
+      "original_sha256": "f9f4b913e1007ac6d1e1e66578c0830f813cb6c8e06421b3e1ad62a0d0b3a2bb",
+      "archived_sha256": "f9f4b913e1007ac6d1e1e66578c0830f813cb6c8e06421b3e1ad62a0d0b3a2bb",
+      "prose_sha256": "f9f4b913e1007ac6d1e1e66578c0830f813cb6c8e06421b3e1ad62a0d0b3a2bb"
+    },
+    {
+      "original_path": "docs/dev/plans/0154-2026-09-01-desktop-locator-deep-module-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0154-2026-09-01-desktop-locator-deep-module-plan.md",
+      "original_sha256": "e07b3ab91bec73ed2f56727579c2b3ba68e1d005ae5be98f706a8e81f2fe5a85",
+      "archived_sha256": "e07b3ab91bec73ed2f56727579c2b3ba68e1d005ae5be98f706a8e81f2fe5a85",
+      "prose_sha256": "e07b3ab91bec73ed2f56727579c2b3ba68e1d005ae5be98f706a8e81f2fe5a85"
+    },
+    {
+      "original_path": "docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md",
+      "original_sha256": "308a4e83f704464546ee665bf8a9435cb2eb325337e34c7ac56a3d0b2e71c35a",
+      "archived_sha256": "308a4e83f704464546ee665bf8a9435cb2eb325337e34c7ac56a3d0b2e71c35a",
+      "prose_sha256": "308a4e83f704464546ee665bf8a9435cb2eb325337e34c7ac56a3d0b2e71c35a"
+    },
+    {
+      "original_path": "docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md",
+      "original_sha256": "6e89742daa680ec4b320820ce178006bc73676f4124dd1e1a5693f36508c15bc",
+      "archived_sha256": "6e89742daa680ec4b320820ce178006bc73676f4124dd1e1a5693f36508c15bc",
+      "prose_sha256": "6e89742daa680ec4b320820ce178006bc73676f4124dd1e1a5693f36508c15bc"
+    },
+    {
+      "original_path": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+      "original_sha256": "a9ece94e9a6a8fe083ecba2044e069652c0c31825edba7528b2a88d4e9b2be3c",
+      "archived_sha256": "a9ece94e9a6a8fe083ecba2044e069652c0c31825edba7528b2a88d4e9b2be3c",
+      "prose_sha256": "a9ece94e9a6a8fe083ecba2044e069652c0c31825edba7528b2a88d4e9b2be3c"
+    },
+    {
+      "original_path": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+      "original_sha256": "0710309ad354e0a0d46ce3cbba2612f2025dcdeb76a231f3bc26cb5825c6977a",
+      "archived_sha256": "e72a3caabb9fe6ebb92087bf90067713d25113d67664b815cec4dc06294f7eb0",
+      "prose_sha256": "249c961098e145c3a0090cf086c5193a9883533eea6c07fd10ff9003add07a8d"
+    },
+    {
+      "original_path": "docs/dev/plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md",
+      "original_sha256": "314df76d0c8018c60c2229df0cf47fac873415238a5ee1f0d0b4ee133a3381ea",
+      "archived_sha256": "33a0a662f4e6d3f636ba86e9e8d72dd0456456d2979c1c996a99fa3919146145",
+      "prose_sha256": "e34a236414930b039d2ca0b3ceeb767b79bd668a7977cd2c603b2ea9122e051f"
+    },
+    {
+      "original_path": "docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md",
+      "original_sha256": "09cff325d35c7171a8d81ce8d3b0828aa7d22d9588907a9913f1aed20a5978ba",
+      "archived_sha256": "2d04383cb96194e6be73cb350758cd533f4b4729652ecf9d5a698b0d0a031b0c",
+      "prose_sha256": "3789aeeb948e193cc8403d6c9e6e21e01986b9cc2a2c2414fa061572becf2882"
+    },
+    {
+      "original_path": "docs/dev/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md",
+      "original_sha256": "997bd0489391e081cdf3f295d1272aa305d9714fb5dc5efdeb492a30d10ed2de",
+      "archived_sha256": "637f58ef1b27474bac34553cc803e704951101e9548c32306fc4331056734f1f",
+      "prose_sha256": "cd92df02690ee375319fc081642e323680fea52d70190fdb4a60108e9ee40c5f"
+    },
+    {
+      "original_path": "docs/dev/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md",
+      "original_sha256": "b5b5d95e0df7d34b797eb37f31d02cf3fc6de74d81f564bb2ee5f2cc7b463b36",
+      "archived_sha256": "b5b5d95e0df7d34b797eb37f31d02cf3fc6de74d81f564bb2ee5f2cc7b463b36",
+      "prose_sha256": "5af079b6ea2c133dbbb8517efba531180d9c9b31aaa06612692b19b47d31bbdf"
+    },
+    {
+      "original_path": "docs/dev/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md",
+      "original_sha256": "112de5d583ef40fdeed046c2e15af82320cbe5fa40a7e0df2bf4c3f11c1b261d",
+      "archived_sha256": "112de5d583ef40fdeed046c2e15af82320cbe5fa40a7e0df2bf4c3f11c1b261d",
+      "prose_sha256": "d790c1f4b62f4e878e0e1cceae3c1f25836723ce7a407f469b51f700f26df79b"
+    },
+    {
+      "original_path": "docs/dev/plans/0164-2026-09-10-forward-only-workstation-upgrade-recovery.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0164-2026-09-10-forward-only-workstation-upgrade-recovery.md",
+      "original_sha256": "2acc95b5ae42d72ecd257d3691d175fb0ce4ba6a0a7b0c41f97577997c0de636",
+      "archived_sha256": "2acc95b5ae42d72ecd257d3691d175fb0ce4ba6a0a7b0c41f97577997c0de636",
+      "prose_sha256": "2dc7bc6a3a0aefb9194f8d3e0418ad0a6f54b7249e0cdcef1c4b64d61229185a"
+    },
+    {
+      "original_path": "docs/dev/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0165-2026-09-11-bill-identifier-form-drift-repair.md",
+      "original_sha256": "8f53c73cd7a38d74791f9eb695712d53b8ab95c694bba631c6227890d6417b91",
+      "archived_sha256": "8f53c73cd7a38d74791f9eb695712d53b8ab95c694bba631c6227890d6417b91",
+      "prose_sha256": "907d48a20abe6af4b3cbbb59dc5754c2a1875103b1381ce7643551e35e482acf"
+    },
+    {
+      "original_path": "docs/dev/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md",
+      "original_sha256": "ec5d498521f3b9d68c13fb0298460dd0d46608461c2b49bf62203bb8ffc91339",
+      "archived_sha256": "c30cd06880e14e4a4d650d3195603da2579cacfe9a968c3d6bcba6c6e0728dac",
+      "prose_sha256": "e764448304b1b94558069f5ff01407be45858406e7c24ee746abede89c5089f1"
+    },
+    {
+      "original_path": "docs/dev/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md",
+      "original_sha256": "05448d34610aa47535d5d85edff8bc689975ae5087628495f258aaf80481a177",
+      "archived_sha256": "442d23cc2706b948336f091b531490aa782e0138315fc285ece5de352d13b6c5",
+      "prose_sha256": "0bec65c98a1ff8ac8f588ff7e5ce2e6a2d241f9fc0ff36f3ecfd182262b1080f"
+    },
+    {
+      "original_path": "docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md",
+      "original_sha256": "8322ec4b858d550c8e77861b4d0d3e1e59f0d7888c8ec5a33321a34648627c77",
+      "archived_sha256": "891a885224db2036092ece15140c4bb56fcf3018393f491fb704bdb59adf2e5a",
+      "prose_sha256": "715c9254a2258895d0970399bf03b584d040298f794af61c636de40c843b2d31"
+    },
+    {
+      "original_path": "docs/dev/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md",
+      "original_sha256": "bd1463a48b8c8dbb1f3bc8aa2a3e43ec1f6a67e233eadd1d6c829175980438d5",
+      "archived_sha256": "bd1463a48b8c8dbb1f3bc8aa2a3e43ec1f6a67e233eadd1d6c829175980438d5",
+      "prose_sha256": "01e3c75e5d1a82a505da5be3e43e982991efe11944be19208c61d378ca3af697"
+    },
+    {
+      "original_path": "docs/dev/plans/0170-2026-09-12-service-job-lifecycle-timestamp-ordering.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0170-2026-09-12-service-job-lifecycle-timestamp-ordering.md",
+      "original_sha256": "8c2c8ad40c9cc8fcc7f5e19fa2a51aebaa95626311a51ec80375df8527ded446",
+      "archived_sha256": "8c2c8ad40c9cc8fcc7f5e19fa2a51aebaa95626311a51ec80375df8527ded446",
+      "prose_sha256": "8c2c8ad40c9cc8fcc7f5e19fa2a51aebaa95626311a51ec80375df8527ded446"
+    },
+    {
+      "original_path": "docs/dev/plans/0171-2026-09-12-service-job-timestamp-integration-install.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0171-2026-09-12-service-job-timestamp-integration-install.md",
+      "original_sha256": "947089a1805455c617841ba7ed53498867c7a6d73dc19bda08fd1117a2574110",
+      "archived_sha256": "0ffd68f05c5578eadca72d69d1f0dbeaae15258491c1e4f4cfb98b6adbf7b47f",
+      "prose_sha256": "b71cc3959440d0e251ea38687147d49b89cf0f6ac32c2c43a81ed5a23f0082ff"
+    },
+    {
+      "original_path": "docs/dev/plans/0172-2026-09-12-retained-tab-and-profile-path-launch-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0172-2026-09-12-retained-tab-and-profile-path-launch-repair.md",
+      "original_sha256": "20d48185b42210f6412875538e6a2739ca664209290c03130aa94193bc7feb05",
+      "archived_sha256": "20d48185b42210f6412875538e6a2739ca664209290c03130aa94193bc7feb05",
+      "prose_sha256": "20d48185b42210f6412875538e6a2739ca664209290c03130aa94193bc7feb05"
+    },
+    {
+      "original_path": "docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md",
+      "original_sha256": "d8c674d128391e462259a0d5496dc6f2f8e72012fe36cec9a8f90b88e036cec7",
+      "archived_sha256": "d8c674d128391e462259a0d5496dc6f2f8e72012fe36cec9a8f90b88e036cec7",
+      "prose_sha256": "d8c674d128391e462259a0d5496dc6f2f8e72012fe36cec9a8f90b88e036cec7"
+    },
+    {
+      "original_path": "docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md",
+      "original_sha256": "26d528431b077c4fc8156863ad9b7e2c49de566255baf4909e31861f643f0a4f",
+      "archived_sha256": "26d528431b077c4fc8156863ad9b7e2c49de566255baf4909e31861f643f0a4f",
+      "prose_sha256": "26d528431b077c4fc8156863ad9b7e2c49de566255baf4909e31861f643f0a4f"
+    },
+    {
+      "original_path": "docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md",
+      "original_sha256": "fbeff863eb74e167b1f3cf9b08e25a56938b39022f4fb26a2b51cd86d45c72c9",
+      "archived_sha256": "fbeff863eb74e167b1f3cf9b08e25a56938b39022f4fb26a2b51cd86d45c72c9",
+      "prose_sha256": "fbeff863eb74e167b1f3cf9b08e25a56938b39022f4fb26a2b51cd86d45c72c9"
+    },
+    {
+      "original_path": "docs/dev/plans/0176-2026-09-13-product-lane-and-note-consolidation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0176-2026-09-13-product-lane-and-note-consolidation.md",
+      "original_sha256": "3cef733e3aba2bce63106da22e53c57507f81eecf023965bcc63f29abf3ea143",
+      "archived_sha256": "3cef733e3aba2bce63106da22e53c57507f81eecf023965bcc63f29abf3ea143",
+      "prose_sha256": "3cef733e3aba2bce63106da22e53c57507f81eecf023965bcc63f29abf3ea143"
+    },
+    {
+      "original_path": "docs/dev/plans/0177-2026-09-13-development-governance-and-repository-readiness.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0177-2026-09-13-development-governance-and-repository-readiness.md",
+      "original_sha256": "55d1e7ecc2393411b1ff171075d6653b309f15cf846dc3a4d22b4b105a905a77",
+      "archived_sha256": "55d1e7ecc2393411b1ff171075d6653b309f15cf846dc3a4d22b4b105a905a77",
+      "prose_sha256": "0bd9d0e6e87758f883f1336a8ad8f0e2b89c3819f89991dbaf1d4787222ae925"
+    },
+    {
+      "original_path": "docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md",
+      "original_sha256": "bfb17e21df47c9522d2f9b533c720670e5bb5841ed66d7a81ef377428c64f91e",
+      "archived_sha256": "bfb17e21df47c9522d2f9b533c720670e5bb5841ed66d7a81ef377428c64f91e",
+      "prose_sha256": "4945c70022cc7a40328cc8435f7beed7edbe893ef87ad0504102d3c75fa855ae"
+    },
+    {
+      "original_path": "docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md",
+      "original_sha256": "92127af33965a3870dfd85642900e1d911fc8e5afc5331c3684fa724fef1e050",
+      "archived_sha256": "92127af33965a3870dfd85642900e1d911fc8e5afc5331c3684fa724fef1e050",
+      "prose_sha256": "4b3e183f80942721fcbf05bd56818a0aa0b17e4b079b1ee37cee753d7cbac0ef"
+    },
+    {
+      "original_path": "docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md",
+      "original_sha256": "f8c63efa06ad5b72c8622d496c62deaac12d862723b143d77f32ee2457979bfe",
+      "archived_sha256": "f8c63efa06ad5b72c8622d496c62deaac12d862723b143d77f32ee2457979bfe",
+      "prose_sha256": "2d8680db71292390c01321158cf78a684980be33a7a360139847c8f48437f2a2"
+    },
+    {
+      "original_path": "docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md",
+      "original_sha256": "58dc847ec2ec13f71a7487e00af1acbdce9711517713f7b141b8c3ffb71dca7d",
+      "archived_sha256": "45f3dab25fb272788d8223389114703f35945a5a152be7c4486971a02d78bce2",
+      "prose_sha256": "4e47384adf420248487eea69452d59e9e699652a315a3c50b52442968a3ea599"
+    },
+    {
+      "original_path": "docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md",
+      "original_sha256": "53a556b502eb9433c0734c77a58e577319ec0e27fa33c24dd878c269fca91739",
+      "archived_sha256": "53a556b502eb9433c0734c77a58e577319ec0e27fa33c24dd878c269fca91739",
+      "prose_sha256": "52546534a48234dd53e79b7c006ba4b405fc0144458f45ed8b0e10ab78326b55"
+    },
+    {
+      "original_path": "docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md",
+      "original_sha256": "39ffefbb37cc908dcf76fa1bd6d9e809ae55253dd08a27a566b1553119c67e7c",
+      "archived_sha256": "39ffefbb37cc908dcf76fa1bd6d9e809ae55253dd08a27a566b1553119c67e7c",
+      "prose_sha256": "30dde39a2c3b5bd6cc891aaca0370746026d4f240f72248d18d9e4fd11b0851f"
+    },
+    {
+      "original_path": "docs/dev/plans/0184-2026-09-14-resumable-candidate-generation-retention.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0184-2026-09-14-resumable-candidate-generation-retention.md",
+      "original_sha256": "0c13b307500d4955811d24b409d9062611d734903e42196c54db6ece0628bc82",
+      "archived_sha256": "0c13b307500d4955811d24b409d9062611d734903e42196c54db6ece0628bc82",
+      "prose_sha256": "7b861d22e1f0d4bcb6b3c3af8c04b6bc7200ee0a69114441269dd847849476d2"
+    },
+    {
+      "original_path": "docs/dev/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md",
+      "original_sha256": "e85d76815a7898de76549c53343b455341d2f83e8641bdd18f7d4a8a5da34e07",
+      "archived_sha256": "e85d76815a7898de76549c53343b455341d2f83e8641bdd18f7d4a8a5da34e07",
+      "prose_sha256": "c702926fce988491e4ff16ebf7eedd5aa8b5767e07049c8dfa8260ce9f074b2e"
+    },
+    {
+      "original_path": "docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md",
+      "original_sha256": "b4a04099c6072fd32ed45ffa409b99cb617d5ef81067b2a674eb699c66b78747",
+      "archived_sha256": "b4a04099c6072fd32ed45ffa409b99cb617d5ef81067b2a674eb699c66b78747",
+      "prose_sha256": "587eed7ade2b3198cd9e4ea3e43b51b7ce9f5748a17f118e1aa50dc35145fb96"
+    },
+    {
+      "original_path": "docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md",
+      "original_sha256": "0747bfcd7e9aedf4bc42fb5562e30960994db29adbf358aaff9d2b384f947d1e",
+      "archived_sha256": "0747bfcd7e9aedf4bc42fb5562e30960994db29adbf358aaff9d2b384f947d1e",
+      "prose_sha256": "0747bfcd7e9aedf4bc42fb5562e30960994db29adbf358aaff9d2b384f947d1e"
+    },
+    {
+      "original_path": "docs/dev/plans/0188-2026-09-13-captcha-guard-contract-and-threat-model.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0188-2026-09-13-captcha-guard-contract-and-threat-model.md",
+      "original_sha256": "4b86ee941b49f65ea4a373ea0f7cd44aa1ba762767fb8d9192f6609a1ba141a9",
+      "archived_sha256": "4b86ee941b49f65ea4a373ea0f7cd44aa1ba762767fb8d9192f6609a1ba141a9",
+      "prose_sha256": "4b86ee941b49f65ea4a373ea0f7cd44aa1ba762767fb8d9192f6609a1ba141a9"
+    },
+    {
+      "original_path": "docs/dev/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md",
+      "original_sha256": "652aa03487382f6448681162739b11f5298aebe52f6d582bcf5ba835f208f023",
+      "archived_sha256": "652aa03487382f6448681162739b11f5298aebe52f6d582bcf5ba835f208f023",
+      "prose_sha256": "652aa03487382f6448681162739b11f5298aebe52f6d582bcf5ba835f208f023"
+    },
+    {
+      "original_path": "docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md",
+      "original_sha256": "64936fdbdc6e5fb463262d51544d155163cc59be726e9986d8249978c8c51eb9",
+      "archived_sha256": "64936fdbdc6e5fb463262d51544d155163cc59be726e9986d8249978c8c51eb9",
+      "prose_sha256": "98d1ceccca56bf3bdaaf0712c608d59f4fe0f6e48ed5d584ba14e5e5e7ff6659"
+    },
+    {
+      "original_path": "docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md",
+      "original_sha256": "b963c733480aa5c3d4b796e71931886e48a8e3bb3e57d6ee54b323209d1cb65a",
+      "archived_sha256": "b963c733480aa5c3d4b796e71931886e48a8e3bb3e57d6ee54b323209d1cb65a",
+      "prose_sha256": "d552e31969a7252daca98c456fd29596637a876c6b8eecef1eddac39422f1315"
+    },
+    {
+      "original_path": "docs/dev/plans/0192-2026-09-14-two-profile-challenge-vertical-slice.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0192-2026-09-14-two-profile-challenge-vertical-slice.md",
+      "original_sha256": "5377d09d6df8e159adacd7d74f7f4690e7a5e68b8188d1e795a8771bc7c7f96e",
+      "archived_sha256": "5377d09d6df8e159adacd7d74f7f4690e7a5e68b8188d1e795a8771bc7c7f96e",
+      "prose_sha256": "5377d09d6df8e159adacd7d74f7f4690e7a5e68b8188d1e795a8771bc7c7f96e"
+    },
+    {
+      "original_path": "docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0193-2026-09-15-challenge-task-service-orchestration.md",
+      "original_sha256": "356cd4dfacc1744e352174c07a6eb38ec07ff8ae5dcaf851b88057d495640dba",
+      "archived_sha256": "356cd4dfacc1744e352174c07a6eb38ec07ff8ae5dcaf851b88057d495640dba",
+      "prose_sha256": "356cd4dfacc1744e352174c07a6eb38ec07ff8ae5dcaf851b88057d495640dba"
+    },
+    {
+      "original_path": "docs/dev/plans/0194-2026-09-15-service-state-load-current-contention-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0194-2026-09-15-service-state-load-current-contention-repair.md",
+      "original_sha256": "ee19ac21e0941658caba9d6500ec6185b0bba212ae145554f7b8dd058b401b05",
+      "archived_sha256": "ee19ac21e0941658caba9d6500ec6185b0bba212ae145554f7b8dd058b401b05",
+      "prose_sha256": "0e473e882863df3709803db98366a744180137d75fa5114dd5c2315e8857acc2"
+    },
+    {
+      "original_path": "docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0195-2026-09-15-custom-profile-identity-repair.md",
+      "original_sha256": "7c2e136f9a58985f7ea7c929c164bad734d65825f3ea9526fd433ef05712eb35",
+      "archived_sha256": "7c2e136f9a58985f7ea7c929c164bad734d65825f3ea9526fd433ef05712eb35",
+      "prose_sha256": "7c2e136f9a58985f7ea7c929c164bad734d65825f3ea9526fd433ef05712eb35"
+    },
+    {
+      "original_path": "docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md",
+      "original_sha256": "1565d69c8096c7303efea9acae1ab724f60d798055559fc86eda9c124342bcf0",
+      "archived_sha256": "1565d69c8096c7303efea9acae1ab724f60d798055559fc86eda9c124342bcf0",
+      "prose_sha256": "1565d69c8096c7303efea9acae1ab724f60d798055559fc86eda9c124342bcf0"
+    },
+    {
+      "original_path": "docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0197-2026-09-16-challenge-consumer-integration.md",
+      "original_sha256": "792c63d1b7b530eb24a9efa274942f7f5229e2d86e65807dbe957d9dfb6994e5",
+      "archived_sha256": "792c63d1b7b530eb24a9efa274942f7f5229e2d86e65807dbe957d9dfb6994e5",
+      "prose_sha256": "792c63d1b7b530eb24a9efa274942f7f5229e2d86e65807dbe957d9dfb6994e5"
+    },
+    {
+      "original_path": "docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0198-2026-09-16-retained-owner-inventory-coherence.md",
+      "original_sha256": "ce15c10047e173c02d59596b5887bafef2cec766b6fecdb5c563bb727e285166",
+      "archived_sha256": "ce15c10047e173c02d59596b5887bafef2cec766b6fecdb5c563bb727e285166",
+      "prose_sha256": "ce15c10047e173c02d59596b5887bafef2cec766b6fecdb5c563bb727e285166"
+    },
+    {
+      "original_path": "docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0199-2026-09-16-compatible-access-profile-selection.md",
+      "original_sha256": "5446baf024c0d991ff6900c9bac5f15401c9e10c6f894ad9e93d3404ab11b43f",
+      "archived_sha256": "5446baf024c0d991ff6900c9bac5f15401c9e10c6f894ad9e93d3404ab11b43f",
+      "prose_sha256": "5446baf024c0d991ff6900c9bac5f15401c9e10c6f894ad9e93d3404ab11b43f"
+    },
+    {
+      "original_path": "docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md",
+      "original_sha256": "2af21fac03141b85194390d6cfdf7ed70348283b9657048d460c4da2e167f303",
+      "archived_sha256": "2af21fac03141b85194390d6cfdf7ed70348283b9657048d460c4da2e167f303",
+      "prose_sha256": "2af21fac03141b85194390d6cfdf7ed70348283b9657048d460c4da2e167f303"
+    },
+    {
+      "original_path": "docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0201-2026-09-16-x-display-live-occupancy.md",
+      "original_sha256": "36eea07e090fd305d5a4ca0244bed01615cd87e80155d7dbe0221181ef88e50b",
+      "archived_sha256": "36eea07e090fd305d5a4ca0244bed01615cd87e80155d7dbe0221181ef88e50b",
+      "prose_sha256": "0d82e5c0aab0be293ce6f8d807517e4520e24a1df295f9464fa9df10a3651b81"
+    },
+    {
+      "original_path": "docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0202-2026-09-16-abandoned-service-browser-retirement.md",
+      "original_sha256": "a330c57a64841ee20ee4d74c8db8a919bee3a420b85fbf8865715b0cb5cb848c",
+      "archived_sha256": "a330c57a64841ee20ee4d74c8db8a919bee3a420b85fbf8865715b0cb5cb848c",
+      "prose_sha256": "885b13c354ea70ff072e470123603362daf3724cb4cee640a2250959e65cdbd6"
+    },
+    {
+      "original_path": "docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0203-2026-09-16-runtime-host-admission-routing.md",
+      "original_sha256": "5dca95dcf2765317f8feebf4cff949740aef196f3fc9511407abc47fe5281ef3",
+      "archived_sha256": "5dca95dcf2765317f8feebf4cff949740aef196f3fc9511407abc47fe5281ef3",
+      "prose_sha256": "bdc9b7a4042b51b8731e599b8d41d0a568ac25927f8de1f71c3dc8c258b4f059"
+    },
+    {
+      "original_path": "docs/dev/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0204-2026-09-16-ci-validation-economics-and-tiering.md",
+      "original_sha256": "3f1e2c1728fcb2c541baf21f30518b1856b73f4287e239dfc4d008e1da7c3b62",
+      "archived_sha256": "3f1e2c1728fcb2c541baf21f30518b1856b73f4287e239dfc4d008e1da7c3b62",
+      "prose_sha256": "3f1e2c1728fcb2c541baf21f30518b1856b73f4287e239dfc4d008e1da7c3b62"
+    },
+    {
+      "original_path": "docs/dev/plans/0205-2026-09-16-service-state-model-crate-extraction.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0205-2026-09-16-service-state-model-crate-extraction.md",
+      "original_sha256": "55e1873f444520e4823c766951963714b30d29c9ee565d8ba1f3ac4518780ab6",
+      "archived_sha256": "55e1873f444520e4823c766951963714b30d29c9ee565d8ba1f3ac4518780ab6",
+      "prose_sha256": "192fb8646df581d96cb40fc5c2d83cb52fdc3f6f0bb79814636ffc4090a2a141"
+    },
+    {
+      "original_path": "docs/dev/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0206-2026-09-16-visual-multi-round-challenge-contract.md",
+      "original_sha256": "91cc1b3470e410f763a0aebcb97d9e8fe197775c76396fc1de11b3f413e7e13e",
+      "archived_sha256": "91cc1b3470e410f763a0aebcb97d9e8fe197775c76396fc1de11b3f413e7e13e",
+      "prose_sha256": "91cc1b3470e410f763a0aebcb97d9e8fe197775c76396fc1de11b3f413e7e13e"
+    },
+    {
+      "original_path": "docs/dev/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0208-2026-09-16-worktree-closeout-candidate-custody.md",
+      "original_sha256": "bd930f514c6ae2242592e8360c0af84e65d8889b6ae25ca79aa13f8e6ffef1bb",
+      "archived_sha256": "bd930f514c6ae2242592e8360c0af84e65d8889b6ae25ca79aa13f8e6ffef1bb",
+      "prose_sha256": "bd930f514c6ae2242592e8360c0af84e65d8889b6ae25ca79aa13f8e6ffef1bb"
+    },
+    {
+      "original_path": "docs/dev/plans/0209-2026-09-16-visual-provider-protocol.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0209-2026-09-16-visual-provider-protocol.md",
+      "original_sha256": "23ad28e68df91432a18b4dca165e8c0060d4f37f00f5042615c0699b6b2adf68",
+      "archived_sha256": "23ad28e68df91432a18b4dca165e8c0060d4f37f00f5042615c0699b6b2adf68",
+      "prose_sha256": "576bf59aa2236b31b98d4839e308918b25a286aa275bc5f756104d9c6a2ce8d1"
+    },
+    {
+      "original_path": "docs/dev/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md",
+      "original_sha256": "62f336a3a639050de7d54cc09d4ed583d5796b5c7fee116535ba3fa12e76c2be",
+      "archived_sha256": "62f336a3a639050de7d54cc09d4ed583d5796b5c7fee116535ba3fa12e76c2be",
+      "prose_sha256": "62f336a3a639050de7d54cc09d4ed583d5796b5c7fee116535ba3fa12e76c2be"
+    },
+    {
+      "original_path": "docs/dev/plans/0212-2026-09-17-desktop-candidate-intent-contract.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0212-2026-09-17-desktop-candidate-intent-contract.md",
+      "original_sha256": "fbc5e7546a210a945019bf3979d915ed6b7601cf4a399843338578ad6321a4ab",
+      "archived_sha256": "fbc5e7546a210a945019bf3979d915ed6b7601cf4a399843338578ad6321a4ab",
+      "prose_sha256": "fbc5e7546a210a945019bf3979d915ed6b7601cf4a399843338578ad6321a4ab"
+    },
+    {
+      "original_path": "docs/dev/plans/0213-2026-09-17-visual-desktop-candidate-adapter.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0213-2026-09-17-visual-desktop-candidate-adapter.md",
+      "original_sha256": "2191dcc6224d296d6ed04a72fc148e49dbd47a83b6c59adee5bf19a873c78b66",
+      "archived_sha256": "2191dcc6224d296d6ed04a72fc148e49dbd47a83b6c59adee5bf19a873c78b66",
+      "prose_sha256": "2191dcc6224d296d6ed04a72fc148e49dbd47a83b6c59adee5bf19a873c78b66"
+    },
+    {
+      "original_path": "docs/dev/plans/0214-2026-09-17-candidate-permit-event-plan.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0214-2026-09-17-candidate-permit-event-plan.md",
+      "original_sha256": "1ef5be40b768d14b83eeee78a58f0b430b1adf01094aa5e0687d9683287f4dda",
+      "archived_sha256": "1ef5be40b768d14b83eeee78a58f0b430b1adf01094aa5e0687d9683287f4dda",
+      "prose_sha256": "1ef5be40b768d14b83eeee78a58f0b430b1adf01094aa5e0687d9683287f4dda"
+    },
+    {
+      "original_path": "docs/dev/plans/0216-2026-09-17-service-model-extraction-landing.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/plans/0216-2026-09-17-service-model-extraction-landing.md",
+      "original_sha256": "24acc023fad62850bcb3e2512c4b11c726488ac2524a93f7c366aee2f0953c88",
+      "archived_sha256": "24acc023fad62850bcb3e2512c4b11c726488ac2524a93f7c366aee2f0953c88",
+      "prose_sha256": "7414c07e0d47c9396a43c64dc9a8f0424b6486b044213aacbef9348459fd1151"
+    },
+    {
+      "original_path": "ROADMAP.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/ROADMAP.md",
+      "original_sha256": "4bf77b7bc14547f329de9354b537251358e007078262c02a34291b77e7de258c",
+      "archived_sha256": "746a9e22dd9b39ca1b33d1f584ed71d674d6400ecba1e7a9346734d375f32a99",
+      "prose_sha256": "db034e800b309b2debdea0b5e80d70cf28417357e5c4881e0cdb5bf0eae8a94b"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-10-through-turn309.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-10-through-turn309.md",
+      "original_sha256": "e478fa5745a7b6d5becdd8d8381f027a56881058550733f35edd86b617fc4bcf",
+      "archived_sha256": "351613913a7526f1a1aa5c08586d6338ea425468cc8f8965dada6fc545507445",
+      "prose_sha256": "15f0dc24d02f57d9ed8c47b3d238cb607e8507e863762f39d16a40829626e840"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-13-through-turn312.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-13-through-turn312.md",
+      "original_sha256": "461e41828602c4977b58f6c9d388c50adfd209e345c35ab30bbb0769351d32ac",
+      "archived_sha256": "d41a42bc4ad3a8f02610d4efdbc63740e2be1d5e2e301069d09ecf018246345e",
+      "prose_sha256": "ab6a4bd0bcd986b5bf828a2163268c2277b3af30cc67688586dcb0234c0148ee"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-13-turn313.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-13-turn313.md",
+      "original_sha256": "aef89ad3f26c1a11848fb3575ce5fdb49fe41ffab69b69f64f7a9b8da915435c",
+      "archived_sha256": "cd29801e13ba018b5f4a3c234ca126af3c4d38b85eae44a2142cc84f68c31b4a",
+      "prose_sha256": "03d84519c626ed6b60a5fd32f3e30c7964aa25041a5ca726d18c4d0ed1159d6b"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-14-p169-through-turn319.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-14-p169-through-turn319.md",
+      "original_sha256": "af403adb5707f41d0a26056168130fa0e80d53d0d8f6751fe479c97cc5bc7f3c",
+      "archived_sha256": "1fb88b53f6beb93a09ea2e192e2baad0d8f7fee15f681c70465fe434948fcd12",
+      "prose_sha256": "bf9e203e405aa06b78cc64a215a939dfc915cc3f0ad6b9d6968a4ff3123b1659"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-14-p186-through-turn328.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-14-p186-through-turn328.md",
+      "original_sha256": "71c2957c6f58f992c81c4dbd65c4d80a21be2545110e6f8ace109b084346c278",
+      "archived_sha256": "71c2957c6f58f992c81c4dbd65c4d80a21be2545110e6f8ace109b084346c278",
+      "prose_sha256": "71c2957c6f58f992c81c4dbd65c4d80a21be2545110e6f8ace109b084346c278"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-14-turn314-through-turn320.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-14-turn314-through-turn320.md",
+      "original_sha256": "b7f363bd8b21f56acce90e86e64f3990d8445e4522a732b5e6228cdb9c2bc683",
+      "archived_sha256": "3ed7e2428154537353303524335532522033e41636a62750d3ec5a0d32c5d402",
+      "prose_sha256": "a0f72d447fda10c56c082c0bec41ac6bba047ef2f31bf587f438b2ccdd8b2bcf"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-14-turn323-through-2026-09-16-turn368.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-14-turn323-through-2026-09-16-turn368.md",
+      "original_sha256": "9957f7d4a361464a9dc004692fb70a80e11dcb661e43f1770f7a2dffb02cef45",
+      "archived_sha256": "639a695580589af6af735d2a166320f771aa2b56bff262b9b7449fdae79f6d24",
+      "prose_sha256": "15f152c7d28a07177361f2897bb06cd864728dbad9d26fa913c00f6f7ad6d597"
+    },
+    {
+      "original_path": "RUNBOOK-history-2026-09-15-p194-through-turn343.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-2026-09-15-p194-through-turn343.md",
+      "original_sha256": "663d4c7d743dce96899d536573298aad1732fb8a3ad0b06aeb0add5c0c5141ca",
+      "archived_sha256": "731027575c103c535dfe32d48561279e6aa9bc361197e8f96a33eef8ce58b55c",
+      "prose_sha256": "79531f20c33c3341037d6d5f66aee7fc7922499df707a26f5712dd08b05e53b1"
+    },
+    {
+      "original_path": "RUNBOOK-history-through-2026-09-02.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-through-2026-09-02.md",
+      "original_sha256": "0ef5a807e9edda555bd235688b703745df9fd3cf39d85e4f76128911966ebbcf",
+      "archived_sha256": "0ef5a807e9edda555bd235688b703745df9fd3cf39d85e4f76128911966ebbcf",
+      "prose_sha256": "0ef5a807e9edda555bd235688b703745df9fd3cf39d85e4f76128911966ebbcf"
+    },
+    {
+      "original_path": "RUNBOOK-history-through-2026-09-08-turn280.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK-history-through-2026-09-08-turn280.md",
+      "original_sha256": "8a695a910e698818706161201edb8588076577879be38e4e625f2235043502fa",
+      "archived_sha256": "b6539200925440cf67ec51c44df4297096ef01c65bafaf5d3e1011ae6ef5d7f4",
+      "prose_sha256": "ad643d2f346cb91c772c4ae71b45d4df25dc13f2bc2d60ccd48cf04a14d98dc4"
+    },
+    {
+      "original_path": "RUNBOOK.md",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/RUNBOOK.md",
+      "original_sha256": "d867a2e77535435c6c5cf8c7f3bfd7effee49026f1256687d06190add467b940",
+      "archived_sha256": "2ffb4125ba44312bb4e032273b1ac7107a275e2723f1cf251c41299b909b33cf",
+      "prose_sha256": "b2f728dfadefccf05549128b01952238b4e283f976977b642d9bca664c272227"
+    },
+    {
+      "original_path": "docs/dev/active-lanes.yaml",
+      "archived_path": "docs/history/2026-10-05-legacy-planning/active-lanes.yaml",
+      "original_sha256": "727d413e4b0f8caf6e143b749a582625f5bc873cbd80d3d8125c8530d17084b9",
+      "archived_sha256": "727d413e4b0f8caf6e143b749a582625f5bc873cbd80d3d8125c8530d17084b9",
+      "prose_sha256": "727d413e4b0f8caf6e143b749a582625f5bc873cbd80d3d8125c8530d17084b9"
+    }
+  ]
+}

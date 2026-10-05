@@ -98,7 +98,7 @@ reuse after those contracts are frozen.
 - [Shared runtime effect custody policy feedback](2026-09-14-runtime-effect-custody-policy-feedback.md)
 - [Session and worktree admission policy feedback](2026-09-14-session-worktree-admission-policy-feedback.md)
 
-[Plan 0161](../plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
+[Plan 0161](../../history/2026-10-05-legacy-planning/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 is assigned to this lane. It owns the profile aggregate, sealed repair and reset
 transactions, lifecycle joins, and shared adapters. Authentication consumes its
 target-scoped reset and readiness outputs.

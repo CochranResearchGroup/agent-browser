@@ -4,7 +4,7 @@ Date: 2026-09-11
 
 Status: ACCEPTED AND INTEGRATED
 
-Plan: [Plan 0167](../plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
+Plan: [Plan 0167](../../history/2026-10-05-legacy-planning/plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
 
 Branch: `maintenance/plan-0167-service-state-lock`
 

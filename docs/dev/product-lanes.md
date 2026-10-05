@@ -98,7 +98,7 @@ development runtime, build acceleration, remote-view infrastructure, shared
 desktop services, capability registry, observability, and architectural
 extractions.
 
-[Plan 0161](plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
+[Plan 0161](../history/2026-10-05-legacy-planning/plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md)
 belongs primarily here because it establishes the profile aggregate, sealed
 repair and reset transactions, lifecycle joins, and shared public adapters.
 `PL-AUTH` consumes its authentication-reset and readiness contracts but does

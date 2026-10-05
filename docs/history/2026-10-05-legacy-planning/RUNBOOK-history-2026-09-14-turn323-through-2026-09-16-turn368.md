@@ -7,7 +7,7 @@ surface under policy 0043. Current execution status remains in
 
 ## Turn 368 | 2026-09-16
 
-[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+[Plan 0203](plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is closed. [PR #172](https://github.com/CochranResearchGroup/agent-browser/pull/172)
 merged source head `28380966` into `main` as `136a1928`; issue #169 closed and
 its stale `state/in-progress` label was removed. Exact-head CI run `35160652859`
@@ -19,7 +19,7 @@ release effect occurred.
 
 ## Turn 367 | 2026-09-16
 
-[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+[Plan 0203](plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is source-complete at `08bebd29`. The red prior-boot fixture reproduced
 `runtime_host_boot_epoch_prior` before the supervised replacement could refresh
 the stale selected identity. The repair treats prior-boot PIDs as
@@ -33,7 +33,7 @@ integration, and closeout remain. No installed runtime or provider was touched.
 
 ## Turn 366 | 2026-09-16
 
-[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+[Plan 0203](plans/0203-2026-09-16-runtime-host-admission-routing.md)
 version 2 records the root defect. The selected ingress registry retains prior-
 boot epoch `linux:754a...` and dead PID 56393 while the same installed generation
 is reachable at the selected socket under supervised PID 1066 on current epoch
@@ -45,7 +45,7 @@ fenced reboot recovery. No runtime mutation was performed.
 
 ## Turn 365 | 2026-09-16
 
-[Plan 0203](docs/dev/plans/0203-2026-09-16-runtime-host-admission-routing.md)
+[Plan 0203](plans/0203-2026-09-16-runtime-host-admission-routing.md)
 is admitted from `main@dd34977e` for issue #169. The provider-free packet will
 first prove that a fresh CLI/MCP client misses a current selected singleton
 runtime host, then repair connection-bound routing without permitting any new
@@ -140,7 +140,7 @@ those checks during normal implementation closeout.
 
 ## Turn 357 | 2026-09-16
 
-[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+[Plan 0202](plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
 is provider-free green for the per-lane resource projection, activity-aware
 candidate matrix, and sealed reserve/effect/finalize transaction. Nine focused
 transaction tests include a real JSON repository regression for pre-advanced
@@ -156,7 +156,7 @@ process was changed.
 
 ## Turn 356 | 2026-09-16
 
-[Plan 0202](docs/dev/plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+[Plan 0202](plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
 is admitted from `main@151ebccd` for issue #103. Existing exact reviewed-tree
 shutdown and inert-row retirement are reusable but do not classify or retire a
 still-live inactive service-owned lane. Three shallow read-only workers will
@@ -175,7 +175,7 @@ shutdown, runtime restart, provider mutation, production effect, or release is
 authorized.
 ## Turn 355 | 2026-09-16
 
-[Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+[Plan 0201](plans/0201-2026-09-16-x-display-live-occupancy.md)
 is closed. [PR #166](https://github.com/CochranResearchGroup/agent-browser/pull/166)
 merged source head `72c7a859` into `main` as `a23764a1`; issue #159 closed.
 Exact-head CI run `35110970667` passed the complete Rust suite, no-launch
@@ -186,7 +186,7 @@ retained-profile, production, or release effect occurred.
 
 ## Turn 354 | 2026-09-16
 
-[Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+[Plan 0201](plans/0201-2026-09-16-x-display-live-occupancy.md)
 is source-complete at `42beec54` through draft PR #166. The original focused
 run failed because an ordinary file and a stale socket inode were both treated
 as `ActiveSocket`. The repair uses exact filesystem and abstract addresses in
@@ -199,7 +199,7 @@ closeout remain. No live or installed-runtime effect occurred.
 
 ## Turn 353 | 2026-09-16
 
-[Plan 0201](docs/dev/plans/0201-2026-09-16-x-display-live-occupancy.md)
+[Plan 0201](plans/0201-2026-09-16-x-display-live-occupancy.md)
 is admitted from `main@b11a7227` for issue #159. The no-live packet will first
 prove ordinary files and stale filesystem socket inodes are not live X display
 evidence while live filesystem and abstract listeners remain reserved. It will
@@ -210,7 +210,7 @@ production, or release effect is authorized.
 
 ## Turn 352 | 2026-09-16
 
-[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+[Plan 0200](plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 is closed. PR #163 merged source head
 `2978594e` into `main` as `c98da4cc`; issue #102 closed and its stale
 `state/in-progress` label was removed. The clean P200 worktree and merged local
@@ -228,7 +228,7 @@ also removed from the active-lane catalog after closure.
 
 ## Turn 351 | 2026-09-16
 
-[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+[Plan 0200](plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 is locally source-complete at `fc2a3359` through draft PR #163. Shellcheck,
 Node syntax, deterministic success and exit-23 cleanup, dead-wrapper
 active-scope accounting, unavailable-systemd behavior, profile-residue and
@@ -242,7 +242,7 @@ Protected exact-head CI, integration, and closeout remain.
 
 ## Turn 350 | 2026-09-16
 
-[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+[Plan 0200](plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 has source checkpoint `ac862e80`. The red provider-free fixture proved the
 wrapper returned while its browser-like descendant remained alive. The repair
 assigns an exact scope identity, retains a dead-wrapper claim while its scope
@@ -256,7 +256,7 @@ unchanged.
 
 ## Turn 349 | 2026-09-16
 
-[Plan 0200](docs/dev/plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
+[Plan 0200](plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md)
 is admitted from `main@3863106e` for issue #102. The provider-free packet will
 first prove that an exact user-systemd scope can retain a browser-like
 descendant after its Cargo parent exits while its admission claim disappears,
@@ -268,7 +268,7 @@ authorized.
 
 ## Turn 348 | 2026-09-16
 
-[Plan 0199](docs/dev/plans/0199-2026-09-16-compatible-access-profile-selection.md)
+[Plan 0199](plans/0199-2026-09-16-compatible-access-profile-selection.md)
 is CLOSED. PR #160 merged exact rebased branch head `01c05d0d` into `main` as
 `e2e81e38`; source-head CI run `35092326047` and merge-commit CI run
 `35092355450` pass. Issue #67 is closed. Access planning now prefers a
@@ -279,7 +279,7 @@ installation, shared-runtime, production, or release effect occurred.
 
 ## Turn 347 | 2026-09-16
 
-[Plan 0197](docs/dev/plans/0197-2026-09-16-challenge-consumer-integration.md)
+[Plan 0197](plans/0197-2026-09-16-challenge-consumer-integration.md)
 integrates Authentication Run and navigation through one provider-neutral
 challenge admission contract. Source checkpoint `2dc5fd60` binds a completed
 receipt to the effective site-policy digest, downstream intent, principal, and
@@ -292,7 +292,7 @@ occurred.
 
 ## Turn 346 | 2026-09-16
 
-[Plan 0198](docs/dev/plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
+[Plan 0198](plans/0198-2026-09-16-retained-owner-inventory-coherence.md)
 is CLOSED. PR #158 merged exact branch head `38344ecf` into `main` as `c2ade1d1`; CI run `35086940883` passes and issue #143 closed.
 The root defect was browser inventory applying current-PID authority validation
 to structurally valid owner history retained after a terminal browser cleared
@@ -304,13 +304,13 @@ pass. No live or installed-runtime effect occurred.
 
 ## Turn 344 | 2026-09-15
 
-[Plan 0196](docs/dev/plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md) is CLOSED. PRs #150, #153, and #154 merged the #87 race proof and exact installed-acceptance repairs into `main@279b2228`. Final generation
+[Plan 0196](plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md) is CLOSED. PRs #150, #153, and #154 merged the #87 race proof and exact installed-acceptance repairs into `main@279b2228`. Final generation
 `0.28.0-15f0f3576657-30788a166073`, SHA-256
 `15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`, is accepted under transaction `upgrade-d0e7c98f-d6b7-4e48-bc60-aa570e5dc329` revision 13. Installed doctor passes with one runtime host, one dashboard, healthy monitor, and exact supervisor identity. A fresh explicit filesystem profile opened `about:blank`, returned the same URL, closed, moved its profile to trash, and left zero exact process holders. A targeted Guacamole web recreate loaded the sealed extension at `0555` and `0444`, returned HTTP 200, and left PostgreSQL and guacd unchanged. Issues #87, #131, and #151 are closed; #143 remains open for the broader retained-owner inventory defect. The dashboard operator-journey warning remains nonblocking and no tenant workflow was run.
 
 ## Turn 339 | 2026-09-15
 
-P169 W5 is integrated and [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
+P169 W5 is integrated and [Plan 0193](plans/0193-2026-09-15-challenge-task-service-orchestration.md)
 is CLOSED. PR #142 merged exact source head `709641e9` into `main` as
 `81de07cf`. Source-head CI run 34993316164 passes. Merge-commit CI run
 34997057075 passes on attempt 2 after one unchanged control-plane timing test
@@ -321,7 +321,7 @@ occurred.
 
 ## Turn 337 | 2026-09-15
 
-P169 W5 is admitted through [Plan 0193](docs/dev/plans/0193-2026-09-15-challenge-task-service-orchestration.md)
+P169 W5 is admitted through [Plan 0193](plans/0193-2026-09-15-challenge-task-service-orchestration.md)
 on `challenge/p169-task-orchestration` from merged-main checkpoint `85b4ee92`.
 The packet will add one durable challenge-aware Service task, reuse established
 Service State and task-custody seams, drive it first through registered
@@ -357,7 +357,7 @@ installed-runtime, production, or release effect occurred.
 
 ## Turn 334 | 2026-09-14
 
-[Plan 0191](docs/dev/plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) is CLOSED through issue #139 and PR #140 after reconciling repository custody.
+[Plan 0191](plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md) is CLOSED through issue #139 and PR #140 after reconciling repository custody.
 Eight P181 wake lifecycle files are preserved in a user-scoped archive with
 SHA-256 `a7249285b59ce1644b2401406f9f3519e4627af4f2b8c4fddd843e0aaf2e0b32`;
 both detached benchmark diffs have standalone patches. Five integrated or
@@ -366,11 +366,11 @@ P180 and P183 through P185 close from merged source plus P186 installed
 acceptance. P182 remains BLOCKED without source custody because its same-run
 acceptance was not exercised. P169 now points to Plan 0187, issues #127 and
 #66, draft PR #128, and remote-equal `fec7fd87`; its conflict and failed Rust
-gate remain. [P190](docs/dev/plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) stays PLANNED. No runtime or external effect occurred.
+gate remain. [P190](plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md) stays PLANNED. No runtime or external effect occurred.
 
 ## Turn 329 | 2026-09-14
 
-[Plan 0187](docs/dev/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+[Plan 0187](plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
 is OPEN and entered W0 custody normalization. Published feature checkpoint
 `2ae7a68332b7a505c74bbd1e987d8a82fb52409d` remains preserved while
 `challenge/p169-control-plane` joined current-main checkpoint
@@ -421,7 +421,7 @@ a healthy monitor, and 43 healthy profile leases. No tenant workflow retried.
 
 ## Turn 328 | 2026-09-14
 
-[Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+[Plan 0186](plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
 is CLOSED. The repair batch merged through PR #129 as `f84ae098`; exact
 candidate SHA-256 `66ac712c6a91a26395d3369fb40ec111e5e46a101a736e35c7c0acce999e7e76`
 passed the source-free fixture and a default preserving workstation install.
@@ -436,7 +436,7 @@ No tenant workflow was retried.
 
 ## Turn 324 | 2026-09-14
 
-[Plan 0181](docs/dev/plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md) is CLOSED through PR #106, which merged exact validated head `91aa3204` into
+[Plan 0181](plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md) is CLOSED through PR #106, which merged exact validated head `91aa3204` into
 `main` as `b5a78faf`. The new crate owns the canonical kernel and protected
 stack; the old owner is deleted and the CLI retains one private adapter.
 
@@ -471,7 +471,7 @@ integrated candidate `bce36a4c` built successfully. Reboot then removed all
 route viewers. A transaction-bound attempt to recreate route A failed before
 effect as `runtime_admission_draining`: the drain permits claimed Service
 reconcile but not the launch, headers, navigation, and cleanup that reconcile
-requires when no viewer survives. [Plan 0186](docs/dev/plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+requires when no viewer survives. [Plan 0186](plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
 and [issue #112](https://github.com/CochranResearchGroup/agent-browser/issues/112)
 own a canonical-viewer-only admission repair. Ordinary and tenant profiles
 must remain blocked. PR #113 merged the first repair as `3c7d29da`; exact

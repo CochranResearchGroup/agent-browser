@@ -22,7 +22,7 @@ Target: `main`
 
 Integration: merge through the existing P157 branch
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+Current execution status: [RUNBOOK.md](../RUNBOOK.md)
 
 ## Objective and operator outcome
 

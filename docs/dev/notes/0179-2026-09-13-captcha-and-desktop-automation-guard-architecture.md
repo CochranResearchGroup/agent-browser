@@ -14,7 +14,7 @@ Source branch: `challenge/p169-control-plane`
 
 ## 2026-09-14 Product-Trunk Refinement
 
-[Plan 0187](../plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+[Plan 0187](../../history/2026-10-05-legacy-planning/plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
 places this extraction design inside a broader provider-neutral challenge
 control plane. The control plane owns posture and avoidance, lifecycle,
 attempt budgets, strategy selection, completion verification, cooldown,

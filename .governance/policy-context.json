@@ -53,7 +53,7 @@
   "governance_inventory": [
     {
       "path": "AGENTS.md",
-      "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e"
+      "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6"
     },
     {
       "path": "docs/dev/policies/0001-policy-management.md",
@@ -320,12 +320,18 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
           "sections": [
             {
               "heading_path": [
                 "AGENTS.md",
                 "Policy Loading Contract"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Current Planning Context"
               ]
             }
           ]
@@ -524,6 +530,20 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-documentation.history-boundary",
+            "kind": "required_gate",
+            "statement": "Use current ROADMAP, RUNBOOK and the active plan index at startup. Archived plans and runbook entries are reference-only; consult only a named entry for a present evidence question and never inherit its strategy or execution authority.",
+            "citations": [
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Current Planning Context"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -606,7 +626,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
           "sections": [
             {
               "heading_path": [
@@ -624,6 +644,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "Testing"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Current Planning Context"
               ]
             }
           ]
@@ -843,6 +869,20 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-implementation.history-boundary",
+            "kind": "required_gate",
+            "statement": "Use current ROADMAP, RUNBOOK and the active plan index at startup. Archived plans and runbook entries are reference-only; consult only a named entry for a present evidence question and never inherit its strategy or execution authority.",
+            "citations": [
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Current Planning Context"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -924,12 +964,18 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
           "sections": [
             {
               "heading_path": [
                 "AGENTS.md",
                 "Policy Loading Contract"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Current Planning Context"
               ]
             }
           ]
@@ -1128,6 +1174,20 @@
                 ]
               }
             ]
+          },
+          {
+            "id": "agent-browser-planning.history-boundary",
+            "kind": "required_gate",
+            "statement": "Use current ROADMAP, RUNBOOK and the active plan index at startup. Archived plans and runbook entries are reference-only; consult only a named entry for a present evidence question and never inherit its strategy or execution authority.",
+            "citations": [
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Current Planning Context"
+                ]
+              }
+            ]
           }
         ],
         "precedence": [],
@@ -1209,7 +1269,7 @@
         },
         {
           "path": "AGENTS.md",
-          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sha256": "8ba2a72365538e8c5407e5d5b4af9f2befc7aed6e28f95261eea85075ef6ebb6",
           "sections": [
             {
               "heading_path": [
@@ -1227,6 +1287,12 @@
               "heading_path": [
                 "AGENTS.md",
                 "RDP and Remote-View Handoffs"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Current Planning Context"
               ]
             }
           ]
@@ -1461,6 +1527,20 @@
                 "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
                 "heading_path": [
                   "Policy | Session And Worktree Admission"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.history-boundary",
+            "kind": "required_gate",
+            "statement": "Use current ROADMAP, RUNBOOK and the active plan index at startup. Archived plans and runbook entries are reference-only; consult only a named entry for a present evidence question and never inherit its strategy or execution authority.",
+            "citations": [
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Current Planning Context"
                 ]
               }
             ]

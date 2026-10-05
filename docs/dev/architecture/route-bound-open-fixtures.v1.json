@@ -2,8 +2,8 @@
   "schemaVersion": "route-bound-open-fixtures.v1",
   "frozenAtCommit": "4f052ba3",
   "authority": [
-    "docs/dev/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md",
-    "docs/dev/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md"
+    "docs/history/2026-10-05-legacy-planning/plans/0101-2026-08-09-route-bound-open-actions-deepening-plan.md",
+    "docs/history/2026-10-05-legacy-planning/plans/0102-2026-08-09-route-bound-open-cycle2-residual-repair-plan.md"
   ],
   "publicContract": {
     "action": "remote_view_open",

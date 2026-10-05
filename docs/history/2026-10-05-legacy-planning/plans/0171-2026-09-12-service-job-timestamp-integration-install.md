@@ -9,7 +9,7 @@ Integration: merge
 Date: 2026-09-12
 Plan version: 2
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+Current execution status: [RUNBOOK.md](../RUNBOOK.md)
 
 ## Objective
 

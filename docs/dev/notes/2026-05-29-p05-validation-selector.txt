@@ -157,10 +157,10 @@ Changed files: 288
   docs/dev/notes/2026-05-29-p05-release-preparation-validation.md
   docs/dev/notes/2026-05-29-p05-validation-selector.txt
   docs/dev/notes/google-runtime-profile-login.md
-  docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md
-  docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md
-  docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md
-  docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md
+  docs/history/2026-10-05-legacy-planning/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md
+  docs/history/2026-10-05-legacy-planning/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md
+  docs/history/2026-10-05-legacy-planning/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md
+  docs/history/2026-10-05-legacy-planning/plans/0004-2026-05-29-release-candidate-install-validation-plan.md
   docs/dev/plans/0005-2026-05-29-release-preparation-and-publication-plan.md
   docs/dev/policies/0011-graph-backed-memory-usage.md
   docs/dev/policies/0012-codegraph-usage.md

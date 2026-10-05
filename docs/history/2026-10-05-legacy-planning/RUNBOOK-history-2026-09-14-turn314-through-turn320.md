@@ -4,7 +4,7 @@ Preserved from the current-main reconciliation performed for Plan 0187 on 2026-0
 
 ## Turn 320 | 2026-09-13
 
-[Plan 0183](docs/dev/plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
+[Plan 0183](plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
 is OPEN through [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104).
 The integrated P180 plus P182 candidate at source `caff5e08` and digest
 `6b808d53` passed dry-run, but its single preserving apply stopped before
@@ -31,7 +31,7 @@ again from the integrated commit before the single remaining apply gate.
 
 ## Turn 319 | 2026-09-13
 
-[Plan 0182](docs/dev/plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+[Plan 0182](plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
 is OPEN through [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
 on `fix/issue-96-auth-resume-state-reconciliation`. Its source writes are
 disjoint from P180, integrated at `44e5dc16`. The operator released Agent #95's
@@ -55,7 +55,7 @@ same-run recourse.
 
 ## Turn 317 | 2026-09-13
 
-[Plan 0180](docs/dev/plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
+[Plan 0180](plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
 is OPEN through [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95).
 Independent source diagnosis confirms an upgrade-compatibility inversion:
 activation persists admission drain before browserless-lane quiescence, while
@@ -97,7 +97,7 @@ runtime back.
 
 ## Turn 316 | 2026-09-13
 
-[Plan 0178](docs/dev/plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
+[Plan 0178](plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md)
 is source-integrated and BLOCKED on separately authorized installed acceptance.
 PR #83 merged browserless lane quiescence as `ae426642`; all fast checks and
 comprehensive Rust passed. PR #92 merged exact runtime-admission claims for the
@@ -119,7 +119,7 @@ mutation. Installed shared-skill parity remains separately owned by issue #79.
 
 ## Turn 315 | 2026-09-13
 
-[Plan 0179](docs/dev/plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
+[Plan 0179](plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
 is CLOSED through [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89).
 PR #90 merged the v0.1.26 selector rollout as `3f842f59` after policy wiring,
 122 selector tests with three source-checkout-only skips, active planning and
