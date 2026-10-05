@@ -3,7 +3,7 @@
 Date: 2026-09-06. Status: bounded Plan 0159 accepted; concrete production
 delivery decision pending. This inventory does not authorize whole-branch promotion.
 
-Authority: [Plan 0159](../plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
+Authority: [Plan 0159](../../history/2026-10-05-legacy-planning/plans/0159-2026-09-05-client-recovery-logging-and-remote-view-remediation.md).
 The historical [D01–D15 register](0152-2026-09-05-plan-0158-defect-register.json)
 remains unchanged. The plan's checkpoints retain the scope of each proof and
 every failed live attempt.

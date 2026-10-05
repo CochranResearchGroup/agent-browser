@@ -59,8 +59,8 @@ That plan owns successor repair execution. The discussion-only boundary below
 is historical; P158's old campaign/calibration sequence remains paused and its
 unmet criteria remain unchanged.
 
-The [completed postmortem](../notes/0152-2026-09-05-plan-0158-postmortem.md)
-and its [finite defect register](../notes/0152-2026-09-05-plan-0158-defect-register.json)
+The [completed postmortem](../../../dev/notes/0152-2026-09-05-plan-0158-postmortem.md)
+and its [finite defect register](../../../dev/notes/0152-2026-09-05-plan-0158-defect-register.json)
 record the interrupted effort's causes, evidence limits, and corrective actions
 for Plan 0159 discussion. This is not W10 or full campaign acceptance. State
 remains OPEN; W1–W5 retain their tooling-only scope and all original unmet

@@ -6,8 +6,8 @@
   "completeCampaignInventory": false,
   "productAcceptance": "incomplete",
   "sourceMap": {
-    "E1": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
-    "E2": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+    "E1": "docs/history/2026-10-05-legacy-planning/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+    "E2": "docs/history/2026-10-05-legacy-planning/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
     "E3": "docs/dev/contracts/p158-historical-failure-registry.v1.json",
     "E4": "private selected restart evidence, see companion report",
     "E5": "private cleanroom adjudication and custody records, see companion report",

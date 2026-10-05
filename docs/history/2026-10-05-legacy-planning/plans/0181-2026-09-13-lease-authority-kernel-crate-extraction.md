@@ -24,7 +24,7 @@ Source baseline: `16d4fb22dfd8cf96cd7e65edfd0b66fe54953945`
 
 Depends on:
 
-- [ADR 0001](../../adr/0001-separate-profile-access-from-runtime-ownership.md), which requires a proven in-process seam before crate extraction;
+- [ADR 0001](../../../adr/0001-separate-profile-access-from-runtime-ownership.md), which requires a proven in-process seam before crate extraction;
 - [Plan 0144](0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md) and [issue #71](https://github.com/CochranResearchGroup/agent-browser/issues/71), which own unfinished public, effect-admission, and installed proof gates for the same authority;
 - [Plan 0151](0151-2026-09-01-cdp-transport-crate-extraction-plan.md), the accepted procedural precedent for a real Rust crate seam; and
 - [Plan 0174](0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md), which owns current Cargo and provider-free test reliability.
@@ -152,7 +152,7 @@ directional cold pair improved 5.47 percent. The strict acceleration-promotion
 claim is withheld because the baseline ran 106 legacy filtered tests while the
 candidate ran 108 crate tests and the three retained adapter tests were
 validated separately. The complete receipt is in
-[the P6 measurement note](../notes/0181-3-2026-09-14-lease-authority-build-measurement.md).
+[the P6 measurement note](../../../dev/notes/0181-3-2026-09-14-lease-authority-build-measurement.md).
 
 The candidate workspace contains the `agent-browser` binary crate plus the
 `agent-browser-cdp` and `agent-browser-lease-authority` library crates. The

@@ -2,11 +2,11 @@
 
 This is the sole current execution status. Plans own acceptance and strategy;
 Git checkpoints and linked archives preserve history. Keep this file at or below
-200 lines under [policy 0043](docs/dev/policies/0043-roadmap-runbook-governance.md).
+200 lines under [policy 0043](../../dev/policies/0043-roadmap-runbook-governance.md).
 
 ## Turn 280 | 2026-09-08
 
-Authority: [Plan0160](docs/dev/plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
+Authority: [Plan0160](plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md).
 A1/A2 and current A3 doctor acceptance pass; A4/full AX open. Original consumer r4
 and six final-binary lifecycle/interaction cases pass. No host restart or binary
 publication this slice. Prior allowances and reported ten-hour overruns remain consumed.

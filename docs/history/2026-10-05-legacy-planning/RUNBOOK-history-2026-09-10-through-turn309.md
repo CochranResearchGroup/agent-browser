@@ -38,7 +38,7 @@ to reconcile without blind closure or relaunch. The correction was committed at
 
 ## Turn 306 | 2026-09-12
 
-[Plan0175](docs/dev/plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
+[Plan0175](plans/0175-2026-09-12-stealth-routing-and-login-posture-repair.md)
 was source-qualified at `27ec5aae` on `fix/plan-0175-stealth-routing-auth`, with
 integration-ready custody. The bounded batch preserved explicit nested
 browser-build selections, routed built-in Google and Gmail sign-in to headed
@@ -50,7 +50,7 @@ passed. Production installation and live account acceptance remained separate.
 
 ## Turn 305 | 2026-09-12
 
-[Plan0174](docs/dev/plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
+[Plan0174](plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
 is CLOSED. PR54 merged the CI repair as `3f680a13`; first-attempt run
 `34729883713` passed every required check, including comprehensive Rust.
 Reconciled P171 cleanup PR51 merged as `00796d5c`; exact-head run `34731270343`
@@ -62,7 +62,7 @@ install, or runtime effect occurred.
 
 ## Turn 304 | 2026-09-12
 
-[Plan0173](docs/dev/plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+[Plan0173](plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
 is CLOSED. PR52 merged as `2156aaad`; exact binary `cae894cf25f2` installed as
 generation `0.28.0-cae894cf25f2-a4332e7facd9` through accepted transaction
 `upgrade-e371f1fa-80a6-485a-a3dd-2e2c6e785454` revision 13. Installed
@@ -84,7 +84,7 @@ route, cleanup, or unrelated-worktree effect occurred.
 
 ## Turn 297 | 2026-09-11
 
-[Plan0168](docs/dev/plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
+[Plan0168](plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
 is CLOSED. It closed integrated and remote-only custody, integrated two P0240
 residuals through PR30 at `de614fbe`, found no P157 residual beyond `ad673377`,
 and merged its record through PR31 and PR32. The canonical Rust edits remained

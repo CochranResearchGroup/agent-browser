@@ -27,7 +27,7 @@ not create routine approval requests or relax existing safety requirements.
 
 [AGENTS.md](../../../AGENTS.md) routes the updated policies. Plan 0160 now inherits
 the cumulative bounds and batch validation rules and points to the sole current
-execution entry in [RUNBOOK.md](../../../RUNBOOK.md). Acceptance scope is intact.
+execution entry in [RUNBOOK.md](../../history/2026-10-05-legacy-planning/RUNBOOK.md). Acceptance scope is intact.
 The previous 9,016-line runbook is archived intact in the repository root to
 preserve relative links. The active file retains current status and scoped stop
 instructions. No known tracked incoming `RUNBOOK.md#...` links were found during

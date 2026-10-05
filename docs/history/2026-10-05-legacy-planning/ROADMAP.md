@@ -1,0 +1,3306 @@
+# Roadmap
+
+Date: 2026-05-26
+Updated: 2026-09-17
+
+This file is the top-level planning index for durable agent-browser lanes.
+Detailed research notes and validation reports remain under `docs/dev/notes/`;
+bounded implementation and validation plans remain under `docs/dev/plans/`.
+
+## Stable Product Lanes
+
+[Agent Browser product lanes](../../dev/product-lanes.md) define the stable
+ownership model above numbered delivery plans:
+
+- `PL-BUGFIX`: reliability and bounded defect repair;
+- `PL-AUTH`: credential management and automated authentication;
+- `PL-CHALLENGE`: CAPTCHA and anti-automation challenge handling;
+- `PL-RECIPES`: deterministic reusable automation recipes and helpers; and
+- `PL-PLATFORM`: architecture, runtime, supervisor, Service State, installation,
+  shared desktop services, and development infrastructure.
+
+Numbered `P###` entries below remain delivery plans and historical roadmap
+checkpoints. They do not define permanent product ownership. New substantive
+plans select one product lane and use the active-lane catalog for branch and
+worktree custody. [The notes index](../../dev/notes/README.md) routes current
+field evidence and acceptance records into the same model.
+
+## P216 | Service Model Extraction Landing
+
+State: CLOSED
+
+Current state: [Plan 0216](plans/0216-2026-09-17-service-model-extraction-landing.md),
+[issue #178](https://github.com/CochranResearchGroup/agent-browser/issues/178),
+and [PR #200](https://github.com/CochranResearchGroup/agent-browser/pull/200)
+record the completed `PL-PLATFORM` extraction. Source candidate `6ff7bc0d`
+places the canonical provider-free Service State aggregate, codecs, records,
+pure transitions, projections, and deterministic wire behavior in
+`agent-browser-service-model` while the CLI retains filesystem, process,
+browser, runtime-owner, HTTP, MCP, and platform effects. Complete local
+changed-surface qualification passes. The measured acceleration is limited to
+the cold pure-model loop, from 171.01 seconds to 4.08 seconds; no general CLI
+or workspace build-time reduction is claimed. P211 remains a separate urgent
+bug-fix lane and must reconcile this integrated boundary before extending the
+overlapping adapters. GitHub Actions remained disabled, and no browser,
+provider, credential, install, runtime, staging, production, or release effect
+occurred.
+
+## P208 | Worktree Closeout And Candidate Custody
+
+State: CLOSED
+
+Current state: [Plan 0208](plans/0208-2026-09-16-worktree-closeout-candidate-custody.md),
+[closed issue #171](https://github.com/CochranResearchGroup/agent-browser/issues/171),
+and merged [PR #182](https://github.com/CochranResearchGroup/agent-browser/pull/182)
+record the completed `PL-PLATFORM` repair. The integrated source serializes one durable
+repository-scoped closeout operation, requires explicit retain, archive, or
+discard choices for pinned candidates, verifies external archives from a fresh
+process, and recovers interrupted archive and Git-removal effects. The merged
+P204 validation contract retains a lightweight `Repository Tooling` lane for
+these provider-free Node contracts in the dormant workflow. Exact-head
+`8a010264` passed run `35227459177` before CI was disabled. Rebased source
+`c2ce2b35` passed conflict-affected local checks and merged as `59928044`.
+No worktree outside disposable fixtures,
+candidate, browser, provider, installed runtime, Service State, production, or
+release effect occurred.
+
+## P204 | CI Validation Economics And Tiering
+
+State: OPEN
+
+Current state: [Plan 0204](plans/0204-2026-09-16-ci-validation-economics-and-tiering.md)
+and [issue #174](https://github.com/CochranResearchGroup/agent-browser/issues/174)
+own the `PL-PLATFORM` repair. Merged PR #179 added the versioned classifier,
+surface fixtures, exact-head conditional jobs, pull-request cancellation,
+focused Rust compartments, bounded economics, and the stable fail-closed
+`Presubmit` aggregate. Exact-head CI run `35175068416` passed every selected
+ordinary gate and the stable aggregate before merge commit `f5e3f31b`. Operator
+direction now removes every full-suite CI route: no `main` push, schedule,
+manual CI dispatch, commit-message trigger, comprehensive Rust job, or slow
+platform matrix remains in candidate `d9fede9d`. Follow-up operator direction
+also disables focused CI for now: the workflow is retained only as
+`.github/workflows/ci.yml.disabled` in candidate `ca077d9e`, and active run
+`35228725370` was cancelled.
+The separate automatic Lease Authority matrix is likewise retained under a
+`.disabled` suffix in candidate `ea254ecd`, so no active workflow has a push or
+pull-request trigger.
+Issue #164 remains an independent enforcement improvement for any future CI
+resumption. Organic docs-only and narrow-Rust evidence are deferred while CI is
+disabled.
+
+## P203 | Runtime Host Admission Routing
+
+State: CLOSED
+
+Current state: [Plan 0203](plans/0203-2026-09-16-runtime-host-admission-routing.md)
+and closed [issue #169](https://github.com/CochranResearchGroup/agent-browser/issues/169)
+record the bounded provider-free repair. Merged
+[PR #172](https://github.com/CochranResearchGroup/agent-browser/pull/172)
+landed source head `28380966` in `main` as `136a1928`. A supervised
+same-generation singleton host can now refresh a selected prior-boot identity
+without weakening current-owner, transaction, binary, generation, topology, or
+missing-epoch fences. Thirteen focused ingress tests, formatting, strict
+Clippy, planning audit, a disposable no-launch supervisor smoke, and exact-head
+CI run `35160652859` pass. No browser, provider, credential, installed-runtime,
+Service State, retained-profile, production, or release effect occurred.
+
+## P202 | Abandoned Service Browser Retirement
+
+State: CLOSED
+
+Current state: [Plan 0202](plans/0202-2026-09-16-abandoned-service-browser-retirement.md)
+and closed [issue #103](https://github.com/CochranResearchGroup/agent-browser/issues/103)
+record the bounded no-live repair. Merged
+[PR #168](https://github.com/CochranResearchGroup/agent-browser/pull/168)
+landed source head `6f099292` in `main` as `528f2ef0`. Service status now
+projects bounded per-lane resource and activity evidence, classifies only
+complete inactive service-owned lanes, and retires an exact reviewed process
+tree through a sealed reserve, effect, and finalize transaction. Provider-free
+qualification and the isolated disposable real-browser acceptance passed; CI
+run `35163527521` passed every ordinary gate at reviewed code head `d7ceca98`,
+and the final delta contained only integrated P203 closeout documentation. No
+installed cleanup, retained-profile effect, provider mutation, production
+effect, or release occurred during integration or closeout.
+
+## P201 | X Display Live Occupancy
+
+State: CLOSED
+
+Current state: [Plan 0201](plans/0201-2026-09-16-x-display-live-occupancy.md)
+and closed [issue #159](https://github.com/CochranResearchGroup/agent-browser/issues/159)
+record the bounded no-live repair. Merged
+[PR #166](https://github.com/CochranResearchGroup/agent-browser/pull/166)
+landed source head `72c7a859` in `main` as `a23764a1`. Live occupancy now comes
+from exact filesystem or abstract `/proc/net/unix` evidence or a matching X
+process; ordinary files and inactive socket inodes are exact reclaimable
+residue. All 11 focused regressions and complete changed-surface validation
+pass. Exact-head CI run `35110970667` passed every selected fast gate. No
+browser, X server, installed-runtime, provider, Service State, or retained
+profile effect occurred. Plan 0201 is closed.
+
+## P200 | Cargo Scope Descendant Lifetime
+
+State: CLOSED
+
+Current state: [Plan 0200](plans/0200-2026-09-16-cargo-scope-descendant-lifetime.md),
+[issue #102](https://github.com/CochranResearchGroup/agent-browser/issues/102),
+and merged [PR #163](https://github.com/CochranResearchGroup/agent-browser/pull/163)
+close the bounded `PL-PLATFORM` repair. Source checkpoint `2978594e` gives each
+admitted Cargo invocation an exact scope identity, retains dead-wrapper claims
+while their scope remains active or unobservable, and stops only that scope
+before releasing admission. The provider-free success, exit-23 failure,
+orphan-scope accounting, unavailable-systemd, profile-residue, and
+foreign-process fixtures pass, as do disposable real-scope success and exit-23
+cases. P200 owns
+`scripts/ci/cargo-safe.sh` and the new exact-scope fixture; P190 remains the
+writer for its candidate-orchestration and current test-runner changes. No
+installed runtime, browser, provider, Service State, or foreign-process effect
+occurred. Complete local changed-surface validation passes. The source entered
+`main` as `c98da4cc`; exact-head CI run `35098782749` and merge-commit CI run
+`35099042490` pass, including Rust, no-launch service smokes, and workstation
+fixtures. Plan 0200 is closed.
+
+## P199 | Compatible Access Profile Selection
+
+State: CLOSED
+
+Current state: [Plan 0199](plans/0199-2026-09-16-compatible-access-profile-selection.md),
+[issue #67](https://github.com/CochranResearchGroup/agent-browser/issues/67),
+and merged [PR #160](https://github.com/CochranResearchGroup/agent-browser/pull/160)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `15dd3b58` makes profile
+selection capability-aware before an executable request is produced, prefers a
+positively compatible candidate, preserves selection when no exact capability
+declaration exists, and rejects an explicitly requested incompatible profile
+with typed no-effect recourse. Focused tests and complete changed-surface
+validation pass. Exact rebased branch head `01c05d0d` merged as `e2e81e38`;
+source-head CI run `35092326047` and merge-commit CI run `35092355450` pass.
+Issue #67 is closed, and no live or installed-runtime effect occurred.
+
+## P198 | Retained Owner Inventory Coherence
+
+State: CLOSED
+
+Current state: [Plan 0198](plans/0198-2026-09-16-retained-owner-inventory-coherence.md),
+[issue #143](https://github.com/CochranResearchGroup/agent-browser/issues/143),
+and merged [PR #158](https://github.com/CochranResearchGroup/agent-browser/pull/158)
+close the bounded `PL-BUGFIX` repair. Source checkpoint `21ec94f3` separates
+structurally valid terminal owner history from current process authority, keeps
+live PID mismatches fail-closed, preserves typed recovery recourse, and marks
+read-only inventory failures `no_effect`. Focused validation, formatting, and
+strict Clippy pass. Exact branch head `38344ecf` entered `main` through merge
+receipt `c2ade1d1`, and exact-head CI run `35086940883` passes; no live or
+installed-runtime effect was part of this lane.
+
+## P196 | Foreground Launch Stale Revision Acceptance
+
+State: CLOSED
+
+Current state: [Plan 0196](plans/0196-2026-09-15-foreground-launch-stale-revision-acceptance.md)
+closed after PRs #150, #153, and #154 integrated the foreground race proof and
+the installed-acceptance repairs. Generation
+`0.28.0-15f0f3576657-30788a166073` is accepted with exact binary SHA-256
+`15f0f3576657da6cfc9a59bdb23b0b3d94fb37d73a4c11d3c1e08a6d4fcf8634`.
+Doctor reports one runtime host, one dashboard process, a healthy monitor, and
+an exact supervisor match. The fresh custom-profile open, URL read, close, and
+residue check pass; the sealed Guacamole extension loads after a targeted web
+container recreation. Issue #143 remains open for its broader retained-owner
+inventory defect.
+
+## P195 | Custom Profile Identity Repair
+
+State: CLOSED
+
+Current state: [Plan 0195](plans/0195-2026-09-15-custom-profile-identity-repair.md)
+and [issue #131](https://github.com/CochranResearchGroup/agent-browser/issues/131)
+are closed after PR #147 merged source head `ada1c62e` as `172ccdd2`. The repair
+keeps opaque service identity out of managed runtime-profile validation while
+preserving explicit paths and the managed-name grammar. Exact-head CI run
+35013644563 passes every ordinary required gate. No browser, install, profile,
+provider, production, or release effect occurred.
+
+## P194 | Service State Load-Current Contention Repair
+
+State: CLOSED
+
+Current state: [Plan 0194](plans/0194-2026-09-15-service-state-load-current-contention-repair.md)
+and [issue #76](https://github.com/CochranResearchGroup/agent-browser/issues/76)
+are closed after PR #146 merged as `f1435195`. Candidate `9fa6c586` adds the
+missing 9.64 MB slow-full-reload red case and uses a revision-only persisted
+freshness probe with a bounded parser stack when recovery is not pending. The
+baseline failed at 1,002 ms in `prepared_commit/load_current`; the candidate
+passes that replay, all 41 `service_store` tests, format, strict Clippy, issue
+#87's pure adjacent-revision case, and canonical CI run 35007032152 without
+increasing the one-second deadline. Production installation and monitor soak
+remain separately live-gated and were not executed by this source plan.
+
+## P191 | Repository Worktree And Lane Reconciliation
+
+State: CLOSED
+
+Current state: [Plan 0191](plans/0191-2026-09-14-repository-worktree-and-lane-reconciliation.md)
+and [issue #139](https://github.com/CochranResearchGroup/agent-browser/issues/139)
+close the exact repository cleanup campaign through PR #140. Five integrated or disposable
+auxiliary worktrees have been removed after their dirty task artifacts were
+preserved. P180 and P183 through P185 now close from merged source plus P186
+cumulative installed acceptance. P182 remains open only for its preserved
+same-run operational acceptance. The then-surviving challenge checkout was
+registered as P169 through Plan 0187, issue #127, leaf issue #66, and PR #128.
+Its W0 through W4 source later integrated into `main` as `e2bd73ff`.
+
+## P190 | Advisory Candidate Build And Promotion Orchestrator
+
+State: PLANNED
+
+Current state: [Plan 0190](plans/0190-2026-09-14-advisory-candidate-build-and-promotion-orchestrator.md)
+and [issue #136](https://github.com/CochranResearchGroup/agent-browser/issues/136)
+define an advisory candidate, build, install, and recovery surface over the
+existing workstation transaction. It will expose evidence, recommendations,
+alternatives, and consequences while fencing concurrent corrupting commits.
+Fast `ci` development builds remain non-promotable. The lane will instead build
+one production-shaped release artifact, test those exact bytes in an isolated
+development namespace, and promote them after merge when executable inputs are
+equivalent. Test runs also receive deterministic identity, deduplication,
+receipt-reuse, isolation, and cleanup rules. Policies 0051 and 0052 reject
+permanent coordinator or permission-service semantics. P190 is not admitted
+for implementation and has no active-lane entry or worktree. P191 clears the
+prior checkout drift but does not itself activate P190.
+
+## P169 | Challenge Countermeasure Control Plane
+
+State: OPEN
+
+Current state:
+[Plan 0187](plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md),
+[issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127),
+leaf [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66),
+merged [PR #128](https://github.com/CochranResearchGroup/agent-browser/pull/128),
+and merged [PR #142](https://github.com/CochranResearchGroup/agent-browser/pull/142)
+own the provider-neutral challenge control-plane lane. Source checkpoint
+`d7c59be2` integrated into `main` as `e2bd73ff`. Exact-head PR CI, merge-commit
+CI run 34977471104, and the four-platform Lease Authority run 34977470855 pass.
+W0 through W4 are integrated: the phase-bound freshness repair,
+desktop-services extraction, challenge-control extraction, and two-profile
+provider-free Service slice. [Plan 0193](plans/0193-2026-09-15-challenge-task-service-orchestration.md)
+is CLOSED after W5 source head `709641e9` merged as `81de07cf`. Source-head CI
+run 34993316164 and merge-commit CI run 34997057075 pass. W5 adds exact
+principal and retained-tab custody, digest-only replay, one composite terminal
+receipt, and bounded status and resource summaries.
+[Plan 0197](plans/0197-2026-09-16-challenge-consumer-integration.md)
+implements W6 at local combined checkpoint `ca0f3447` on
+`challenge/p197-consumer-integration`. Authentication and navigation consume
+one provider-neutral admission contract through effective-site-policy and
+exact-tab adapters, retain typed admission beside later consumer failure, and
+deny challenged navigation before confirmation, recovery, launch, or dispatch.
+The four public guidance surfaces are aligned. P202 merged through PR #168 and
+released its overlap; P197 joined canonical `main@2632e31c` at merge checkpoint
+`7dc8a860`. Combined provider-free source, contract, client, route-confusion,
+and documentation checks pass. P197 publication, exact-head forge evaluation,
+and protected integration remain. W7-A is admitted through
+[Plan 0206](plans/0206-2026-09-16-visual-multi-round-challenge-contract.md)
+on `challenge/p206-visual-round-contract` from exact published P197 head
+`cd22a39f` and is source-complete and acceptance-complete at `ac9f50a7`. Its
+pure provider-free round contract and 23-case synthetic matrix are green with the complete crate,
+architecture, formatting and strict Clippy gates. P197 merged through PR #157
+as `c855fc33`; P206 joined that canonical checkpoint at `5d6e3d57` without a
+tree change, then joined merged P204 and current `main@f5e3f31b` at
+`89bdfdbf`. Pre-merge review then found cumulative `u8` saturation could admit
+an over-budget restored total and could classify 256 selected candidates as a
+generic transition error. Repair checkpoint `4813d385` uses widened and checked
+budget arithmetic; all 41 challenge-control tests, including 25 visual-round
+cases, architecture, formatting, strict Clippy and diff hygiene pass. P206
+joined CI-disabled `main@f6d49f89` at `bb961c96`, P208's source integration at
+`db987e4e`, and current `main@692f77c6` at `1c9ee159`; none changes the accepted
+Rust source.
+Conflict-affected repository-control checks pass locally. GitHub CI remains
+operator-disabled and was not restored or run. Reconciled publication and
+protected P206 integration remain.
+Issue #66 retains the separately live-gated challenge acceptance leaf. This
+registration authorizes no challenge attempt, retry, browser effect, provider
+effect, credential use, runtime mutation, installation, or release.
+W7-B is locally admitted through
+[Plan 0209](plans/0209-2026-09-16-visual-provider-protocol.md) on
+`challenge/p209-visual-provider-protocol`. It owns only a pure candidate-only
+provider protocol and fake serialized fixtures. P204 merged through PR #179;
+P206 exact head `82e25624` merged through PR #180 as `d3f923a1`; P209 joined
+that canonical result at `3ef2ad9e` without a Rust or Cargo dependency change.
+The reconciled head passes all 52 challenge-control tests. The crate
+architecture, formatting, strict Clippy and diff-hygiene evidence remains
+source-identical. P209 exact head `27cd5342` merged through PR #188 as
+`fb616aee`. W7-C is admitted through
+[Plan 0210](plans/0210-2026-09-17-visual-artifact-and-provider-invocation-adapter.md)
+on `challenge/p210-visual-artifact-adapter` from that exact canonical baseline.
+It owns only a pure artifact-custody and one-shot injected fake-provider
+adapter. GitHub CI remains operator-disabled. The packet creates no real
+provider, browser, credential, CAPTCHA, runtime or production authority. P210
+source checkpoint `0729b63d` now implements that boundary with 10 adapter
+fixtures. All 52 challenge-control tests, both architecture guards, workspace
+formatting and strict workspace Clippy pass. Review repaired exact
+artifact/request expiry binding and delayed provider receipt-time
+adjudication. Publication and protected integration remain.
+P210 exact head `343a61b9` merged through PR #192 as `06972a5e`. The next
+platform dependency is admitted through
+[Plan 0212](plans/0212-2026-09-17-desktop-candidate-intent-contract.md)
+on `platform/p212-desktop-candidate-intent-contract`. P212 freezes an
+effect-free candidate geometry and controller-authority admission contract in
+desktop services without importing challenge types or emitting input. P211's
+active cold-upgrade source is disjoint; shared planning projections reconcile
+at integration. Source checkpoint `00f41715` implements exact observation,
+ordered selection, physical-pixel geometry, authority and checked-budget
+binding. All 12 desktop-services tests, the strengthened architecture guard,
+workspace formatting and strict workspace Clippy pass locally. Publication and
+protected integration remain. GitHub CI remains operator-disabled.
+P212 exact head `dc20155e` merged through PR #193 as `ddae1897`. The
+challenge-side consumer is admitted through
+[Plan 0213](plans/0213-2026-09-17-visual-desktop-candidate-adapter.md)
+on `challenge/p213-visual-desktop-adapter`. P213 proves the visual intent is
+the current state-machine-authorized intent, binds it to exact desktop
+observation geometry and current controller authority, and returns the P212
+effect-free permit. It adds no executor, browser, provider, CAPTCHA, route
+claim, input, runtime or production authority and avoids P205's Cargo manifest
+and lockfile surfaces. Source checkpoint `1bad68e3` implements the exact
+state-machine, ordered-candidate, observation, effective-expiry and controller
+authority join. All 58 challenge-control tests, all 12 desktop-services tests,
+the strengthened architecture guard, workspace formatting and strict workspace
+Clippy pass locally. Publication and protected integration remain. GitHub CI
+remains operator-disabled.
+P213 exact head `c8012bd0` merged through PR #196 as `7e56d9c7`. The next
+platform boundary is admitted through
+[Plan 0214](plans/0214-2026-09-17-candidate-permit-event-plan.md)
+on `platform/p214-candidate-event-plan`. P214 defines exact raw pointer-event
+budget semantics and a deterministic effect-free plan before any executor is
+introduced. Every move, down and up consumes the permit budget; key semantics,
+provider calls, route claims and event emission remain excluded. P214 avoids
+P205's Cargo manifest and lockfile surfaces. GitHub CI remains
+operator-disabled. Source checkpoint `f90ef7a7` now produces exact-budget,
+checked, deterministic raw pointer plans without an executor. All 18
+desktop-services tests, all 58 challenge-control tests, the strengthened
+architecture guard, workspace formatting and strict workspace Clippy pass
+locally. Publication and protected integration remain.
+
+## P186 | Route Viewer Admission Drain Recovery
+
+State: CLOSED
+
+Current state: [Plan 0186](plans/0186-2026-09-14-route-viewer-admission-drain-recovery.md)
+closed after the complete repair batch merged through PR #129 as `f84ae098`.
+Exact candidate `66ac712c` passed its pinned source-free fixture and accepted a
+default preserving workstation transaction. A, B, and C finalized as separate
+route-viewer lanes with exact handoff and owner-transfer receipts. Final doctor
+passes with one selected runtime host, one dashboard process, zero legacy
+daemons, no admission drain, a healthy monitor, and 43 healthy profile leases.
+The protected Last30Days generation-90 owner remained unchanged. Authenticated
+dashboard operator-journey evidence is deferred as a nonblocking installation
+warning outside P186. Issue #112 owns the public completion receipt.
+
+## P185 | Route Viewer Runtime Profile Identity
+
+State: CLOSED
+
+Current state: [Plan 0185](plans/0185-2026-09-14-route-viewer-runtime-profile-identity.md)
+and [issue #110](https://github.com/CochranResearchGroup/agent-browser/issues/110)
+closed after PR #111 merged the stable managed-profile repair as `ffc6e510`.
+Plan 0186's accepted cumulative transaction finalized canonical route viewers
+A, B, and C as distinct managed-profile handoff lanes, then proved terminal
+cleanup and coherent final doctor state. Issue #110 is closed.
+
+## P184 | Resumable Candidate Generation Retention
+
+State: CLOSED
+
+Current state: [Plan 0184](plans/0184-2026-09-14-resumable-candidate-generation-retention.md)
+and [issue #108](https://github.com/CochranResearchGroup/agent-browser/issues/108)
+closed after PR #109 merged candidate retention as `3b7e8411` and the successor
+recovery chain retained candidate custody through Plan 0186's accepted
+preserving transaction. Final installed and protected-authority readback
+passed. Issue #108 is closed.
+
+## P183 | Registered Owner Browser-Missing Migration Repair
+
+State: CLOSED
+
+Current state: [Plan 0183](plans/0183-2026-09-13-terminal-owner-browser-missing-migration-repair.md)
+and [issue #104](https://github.com/CochranResearchGroup/agent-browser/issues/104)
+closed after PR #107 merged the migration repair as `12848e34`. Plan 0186's
+accepted cumulative install retained the protected Last30Days generation-90
+owner and proved coherent final runtime state. Issue #104 is closed.
+
+## P182 | Authentication Resume State Reconciliation
+
+State: BLOCKED
+
+Current state: [Plan 0182](plans/0182-2026-09-13-authentication-resume-state-reconciliation.md)
+and [issue #96](https://github.com/CochranResearchGroup/agent-browser/issues/96)
+retain the separately gated same-run Authentication Run acceptance. PR #98
+merged exact source head `dbe70d8d` as `caff5e08`, and the clean integrated
+source and red-team worktrees are retired. Plan 0186 installed the cumulative
+source without exercising authentication. The preserved run and its last
+recorded zero-effect state remain unchanged; repository cleanup authorizes no
+resume, cancellation, or replacement.
+
+## P181 | Lease-Authority Kernel Crate Extraction
+
+State: CLOSED
+
+Current state: [Plan 0181](plans/0181-2026-09-13-lease-authority-kernel-crate-extraction.md)
+is integrated through PR #106 as merge `b5a78faf`. The old native
+owner is deleted, the kernel and protected stack live in
+`agent-browser-lease-authority`, and the CLI retains only a private Service
+State and repository adapter. The architecture guard and its mutation tests are
+green, all 106 baseline invariant labels remain mapped, and local crate,
+adapter, joined-fixture, formatting, and strict-Clippy checks pass. The bounded
+P6 packet measured a 91.95 percent focused-loop reduction with no downstream or
+cold regression. Its strict promotion claim is withheld because the frozen
+focused selections were not literally identical. Source-equivalent
+native-Linux comprehensive CI passed. The repair full run compiled the new
+crate on macOS ARM and Windows, but inherited CLI compilation failed on macOS,
+Windows was cancelled by fail-fast, and the browser E2E navigation fixture
+retained its shared-profile browser. The joined architecture, crate, format,
+and strict-Clippy gates pass. The broad-run allowance remains exhausted, but
+P181's path-filtered non-fail-fast workflow passes the crate directly on Linux,
+macOS ARM, macOS x86, and Windows in run 34857911397. Ordinary PR CI run
+34857911400 is also green. Final pre-join head `8a57dce5` also passed focused
+run 34861501476 and ordinary CI run 34861501499. The initial Windows fixture failure was repaired at
+`b6aa71dd` with platform-native absolute test paths while retaining fail-closed
+protected-state validation. Current `main` at `bba8b7a3` is joined cleanly at
+`5ceb709c`, preserving the extracted owner and P186 route-command admission
+repair. Exact head `91aa3204` passes focused four-platform run 34864731916 and
+ordinary CI run 34864731908, including comprehensive Rust and no-launch smokes.
+The validated head is an ancestor of `main`; no P181 gate remains. Work item
+[CochranResearchGroup/agent-browser#99](https://github.com/CochranResearchGroup/agent-browser/issues/99)
+is complete from baseline `16d4fb22`.
+P181 authorized the bounded source extraction and provider-free validation but
+no runtime, browser, profile, provider, installation, or production effect.
+
+## P180 | Pre-Drain Browserless Lane Quiescence Repair
+
+State: CLOSED
+
+Current state: [Plan 0180](plans/0180-2026-09-13-pre-drain-browserless-lane-quiescence-repair.md)
+and [issue #95](https://github.com/CochranResearchGroup/agent-browser/issues/95)
+closed after PR #97 merged exact source head `949101b7` as `44e5dc16`. Plan
+0186's later cumulative candidate passed a default preserving install and final
+runtime-coherence doctor, satisfying P180's deferred installed boundary. Issue
+#95 closes from that evidence. P182's authentication acceptance remains a
+separate open gate.
+
+## P179 | Policy Selector v0.1.26 Integration
+
+State: CLOSED
+
+Current state: [Plan 0179](plans/0179-2026-09-13-policy-selector-v0-1-26-integration.md)
+and [issue #89](https://github.com/CochranResearchGroup/agent-browser/issues/89)
+record the scoped integration of the v0.1.26 policy rollout. PR #90 merged as
+`3f842f59` after bounded policy, selector, planning, goal, documentation, and
+patch-hygiene checks passed. Canonical `main` is clean and synchronized, and
+the integrated topic worktree plus refs are retired. No installed or live
+runtime effect occurred.
+
+## P177 | Development Governance And Repository Readiness
+
+State: CLOSED
+
+Current state: PR #86 integrated the issue foundation, selector v0.1.25,
+policies 0047 through 0049, field-note custody, no-op branch retirement,
+P169-only Turnstile paused checkpoint, and the reconciled 37-finding planning
+ledger as `2d71134a55fc2f919daaf8cb7595efd3c7ebef79`.
+[Plan 0177](plans/0177-2026-09-13-development-governance-and-repository-readiness.md)
+defines the policy adoption, issue migration, worktree reconciliation, planning
+cleanup, and read-only runtime-readiness campaign. Production maintenance and
+provider-backed acceptance remain quarantined under issue #76; P178 remains a
+separate issue #84 and PR #83 lane.
+
+## P178 | Browserless Runtime Lane Quiescence
+
+State: OPEN
+
+Current state: [Plan 0178](plans/0178-2026-09-13-browserless-runtime-lane-quiescence.md),
+[issue #84](https://github.com/CochranResearchGroup/agent-browser/issues/84),
+[PR #83](https://github.com/CochranResearchGroup/agent-browser/pull/83), and
+[PR #92](https://github.com/CochranResearchGroup/agent-browser/pull/92) record
+the integrated installer repair. PR #83 merged checkpoint `f6b263f0` as
+`ae426642`; PR #92 merged exact runtime-admission claims for browserless status
+and close as `7e59ae35`. Both clean source branches and their worktree are
+retired after ancestry verification. Installed acceptance remains blocked by
+production maintenance issue #76 and requires separate effect authority.
+
+## P12 | Selected Workspace Inspector And App Intelligence
+
+State: OPEN
+
+Current state: [Plan 0012](plans/0012-2026-05-31-workspace-inspection-pane-app-intelligence-roadmap.md)
+and [issue #68](https://github.com/CochranResearchGroup/agent-browser/issues/68)
+own the remaining evidence-tab, App Intelligence, and hosted outcome. Plans
+0018 and 0021 are superseded into this single delivery authority.
+
+## P165 | BILL Authentication And Consumer Acceptance
+
+State: BLOCKED
+
+Current state: [Plan 0165](plans/0165-2026-09-11-bill-identifier-form-drift-repair.md)
+and [issue #75](https://github.com/CochranResearchGroup/agent-browser/issues/75)
+retain sealed BILL authentication and the first read-only consumer acceptance.
+Source, installation, and session-link repair are already complete.
+
+## P176 | Product Lane And Note Consolidation
+
+State: CLOSED
+
+Current state: five stable product lanes, note-routing rules, multi-agent WIP
+limits, shared-writer arbitration, dependency ordering, and Plan 0161 platform
+ownership are integrated through PR 60 at `1d12d1c4`.
+[Plan 0176](plans/0176-2026-09-13-product-lane-and-note-consolidation.md)
+is the closed execution and integration record.
+
+## P174 | CI Production-Scale And Process-Identity Reliability
+
+State: CLOSED
+
+Closed: PR 54 merged the repair as `3f680a13`; CI run `34729883713`
+passed every required check on its first attempt, including comprehensive Rust.
+PR 51 then reconciled the P171 catalog cleanup onto that exact repair and merged
+as `00796d5c`; post-reconciliation run `34731270343` also passed on its first
+attempt. The one-second deadline and production identity fence remain unchanged.
+[Plan 0174](plans/0174-2026-09-12-ci-production-scale-and-process-identity-reliability.md)
+is the closed execution record.
+
+## P173 | Expired Session Retained Browser Reuse Repair
+
+State: CLOSED
+
+Closed: PR 52 merged as `2156aaad472ecebb1f79e7d5ce79419949b4705c`
+after complete CI. Generation `0.28.0-cae894cf25f2-a4332e7facd9` was installed
+transactionally and passed exact same-principal lease rejoin, retained-browser
+reuse, canonical valid-handle, page probe, exact-tab release, and Chrome PID
+49619 continuity. BILL's website session is independently at login. A separate
+shared-tab cleanup-policy label mismatch is retained in the plan closeout for a
+future bounded contract repair.
+[Plan 0173](plans/0173-2026-09-12-expired-session-retained-browser-reuse-repair.md)
+is the closed execution record.
+
+## P169 | Challenge Countermeasure Control Plane
+
+State: BLOCKED
+
+Current state: [Plan 0169](plans/0169-2026-09-11-cloudflare-turnstile-desktop-challenge-plan.md)
+and [issue #66](https://github.com/CochranResearchGroup/agent-browser/issues/66)
+own the existing bounded Turnstile implementation. That leaf remains paused
+because live interaction acceptance is unproven. No retry is authorized. The
+[desktop guard architecture note](../../dev/notes/0179-2026-09-13-captcha-and-desktop-automation-guard-architecture.md)
+preserves the broader staged design under this single P169 lane.
+
+[Plan 0187](plans/0187-2026-09-14-challenge-countermeasure-control-plane-blueprint.md)
+is the active parent blueprint for the broader product trunk under
+[issue #127](https://github.com/CochranResearchGroup/agent-browser/issues/127). It defines
+the provider-neutral challenge lifecycle and policy control plane, the shared
+desktop transaction capability, provider and consumer branches, and workfronts
+W0 through W8. W0 is reconciling current main on
+`challenge/p169-control-plane`; W1 through W4 are the first provider-free
+implementation batch. It authorizes no runtime effect or hCaptcha retry.
+
+The operator resumed provider-free anti-bot feature work on 2026-09-13.
+[Plan 0188](plans/0188-2026-09-13-captcha-guard-contract-and-threat-model.md)
+closed the first architecture packet at
+`c6f0b447a03a586991561824ad0e744974267e81`: guard request, capability,
+receipt, threat model, dependency direction, and deterministic fixtures are
+frozen. This did not authorize installation, browser or profile mutation,
+desktop input, a live challenge attempt, or retry. Plan 0169 remains blocked on
+its separate live-interaction acceptance gate.
+
+[Plan 0189](plans/0189-2026-09-13-hcaptcha-fixture-checkbox-acceptance.md)
+adds the separate hCaptcha fixture locator and one-click recipe. Its
+provider-free implementation and corrected no-effect classification for
+pre-input controller-authority rejection pass, but the installed acceptance
+attempt `r163653` stopped before `LeftDown` because the original observation
+expired during the guarded pointer trajectory. Plan 0189 remains BLOCKED
+on a separately planned interaction-freshness repair and a new explicit live
+interaction budget. No retry, reset, challenge solving, provider apply,
+production mutation, or release is authorized.
+
+## P171 | Service Job Timestamp Integration And Install
+
+State: CLOSED
+
+Current state: PR 43 merged as `40da27f7`; exact integrated generation
+`0.28.0-2c185ec7ccd6-f318ad66074f` is accepted under transaction
+`upgrade-1fcb7d57-671f-4cf9-afc6-1bcb45293e1a`. Final CI and installed
+multiplicity/resource acceptance pass. The same PR repaired the comprehensive
+Rust runner's shared-target race and synchronized the frozen no-launch MCP
+inventory. No browser, profile, provider, or cleanup effect occurred.
+[Plan 0171](plans/0171-2026-09-12-service-job-timestamp-integration-install.md)
+is the closed execution contract and receipt.
+
+## P168 | Worktree, Branch, Merge, And Closure Campaign
+
+State: CLOSED
+
+Current state: W0 established clean P168 custody without touching the two
+Odollo-owned Rust edits on canonical `main`. Closed-world review proves P165,
+P144, P155, P156, P166, P167, P157, and both documentation branches have no
+unrepresented source work. Their reviewed worktree and refs are now closed.
+P165, P144, Plan 0158, and Plan 0162 retain their separate
+open operational or future-source gates. PR 30 merged the two accepted P0240
+residuals as `de614fbe`; its original and integration worktrees plus their local
+and remote branches are closed. Three commits were patch-equivalent, one
+formatting commit was superseded, and its historical qualification commits
+remain recoverable by ID. PR 31 merged the campaign custody record as
+`9f711ebc`; PR 32 closes the plan and active-lane entry. The canonical
+Odollo-owned dirty paths remain separate attributable custody.
+[Plan 0168](plans/0168-2026-09-11-worktree-branch-review-merge-and-closure-campaign.md)
+defines the review, selective merge, catalog repair, and exact-ref closure
+campaign. It authorizes no production, browser, profile, credential, provider,
+tenant, X, RuFresh, or release effect.
+
+## P167 | Production-Scale Service State Lock Attribution And Critical-Section Repair
+
+State: CLOSED
+
+Current state: A 2026-09-11 Last30days X evaluation timed out after 1,002 ms
+waiting for the shared Service State file lock. Fifteen retained failures span
+10 actions and 10 installed builds, so the leading diagnosis is shared
+production-scale contention rather than an X-specific defect. The observed
+state was 6,536,547 bytes, while closed Plan 0142 accepted an approximately
+3.15 MB threaded burst and a separate raw cross-process lock-holder test. Its
+32-entry holder telemetry is process-local and cannot identify the historical
+contender. [Plan 0167](plans/0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
+is an active corrective successor for durable cross-process attribution, an
+at-least 8 MiB multi-process regression, and measured critical-section repair.
+It authorizes no X retry, production installation, production-state mutation,
+process cleanup, provider effect, or RuFresh replay. PR 29 integrated the
+source repair at `14fb3db0`. A 9,642,672-byte, two-writer and two-reader
+regression now completes in 709 to 739 ms across six samples, with zero commit
+wait and 358 to 380 ms exclusive holds. Durable holder telemetry fails closed
+through lock-token, PID, and process-start validation. The ordinary one-second
+deadline is unchanged. Provider-free qualification is green; production
+installation, shared skill publication, installed doctor, and X evaluation
+remain separately gated.
+
+## P157 | Profile Permissions And Request Provenance
+
+State: SOURCE COMPLETE; INSTALLED ACCEPTANCE REOPENED
+Current state: Research.gov fieldwork exposed that profile access, coordination
+leases, and runtime ownership proof are conflated, while scheduler rejection
+can bypass structured failure decoration and lose runtime-lane correlation.
+The accepted architecture makes `shared-local` the trusted local default,
+retains strict policy as opt-in, narrows occupied profiles through an explicit
+drain-and-restrict transaction, and carries one immutable causal envelope from
+ingress through response, job, event, trace, and incident records.
+The revised plan first extracts one behavior-preserving deep Profile
+acquisition owner, validates every projection through a semantic contract
+oracle, keeps protected lease exchange behind one cohesive client, and makes
+the Rust install domain the sole owner of convergence truth consumed by the
+dashboard.
+Plan 0168 verified that the four commits remaining on the historical P157 ref
+are patch-equivalent or behaviorally represented on `main`. That ref may close
+without closing Plan 0158 or Plan 0162. Any resumed implementation must start
+from current `main` on a fresh registered branch.
+W1 is source complete at `5166dabf`. One typed Profile acquisition owner now
+computes reuse, lifecycle replacement, the dominant blocker, deterministic
+route names, and the executable request. Service Access projects that result,
+recovery coordination is an internal child, and action runtime consumes the
+typed decision. A projection-consistency oracle covers every current Service
+Access fixture without changing permission or public-contract semantics.
+W2 is source complete at `cd0bdb1d`. Six additive v1 schemas freeze profile
+policy, access decisions, request provenance, terminal outcomes, migration, and
+independent dashboard health axes. The service-client gate now carries five
+source-grounded red cases assigned to W3, W4, W5, and W9.
+W3 is source complete at `79bb71f4`. Daemon ingress now generates a stable
+service-owned connection identity per transport, each per-lane control plane
+captures one allowlist-only provenance envelope, and every queued or terminal
+job state preserves the same request, connection, lane, subject, assurance,
+profile, and causal identifiers. Private routing payloads remain outside the
+envelope. The runtime-lane oracle case is green while the four later cases
+remain red.
+W4 is source complete at `2ab08e87`. One typed terminal finalizer now owns
+success, failure, cancellation, timeout, and rejection. The exact structured
+failure and immutable provenance are preserved across response, ServiceJob,
+terminal ServiceEvent, and trace projections. Scheduler rejection now uses
+that path, leaving the three W5 and W9 oracle cases intentionally red.
+W5 is source complete at `f7166030`. One revisioned access-policy evaluator in
+the Profile acquisition owner now makes `shared-local` the frictionless
+default and retains `restricted` and `exclusive` as explicit strict modes.
+Self-identification cannot manufacture trusted assurance, admitted policy and
+decision identities flow into request provenance, and identity denials return
+non-circular typed recourse. The two W5 oracle cases are green, leaving only
+the W9 convergence case red.
+W6 is source complete at `83319369`. Each admitted tab now inherits the current
+Profile access decision and belongs to one service-generated connection
+instance. Compatible clients still share one browser, but their tabs remain
+independently attributable. A disconnected child reconnects frictionlessly for
+the same stable subject, active connections cannot be stolen by repeated
+labels, current parent policy always bounds child permission, and tab release
+closes only the authorized owned resource. Internal child and connection fields
+cannot be forged through request parameters.
+W7 is source complete at `d3c12100`. Profile policy edits now use
+expected-revision compare-and-swap. Widening commits immediately, while
+narrowing occupied Profiles persists a drain that fences new admission and
+later control but preserves exact own-tab release. Incompatible occupancy is
+derived from attributed Service state, restriction commits only at zero, and
+forced eviction requires a separate explicit permission, exact target plan,
+and minimal receipt.
+W8 is source complete at `c46c6d43`. Protected lease-authority exchange now
+has one cohesive client, while the kernel remains the canonical evaluator.
+Human takeover mutates only controller authority and fences the former
+controller without changing Profile policy. Forced lifecycle effects require
+a durable permission authorization plus an exact current policy, daemon,
+browser, tab, and physical CDP-target proof, then persist a minimal idempotency
+receipt. Full-runtime shutdown is similarly bound to Operator assurance, both
+required lifecycle permissions, the reviewed P156 plan digest, and its exact
+managed browser targets.
+W9 is source complete at `d806c74c`. One Rust convergence owner now produces
+the desired state, normalized observations, sealed plan, typed health axes,
+one executable next action, and final receipt. A single current runtime-host
+listener is authoritative without the retired default socket. ACL ambiguity
+remains observable only on the access axis, while the dashboard warns solely
+from typed runtime or convergence blockers. The privileged shell adapter must
+execute the Rust-sealed action set and return verified postconditions.
+W10 is source complete at `2a930e0e`. Missing legacy policies now migrate
+deterministically: proven exclusive ownership remains subject-bound, while
+ambiguous identity becomes nonblocking shared-local access and appears only on
+the access-health axis. HTTP, MCP, generated clients, dashboard, doctor, help,
+README, agent skill, contracts, and docs now expose human presets,
+revision-fenced policy edits, and exact authorized tab eviction.
+W11 recorded a focused acceptance checkpoint at source `cc8510ba` and installed generation
+`0.28.0-ef3cd3921169`. The isolated development runtime has one coherent
+selected executable across its host, backend, dashboard, and supervisor
+manifest. Doctor, three-cycle browser launch, self-declared disposable-profile
+continuity, HTTP and MCP crash recovery, causal recovery logging, supervisor
+takeover, revisioned policy mutation, exact eviction, and digest-bound full
+shutdown gates pass without production effects. That closeout did not execute
+the full historically adversarial matrix in W11's original exit contract.
+Plan 0158 therefore reopens installed acceptance while preserving P157's
+source-complete result. It freezes one candidate and runs diagnostic-only
+agent, external remote-view, handoff, Xvfb, supervisor, dashboard, concurrency,
+performance, soak, and causal-logging stress without repair between failures.
+Plan 0158 W1 is complete. The frozen machine-readable registry contains 11
+historical families, all 49 scenarios and five combined phases, numeric safety
+ceilings, candidate identity requirements, and eight relationship-preserving
+redacted fixture seeds. A read-only production recount confirmed 39 failed or
+timed-out jobs without top-level structured failure or provenance. Existing
+P46 and P67 harnesses are explicitly disqualified from unchanged reuse because
+they repair, reset, retry, reconcile, clean, or permit loopback fallback.
+Plan 0158 W2 is complete. A provider-free monotonic controller now freezes one
+candidate and schedule, rejects opportunistic retries and terminal overwrites,
+propagates only exact lost prerequisites, records environment-scoped safety
+stops, preserves scheduled teardown failure, writes exclusive atomic artifacts
+and a hash-chained typed ledger, and seals only after terminal-count closure.
+Strict schemas validate the actual persisted manifest and every ledger record.
+Plan 0158 W3 is complete. A provider-free causal auditor now reconciles
+requests, responses, jobs, events, traces, incidents, dashboard projections,
+artifacts, and redaction receipts. Thirteen synthetic envelopes prove exact
+detection of 11 missing, duplicate, conflicting, reordered, null, isolated,
+broken-parent, unsafe-retry, capture-gap, and sensitive-leak classes while
+complete and reordered input stays clean.
+Plan 0158 W4 is complete. A provider-free external-handoff oracle rejects
+loopback, private, link-local, `.local`, raw provider, diagnostic-role, and
+non-secure URLs across 13 client-visible roles; requires all eight external
+ingress checks; gates pixels on operator readiness; reconciles eight retained
+identity fields; and detects changed handoffs and duplicate cold launches.
+Thirty-six synthetic sessions exercise all 23 finding classes.
+Plan 0158 W5 is complete. The provider-free dashboard oracle now detects 46
+isolated rail, selection, multi-client, warning, URL, stream, browser-evidence,
+accessibility, latency, and resource-growth defect classes. Fifty-one strict
+fixtures include clean empty, sparse, normal, dense, and typed-convergence
+controls. The dense control materially generates 22,600 resources and 600 rail
+rows for the exact 100 Profile, 500 browser, 2,000 tab, 10,000 job, and 10,000
+event inventory.
+Plan 0158 W6 preflight is complete. The readiness audit rejected the prior
+loopback HTTP operator URL and incomplete freeze manifest before installation.
+The development provider now requires one reviewed public HTTPS origin plus an
+external-ingress revision, and the campaign controller can seal exact E1/E2,
+artifact, calibration, fixture, external-vantage, and zero-start freeze
+evidence. Twenty-six adversarial preparation fixtures are green. W6 remains
+open until a fresh candidate is installed, externally calibrated, and frozen.
+
+### Plan
+
+- `docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md`
+- `docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md`
+
+### Next Recommendation
+
+[Plan 0166](plans/0166-2026-09-11-repository-custody-and-timed-out-connection-release.md)
+is closed through PR 27. Repository custody is reconciled, and client EOF now
+releases the exact task-owned connection without cancelling or replaying its
+accepted job. [Plan 0162](plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md)
+is the next implementation lane under its existing authority. No Odollo retry,
+new browser or profile, tenant action, or production installation occurred;
+the completed RuFresh no-result remains valid.
+
+[Plan 0160](plans/0160-2026-09-06-production-profile-identity-and-operational-readiness.md)
+governs the four remaining production readiness items. Current execution,
+acceptance evidence, cumulative effort, and the next bounded action are owned by
+[RUNBOOK.md](RUNBOOK.md). First-class profile diagnosis, preserving repair,
+runtime reset, and authentication reset completed through
+[Plan 0161](plans/0161-2026-09-09-first-class-profile-repair-and-reset-plan.md).
+Destructive profile-data reset remains separately gated by
+[Plan 0163](plans/0163-2026-09-10-profile-data-reset-backup-and-restore.md).
+The authenticated operator journey now adopts Plan 0124's arbitrary-N capacity through
+[Plan 0162](plans/0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md):
+browsers bind to validated desktop slots, while Guacamole viewers join those
+desktops just in time without client route selection. Its initial production
+target is three warm slots and shared viewing of one browser from three
+locations. Unattended operation follows those owner/lease and presentation
+milestones. Plan 0159's bounded completion and installed profile repair do
+not establish whole production readiness. P158's historical calibration sequence
+remains paused and its incomplete criteria remain visible.
+
+### Postmortem Disposition Before Successor Authorization
+
+Plan 0158 execution is paused following the operator's interruption. The
+[completed postmortem](../../dev/notes/0152-2026-09-05-plan-0158-postmortem.md)
+and [finite defect register](../../dev/notes/0152-2026-09-05-plan-0158-defect-register.json)
+now govern the successor discussion. Plan 0158 remains OPEN and incomplete;
+postmortem completion is not W10 acceptance. Do not resume its historical
+diagnostic, calibration, repair, installation, or reopen sequence automatically.
+
+Discuss Plan 0159 around original authorized-handle recovery with diagnostic
+evidence, ordinary durable remote-view behavior, and a consolidated production
+delivery decision. The final retained restart has 0/2 resumed original handles
+despite surviving Chrome processes and listener readiness. Historical zero
+Service-resource cleanup did not eliminate ancillary process residue. Source,
+installed, production, and user-outcome acceptance remain distinct.
+
+### Historical Priority Checkpoints Before Interruption
+
+Plan 0158 is reconciled around usable authenticated Profile leases/ACLs,
+postmortem-quality logging, and ordinary durable remote-view links. Current
+proof is partial: authenticated own-Profile acquisition and actionable denials
+pass focused checks, while full ACL lifecycle remains open. A controlled
+process-interruption probe disproves journal durability for the in-memory
+delivery interval. Ordinary links still lack external pixel/input acceptance.
+
+The retained-handoff identity rejection repair now passes one installed P158
+verification: failed response/job with actionable recourse, matching event,
+trace and journal, zero missing/duplicate/conflicting captured matches, and
+unchanged browser/session/tab/handoff records. Source is 5803203b; installed
+generation is 0.28.0-75f7d4a2caab. This proves truthful failure, not recovery or
+working links. The bounded verification is complete; do not repeat it.
+
+Two independent registered-capability clients pass focused acquisition of their
+own restricted Profiles, including after a disposable host restart with
+persisted capabilities and closed browsers. The unauthorized cross-profile
+operation now preserves profile_access_denied, the planner's denied decision,
+subject/assurance, missing permission, and policy-inspection recourse. One HTTP
+and one MCP adapter verification each join exactly one journal occurrence with
+zero missing/duplicate/conflicting captured matches and no browser effects.
+The denial repair cycle is complete; installed P158 remains unchanged.
+
+The logging interruption probe now reproduces actual loss: while the disposable
+journal file is locked, a rejection reaches the client; after exact-host
+SIGKILL and restart, its journal has zero matches where one is required. The
+request was not retried. This disproves interruption durability for the
+in-memory delivery interval; it is distinct from calibration harness loss.
+
+Repair 2fae5f5a now persists private pending records before response and recovers
+them on daemon startup without request resubmission. Two disposable-host checks
+pass: pending-before-append and an observer-synced append-before-retirement
+state each yield expected 1, observed 1, missing 0, duplicates 0, conflicts 0.
+This closes the bounded process-interruption repair cycle; the original failed
+epoch remains evidence, and host power-loss durability is not established.
+Authenticated policy revocation and rejoin now pass after 54d1a8f6: closed tab
+history no longer blocks drain completion. Revision 1 drains, revision 2 denies
+the revoked client, and revision 3 permits restored-grant rejoin over a fresh
+connection while the retained peer remains usable. Two denial journal joins
+pass with zero missing/duplicate/code-conflicting records. Three policy mutation
+receipts originally disagreed with terminal provenance about the authenticated
+actor. Repair 062727fb now passes three focused policy operations with 18 matching
+response/job/event/trace provenance projections and zero missing, duplicate, or
+conflicting records. Next reconcile the retained remote-view target and supported
+recovery path, then pursue ordinary external same-URL pixels/input. Preserve P/Q
+failures and the original target. Do not repeat the completed journal, drain, or
+provenance cycles or resume calibration by default.
+Access-plan denial advice is now fixed and authenticated-client verified in
+31a5a348. The failed production host is restored with its existing binary and a
+scoped startup-directory compatibility override; this is not remote-view proof.
+The operator prioritizes remaining client blockers next: retained live-browser
+restart, identity-unproven recovery, stale handles, and timeout uncertainty.
+Full ACL lifecycle, dashboard projection, reboot durability, ordinary external
+pixels/input, W6,
+and W7–W10 remain unmet. The renewed Plan 0158 priorities and original
+acceptance criteria remain in force.
+
+## P156 | Full Runtime Shutdown Replacement
+
+State: CLOSED
+Current state: the installation deadlock exposed by Research.gov fieldwork has
+been separated into a provider-neutral product lane. W1 through W6 are source
+complete. `preserve` remains the default; `full-shutdown` apply requires a
+current reviewed SHA-256 plan digest. The deep replacement module closes only
+digest-bound managed lanes, escalates only through exact process identities,
+preserves profiles and stored credentials, retires the exact source host, and
+resumes forward from durable receipts. The exact candidate is installed in the
+isolated development runtime, doctor is fully green, and the three-cycle launch
+smoke passes. No production shutdown was applied. PR 14 integrated checkpoints
+`e46d9f75` and `3bfb1c49` through `ba3916ca`; the historical source lane is
+closed.
+
+### Plan
+
+- `docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md`
+
+### Next Recommendation
+
+Any production full shutdown requires a new current plan digest and explicit
+operator review outside this closed source lane.
+
+## P155 | Durable Handoff Resume Intent
+
+State: CLOSED
+Current state: Research.gov fieldwork produced two provider-neutral client
+helpers. A resolved durable handoff now yields the exact retained route,
+managed profile, target, URL, caller attribution, and valid tab handle without
+exposing provider URLs or profile paths. Diagnostics now classify explicitly
+as unavailable, observation-only, or effect-capable; only complete control
+plane attestation admits navigation or input. The source checkpoint is
+`804519f0` and all selected provider-free gates pass. PR 14 integrated the
+checkpoint through `ba3916ca`; the source lane is closed.
+
+### Plan
+
+- `docs/dev/plans/0155-2026-09-02-durable-handoff-resume-intent-plan.md`
+
+### Next Recommendation
+
+Continue Research.gov observation through durable handoff `r580584`; do not navigate or
+enter data until canonical profile-lease proof makes diagnostics
+effect-capable.
+
+## P153 | Lost Profile Capability Rotation Recovery
+
+State: ACCEPTED
+Current state: the operator-local public status and exact compare-and-swap
+rotation repair is merged and installed as generation
+`0.28.0-e2244cd2447c-c25a91eb0d2b`. The installed/source SHA-256 identity
+matches, production doctor succeeds with one current host and zero legacy
+daemons, and live status reports that the sole Last30days registration is idle
+and eligible for rotation with no blockers. No production capability or client
+configuration has been changed and no provider tick ran.
+
+### Plan
+
+- `docs/dev/plans/0153-2026-09-01-lost-profile-capability-rotation-recovery-plan.md`
+
+### Next Recommendation
+
+Obtain explicit operator authority before rotating the production capability
+and writing its new private file into Last30days configuration. Treat a later
+provider acceptance tick as its own authorization because the prior tick is
+already consumed.
+
+## P152 | Terminal Session Replacement Planner Executor Parity
+
+State: ACCEPTED
+Current state: the terminal replacement, Last30days schema-17, and truthful
+capability-gate repairs are merged and installed. The single acceptance tick
+proved three-attempt persistence for both X and LinkedIn. A production
+no-launch readback then proved that unauthenticated planning reports
+`profile_capability_required` before daemon relay while the authenticated path
+remains executable. No credentials, profile identity, or authentication
+authority has been mutated.
+
+### Plan
+
+- `docs/dev/plans/0152-2026-09-01-terminal-session-replacement-planner-executor-parity-plan.md`
+
+### Next Recommendation
+
+Treat Last30days capability registration and private wiring as a separate
+identity-mutation objective requiring explicit authority. The consumed
+acceptance tick must not be repeated implicitly.
+
+## P150 | Automatic Terminal Quarantine Convergence
+
+State: ACCEPTED
+Current state: production reconciliation closed the exact Research.gov
+quarantine and a recovered no-launch reattach produced ready durable handoff
+`r580584`. The first fresh acquisition exposed a background-reconcile race in
+which a seconds-old pending lease was mistaken for detached. Source now requires
+a valid 15-minute age plus matching ownership identity before detached pending
+convergence. Production transaction `upgrade-a65e0348-7d32-4f62-9889-b4908c8cbe91`
+installed the merged age fence as generation
+`0.28.0-4a92c42517e1-6121fd69672b`, finalized the Research.gov lane at owner
+generation 9, and preserved the ready browser, tab, route, display, and durable
+handoff. Production doctor succeeds with one current runtime host and zero
+legacy daemons.
+
+### Plan
+
+- `docs/dev/plans/0150-2026-09-01-automatic-terminal-quarantine-convergence-plan.md`
+
+### Next Recommendation
+
+Continue Research.gov fieldwork through durable handoff `r580584`. The operator
+must complete the first LastPass credential and passkey flow manually because
+the installed real-prompt desktop workflow is not product-accepted. After the
+authenticated target is visible, run a bounded auth probe and only then record
+profile freshness. Do not cold-launch a replacement browser for route, display,
+or viewer reconnection.
+
+## P144 | Lease Authority Coordination And Revocation
+
+State: IN PROGRESS
+Current state: checkpoint `ae5ad34c` is integrated through merge `74883c6c`,
+so its historical branch may close without closing the lane. Retained
+historical lease records are nonblocking. Slice B now
+persists a canonical active-claim map with revision compare-and-swap, fencing,
+strict recovery metadata, and repository-level atomic acquisition. Access
+planning and profile-lease doctor consume current claims without relying on a
+client-session projection; retained rows remain context and cannot add doctor
+blockers when a canonical claim exists. Public mutation and daemon effect
+admission migration are still in progress. No live runtime state or tenant
+profile has been changed by this lane.
+
+### Plan
+
+- `docs/dev/plans/0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md`
+
+### Next Recommendation
+
+Complete the retained-history red-green slice, then introduce the canonical
+active-claim kernel before widening public revocation surfaces.
+
+## P129 | Request Delivery, Lifecycle Projection, And Cleanup Repair
+
+State: IN PROGRESS
+Current state: live evidence proved that the stable dashboard ingress can
+return a retryable 503 after a non-retry-safe service mutation has already
+completed. The same proof exposed duplicate cold-start targets, contradictory
+tab cleanup policy, hidden terminal-replacement identity, unexplained
+nonterminal cleanup obligations, false unowned-process pressure, and a split
+historical QBO identity. Source repair is beginning on current main; no new
+runtime candidate has been built or installed.
+
+### Plan
+
+- `docs/dev/plans/0129-2026-08-24-request-lifecycle-and-cleanup-repair-plan.md`
+
+### Next Recommendation
+
+Complete the delayed-backend red-green ingress slice first. Do not retry a
+timed-out mutation or start workstation apply until at-most-once delivery is
+proven through the public ingress.
+
+## P128 | Runtime Lifecycle Hotfix Collection
+
+State: ACCEPTED
+Current state: the lifecycle repairs are integrated through current main and
+installed as generation `0.28.0-6b461233692c-7e71e8fd473b`. Transactional
+workstation acceptance, provider-free BILL replacement, exact process exit,
+profile-lock release, rollback readiness, and warning-only historical
+supervisor classification passed. P129 owns newly observed request-delivery,
+projection, and cleanup defects.
+
+### Plan
+
+- `docs/dev/plans/0128-2026-08-23-runtime-lifecycle-hotfix-collection.md`
+
+### Next Recommendation
+
+Preserve P128 as the accepted lifecycle foundation and route follow-up work
+through P129.
+
+## P127 | Development Presentation Provider Isolation
+
+State: IN PROGRESS
+Current state: Slice A is accepted. The source authority defines a development-only provider
+root, secrets, state, receipts, service and database identities, nonproduction
+ports, arbitrary six-route inventory, four-slot warm policy, exact manifest
+drift checks, and a development pseudo-home skill target. The development skill
+copy is current and installed doctor remains green. No provider resource or
+production surface has been changed.
+
+### Plan
+
+- `docs/dev/plans/0127-2026-08-23-development-presentation-provider-isolation-plan.md`
+
+### Next Recommendation
+
+Accept the provider-free source and development skill packet, then review the
+separate privileged provider deployment adapter before creating Guacamole,
+XRDP, display, database, route-user, or ingress resources.
+
+## P126 | Pre-Development Runtime Safety And Browser Launch Stabilization
+
+State: ACCEPTED
+Current state: development GC now requires positive development-environment
+ownership before admitting any process as a candidate. The development
+publisher pins `/opt/google/chrome/chrome` through its stable launcher and all
+three units. Doctor passes, three consecutive disposable launch cycles pass,
+and both production and development GC dry-runs finish with zero candidates.
+The exact two-day-old test Chrome group was terminated after repeated identity
+and no-owner proof, and its temporary home was moved to trash.
+
+### Plan
+
+- `docs/dev/plans/0126-2026-08-23-pre-development-runtime-safety-and-browser-launch-stabilization.md`
+
+### Next Recommendation
+
+Begin only P124 Slice A in source and provider-free fixtures. Keep installed
+experiments on the accepted development Runtime Environment and preserve
+production as a separate effect boundary.
+
+## P125 | Development Runtime Isolation And Build Capacity
+
+State: ACCEPTED
+Current state: the isolated `agent-browser-dev` executable, immutable
+generation store, pseudo-home, state, socket namespace, systemd units,
+dashboard and auth surface, and Cooper ingress are installed and accepted.
+Repeated development publication, replacement, stop/start, and cleanup left
+the exact production process, executable, dashboard, browser, session, and
+handoff identities unchanged. Resource-aware Build Admission now permits two
+bounded Cargo invocations when live capacity allows and queues work under
+pressure.
+
+### Plan
+
+- `docs/dev/plans/0125-2026-08-23-development-runtime-isolation-and-build-capacity-plan.md`
+
+### Next Recommendation
+
+Begin P124 Slice A in source and provider-free fixtures. Use the accepted
+development Runtime Environment for later installed P124 experiments and keep
+production outside that experimental acceptance boundary.
+
+## P124 | Scalable Desktop Evidence And Presentation Capacity
+
+State: COMPLETE — DEVELOPMENT ACCEPTED; PRODUCTION ADOPTION IN P162
+Current state: Source and development-runtime acceptance proved arbitrary-N
+presentation inventory, four warm slots, controlled elastic 4 to 6 to 4
+lifecycle convergence, multi-viewer and controller posture, desktop evidence,
+retained-browser preservation and exact cleanup. Production input remained
+outside P124 and is now owned by Plan0162 under Plan0160 A2/A3.
+
+### Plan
+
+- `docs/dev/plans/0124-2026-08-23-scalable-desktop-evidence-and-presentation-capacity-plan.md`
+
+### Next Recommendation
+
+Do not rerun P124's accepted development campaign. Plan0161's preserving-repair
+milestone is complete; execute Plan0162 next to adopt configurable desktop slots
+and just-in-time viewer allocation in production.
+
+## P123 | Exact Profile Compatibility Installed Admission
+
+State: CANCELLED
+Current state: Plan 0123 is historical and superseded by later transactional
+installation and retained-profile campaigns, including Plan 0165. Its frozen
+candidate must not receive a new live apply.
+
+### Plan
+
+- `docs/dev/plans/0123-2026-08-23-exact-profile-compatibility-installed-admission.md`
+
+### Next Recommendation
+
+Obtain explicit live authority before the transactional apply. Re-run all
+admission evidence immediately before apply and require installed no-launch
+agreement before any browser acquisition.
+
+## P122 | Exact Profile Capability Compatibility
+
+State: COMPLETE
+Current state: read-only access planning and executable no-launch preflight now
+share one exact profile, host, and executable compatibility predicate. An
+account-selected profile cannot borrow a compatible declaration from another
+profile merely because the host or executable matches. The provider-free
+regression fixture, affected Rust suites, strict Clippy, API/MCP parity,
+generated-client checks, and client type checks pass. Installed-runtime and
+tenant qualification remain outside this source-complete lane.
+
+### Plan
+
+- `docs/dev/plans/0122-2026-08-23-exact-profile-capability-compatibility.md`
+
+### Next Recommendation
+
+Promote this source through the governed installed-runtime transaction only
+when a consuming workflow has explicit authority, then repeat access-plan and
+no-launch preflight readback for the same selected profile before browser use.
+
+## P117 | Runtime Lifecycle Authority And Convergence
+
+State: ACCEPTED
+Current state: Plan 0117 is accepted at source and installed-runtime boundaries.
+One lifecycle authority owns launch, attach, transfer, adoption, rollback,
+retained preservation, recovery, close, and cleanup obligations. Transactional
+cutover transfers effect authority before retiring the old shared host once by
+exact process identity. Idle lanes cannot terminate that host early, and launch
+admission prevents a conflicting managed browser from starting before durable
+ownership is proven.
+
+Installed generation `0.28.0-aa21c5fe8a6d-25828e3b8aed` is selected from
+binary SHA-256
+`aa21c5fe8a6dd75f1422bd84147756f984ea8662fc5d9a1ea3afac1c37eed452`.
+Accepted transaction `upgrade-52684512-bfc2-4c30-971b-ab166eaa5364`
+preserved the authenticated browser and durable handoff `r520477`. Final doctor
+reports one dashboard, one runtime host, one executable generation, zero legacy
+daemons, converged status, and no issues. Service GC has zero candidates;
+reviewed generation GC removed only the obsolete rollback generation and left
+one selected generation on disk.
+
+### Plan
+
+- `docs/dev/plans/0117-2026-08-19-runtime-lifecycle-authority-and-convergence-plan.md`
+
+### Next Recommendation
+
+Preserve P117 as the accepted lifecycle and convergence foundation. Continue
+ordinary work through the single-host service path, and reserve formal release
+work for the explicit many-to-many Guacamole/RDP release milestone.
+
+## P116 | Runtime Adoption And Transactional Upgrade
+
+State: OPEN
+Current state: Plan 0116 was reopened on 2026-09-09 after the latest production
+installation required a full hard stop. The existing installation did not
+cooperatively surrender custody, the installer did not establish a healthy
+updated supervisor, and runtime inventory still disagrees with its steady-state
+multiplicity projection. Earlier work converted the August 15 runtime and durable-handoff
+failures into one generation-aware architecture. Current workstation apply can
+commit the new payload before runtime reconciliation, restore only systemd
+active states after later failure, and leave live daemons bound to prior or
+deleted executable generations. Cooperative handoff requires the old daemon to
+prepare a descriptor, while durable handoff resolution can replay navigation
+and silently render CDP before the requested RDP presentation converges. P116
+freezes immutable generation staging, closed-world runtime census, verified
+orphan adoption, two-phase owner transfer, continuous dashboard ingress,
+read-mostly durable handoff recovery, hard provider requirements, end-to-end
+presentation receipts, and rollback that proves the operator journey rather
+than only restoring files or units. Slice A is accepted with a
+closed ten-source census ledger, thirteen deterministic runtime fixtures
+covering all eight classifications, frozen generation, transaction, adoption,
+and presentation schemas, and source-bound red proofs for the two current
+unsafe seams. The three pre-existing baseline failures discovered during Slice
+A were reconciled: confirmation control actions no longer launch Chrome, and
+legacy service-status fixtures now carry the ready-stream evidence required by
+current reconciliation. Focused tests, formatting, strict Clippy, and the
+CI-partitioned Rust suite pass. Slice B is accepted with one sealed runtime
+generation containing the binary, support payload, manifest, and unit
+templates; stable command and unit links resolve through an atomically replaced
+`current` selector. Seven injected staging and selector failures preserve the
+selected generation byte-for-byte, selector-commit failure restores the prior
+selection, changed payloads retain the old generation, and standalone
+reconciliation cannot mutate or select payload generations. Slice C is
+accepted at the source and isolated-fixture boundary. Ten read-only adapters
+join service browser records, canonical profile identity, legacy owner
+references, named supervisors, daemon metadata, P108 process identity,
+profile-lock and DevTools evidence, bounded CDP browser and target digests,
+display proof records, and presentation records. Real-host apply requires two
+matching rounds, writes a private transaction containing the census digest and
+per-runtime classifications, and blocks before unit quiescence or payload
+staging on incomplete, changing, conflicting, or owner-generation-poor
+evidence. P111 owner generations remain absent in current source, so a live
+cooperative daemon cannot be granted transfer authority yet; that fail-closed
+result is deliberate and compatible with P111 rather than a competing owner
+registry. Slice D is accepted at the source and isolated-fixture boundary. It
+has a provider-neutral ownership foundation in the one
+locked service-state repository. It uses P111-compatible profile owner states,
+monotonic owner generations, observation-only candidate attachments, atomic
+compare-and-swap commit, idempotent replay, ownerless verified-orphan adoption,
+and receipt-bearing reverse transfer that advances generation to prevent ABA.
+The daemon command path has a generation fence before stream broadcast,
+browser recovery, or dispatch whenever a transfer binding is present, and the
+census reads this registry before falling back to legacy session references.
+The production handoff path keeps the old daemon authoritative through
+candidate observation and compare-and-swap, supports exact pre-commit abort,
+receipt-bearing post-commit reverse, and old-owner finalize only after commit.
+Verified ownerless browsers and legacy schema-one retry records enter the same
+process, profile, endpoint, target, and logical-browser proof seam without
+launch or navigation. Named-supervisor restarts rehydrate from the registry as
+current or observation-only bindings, and the development publisher joins
+active supervisor manifests with socket discovery. The orphan red seam is
+closed. Payload commit before runtime preservation remains intentionally red.
+Slice E is implemented at the source and isolated-fixture boundary with stable
+ingress, generation backends, revision-fenced candidate selection, manifest
+revalidation, retained fallback, production `PresentationReceipt` derivation,
+doctor axes, and no-replay mutation failure behavior. The isolated transaction
+continued serving from the old backend after candidate termination. Slice E
+is not accepted yet because early diagnostic processes inherited user-scoped
+dashboard auth and service-state paths: the auth store was rewritten through
+normal startup, and the shared service-state mtime advanced while lock
+contention was observed. The source now has explicit auth-directory,
+backend-only, and relay-skip isolation for fixtures.
+Slice F is accepted at the source and isolated-fixture boundary. Ordinary
+durable resolution strips stored navigation and ephemeral route selectors,
+requires the exact retained target, requests the existing two-phase orphan
+adoption path when its daemon is gone, and never falls back to browser launch,
+target creation, navigation, provider substitution, or a raw provider redirect.
+The persisted presentation receipt advances monotonically and binds the stable
+dashboard deployment, logical browser, daemon owner generation, process
+identity, target, route, display, and requested and observed provider. Both the
+resolver and dashboard fail closed as retryable `converging` until that exact
+receipt is ready. One isolated fixture now proves the same opaque handoff across
+daemon loss, owner and process generation replacement, route and display
+replacement, and dashboard generation change without duplicate-browser or
+navigation events. Explicit reopen remains the only path that restores the
+stored URL and may create or navigate a target.
+The initial Slices G and H acceptance was reopened after a closed-world audit
+found that postcommit doctor rejected its own active transaction, candidate
+presentation summaries were synthesized instead of independently receipted,
+payload status ignored the atomic selector, dashboard rollback could not
+restore the authenticated old generation, and controlled shutdown lacked exact
+process-exit plus profile-lock proof. Those defects are now remediated at the
+source and isolated-fixture boundary. Production apply launches a sealed
+generation-specific shadow backend, stages it behind stable ingress, and waits
+for an independently authenticated candidate presentation receipt before
+selector commit. Postcommit validation checks that exact live receipt;
+rollback restores the prior dashboard backend and its authenticated receipt.
+Status and doctor share seven readiness axes, shutdown proves both exact child
+exit and read-only lock disappearance, and accepted transactions retain the
+rollback generation until an explicit reviewed `install workstation finalize`
+transition. Generation GC now has direct deterministic coverage for selected,
+live-process, supervisor, unclosed-transaction, and rollback references. The
+repository Rust cadence, strict Clippy, formatting, focused transaction and
+ingress tests, production docs build, and source-free workstation matrix pass.
+One later source audit found that workstation transfer still stopped when an
+old daemon lacked the cooperative handoff command. The transaction now treats
+only an exact unknown-command response as that legacy case, binds the recorded
+daemon to the selected old-generation executable, revokes only that verified
+daemon process, advances only the exact owner ID and generation from `ready`
+to `orphaned`, and requires the candidate to pass the existing orphan process,
+profile, endpoint, target, and logical-identity proof seam. The browser process
+remains untouched. Orphan adoption skips source-daemon finalization, and
+rollback after irreversible legacy-daemon revocation or completed cooperative
+source finalization enters `operator_recovery_required` instead of claiming
+the old owner was restored. Focused tests prove exact-process targeting,
+browser survival, protocol classification, owner-generation fencing, and
+rollback semantics.
+Neither finalization, GC apply, installed-payload replacement, nor production
+transfer was executed.
+
+### Plan
+
+- `docs/dev/plans/0116-2026-08-15-runtime-adoption-and-transactional-upgrade-plan.md`
+
+### Next Recommendation
+
+Retain the implemented P116 foundation, then close the three reopened gates:
+old-runtime surrender before selector commit, automatic production-supervisor
+replacement and restart, and one authoritative production runtime/listener
+projection with no reachable stale production streams. Continue P117 lifecycle
+work only where it supplies those gates or the separately governed convergence
+work.
+
+## P114 | Terminal Route Quarantine Recovery
+
+State: CLOSED
+Current state: Plan 0114 is closed by Plan 0150's accepted production
+convergence and acquisition evidence. No separate active issue or installed
+recovery remains for the historical route.
+
+### Plan
+
+- `docs/dev/plans/0114-2026-08-14-terminal-route-quarantine-recovery-plan.md`
+
+### Next Recommendation
+
+Complete source and documentation validation, install one matching checkpoint,
+then dry-run and apply only the exact inactive Google Messages quarantine.
+
+## P113 | Workspace Viewport Just-Works UX
+
+State: COMPLETED
+Current state: the workspace viewport now selects the best usable source and
+performs one bounded service-approved route or observer-lease recovery without
+an operator guessing provider mechanics. The normal surface has one semantic
+`View` menu, one connection state, one `Retry connection` fallback, and text
+labelled low-level operations under `Advanced connection controls`. Live QBO
+runtime smoke renders the RDP desktop as `controllable` while preserving the
+existing browser, profile, display, and route identities.
+
+### Plan
+
+- `docs/dev/plans/0113-2026-08-14-workspace-viewport-just-works-ux-plan.md`
+
+### Next Recommendation
+
+Continue P111. Its separately bounded duplicate-profile-pressure lane owns the
+only remaining install-doctor finding and must preserve the forensic retained
+state until its owner-classification fixtures are accepted.
+
+## P112 | Dashboard Remote-View Reconnect Repair
+
+State: COMPLETED
+Current state: the dashboard now separates the selected presentation stream
+from authoritative viewer-route operations, applies a bounded fifteen-second
+remote-view request allowance, preserves typed backend failures, and renders
+readiness guidance without duplicated wording. The pushed checkpoint is
+installed with converged native, dashboard, workstation, supervisor, and
+runtime provenance. Live readback restored `guacamole:2` to `attached_ready`
+and persisted an observing lease while preserving the existing QBO browser,
+profile, display, and process.
+
+### Plan
+
+- `docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md`
+
+### Next Recommendation
+
+Continue P111. Its duplicate-profile-pressure lane owns the two evidence-poor
+retained `default` profile rows that remain outside P112's reconnect repair.
+
+## P111 | Multi-Agent Shared-Browser Profile Authority
+
+State: OPEN
+Current state: Plan 0111 freezes the ordinary browser-sharing topology as one
+canonical writable profile directory, one owning browser instance and Chromium
+process group, many accountable agent sessions, and many independently owned
+tabs or windows. It separates browser-instance profile ownership from
+per-agent participation, per-tab mutation ordering, browser-global mutation,
+and display-controller authority. The plan also targets the remaining
+check-then-launch race, stale attached-existing browser evidence, route-hint
+validation, and duplicate-pressure terminology left after P69's shared-tab
+routing implementation.
+
+### Current Evidence
+
+- P69 already routes ordinary compatible work through retained-browser tab
+  acquisition and declares `exclusive_process` plus `shared_browser_tabs`.
+- Current installed service state models three ready browser records against
+  profile `default`; two evidence-poor `attached_existing` rows produce a
+  duplicate-profile warning while reviewed GC has no safe candidate.
+- The service-state repository provides cross-process atomic mutations, but
+  profile availability is currently checked before launch without first
+  persisting an owner reservation.
+- Maintainer direction is that agents, tabs, windows, and normal Chromium child
+  processes are shareable. Only independent browser roots writing the same
+  canonical profile directory require exclusion.
+
+### Plan
+
+- `docs/dev/plans/0111-2026-08-13-multi-agent-shared-browser-profile-authority-plan.md`
+
+### Next Recommendation
+
+Execute Slice A only: freeze red fixtures for canonical profile identity,
+browser-root classification, concurrent owner reservation, stale
+attached-existing rows, and invalid route-hint bypass before changing launch
+behavior.
+
+## P110 | Desktop Perception And Interaction Foundation
+
+State: ALL FIVE POCS SOURCE ACCEPTED | AUTHENTICATION SLICE A SOURCE ACCEPTED |
+PLAN 0131 CONTROLLED PROVIDER PLANNED
+Current state: Plan 0110-1 is source accepted at `853c2d90`. The canonical
+`desktop_capture` service action resolves an exact service-owned RDP workspace,
+requires operator-visible display proof, captures a bounded ephemeral PNG, and
+returns typed context and frame receipts across CLI, HTTP, MCP, generated
+client, schema, help, skill, and docs surfaces. The source gates are green
+after one independent audit and one bounded remediation packet. No live
+browser, display, RDP, Guacamole, installed-runtime, locator, or machine-input
+proof was performed. Plan 0110-2 is source accepted at `4281196a`: the atomic
+`desktop_locate` action binds deterministic geometry, integer template, and
+pinned OCR-token evidence to one fresh frame, returns explicit matched,
+not-found, or ambiguous observations, and emits no input. Its sole registered
+profile targets a repository-owned synthetic verification control. Plan
+0110-3 is source accepted at `fd9c6a41`. Its source-only `desktop_interact`
+transaction uses current-controller epoch checks, the real process-owned
+route claim and per-event fence, deterministic fixed-point pointer motion, a
+single left click, fixed benign text, bounded release cleanup, receipt-bearing
+partial effects, replay suppression, and after-state verification. PoC 3 adds
+no production input provider and authorizes no live desktop effects. Plan
+0110-4 is source accepted at `7391409b`. Its distinct read-only
+`desktop_prompt_observe` action proves, for repository fixture inputs only,
+independently rendered page and DOM absence evidence, a repository-owned
+three-layer prompt corpus, typed no-effect operator intervention, strict
+privacy, and a configured provider-unavailable posture. Plan 0110-5 is source
+accepted at `b98343f6`. Its second named `desktop_interact` recipe proves
+durable cross-ingress operation replay, principal-scoped provider effect keys,
+provider-neutral evidence, service-owned ready handoff resolution, a complete
+25-scenario source matrix, safe durable and dashboard projections, and a
+separate aggregate planning-only entry gate. Every individual operation
+receipt remains live closed. No production desktop provider or controlled live
+recipe was authorized or exercised.
+
+Plan 0138 Authentication Run Slice A is source accepted at `d0786a5a`. A
+focused internal Rust module now binds one run to its exact principal, task,
+target account, profile, browser, session, login tab, site recipe, and policy.
+Its response-only action seam keeps credentials, OTPs, and device-verification
+URLs out of the run and every outward receipt. Synthetic SMS and email-link
+canaries prove watch-before-trigger ordering, one post-fence candidate,
+same-profile new-tab navigation, effect replay rejection, bounded transitions,
+and exact-target verification. This packet added no public action, Service
+State migration, installed runtime, or live provider effect.
+
+Plan 0131 is now planned at source baseline `e8695f82`. It freezes one
+development-first X11 provider behind the existing `desktop_interact` engine,
+an OS-visible route fence shared by input and controller mutations, a private
+prepared/acknowledged/uncertain effect journal, a repository-owned RDP fixture,
+transactional development installation, rollback, and a separately authorized
+production controlled-fixture boundary. No source implementation has started.
+
+Separately authorized live fieldwork on 2026-08-22 demonstrated that fresh
+service-bound desktop capture, deterministic OCR and geometry checks, and one
+raw XTEST click can select a uniquely matched LastPass passkey and reach an
+authenticated application. The redacted productization findings are recorded
+in
+`docs/dev/notes/0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md`.
+This off-contract experiment does not clear P110 live Foundation Acceptance:
+the effect did not use a production Agent Browser input provider, controller
+lease, cross-process fence, or canonical `desktop_interact` receipt.
+
+### Vision
+
+Make agent-browser capable of perceiving and interacting with the complete
+browser workspace, including browser chrome, extension UI, credential-manager
+prompts, operating-system dialogs, and CDP-free browser windows. The layer
+should feel like a natural extension of the existing browser toolset rather
+than a separate remote-desktop automation product.
+
+The foundation is a display-bound transaction:
+
+1. resolve one service-owned browser workspace and its current display,
+   view-stream, geometry, and control authority;
+2. observe a fresh frame and any available semantic desktop evidence;
+3. locate candidate UI targets with explicit detector evidence;
+4. perform a bounded pointer or keyboard action through the selected input
+   backend;
+5. verify the resulting desktop state and retain a typed receipt.
+
+Detection and actuation may be deterministic and replayable. An external
+site's acceptance decision, authentication result, or challenge outcome is not
+represented as deterministic unless separately observed and verified.
+
+The broader product direction and human-authorization boundaries are defined
+in `VISION.md`.
+
+### Foundation Vocabulary
+
+The first implementation should refine, rather than prematurely freeze, this
+working vocabulary:
+
+- `DesktopContext`: the browser, session, profile, display allocation,
+  view stream, input provider, coordinate spaces, geometry epoch, and current
+  control authority against which work is valid;
+- `FrameReceipt`: one captured desktop frame with source identity, sequence,
+  dimensions, scaling, capture time, content hash, retention posture, and
+  geometry epoch;
+- `Observation`: one or more located candidates with detector identity,
+  detector version, target class, bounds, coordinate space, supporting
+  evidence, and source frame;
+- `InteractionRecipe`: ordered observe, locate, move, click, key, text, wait,
+  and verify steps with preconditions, timeout, retry budget, motion profile,
+  and stop conditions;
+- `InteractionReceipt`: caller attribution, authority decision, selected
+  target, before and after frames, emitted input, verification result, errors,
+  and cleanup or handoff state.
+
+These records should use opaque IDs and typed relationships. Callers should not
+pass raw Guacamole URLs, guess display names, or translate coordinates without
+service-owned geometry evidence.
+
+### Reusable Architecture
+
+The foundation should keep mechanisms separate from use-case policy:
+
+- frame sources capture a named desktop surface from Guacamole/RDP, X11,
+  Windows, Wayland, macOS, or another provider;
+- semantic sources contribute accessibility-tree, window, process, focus, and
+  control metadata when the platform exposes it;
+- locators implement exact templates, OCR, geometry, pinned local models, or
+  approved probabilistic vision providers behind one observation contract;
+- coordinate mappers translate frame, stream, logical-desktop, physical-pixel,
+  and input-backend coordinates while retaining scale and crop evidence;
+- input sinks emit pointer and keyboard events through Guacamole, X11,
+  Windows, Wayland, macOS, or another provider;
+- verifiers classify the post-action state without assuming that emitted input
+  produced the requested external outcome;
+- policy selects providers, required evidence, motion posture, approval gates,
+  retry budgets, redaction, artifact retention, and human handoff.
+
+The core should not contain site-specific CAPTCHA coordinates or
+credential-manager screenshots. Use cases should contribute fixtures,
+detectors, policies, and verification rules through the shared contracts.
+
+### Service Authority And Safety
+
+Desktop work must remain inside the existing service control plane:
+
+- every request carries service, agent, and task attribution when known;
+- the service resolves the browser and exact display allocation before work;
+- observation may be shared, but machine input requires a controller lease or
+  another explicit control authority;
+- human takeover and machine input are serialized rather than allowed to race;
+- an action fails closed when its frame is stale, geometry changed, focus is
+  wrong, the display or route was replaced, or target evidence is ambiguous;
+- retries are bounded and each attempt re-observes current state;
+- sensitive frames are ephemeral by default and must not leak passwords,
+  passkey account details, one-time codes, or private browser content into
+  logs or retained service state;
+- secure-desktop, biometric, PIN, master-password, and user-consent prompts can
+  become typed operator-intervention states instead of automation failures;
+- durable operator continuation uses the existing opaque remote-view handoff,
+  never a raw provider route.
+
+Smooth pointer motion is a reusable interaction profile, not a promise to
+evade bot detection. Replayable variation must carry its seed and generated
+trajectory in the receipt.
+
+### Coherent Product Surface
+
+The exact names remain subject to the first contract proof, but the intended
+shape is one discoverable `desktop` family backed by one service-owned model:
+
+- CLI: a natural `agent-browser desktop` command group for capabilities,
+  observation, location, bounded actions, and recipes, with human-readable
+  output and stable JSON receipts;
+- HTTP API: service-owned capability reads and queued desktop interaction
+  requests using the same context, recipe, and receipt schemas as every other
+  ingress;
+- MCP: small task-shaped tools for observing, locating, and acting, plus
+  resources for capabilities and retained non-sensitive state; MCP handlers
+  remain thin adapters over the service contract;
+- generated client: typed request builders, helpers, summaries, and receipt
+  types generated or checked from the same schemas;
+- dashboard: selected-workspace capability, live observation overlays,
+  controller ownership, verification state, and one-click operator takeover;
+- access plan and contract metadata: advertise whether a requested workspace
+  has desktop capture, semantic inspection, locator, pointer, keyboard, and
+  verification capabilities before a caller attempts an action.
+
+Simple commands should lower into the same recipe engine used by advanced
+callers. The foundation should not grow separate CLI-only, MCP-only, or
+dashboard-only execution paths.
+
+### Proof Of Concept 1 | Display-Bound Frame Capture
+
+Capture one fresh frame from a service-owned RDP/Guacamole browser workspace
+and return a `DesktopContext` plus `FrameReceipt` through the native service,
+CLI, HTTP, MCP, and generated client surfaces.
+
+This proof should establish exact browser-to-display binding, frame identity,
+dimensions, scaling, coordinate-space metadata, freshness, redaction and
+retention defaults, and typed failure when the route or display is not ready.
+It should not inject input or run a vision model.
+
+### Proof Of Concept 2 | Deterministic Fixture Location
+
+Locate known controls in a controlled desktop fixture using deterministic
+template, geometry, and OCR evidence. The fixture should exercise multiple
+scales, themes, window positions, and one visually similar decoy.
+
+This proof should establish the locator interface, detector versioning,
+candidate ranking, ambiguity handling, source-frame binding, and visualization
+of proposed targets. It should not click a live challenge or credential prompt.
+
+### Proof Of Concept 3 | Guarded Pointer And Keyboard Transaction
+
+Use the same display and coordinate model to move the pointer along a smooth,
+replayable path, click a controlled target, enter non-sensitive test text, and
+verify the resulting fixture state.
+
+This proof should establish controller leasing, focus checks, coordinate
+mapping, press and release semantics, motion profiles, stale-frame abort,
+bounded retries, before and after evidence, and cooperative human takeover.
+
+### Proof Of Concept 4 | Browser-External Prompt Perception
+
+Detect and classify a controlled browser-chrome, extension, or native dialog
+that is absent from the page screenshot and DOM. Fuse pixels with available
+desktop accessibility and window metadata, then return either an actionable
+candidate or a typed `operator_intervention_required` result.
+
+This proof should validate the reason the new layer exists without depending
+on a real account, secret, biometric, third-party site, or production LastPass
+state.
+
+### Proof Of Concept 5 | Foundation Stress And Use-Case Entry
+
+Exercise one complete provider-neutral recipe through every advertised ingress
+and confirm that capability discovery, request validation, queueing, leases,
+receipts, errors, generated client types, dashboard projection, help, README,
+repo skill, and docs site remain coherent.
+
+Only after this gate should discrete challenge and authentication use cases
+start adding their own detectors and policy:
+
+1. controlled Turnstile test fixtures and provider-supplied test keys;
+2. read-only LastPass or passkey-prompt detection with operator continuation;
+3. authorized visual challenge classification with explicit provider and
+   human-approval policy;
+4. broader local-desktop backends after the RDP contract proves reusable.
+
+Each use case is both a product increment and an architecture probe. When a
+use case exposes awkward context binding, duplicated ingress logic, weak
+receipts, unsafe defaults, or detector-specific coupling, adjust the
+foundation before normalizing the workaround.
+
+### Foundation Acceptance
+
+The foundational lane is not accepted until:
+
+- one display-bound recipe passes on a controlled RDP/Guacamole fixture;
+- every action proves fresh frame, current geometry, correct display, and
+  current controller authority before input;
+- deterministic detectors and replayable motion reproduce their receipts
+  against pinned fixtures;
+- ambiguous or changed targets stop without input;
+- CLI, HTTP, MCP, generated client, contract metadata, dashboard, help, README,
+  repo skill, and docs site expose one coherent capability family;
+- capture and input providers are replaceable without changing use-case
+  recipes;
+- sensitive observations remain ephemeral and redacted by default;
+- operator takeover uses the durable handoff and resumes only through explicit
+  authority;
+- controlled fixtures cover success, ambiguity, stale geometry, focus loss,
+  route replacement, lease conflict, input failure, and failed verification.
+
+### Non-Goals
+
+- Do not promise deterministic completion of external anti-bot challenges.
+- Do not automate biometrics, secure-desktop prompts, or user-consent gestures.
+- Do not build site-specific coordinates or image assets into the core engine.
+- Do not require every operating system backend before the RDP contract is
+  proven.
+- Do not weaken existing profile, browser, route, display, controller, or
+  operator-handoff authority to make a fixture pass.
+- Do not treat source readiness as installed, live, or release acceptance.
+
+### Next Recommendation
+
+For the authentication lane, persist the accepted `AuthenticationRun` in
+Service State and design one coherent create, inspect, resume, cancel, and
+result contract across every public ingress before connecting a live provider.
+Keep OTPs and device-verification URLs inside response-only internal adapters.
+Plan 0131 remains the independent controlled-input lane and retains its own
+production controlled-fixture gate.
+
+### Evidence
+
+- `VISION.md`
+- `docs/dev/plans/0110-2026-08-12-desktop-perception-interaction-foundation-plan.md`
+- `docs/dev/plans/0110-1-2026-08-12-p110-poc1-display-bound-frame-capture-plan.md`
+- `docs/dev/notes/0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md`
+- `docs/dev/plans/0138-2026-08-29-authentication-run-provider-free-foundation-plan.md`
+- `docs/dev/notes/0138-2026-08-29-authentication-run-provider-free-source-acceptance.md`
+- `docs/dev/plans/0110-2-2026-08-12-p110-poc2-deterministic-fixture-location-plan.md`
+- `docs/dev/plans/0110-3-2026-08-12-p110-poc3-guarded-desktop-interaction-plan.md`
+- `docs/dev/plans/0110-4-2026-08-12-p110-poc4-browser-external-prompt-perception-plan.md`
+- `docs/dev/notes/0110-4-2026-08-12-browser-external-prompt-perception-source-acceptance.md`
+- `docs/dev/plans/0110-5-2026-08-12-p110-poc5-foundation-stress-and-entry-gate-plan.md`
+- `docs/dev/notes/0110-5-2026-08-12-foundation-stress-source-acceptance.md`
+- `docs/dev/notes/0110-3-2026-08-12-guarded-desktop-interaction-source-acceptance.md`
+- `docs/dev/notes/0110-2-2026-08-12-deterministic-fixture-location-source-acceptance.md`
+- `docs/dev/notes/0110-1-2026-08-12-display-bound-frame-capture-source-acceptance.md`
+- `docs/dev/plans/0131-2026-08-25-controlled-x11-desktop-provider-foundation-acceptance-plan.md`
+- `docs/dev/notes/2026-04-22-agent-browser-service-roadmap.md`
+- `docs/dev/notes/2026-04-24-service-model-roadmap-review.md`
+- `docs/dev/notes/2026-05-20-remote-view-control-posture-checkpoint.md`
+- `docs/dev/notes/2026-06-22-rdp-browser-determinism-audit.md`
+
+## P109 | Runtime Dependability Handoff Remediation
+
+State: SOURCE ACCEPTED | INSTALLED CANARY NOT AUTHORIZED
+Current state: ambiguous global close rejects before effects, named Linux
+daemon sessions have a fixed-port no-browser supervisor, remote-view doctor
+reports requested-subject readiness separately from global advisories,
+renderer crashes produce typed command and service lifecycle evidence, and
+effectful service requests require accountable attribution. Canonical guarded
+Rust and the selected no-launch, client, dashboard, docs, architecture, and
+fixture gates are green at source commit `c00c9655`.
+
+### Next Recommendation
+
+Keep the runtime interlock disabled. If separately authorized, run Slice H with
+one disposable session and profile to prove installed fixed-port restart,
+requested-scope doctor status, advisory visibility, exact rollback, and zero
+unrelated effects. Do not use Google Messages or Facebook as the first canary.
+
+### Evidence
+
+- `docs/dev/notes/0109-2026-08-11-dependability-handoff-review.md`
+- `docs/dev/notes/0109-2026-08-11-runtime-dependability-execution-receipt.md`
+- `docs/dev/plans/0109-2026-08-11-runtime-dependability-handoff-remediation-plan.md`
+
+## P97 | CLI Command Timeout Layering Repair
+
+State: CLOSED
+Current state: ordinary CLI commands carry global `--job-timeout-ms` into both
+the control-plane worker and Chromium's renderer, successful navigation reads
+browser-level target metadata, and terminal responses no longer wait for
+health probes. Linux daemon reuse avoids hashing the full executable when the
+live daemon and CLI share one inode. Installed executable SHA-256 is
+`17f393c716f63de5008a25045f1ead0a4377efb7936300c8e1bcce2247d5995b`;
+install and remote-view doctors are ready, and retained Last30Days PID 63205
+remains live.
+
+### Next Recommendation
+
+Require fresh operator authority before another Last30Days Facebook provider
+proof. Preserve renderer-side termination, process-exit-only cleanup, and
+response-before-health ordering in future control-plane changes.
+
+### Evidence
+
+- `docs/dev/plans/0097-2026-08-08-cli-command-timeout-layering-repair-plan.md`
+- `docs/dev/notes/2026-08-09-facebook-search-target-cdp-runtime-stall.md`
+
+## P96 | Durable Remote-View Handoff
+
+State: CLOSED
+Current state: successful remote-view opens return authenticated opaque handoff
+URLs whose identity survives Guacamole connection, route, display, viewer, and
+target churn. A sidecar preserves handoff records across retained legacy daemon
+writes, and authenticated resolution reacquires current provider state for the
+same logical browser and tab while explicit close remains terminal.
+
+### Next Recommendation
+
+Consume the durable URL as the canonical operator handoff and keep raw provider
+routes as diagnostic evidence only. Preserve dashboard authentication, opaque
+public identity, exact profile ownership, and explicit-close fail-closed
+behavior in future resolver changes.
+
+### Evidence
+
+- `docs/dev/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md`
+
+## P95 | Remote-Control Duplicate-Pressure Readiness Repair
+
+State: CLOSED
+Current state: remote-control readiness keeps raw install-doctor success
+separate from its effective single-route gate. Sole duplicate-profile pressure
+with zero readiness-impacting candidates remains visible but no longer blocks
+remote control. Mixed, malformed, timed-out, and readiness-impacting install
+reports still fail closed, and the actual open request retains its
+target-profile duplicate guard.
+
+### Next Recommendation
+
+Resume the bounded Last30days remote-control workflow from the installed
+`remoteControl.status=ready` gate. Treat the open request's target-profile
+conflict result as authoritative and do not weaken it if live ownership has
+changed since this closeout.
+
+### Evidence
+
+- `docs/dev/plans/0095-2026-08-07-remote-control-duplicate-pressure-readiness-repair-plan.md`
+- `docs/dev/notes/0095-2026-08-07-last30days-remote-control-duplicate-pressure-handoff.md`
+
+## P94 | Profile Lifecycle UX
+
+State: CLOSED
+Current state: actionable profile rows expose Open browser and route their exact
+profile identity through the no-launch guided launcher. Every live
+service-owned browser can be politely closed from the workspace tree or Service
+browser table through the advertised service contract. Detected non-owned
+browsers remain lifecycle-disabled.
+
+### Next Recommendation
+
+Add an operator-reviewed compatibility-evidence onboarding surface for stored
+profile and browser pairs that the launcher currently shows as blocked. Keep
+launch unavailable until the existing capability and validation gates pass.
+
+### Evidence
+
+- `docs/dev/plans/0094-2026-08-06-profile-lifecycle-ux-plan.md`
+
+## P93 | Stored-Profile Browser Opening
+
+State: CLOSED
+Current state: installed browser-capability preflights preserve their global
+launch flags and pass against exact compatibility evidence. The dashboard
+launcher carries service identity and exact custom profile paths together.
+Two service-owned stored-profile browsers are running with distinct PIDs,
+private displays, CDP endpoints, screenshots, and controllable streams. The
+Last30days browser is visibly authenticated on Facebook. The AuraCall profile
+opens ChatGPT from its exact path, but its saved login is currently logged out.
+
+### Next Recommendation
+
+Use the installed dashboard launcher for future stored-profile starts, and
+repeat both profile identity fields on direct follow-up CLI commands. Treat the
+AuraCall ChatGPT readiness row as drifted until a separate authorized login and
+freshness-verification pass succeeds.
+
+### Evidence
+
+- `docs/dev/plans/0093-2026-08-05-stored-profile-browser-opening-plan.md`
+
+## P92 | Passwordless Helper Compatibility and Guacamole Text Input Defaults
+
+State: CLOSED
+Current state: compatible helper and managed AppArmor policy drift no longer
+cross another `sudo -v` boundary, and AppArmor-disabled WSL kernels do not
+request an inapplicable policy bootstrap. Installed route-user and
+display-access scripts require the narrow passwordless helper without direct
+sudo fallbacks. The live Guacamole web container loads the versioned defaults
+extension, and a fresh browser origin reads back text input with later user
+overrides preserved.
+
+### Next Recommendation
+
+Consume this closed slice in the next reviewed workstation candidate. Keep the
+live extension mounted until that candidate owns the same artifact through the
+installed payload.
+
+## P91 | Systemd Interlock Self-Quiesce Repair
+
+State: CLOSED
+Current state: the self-quiesce defect is repaired and validated, and the
+corrected binary and source-free payload are installed with matching
+provenance. The dashboard public route and PostgreSQL backup timer are healthy.
+The compatible-helper path is now source-complete and the installed helper
+reports ready without interactive sudo. The recurring interlock remains
+disabled pending a current candidate install and coordinated runtime handoff.
+`wsl-chrome-3` was recovered separately on Route A; four other stale daemon
+owners still truthfully bind the prior executable and cannot be forced
+closed safely.
+
+### Next Recommendation
+
+Keep this repair closed. Issue #76 owns the distinct current production
+Service State monitor lock-timeout regression.
+
+## P90 | Route-Bound Display Proof Diagnostics
+
+State: CLOSED
+Current state: two last30days X successor attempts selected the correct profile
+and route B, then failed visible-window proof because display `:11` was reported
+as `display_probe_unavailable`. The retained lease preserved the typed proof
+failure, but CLI error rendering collapsed it into a generic page timeout.
+
+### Next Recommendation
+
+The reviewed executable is installed after the litscout owner paused its
+workflow, but install doctor fails closed on source-free manifest and
+root-owned helper drift. Complete `agent-browser install workstation --apply
+--json` from an interactive sudo-capable terminal, then require install doctor
+to pass before consuming another last30days source attempt.
+
+## P89 | Native Focus for Route-Bound Handoff
+
+State: CLOSED
+Current state: route-bound handoff uses native X11 focus after exact-target
+navigation. The installed cold LinkedIn feed gate passed exact-target,
+visible-window, and operator-route proof in 5.5 seconds.
+
+### Next Recommendation
+
+Consume this repair through last30days source acceptance; keep ordinary
+`view_focus` CDP behavior unchanged.
+
+## P88 | Active-Target Remote-View Readback
+
+State: CLOSED
+Current state: exact-active readback reuses retained target metadata and avoids
+redundant CDP target activation. Focus behavior was completed by Plan 0089.
+
+### Next Recommendation
+
+Preserve exact-active reuse and real target switching as separate paths.
+
+## P87 | Remote-View Blank-Target Acquisition
+
+State: CLOSED
+Current state: route-bound new tabs attach at `about:blank`, then use no-wait
+destination navigation and exact-target readback. The live destination gate
+passed; later handoff issues were closed by Plans 0088 and 0089.
+
+### Next Recommendation
+
+Preserve blank-target acquisition for remote-view opens only.
+
+## P86 | Remote-View Open Per-Job Timeout
+
+State: CLOSED
+Current state: `remote-view open --job-timeout-ms` carries positive per-job
+timeouts into the control plane; live jobs recorded the configured 90 seconds.
+
+### Next Recommendation
+
+Keep client timeout policy explicit and user-scoped at the caller.
+
+## P85 | Service-Tab-Handle Profile Routing
+
+State: CLOSED
+Current state: the shared service-tab-handle routing helper preserves browser,
+session, target, and profile identity across every follow-on client request.
+Focused client/type checks pass, and the one live rerun proved target-bound
+LinkedIn URL/title readback, browser-visible route handoff, one matching tab,
+and cleanup.
+
+### Next Recommendation
+
+Return to last30days Plan 0018 and execute fresh bounded successor intervals for
+Reddit, X, Facebook, and LinkedIn using their configured access-method order.
+
+## P84 | Handle-Bound Live-Gate Readback
+
+State: CLOSED
+Current state: the live gate now reads URL/title through the exact returned
+service-tab handle. Its sole rerun reached P85's distinct dropped-profile
+client-routing defect and cleaned up safely.
+
+### Next Recommendation
+
+Continue through P85; do not return to generic active-tab rediscovery.
+
+## P83 | Route-Owned Live-Gate Attribution
+
+State: CLOSED
+Current state: route-owned stream selection and its stale duplicate-route
+regression pass. The sole live rerun reached the distinct Plan 0084 generic-tab
+readback defect and cleaned up safely.
+
+### Next Recommendation
+
+Continue through P84; do not reopen P83 or weaken route-owned evidence.
+
+## P82 | Fresh Install Productization and v0.28.0 Release
+
+State: CLOSED
+Current state: `v0.28.0` is published from exact commit `4132e782`. Its public
+Linux x64 binary reproduces the source-free workstation substrate on the
+accepted disposable Ubuntu host and passes installed-hash, doctor, remote-view,
+and no-launch route proof.
+
+### Current State
+
+- Public `v0.28.0` is published with seven supported binaries and a checksummed
+  manifest.
+- The installed runtime and recurring interlock are binary-owned and do not
+  require a repository working directory or pnpm.
+- The public release includes P81's readiness-gated route projection.
+- Packet F independent audits found installer locking, credential-transport,
+  payload-integrity, route-environment, validation-selection, CI, and
+  release-note binding defects. Repairs are implemented, and all three
+  independent rechecks passed.
+- Release `v0.28.0` was prepared through PR 7 and published from `4132e782`.
+- The source-free payload, pinned Guacamole assets, one-sudo host preparation,
+  and binary-owned canonical route reconciliation are present in the public
+  release with focused local fixtures green.
+- Clean-overlay execution exposed a too-small cloud disk before the reboot
+  gate. The VM harness now provisions 24 GiB overlays, and installer preflight
+  requires 6 GiB free before authorization or mutation.
+- The resized overlay proved the one-prompt and reboot boundary, then exposed a
+  cold Guacamole header-account race after a JVM restart. Reconciliation now
+  uses application readiness plus an exact database postcondition; a new clean
+  candidate run later passed after the bounded readiness repair.
+- The following clean continuation passed account and route opening, then
+  exposed a systemd fresh-unit reset ordering defect. Activation now checks
+  exact failed state through a state-bearing raw command read before resetting
+  prior interlock failure state because file-derived `LoadState=loaded` does
+  not prove a unit is manager-loaded. A reset race is accepted only after a
+  second read proves the failed state cleared.
+- The resumed candidate exposed a retiring-daemon cleanup race during
+  executable handoff. Shutdown now removes Unix session artifacts only when
+  the shared socket path still matches the daemon's original device and inode;
+  the focused regression and live handoff smoke pass.
+- The next clean exact-candidate run passed through user-unit activation and
+  install doctor, then final remote-view doctor exposed missing `xdpyinfo` and
+  a legacy host-guacd assumption. The package set and doctor now cover display
+  inspection, visual-proof tools, pinned container-backed Guacd, and managed
+  Chrome outside `PATH`.
+- The rebuilt candidate passed clean install, reboot continuation, idempotent
+  rerun, PostgreSQL backup, and isolated restore. A live Route A open then
+  exposed Ubuntu 24.04 AppArmor blocking the managed Chrome sandbox user
+  namespace. Host preparation now installs and loads a path-scoped `userns`
+  profile without disabling Chromium's sandbox or the host restriction, and
+  remote-view doctor gates on that policy. The same live open subsequently
+  reached `operatorVisible=ready`.
+- The exact rebuilt clean host installed and reloaded that policy across
+  reboot, then completed its zero-prompt continuation. A subsequent standalone
+  doctor exposed a separate discovery gap: install-time doctor used an
+  explicit support root, while later doctor runs missed the versioned
+  source-free helper directory. Discovery now includes
+  `~/.local/lib/agent-browser/<version>/scripts`.
+- Commit `ce26f0f6` produced exact candidate SHA-256
+  `06e3b85ebc734c914ad8937afe0f169107cd6e646f5c129ebe1d7afe29aacca2`.
+  After applying its emitted stale-viewer remediation, idempotent convergence
+  passed with exact installed hash parity and active user services.
+- A fresh login shell passed standalone install and remote-view doctors from
+  the versioned installed support root. Remote control, many-to-many
+  prerequisites, and the sandbox policy all reported ready with no issues.
+- The exact candidate opened Route A at `guacamole:1`, connection `1`, and
+  display `:10` with `operatorVisible=ready`; cleanup restored the entry to
+  `available` with no allocation.
+- Whole-slice local validation is green. The full Rust suite found one stale
+  source-string assertion for an installer helper whose signature had gained
+  arguments; production privilege-before-dependency order was already
+  correct, and the repaired assertion passes in the serialized Rust CI
+  harness.
+- Fast CI run `30540857427` reached the post-Rust no-launch packet before
+  exposing older profile-lookup contract expectations and a fixture assumption
+  that service status starts a daemon and creates state. The assertions now
+  use the generated lookup template and selection order, while the fixture
+  handles the intentional offline status path. All ten no-launch smokes pass
+  locally.
+- Exact-head fast CI run `30541737279` is fully green at `0cbd1729`.
+  Manually dispatched full CI run `30542411936` exposed a macOS Apple Silicon
+  integer-width mismatch in workstation disk preflight. The portable
+  conversion helper, saturation regression, and target-gated Linux import pass
+  formatting, strict Clippy, and the complete serialized Rust harness locally.
+- Exact-head fast CI run `30543600554` passed at `2db64424`. Full CI run
+  `30544211166` moved Apple Silicon past the repaired compile site, then found
+  two Windows portability boundaries: a runtime-gated Linux-only WSL test and
+  unconditional Unix process probing in workstation lock recovery. Both now
+  use compile-time target gates, with non-Unix lock probing failing closed.
+- Exact-head fast CI run `30545123372` passed at `a5423d6e`. Full CI run
+  `30545744595` compiled and ran the Windows suite until a manifest fixture
+  embedded a native Windows path into JSON without escaping backslashes. The
+  fixture now uses structured JSON serialization.
+- Exact-head fast CI run `30547407293` passed at `60c784e3`. Full CI run
+  `30548163584` then exposed a Linux private-display readiness race: a fixed
+  startup delay allowed two launches to select `:90` under load. Selection is
+  now serialized, and launch returns only after the spawned Xvfb owns a ready
+  display or fails closed with cleanup. The same run found a macOS daemon
+  socket fixture exceeding `SUN_LEN`; that test now uses a short, unique Unix
+  temporary path.
+- Exact-head fast CI run `30549724644` passed at `98316d14`. Full CI run
+  `30550334355` reached the complete Windows suite and exposed native-path
+  fixture assumptions, Unix-only home isolation, and an actual Windows
+  process-liveness gap in installer inventory. The path fixtures now compare
+  native paths, the repository test is Unix-gated, and Windows inventory uses
+  `windows-sys` to distinguish active processes. The native E2E lane also
+  exposed recovery tracing lost after intentional terminal-browser compaction.
+  Relaunch now reconstructs the bounded recovery tombstone from preserved
+  event history, retains trace context, and completes the
+  process-exited-to-ready recovery sequence.
+- Candidate fast CI, candidate full CI, remediation full CI, the corrected
+  release dry run, publication, and published-asset verification are green.
+- The public Linux x64 artifact and installed binary share SHA-256
+  `4af2aba4e3670b2ffcd9601ab0134ad24cd13ec9e8131212f42a5645cb9baa22`.
+- Source-free reinstall, install doctor, remote-view doctor, and no-launch
+  Route A planning passed on the accepted disposable Ubuntu VM.
+- Plan
+  `docs/dev/plans/0082-2026-07-29-fresh-install-productization-and-v0-28-0-release-plan.md`
+  and the dated release validation note own the bounded implementation and
+  final evidence.
+
+### Next Recommendation
+
+Treat `v0.28.0` as the supported public workstation baseline. Start any
+post-release defects as separately bounded lanes rather than reopening P82.
+
+## P81 | Guacamole Route-Pool State Reconciliation
+
+State: CLOSED
+Current state: normal convergence now projects readiness-verified Guacamole
+routes into retained service state. Stable route A resolves to
+`guacamole:1/:11`, stable route B resolves to `guacamole:2/:12`, and the
+installed recurring interlock plus a no-launch route-open proof pass.
+
+### Current State
+
+- Readiness reports route A as `guacamole:1` on `:11` and route B as
+  `guacamole:2` on `:12`.
+- The failed Plan 0012 acquisition selected legacy `guacamole:4/:10` because
+  convergence discarded route-readiness JSON before reconciliation.
+- The repaired convergence path passes successful route-readiness JSON into
+  guarded service reconciliation, and installed retained state now matches
+  routes `1/:11` and `2/:12`.
+- Active conflicting allocations remain unchanged and are reported instead of
+  being redirected.
+- The applied convergence and the next scheduled interlock pass completed
+  successfully.
+- A no-launch stable-entry proof selected route A as `guacamole:1/:11` with no
+  browser launch, route checkout, or tab opening.
+- Plan
+  `docs/dev/plans/0081-2026-07-28-guacamole-route-pool-state-reconciliation-plan.md`
+  owns the source repair, installed no-launch proof, and closeout.
+
+### Next Recommendation
+
+Leave source authentication and canary work in Plan 0012. Authorize one fresh
+attempt only when the operator is ready; no request ID was consumed by P81.
+
+## P80 | Guacamole PostgreSQL Durability Remediation
+
+State: CLOSED
+Current state: the Docker Desktop WSL stale-bind root cause is proved and
+removed from the live PostgreSQL path. The current two-route database now runs
+from a Docker named volume with cluster-identity continuity, daily checksummed
+backups, and a passing isolated restore drill.
+
+### Current State
+
+- The former long-running container saw its declared WSL bind as `tmpfs`,
+  while the host and a fresh probe saw the retained ext4 directory. This mount
+  namespace split caused a new `initdb` after WSL restarts.
+- PostgreSQL now uses named volume
+  `agent-browser-guacamole-postgres-data` on ext4.
+- The restored database retains two canonical route rows, 22 parameters, and
+  four connection permissions.
+- Schema assurance fails closed on stale bind, cluster identity mismatch,
+  partial schema, or absent schema for a recorded identity.
+- The installed daily backup service and recurring runtime interlock both
+  complete successfully; their timers are enabled and active.
+- Plan
+  `docs/dev/plans/0080-2026-07-28-guacamole-postgres-durability-remediation-plan.md`
+  and the dated validation note own the causal evidence and recovery contract.
+
+### Next Recommendation
+
+Keep the old bind directory only as a forensic artifact until an explicit
+retention decision. Treat named-volume state as live authority and paired dump
+plus manifest files as recovery authority.
+
+## P79 | Route-Specific Guacamole RDP Isolation Repair
+
+State: CLOSED
+Current state: the two managed Guacamole rows were migrated in place to
+distinct route-specific users, live displays `:11` and `:12` are ready, the
+single-route and many-to-many readiness surfaces are ready, and the recurring
+interlock completes successfully without duplicate or repeated route repair.
+
+### Current State
+
+- Guacamole has exactly two canonical managed RDP connections, preserving ids
+  `1` and `2`, using `agent-browser-rdp-a` and `agent-browser-rdp-b`.
+- The managed rows have no `color-depth` parameter and each retains two read
+  grants.
+- Route displays `:11` and `:12` have live X11 sockets and display access.
+- Route readiness, remote control, many-to-many prerequisites, install doctor,
+  and one read-only convergence pass report ready.
+- The user-scoped interlock service completed with result `success` and no
+  route mutation steps; the enabled timer is active and waiting.
+- Source commits `2dcac761` and `641f45ae` are pushed to `origin/main`.
+- Plan
+  `docs/dev/plans/0079-2026-07-28-route-specific-guacamole-rdp-isolation-repair-plan.md`
+  owns the bounded diagnosis, implementation, live repair, and closeout.
+
+### Next Recommendation
+
+Keep application-browser and source-authentication work behind its own
+authorization. Open a separate durability packet for Guacamole PostgreSQL
+backup, retention, restore validation, and the unexplained reinitialization
+events.
+
+## P78 | Guacamole Route Fixture Recovery Interlock
+
+State: BLOCKED
+Current state: the deterministic controller repair and documentation are
+implemented. The authorized replacement live attempt created the two expected
+Guacamole route records and permissions, then failed because XRDP reattached
+both same-user connections to display `:10` instead of allocating route B's
+display `:11`. [Issue #85](https://github.com/CochranResearchGroup/agent-browser/issues/85)
+owns the remaining route-isolation outcome.
+
+### Current State
+
+- Guacamole PostgreSQL reinitialized at 2026-07-27 11:46:23 UTC. Deterministic
+  recovery now created two route connections and their required read
+  permissions.
+- The recurring runtime interlock ensures the schema and can restore missing
+  route displays. The repaired controller now selects the exact
+  `provision_second_guacamole_rdp_connection` remedy, runs the guarded
+  apply-by-default existing-user sync, and refreshes doctors before display
+  restoration.
+- The remote-view acquisition preflight correctly rejects launch while no
+  display allocation or available route-pool entry exists.
+- The retained replacement-attempt receipt records successful fixture
+  provisioning and `restore_rdp_route_displays` status 1. Current readiness
+  reports route A ready on `:10` and route B blocked because `:11` has no X11
+  socket.
+- XRDP 0.9.24 runs `Policy=Default`. Its logs show route B reconnecting to
+  route A's `:10` session, so the configured 24 and 32 color-depth distinction
+  does not isolate these same-user routes on the installed runtime.
+- No usable PostgreSQL backup was found. Repeated initialization events remain
+  unexplained and require a separate durability packet after route recovery.
+- Plan
+  `docs/dev/plans/0078-2026-07-27-guacamole-route-fixture-recovery-interlock-plan.md`
+  owns the deterministic controller repair, fixture-backed regression,
+  documentation, one separately authorized live recovery attempt, and
+  installed interlock proof.
+
+### Evidence
+
+- `~/.agent-browser/convergence/local-runtime-latest.json`
+- `scripts/converge-local-runtime.js`
+- `scripts/test-local-runtime-convergence.js`
+- `docs/dev/notes/2026-07-22-rdp-boot-readiness-failure.md`
+
+### Next Recommendation
+
+Open a new bounded route-isolation plan that reviews the existing route-specific
+users against a reviewed XRDP session-policy alternative. Do not rerun route
+sync or display restoration, launch an application browser, or diagnose source
+authentication until one isolation mechanism is explicitly authorized and
+validated.
+
+## P77 | Profile Discovery And Manual Browser Launch UX
+
+State: CLOSED
+Current state: P77 completed the 2026-07-25 profile-discovery and manual
+browser requirement as one coordinated selector, catalog, lifecycle,
+inventory, dashboard, runtime-handoff, and stale-state interlock lane.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0077-2026-07-25-profile-discovery-and-manual-browser-launch-ux-plan.md`
+  is complete.
+- The source note remains unchanged at
+  `docs/dev/notes/2026-07-25-profile-discovery-and-manual-browser-launch-ux.md`.
+- Exact X lookup selects `last30days-facebook` by authenticated-target
+  evidence, while an unmatched identity returns structured `not_found`.
+- CLI, HTTP, MCP, generated client, and dashboard share the same ranked
+  discovery and recommendation contract.
+- Detached no-CDP runtime-login browsers remain visible in service status and
+  the workspace rail with accurate unsupported-automation controls.
+- Runtime publication hands active browser processes and ports to fresh
+  daemons, while the convergence interlock expires stale leases, repairs route
+  pool drift, and verifies current executable listeners.
+
+### Evidence
+
+- `docs/dev/notes/2026-07-25-profile-discovery-and-manual-browser-launch-ux.md`
+- `docs/dev/plans/0077-2026-07-25-profile-discovery-and-manual-browser-launch-ux-plan.md`
+- `cli/src/native/service_lifecycle.rs`
+- `cli/src/native/stream/http.rs`
+- `cli/src/runtime_profile.rs`
+- `packages/dashboard/src/components/workspace-navigator.tsx`
+
+### Next Recommendation
+
+Keep future profile, manual-browser, and dashboard-launch changes within the
+Plan 0077 selector precedence, no-CDP inventory, access-plan routing,
+one-process-per-profile, runtime-handoff, and stale-state interlock contracts.
+
+## P76 | Clipboard Target Recovery And Interaction Performance
+
+State: CLOSED
+Current state: P76 completed the remediation lane for the retained LinkedIn
+clipboard-read incident. Clipboard deadlines and recovery are bounded,
+clipboard-write capture is opt-in and restored, dependent batches expose
+timings while preserving target identity, role locators use browser-computed
+accessible names, and ordinary closed-tab status is a bounded projection of
+the complete retained authority.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`
+  is complete.
+- The source incident note is
+  `docs/dev/notes/2026-07-19-clipboard-read-target-recovery-performance.md`.
+- Installed validation proved the unresolved-promise deadline and same-target
+  recovery, bounded write capture and restoration, dependent-batch target
+  stability and timings, accessible-name lookup, and bounded versus full
+  closed-tab status modes.
+- `agent-browser install doctor` passed after local runtime publication with a
+  ready dashboard, converged runtime state, zero stale runtimes, and no install
+  issues.
+
+### Evidence
+
+- `docs/dev/notes/2026-07-19-clipboard-read-target-recovery-performance.md`
+- `docs/dev/plans/0076-2026-07-19-clipboard-target-recovery-and-interaction-performance-remediation-plan.md`
+- `cli/src/native/cdp/client.rs`
+- `cli/src/native/browser.rs`
+- `cli/src/native/actions.rs`
+- `cli/src/native/clipboard.rs`
+- `cli/src/native/dependent_batch.rs`
+- `cli/src/native/service_status_projection.rs`
+
+### Next Recommendation
+
+Keep future clipboard and interaction changes within the Plan 0076 typed
+deadline, restoration, target-identity, timing, accessibility, and projection
+contracts.
+
+## P01 | Remote View Backend Reliability
+
+State: CLOSED
+
+### Current State
+
+- Plan `docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md`
+  is closed with a validated RDP and Guacamole reliability gate.
+- The validated handoff is recorded in
+  `docs/dev/notes/2026-05-26-rdp-guac-slice-e-reliability-gate.md`.
+- This lane validates the current RDP and Guacamole deployment as a
+  supportable full-control path. It does not by itself switch default backend
+  settings.
+- CDP streaming and VNC/noVNC remain separate future backend campaign items.
+
+### Evidence
+
+- `docs/dev/notes/2026-05-26-remote-view-backends-campaign.md`
+- `docs/dev/notes/2026-05-26-rdp-guac-slice-a-ownership-audit.md`
+- `docs/dev/notes/2026-05-26-rdp-guac-slice-b-live-validation.md`
+- `docs/dev/notes/2026-05-26-rdp-guac-slice-c-live-validation.md`
+- `docs/dev/notes/2026-05-26-rdp-guac-slice-d-live-validation.md`
+- `docs/dev/notes/2026-05-26-rdp-guac-slice-e-reliability-gate.md`
+
+### Next Recommendation
+
+Keep P01 closed unless a release gate regresses. Open a new lane for CDP
+streaming or VNC/noVNC rather than reopening this RDP and Guacamole lane for
+unrelated backend families.
+
+## P02 | Guacamole Remote View Routing Hardening
+
+State: CLOSED
+Current state: P02 route authority, takeover-event, and shared-route
+RDP/Guacamole validation are complete. Distinct-route Guacamole coverage is a
+future provider-configuration expansion.
+
+### Current State
+
+- Plan `docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md`
+  is closed.
+- This lane addresses the post-P01 review findings: hardcoded Guacamole route
+  repair, metadata-only `view_takeover`, and external-open behavior that can
+  race ahead of the service-owned takeover result.
+- P02 keeps RDP and Guacamole as the current full-control path, but requires
+  route identity and viewer ownership to become service-owned before calling
+  the path hardened for multiple external browser workspaces.
+- Production code no longer synthesizes the current workstation Guacamole
+  client hash. Service stream records carry route metadata, dashboard external
+  open waits for `view_takeover` acceptance, and `view_takeover` persists a
+  `viewer_takeover_requested` service event.
+- Same-day viewer-transfer and browser-switch live gates passed with the
+  configured shared Guacamole route and service-visible route identity.
+
+### Evidence
+
+- `docs/dev/plans/0001-2026-05-26-rdp-guac-hardening-test-plan.md`
+- `docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md`
+- `docs/dev/notes/2026-05-26-remote-view-backends-campaign.md`
+- `docs/dev/notes/2026-05-27-guac-route-authority-audit.md`
+- `docs/dev/notes/2026-05-27-guac-route-hardening-validation.md`
+
+### Next Recommendation
+
+Open a new lane only when a second live Guacamole connection or distinct-route
+provider setup is available. Keep P02 closed for the current shared-route
+hardening path.
+
+## P03 | Guacamole RDP Many-To-Many Viewing
+
+State: CLOSED
+Current state: P03 is complete. The route-pool, private display allocation,
+viewer lease, dashboard tiling, reconcile, doctor, and Linux privilege-helper
+installer surfaces are implemented, and the OCR-backed many-to-many live gate
+passed with two simultaneous Guacamole/RDP browser routes. P03 covers the
+distinct-route and private-display provider expansion that P02 intentionally
+deferred.
+
+### Current State
+
+- Plan `docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md`
+  is closed.
+- The target behavior is many browser workspaces and many external viewers:
+  each preferred remote-headed browser gets a private virtual display, each
+  private display gets a distinct Guacamole/RDP route, and observers and
+  controllers are tracked by service-owned viewer leases.
+- The current workstation can still use the validated shared Guacamole route
+  as an explicit fallback, but shared route behavior is focus switching, not
+  simultaneous multi-browser viewing.
+- The first supported implementation path is a static Guacamole route pool
+  backed by distinct RDP targets. Dynamic Guacamole connection generation can
+  come later. `agent-browser doctor remote-view` is now the unified
+  doctor/setup discovery surface for install state, existing RDP users,
+  Guacamole records, network health, service state, and route-display state.
+- P03 Slice B is complete for no-launch service allocation contracts. The
+  service model, HTTP read collections, MCP read resources, contract metadata,
+  service job audit fields, and client read helpers expose remote-view
+  allocation records. Service request actions and generated client helpers
+  mutate route checkout, route release, viewer lease request, viewer lease
+  release, and controller lease takeover state without launching a browser.
+  Dashboard workspace rows, browser details, view-stream cards, and workspace
+  viewport headers render route id, display allocation, provider mode, viewer
+  count, controller lease, and readiness from typed stream metadata.
+- P03 Slice C is complete. Remote-headed launches now default to private
+  virtual display allocation, records display allocation ids on browser records
+  and view streams, creates per-session private display allocation records,
+  keeps explicit shared-display and ambient-display requests modeled as
+  non-private scope, releases only the closed browser's owned display
+  allocation, and marks owned allocations orphaned when a browser process
+  exits. The live private-display smoke passed with two distinct display names.
+- P03 Slice D is in progress. `service_remote_view_route_checkout` can select
+  compatible static route-pool entries for private display allocations, rejects
+  target mismatches and private-route contention, and returns
+  `route_pool_unavailable` when no compatible pool entry is available.
+  Checkout also rejects explicit failed or stale route-pool readiness with
+  `route_pool_not_ready` before marking a route externally viewable. The
+  remaining Slice D gates are live provider probes and a live two-entry
+  Guacamole route pool smoke with distinct RDP targets.
+- P03 Slice E is in progress. Viewer lease heartbeat is a service request
+  action, single-viewer routes return typed denial metadata for extra active
+  viewers, controller requests return typed denial metadata when another
+  controller is active, explicit controller takeover remains auditable, and
+  retained service events cover viewer connect/disconnect, controller
+  requested/granted/denied, and route release.
+- P03 Slice F is in progress. Workspace rows and the remote viewport now score
+  retained streams so private pool, generated, or discovered routes outrank
+  shared fallback streams, duplicate Guacamole route diagnostics continue to
+  explain shared-route contention on affected rows, and `view=workspace:tile`
+  renders the top two embeddable service-owned remote routes with independent
+  tile refresh and shared-route warnings. Single-workspace view now has
+  service-owned recovery controls for route refresh, observer reconnect,
+  controller takeover, and retained viewer release. The remaining Slice F gate
+  is live rendered inspection with two RDP-capable workspace rows.
+- P03 Slice G is complete. `service_reconcile` now repairs remote-view
+  allocation drift by orphaning display allocations and routes whose owner
+  browser is missing or unhealthy, disconnecting unavailable-route viewer
+  leases, expiring stale viewer leases, clearing stale controller references,
+  preserving healthy routes, and persisting those reconciled remote-view
+  records through the repository merge path. Service incidents now distinguish
+  route-pool exhaustion, route unreachable, missing display allocation,
+  provider-auth failure, and iframe-blocked readiness from retained
+  remote-view state. `service_route_pool_repair` now gives operators a
+  dry-run-first service-request action for stale checked-out route-pool
+  entries, reporting stale reasons and resetting only stale entries to
+  `available` when `apply` is true. The live route-cleanup gate
+  `pnpm test:rdp-guac-route-cleanup-live` passed on 2026-05-28 with artifacts
+  at `/tmp/agent-browser-rdp-guac-route-cleanup-2026-05-28T04-52-11-882Z`,
+  proving stream restart preserves a healthy checkout, browser crash reconcile
+  orphans the route, dry-run repair reports one stale checkout, and apply
+  returns the pool entry to `available`.
+- P03 Slice H now has a guarded live gate script,
+  `pnpm test:rdp-guac-many-to-many-live`. The harness is wired into docs and
+  requires two distinct route-pool entries before it can launch the full matrix.
+  The first invocation failed early with a configuration artifact at
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-28T04-59-03-972Z/failure.json`
+  because the workstation does not currently expose two distinct Guacamole/RDP
+  routes. A follow-up live topology check confirmed the user-scoped environment
+  only exposes the shared `AGENT_BROWSER_REMOTE_VIEW_URL`, service state has no
+  persisted route pool, and the Guacamole database has one RDP connection to
+  host XRDP. P03 now has `pnpm test:rdp-guac-route-pool-readiness` as a
+  non-secret preflight for this blocker; it checks the Guacamole Compose
+  containers, Guacamole web ingress, guacd-to-RDP TCP reachability, redacted
+  connection metadata, and distinct target identity before emitting a route
+  pool. Its current `--report-only` output shows Guacamole Postgres,
+  Guacamole web ingress, guacd, and the existing host-XRDP backend ready, but
+  only one RDP connection and one distinct target identity are available. P03
+  also has `pnpm setup:rdp-guac-route-pool` as the interactive provisioning command for
+  the first static two-route shape. It creates two local XRDP users and two
+  Guacamole RDP connections, but it needs interactive `sudo` and therefore was
+  syntax-checked rather than run in the current non-interactive session. P03
+  now also has `pnpm sync:rdp-guac-existing-user-route-pool` for the existing
+  `agent-browser-rdp` user path. That no-sudo sync created Guacamole
+  connections 2 and 3 with color depths 24 and 32, and route-pool readiness
+  now selects those managed connections as ready distinct targets. P03
+  also has `pnpm inspect:rdp-route-displays` as a non-sudo post-bootstrap
+  helper that maps the route users to active XRDP display names and prints the
+  display-target variables needed by the many-to-many live gate. The display
+  inspector and route-pool readiness smoke can print copyable shell exports
+  when run with `--shell`. A follow-up topology check confirmed that
+  host-XRDP route creation is only a
+  bootstrap: current private browser displays are service-owned Xvfb
+  allocations, while host XRDP creates separate login Xorg sessions. The final
+  P03 gate must prove each route displays its claimed browser, not merely a
+  separate XRDP desktop. The many-to-many live gate now enforces that with
+  screenshot crop plus OCR target-binding proof against each tile iframe. It
+  also supports the first testable host-XRDP topology: route entries can carry
+  distinct display names, and the gate will launch each browser directly onto
+  its route's XRDP display before checking out the route.
+- P03 is now refocused around a doctor-first setup contract.
+  `agent-browser doctor remote-view` composes install doctor, runtime status,
+  Guacamole/RDP readiness, route-pool inventory, route-display inspection,
+  user-scoped secret key presence, Docker/network checks, and RDP user
+  inventory. Current live evidence shows managed Guacamole connections 2 and 3
+  are selected route-pool candidates and the route pool is ready, but opening
+  both route clients still produced one existing-user XRDP display (`:10`).
+  XRDP logs show both clients logged in on display 10 and connected to the
+  same Xorg PID. The doctor now recommends an explicit route-specific user or
+  XRDP policy isolation fallback instead of further ad hoc Guacamole records.
+  `pnpm install:privileges` now installs the narrow root-owned helper and
+  `agent-browser` group path for one-time authorization, with sudoers limited
+  to the installed helper outside the writable checkout.
+  `pnpm setup:rdp-guac-route-pool` is guarded by that route-display evidence
+  and refuses to create route-specific users unless the current inspector
+  output proves the existing-user route collapsed, or an operator passes a
+  reviewed `--force` override. After route-specific sessions exist, `pnpm
+  grant:rdp-route-display-access` reports or applies the narrow local X access
+  grants needed for the agent user to launch Chrome onto those XRDP-owned
+  displays. The CLI installer now includes
+  `agent-browser install --with-deps --with-remote-view-privileges` so release
+  binaries can install the `agent-browser` group, root-owned helper, and
+  sudoers rule with one intentional authorization. The live doctor reports the
+  helper ready, the operator user in the group, and no interactive sudo
+  required for recurring desktop setup. The OCR-backed many-to-many live gate
+  passed on 2026-05-29 with
+  route A on display `:12`, route B on display `:11`, local Guacamole frame
+  URLs, two dashboard clients, refresh coverage, Browser A close, Browser B
+  survival, and route-pool release proof. Artifacts:
+  `/tmp/agent-browser-rdp-guac-many-to-many-2026-05-29T01-34-49-701Z`.
+
+### Evidence
+
+- `docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md`
+- `docs/dev/notes/2026-05-28-guac-rdp-p03-provider-topology-audit.md`
+- `docs/dev/plans/0002-2026-05-27-guac-remote-view-routing-hardening-plan.md`
+- `docs/dev/notes/2026-05-27-guac-route-hardening-validation.md`
+- `docs/dev/notes/2026-05-26-remote-view-backends-campaign.md`
+
+### Next Recommendation
+
+Keep P03 closed unless the live gate regresses. The next release checkpoint
+should build a candidate binary, run `agent-browser install doctor`,
+`agent-browser doctor remote-view`, and the many-to-many live gate from the
+installed candidate.
+
+## P04 | Release Candidate Install Validation
+
+State: CLOSED
+Current state: P04 validated the release-candidate checkpoint after P03. The
+installed 0.26.1 candidate now proves that the installer-owned remote-view
+privilege setup, install doctor, remote-view doctor, default runtime attach
+path, and many-to-many Guacamole/RDP live gate work from the operator command
+path rather than from the mutable repo checkout.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md`
+  is closed.
+- P03 proved the feature path on the live host. P04 proved the operator install
+  and release surfaces around that path.
+- The installed candidate exposes
+  `agent-browser install --with-deps --with-remote-view-privileges`, keeps the
+  helper root-owned under `/usr/local/libexec/agent-browser`, reports
+  `requiresInteractiveSudo=false` from `agent-browser doctor remote-view
+  --json`, and passes the many-to-many live gate with the installed command on
+  `PATH`.
+- The default-profile lock regression is fixed: an implicit
+  `agent-browser --json get title` attaches to the live default runtime profile
+  instead of launching another Chrome against the locked profile directory.
+
+### Evidence
+
+- `docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md`
+- `docs/dev/notes/2026-05-29-p04-release-candidate-install-validation.md`
+- `docs/dev/plans/0003-2026-05-28-guac-rdp-many-to-many-viewing-plan.md`
+- `docs/dev/notes/2026-05-28-p03-doctor-first-refactor.md`
+
+### Next Recommendation
+
+Keep P04 closed unless the installed command, doctor surfaces, privilege helper,
+or many-to-many live gate regresses. The next slice should keep hardening the
+Guacamole/RDP productization milestone rather than turning the checkpoint into
+a formal release.
+
+## P05 | Runtime Checkpoint And No-Release Handoff
+
+State: CLOSED
+Current state: P05 validated and installed a `0.27.0` roadmap checkpoint
+runtime without publishing a formal release.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md`
+  is closed.
+- The authoritative validation base is `v0.26.1`; `v0.25.4` is not on the
+  current `HEAD` ancestry and was not used as the release base.
+- The checkpoint runtime version is `0.27.0`.
+- Version metadata is synchronized across `package.json`, `cli/Cargo.toml`,
+  `cli/Cargo.lock`, and `packages/dashboard/package.json`.
+- `CHANGELOG.md` keeps current work under `## Unreleased`, release extraction
+  markers remain around the latest published `0.26.1` entry, and
+  `docs/src/app/changelog/page.mdx` does not list a public `v0.27.0` release.
+- The GitHub Actions `Release` workflow is manual-only so ordinary pushes to
+  `main` cannot publish a GitHub release accidentally.
+- Selected validation passed, including Rust format, clippy, focused Rust
+  service tests, service API/MCP parity, browser capability registry draft,
+  service client, docs build, dashboard tests, dashboard build, installed skill
+  sync, install doctor, remote-view doctor, default-profile attach, and the
+  OCR-backed many-to-many live gate.
+- The installed 0.27.0 checkpoint checksum is
+  `e99093bb46891983afe71c2bf992a5f5c1ded16ecbbd29504a3e9e55a16be33f`.
+
+### Evidence
+
+- `docs/dev/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md`
+- `docs/dev/notes/2026-05-29-p05-release-preparation-validation.md`
+- `docs/dev/notes/2026-05-29-p05-validation-selector.txt`
+- `docs/dev/plans/0004-2026-05-29-release-candidate-install-validation-plan.md`
+- `docs/dev/notes/2026-05-29-p04-release-candidate-install-validation.md`
+
+### Next Recommendation
+
+Proceed to P06. The next lane should harden the installer, doctor, route-pool,
+Guacamole/RDP preflight, and many-to-many operational evidence needed before a
+formal release milestone.
+
+## P06 | Guacamole RDP Productization Hardening
+
+State: CLOSED
+Current state: P06 validated the Guacamole/RDP productization hardening
+milestone without publishing a formal release.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
+  is closed.
+- The rebuilt installed checkpoint runtime passes install doctor, remote-view
+  doctor, and the many-to-many live gate from the installed command.
+- `agent-browser install doctor --json` now reports remote-view privilege
+  readiness with helper, sudoers, group, membership, helper check, nested issue
+  fields, service readiness from a no-launch service-status probe, and
+  `requiresInteractiveSudo=false` on the provisioned machine.
+- The privilege installer now exits before privileged changes on an
+  already-provisioned machine when the helper, sudoers file, group, membership,
+  and non-interactive helper check are ready.
+- `agent-browser doctor remote-view --json` now reports stable top-level issue
+  codes, viewer browser and OCR prerequisites, privilege readiness, route-pool
+  readiness, route displays, display access, and many-to-many readiness.
+- The many-to-many harness now hydrates route-pool and route-display
+  environment from doctor output, auto-discovers common viewer browsers,
+  prefers installed `agent-browser`, and classifies public Guacamole route URLs
+  with `non_embeddable_guacamole_url`.
+- `pnpm test:install-privileges-clean-fixture` proves the clean reset-fixture
+  first-apply privilege installer path uses exactly one `sudo -v` boundary and
+  the second apply performs only a non-interactive helper readiness check.
+- `agent-browser install --with-deps --with-remote-view-privileges` now runs
+  remote-view privilege setup before Linux dependency installation, so the
+  explicit helper authorization boundary comes first.
+- Route-pool readiness passed after restarting `agent-browser-guacamole` and
+  `agent-browser-guacd`.
+- The final installed 0.27.0 checkpoint checksum for P06 is
+  `cb9f81a245464c516d313aee875fa076049cdc5559e9342250c9680463faa9e4`.
+- P06 did not publish a formal release, move release markers, or add a public
+  `0.27.0` docs changelog entry.
+
+### Evidence
+
+- `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
+- `docs/dev/notes/2026-05-29-p06-installer-doctor-productization.md`
+
+### Next Recommendation
+
+Keep P06 closed unless install doctor, remote-view doctor, route-pool
+readiness, or the many-to-many live gate regresses. Open a separate formal
+release lane when the maintainer wants to prepare and publish a release.
+
+## P07 | v0.27.0 Formal Release
+
+State: CLOSED
+Current state: `v0.27.0` is released. The public GitHub release exists with
+all seven expected platform assets.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
+  is closed.
+- P06 closed the operational milestone that kept P05 from publishing a public
+  release.
+- This lane moves the validated `0.27.0` checkpoint into release metadata,
+  validation, PR merge, and GitHub release publication.
+- Release-preparation validation passed and is recorded in
+  `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`.
+- Early release workflow dry runs failed on cross-target Rust compile errors
+  and Linux X11 linking; the fix note is
+  `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`.
+- The successful dry run and real release workflow both ran against
+  `17a284f8624e6108473970e2ec2b380debf9f7ac`.
+- GitHub release:
+  `https://github.com/CochranResearchGroup/agent-browser/releases/tag/v0.27.0`
+
+### Evidence
+
+- `docs/dev/plans/0005-2026-05-29-runtime-checkpoint-and-no-release-handoff-plan.md`
+- `docs/dev/plans/0006-2026-05-29-guac-rdp-productization-hardening-plan.md`
+- `docs/dev/plans/0007-2026-05-29-v0-27-0-formal-release-plan.md`
+- `docs/dev/notes/2026-05-29-p07-v0-27-0-release-prep-validation.md`
+- `docs/dev/notes/2026-05-29-p07-release-dry-run-cross-target-fix.md`
+
+### Next Recommendation
+
+Keep P07 closed unless the published assets or release tag need correction.
+Start a new lane for any post-release patch or next-version work.
+
+## P08 | CDP Tab Streaming For Non-Remote Browsers
+
+State: CLOSED
+Current state: P08 is the next feature-planning lane after the `v0.27.0`
+release. Existing runtime streaming already uses CDP screencast, but
+service-owned non-remote browsers do not yet advertise dashboard-openable,
+tab-focused `cdp_screencast` view streams.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md`
+  is open.
+- P03 through P07 hardened remote-headed Guacamole/RDP viewing and release
+  delivery. P08 intentionally targets local or attached CDP-controllable
+  browsers that do not need a remote desktop route.
+- Existing source has `StreamServer`, CDP `Page.startScreencast`,
+  `ViewStreamProvider::CdpScreencast`, and dashboard view-stream rendering.
+  The missing work is service-state ownership, readiness, tab focus, and
+  dashboard-openable URLs for non-remote browsers.
+
+### Evidence
+
+- `docs/dev/plans/0008-2026-05-30-cdp-tab-streaming-for-non-remote-browsers-plan.md`
+- `cli/src/native/stream/mod.rs`
+- `cli/src/native/stream/cdp_loop.rs`
+- `cli/src/native/stream/websocket.rs`
+- `cli/src/native/service_model.rs`
+- `packages/dashboard/src/components/service-panel.tsx`
+
+### Next Recommendation
+
+Start P08 Slice A with a contract and ownership audit before editing runtime
+streaming code.
+
+## P13 | Resource Monitor And Garbage Collector
+
+State: CLOSED
+Current state: Plans 0026, 0027, and 0029 are closed. Preserve their resource
+inventory, guarded GC, and minimal-profile behavior; route new process pressure
+through a current defect such as issue #77.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md`
+  is closed with read-only resource inventory, guarded GC apply, dashboard
+  visibility, timer summary output, and install doctor resource warnings.
+- Plan
+  `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+  is closed after making access-plan and launch behavior promote the minimal necessary
+  number of runtime profiles for simultaneous account, website, browser-build,
+  and remote-view isolation sets.
+- The 2026-06-04 cleanup found stale multi-day `chromium-stealthcdp` process
+  groups, orphaned Xvfb displays, stale no-argument `agent-browser` daemon
+  siblings, and stale default runtime-state pointers.
+- The live dashboard service remained healthy, but stale resources outside the
+  service MainPID consumed high CPU and several GB of memory.
+- Existing retained-state cleanup covers stale service records and custom
+  profile metadata. P13 covers live OS resource inventory, stale process
+  classification, dry-run GC, guarded apply, dashboard resource-pressure
+  visibility, and prevention of avoidable duplicate runtime profile/browser
+  lanes.
+
+### Evidence
+
+- `docs/dev/plans/0026-2026-06-04-resource-monitor-and-garbage-collector-plan.md`
+- `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+- `docs/dev/plans/0010-2026-05-30-retained-orphan-profile-cleanup-plan.md`
+- `docs/dev/plans/0025-2026-06-01-remote-view-target-attribution-and-idle-display-plan.md`
+
+### Next Recommendation
+
+Keep P13 closed and preserve its monitoring contracts. Use issue #77 for the
+fresh ownership and cleanup-eligibility investigation.
+
+## P14 | AuraCall Service CDP Upgrade
+
+State: CLOSED
+Current state: Plan 0033 records all six implementation slices closed. New
+consumer-specific migration pressure should open a fresh bounded issue rather
+than retaining this historical umbrella.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`
+  is closed.
+- The motivating downstream user is AuraCall, but the lane is intentionally
+  framed as generic agent-browser service primitives rather than
+  provider-specific AuraCall scraping logic.
+- The handoff note
+  `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md` records the
+  requested feature set and links the relevant sibling AuraCall source paths.
+- Existing access-plan and service-request contracts provide the foundation.
+  Slices A through D now provide explicit profile-origin and BYOP registration
+  semantics, lease-backed service tab handles, policy-gated CDP attach/detach
+  helpers, and bounded evaluate service requests. Slice E has started with a
+  compact diagnostics service request and generated client helper for valid
+  service tab handles. Software clients still need readiness evidence and
+  migration ergonomics before migrating raw CDP provider code safely.
+
+### Evidence
+
+- `docs/dev/notes/2026-05-09-access-plan-service-request-handoff.md`
+- `docs/dev/notes/2026-06-13-auracall-cdp-feature-requests.md`
+- `docs/dev/plans/0033-2026-06-13-auracall-service-cdp-upgrade-plan.md`
+- `docs/dev/plans/0027-2026-06-05-minimal-runtime-profile-reuse-plan.md`
+
+### Next Recommendation
+
+Preserve the completed generic primitives. Route any new AuraCall migration
+gap through a current issue with its own acceptance boundary.
+
+## P16 | Remote Control Ready Command
+
+State: CLOSED
+Current state: P16 is closed. The route-specific `remote_view_open` path is
+live-proven, documented, and handed off for downstream clients.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
+  is closed.
+- The motivating live failure loaded LinkedIn successfully in
+  `stealthcdp-default`, but the operator first saw a Guacamole error document
+  because the Guacamole PostgreSQL schema was missing, then saw only an
+  `xterm` because the browser was on hidden Xvfb display `:90` while the
+  external Guacamole route showed XRDP display `:10`.
+- The route-specific live path now proves the desired outcome through
+  `remote-view open`: the selected route-pool entry resolves to Guacamole
+  connection `3`, route `guacamole:3`, display `:11`, and display allocation
+  `remote-view-display:11`.
+- `agent-browser doctor remote-view --json` reports `status=ready`,
+  `remoteControl.status=ready`, and `manyToMany.status=ready` for the current
+  route-pool topology.
+- `remote_view_open` now grants route-display access through the installed
+  privileged helper when needed before launching on the selected route display.
+- `remote-view open` accepts the documented `--browser-build
+  stealthcdp_chromium` and `--provider rdp_gateway` flags, and post-launch
+  route verification failures clean up before returning the typed error.
+- Downstream handoff is recorded in
+  `docs/dev/notes/2026-06-21-remote-view-open-route-specific-handoff.md`.
+
+### Evidence
+
+- `docs/dev/plans/0036-2026-06-18-rdp-ready-to-go-plan.md`
+- `docs/dev/plans/0038-2026-06-19-remote-headed-cutover-proof-plan.md`
+- `docs/dev/plans/0039-2026-06-20-remote-control-ready-command-plan.md`
+- `docs/dev/notes/2026-06-21-remote-view-open-route-specific-handoff.md`
+
+### Next Recommendation
+
+Keep P16 closed. Downstream clients should adopt the generic `remote_view_open`
+path and run the required remote-view doctor, fixture, and many-to-many gates
+in their own environment before changing browser-owner defaults.
+
+## P69 | Shared Profile Routing And Handoff Deepening
+
+State: CLOSED
+Current state: Plan 0069 records complete live shared-profile routing proof and
+no remaining work. Plan 0111 and issue #69 exclusively own later atomic owner
+reservation and multi-agent authority.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0069-2026-07-06-shared-profile-routing-and-handoff-deepening-plan.md`
+  is closed.
+- The source routing note is
+  `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md`.
+- The plan applies the architecture-review recommendation to deepen the
+  route-bound handoff module first, then tighten workspace inventory
+  actionability and contract catalog/client ergonomics.
+- The target behavior keeps the exclusive-profile-process invariant while
+  allowing multiple operators or clients to open separate tabs through one
+  retained browser/profile owner.
+
+### Evidence
+
+- `/tmp/architecture-review-agent-browser-2026-07-06T15-20-00.html`
+- `docs/dev/plans/0037-2026-06-19-runtime-profile-sharing-plan.md`
+- `docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md`
+- `docs/dev/plans/0068-2026-07-06-operator-handoff-and-one-time-profile-hardening-plan.md`
+- `docs/dev/notes/2026-07-06-last30days-profile-routing-failure.md`
+
+### Next Recommendation
+
+Keep P69 as the route-bound handoff consolidation authority. Its Slice A and
+Slice B shared-profile routing behavior are implemented. Use P111 for the
+remaining browser-owner reservation, multi-agent participation, scoped
+operation authority, and duplicate-evidence reconciliation work.
+
+## P42 | Runtime Convergence
+
+State: CLOSED
+Current state: P42 closed after making dashboard, daemon sessions, route
+helpers, service state, and live workspace rows converge on one explicit
+runtime identity.
+
+### Current State
+
+- Plan `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md` is closed.
+- Install doctor now reports active runtime inventory, live dashboard runtime
+  readiness, explicit runtime convergence summary states, stale daemon
+  executable drift, and stale stream-backend drift.
+- Daemon reuse compares executable SHA-256, not only package version.
+- The dashboard live rail excludes retained/no-action diagnostic records and
+  groups detected non-owned CDP browsers separately.
+- `pnpm converge:local-runtime -- --apply --json` is the bounded local repair
+  command for publish/restart, stale daemon remedies, Guacamole schema guard,
+  route-pool readiness, and route display-access grants.
+- Final installed readbacks reported install doctor ready, remote-view ready,
+  `runtimeConvergence.status=converged`, and route-pool readiness
+  `success=true`.
+
+### Evidence
+
+- `docs/dev/plans/0040-2026-06-21-dashboard-binary-harmonization-plan.md`
+- `docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md`
+- `docs/dev/plans/0042-2026-06-22-runtime-convergence-plan.md`
+
+### Next Recommendation
+
+Keep P42 closed. Downstream work should use the convergence command and doctor
+readbacks before live browser work, then proceed to the many-to-many
+Guacamole/RDP live gate and P41 foreign-CDP browser management without turning
+non-owned browser addressability into agent-browser lifecycle ownership.
+
+## P41 | Foreign CDP Browser Discovery And Control
+
+State: ACTIVE
+Current state: discovery, PNG capture, responsive Watch live image feed, and
+an explicit time-bounded Borrow control path are installed and live-proven on
+a disposable non-owned Chrome process.
+
+### Current State
+
+- Borrow is scoped to one detected foreign CDP port, one live page target, and
+  one authenticated dashboard superuser.
+- Grants default to five minutes, are capped at fifteen minutes, and accept only
+  pointer, keyboard, and wheel input.
+- Release and expiry fail closed. Close, Kill, profile release, lifecycle
+  ownership, arbitrary CDP commands, evaluation, and navigation remain outside
+  the foreign-browser path.
+- The installed runtime advertises `workspace.foreignCdpBorrow`. A disposable
+  live proof completed capture, Watch, pointer and keyboard input, wheel
+  dispatch, Release, post-release denial, and unchanged foreign ownership.
+- The remaining P41 gate is a native CDP screencast transport plus durable
+  Service or Activity audit history. The current Watch feed polls screenshots,
+  and Borrow audit metadata currently reaches the service log.
+
+### Evidence
+
+- `docs/dev/plans/0041-2026-06-22-foreign-cdp-browser-discovery-and-control-plan.md`
+
+### Next Recommendation
+
+Add the native CDP screencast and durable Borrow audit surface without widening
+Borrow into arbitrary CDP or lifecycle control, then close P41 after an
+installed live proof.
+
+## P43 | Route Handoff Confusion Audit
+
+State: COMPLETE
+Current state: P43 closed the Facebook remote-view incident class where route
+infrastructure was ready and CDP targets existed, but the dashboard still
+presented terminal-only Guacamole views for active browser rows. The lane now
+has route-handoff audit output, parser-safe one-line CLI guidance, route-pool
+and profile-lock diagnostics, row-bound operator-visible proof, dashboard proof
+gating, downstream client proof enforcement, and repeatable no-launch plus OCR
+live gates.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0043-2026-06-22-route-handoff-confusion-audit-plan.md`
+  is open.
+- Slice A is complete. `pnpm audit:route-handoff -- --json` now emits the
+  read-only route-handoff audit artifact for active browsers, tabs, displays,
+  routes, route-pool entries, viewer leases, runtime convergence, stream URLs,
+  and retained visual proof.
+- Slice B is complete. `agent-browser remote-view open --help` now shows the
+  route-bound one-liner, flag-placement guidance, and session versus
+  session-name distinction, and parser coverage preserves post-subcommand
+  runtime/profile/session-state flags.
+- Slice C is complete. `route_pool_unavailable`,
+  `route_pool_entry_missing`, and `route_pool_entry_unavailable` now keep
+  stable error codes and append compact diagnostic JSON with requested
+  route/display/provider identity, matching and available pool entries, ready
+  display allocations, existing remote-view routes, and recommended commands.
+- Slice D is complete. Chrome profile-lock failures now append diagnostic JSON
+  with lock PID, runtime-profile and service-browser ownership matches, primary
+  owner, and safe reuse, close, inspect, or separate-profile remedies.
+- Slice E is complete. `remote-view open` now returns top-level
+  `operatorVisible` proof. Dry-runs report `not_checked`; successful opens
+  report `ready` with route, browser, session, display, provider, and visible
+  proof identity.
+- Slice F is complete. Dashboard workspace rows now carry operator-visible
+  route-proof state, require browser-window proof before RDP gateway View,
+  Control, or external open actions, and keep terminal-only or missing-proof
+  route rows as disabled live diagnostics rather than no-action attention
+  entries.
+- Slice G is complete. Service-client route-bound remote-view helpers now
+  require `operatorVisible.state=ready` before non-dry-run handoff success,
+  expose a compact route, tab, profile, and visual-proof summary helper, and
+  keep infrastructure-only readiness as an explicit caller opt-in.
+- Slice H is complete. `pnpm test:route-confusion-gates` now preserves the
+  parser, route-pool, profile-lock, route-handoff audit, and dashboard
+  proof-classification cases. `pnpm validation:select -- --base <ref>`
+  recommends that gate for route, dashboard stream, service-client, and
+  remote-view command surfaces.
+- The OCR-backed live route gate now opens a neutral fixture URL through
+  `remote-view open`, verifies route-handoff audit classification
+  `route_bound_ready`, verifies visual state `browser_window_visible`, and
+  OCRs the route display for the unique fixture marker.
+- Slice H fixed repeat route-pool checkout for same-owner route-bound handoffs:
+  a checked-out route-pool entry is reusable only when the ready retained route
+  belongs to the same browser, session, and display allocation.
+- `last30days` now calls the route-bound `agent-browser remote-view open`
+  one-liner for Facebook, uses the `last30days-facebook` runtime profile, and
+  rejects missing-proof, CDP-only, or terminal-only Guacamole/RDP handoff
+  success before scraping.
+- The incident note is
+  `docs/dev/notes/2026-06-22-facebook-remote-view-open-friction.md`.
+- Live readback on 2026-06-22 showed `session:default` on profile
+  `last30days-facebook`, display `:11`, and generic `rdp_gateway` stream
+  metadata, plus a separate LitScout browser on display `:93` with multiple
+  `127.0.0.1` tabs.
+- The P43 route, browser, tab, stream, and operator-visible proof convergence
+  gap is closed.
+
+### Evidence
+
+- `agent-browser doctor remote-view --json` reported remote-view ready and
+  still recommended the OCR-backed many-to-many gate as the next proof.
+- `agent-browser service browsers --json` reported Facebook and LitScout as
+  separate active remote-headed browser rows with generic Guacamole stream
+  URLs.
+- CodeGraph inspection identified the route-binding path in
+  `cli/src/native/actions.rs` and the dashboard stream helper in
+  `packages/dashboard/src/lib/service-view-streams.ts` as the key audit joins.
+- Live OCR proof on 2026-06-22 passed with artifact directory
+  `/tmp/agent-browser-remote-view-open-live-2026-06-22T16-23-29-784Z`,
+  route `guacamole:5`, display allocation `remote-view-display:12`,
+  route-handoff classification `route_bound_ready`, visual state
+  `browser_window_visible`, and fixture text
+  `REMOTE VIEW OPEN FIXTURE 3815575`.
+- `pnpm test:service-cdp-tab-streaming-live` was retried twice and remained
+  blocked before CDP validation by the existing temporary-daemon startup race:
+  `Daemon failed to start`.
+
+### Next Recommendation
+
+Open the next lane on the temporary-daemon startup race that still blocks
+`pnpm test:service-cdp-tab-streaming-live` and other temp-session live smokes.
+Keep it separate from P43: the route-bound Guacamole/RDP handoff contract now
+has row-bound proof, downstream enforcement, no-launch fixtures, and OCR live
+coverage.
+
+## P44 | RDP Browser Deterministic Refactor
+
+State: CLOSED
+Current state: Plan 0044 is complete. Later remote-view architecture and route
+recovery work has separate plan authority; do not retain this plan as an open
+umbrella.
+
+### Current State
+
+- Plan
+  `docs/dev/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md`
+  is in progress.
+- Slice A is complete. `remote_view_open` now normalizes a typed
+  `RemoteViewOpenIntent` before acquisition, uses `viewStreamProvider` as the
+  canonical RDP gateway field, preserves `provider=rdp_gateway` as a
+  compatibility alias, and rejects provider/view-stream conflicts before
+  route binding or launch.
+- Help, README, docs site, and repo skill guidance now prefer
+  `--view-stream-provider rdp_gateway` for `remote-view open` while documenting
+  the legacy alias boundary.
+- The generated service-client helper surface now preserves
+  `viewStreamProvider` for `remote_view_open` helper requests.
+- Slice B is complete. `remote_view_open`, route preflight, and route checkout
+  now share a no-mutation `RemoteViewAcquisitionPlan` that explains selected
+  route/display decisions, same-owner reuse, stale-browser fallback avoidance,
+  blockers, and suggested repair commands before acquisition mutates state.
+- Slice C is complete. `remote_view_open` now creates a persisted pending
+  acquisition lease, marks selected route-pool/display/route state pending, and
+  restores those records with typed cleanup evidence when display access,
+  launch, tab, focus, proof, or checkout fails. The forced-proof live smoke
+  passed with cleanup state `closed_new_browser` and rollback state
+  `rolled_back`, and the normal fixture smoke passed afterward with repeat
+  open, HTTP helper, CDP readback, X11 PID proof, route-handoff classification
+  `route_bound_ready`, visual state `browser_window_visible`, and OCR proof.
+- Slice C service-contract metadata coverage is in place for
+  `remoteViewAcquisitionLeases`, route checkout metadata, and route release
+  metadata. Live validation also hardened stale released display allocation
+  reclaim and same-owner pending reservation reuse during checkout.
+- Slice D is in progress. New route-pool XRDP users no longer start a
+  foreground terminal from `.xsession`; the privileged helper and route-pool
+  setup fallback now write an idle Openbox session that keeps XRDP alive for the
+  browser launch. Display proof now classifies a browser-obscuring terminal as
+  `terminal_topmost` and fails with `terminal_topmost_route`.
+- `agent-browser install doctor` and `agent-browser doctor remote-view` now
+  parse the installed privileged helper's route `.xsession` template into
+  `helperDesktopSession` and emit
+  `remote_view_route_desktop_helper_stale` when the installed helper still
+  writes a terminal-first route desktop. Current debug-binary readback on this
+  host reports `state=terminal_first_template`.
+- Slice E has started. Successful `remote_view_open` responses now preserve the
+  existing visible-window proof and add structured `operatorVisible` target
+  evidence plus route, display, browser, tab, stream, and Guacamole component
+  states. The service-client proof summary helper prefers those structured
+  fields when present.
+- Slice E now distinguishes `wrong_tab` from display visibility: a browser
+  window can be visible on the route while the selected target URL fails the
+  requested URL proof.
+- Slice E now distinguishes `guacamole_route_unavailable` from both wrong-tab
+  and display visibility failures when the display and tab are ready but the
+  operator route is not.
+- Slice E now distinguishes `cdp_target_unavailable` when the selected tab
+  result lacks a CDP target ID even though display and route proof can be ready.
+- Slice E now distinguishes `stale_route_record` when retained route-pool
+  metadata points at stale or mismatched route allocation state.
+- Slice E dashboard fixture coverage is in place. Workspace rows preserve the
+  expanded proof states from structured stream readiness and keep View and
+  Control disabled with state-specific reasons.
+- Slice F has started. Generic `tab_handle_refresh` now accepts
+  `replace_duplicates` through the daemon, HTTP, MCP, service schema, generated
+  client template, README, docs site, and repo plus installed skill guidance.
+  The policy reuses or opens one compatible target and returns
+  `duplicateTargetCleanup` evidence for best-effort closure of other compatible
+  live targets.
+- Slice F dashboard stale-target URL recovery is in place. Workspace viewport
+  control mode now treats missing, closed, blank, or target-shaped stale
+  `tab=target:*` selections as recoverable stale target identity, replaces the
+  URL with the current live service tab, and queues `view_focus` only after that
+  recovery.
+- Slice F route-bound tab acquisition now reuses a live same-origin target before
+  opening a new tab and records `tabAcquisitionDecision` plus
+  `duplicateTargetCleanup` evidence. The live smoke now asserts that CLI first,
+  CLI repeat, and HTTP helper opens converge to one active intended target.
+- Slice G has started. The existing `service_remote_view_route_preflight`
+  no-launch action now returns `fastPreflight` component evidence for route
+  launch eligibility, including acquisition-plan blockers, Guacamole route URL
+  shape, retained Guacamole and RDP readiness, display access, and route desktop
+  state. HTTP `GET /api/service/remote-view/route-preflight`, MCP
+  `service_remote_view_route_preflight`, and
+  `getServiceRemoteViewRoutePreflight()` now expose the same no-launch gate
+  without requiring clients to hand-build a generic service request.
+  Display-access probing is bounded so unreachable displays cannot hang fast
+  preflight. `pnpm test:remote-view-route-preflight-timing` exercises the
+  isolated HTTP/client path and asserts the fast preflight remains within a
+  bounded threshold without launching a browser.
+- Slice H has started. RDP gateway workspace rows with non-ready
+  operator-visible proof now move to `needs-attention` with disabled View and
+  Control reasons instead of remaining in the active control group. The
+  dashboard workspace fixture covers terminal-only, unbound, missing-proof,
+  wrong-tab, unavailable-route, missing-CDP-target, and stale-route rows while
+  preserving ready service-owned browsers as active controllable rows and
+  external CDP browsers as detected non-owned rows.
+- Slice H now has explicit `WorkspaceInventoryClass` metadata on the shared
+  workspace node model and selected-workspace context. Inspector, chat,
+  console, and automation consumers can distinguish service-owned controllable,
+  service-owned view-only, service-owned diagnostic, detected non-owned, viewer
+  client, retained history, service-owned session, and profile action rows
+  without inferring ownership from URL shape.
+- Slice H dashboard inventory refactor is complete. The Workspace inspector
+  now renders the selected row's canonical inventory Class, the focused
+  navigator and inspector-action smokes passed, and the dashboard was published
+  locally with runtime smoke coverage against
+  `http://127.0.0.1:4848/`. The installed executable SHA is
+  `6c7c9b879c1b564130fb74e4d2abec7502252033be14e66586c20477e7762649`;
+  the dashboard bundle SHA is
+  `10177dc55ce0a76f29fbcce7ede2acf8e7b5cbb896d83987ddff2e2aaa193967`.
+  After closing stale daemon session `default`, install doctor reports runtime
+  convergence `converged` with stale daemon count `0`.
+
+### Evidence
+
+- `docs/dev/notes/2026-06-22-rdp-browser-determinism-audit.md`
+- `docs/dev/plans/0044-2026-06-22-rdp-browser-deterministic-refactor-plan.md`
+
+### Next Recommendation
+
+Continue P44 by refreshing the installed privileged helper from an interactive
+sudo shell to close the Slice D live boundary, then run the guarded Slice F
+route-bound repeat-open live smoke on the refreshed route. After that, continue
+with Slice I foreign CDP integration boundaries and Slice J incident/state
+durability.
+Current doctor readback shows the repo helper is fixed and the installed helper
+is detected as `remote_view_route_desktop_helper_stale`; refreshing it requires
+an interactive sudo boundary because `sudo -n` is unavailable in this session.
+Doctor also reports readiness-impacting stale resource candidates.

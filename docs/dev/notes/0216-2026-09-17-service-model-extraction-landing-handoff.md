@@ -13,7 +13,7 @@ Related lanes: P204, P211, P215
 This note preserves the restart state used to land the accepted Service Model
 extraction without resuming the expression-by-expression privacy loop. The
 governing plan is
-[Plan 0216](../plans/0216-2026-09-17-service-model-extraction-landing.md).
+[Plan 0216](../../history/2026-10-05-legacy-planning/plans/0216-2026-09-17-service-model-extraction-landing.md).
 Plans 0205 and 0216 are closed historical evidence, not an active execution
 backlog.
 

@@ -26,7 +26,7 @@ occurred.
 
 ## Turn 341 | 2026-09-15
 
-[Plan 0195](docs/dev/plans/0195-2026-09-15-custom-profile-identity-repair.md)
+[Plan 0195](plans/0195-2026-09-15-custom-profile-identity-repair.md)
 and issue #131 are closed after PR #147 merged exact source head `ada1c62e` as
 `172ccdd2`; CI run 35013644563 passes every ordinary required gate. Earlier run
 35009619406 retains one unrelated Lease Authority process-observation flake;

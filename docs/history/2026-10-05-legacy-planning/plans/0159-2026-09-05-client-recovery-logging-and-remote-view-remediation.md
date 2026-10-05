@@ -36,8 +36,8 @@ correct browser, accept input, and work when reopened. Consolidate verified
 repairs into a concrete production-update decision instead of leaving source
 validation disconnected from delivery.
 
-The [postmortem](../notes/0152-2026-09-05-plan-0158-postmortem.md) and
-[D01–D15 register](../notes/0152-2026-09-05-plan-0158-defect-register.json)
+The [postmortem](../../../dev/notes/0152-2026-09-05-plan-0158-postmortem.md) and
+[D01–D15 register](../../../dev/notes/0152-2026-09-05-plan-0158-defect-register.json)
 are the fixed starting inventory. Preserve their historical status and failed
 attempts; record new dispositions here. Completing this successor does not
 retroactively pass P158's unexecuted full campaign, performance or endurance
@@ -1572,7 +1572,7 @@ state back to blue through remote DOM evaluation or accept white as the new
 oracle. The current synthetic marker remains clicked; preserve that state as
 evidence until the selected recovery or fixture-disposition step.
 
-The [delivery inventory](../notes/0153-2026-09-06-plan-0159-repair-delivery-inventory.md)
+The [delivery inventory](../../../dev/notes/0153-2026-09-06-plan-0159-repair-delivery-inventory.md)
 now separates inherited repairs, primary/frontend/provider dependencies, source
 composition, isolated installation, existing scoped proofs, and the remaining
 production bundle/rollback/override gates. It is preparation, not an approval-
@@ -1898,7 +1898,7 @@ production deployment explicitly pending. No new external probe was run.
 
 ## Checkpoint 45: concrete delivery proposal and policy disposition
 
-The [production delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+The [production delivery proposal](../../../dev/notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
 now names the frozen runtime/support identities, client dependency, conditional
 installer command, rollback custody, socket override disposition and installed
 outcome checks. Recommendation: retain production pending an explicit decision
@@ -1936,7 +1936,7 @@ complete. No new broad discovery or external retry is authorized by this step.
 
 Progress: `outcome_progress`. State transitions to COMPLETE for the frozen five
 criteria, with production delivery decision pending. The
-[acceptance audit](../notes/0155-2026-09-06-plan-0159-acceptance-audit.md)
+[acceptance audit](../../../dev/notes/0155-2026-09-06-plan-0159-acceptance-audit.md)
 records the criterion-by-criterion evidence and limits. W1/W3 artifact readback,
 selected W2 journal/actor/stream receipts, rollback/support custody, exact
 migration review and explicit retained-resource dispositions were inspected.
@@ -1944,7 +1944,7 @@ The final frozen release binary passes the source-free installer fixture;
 handoff documentation checks pass. Required Rust, migration, asset, client and
 docs validation is retained with its corresponding source/build boundaries.
 
-The [delivery proposal](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+The [delivery proposal](../../../dev/notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
 recommends retaining current production until a separate decision explicitly
 covers the 77 policy materializations. Criterion 4 permits that decision to
 remain pending. No production replacement, ACL mutation, override retirement,
@@ -1965,7 +1965,7 @@ Repair `8bd7f58a` resolves those three causes without relaxing ownership gates.
 The exact release binary now passes the original two-client W1 recovery probe
 and production custom-profile control, session-only use, conflict rejection,
 and headless close/reopen. All three production services run the repaired
-release. See the [delivery record](../notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
+release. See the [delivery record](../../../dev/notes/0154-2026-09-06-plan-0159-production-delivery-proposal.md)
 for immutable generation identity, test evidence and rollback custody.
 
 This closes the reproduced profile failures. Ambient remote-headed reopen

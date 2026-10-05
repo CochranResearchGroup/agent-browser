@@ -18,7 +18,7 @@ Integration model: short-lived branch through the protected `main` workflow
 
 Related plans: [Plan 0144](0144-2026-08-31-lease-authority-coordination-and-revocation-plan.md), [Plan 0155](0155-2026-09-02-durable-handoff-resume-intent-plan.md), [Plan 0156](0156-2026-09-02-full-runtime-shutdown-replacement-plan.md), [Plan 0157](0157-2026-09-02-profile-permissions-and-request-provenance-plan.md), [Plan 0161](0161-2026-09-09-first-class-profile-repair-and-reset-plan.md), [Plan 0162](0162-2026-09-10-production-desktop-slot-and-jit-viewer-allocation.md), [Plan 0165](0165-2026-09-11-bill-identifier-form-drift-repair.md), [Plan 0166](0166-2026-09-11-repository-custody-and-timed-out-connection-release.md), and [Plan 0167](0167-2026-09-11-production-scale-service-state-lock-attribution-and-critical-section-repair.md)
 
-Current execution status: [RUNBOOK.md](../../../RUNBOOK.md)
+Current execution status: [RUNBOOK.md](../RUNBOOK.md)
 
 ## Objective and authority
 

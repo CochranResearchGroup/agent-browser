@@ -183,37 +183,37 @@
   "sources": [
     {
       "id": "S-P158",
-      "path": "docs/dev/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0158-2026-09-02-frozen-candidate-historical-failure-stress-campaign.md",
       "kind": "governing_plan"
     },
     {
       "id": "S-P157",
-      "path": "docs/dev/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0157-2026-09-02-profile-permissions-and-request-provenance-plan.md",
       "kind": "identity_acl_and_logging_history"
     },
     {
       "id": "S-P156",
-      "path": "docs/dev/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0156-2026-09-02-full-runtime-shutdown-replacement-plan.md",
       "kind": "installer_and_shutdown_history"
     },
     {
       "id": "S-P148",
-      "path": "docs/dev/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0148-2026-09-01-runtime-host-supervisor-takeover-plan.md",
       "kind": "supervisor_history"
     },
     {
       "id": "S-P147",
-      "path": "docs/dev/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0147-2026-09-01-runtime-host-ingress-supervisor-restart-repair-plan.md",
       "kind": "ingress_generation_history"
     },
     {
       "id": "S-P142",
-      "path": "docs/dev/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0142-2026-08-29-service-state-concurrency-and-client-recourse-reliability-plan.md",
       "kind": "lock_and_timeout_history"
     },
     {
       "id": "S-P134",
-      "path": "docs/dev/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0134-2026-08-26-crash-epoch-and-profile-lifecycle-coherence-plan.md",
       "kind": "epoch_and_identity_history"
     },
     {
@@ -233,32 +233,32 @@
     },
     {
       "id": "S-P112",
-      "path": "docs/dev/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0112-2026-08-13-dashboard-remote-view-reconnect-repair-plan.md",
       "kind": "dashboard_reconnect_history"
     },
     {
       "id": "S-P100",
-      "path": "docs/dev/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0100-2026-08-09-service-status-projection-authority-deepening-plan.md",
       "kind": "projection_and_timeout_history"
     },
     {
       "id": "S-P096",
-      "path": "docs/dev/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0096-2026-08-07-durable-remote-view-handoff-plan.md",
       "kind": "durable_handoff_contract"
     },
     {
       "id": "S-P067",
-      "path": "docs/dev/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0067-2026-07-05-rdp-reattachment-stress-hardening-plan.md",
       "kind": "route_restart_and_rail_history"
     },
     {
       "id": "S-P063",
-      "path": "docs/dev/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0063-2026-06-27-s10-foreign-cdp-inventory-plan.md",
       "kind": "foreign_cdp_history"
     },
     {
       "id": "S-P062",
-      "path": "docs/dev/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md",
+      "path": "docs/history/2026-10-05-legacy-planning/plans/0062-2026-06-27-s9-stale-target-recovery-plan.md",
       "kind": "stale_target_history"
     },
     {
