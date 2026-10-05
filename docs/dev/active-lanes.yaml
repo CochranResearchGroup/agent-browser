@@ -1,5 +1,24 @@
 schema_version: 1
 work_item_tracking: required
-# Legacy custody records are preserved in docs/history/2026-10-05-legacy-planning/active-lanes.yaml.
-# P223 remains paused in the existing p220 working checkout; no checkout was removed.
-lanes: []
+lanes:
+  - id: P222
+    product_lane: PL-PLATFORM
+    objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup
+    plan: docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md
+    plan_ref: refs/remotes/origin/main
+    branch: platform/p220-remote-view-consumer
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    checkpoint: 3663b39390024520f71b321e66b6d9b07758575b
+    remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
+    integration_receipt: null
+    integration: Implementation lands through protected PRs after the bounded workflow outcome and relevant changed-surface gates
+    validation_status: Prior M1-M3 scenario acceptance retained; M4 workflow recovery and M5 reproducible use remain incomplete; re-anchoring adds no runtime proof
+    validation_ref: null
+    work_items: [CochranResearchGroup/agent-browser#202]
+    dependencies: []
+    overlaps: []
+    reconciled_overlaps: []
+    blocker: P223 execution remains paused at the reached operator effort ceiling; explicit resume required
+    updated_at: 2026-10-05
