@@ -19,8 +19,8 @@
 - Keep each rule in one authoritative location. Use `AGENTS.md` for routing and
   repo-specific constraints, and use linked policy files for the durable body;
   do not duplicate the same rule across both surfaces for emphasis.
-- Re-read the relevant adopted policy files at the start of any non-trivial turn.
-- Re-read the relevant adopted policy files when task scope changes mid-session.
+- For supported policy-context pilot tasks, a current cited decision packet satisfies the scoped policy read. Follow its reread triggers and canonical fallback paths.
+- For unsupported tasks or non-current packets, read the relevant canonical policies directly. Recheck policy when task scope changes; review canonical changes before refreshing manifest hashes.
 - Treat policy installation, policy enumeration, and `AGENTS.md` wiring as deterministic setup work rather than ad hoc prose copying.
 - Validate policy identity and wire-in uniqueness deterministically. Duplicate
   identities must name every conflicting path and fail closed until a

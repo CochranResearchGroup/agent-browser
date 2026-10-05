@@ -1,0 +1,1474 @@
+{
+  "schema_version": 1,
+  "fallback_paths": [
+    "AGENTS.md",
+    "docs/dev/policies/0001-policy-management.md",
+    "docs/dev/policies/0002-policy-upgrade-management.md",
+    "docs/dev/policies/0003-policy-adoption-feedback-loop.md",
+    "docs/dev/policies/0004-git-worktree-hygiene.md",
+    "docs/dev/policies/0005-commit-history-discipline.md",
+    "docs/dev/policies/0006-branch-and-integration-strategy.md",
+    "docs/dev/policies/0007-commit-and-push-cadence.md",
+    "docs/dev/policies/0008-versioning-and-release.md",
+    "docs/dev/policies/0009-turn-closeout.md",
+    "docs/dev/policies/0010-validation-and-handoff.md",
+    "docs/dev/policies/0011-graph-backed-memory-usage.md",
+    "docs/dev/policies/0012-codegraph-usage.md",
+    "docs/dev/policies/0014-website-surface-targeting.md",
+    "docs/dev/policies/0015-db-backed-state-governance.md",
+    "docs/dev/policies/0016-live-drift-reconciliation.md",
+    "docs/dev/policies/0017-backup-and-recovery-operations.md",
+    "docs/dev/policies/0018-visual-release-qa.md",
+    "docs/dev/policies/0019-web-interface-quality.md",
+    "docs/dev/policies/0020-documentation-change-control.md",
+    "docs/dev/policies/0021-subagent-workflow-optimization.md",
+    "docs/dev/policies/0022-preview-artifact-review.md",
+    "docs/dev/policies/0023-upstream-fork-maintenance.md",
+    "docs/dev/policies/0024-notes-and-memories.md",
+    "docs/dev/policies/0026-subagent-runtime-governance.md",
+    "docs/dev/policies/0028-goal-execution-governance.md",
+    "docs/dev/policies/0029-parallel-plan-design.md",
+    "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+    "docs/dev/policies/0032-runtime-state-governance.md",
+    "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+    "docs/dev/policies/0034-fieldwork-productization.md",
+    "docs/dev/policies/0035-monolith-extraction-discipline.md",
+    "docs/dev/policies/0036-architecture-guardrails.md",
+    "docs/dev/policies/0037-active-lane-coordination.md",
+    "docs/dev/policies/0038-multi-agent-reconciliation.md",
+    "docs/dev/policies/0039-policy-harvest-loop.md",
+    "docs/dev/policies/0042-code-testing-discipline.md",
+    "docs/dev/policies/0043-roadmap-runbook-governance.md",
+    "docs/dev/policies/0044-planning-discipline.md",
+    "docs/dev/policies/0045-model-selection-and-calibration.md",
+    "docs/dev/policies/0046-work-item-traceability.md",
+    "docs/dev/policies/0047-multi-session-development-operating-model.md",
+    "docs/dev/policies/0048-forge-issue-reporting.md",
+    "docs/dev/policies/0049-github-issue-operations.md",
+    "docs/dev/policies/0050-collaborative-development-workflow.md",
+    "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+    "docs/dev/policies/0052-session-and-worktree-admission.md",
+    "docs/dev/policies/0053-policy-context-pilot.md"
+  ],
+  "governance_inventory": [
+    {
+      "path": "AGENTS.md",
+      "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e"
+    },
+    {
+      "path": "docs/dev/policies/0001-policy-management.md",
+      "sha256": "666a087bda0556c7a00a3e3ca87b27ae3a0645e96304a550cf9280408350df32"
+    },
+    {
+      "path": "docs/dev/policies/0002-policy-upgrade-management.md",
+      "sha256": "643cfc9145f8e66fe69155b74e3db95cf418c48556a2d7b4770945465441b6fd"
+    },
+    {
+      "path": "docs/dev/policies/0003-policy-adoption-feedback-loop.md",
+      "sha256": "1c6a436083a768a403c1fef0967d7aa7fa3f793358789be05f4c5d65c341603d"
+    },
+    {
+      "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+      "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158"
+    },
+    {
+      "path": "docs/dev/policies/0005-commit-history-discipline.md",
+      "sha256": "ced63076b82cd883e6721693c55a3b1ed0674fd98bd677c377b6aaa6cd7e8e27"
+    },
+    {
+      "path": "docs/dev/policies/0006-branch-and-integration-strategy.md",
+      "sha256": "34db40ab0431054b5df30952b82463f81f49b324b2cef602097ae6be00c85fcd"
+    },
+    {
+      "path": "docs/dev/policies/0007-commit-and-push-cadence.md",
+      "sha256": "b5b053e154faa35d7957cb43ea8c30341d9fb54cf7dd768cca9c7eb72d177fc3"
+    },
+    {
+      "path": "docs/dev/policies/0008-versioning-and-release.md",
+      "sha256": "03b8511397935437c37c4caa12f30072fc317b3039765fc914c2ebb67bb53ad1"
+    },
+    {
+      "path": "docs/dev/policies/0009-turn-closeout.md",
+      "sha256": "b2af31262a58a4785ebf13f78b30f880d553d30d0568d9a598b0819f26eefd44"
+    },
+    {
+      "path": "docs/dev/policies/0010-validation-and-handoff.md",
+      "sha256": "c98b208ed78f1dd100e69494518b3189a3054b7a681691e7b249a3fc45201de7"
+    },
+    {
+      "path": "docs/dev/policies/0011-graph-backed-memory-usage.md",
+      "sha256": "ff4f97ea5ba36e4751fdb443e86909985109e6f2659ac92547bbecd004ab4299"
+    },
+    {
+      "path": "docs/dev/policies/0012-codegraph-usage.md",
+      "sha256": "77cfe94edf3ebc4cd22566d507ee5af47f4a464a1402dcb6c5ccaddfa0e7ad7d"
+    },
+    {
+      "path": "docs/dev/policies/0014-website-surface-targeting.md",
+      "sha256": "9610d825a5bbc4cde61dda61ce25fc8164d39536dac646792e61fc23351ab6ce"
+    },
+    {
+      "path": "docs/dev/policies/0015-db-backed-state-governance.md",
+      "sha256": "b1fc12c631cdab6eef0208db458be22cff4a26ccbe120a841a5c8b7bf6acfe39"
+    },
+    {
+      "path": "docs/dev/policies/0016-live-drift-reconciliation.md",
+      "sha256": "ab4fc374be4097caca5f42b0923d96717ea4d8e5e9f82ff92b0e2878684b6e63"
+    },
+    {
+      "path": "docs/dev/policies/0017-backup-and-recovery-operations.md",
+      "sha256": "15432166702161d76ad0e7999abd7e7830ad5bec39710bf6c86e3c690228beb7"
+    },
+    {
+      "path": "docs/dev/policies/0018-visual-release-qa.md",
+      "sha256": "9f31181df57f955e563fa852a333b290e062d5cff5aa54a2e561eae81f38cfa0"
+    },
+    {
+      "path": "docs/dev/policies/0019-web-interface-quality.md",
+      "sha256": "8f877d0d3b4527d955f5637d52f438599810abe3af5b9a5b240ee7c7c625a5d0"
+    },
+    {
+      "path": "docs/dev/policies/0020-documentation-change-control.md",
+      "sha256": "65323bab8fa538ef8d94971a45880c3777944dacfc7f2966bdc29e3925a26446"
+    },
+    {
+      "path": "docs/dev/policies/0021-subagent-workflow-optimization.md",
+      "sha256": "502f9ccded19e477ee02fcceb7bb2cafa22b2f47332e0470cefa1d37c2e6c942"
+    },
+    {
+      "path": "docs/dev/policies/0022-preview-artifact-review.md",
+      "sha256": "437c52c2ce1f7a06c851ca6136ef36c1efc466be16c68428db4271cd09fe5a52"
+    },
+    {
+      "path": "docs/dev/policies/0023-upstream-fork-maintenance.md",
+      "sha256": "1e132586bbfdeeea78aba1ba4ff499ad1ff2d1a06455add5bd81f1f7c555bc72"
+    },
+    {
+      "path": "docs/dev/policies/0024-notes-and-memories.md",
+      "sha256": "41bba721dbd95a4187fa678c9b0aaba7cf5631f20795ff7122a33b9051601e23"
+    },
+    {
+      "path": "docs/dev/policies/0026-subagent-runtime-governance.md",
+      "sha256": "66189ac9f2b05f36267214a4fd012baeca35136d093226f5c544aea26856fab6"
+    },
+    {
+      "path": "docs/dev/policies/0028-goal-execution-governance.md",
+      "sha256": "5eb3f238cb25e16f03c59f7dc7dd39ef857fe09be719e0fdfbeaff7be9a632f0"
+    },
+    {
+      "path": "docs/dev/policies/0029-parallel-plan-design.md",
+      "sha256": "a3e7666d1eb09284bfd11a806ac28003cb7b8f03296591092b8074e3ae3ad638"
+    },
+    {
+      "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+      "sha256": "a5c5e98d01d5f67cca22a62338002ffb3c5bc692bc167005b31806b000b2d3ec"
+    },
+    {
+      "path": "docs/dev/policies/0032-runtime-state-governance.md",
+      "sha256": "add3dc6878087ada7ae6358be720c6688c4a84a0e2ca1b9dbef39b8fd9f736fa"
+    },
+    {
+      "path": "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+      "sha256": "554324ed7aaabb4cdfbbea28ceb4be411a5571887732329189c3e5fd0366d6f2"
+    },
+    {
+      "path": "docs/dev/policies/0034-fieldwork-productization.md",
+      "sha256": "7ddaafd0de8cba624bcde6401417e5f771b94a96eb98566468c7138f4d4ec8a8"
+    },
+    {
+      "path": "docs/dev/policies/0035-monolith-extraction-discipline.md",
+      "sha256": "a73b0094d0f556af3597600cf216d91f74519153be453072861acbdcb348481a"
+    },
+    {
+      "path": "docs/dev/policies/0036-architecture-guardrails.md",
+      "sha256": "530f5a9f15a19d147c2c3c06804f07698d695a86251926acf9707c66a6fa685c"
+    },
+    {
+      "path": "docs/dev/policies/0037-active-lane-coordination.md",
+      "sha256": "e8f6982eb3af998382b3d0ee278ca13dd43931e5bc5567c6249404b82dd857b2"
+    },
+    {
+      "path": "docs/dev/policies/0038-multi-agent-reconciliation.md",
+      "sha256": "b534235189a6b32328db82b7c4f84ad42e77a3aadb50b4e6ae9c1a11afb1880a"
+    },
+    {
+      "path": "docs/dev/policies/0039-policy-harvest-loop.md",
+      "sha256": "abd9f2b72611fe91f20165e01250877bfcb8828e3b2feda638b3e5b28aca70ca"
+    },
+    {
+      "path": "docs/dev/policies/0042-code-testing-discipline.md",
+      "sha256": "cb1e8e731ddd9cf8fde59b81529e6be456f344b9075e07abf4b70c5770aee8e5"
+    },
+    {
+      "path": "docs/dev/policies/0043-roadmap-runbook-governance.md",
+      "sha256": "8f964251af141ec9c92eadc73383210c941bec2ec276a0a8d06522f814906317"
+    },
+    {
+      "path": "docs/dev/policies/0044-planning-discipline.md",
+      "sha256": "ef76dc965cbbe7c66a6899eab44fdd55491729b060f8abdd545dda2b149e4bf7"
+    },
+    {
+      "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+      "sha256": "f107b8201aea5022f002301ff531395b9d4522ef14307d40c59b75c1434cdb16"
+    },
+    {
+      "path": "docs/dev/policies/0046-work-item-traceability.md",
+      "sha256": "b2adb8ec67916fa3752cdbc63c836fc105d1767790aaae18ddc515f5bda5f5b5"
+    },
+    {
+      "path": "docs/dev/policies/0047-multi-session-development-operating-model.md",
+      "sha256": "6f401a58f3f35040478b754d83e1f7f2ce40d5dad05104b327a968e6a7ad639a"
+    },
+    {
+      "path": "docs/dev/policies/0048-forge-issue-reporting.md",
+      "sha256": "8dab2015b6f8fc84375058ddcf0373ca742c4252230056eb2ba9cca9754c31b3"
+    },
+    {
+      "path": "docs/dev/policies/0049-github-issue-operations.md",
+      "sha256": "00bdb890b717c9cb1fc2835e5a79079560ba172d52d50e6ce56ce8379a14f75e"
+    },
+    {
+      "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+      "sha256": "28386a566bd0a5cdcd1c1ab6181ed9968eebf898794058310e007e99820cf697"
+    },
+    {
+      "path": "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+      "sha256": "201d90c49d55bcc731cd85be1e9645692935c682d630a259582d281ca7462f3e"
+    },
+    {
+      "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+      "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35"
+    },
+    {
+      "path": "docs/dev/policies/0053-policy-context-pilot.md",
+      "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82"
+    }
+  ],
+  "profiles": [
+    {
+      "id": "agent-browser-documentation",
+      "scope": "Bounded documentation work in agent-browser; unresolved policy details require cited canonical reads. No implicit runtime authority.",
+      "task_kinds": [
+        "documentation"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Git / Worktree Hygiene"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0053-policy-context-pilot.md",
+          "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0010-validation-and-handoff.md",
+          "sha256": "c98b208ed78f1dd100e69494518b3189a3054b7a681691e7b249a3fc45201de7",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Validation And Handoff"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0020-documentation-change-control.md",
+          "sha256": "65323bab8fa538ef8d94971a45880c3777944dacfc7f2966bdc29e3925a26446",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Documentation Change Control"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0042-code-testing-discipline.md",
+          "sha256": "cb1e8e731ddd9cf8fde59b81529e6be456f344b9075e07abf4b70c5770aee8e5",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Code Testing Discipline"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+          "sha256": "554324ed7aaabb4cdfbbea28ceb4be411a5571887732329189c3e5fd0366d6f2",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Tenant Isolation And Operator State"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "AGENTS.md",
+          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sections": [
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Policy Loading Contract"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0028-goal-execution-governance.md",
+          "sha256": "5eb3f238cb25e16f03c59f7dc7dd39ef857fe09be719e0fdfbeaff7be9a632f0",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Goal Execution Governance"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+          "sha256": "f107b8201aea5022f002301ff531395b9d4522ef14307d40c59b75c1434cdb16",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Model Selection And Calibration"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+          "sha256": "28386a566bd0a5cdcd1c1ab6181ed9968eebf898794058310e007e99820cf697",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Collaborative Development Workflow"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Session And Worktree Admission"
+              ]
+            }
+          ]
+        }
+      ],
+      "fallback_paths": [
+        "docs/dev/policies/0004-git-worktree-hygiene.md",
+        "docs/dev/policies/0053-policy-context-pilot.md",
+        "docs/dev/policies/0010-validation-and-handoff.md",
+        "docs/dev/policies/0020-documentation-change-control.md",
+        "docs/dev/policies/0042-code-testing-discipline.md",
+        "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+        "AGENTS.md",
+        "docs/dev/policies/0028-goal-execution-governance.md",
+        "docs/dev/policies/0045-model-selection-and-calibration.md",
+        "docs/dev/policies/0050-collaborative-development-workflow.md",
+        "docs/dev/policies/0052-session-and-worktree-admission.md"
+      ],
+      "reread_triggers": [
+        "Task scope, authority, effects, target, or validation changes",
+        "Source drift, missing inventory, unsupported task, unresolved detail, or context loss"
+      ],
+      "decision_packet": {
+        "schema_version": 1,
+        "obligations": [
+          {
+            "id": "documentation.inspect",
+            "kind": "required_gate",
+            "statement": "Inspect current targets and git status; preserve unrelated dirty work.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+                "heading_path": [
+                  "Policy | Git / Worktree Hygiene"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "documentation.loading",
+            "kind": "required_gate",
+            "statement": "Use a current cited packet only within its declared scope; read canonical fallback on drift, unsupported tasks, or unresolved details.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0053-policy-context-pilot.md",
+                "heading_path": [
+                  "Policy"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "documentation.report",
+            "kind": "receipt_requirement",
+            "statement": "Report actual changed behavior, relevant validation, and remaining limitations; distinguish source evidence from installed or live proof.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0010-validation-and-handoff.md",
+                "heading_path": [
+                  "Policy | Validation And Handoff"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "documentation.canonical",
+            "kind": "required_gate",
+            "statement": "Update the canonical owning document in the same slice; preserve historical evidence and avoid competing authorities.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0020-documentation-change-control.md",
+                "heading_path": [
+                  "Policy | Documentation Change Control"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "documentation.bounded",
+            "kind": "validation_requirement",
+            "statement": "Run checks appropriate to the changed surface; avoid redundant or implementation-mirroring tests.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0042-code-testing-discipline.md",
+                "heading_path": [
+                  "Policy | Code Testing Discipline"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "documentation.private",
+            "kind": "prohibited_effect",
+            "statement": "Keep tenant and operator runtime state out of the product repository.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+                "heading_path": [
+                  "Policy | Tenant Isolation And Operator State"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-documentation.delivery-bounds",
+            "kind": "required_gate",
+            "statement": "Honor the governing objective, cumulative delivery and review bounds, and pause instructions; proceed within existing authority and escalate only an unresolved action-specific gate.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0028-goal-execution-governance.md",
+                "heading_path": [
+                  "Policy | Goal Execution Governance"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-documentation.economical-routing",
+            "kind": "required_gate",
+            "statement": "Use economical task routing and proportional context; do not delegate merely to repeat structural discovery.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+                "heading_path": [
+                  "Policy | Model Selection And Calibration"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-documentation.integration",
+            "kind": "required_gate",
+            "statement": "Start integration from freshly fetched origin/main, preserve unrelated work, and land canonical changes only through a pull request linked to the work item.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+                "heading_path": [
+                  "Policy | Collaborative Development Workflow"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-documentation.checkout-custody",
+            "kind": "required_gate",
+            "statement": "Before assigning or creating a checkout, reconcile inventory and overlaps; bind a necessary auxiliary to this task and remove it after clean integration.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+                "heading_path": [
+                  "Policy | Session And Worktree Admission"
+                ]
+              }
+            ]
+          }
+        ],
+        "precedence": [],
+        "conflicts": []
+      }
+    },
+    {
+      "id": "agent-browser-implementation",
+      "scope": "Bounded implementation work in agent-browser; unresolved policy details require cited canonical reads. No implicit runtime authority.",
+      "task_kinds": [
+        "implementation",
+        "review"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Git / Worktree Hygiene"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0053-policy-context-pilot.md",
+          "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0010-validation-and-handoff.md",
+          "sha256": "c98b208ed78f1dd100e69494518b3189a3054b7a681691e7b249a3fc45201de7",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Validation And Handoff"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0036-architecture-guardrails.md",
+          "sha256": "530f5a9f15a19d147c2c3c06804f07698d695a86251926acf9707c66a6fa685c",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Architecture Guardrails"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0042-code-testing-discipline.md",
+          "sha256": "cb1e8e731ddd9cf8fde59b81529e6be456f344b9075e07abf4b70c5770aee8e5",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Code Testing Discipline"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+          "sha256": "a5c5e98d01d5f67cca22a62338002ffb3c5bc692bc167005b31806b000b2d3ec",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Runtime Vs Product Boundary"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "AGENTS.md",
+          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sections": [
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Code Style"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Documentation"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Testing"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0028-goal-execution-governance.md",
+          "sha256": "5eb3f238cb25e16f03c59f7dc7dd39ef857fe09be719e0fdfbeaff7be9a632f0",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Goal Execution Governance"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+          "sha256": "f107b8201aea5022f002301ff531395b9d4522ef14307d40c59b75c1434cdb16",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Model Selection And Calibration"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+          "sha256": "28386a566bd0a5cdcd1c1ab6181ed9968eebf898794058310e007e99820cf697",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Collaborative Development Workflow"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Session And Worktree Admission"
+              ]
+            }
+          ]
+        }
+      ],
+      "fallback_paths": [
+        "docs/dev/policies/0004-git-worktree-hygiene.md",
+        "docs/dev/policies/0053-policy-context-pilot.md",
+        "docs/dev/policies/0010-validation-and-handoff.md",
+        "docs/dev/policies/0036-architecture-guardrails.md",
+        "docs/dev/policies/0042-code-testing-discipline.md",
+        "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+        "AGENTS.md",
+        "docs/dev/policies/0028-goal-execution-governance.md",
+        "docs/dev/policies/0045-model-selection-and-calibration.md",
+        "docs/dev/policies/0050-collaborative-development-workflow.md",
+        "docs/dev/policies/0052-session-and-worktree-admission.md"
+      ],
+      "reread_triggers": [
+        "Task scope, authority, effects, target, or validation changes",
+        "Source drift, missing inventory, unsupported task, unresolved detail, or context loss"
+      ],
+      "decision_packet": {
+        "schema_version": 1,
+        "obligations": [
+          {
+            "id": "implementation.inspect",
+            "kind": "required_gate",
+            "statement": "Inspect current targets and git status; preserve unrelated dirty work.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+                "heading_path": [
+                  "Policy | Git / Worktree Hygiene"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.loading",
+            "kind": "required_gate",
+            "statement": "Use a current cited packet only within its declared scope; read canonical fallback on drift, unsupported tasks, or unresolved details.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0053-policy-context-pilot.md",
+                "heading_path": [
+                  "Policy"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.report",
+            "kind": "receipt_requirement",
+            "statement": "Report actual changed behavior, relevant validation, and remaining limitations; distinguish source evidence from installed or live proof.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0010-validation-and-handoff.md",
+                "heading_path": [
+                  "Policy | Validation And Handoff"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.architecture",
+            "kind": "required_gate",
+            "statement": "Use existing ownership boundaries; update the governing plan before expanding top-level workflows or blurring architecture.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0036-architecture-guardrails.md",
+                "heading_path": [
+                  "Policy | Architecture Guardrails"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.tests",
+            "kind": "validation_requirement",
+            "statement": "Choose meaningful checks for every changed surface; reuse passed gates only within their evidenced scope.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0042-code-testing-discipline.md",
+                "heading_path": [
+                  "Policy | Code Testing Discipline"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.runtime",
+            "kind": "prohibited_effect",
+            "statement": "Do not treat product changes or validation readiness as authority for live runtime effects.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+                "heading_path": [
+                  "Policy | Runtime Vs Product Boundary"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "implementation.repo-checks",
+            "kind": "validation_requirement",
+            "statement": "Use pnpm. For changed Rust run cargo-safe fmt and clippy; match additional tests to touched surfaces. Update all documented user-facing feature surfaces when applicable.",
+            "citations": [
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Testing"
+                ]
+              },
+              {
+                "path": "AGENTS.md",
+                "heading_path": [
+                  "AGENTS.md",
+                  "Documentation"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-implementation.delivery-bounds",
+            "kind": "required_gate",
+            "statement": "Honor the governing objective, cumulative delivery and review bounds, and pause instructions; proceed within existing authority and escalate only an unresolved action-specific gate.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0028-goal-execution-governance.md",
+                "heading_path": [
+                  "Policy | Goal Execution Governance"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-implementation.economical-routing",
+            "kind": "required_gate",
+            "statement": "Use economical task routing and proportional context; do not delegate merely to repeat structural discovery.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+                "heading_path": [
+                  "Policy | Model Selection And Calibration"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-implementation.integration",
+            "kind": "required_gate",
+            "statement": "Start integration from freshly fetched origin/main, preserve unrelated work, and land canonical changes only through a pull request linked to the work item.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+                "heading_path": [
+                  "Policy | Collaborative Development Workflow"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-implementation.checkout-custody",
+            "kind": "required_gate",
+            "statement": "Before assigning or creating a checkout, reconcile inventory and overlaps; bind a necessary auxiliary to this task and remove it after clean integration.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+                "heading_path": [
+                  "Policy | Session And Worktree Admission"
+                ]
+              }
+            ]
+          }
+        ],
+        "precedence": [],
+        "conflicts": []
+      }
+    },
+    {
+      "id": "agent-browser-planning",
+      "scope": "Bounded planning work in agent-browser; unresolved policy details require cited canonical reads. No implicit runtime authority.",
+      "task_kinds": [
+        "planning"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Git / Worktree Hygiene"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0053-policy-context-pilot.md",
+          "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0010-validation-and-handoff.md",
+          "sha256": "c98b208ed78f1dd100e69494518b3189a3054b7a681691e7b249a3fc45201de7",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Validation And Handoff"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0044-planning-discipline.md",
+          "sha256": "ef76dc965cbbe7c66a6899eab44fdd55491729b060f8abdd545dda2b149e4bf7",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Planning Discipline"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0043-roadmap-runbook-governance.md",
+          "sha256": "8f964251af141ec9c92eadc73383210c941bec2ec276a0a8d06522f814906317",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Roadmap / Runbook Governance"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+          "sha256": "a5c5e98d01d5f67cca22a62338002ffb3c5bc692bc167005b31806b000b2d3ec",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Runtime Vs Product Boundary"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "AGENTS.md",
+          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sections": [
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Policy Loading Contract"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0028-goal-execution-governance.md",
+          "sha256": "5eb3f238cb25e16f03c59f7dc7dd39ef857fe09be719e0fdfbeaff7be9a632f0",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Goal Execution Governance"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+          "sha256": "f107b8201aea5022f002301ff531395b9d4522ef14307d40c59b75c1434cdb16",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Model Selection And Calibration"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+          "sha256": "28386a566bd0a5cdcd1c1ab6181ed9968eebf898794058310e007e99820cf697",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Collaborative Development Workflow"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Session And Worktree Admission"
+              ]
+            }
+          ]
+        }
+      ],
+      "fallback_paths": [
+        "docs/dev/policies/0004-git-worktree-hygiene.md",
+        "docs/dev/policies/0053-policy-context-pilot.md",
+        "docs/dev/policies/0010-validation-and-handoff.md",
+        "docs/dev/policies/0044-planning-discipline.md",
+        "docs/dev/policies/0043-roadmap-runbook-governance.md",
+        "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+        "AGENTS.md",
+        "docs/dev/policies/0028-goal-execution-governance.md",
+        "docs/dev/policies/0045-model-selection-and-calibration.md",
+        "docs/dev/policies/0050-collaborative-development-workflow.md",
+        "docs/dev/policies/0052-session-and-worktree-admission.md"
+      ],
+      "reread_triggers": [
+        "Task scope, authority, effects, target, or validation changes",
+        "Source drift, missing inventory, unsupported task, unresolved detail, or context loss"
+      ],
+      "decision_packet": {
+        "schema_version": 1,
+        "obligations": [
+          {
+            "id": "planning.inspect",
+            "kind": "required_gate",
+            "statement": "Inspect current targets and git status; preserve unrelated dirty work.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+                "heading_path": [
+                  "Policy | Git / Worktree Hygiene"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "planning.loading",
+            "kind": "required_gate",
+            "statement": "Use a current cited packet only within its declared scope; read canonical fallback on drift, unsupported tasks, or unresolved details.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0053-policy-context-pilot.md",
+                "heading_path": [
+                  "Policy"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "planning.report",
+            "kind": "receipt_requirement",
+            "statement": "Report actual changed behavior, relevant validation, and remaining limitations; distinguish source evidence from installed or live proof.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0010-validation-and-handoff.md",
+                "heading_path": [
+                  "Policy | Validation And Handoff"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "planning.scope",
+            "kind": "required_gate",
+            "statement": "Keep plans proportional and bounded; record the actual outcome, dependencies, and remaining gates.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0044-planning-discipline.md",
+                "heading_path": [
+                  "Policy | Planning Discipline"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "planning.authority",
+            "kind": "required_gate",
+            "statement": "Keep roadmap, runbook, and bounded plan responsibilities distinct; reconcile canonical status instead of creating a parallel backlog.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0043-roadmap-runbook-governance.md",
+                "heading_path": [
+                  "Policy | Roadmap / Runbook Governance"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "planning.runtime",
+            "kind": "prohibited_effect",
+            "statement": "Planning does not authorize live runtime effects.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+                "heading_path": [
+                  "Policy | Runtime Vs Product Boundary"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-planning.delivery-bounds",
+            "kind": "required_gate",
+            "statement": "Honor the governing objective, cumulative delivery and review bounds, and pause instructions; proceed within existing authority and escalate only an unresolved action-specific gate.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0028-goal-execution-governance.md",
+                "heading_path": [
+                  "Policy | Goal Execution Governance"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-planning.economical-routing",
+            "kind": "required_gate",
+            "statement": "Use economical task routing and proportional context; do not delegate merely to repeat structural discovery.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+                "heading_path": [
+                  "Policy | Model Selection And Calibration"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-planning.integration",
+            "kind": "required_gate",
+            "statement": "Start integration from freshly fetched origin/main, preserve unrelated work, and land canonical changes only through a pull request linked to the work item.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+                "heading_path": [
+                  "Policy | Collaborative Development Workflow"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-planning.checkout-custody",
+            "kind": "required_gate",
+            "statement": "Before assigning or creating a checkout, reconcile inventory and overlaps; bind a necessary auxiliary to this task and remove it after clean integration.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+                "heading_path": [
+                  "Policy | Session And Worktree Admission"
+                ]
+              }
+            ]
+          }
+        ],
+        "precedence": [],
+        "conflicts": []
+      }
+    },
+    {
+      "id": "agent-browser-runtime",
+      "scope": "Bounded runtime work in agent-browser; unresolved policy details require cited canonical reads. No implicit runtime authority.",
+      "task_kinds": [
+        "runtime"
+      ],
+      "sources": [
+        {
+          "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+          "sha256": "6a69a16996dffcfbf1ea351a7ed17f9b7b0a26fee547af0c33543c5f9bc25158",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Git / Worktree Hygiene"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0053-policy-context-pilot.md",
+          "sha256": "70162796349c28ce2c33692240beb6ad3d53e8d11bf37549162dc09f4a0d2a82",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0010-validation-and-handoff.md",
+          "sha256": "c98b208ed78f1dd100e69494518b3189a3054b7a681691e7b249a3fc45201de7",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Validation And Handoff"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+          "sha256": "a5c5e98d01d5f67cca22a62338002ffb3c5bc692bc167005b31806b000b2d3ec",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Runtime Vs Product Boundary"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+          "sha256": "554324ed7aaabb4cdfbbea28ceb4be411a5571887732329189c3e5fd0366d6f2",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Tenant Isolation And Operator State"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+          "sha256": "201d90c49d55bcc731cd85be1e9645692935c682d630a259582d281ca7462f3e",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Shared Runtime Effect Coordination And Integrity"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "AGENTS.md",
+          "sha256": "d901ef75da551b001401a1b859024b46e2345ebd43d6f5bbf20a88d9dd19028e",
+          "sections": [
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Policy Loading Contract"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "Isolated Development Runtime"
+              ]
+            },
+            {
+              "heading_path": [
+                "AGENTS.md",
+                "RDP and Remote-View Handoffs"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0028-goal-execution-governance.md",
+          "sha256": "5eb3f238cb25e16f03c59f7dc7dd39ef857fe09be719e0fdfbeaff7be9a632f0",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Goal Execution Governance"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+          "sha256": "f107b8201aea5022f002301ff531395b9d4522ef14307d40c59b75c1434cdb16",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Model Selection And Calibration"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+          "sha256": "28386a566bd0a5cdcd1c1ab6181ed9968eebf898794058310e007e99820cf697",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Collaborative Development Workflow"
+              ]
+            }
+          ]
+        },
+        {
+          "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+          "sha256": "005f558a9cfff75171639ee911238ce2468747f9f0e46b5b120d68b9b5838a35",
+          "sections": [
+            {
+              "heading_path": [
+                "Policy | Session And Worktree Admission"
+              ]
+            }
+          ]
+        }
+      ],
+      "fallback_paths": [
+        "docs/dev/policies/0004-git-worktree-hygiene.md",
+        "docs/dev/policies/0053-policy-context-pilot.md",
+        "docs/dev/policies/0010-validation-and-handoff.md",
+        "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+        "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+        "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+        "AGENTS.md",
+        "docs/dev/policies/0028-goal-execution-governance.md",
+        "docs/dev/policies/0045-model-selection-and-calibration.md",
+        "docs/dev/policies/0050-collaborative-development-workflow.md",
+        "docs/dev/policies/0052-session-and-worktree-admission.md"
+      ],
+      "reread_triggers": [
+        "Task scope, authority, effects, target, or validation changes",
+        "Source drift, missing inventory, unsupported task, unresolved detail, or context loss"
+      ],
+      "decision_packet": {
+        "schema_version": 1,
+        "obligations": [
+          {
+            "id": "runtime.inspect",
+            "kind": "required_gate",
+            "statement": "Inspect current targets and git status; preserve unrelated dirty work.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0004-git-worktree-hygiene.md",
+                "heading_path": [
+                  "Policy | Git / Worktree Hygiene"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.loading",
+            "kind": "required_gate",
+            "statement": "Use a current cited packet only within its declared scope; read canonical fallback on drift, unsupported tasks, or unresolved details.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0053-policy-context-pilot.md",
+                "heading_path": [
+                  "Policy"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.report",
+            "kind": "receipt_requirement",
+            "statement": "Report actual changed behavior, relevant validation, and remaining limitations; distinguish source evidence from installed or live proof.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0010-validation-and-handoff.md",
+                "heading_path": [
+                  "Policy | Validation And Handoff"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.boundary",
+            "kind": "required_gate",
+            "statement": "Separate product readiness from runtime authority and inspect the applicable environment boundary before effects.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+                "heading_path": [
+                  "Policy | Runtime Vs Product Boundary"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.tenant",
+            "kind": "required_gate",
+            "statement": "Preserve tenant isolation and keep operator state outside product sources.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0033-tenant-isolation-and-operator-state.md",
+                "heading_path": [
+                  "Policy | Tenant Isolation And Operator State"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.custody",
+            "kind": "required_gate",
+            "statement": "Use the shared runtime custody protocol and its canonical detail before touching shared mutable runtime state.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+                "heading_path": [
+                  "Policy | Shared Runtime Effect Coordination And Integrity"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.scope",
+            "kind": "approval_requirement",
+            "statement": "Confirm effect authority from explicit task context; honor existing authorization and resolve a genuinely uncovered scope before effects.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0051-shared-runtime-effect-custody.md",
+                "heading_path": [
+                  "Policy | Shared Runtime Effect Coordination And Integrity"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.inference",
+            "kind": "prohibited_effect",
+            "statement": "Do not infer runtime effect authority from source readiness or a prepared artifact.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0031-runtime-vs-product-boundary.md",
+                "heading_path": [
+                  "Policy | Runtime Vs Product Boundary"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "runtime.runtime",
+            "kind": "validation_requirement",
+            "statement": "Require evidence appropriate to the exact installed or live target; a source or build check alone does not prove live behavior.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0010-validation-and-handoff.md",
+                "heading_path": [
+                  "Policy | Validation And Handoff"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.delivery-bounds",
+            "kind": "required_gate",
+            "statement": "Honor the governing objective, cumulative delivery and review bounds, and pause instructions; proceed within existing authority and escalate only an unresolved action-specific gate.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0028-goal-execution-governance.md",
+                "heading_path": [
+                  "Policy | Goal Execution Governance"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.economical-routing",
+            "kind": "required_gate",
+            "statement": "Use economical task routing and proportional context; do not delegate merely to repeat structural discovery.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0045-model-selection-and-calibration.md",
+                "heading_path": [
+                  "Policy | Model Selection And Calibration"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.integration",
+            "kind": "required_gate",
+            "statement": "Start integration from freshly fetched origin/main, preserve unrelated work, and land canonical changes only through a pull request linked to the work item.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0050-collaborative-development-workflow.md",
+                "heading_path": [
+                  "Policy | Collaborative Development Workflow"
+                ]
+              }
+            ]
+          },
+          {
+            "id": "agent-browser-runtime.checkout-custody",
+            "kind": "required_gate",
+            "statement": "Before assigning or creating a checkout, reconcile inventory and overlaps; bind a necessary auxiliary to this task and remove it after clean integration.",
+            "citations": [
+              {
+                "path": "docs/dev/policies/0052-session-and-worktree-admission.md",
+                "heading_path": [
+                  "Policy | Session And Worktree Admission"
+                ]
+              }
+            ]
+          }
+        ],
+        "precedence": [],
+        "conflicts": []
+      }
+    }
+  ]
+}
