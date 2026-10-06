@@ -2,7 +2,7 @@
 
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
   assertProductionUnchanged,
@@ -29,10 +29,13 @@ for (let index = 1; index <= iterations; index += 1) {
   const identity = `p126-fresh-${runId}-${index}`;
   const profileRoot = resolve(descriptor.stateDir, 'runtime-profiles', identity);
   assert.ok(profileRoot.startsWith(`${resolve(descriptor.stateDir)}/`));
+  const userDataDir = join(profileRoot, 'user-data');
+  mkdirSync(userDataDir, { recursive: true });
   try {
     const opened = runJson([
       '--session', identity,
       '--runtime-profile', identity,
+      '--profile', userDataDir,
       '--json',
       'open',
       'about:blank',

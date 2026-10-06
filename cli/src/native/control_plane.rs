@@ -678,7 +678,12 @@ pub(crate) fn service_status_result_envelope(
     >,
 ) -> Value {
     match result {
-        Ok(data) => json!({ "id": id, "success": true, "data": data }),
+        Ok(data) => {
+            let mut data =
+                serde_json::to_value(data).expect("service status response is serializable");
+            data["browserRuntime"] = super::browser_session_store::BrowserSessionSqliteStore::default_operational_status_read_only();
+            json!({ "id": id, "success": true, "data": data })
+        }
         Err(error) => json!({ "id": id, "success": false, "error": error.to_string() }),
     }
 }
@@ -1980,7 +1985,16 @@ async fn run_worker(
                             let _ = request.response_tx.send(response);
                             continue;
                         }
-                        match scheduler_profile_lease_gate(&mut request, &state.session_id) {
+                        let managed_selection = if let Some(host) = state.managed_session_host.clone() {
+                            let name = super::browser_session_host::managed_command_session_name(&state.session_id, &request.command);
+                            super::browser_session_host::shared_managed_request_selected(host, name, request.command.clone()).await
+                        } else { Ok(false) };
+                        let lease_decision = match managed_selection {
+                            Ok(true) => SchedulerLeaseDecision::Ready,
+                            Ok(false) => scheduler_profile_lease_gate(&mut request, &state.session_id),
+                            Err(error) => SchedulerLeaseDecision::Reject(error),
+                        };
+                        match lease_decision {
                             SchedulerLeaseDecision::Ready => {
                                 if request.profile_lease_wait_started_at.is_some() {
                                     record_profile_lease_wait_ended_event(&request, "ready", None);
@@ -3545,7 +3559,26 @@ mod tests {
             )
             .await;
         assert_eq!(control["success"], true);
-        assert_eq!(control["data"], action);
+        // Operational diagnostics sample the live host independently of the fixed
+        // projection. Both entry points must expose them, while fixed fields match.
+        for response in [&control["data"], &action] {
+            assert_eq!(
+                response["browserRuntime"]["schemaVersion"],
+                "agent-browser.runtime-operational-status.v1"
+            );
+            assert!(response["browserRuntime"]["state"].is_string());
+        }
+        let mut fixed_control = control["data"].clone();
+        let mut fixed_action = action.clone();
+        fixed_control
+            .as_object_mut()
+            .unwrap()
+            .remove("browserRuntime");
+        fixed_action
+            .as_object_mut()
+            .unwrap()
+            .remove("browserRuntime");
+        assert_eq!(fixed_control, fixed_action);
 
         let control_text = control.to_string();
         let direct_body = super::super::stream::service_status_http_with_relay(
@@ -3573,7 +3606,7 @@ mod tests {
             super::super::stream::service_status_http_body_fixture(&dashboard_backend).unwrap(),
         )
         .unwrap();
-        assert_eq!(dashboard_backend_body["data"], action);
+        assert_eq!(dashboard_backend_body["data"], control["data"]);
 
         let fallback_http = String::from_utf8(
             super::super::stream::service_status_dashboard_cli_fallback_fixture(action.to_string()),

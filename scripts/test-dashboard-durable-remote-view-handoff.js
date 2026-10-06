@@ -17,39 +17,13 @@ const developmentProviderDeployment = readFileSync(
 
 assert.match(
   dashboardPage,
-  /remoteViewHandoffIdFromPath\([\s\S]*remote-view[\s\S]*function RemoteViewHandoffGate\([\s\S]*action: "service_remote_view_handoff_resolve"/,
-  'authenticated dashboard routes must resolve opaque remote-view handoff IDs through the service queue',
+  /window\.location\.replace\(`\/api\/remote-view\/\$\{encodeURIComponent\(handoffId\)\}\/presentation`\)/,
+  'authenticated handoffs must navigate directly through the current presentation endpoint',
 );
-
-assert.match(
-  dashboardPage,
-  /next\.startsWith\("\/guacamole\/"\)[\s\S]*window\.location\.assign\(next\)/,
-  'post-auth forwarding to a direct Guacamole path must perform a real navigation',
-);
-
-assert.match(
-  dashboardPage,
-  /resolveHandoff\(true\)[\s\S]*Reopen tab/,
-  'a deliberately closed handoff target must require an explicit reopen action',
-);
-
-assert.match(
-  dashboardPage,
-  /Remote view unavailable[\s\S]*resolveHandoff\(false\)[\s\S]*Retry/,
-  'a transient provider reacquisition failure must keep the durable handoff retryable',
-);
-
-assert.match(
-  dashboardPage,
-  /service_remote_view_handoff_resolve[\s\S]*serviceStateLockTimeoutMs: 30_000[\s\S]*jobTimeoutMs: 90_000/,
-  'durable handoff resolution must reserve a bounded Service State contention budget inside its job timeout',
-);
-
-assert.match(
-  dashboardPage,
-  /presentationMayStillConverge[\s\S]*nextResolution\.status === "ready"[\s\S]*nextResolution\.status === "converging"[\s\S]*status: "converging"/,
-  'an incoherent ready response must enter the bounded presentation retry loop',
-);
+const gate = dashboardPage.slice(dashboardPage.indexOf('function RemoteViewHandoffGate('),
+  dashboardPage.indexOf('function DashboardSessionRestoreScreen('));
+assert.doesNotMatch(gate, /fetch\(|setTimeout|Open desktop|writeDashboardWorkspaceUrlSelection/,
+  'handoffs must not duplicate resolution, poll, select a dashboard workspace or require another click');
 
 assert.match(
   streamStore,
@@ -69,18 +43,6 @@ assert.doesNotMatch(
   streamStore,
   /new WebSocket\(`ws:\/\/localhost:\$\{port\}`\)/,
   'the global dashboard stream hook must not hard-code a loopback WebSocket for external clients',
-);
-
-assert.match(
-  dashboardPage,
-  /params\.set\("view-provider", nextResolution\.viewStreamProvider\)[\s\S]*params\.set\("view", "workspace:control"\)/,
-  'successful handoff resolution must preserve the intended view provider and open workspace control',
-);
-
-assert.match(
-  dashboardPage,
-  /durableHandoffPresentationReady\([\s\S]*presentationGeneration[\s\S]*dashboardDeploymentGeneration[\s\S]*logicalBrowserId[\s\S]*daemonOwnerGeneration[\s\S]*processInstanceDigest[\s\S]*requiredStreamProvider[\s\S]*observedStreamProvider[\s\S]*state === "ready"/,
-  'the dashboard must require a matching authenticated presentation generation before rendering',
 );
 
 assert.doesNotMatch(
@@ -105,12 +67,6 @@ assert.match(
   handoff,
   /for key in \[[\s\S]*"url"[\s\S]*"routePoolEntryId"/,
   'normal durable resolution must remove stored navigation and ephemeral route selectors',
-);
-
-assert.match(
-  dashboardPage,
-  /status: "converging"[\s\S]*window\.setTimeout\(\(\) => void resolveHandoff\(false\), 1_000\)/,
-  'a missing or stale presentation receipt must remain on the durable URL and retry convergence',
 );
 
 assert.match(

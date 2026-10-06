@@ -5744,6 +5744,10 @@ profile pressure, and remote-view privilege readiness. Warning-severity
 observations remain visible but do not make doctor exit nonzero. Workstation
 runtime multiplicity is scoped to the exact production socket namespace, so
 an isolated `agent-browser-dev` host is not classified as production drift.
+Development install doctor binds the selected generation, exact launcher bytes
+and configured dashboard port. Republish that development installation when its
+binding is missing or changed. A native Remote View binding uses read-only
+provider inventory readiness; visible pixels and input require workflow checks.
 Production and isolated development clients share one root-owned protected
 lease-authority socket; a development runtime must verify that endpoint rather
 than launching a second authority daemon.
@@ -6314,8 +6318,49 @@ Examples:
         "remote-view" => {
             r##"
 agent-browser remote-view - Route-bound remote-headed browser handoff
+Retained view requests keep their key after interrupted replies. A provider-proven
+terminal grant or a qualified published expiry renews once under the same handoff.
+Revocation, identity mismatch and invalid issuance fail closed; ambiguous replies
+stay pending. Dashboard presentation reads do not issue grants.
 
 Usage: agent-browser remote-view open [url] [options]
+       agent-browser remote-view resolve <handoff-id>
+       agent-browser remote-view inspect <handoff-id>
+       agent-browser remote-view extend <handoff-id> --ttl-ms <milliseconds>
+
+Resolve addresses an existing logical handoff and refuses closed sessions.
+Converging means pending readiness. Require opened plus operatorVisible.state=ready
+before attachment. Native desktop links do not require a viewer grant.
+Retained handoffs preserve logical tabs, not indefinite browser processes.
+The five-minute idle reaper closes a browser when all peers are idle and no
+active operation holds custody, including after service restart without a
+client request. With the Remote View application provider, normal open and resolve prepare the
+native desktop without issuing an extra Agent Browser viewer grant.
+Clients briefly wait for an existing runtime host to publish its restarted endpoint.
+Named-session batches preserve their selected runtime profile and browser build.
+Explicit build choices persist per profile for launch and recovery across restart.
+Retained recovery reconciles unobserved claims after exact profile process absence.
+Provider read failures before launch create no new process claim.
+
+Links default to 24-hour retention. open --handoff-ttl-ms selects a new link's
+positive lifetime. inspect reports expiry; extend --ttl-ms ensures at least that
+much remaining time. Expired links return remote_view_handoff_expired and cannot
+be extended. Normal open can issue a new link to the same retained tab.
+Link expiry does not close browsers or disconnect native viewers.
+Reconnect using the same handoff URL. Opening it restores an idle-cleaned
+retained browser before redirecting to its native desktop, without viewer grants.
+Ordinary automation also recovers retained idle browsers without opening the link first.
+A lost managed browser can recover after positive process and profile absence.
+A reused PID does not block recovery when current identity proves it unrelated
+and a fresh census proves the retained profile absent. Unknown identity or
+profile occupancy blocks recovery; unrelated processes remain untouched.
+Logical browser, session, tab and handoff IDs remain stable; physical targets
+and the CDP endpoint change. Interrupted recovery requires custody readback.
+Explicitly closed sessions and tabs remain closed.
+Valid retained handoffs preserve their exact sessions through inactivity and
+client reconnect. Close the tab or session explicitly; invalid or closed
+bindings do not prevent idle cleanup or grant additional access.
+
 
 `remote-view open` selects a service-owned remote-view route, launches or
 reuses a remote-headed browser on the bound display, opens the requested tab,
@@ -6377,6 +6422,8 @@ for journal correlation; retrySafe remains false.
 Options:
   --runtime-profile <id>       Use a managed runtime profile, for example last30days-facebook
   --browser-build <build>      Browser build: stock_chrome, stealthcdp_chromium, or cdp_free_headed
+                              Linux managed opens verify the actual executable and reject incompatible reuse;
+                              stealthcdp_chromium requires a ready configured build manifest.
   --view-stream-provider rdp_gateway
                                Use the Guacamole/RDP gateway view stream
   --provider rdp_gateway       Compatibility alias for --view-stream-provider rdp_gateway
@@ -6657,6 +6704,8 @@ Usage:
   agent-browser service status --watch [--interval <ms>] [--count <n>]
   agent-browser service watch [--interval <ms>] [--count <n>]
   agent-browser service reconcile [--authoritative-route-pool-json <json-array>]
+  agent-browser service runtime-backup status
+  agent-browser service runtime-backup create
   agent-browser service resources [--monitor-summary|--write-monitor-summary]
   agent-browser service gc [--dry-run|--apply --review-token <token>|--apply --force-without-review]
   agent-browser service prune-retained [--dry-run|--apply] [--closed-tabs|--no-closed-tabs] [--not-started-browsers|--no-not-started-browsers] [--process-exited-browsers] [--released-sessions] [--abandoned-sessions] [--orphaned-profiles] [--display-allocations] [--abandoned-session-min-age-minutes <n>]
@@ -6840,6 +6889,9 @@ Notes:
   - service profiles <id> diagnose reports whether the exact profile is ready, repairable, awaiting manual authentication, or blocked by current foreign or ambiguous custody. Historical records remain evidence and do not establish current occupancy by themselves. The same read is available from HTTP GET /api/service/profiles/<id>/diagnosis, MCP agent-browser://profiles/{profile_id}/diagnosis, and getServiceProfileDiagnosis().
   - service profiles <id> repair plans without effects and applies only an unchanged sealed plan with the private capability. The same operations are available from HTTP POST /api/service/profiles/<id>/repair/plan and /repair/apply, MCP service_profile_repair_plan and service_profile_repair_apply, and planServiceProfileRepair() and applyServiceProfileRepair().
   - service profiles <id> reset is scoped. Runtime reset retires only a proven inert service-owned lane while preserving profile data and peer lanes. Authentication reset removes only the selected target's retained authentication evidence, never erases browser cookies, and returns a manual-seeding handoff. Full profile-data reset fails closed until backup restore and rollback are supported. HTTP, MCP, and generated clients expose matching plan/apply operations.
+  - Opening a durable handoff checks the current Agent Browser desktop assignment and navigates directly to Remote View's native desktop route. No original-tab activation or temporary Agent Browser viewer grant is required. Remote View owns authentication, input and viewer lifetime.
+  - Development host activation preserves retained browser children and persistent private temporary storage. Managed handoffs require no intermediate dashboard workspace or Open desktop click. Runtime multiplicity reads the selected namespace dashboard backend rather than the default development unit.
+  - Development-script install with --no-activate requires stopped host and dashboard units and refuses unknown unit state before changing executable bindings. Use normal pnpm development-runtime:install for coordinated activation.
   - An unconfigured optional development presentation provider starts with zero routes so headless work remains available; this is not presentation readiness. Staged provider inventory loss remains an error.
   - An older capability binding does not veto an independently permitted shared-local client reusing an exact current browser/profile. It remains unproven for the registered capability; guarded rejoin is required for that authority. Restricted profiles, mismatched identities and future-generation bindings still fail admission.
   - Reattaching to the same verified browser preserves its original host, display allocation, launch metadata and profile path. Preservation requires matching current-boot process identity, endpoint and profile; replacement processes receive fresh metadata.
@@ -7001,9 +7053,10 @@ Notes:
   - Failed service requests retain the error string and may add a versioned failure object. For service_state_lock_timeout, inspect effectState and the returned job and trace locators before retrying; effect_uncertain is never retry permission. A file-lock timeout may append validated holder_status, PID plus process-start identity, build generation, operation, mode, phase, monotonic wait and elapsed-hold timing, acquisition wall time, and available coarse state counts from the bounded holder sidecar. Missing, stale, corrupt, or racy evidence remains unknown or stale and never authorizes force-unlock, process termination, takeover, or retry. The repository may replay one pure in-memory mutation after a stale revision, but it never replays browser, tab, route, provider, or tenant effects. For runtime_lifecycle_existing_owner_requires_explicit_transition, refresh the access plan and reuse only when it supplies exact browserId and sessionName hints. Never blind-retry or launch a duplicate profile lane.
   - Route-bound acquisition automatically completes a matching failed rollback quarantine only after the browser, process identity, session, viewer, controller, handoff, presentation slot, route, display, and route-pool evidence proves inactive. Detached pending acquisitions also require a valid creation time at least 15 minutes old, and reused route or display IDs do not imply ownership without matching browser, session, or allocation identity. This protects foreground acquisitions from background rollback. A skipped service_route_pool_repair response reports repaired=false and names the typed evidence that must change before retry.
   - Current service status includes bounded process-local serviceStateLockDiagnostics with active lock holders, recent wait and hold phases, timeout counters, and process-lock poison recoveries. This diagnostic is not persisted and does not contain state paths or request payloads.
+  - service runtime-backup status verifies the current online backup without changing it. service runtime-backup create writes one verified online SQLite backup and rotates at most one previous copy. Neither command restores data.
   - Remote-view reattach requires configured presentation capacity and reserves the exact bound slot at recovery priority. It rejects active human control, focuses and maximizes the exact retained browser, then independently re-observes process-bound X11 state before checkout can report attached_ready. Missing process, display, visible-workspace, active or topmost, geometry, or occlusion evidence returns a typed operator-presentation blocker without launching a replacement or changing route records. Route switch retains its atomic migration reservation: the moving browser may retain its active source slot, an occupied destination stays bound until parking, and checkout transfers the leased destination before release. recoveryAdmission and recoveryRelease are the capacity receipts; not_configured remains compatibility evidence for route switch only.
   - Dashboard refresh preserves an explicitly selected tab when inventory temporarily omits it. View and controls wait for that same tab; a missing row alone never authorizes selecting another target.
-  - remote_view_open returns an authenticated durable /remote-view/<handoff-id> operator URL in externalUrl and handoffUrl only when the route supplies a dashboard publicOperatorUrl. It never rewrites providerExternalUrl into a dashboard handoff path. Software clients should use requestServiceRemoteViewHandoff(), which returns only handoffId and handoffUrl. requestServiceRemoteViewOpen() rejects a real response without a durable handoff unless allowRawProviderUrl=true is explicitly selected for provider diagnostics. providerExternalUrl and routeBinding URLs identify only the current provider connection. Use action=service_remote_view_handoff_resolve with params.handoffId to adopt the exact retained browser identity and reacquire presentation without navigation, replacement targets, browser relaunch, provider substitution, or a raw-provider redirect. Authenticated dashboard responses omit provider route, embed, and health URLs before reaching the operator browser. A non-local dashboard routes CDP screen sockets through its authenticated same-origin /api/stream/<port> WebSocket proxy instead of presenting loopback URLs to the operator browser. Dashboard durable resolution reserves up to 30 seconds for Service State contention within its 90-second job budget. If the recorded CDP target ID expired, normal resolution may bind the current tab whose URL still matches the recorded intent. A ready response includes a presentationGeneration and matching presentationReceipt bound to the dashboard deployment, logical browser, daemon owner generation, process identity, target, and requested provider; the durable handoff sidecar preserves the highest recorded presentation generation when an older service writer saves stale state. A missing or stale receipt remains retryable with status=converging. Set params.allowReopenClosed=true only after explicit operator confirmation because explicit reopen is the separate path that may create and navigate a replacement target.
+  - remote_view_open returns an authenticated durable /remote-view/<handoff-id> operator URL in externalUrl and handoffUrl only when the route supplies a dashboard publicOperatorUrl. It never rewrites providerExternalUrl into a dashboard handoff path. Software clients should use requestServiceRemoteViewHandoff(), which returns only handoffId and handoffUrl. requestServiceRemoteViewOpen() rejects a real response without a durable handoff unless allowRawProviderUrl=true is explicitly selected for provider diagnostics. providerExternalUrl and routeBinding URLs identify only the current provider connection. Use action=service_remote_view_handoff_resolve with params.handoffId to adopt the exact retained browser identity and reacquire presentation without navigation, replacement targets, browser relaunch, provider substitution, or a raw-provider redirect. Authenticated dashboard responses omit provider route, embed, and health URLs before reaching the operator browser. A non-local dashboard routes CDP screen sockets through its authenticated same-origin /api/stream/<port> WebSocket proxy instead of presenting loopback URLs to the operator browser. A completed expired viewer issuance may renew after desktop recovery using its qualified original mutation record; ambiguous issuance remains pending. Dashboard durable resolution reserves up to 30 seconds for Service State contention within its 90-second job budget. If the recorded CDP target ID expired, normal resolution may bind the current tab whose URL still matches the recorded intent. A ready response includes a presentationGeneration and matching presentationReceipt bound to the dashboard deployment, logical browser, daemon owner generation, process identity, target, and requested provider; the durable handoff sidecar preserves the highest recorded presentation generation when an older service writer saves stale state. A missing or stale receipt remains retryable with status=converging. Set params.allowReopenClosed=true only after explicit operator confirmation because explicit reopen is the separate path that may create and navigate a replacement target.
   - Automation-capable remote_view_open success includes a valid serviceTabHandle at the top level and under tab.serviceTabHandle. Use it directly for the next handle-scoped action. Generic tab_new rejects route and display selectors before queueing; use authenticated remote_view_open for route-bound cold acquisition. Without an explicit displayAllocationId, route-pool allocation identity follows the stable route identity instead of a reusable X11 display number.
   - HTTP GET /api/service/contracts and MCP agent-browser://contracts expose matching service request schema IDs, contract versions, routes, MCP tool names, and supported actions for compatibility checks. Contracts include no-launch remote-view allocation collections for display allocations, remote-view routes, route pool entries, and viewer leases.
   - CLI service profiles lookup, HTTP GET /api/service/profiles/lookup, and MCP agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild} rank the authoritative profile catalog and return match evidence plus launch, add-tab, view, seed, wait, or holder-inspection guidance. Identity searches never fall back to an unrelated generic browser-build default.
@@ -7011,6 +7064,7 @@ Notes:
   - Service status includes presentationCapacity when durable slot authority is configured. It reports warm and active slots, admitted and hard limits, protected reserves, queued demand, and redacted binding warnings without launching a browser or opening a route.
   - Service status includes desktopEvidencePolicy. Use CDP for page evidence. Reserve desktop presentation only for browser chrome, extension UI, password-manager or passkey prompts, native dialogs, OS windows, or stacking evidence that CDP cannot observe. A generic CDP failure is diagnostic and does not authorize desktop fallback.
   - Current service status includes additive statusProjection provenance and freshness for host-local observations. service_state remains authority; unavailable means unknown. Derive staleness from validUntil. Legacy v1 fields remain supported.
+  - Current service status includes additive browserRuntime read-only health: redacted SQLite integrity and size, migration archive state, verified-backup state, and current browser-launch admission. Unavailable storage exposes only a stable failure code and never its filesystem path. install doctor prints the same fields.
   - Current service status also includes additive runtimeLifecycle readback. CLI JSON, HTTP GET /api/service/status, typed MCP service_status, the generated client, Service State, and the dashboard share its multiplicity, lifecycle-owner, reconciliation, retention, pressure, cleanup-obligation, and blocking-incident model. A convergence_window is transaction-bound overlap, not steady state.
   - Reconciliation expires active session leases whose recorded browser ownership no longer exists, so stale retained sessions cannot continue to hold a profile.
   - HTTP GET /api/service/profiles/<id>/readiness and MCP agent-browser://profiles/{profile_id}/readiness return one profile's no-launch targetReadiness rows for software clients and agents that do not need allocation details.
@@ -7559,6 +7613,7 @@ Dashboard:
   dashboard [start]          Start the dashboard server (default port: 4848)
   dashboard start --port <n> Start on a specific port
   dashboard ingress status  Show stable-ingress and presentation readiness
+  service browsers           List legacy and managed browser identities with canonical CDP endpoints; inventory is not fresh health proof.
   dashboard stop             Stop the dashboard server
   Linux repo installs can run bash scripts/install-dashboard-user-service.sh
   to enable the dashboard, recurring runtime-health interlock, and daily
@@ -7784,6 +7839,10 @@ Configuration:
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
+  With a configured Remote View provider, ordinary open and remote-view open
+  register an explicit --runtime-profile name plus --profile absolute-directory
+  binding. Create the directory first; conflicting name/path bindings fail
+  before browser allocation.
 
   Use `agent-browser runtime list` to inspect the merged runtime-profile view
   from config plus on-disk managed profiles.
@@ -7798,6 +7857,24 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM state encryption
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
+  AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
+                                 Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
+                                 Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
+  AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; interrupted acquisitions reuse their key)
+  AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
+  AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
+                                 Configured Remote View admits ordinary open requests as managed sessions.
+                                 Socket and queued commands share the managed owner; queued policy and confirmation still apply.
+                                 Managed tab_new retains one request; params.tabRequestId is a stable service retry key.
+                                 Unknown creation remains pending across restart and requires exact readback.
+                                 Select an exact catalog profile with --runtime-profile; omitted selectors use a disposable profile, including remote-view open.
+                                 Closed or expired links return HTTP 410 with guidance; a closed task needs a new handoff.
+                                 Managed JSON responses include browserSession identity; successful navigation records durable URL history.
+                                 Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.
+                                 Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.
+  AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN Reviewed external HTTPS origin for click-driven top-level viewing.
+                                 The authenticated handoff page opens an already-published grant; browser lifecycle needs no public origin.
+                                 Managed open readiness joins addressed-tab owned-window proof with current installed Remote View transport and matching public HTTPS origin. Viewer pixels/input require live acceptance.
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.

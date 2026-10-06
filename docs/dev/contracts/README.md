@@ -3,6 +3,31 @@
 This directory holds machine-readable schemas for service API records that
 software clients and MCP agents are expected to consume directly.
 
+## Remote View Consumer Foundation v1
+
+`remote-view-foundation.v1.fixture.json` is the provider-free Agent Browser
+consumer fixture for the complete public Remote View F0 foundation
+observation. The service-model parser rejects unversioned shape drift and
+validates the exact published resource and state vocabulary. The fixture does
+not advertise later desktop lifecycle, viewing, placement, or cleanup
+operations ahead of their Remote View checkpoints.
+
+`remote-view-j1-consumer.v1.fixture.json` binds Agent Browser's provider-free
+consumer to Remote View J1 source checkpoint
+`f674518e34fea346002c72c4adc3966b628d0b78`. It covers the public camel-case
+desktop lifecycle observation, exact desktop UUID and generation selection,
+allocation state, and the snake-case durable operation-status record. The
+consumer recomputes Remote View's operation payload hash and preserves the
+exact desktop UUID and generation for a later release request. The fixture
+does not imply application placement, opaque viewing handoff, viewer
+readiness, or installed-runtime acceptance; those remain later Remote View
+checkpoint dependencies.
+
+`p220-p219-file-disposition.v1.json` is the exact 63-file custody ledger for
+the unpublished P219 implementation slice at `47150749`. Every file has one
+retain, adapt, retire, or evidence-only disposition; mixed files require
+hunk-level reconciliation and are never blanket cherry-pick authority.
+
 ## Service Principal Authority v1
 
 `service-principal-authority.v1.md` defines the internal authenticated

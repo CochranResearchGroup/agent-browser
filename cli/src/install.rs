@@ -16,6 +16,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
+mod development_doctor;
+
 const LAST_KNOWN_GOOD_URL: &str =
     "https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json";
 const STEALTHCDP_CHROMIUM_RELEASE_TAG: &str = "v150.0.7835.0-stealthcdp.6b6558b55a1d";
@@ -1040,6 +1042,22 @@ pub fn run_install_doctor(flags: &Flags) {
         report.pointer("/data/runtimeMultiplicity/state"),
     );
     print_doctor_field(
+        "browser runtime",
+        report.pointer("/data/browserRuntime/state"),
+    );
+    print_doctor_field(
+        "browser database integrity",
+        report.pointer("/data/browserRuntime/storage/integrityState"),
+    );
+    print_doctor_field(
+        "browser runtime backup",
+        report.pointer("/data/browserRuntime/storage/backupState"),
+    );
+    print_doctor_field(
+        "browser launch admission",
+        report.pointer("/data/browserRuntime/launchAdmission/state"),
+    );
+    print_doctor_field(
         "runtime hosts",
         report.pointer("/data/runtimeMultiplicity/counts/runtimeHosts"),
     );
@@ -1051,14 +1069,36 @@ pub fn run_install_doctor(flags: &Flags) {
         "stale runtimes",
         report.pointer("/data/runtimeInventory/staleCount"),
     );
-    print_doctor_field(
-        "remote-view helper",
-        report.pointer("/data/remoteViewPrivileges/helperPath"),
-    );
-    print_doctor_field(
-        "remote-view sudoers",
-        report.pointer("/data/remoteViewPrivileges/sudoersPath"),
-    );
+    // Native providers own their setup; helper absence is not a setup failure.
+    match report
+        .pointer("/data/remoteViewPrivileges/mode")
+        .and_then(Value::as_str)
+    {
+        Some("native_remote_view") => {
+            print_doctor_field(
+                "native Remote View inventory ready",
+                report.pointer("/data/remoteViewPrivileges/ready"),
+            );
+            print_doctor_field(
+                "native Remote View pool",
+                report.pointer("/data/remoteViewPrivileges/pool"),
+            );
+        }
+        Some("unbound_development") => print_doctor_field(
+            "development installation binding ready",
+            report.pointer("/data/remoteViewPrivileges/ready"),
+        ),
+        _ => {
+            print_doctor_field(
+                "remote-view helper",
+                report.pointer("/data/remoteViewPrivileges/helperPath"),
+            );
+            print_doctor_field(
+                "remote-view sudoers",
+                report.pointer("/data/remoteViewPrivileges/sudoersPath"),
+            );
+        }
+    }
 
     let issues = report
         .pointer("/data/issues")
@@ -1133,24 +1173,57 @@ fn install_doctor_issues_allow_success(issues: &[Value]) -> bool {
 fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("current_executable");
     let current_executable = binary_fingerprint(std::env::current_exe().ok());
+    let development =
+        std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT").as_deref() == Ok("development");
+    let binding = development.then(|| {
+        development_doctor::load_binding(
+            current_executable
+                .get("canonicalPath")
+                .and_then(Value::as_str)
+                .map(Path::new)
+                .ok_or("development_executable_unavailable")?,
+            std::env::var("AGENT_BROWSER_DEV_NAMESPACE").ok().as_deref(),
+        )
+    });
+    let bound_target = binding.as_ref().and_then(|result| result.as_ref().ok());
     install_doctor_trace("path_command");
-    let path_command = binary_fingerprint(find_path_command(command_name()));
+    let path_command = if development {
+        bound_target
+            .map(|target| target.command_fingerprint(&current_executable))
+            .unwrap_or_else(|| json!({"path":null,"exists":false,"sha256":null}))
+    } else {
+        binary_fingerprint(find_path_command(command_name()))
+    };
     install_doctor_trace("pnpm_package_binary");
-    let pnpm_package_binary = binary_fingerprint(find_pnpm_package_binary());
+    let pnpm_package_binary = if development {
+        json!({"path":null,"scope":"not_applicable_to_development"})
+    } else {
+        binary_fingerprint(find_pnpm_package_binary())
+    };
     install_doctor_trace("workspace_binary");
     let workspace_binary = binary_fingerprint(find_workspace_binary());
     install_doctor_trace("launch_config");
     let launch_config = launch_config_status(flags);
     install_doctor_trace("remote_view_privileges");
-    let remote_view_privileges = remote_view_privilege_status();
+    let remote_view_privileges = if development && bound_target.is_none() {
+        json!({"mode":"unbound_development","ready":false,"helperRequired":false})
+    } else if development
+        && crate::native::browser_session_remote_view::remote_view_settings_present()
+    {
+        development_doctor::native_provider_readiness()
+    } else {
+        remote_view_privilege_status()
+    };
     install_doctor_trace("dashboard_runtime");
     let dashboard_runtime = runtime_manifest_json();
     install_doctor_trace("live_dashboard_runtime");
-    let mut live_dashboard_runtime = live_dashboard_runtime_probe(
-        current_executable
-            .get("sha256")
-            .and_then(|value| value.as_str()),
-    );
+    let expected_hash = current_executable.get("sha256").and_then(Value::as_str);
+    let mut live_dashboard_runtime = if development {
+        bound_target.map(|target| live_dashboard_runtime_probe_at(expected_hash, Ok(target.dashboard_target())))
+            .unwrap_or_else(|| json!({"available":false,"ready":false,"state":"development_install_binding_unavailable"}))
+    } else {
+        live_dashboard_runtime_probe(expected_hash)
+    };
     live_dashboard_runtime["dashboardIngress"] =
         crate::dashboard_ingress::dashboard_ingress_status_json();
     live_dashboard_runtime["workstationUpgrade"] =
@@ -1202,6 +1275,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             &live_dashboard_runtime,
             &workstation_payload,
         );
+    install_doctor_trace("browser_runtime");
+    let browser_runtime = crate::native::browser_session_store::BrowserSessionSqliteStore::default_operational_status_read_only();
     install_doctor_trace("issues");
     let mut issues = install_doctor_issues(InstallDoctorIssueInputs {
         current_executable: &current_executable,
@@ -1216,6 +1291,14 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
         runtime_inventory: &runtime_inventory,
         daemon_listener_inventory: &daemon_listener_inventory,
     });
+    if let Some(Err(reason)) = &binding {
+        issues.push(json!({
+            "code":"development_install_binding_unavailable",
+            "message":"the isolated installation cannot prove its selected binary, launcher and dashboard binding",
+            "reason":reason,
+            "nextAction":"republish_exact_development_generation",
+        }));
+    }
     issues.extend(profile_lease_doctor.findings.iter().map(|finding| {
         json!({
             "code": format!("profile_lease_{}", finding.code),
@@ -1280,6 +1363,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     json!({
         "success": install_doctor_issues_allow_success(&issues),
         "data": {
+            "installationScope": if development { "development" } else { "production" },
             "version": env!("CARGO_PKG_VERSION"),
             "currentExecutable": current_executable,
             "pathCommand": path_command,
@@ -1295,6 +1379,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
             "liveDashboardRuntime": live_dashboard_runtime,
             "runtimeInventory": runtime_inventory,
             "runtimeMultiplicity": runtime_multiplicity,
+            "browserRuntime": browser_runtime,
             "runtimeMonitor": runtime_monitor,
             "daemonListenerInventory": daemon_listener_inventory,
             "runtimeConvergence": runtime_convergence,
@@ -1664,6 +1749,16 @@ fn install_doctor_issues(inputs: InstallDoctorIssueInputs<'_>) -> Vec<serde_json
     let daemon_listener_inventory = inputs.daemon_listener_inventory;
     let manual_preservation_sessions =
         accepted_manual_preservation_sessions(live_dashboard_runtime);
+
+    if remote_view_privileges.get("mode").and_then(Value::as_str) == Some("native_remote_view")
+        && remote_view_privileges.get("ready").and_then(Value::as_bool) != Some(true)
+    {
+        issues.push(json!({
+            "code":"native_remote_view_provider_not_ready",
+            "message":"the configured native Remote View application inventory is unavailable or does not admit the selected pool",
+            "nextAction":"inspect_native_remote_view_provider",
+        }));
+    }
 
     if path_command
         .get("path")
@@ -2940,7 +3035,14 @@ fn local_port_reachable(port: u16) -> bool {
 }
 
 fn live_dashboard_runtime_probe(expected_executable_sha256: Option<&str>) -> serde_json::Value {
-    let (url, host_header, port) = match local_dashboard_probe_target() {
+    live_dashboard_runtime_probe_at(expected_executable_sha256, local_dashboard_probe_target())
+}
+
+fn live_dashboard_runtime_probe_at(
+    expected_executable_sha256: Option<&str>,
+    target: Result<(String, String, u16), String>,
+) -> serde_json::Value {
+    let (url, host_header, port) = match target {
         Ok(target) => target,
         Err(reason) => {
             return json!({
@@ -6155,6 +6257,40 @@ EOF
         });
 
         assert!(!remote_view_helper_status_contract_ready(&report));
+    }
+
+    #[test]
+    fn isolated_doctor_native_inventory_failure_blocks_without_legacy_helper_remedy() {
+        let binary = json!({"path":"/tmp/agent-browser-dev", "sha256":"same"});
+        let launch = json!({"stealthCdpChromiumRequired":false});
+        let service = json!({"ready":true});
+        let empty = json!({});
+        for ready in [false, true] {
+            let provider = json!({"mode":"native_remote_view", "ready":ready,
+                "helperRequired":false, "proofScope":"provider_inventory"});
+            let issues = install_doctor_issues(InstallDoctorIssueInputs {
+                current_executable: &binary,
+                path_command: &binary,
+                pnpm_package_binary: &empty,
+                workspace_binary: &binary,
+                launch_config: &launch,
+                remote_view_privileges: &provider,
+                service: &service,
+                service_resources: &empty,
+                live_dashboard_runtime: &empty,
+                runtime_inventory: &empty,
+                daemon_listener_inventory: &empty_daemon_listener_inventory(),
+            });
+            assert_eq!(
+                issues
+                    .iter()
+                    .any(|issue| issue["code"] == "native_remote_view_provider_not_ready"),
+                !ready
+            );
+            assert!(!issues
+                .iter()
+                .any(|issue| issue["nextAction"] == "install_remote_view_privileges"));
+        }
     }
 
     #[test]

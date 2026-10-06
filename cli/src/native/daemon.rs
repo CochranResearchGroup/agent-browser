@@ -408,11 +408,14 @@ struct RuntimeLane {
 #[derive(Clone)]
 struct RuntimeHostRouter {
     lanes: Arc<crate::runtime_host::RuntimeLaneRegistry<RuntimeLane>>,
+    browser_sessions:
+        Arc<std::sync::Mutex<Option<super::browser_session_host::DefaultBrowserSessionHost>>>,
     creation_lock: Arc<Mutex<()>>,
     socket_dir: PathBuf,
     service_reconcile_interval_ms: Option<u64>,
     service_job_timeout_ms: Option<u64>,
     service_monitor_interval_ms: Option<u64>,
+    browser_session_reap_interval_ms: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -442,6 +445,7 @@ impl RuntimeHostRouter {
         let lanes = Arc::new(crate::runtime_host::RuntimeLaneRegistry::new(
             crate::runtime_host::DEFAULT_MAX_RUNTIME_LANES,
         ));
+        let browser_sessions = Arc::new(std::sync::Mutex::new(None));
         let initial_state = match initial_config.as_ref() {
             Some(config) => DaemonState::new_for_runtime_lane_with_stream(
                 initial_session,
@@ -456,7 +460,7 @@ impl RuntimeHostRouter {
             ),
         };
         let control_plane = ControlPlaneWorker::start_with_options(
-            initial_state,
+            initial_state.with_managed_session_host(browser_sessions.clone()),
             options.service_reconcile_interval_ms,
             options.service_job_timeout_ms,
             options.service_monitor_interval_ms,
@@ -474,11 +478,15 @@ impl RuntimeHostRouter {
         )?;
         Ok(Self {
             lanes,
+            browser_sessions,
             creation_lock: Arc::new(Mutex::new(())),
             socket_dir,
             service_reconcile_interval_ms: options.service_reconcile_interval_ms,
             service_job_timeout_ms: options.service_job_timeout_ms,
             service_monitor_interval_ms: options.service_monitor_interval_ms,
+            browser_session_reap_interval_ms: browser_session_reap_interval_ms(
+                options.service_reconcile_interval_ms,
+            ),
         })
     }
 
@@ -524,7 +532,8 @@ impl RuntimeHostRouter {
                             old.stream_client.clone(),
                             old.stream_server.clone(),
                             config,
-                        )?,
+                        )?
+                        .with_managed_session_host(self.browser_sessions.clone()),
                         config.service_reconcile_interval_ms,
                         config.service_job_timeout_ms,
                         config.service_monitor_interval_ms,
@@ -580,7 +589,8 @@ impl RuntimeHostRouter {
                     stream_client.clone(),
                     stream_server.clone(),
                     &config,
-                )?,
+                )?
+                .with_managed_session_host(self.browser_sessions.clone()),
                 config.service_reconcile_interval_ms,
                 config.service_job_timeout_ms,
                 config.service_monitor_interval_ms,
@@ -616,7 +626,156 @@ impl RuntimeHostRouter {
                 let _ = fs::remove_file(path);
             }
         }
+        let browser_sessions = self.browser_sessions.clone();
+        let _ = tokio::task::spawn_blocking(move || {
+            if let Ok(mut host) = browser_sessions.lock() {
+                host.take();
+            }
+        })
+        .await;
     }
+
+    async fn handle_browser_session_command(&self, command: Value) -> Value {
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            host.as_mut()
+                .ok_or_else(|| "browser_session_host_missing".to_string())
+                .map(|host| host.handle_command(&command))
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => serde_json::json!({ "success": false, "error": error }),
+            Err(error) => serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            }),
+        }
+    }
+    async fn try_handle_browser_session_handoff(&self, command: Value) -> Option<Value> {
+        let id = command.get("id").cloned().unwrap_or(Value::Null);
+        match super::browser_session_host::resolve_shared_handoff_command(
+            self.browser_sessions.clone(),
+            command,
+        )
+        .await
+        {
+            Ok(Some(data)) => Some(serde_json::json!({ "id":id, "success":true, "data":data })),
+            Ok(None) => None,
+            Err(error) => Some(serde_json::json!({ "id":id, "success":false, "error":error })),
+        }
+    }
+
+    async fn try_handle_managed_browser_command(
+        &self,
+        session_name: &str,
+        command: Value,
+    ) -> Option<Value> {
+        match super::browser_session_host::execute_shared_managed_command(
+            self.browser_sessions.clone(),
+            session_name.to_string(),
+            command,
+        )
+        .await
+        {
+            Ok(response) => response,
+            Err(error) => Some(serde_json::json!({ "success":false, "error":error })),
+        }
+    }
+
+    async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
+        let browser_sessions = self.browser_sessions.clone();
+        match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
+            let mut host = browser_sessions
+                .lock()
+                .map_err(|_| "browser_session_host_lock_poisoned".to_string())?;
+            if host.is_none() {
+                let store =
+                    super::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?;
+                let state = store.load_session_state()?;
+                if browser_session_focus_command(&command, &state).is_none() {
+                    return Ok(None);
+                }
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            } else if host
+                .as_ref()
+                .is_none_or(|host| browser_session_focus_command(&command, host.state()).is_none())
+            {
+                return Ok(None);
+            }
+            let command = browser_session_focus_command(
+                &command,
+                host.as_ref()
+                    .ok_or_else(|| "browser_session_host_missing".to_string())?
+                    .state(),
+            )
+            .ok_or_else(|| "browser_session_focus_route_lost".to_string())?;
+            Ok(host.as_mut().map(|host| host.handle_command(&command)))
+        })
+        .await
+        {
+            Ok(Ok(response)) => response,
+            Ok(Err(error)) => Some(serde_json::json!({ "success": false, "error": error })),
+            Err(error) => Some(serde_json::json!({
+                "success": false,
+                "error": format!("browser_session_host_join_failed:{error}"),
+            })),
+        }
+    }
+
+    async fn reap_browser_sessions(&self) -> Result<(), String> {
+        let browser_sessions = self.browser_sessions.clone();
+        tokio::task::spawn_blocking(move || {
+            super::browser_session_host::reap_shared_browser_sessions(browser_sessions)
+        })
+        .await
+        .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
+    }
+}
+
+fn browser_session_focus_command(
+    command: &Value,
+    state: &agent_browser_service_model::BrowserSessionState,
+) -> Option<Value> {
+    if command.get("action").and_then(Value::as_str) != Some("view_focus") {
+        return None;
+    }
+    let browser_id = command.get("browserId").and_then(Value::as_str)?;
+    if !state.browsers.contains_key(browser_id) {
+        return None;
+    }
+    let mut routed = command.clone();
+    routed["action"] = Value::String("browser_session_focus".to_string());
+    Some(routed)
+}
+
+fn browser_session_reap_interval_ms(service_reconcile_interval_ms: Option<u64>) -> u64 {
+    const DEFAULT_REAP_INTERVAL_MS: u64 = 30_000;
+    service_reconcile_interval_ms
+        .unwrap_or(DEFAULT_REAP_INTERVAL_MS)
+        .max(1)
+}
+
+fn spawn_browser_session_reaper(router: RuntimeHostRouter) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_millis(
+            router.browser_session_reap_interval_ms,
+        ));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            if let Err(error) = router.reap_browser_sessions().await {
+                let _ = writeln!(std::io::stderr(), "Browser session reaper error: {error}");
+            }
+        }
+    })
 }
 
 #[cfg(unix)]
@@ -656,6 +815,7 @@ async fn run_socket_server(
         },
     )?;
     router.preload_supervised_lanes(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -716,6 +876,9 @@ async fn run_socket_server(
         }
     }
 
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
+
     Ok(())
 }
 
@@ -772,6 +935,7 @@ async fn run_socket_server(
         },
     )?;
     router.preload_supervised_lanes(session).await?;
+    let browser_session_reaper = spawn_browser_session_reaper(router.clone());
 
     let (reset_tx, mut reset_rx) = mpsc::channel::<()>(64);
     let reset_tx = idle_timeout_ms.map(|_| Arc::new(reset_tx));
@@ -828,6 +992,9 @@ async fn run_socket_server(
             }
         }
     }
+
+    browser_session_reaper.abort();
+    let _ = browser_session_reaper.await;
 
     Ok(())
 }
@@ -936,6 +1103,70 @@ async fn handle_connection<S>(
                         continue;
                     }
                 };
+                let action = cmd
+                    .get("action")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned);
+                if action.as_deref() == Some("service_remote_view_handoff_resolve") {
+                    if let Some(response) =
+                        router.try_handle_browser_session_handoff(cmd.clone()).await
+                    {
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if action.as_deref() == Some("view_focus") {
+                    if let Some(response) =
+                        router.try_handle_browser_session_focus(cmd.clone()).await
+                    {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if action
+                    .as_deref()
+                    .is_some_and(|action| action.starts_with("browser_session_"))
+                {
+                    if let Some(ref tx) = idle_reset_tx {
+                        let _ = tx.try_send(());
+                    }
+                    let response = router.handle_browser_session_command(cmd).await;
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
+                if action.as_deref().is_some_and(|action| {
+                    super::browser_session_host::ordinary_managed_action(action)
+                }) {
+                    if let Some(response) = router
+                        .try_handle_managed_browser_command(&lane_session, cmd.clone())
+                        .await
+                    {
+                        if let Some(ref tx) = idle_reset_tx {
+                            let _ = tx.try_send(());
+                        }
+                        let mut serialized = serialize_daemon_response(response).await;
+                        serialized.push('\n');
+                        if writer.write_all(serialized.as_bytes()).await.is_err() {
+                            break;
+                        }
+                        continue;
+                    }
+                }
                 let lane = match router.lane(&lane_session, lane_config).await {
                     Ok(lane) => lane,
                     Err(error) => {
@@ -967,10 +1198,6 @@ async fn handle_connection<S>(
                     let _ = tx.try_send(());
                 }
 
-                let action = cmd
-                    .get("action")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_owned);
                 let exits_daemon = matches!(
                     action.as_deref(),
                     Some("close" | "runtime_handoff_finalize" | "runtime_handoff_rollback")
@@ -1585,5 +1812,41 @@ mod tests {
             heartbeat_count.load(Ordering::Relaxed) > 100,
             "the two-worker runtime must continue scheduling unrelated work"
         );
+    }
+    #[test]
+    fn browser_session_reaper_uses_service_reconcile_interval() {
+        assert_eq!(browser_session_reap_interval_ms(None), 30_000);
+        assert_eq!(browser_session_reap_interval_ms(Some(1_250)), 1_250);
+        assert_eq!(browser_session_reap_interval_ms(Some(0)), 1);
+    }
+
+    #[test]
+    fn view_focus_routes_only_manager_owned_browser_ids() {
+        let mut state = agent_browser_service_model::BrowserSessionState::default();
+        state.browsers.insert(
+            "browser-work".to_string(),
+            agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser-work".to_string(),
+                profile_id: "work".to_string(),
+                pid: 4242,
+                cdp_endpoint: "ws://127.0.0.1:9422/devtools/browser/test".to_string(),
+                desktop: None,
+                active_session_ids: Vec::new(),
+            },
+        );
+        let owned = serde_json::json!({
+            "action": "view_focus",
+            "browserId": "browser-work",
+            "targetId": "target-1"
+        });
+        let foreign = serde_json::json!({
+            "action": "view_focus",
+            "browserId": "legacy-browser"
+        });
+
+        let routed = browser_session_focus_command(&owned, &state).unwrap();
+        assert_eq!(routed["action"], "browser_session_focus");
+        assert_eq!(routed["targetId"], "target-1");
+        assert!(browser_session_focus_command(&foreign, &state).is_none());
     }
 }

@@ -22,6 +22,9 @@ pub mod browser_input;
 #[allow(dead_code)]
 pub mod browser_inspection;
 #[allow(dead_code)]
+pub(crate) mod browser_launch_admission;
+mod browser_launch_custody_store;
+#[allow(dead_code)]
 pub mod browser_lifecycle;
 #[allow(dead_code)]
 pub mod browser_locator;
@@ -29,6 +32,15 @@ pub mod browser_locator;
 pub mod browser_navigation;
 #[allow(dead_code)]
 pub mod browser_session_authority;
+#[cfg(test)]
+mod browser_session_consumer_tests;
+#[allow(dead_code)]
+pub(crate) mod browser_session_host;
+pub(crate) mod browser_session_remote_view;
+#[allow(dead_code)]
+pub(crate) mod browser_session_runtime;
+#[allow(dead_code)]
+pub(crate) mod browser_session_store;
 #[allow(dead_code)]
 pub mod browser_tabs;
 #[allow(dead_code)]
@@ -58,6 +70,9 @@ pub(crate) mod desktop_evidence;
 pub(crate) mod desktop_evidence_action;
 #[allow(dead_code)]
 pub(crate) mod desktop_evidence_cdp;
+pub(crate) mod remote_view_application_http;
+mod remote_view_application_store;
+mod remote_view_pool_request_store;
 pub(crate) mod service_authentication_run;
 pub(crate) mod service_challenge_task;
 pub(crate) mod service_connection_lifetime;
@@ -185,6 +200,7 @@ pub(crate) mod service_request_provenance;
 pub mod service_resources;
 #[allow(dead_code)]
 pub mod service_retained_state;
+pub(crate) mod service_runtime_backup;
 pub(crate) mod service_state_migration;
 pub(crate) mod service_state_validation;
 #[allow(dead_code)]

@@ -662,6 +662,9 @@ pub struct LaunchOptions {
     pub remote_headed: bool,
     /// Optional display allocation policy for remote-headed service launches.
     pub remote_headed_display_isolation: Option<String>,
+    /// Fresh provider launch inputs, consumed only by process construction.
+    /// Presence disables automatic retries and redacts launch diagnostics.
+    pub(crate) private_launch_environment: Option<std::collections::BTreeMap<String, String>>,
 }
 
 impl Default for LaunchOptions {
@@ -692,6 +695,7 @@ impl Default for LaunchOptions {
             display: None,
             remote_headed: false,
             remote_headed_display_isolation: None,
+            private_launch_environment: None,
         }
     }
 }
@@ -1053,6 +1057,14 @@ fn build_chrome_args(
     })
 }
 
+/// Apply complete private inputs after local keyring defaults. The caller pins
+/// DISPLAY from the same environment; no private input is serialized or logged.
+fn apply_private_launch_environment(command: &mut Command, options: &LaunchOptions) {
+    if let Some(environment) = &options.private_launch_environment {
+        command.envs(environment);
+    }
+}
+
 pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
     let chrome_path = match &options.executable_path {
         Some(p) => PathBuf::from(p),
@@ -1074,7 +1086,11 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         agent_browser_lease_authority::validate_runtime_profile_name(runtime_profile)?;
     }
 
-    let max_attempts = 3;
+    let max_attempts = if options.private_launch_environment.is_some() {
+        1
+    } else {
+        3
+    };
     let mut attempt_errors = Vec::new();
 
     unlock_macos_keychain(options.keychain_password.as_deref())?;
@@ -1104,7 +1120,11 @@ pub fn launch_chrome(options: &LaunchOptions) -> Result<ChromeProcess, String> {
         }
     }
 
-    Err(attempt_errors.join("\n"))
+    if options.private_launch_environment.is_some() {
+        Err("browser_private_launch_outcome_unknown".to_string())
+    } else {
+        Err(attempt_errors.join("\n"))
+    }
 }
 
 pub struct ManualChromeLaunch {
@@ -1183,6 +1203,8 @@ pub fn launch_chrome_detached(options: &LaunchOptions) -> Result<ManualChromeLau
     for (key, value) in &linux_keyring_env {
         cmd.env(key, value);
     }
+
+    apply_private_launch_environment(&mut cmd, options);
 
     // Resolve the effective display once so the spawned browser and its
     // retained manual-runtime record cannot disagree when DISPLAY is inherited.
@@ -1621,6 +1643,8 @@ fn try_launch_chrome(
         cmd.env(key, value);
     }
 
+    apply_private_launch_environment(&mut cmd, options);
+
     // In local headed mode on Unix, default DISPLAY to :0.0 when it is unset
     // so WSL and similar environments can attach to the user's primary X
     // server without requiring explicit DISPLAY configuration. Remote-headed
@@ -1652,7 +1676,11 @@ fn try_launch_chrome(
         cleanup_temp_dir(&temp_user_data_dir);
         format!("Failed to launch Chrome at {:?}: {}", chrome_path, e)
     })?;
-    let requested_stderr_log_path = chrome_stderr_log_path(child.id());
+    let requested_stderr_log_path = if options.private_launch_environment.is_some() {
+        None
+    } else {
+        chrome_stderr_log_path(child.id())
+    };
     let (stderr_logs, stderr_drainer, stderr_log_path) =
         match start_chrome_stderr_drainer(&mut child, requested_stderr_log_path) {
             Ok(drainer) => drainer,
@@ -3208,6 +3236,55 @@ fn find_path_executable(name: &str) -> Option<PathBuf> {
 mod tests {
     use super::*;
     use crate::test_utils::EnvGuard;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn private_external_launch_consumes_complete_environment_without_retry_or_diagnostic_leak() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = TempDir::new("private-external-launch");
+        fs::create_dir_all(&*root).unwrap();
+        let executable = root.join("fixture-chrome");
+        let receipt = root.join("attempts");
+        fs::write(&executable, concat!(
+            "#!/bin/sh\n",
+            "printf '%s|%s|%s\\n' \"$DISPLAY\" \"$XAUTHORITY\" \"$PRIVATE_FIXTURE_INPUT\" >> \"$PRIVATE_FIXTURE_RECEIPT\"\n",
+            "printf '%s\\n' \"$PRIVATE_FIXTURE_INPUT\" >&2\n",
+            "exit 1\n",
+        )).unwrap();
+        fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
+        let environment = std::collections::BTreeMap::from([
+            ("DISPLAY".to_string(), ":41".to_string()),
+            (
+                "XAUTHORITY".to_string(),
+                "/synthetic/private-auth".to_string(),
+            ),
+            (
+                "PRIVATE_FIXTURE_INPUT".to_string(),
+                "synthetic-secret".to_string(),
+            ),
+            (
+                "PRIVATE_FIXTURE_RECEIPT".to_string(),
+                receipt.to_string_lossy().into_owned(),
+            ),
+        ]);
+        let options = LaunchOptions {
+            headless: false,
+            display: Some(":41".to_string()),
+            executable_path: Some(executable.to_string_lossy().into_owned()),
+            profile: Some(root.join("profile").to_string_lossy().into_owned()),
+            private_launch_environment: Some(environment),
+            ..LaunchOptions::default()
+        };
+        let error = match launch_chrome(&options) {
+            Err(error) => error,
+            Ok(_) => panic!("synthetic child must fail"),
+        };
+        assert_eq!(error, "browser_private_launch_outcome_unknown");
+        assert_eq!(
+            fs::read_to_string(receipt).unwrap(),
+            ":41|/synthetic/private-auth|synthetic-secret\n"
+        );
+    }
 
     #[cfg(unix)]
     fn spawn_noop_child() -> Child {

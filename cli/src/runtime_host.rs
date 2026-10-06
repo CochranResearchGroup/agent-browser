@@ -98,6 +98,24 @@ pub(crate) fn take_lane_config(command: &mut Value) -> Result<Option<RuntimeLane
 /// reject profile and runtime-profile routing, so lane defaults must remain
 /// control-plane metadata instead of becoming caller-visible action fields.
 pub(crate) fn command_accepts_lane_profile_defaults(command: &Value) -> bool {
+    let action = command.get("action").and_then(Value::as_str).unwrap_or("");
+    // Native managed admission owns disposable selection and name-based reuse.
+    // Cached daemon defaults must not become an implicit catalog constraint.
+    if crate::native::browser_session_remote_view::remote_view_settings_present()
+        && (matches!(
+            action,
+            "remote_view_open"
+                | "browser_session_navigate"
+                | "browser_session_close"
+                | "browser_session_tab_new"
+                | "browser_session_tab_close"
+                | "batch"
+        ) || (command.get("sessionName").is_some()
+            && crate::native::browser_session_host::ordinary_managed_action(action)
+            && !matches!(action, "launch" | "connect")))
+    {
+        return false;
+    }
     !matches!(
         command.get("action").and_then(Value::as_str),
         Some(
@@ -123,10 +141,9 @@ pub(crate) fn reconcile_lane_profile_defaults(command: &mut Value, config: &Runt
         .as_object_mut()
         .and_then(|object| object.remove(SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD))
         .and_then(|value| value.as_bool());
-    let inherited_service_focus = command.get("action").and_then(Value::as_str)
-        == Some("view_focus")
+    let inherited_service_routing = !command_accepts_lane_profile_defaults(command)
         && explicit_service_profile_routing == Some(false);
-    if inherited_service_focus {
+    if inherited_service_routing {
         if let Some(object) = command.as_object_mut() {
             object.remove("runtimeProfile");
             object.remove("profileId");
@@ -368,7 +385,43 @@ mod tests {
     }
 
     #[test]
+    fn native_managed_requests_do_not_inherit_cached_lane_profiles() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_ORIGIN"]);
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:19103");
+        let config = RuntimeLaneConfig {
+            runtime_profile: Some("default".into()),
+            profile: Some("/startup/default/user-data".into()),
+            ..RuntimeLaneConfig::default()
+        };
+        for action in [
+            "remote_view_open",
+            "navigate",
+            "get_url",
+            "browser_session_close",
+            "browser_session_navigate",
+            "browser_session_tab_new",
+            "browser_session_tab_close",
+            "batch",
+        ] {
+            let mut command = serde_json::json!({"action":action,"sessionName":"task"});
+            reconcile_lane_profile_defaults(&mut command, &config);
+            assert!(command.get("runtimeProfile").is_none(), "{action}");
+            assert!(command.get("profile").is_none(), "{action}");
+
+            command["runtimeProfile"] = serde_json::json!("explicit");
+            reconcile_lane_profile_defaults(&mut command, &config);
+            assert_eq!(command["runtimeProfile"], "explicit");
+
+            command[SERVICE_REQUEST_EXPLICIT_PROFILE_ROUTING_FIELD] = serde_json::json!(false);
+            reconcile_lane_profile_defaults(&mut command, &config);
+            assert!(command.get("runtimeProfile").is_none(), "{action}");
+        }
+    }
+
+    #[test]
     fn bounded_desktop_commands_do_not_accept_lane_profile_defaults() {
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_ORIGIN"]);
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_ORIGIN");
         for action in [
             "desktop_capture",
             "desktop_locate",

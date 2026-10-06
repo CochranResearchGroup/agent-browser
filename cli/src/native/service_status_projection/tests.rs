@@ -676,9 +676,19 @@ async fn invalid_launch_configuration_fails_before_observation() {
 #[tokio::test]
 async fn fixed_input_real_status_producer_and_fallback_data_seams_match() {
     let response = project(ServiceState::default(), false).await;
-    let canonical = serde_json::to_value(response.clone()).unwrap();
+    let projected = serde_json::to_value(response.clone()).unwrap();
     let control_envelope =
         crate::native::control_plane::service_status_result_envelope("fixed-status", Ok(response));
+    // The real producer adds one read-only runtime observation. Freeze that
+    // observation once so both transports carry the same complete snapshot.
+    let canonical = control_envelope["data"].clone();
+    let mut producer_projection = canonical.clone();
+    assert!(producer_projection
+        .as_object_mut()
+        .unwrap()
+        .remove("browserRuntime")
+        .is_some());
+    assert_eq!(producer_projection, projected);
     let direct_http =
         crate::native::stream::service_status_http_fixture(control_envelope.to_string());
     let dashboard_backend = crate::native::stream::service_status_handler_fixture(direct_http);

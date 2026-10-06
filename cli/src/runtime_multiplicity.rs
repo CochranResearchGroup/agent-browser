@@ -337,11 +337,15 @@ fn selected_generation_id_for_environment(
         .flatten()
 }
 
-fn dashboard_backend_unit_name(runtime_environment: &str) -> &'static str {
+/// Select the exact namespace backend; production never borrows a development unit.
+fn dashboard_backend_unit_name(runtime_environment: &str, namespace: Option<&str>) -> String {
     if runtime_environment == "development" {
-        "agent-browser-dev-dashboard-backend.service"
+        match namespace {
+            Some(namespace) => format!("agent-browser-dev-{namespace}-dashboard-backend.service"),
+            None => "agent-browser-dev-dashboard-backend.service".to_string(),
+        }
     } else {
-        "agent-browser-dashboard-backend.service"
+        "agent-browser-dashboard-backend.service".to_string()
     }
 }
 
@@ -352,7 +356,10 @@ fn dashboard_backend_process(runtime_environment: &str) -> Option<RuntimeProcess
             .args([
                 "--user",
                 "show",
-                dashboard_backend_unit_name(runtime_environment),
+                &dashboard_backend_unit_name(
+                    runtime_environment,
+                    std::env::var("AGENT_BROWSER_DEV_NAMESPACE").ok().as_deref(),
+                ),
                 "--property=MainPID",
                 "--value",
             ])
@@ -435,14 +442,23 @@ mod tests {
     #[test]
     fn development_multiplicity_uses_its_own_dashboard_and_host_generation() {
         assert_eq!(
-            dashboard_backend_unit_name("development"),
+            dashboard_backend_unit_name("development", None),
             "agent-browser-dev-dashboard-backend.service"
         );
         assert_eq!(
-            dashboard_backend_unit_name("production"),
+            dashboard_backend_unit_name("production", None),
             "agent-browser-dashboard-backend.service"
         );
 
+        assert_eq!(
+            dashboard_backend_unit_name("development", Some("p221")),
+            "agent-browser-dev-p221-dashboard-backend.service",
+            "a namespaced census must inspect its own dashboard, never the default lane"
+        );
+        assert_eq!(
+            dashboard_backend_unit_name("production", Some("p221")),
+            "agent-browser-dashboard-backend.service"
+        );
         let runtime_hosts = vec![process(42, "development-generation")];
         assert_eq!(
             selected_generation_id_for_environment(

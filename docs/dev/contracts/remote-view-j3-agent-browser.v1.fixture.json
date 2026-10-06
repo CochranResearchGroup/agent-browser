@@ -1,0 +1,183 @@
+{
+  "schemaVersion": 1,
+  "sourceCheckpoint": "018d3d752f9d99805242f99c00034f0caabc53d1",
+  "registration": {
+    "registrationId": "registration-agent-browser",
+    "consumerKey": "agent-browser",
+    "applicationShape": "browser-desktop"
+  },
+  "assignments": [
+    {
+      "assignmentId": "assignment-alice",
+      "registrationId": "registration-agent-browser",
+      "poolId": "pool-agent-browser",
+      "desktopId": "11111111-1111-1111-1111-111111111111",
+      "generation": 3,
+      "state": "active"
+    },
+    {
+      "assignmentId": "assignment-bob",
+      "registrationId": "registration-agent-browser",
+      "poolId": "pool-agent-browser",
+      "desktopId": "22222222-2222-2222-2222-222222222222",
+      "generation": 7,
+      "state": "active"
+    }
+  ],
+  "placements": [
+    {
+      "placementId": "placement-alice",
+      "assignmentId": "assignment-alice",
+      "registrationId": "registration-agent-browser",
+      "poolId": "pool-agent-browser",
+      "desktopId": "11111111-1111-1111-1111-111111111111",
+      "generation": 3,
+      "applicationShape": "browser-desktop",
+      "operationId": "operation-place-alice",
+      "currentAttempt": {
+        "operationId": "operation-place-alice",
+        "journalOperationId": "operation-place-alice",
+        "attempt": 1,
+        "kind": "application.place",
+        "payloadHash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      },
+      "state": "ready"
+    },
+    {
+      "placementId": "placement-bob",
+      "assignmentId": "assignment-bob",
+      "registrationId": "registration-agent-browser",
+      "poolId": "pool-agent-browser",
+      "desktopId": "22222222-2222-2222-2222-222222222222",
+      "generation": 7,
+      "applicationShape": "browser-desktop",
+      "operationId": "operation-place-bob",
+      "currentAttempt": {
+        "operationId": "operation-place-bob",
+        "journalOperationId": "operation-place-bob",
+        "attempt": 1,
+        "kind": "application.place",
+        "payloadHash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "state": "ready"
+    }
+  ],
+  "viewingRoutes": [
+    {
+      "schemaVersion": 1,
+      "routeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+      "desktopId": "11111111-1111-1111-1111-111111111111"
+    },
+    {
+      "schemaVersion": 1,
+      "routeId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+      "desktopId": "22222222-2222-2222-2222-222222222222"
+    }
+  ],
+  "viewerSessions": [
+    {
+      "schemaVersion": 1,
+      "session": {
+        "schemaVersion": 1,
+        "sessionId": "viewer-alice-desktop",
+        "routeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "operator": "fixture-operator",
+        "desktopId": "11111111-1111-1111-1111-111111111111",
+        "admittedGeneration": 3,
+        "device": { "width": 1440, "height": 900 },
+        "state": "admitted",
+        "admittedAt": 100,
+        "lastActivityAt": 101,
+        "reconnectAttempts": 0
+      },
+      "liveState": "connected"
+    },
+    {
+      "schemaVersion": 1,
+      "session": {
+        "schemaVersion": 1,
+        "sessionId": "viewer-alice-mobile",
+        "routeId": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+        "operator": "fixture-operator",
+        "desktopId": "11111111-1111-1111-1111-111111111111",
+        "admittedGeneration": 3,
+        "device": { "width": 390, "height": 844 },
+        "state": "admitted",
+        "admittedAt": 102,
+        "lastActivityAt": 103,
+        "reconnectAttempts": 0
+      },
+      "liveState": "connected"
+    },
+    {
+      "schemaVersion": 1,
+      "session": {
+        "schemaVersion": 1,
+        "sessionId": "viewer-bob-desktop",
+        "routeId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "operator": "fixture-operator",
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "admittedGeneration": 7,
+        "device": { "width": 1440, "height": 900 },
+        "state": "admitted",
+        "admittedAt": 104,
+        "lastActivityAt": 105,
+        "reconnectAttempts": 0
+      },
+      "liveState": "connected"
+    },
+    {
+      "schemaVersion": 1,
+      "session": {
+        "schemaVersion": 1,
+        "sessionId": "viewer-bob-mobile",
+        "routeId": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+        "operator": "fixture-operator",
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "admittedGeneration": 7,
+        "device": { "width": 390, "height": 844 },
+        "state": "admitted",
+        "admittedAt": 106,
+        "lastActivityAt": 107,
+        "reconnectAttempts": 0
+      },
+      "liveState": "connected"
+    }
+  ],
+  "joinedReleases": [
+    {
+      "assignment": {
+        "assignmentId": "assignment-alice",
+        "registrationId": "registration-agent-browser",
+        "poolId": "pool-agent-browser",
+        "desktopId": "11111111-1111-1111-1111-111111111111",
+        "generation": 3,
+        "state": "released"
+      },
+      "retirement": {
+        "schemaVersion": 1,
+        "desktopId": "11111111-1111-1111-1111-111111111111",
+        "generation": 3,
+        "routes": ["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"],
+        "sessions": ["viewer-alice-desktop", "viewer-alice-mobile"]
+      }
+    },
+    {
+      "assignment": {
+        "assignmentId": "assignment-bob",
+        "registrationId": "registration-agent-browser",
+        "poolId": "pool-agent-browser",
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "generation": 7,
+        "state": "released"
+      },
+      "retirement": {
+        "schemaVersion": 1,
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "generation": 7,
+        "routes": ["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"],
+        "sessions": ["viewer-bob-desktop", "viewer-bob-mobile"]
+      }
+    }
+  ]
+}

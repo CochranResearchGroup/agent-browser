@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "sourceCheckpoint": "f674518e34fea346002c72c4adc3966b628d0b78",
+  "lifecycleObservations": [
+    {
+      "schemaVersion": 1,
+      "operation": "desktop.allocate",
+      "desktop": {
+        "desktopId": "11111111-1111-1111-1111-111111111111",
+        "friendlyRoute": "desktop-alice",
+        "generation": 2,
+        "state": "ready",
+        "resources": {
+          "display": 80,
+          "vncPort": 5980
+        },
+        "allocated": true
+      }
+    },
+    {
+      "schemaVersion": 1,
+      "operation": "desktop.allocate",
+      "desktop": {
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "friendlyRoute": "desktop-bob",
+        "generation": 3,
+        "state": "ready",
+        "resources": {
+          "display": 81,
+          "vncPort": 5981
+        },
+        "allocated": true
+      }
+    }
+  ],
+  "operationStatuses": [
+    {
+      "schema_version": 1,
+      "id": "operation-create-bob",
+      "idempotency_key": "create-bob",
+      "kind": "desktop.create",
+      "payload": {
+        "friendlyRoute": "desktop-bob",
+        "idempotencyKey": "create-bob"
+      },
+      "payload_hash": "ed8550d222159a941ef3826a209b20a775b2530445ec46811449bbc6c18042ce",
+      "state": "succeeded",
+      "attempt": 1,
+      "created_unix_ms": 1000,
+      "updated_unix_ms": 1100,
+      "timeout_unix_ms": 2000,
+      "journal_operation_ids": [
+        "operation-create-bob-attempt-1"
+      ],
+      "last_error": null
+    },
+    {
+      "schema_version": 1,
+      "id": "operation-delete-bob",
+      "idempotency_key": "delete-bob",
+      "kind": "desktop.delete",
+      "payload": {
+        "desktopId": "22222222-2222-2222-2222-222222222222",
+        "expectedGeneration": 3
+      },
+      "payload_hash": "91f080b967c4ea7a1013669599c5881b5550bd8836165c14b2b003399cc4f9cb",
+      "state": "awaiting_intervention",
+      "attempt": 1,
+      "created_unix_ms": 3000,
+      "updated_unix_ms": 3200,
+      "timeout_unix_ms": 4000,
+      "journal_operation_ids": [
+        "operation-delete-bob-attempt-1"
+      ],
+      "last_error": "effect_reconciliation_required"
+    }
+  ]
+}

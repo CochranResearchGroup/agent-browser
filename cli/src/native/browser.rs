@@ -556,7 +556,14 @@ impl BrowserManager {
         let engine_name = engine.unwrap_or("chrome").to_string();
         let profile_configured = options.profile.is_some();
         let headed = !options.headless;
-        let result = Self::launch_inner(options, engine).await;
+        let private_launch = options.private_launch_environment.is_some();
+        let result = Self::launch_inner(options, engine).await.map_err(|error| {
+            if private_launch {
+                "browser_private_launch_outcome_unknown".to_string()
+            } else {
+                error
+            }
+        });
         if let Err(error) = result.as_ref() {
             let record = ServiceFailureRecord::new(
                 ServiceFailureCategory::BrowserLaunch,

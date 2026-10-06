@@ -803,6 +803,13 @@ pub(crate) fn normalize_service_request(
                     apply_remote_view_handoff_route_hints(service_state, &mut command);
                 }
                 RouteHintStage::SharedProfile => {
+                    if action == "tab_new"
+                        && super::browser_session_remote_view::remote_view_settings_present()
+                    {
+                        // Session Manager owns profile and browser admission for
+                        // the configured external-desktop consumer path.
+                        continue;
+                    }
                     apply_shared_profile_route_hints_with_decision(
                         service_state,
                         &mut command,

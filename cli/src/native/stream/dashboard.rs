@@ -376,6 +376,41 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         None
     };
 
+    // This route follows the ordinary dashboard authentication gate above.
+    // Opening the durable handoff restores its browser before the native viewer redirect.
+    if method == "GET" && path.starts_with("/api/remote-view/") {
+        let Some(id) = super::remote_view_presentation::handoff_id(path) else {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_handoff_path_invalid",
+            )
+            .await;
+            return;
+        };
+        match super::remote_view_presentation::resolve_location(
+            id,
+            authenticated_dashboard_user
+                .as_deref()
+                .unwrap_or("operator"),
+        )
+        .await
+        {
+            Ok(location) => {
+                let response = format!("HTTP/1.1 303 See Other\r\nLocation: {location}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+            Err(reason) => {
+                let html = headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("accept") && value.contains("text/html")
+                });
+                let response = super::remote_view_presentation::failure_response(&reason, html);
+                let _ = stream.write_all(response.as_bytes()).await;
+            }
+        }
+        return;
+    }
+
     if method == "GET" && path == "/api/runtime/health" {
         write_json_value(&mut stream, "200 OK", crate::install::runtime_health_json()).await;
         return;
@@ -3779,6 +3814,26 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn tab_presentation_endpoint_authenticates_before_provider_resolution() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            handle_dashboard_connection(stream).await;
+        });
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client.write_all(b"GET /api/remote-view/opaque-a/presentation HTTP/1.1\r\nHost: dashboard.example\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = Vec::new();
+        timeout(Duration::from_secs(2), client.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        server.await.unwrap();
+        assert_eq!(http_response_status(&response), Some(401));
+        assert!(!String::from_utf8_lossy(&response).contains("Location:"));
+    }
 
     #[tokio::test]
     async fn guacamole_primary_failures_correlate_requests_without_duplicating_owner_events() {

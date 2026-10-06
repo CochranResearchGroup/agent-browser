@@ -185,6 +185,9 @@ use super::service_resources::{
 use super::service_retained_state::{
     handle_service_prune_retained, handle_service_repair_retained, handle_service_route_pool_repair,
 };
+use super::service_runtime_backup::{
+    handle_service_runtime_backup_create, handle_service_runtime_backup_status,
+};
 use super::service_status_projection::handle_service_status;
 use super::service_trace::handle_service_trace;
 use super::service_ui_action::handle_service_ui_action;
@@ -212,6 +215,9 @@ macro_rules! race_renderer_crash {
 }
 
 pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
+    if action.starts_with("browser_session_") {
+        return true;
+    }
     matches!(
         action,
         "" | "launch"
@@ -292,6 +298,8 @@ pub(crate) fn action_skips_browser_launch(action: &str) -> bool {
             | "service_job_cancel"
             | "service_browser_retry"
             | "service_remedies_apply"
+            | "service_runtime_backup_status"
+            | "service_runtime_backup_create"
             | "service_profile_upsert"
             | "service_profile_policy_mutate"
             | "service_profile_tab_evict"
@@ -514,6 +522,52 @@ pub(crate) async fn handle_dependent_batch(cmd: &Value, state: &mut DaemonState)
 /// recover, launch, or otherwise mutate browser/runtime state. The outer wrapper
 /// also retains that admission beside any later success or failure response.
 pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Value {
+    execute_command_with_target_custody(cmd, state, false).await
+}
+
+/// The managed-session owner has selected and verified this exact target in
+/// its own runtime. Do not infer a second target from the legacy tab catalog.
+pub(crate) async fn execute_managed_target_command(
+    cmd: &Value,
+    state: &mut DaemonState,
+    target_id: &str,
+) -> Value {
+    if cmd
+        .get("targetId")
+        .filter(|value| !value.is_null())
+        .is_some_and(|value| value.as_str() != Some(target_id))
+        || cmd
+            .get("tabId")
+            .filter(|value| !value.is_null())
+            .is_some_and(|value| {
+                value.as_str() != Some(target_id)
+                    && value.as_str() != Some(format!("target:{target_id}").as_str())
+            })
+    {
+        return error_response(
+            cmd["id"].as_str().unwrap_or(""),
+            "browser_session_target_selector_conflict",
+        );
+    }
+    if state
+        .browser
+        .as_ref()
+        .and_then(|browser| browser.active_target_id().ok())
+        != Some(target_id)
+    {
+        return error_response(
+            cmd["id"].as_str().unwrap_or(""),
+            "browser_session_target_unproven",
+        );
+    }
+    execute_command_with_target_custody(cmd, state, true).await
+}
+
+async fn execute_command_with_target_custody(
+    cmd: &Value,
+    state: &mut DaemonState,
+    managed_target: bool,
+) -> Value {
     let _service_state_lock_timeout_override =
         crate::native::service_store::service_state_lock_timeout_override(
             cmd.get("serviceStateLockTimeoutMs").and_then(Value::as_u64),
@@ -528,8 +582,13 @@ pub(crate) async fn execute_command(cmd: &Value, state: &mut DaemonState) -> Val
     } else {
         None
     };
-    let mut response =
-        execute_command_after_navigation_admission(cmd, state, navigation_admission.clone()).await;
+    let mut response = execute_command_after_navigation_admission(
+        cmd,
+        state,
+        navigation_admission.clone(),
+        managed_target,
+    )
+    .await;
     attach_navigation_challenge_admission(&mut response, navigation_admission.as_ref());
     response
 }
@@ -548,6 +607,7 @@ async fn execute_command_after_navigation_admission(
     cmd: &Value,
     state: &mut DaemonState,
     navigation_admission: Option<Value>,
+    managed_target: bool,
 ) -> Value {
     let action = cmd.get("action").and_then(|v| v.as_str()).unwrap_or("");
     let id = cmd
@@ -583,7 +643,29 @@ async fn execute_command_after_navigation_admission(
             }
         }
     }
-    if crate::runtime_owner_transfer::action_requires_runtime_admission(action) {
+    let managed_session_name =
+        super::browser_session_host::managed_command_session_name(&state.session_id, cmd);
+    let managed_request = if !state.browser_session_manager_owned {
+        if let Some(host) = state.managed_session_host.clone() {
+            match super::browser_session_host::shared_managed_request_selected(
+                host,
+                managed_session_name.clone(),
+                cmd.clone(),
+            )
+            .await
+            {
+                Ok(selected) => selected,
+                Err(error) => return error_response(&id, &error),
+            }
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    if !state.browser_session_manager_owned
+        && crate::runtime_owner_transfer::action_requires_runtime_admission(action)
+    {
         let admission_drain = match crate::runtime_adoption::runtime_admission_drain_path() {
             Ok(path) => path,
             Err(error) => return error_response(&id, &error),
@@ -594,7 +676,10 @@ async fn execute_command_after_navigation_admission(
             return error_response(&id, &error);
         }
     }
-    if crate::runtime_owner_transfer::action_requires_owner_effect_authority(action) {
+    if !state.browser_session_manager_owned
+        && !managed_request
+        && crate::runtime_owner_transfer::action_requires_owner_effect_authority(action)
+    {
         if let Err(error) = crate::native::runtime_lifecycle::admit_default_action_effect(
             &mut state.runtime_owner_binding,
             action,
@@ -687,6 +772,22 @@ async fn execute_command_after_navigation_admission(
             }
         }
     }
+    if managed_request {
+        let Some(host) = state.managed_session_host.clone() else {
+            return error_response(&id, "browser_session_managed_route_changed");
+        };
+        return match super::browser_session_host::execute_shared_managed_command(
+            host,
+            managed_session_name,
+            cmd.clone(),
+        )
+        .await
+        {
+            Ok(Some(response)) => response,
+            Ok(None) => error_response(&id, "browser_session_managed_route_changed"),
+            Err(error) => error_response(&id, &error),
+        };
+    }
     if action == "dependent_batch" {
         let action_started = std::time::Instant::now();
         let mut response = match handle_dependent_batch(cmd, state).await {
@@ -716,7 +817,7 @@ async fn execute_command_after_navigation_admission(
         return response;
     }
     let explicit_service_handle = cmd.get("serviceTabHandle").is_some();
-    let bound_command = if !action_skips_browser_launch(action) {
+    let bound_command = if !action_skips_browser_launch(action) && !managed_target {
         match super::action_runtime::runtime::bind_native_service_tab_command(cmd, state) {
             Ok(command) => command,
             Err(error) => return error_response(&id, &format!("{error}; source=native/action_runtime/runtime/cdp_free_execute.rs::bind_native_service_tab_command")),
@@ -780,7 +881,7 @@ async fn execute_command_after_navigation_admission(
     let skip_launch = action_skips_browser_launch(action)
         || native_handle_command
         || (action == "evaluate" && cmd.get("serviceTabHandle").is_some());
-    if !skip_launch {
+    if !skip_launch && !state.browser_session_manager_owned {
         if let Some(blocker) = active_manual_seeding_cdp_blocker(cmd, state) {
             return error_response(&id, &blocker);
         }
@@ -799,6 +900,9 @@ async fn execute_command_after_navigation_admission(
             needs_launch = false;
         }
         if needs_launch {
+            if state.browser_session_manager_owned {
+                return error_response(&id, "browser_session_managed_browser_unavailable");
+            }
             let mut recovery_persistence = BrowserRecoveryPersistence::NotRecorded;
             if state.browser.is_some() {
                 if let (Some(health), Some(reason_kind), Some(message)) = (
@@ -841,8 +945,10 @@ async fn execute_command_after_navigation_admission(
                 let _ = mgr.ensure_page().await;
             }
         }
-        if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
-            return error_response(&id, &mismatch);
+        if !state.browser_session_manager_owned {
+            if let Some(mismatch) = active_browser_profile_mismatch(cmd, state) {
+                return error_response(&id, &mismatch);
+            }
         }
     }
     if matches!(state.backend_type, BackendType::WebDriver)
@@ -1054,6 +1160,8 @@ async fn execute_command_after_navigation_admission(
             "service_job_cancel" => handle_service_job_cancel(cmd).await,
             "service_browser_retry" => handle_service_browser_retry(cmd).await,
             "service_remedies_apply" => handle_service_remedies_apply(cmd).await,
+            "service_runtime_backup_status" => handle_service_runtime_backup_status().await,
+            "service_runtime_backup_create" => handle_service_runtime_backup_create().await,
             "service_profile_upsert" => handle_service_profile_upsert(cmd).await,
             "service_profile_policy_mutate" => handle_service_profile_policy_mutate(cmd).await,
             "service_profile_tab_evict" => handle_service_profile_tab_evict(cmd, state).await,

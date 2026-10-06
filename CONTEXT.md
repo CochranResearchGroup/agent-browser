@@ -4,6 +4,10 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Development publication**:
+An isolated generation installation whose activation coordinates the runtime host and dashboard process group. Non-activating publication requires stopped units before changing executable bindings. Host retirement preserves retained browser children and persistent private temporary storage.
+
+
 **Client subject**:
 The stable identity to which access policy grants are assigned, together with an explicit assurance level such as locally self-declared or authenticated.
 _Avoid_: Runtime owner, daemon identity, session name
@@ -114,6 +118,7 @@ _Avoid_: URL readiness, route health
 
 **Durable handoff**:
 An opaque public identity that can reacquire current route and browser evidence without exposing an ephemeral provider address.
+An exact live session/tab binding retains that session through inactivity until explicit closure or lifecycle failure; a dangling historical binding confers no retention or access authority.
 _Avoid_: Guacamole URL, provider URL
 
 **Desktop evidence episode**:

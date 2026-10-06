@@ -1512,6 +1512,19 @@ fn dashboard_ingress_request_identity(request: &[u8]) -> (String, String, String
 /// timeout plus a small response grace so a committed request is not reported
 /// as a retryable backend failure.
 fn dashboard_ingress_first_response_timeout(request: &[u8]) -> Duration {
+    let native_handoff = request.starts_with(b"GET ")
+        && std::str::from_utf8(request)
+            .ok()
+            .and_then(|request| request.lines().next()?.split_whitespace().nth(1))
+            .is_some_and(|path| {
+                let path = path.split('?').next().unwrap_or(path);
+                path.starts_with("/api/remote-view/") && path.ends_with("/presentation")
+            });
+    if native_handoff {
+        // Browser recovery can precede the redirect. Keep ingress attached for
+        // its 20-second owner preparation and 90-second resolution budgets.
+        return Duration::from_secs(120);
+    }
     if request.starts_with(b"GET ")
         || request.starts_with(b"HEAD ")
         || request.starts_with(b"OPTIONS ")
@@ -3221,6 +3234,22 @@ mod tests {
         backend.await.unwrap();
         ingress.await.unwrap();
         assert!(response.ends_with(b"committed"));
+    }
+
+    #[test]
+    fn native_handoff_redirect_waits_for_browser_recovery() {
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/remote-view/opaque-a/presentation HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(120)
+        );
+        assert_eq!(
+            dashboard_ingress_first_response_timeout(
+                b"GET /api/remote-view/opaque-a/status HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            ),
+            Duration::from_secs(10)
+        );
     }
 
     #[test]

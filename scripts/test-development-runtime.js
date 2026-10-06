@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
   mkdirSync,
@@ -30,6 +31,7 @@ import {
   installDevelopmentRuntime,
   doctorDevelopmentRuntime,
   publishDevelopmentRuntimeIngress,
+  renderDevelopmentLauncher,
   renderDevelopmentUnits,
 } from './lib/development-runtime.js';
 
@@ -262,7 +264,38 @@ try {
   assert.match(units['agent-browser-dev-dashboard.service'], /AGENT_BROWSER_DASHBOARD_PORT=4948/);
   assert.doesNotMatch(JSON.stringify(units), /4848|4849|agent-browser-dashboard\.service/);
 
+  assert.match(units[descriptor.unitNames.runtimeHost], /^KillMode=process$/m,
+    'runtime host retirement must preserve owned browser children');
+  assert.match(units[descriptor.unitNames.runtimeHost], /^PrivateTmp=false$/m,
+    'retained browsers must not lose private temporary storage on host retirement');
+  assert.match(units[descriptor.unitNames.runtimeHost], /^StateDirectory=agent-browser\/runtime-tmp\/%N\/tmp agent-browser\/runtime-tmp\/%N\/var-tmp$/m);
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  // Non-activating publication must not replace executable-bound files while
+  // any member of the running host/dashboard group still owns the old binary.
+  const replacementBinary = join(fixture, 'replacement-agent-browser');
+  writeFileSync(replacementBinary, readFileSync(fakeBinary, 'utf8') + '\n# replacement generation\n', { mode: 0o755 });
+  const selectedBefore = readlinkSync(descriptor.current);
+  const boundPaths = [descriptor.executable, descriptor.laneManifest,
+    ...descriptor.units.map((name) => join(descriptor.systemdDir, name))];
+  const boundBefore = boundPaths.map((path) => readFileSync(path, 'utf8'));
+  for (const liveUnit of descriptor.units) {
+    assert.throws(() => installDevelopmentRuntime({
+      binary: replacementBinary, env, activate: false,
+      observeUnit: (name) => name === liveUnit
+        ? { loadState: 'loaded', activeState: 'active', mainPid: 4242 }
+        : { loadState: 'loaded', activeState: 'inactive', mainPid: null },
+    }), /Non-activating publication requires stopped development units/,
+    'partial publication must refuse before replacing the running group binding');
+    assert.equal(readlinkSync(descriptor.current), selectedBefore);
+    assert.deepEqual(boundPaths.map((path) => readFileSync(path, 'utf8')), boundBefore);
+  }
+  assert.throws(() => installDevelopmentRuntime({
+    binary: replacementBinary, env, activate: false,
+    observeUnit: () => ({ loadState: 'unknown', activeState: 'unknown', mainPid: null }),
+  }), /Non-activating publication requires stopped development units/,
+  'unknown process ownership cannot admit partial publication');
+  assert.equal(readlinkSync(descriptor.current), selectedBefore);
+  assert.deepEqual(boundPaths.map((path) => readFileSync(path, 'utf8')), boundBefore);
   const installedStatus = developmentRuntimeStatus({ env });
   assert.deepEqual(installedStatus.ports, {
     dashboard: 4948,
@@ -332,6 +365,37 @@ try {
     readFileSync(join(installed.generation.path, 'generation.json'), 'utf8'),
   );
   assert.equal(generationManifest.externalBrowserDiscovery, 'disabled');
+  assert.equal(generationManifest.installDoctor.commandPath, descriptor.executable);
+  assert.equal(generationManifest.installDoctor.dashboardPort, descriptor.dashboardPort);
+  assert.equal(generationManifest.installDoctor.commandSha256,
+    createHash('sha256').update(readFileSync(descriptor.executable)).digest('hex'));
+  const nativeEnv = { ...env,
+    AGENT_BROWSER_REMOTE_VIEW_ORIGIN: 'http://127.0.0.1:19103',
+    AGENT_BROWSER_REMOTE_VIEW_POOL: 'fixture',
+    AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN: 'https://view.example.com',
+  };
+  const nativeDescriptor = developmentRuntimeDescriptor(nativeEnv);
+  assert.equal(nativeDescriptor.remoteView.application, 'agent-browser');
+  assert.equal(nativeDescriptor.remoteView.pool, 'fixture');
+  const nativeLauncher = renderDevelopmentLauncher(nativeDescriptor, installed.generation.binary);
+  assert(nativeLauncher.includes("export AGENT_BROWSER_REMOTE_VIEW_POOL='fixture'"));
+  assert(nativeLauncher.includes(`export AGENT_BROWSER_DASHBOARD_PORT=${descriptor.dashboardPort}`));
+  assert(Object.values(renderDevelopmentUnits(nativeDescriptor, installed.generation.binary))
+    .every((unit) => unit.includes('AGENT_BROWSER_REMOTE_VIEW_POOL=fixture')));
+  const retainedManifestPath = join(installed.generation.path, 'generation.json');
+  writeFileSync(retainedManifestPath, JSON.stringify({ ...generationManifest,
+    remoteView: nativeDescriptor.remoteView }));
+  assert.deepEqual(developmentRuntimeDescriptor(env).remoteView, nativeDescriptor.remoteView);
+  writeFileSync(retainedManifestPath, JSON.stringify(generationManifest));
+  assert.throws(() => developmentRuntimeDescriptor({ ...nativeEnv,
+    AGENT_BROWSER_REMOTE_VIEW_ORIGIN: 'https://foreign.example.com' }), /Native Remote View binding/);
+  for (const publicOrigin of ['https://localhost', 'https://view.localhost',
+    'https://127.0.0.1', 'https://[::1]', 'https://0.0.0.0', 'https://[::]', 'https://view.example.com:0']) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...nativeEnv,
+      AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN: publicOrigin }), /Native Remote View binding/);
+  }
+  assert.throws(() => developmentRuntimeDescriptor({ ...env,
+    AGENT_BROWSER_REMOTE_VIEW_POOL: 'partial' }), /Native Remote View binding/);
   assert.equal(installed.status.externalBrowserDiscovery, 'disabled');
   assert.equal(installed.status.generationMetadata.externalBrowserDiscovery, 'disabled');
   assert.deepEqual(generationManifest.desktopInputProvider, {

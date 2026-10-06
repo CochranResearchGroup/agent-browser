@@ -4,7 +4,7 @@ Date: 2026-10-04
 Updated: 2026-10-05
 Plan version: 6
 State: OPEN
-Execution: PAUSED at the existing operator token checkpoint
+Execution: ACTIVE after explicit operator resume on 2026-10-05
 Product lane: PL-PLATFORM
 Lane: P222
 Work item: [agent-browser#202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
@@ -52,7 +52,7 @@ Production promotion, a formal release, unrelated architecture and changes to cl
 
 ## Pause and effort
 
-Re-anchoring changes documentation, not execution authority. P223 remains paused. Preserve the reached execution ceiling, cumulative effort and failures; revision 6 creates no fresh token allowance and does not renew the prior one-million-token budget. Runtime continuation requires an explicit resume. Establish any new execution bound from that direction, not from the plan revision.
+Re-anchoring alone grants no execution authority. The operator explicitly resumed execution on 2026-10-05 with a checkpoint before 1.5 million tokens in the resumed thread. Preserve the prior reached ceiling, cumulative effort and failures. This renewed bound comes from that direction, not from revision 6.
 
 ## Revision provenance
 

@@ -1914,6 +1914,16 @@ one.
 
 Service tools include `service_request`, `desktop_capture`, `desktop_evidence_observe`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the low-level route-bound diagnostic and `desktop_evidence_observe` for the task-shaped browser-external scene observation. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
 
+Browser Runtime backup operations use the same serialized `service_request` queue. `service_runtime_backup_status` verifies the current SQLite backup without changing it. `service_runtime_backup_create` creates one verified online backup and rotates at most one previous copy. Neither action restores data or includes the separate Service State store.
+
+Service status also exposes additive <code>browserRuntime</code> read-only
+health. It reports redacted SQLite integrity and database size, migration
+archive state, verified-backup state, and current browser-launch admission.
+Unavailable storage returns only a stable failure code plus launch admission;
+the database path is never public. <code>agent-browser install doctor</code>
+prints the same health fields without migrating the database or creating a
+backup.
+
 Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
 
 ## Dashboard operations

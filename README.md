@@ -100,6 +100,14 @@ Development runtime JSON status reports configured listener numbers under
 prints each configured port while separately verifying that its listener is
 owned by the expected unit PID.
 
+`agent-browser-dev install doctor` checks the selected development generation,
+the exact launcher bytes and its configured dashboard port. Namespaced launchers
+use their own installation binding. Missing or changed bindings require
+republishing that development installation. When the existing native Remote View
+environment variables are supplied during publication, the publisher retains
+that binding across updates and doctor checks the selected provider's read-only
+inventory. Provider inventory readiness does not prove visible pixels or input.
+
 The development candidate uses the optimized Cargo `ci` profile and publishes
 `cli/target/ci/agent-browser`. Reserve `pnpm build:native`, with full LTO and
 one codegen unit, for the final production or release gate. The Cargo wrapper
@@ -1587,7 +1595,9 @@ agent-browser provides multiple ways to persist login sessions so you don't re-a
 | **State file** | Load a previously saved state JSON on launch | `--state <path>` / `AGENT_BROWSER_STATE` |
 | **Auth vault** | Store credentials locally (encrypted), login by name | `auth save` / `auth login` |
 
-### Import auth from your browser
+#When a Remote View provider is configured, ordinary `open` and `remote-view open` both register a new explicit `--runtime-profile <name>` plus `--profile <absolute-directory>` binding. Create the directory first. Reusing the name with another directory, or the directory with another name, fails before browser allocation.
+
+## Import auth from your browser
 
 If you are already logged in to a site in Chrome, you can grab that auth state and reuse it:
 
@@ -2150,6 +2160,11 @@ availability, `observedAt`, `validUntil`, and `maxAgeMs`. Derive staleness from
 `validUntil`; unavailable means unknown and cannot create or disable browser
 authority. Older v1 responses may omit the additive object, and all legacy v1
 fields remain supported.
+They also include additive `browserRuntime` health. This read-only projection
+reports redacted SQLite integrity, database size, migration archive state,
+verified-backup state, and current browser-launch admission. An unavailable
+database exposes only a stable failure code and launch admission, never its
+filesystem path. `agent-browser install doctor` prints the same health fields.
 On Unix, detached launches retain the effective X11 display even when it came from the inherited `DISPLAY` environment variable. Service status can therefore associate the manual browser with the governed remote-view route for that display, allowing its detected dashboard tile to expose the available remote View or Control action.
 
 During development, a normal command that finds a daemon running a different executable prepares an authenticated handoff, starts the current executable, resumes the same browser PID and DevTools endpoint, and only then accepts new work. Missing handoff authority fails closed. Active browsers and their ports stay open across the daemon changeover, while orphaned retained session leases are expired during reconciliation so stale ownership cannot block a healthy profile.
@@ -2817,6 +2832,10 @@ explicit values disable external discovery. The isolated development launcher
 and services pin `disabled`, and their doctor verifies the running processes.
 This is not a browser sandbox or a synthetic-only capture guarantee: retained
 Service records and displayed desktop content still require ownership checks.
+
+Development host activation preserves retained browser children and persistent private temporary storage, matching the canonical supervisor lifecycle. Managed handoffs navigate directly to the authenticated Remote View desktop. The runtime multiplicity census observes the selected namespace’s dashboard backend; production and default development keep their own unit bindings.
+
+Non-activating development publication (`install --no-activate`) requires all development host and dashboard units to be stopped. It refuses before changing selected manifests, units or launchers if a unit is running or its state is unknown. Use normal `pnpm development-runtime:install` to activate the complete host and dashboard group.
 
 For a separate development installation, set `AGENT_BROWSER_DEV_NAMESPACE` to
 1–8 lowercase letters or digits, starting with a letter. Its launcher, service
@@ -3742,7 +3761,7 @@ poisoning. Use it to distinguish current contention from a completed timeout.
 It is diagnostic only, contains no profile paths or request payloads, and is
 never persisted into Service State.
 
-Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser:
+Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser. `service runtime-backup status` verifies the current Browser Runtime SQLite backup without changing it. `service runtime-backup create` performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
 ```bash
 agent-browser service status
@@ -3750,6 +3769,8 @@ agent-browser service status --watch --interval 1000
 agent-browser service status --full-tab-history
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile
+agent-browser service runtime-backup status
+agent-browser service runtime-backup create
 agent-browser service resources
 agent-browser service gc --dry-run
 agent-browser service gc --apply --review-token <token>
@@ -5707,3 +5728,180 @@ projection’s `bindingWarnings` report the cause; admitted capacity becomes zer
 and new presentation effects are refused with `inventory_admission`. Restore
 the configured inventory and its ownership evidence to requalify capacity.
 Ordinary browser diagnostics remain available during the outage.
+
+
+## Remote View application runtime
+
+A retained view request is replayed with its original key after an interrupted
+reply. When the provider proves that grant terminal, the client records that
+outcome and renews the view once under the same durable handoff. Ambiguous
+responses preserve the pending request and do not select a replacement key.
+For an expired published grant, the session manager validates the retained
+issuance against the current assignment and renews once under the same handoff.
+A completed issuance whose reply was not published is read from its original
+durable mutation record. Its validated expiry permits one renewal after a
+desktop-generation change without rewriting that prior intent. Pending,
+unexpired, malformed or differently bound records still fail closed. Prior
+issuance history remains intact; dashboard presentation reads do not issue grants.
+Grant issuance alone does not establish operator-visible readiness.
+
+Use `agent-browser remote-view resolve <handoff-id>` to check an existing handoff
+without opening another browser or replacing its URL. It refuses closed sessions.
+A converging response is pending readiness; attach only after status is opened
+and operatorVisible.state is ready. The session manager may renew an expired
+grant while retaining the handoff identity.
+
+A valid retained operator handoff keeps its exact logical session and tab
+through browser idle closure and client reconnect. It does not disable the
+browser's five-minute idle reaper. After service restart, the reaper loads
+retained ownership without waiting for a client request. When every peer is idle and no active operation
+holds custody, the process closes once; reconnect through the same handoff
+recovers the retained identities after positive process and profile absence. A reused PID is allowed only when current process identity proves it unrelated and a fresh census proves the retained profile absent. Unknown identity or profile occupancy blocks recovery; unrelated processes are preserved.
+Explicitly closing the tab or session ends that logical target. A handoff grants
+no additional access. Requester-selected retention and browser TTL extensions
+remain a separate delivery gate.
+
+
+
+With origin and pool configured, `remote-view open` uses the managed browser
+session owner instead of requiring a historical presentation route first. An
+explicit runtime profile and absolute existing profile directory register one
+persistent profile binding; conflicting IDs or paths are rejected. Opening
+returns `converging` with pending operator visibility until the presentation
+join is proved. This does not establish a ready viewer or matched browser-build
+proof for clients that require them.
+
+
+Managed Remote View focus first selects the addressed CDP target, then reads
+current provider windows against the retained launch assignment. It requires
+exactly one active window with positive dimensions for the owned browser PID.
+Missing, inactive, ambiguous or stale window evidence prevents focus qualification;
+`remote_view_focus_window_readback_required` identifies unavailable readback and
+`remote_view_focus_owned_window_unproven` identifies missing owned foreground proof.
+This window check does not establish viewer connectivity or operator readiness.
+
+For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
+with the Remote View HTTP origin on a literal loopback address, such as
+`http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured
+pool name. Set `AGENT_BROWSER_REMOTE_VIEW_APPLICATION` when the application
+selector differs from the default `agent-browser`. Set origin and pool together.
+Set `AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT` to the desired desktop count
+(default: `1`), within the application's Remote View pool policy. A new browser
+request acquires missing assignments before selecting a live desktop. Status,
+healthy session reuse and runtime construction do not allocate desktops.
+An interrupted acquisition retains its original request across restart. The next
+placement request reconciles that same provider idempotency key and requires the
+assignment in current inventory before launch. Failed reconciliation returns
+`remote_view_pool_acquisition_readback_required`; it does not allocate using a new key.
+
+Browser placement reads current public inventory and windows, then refreshes
+exact desktop identity before launch. Window-free desktops win occupancy ties;
+healthy occupied desktops remain eligible. Managed commands address the session's current
+tab through its managed owner, without a second legacy tab-catalog lookup.
+Conflicting explicit target selectors are rejected. Agent Browser launches its own browser with fresh private environment inputs
+from Remote View. Local sessions use their existing runtime when these settings
+are absent. Tab focus, view renewal and automatic capacity shrink remain under development
+in Plan 220. Reducing the desired count does not immediately return assignments.
+
+With Remote View configured, an ordinary `open` request admits a managed session
+automatically. Socket and queued ordinary browser commands use the same managed
+session owner. Queued commands preserve explicit profile selectors and apply
+command policy and confirmation before dispatch. Use `--runtime-profile` for an exact catalog profile; `--profile`
+may name a catalog profile or its recorded directory. Conflicting selectors fail
+before allocation. Without an explicit profile selector, both `remote-view open`
+and ordinary commands use a disposable profile; implicit CLI startup defaults
+do not select a catalog profile. Later requests reuse its browser and current tab. JSON responses include
+`browserSession` with the session, profile, browser, tab and target identities.
+Configured Remote View responses also retain a stable `browserSession.handoffId`
+for that logical tab before responding. It survives restart and is reused on
+subsequent commands. `browserSession.handoffUrl` is its durable
+`/remote-view/<handoff-id>` path on the authenticated Agent Browser dashboard.
+Resolve relative paths against that dashboard's HTTPS origin.
+Closed or expired handoff links return HTTP 410 with an actionable explanation.
+A closed task requires a new task and handoff; reconnecting its old link cannot
+select a replacement browser. Ordinary browser commands after `close` can start
+a fresh disposable browser, so issue another `close` when that new work ends.
+For this identity, `service_remote_view_handoff_resolve` retains a view request
+before provider issuance and reuses a qualified grant after restart. It reports
+`status=converging` and `operatorVisible.state=pending` until tab-specific
+presentation is proved. Grant issuance alone does not mean the tab is visible.
+
+`service browsers` includes existing Browser Session Manager records using their
+exact browser ID, PID, active session IDs and canonical `cdpEndpoint`. This
+read-only projection creates no runtime state and does not establish fresh CDP
+health or operator visibility. Clients verify connection after resolving the
+endpoint; inventory IDs never grant lifecycle authority.
+
+Managed open and handoff resolution report `operatorVisible.state=ready` only
+when the exact tab has owned foreground-window proof and Remote View reports
+current installed desktop and Guacamole transport readiness for the retained
+grant. The configured HTTPS public origin must match the provider observation.
+Missing or stale proof keeps open pending with an actionable reason. This route
+qualification does not prove connected viewer pixels or input; those require
+live acceptance after opening the authenticated handoff.
+
+Configure the runtime host and dashboard processes with the same reviewed
+`AGENT_BROWSER_REMOTE_VIEW_ORIGIN`, `AGENT_BROWSER_REMOTE_VIEW_POOL`, and
+`AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`. The public origin must be Remote View's
+external HTTPS origin. Opening the durable handoff authenticates the operator,
+checks the desktop's current Agent Browser assignment and lifecycle generation,
+and navigates directly to Remote View's native desktop route in the same tab.
+It does not activate the original browser tab, issue or renew an Agent Browser
+viewer grant, select a dashboard workspace, or require another Open desktop click.
+Remote View owns viewer authentication, input and viewer lifetime. Existing
+consumer-grant records are not access requirements for this desktop link.
+Keep the durable Agent Browser handoff as the bookmark so current placement
+is resolved each time it opens. Missing or unowned desktops fail the ownership
+join; the link never substitutes a peer desktop. The native desktop chooser uses
+Remote View's existing operator visibility rules.
+
+With Remote View configured, `tab_new` uses the managed owner. Its first request
+uses the new session's initial tab; later requests create a distinct tab and
+handoff. Service callers can supply `params.tabRequestId` as a stable retry key.
+An exact completed retry returns the retained result with the current transport
+request ID, without another tab or navigation. Changed input conflicts with the
+retained key. An unknown result returns
+`browser_session_tab_creation_readback_required`; it remains pending across
+restart and prevents another creation on that profile. Automatic reconciliation
+of these pending requests remains unfinished. Legacy service tab handles still
+require their explicit managed join; this path does not fabricate one.
+
+Successful navigations retain their URL in durable session history.
+
+On Linux, managed Remote View open honors explicit `stock_chrome` and
+`stealthcdp_chromium` selections. Chromium Stealth requires a ready configured
+build manifest. An incompatible executable already using the selected profile
+returns `browser_build_reuse_conflict` before navigation. Successful selection
+returns `browserBuildProof` from the actual process executable. This proof does
+not establish operator viewing readiness.
+
+Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Ordinary automation commands also recover the same retained browser after idle cleanup, so continuation does not require opening the handoff link first. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
+
+Normal client `remote-view open` and `remote-view resolve` use the native Remote View desktop readiness path when the Remote View application provider is configured. They preserve the logical handoff and profile without issuing an extra Agent Browser viewer grant. Remote View retains its existing operator authentication. During a runtime-host restart, client commands briefly wait for the existing endpoint to finish publishing before reporting it unavailable.
+
+With the Remote View application provider, named-session batches keep their selected runtime profile and browser build. The shared browser owner launches or restores the browser when the navigation command runs.
+
+Handoff links have a 24-hour default retention, separate from browser idle cleanup
+and Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
+<milliseconds>` selects a positive lifetime for a newly issued link. JSON exposes
+`handoffCreatedAtMs` and `handoffExpiresAtMs`. `remote-view inspect <handoff-id>`
+shows expiry even after the link expires. `remote-view extend <handoff-id> --ttl-ms
+<milliseconds>` ensures at least that much remaining time without shortening a
+longer expiry. Extension does not restore a browser or issue a viewer grant.
+Expired links return `remote_view_handoff_expired` (HTTP 410 on the deep-link
+endpoint); opening or extending them cannot revive them. A subsequent normal
+open can issue a new opaque link to the same retained tab. An already-connected
+native viewer remains connected. Legacy links receive the default retention once
+when the shared owner first loads the upgraded state; restarts do not renew them.
+Service callers use `service_remote_view_handoff_resolve` with
+`params.handoffOperation` set to `inspect` or `extend`; extension also supplies
+positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
+
+Explicit native Remote View build selections are retained per runtime profile.
+Later launches and retained-browser recovery restore that profile's executable,
+even after another client selects a different build or the shared owner restarts.
+An incompatible executable already using the profile remains a build conflict.
+Legacy records acquire their choice on the next explicit build request; the
+upgrade does not guess a missing historical choice from profile contents.
+
+Retained browser recovery reconciles an unobserved launch claim after proving the exact profile has no live process. The original claim remains in history. Provider environment checks run before process admission, so unavailable desktops do not create new launch claims.

@@ -1046,7 +1046,37 @@ export interface ServiceStateLockDiagnostics {
   };
 }
 
+export interface ServiceBrowserRuntimeOperationalStatus {
+  schemaVersion: 'agent-browser.runtime-operational-status.v1';
+  state: 'available' | 'unavailable';
+  failureCode?: string;
+  launchAdmission: {
+    schemaVersion: 'agent-browser.browser-launch-admission.v1';
+    state: 'admitted' | 'rejected';
+    availableMemoryBytes: number | null;
+    minimumAvailableMemoryBytes: number;
+    availableDiskBytes: number | null;
+    minimumAvailableDiskBytes: number;
+    hostProcessCount: number | null;
+    hostProcessLimit: number | null;
+    browserProcessCount: number | null;
+    maximumBrowserProcesses: number;
+    reasons: string[];
+  };
+  storage?: {
+    integrityState: 'ok';
+    databaseBytes: number;
+    backupState: 'missing' | 'verified' | 'gap';
+    backupSha256: string | null;
+  };
+  migration?: {
+    importedSourceCount: number;
+    archiveState: 'present' | 'missing' | 'invalid' | 'unavailable';
+  };
+}
+
 export interface ServiceStatusResponse {
+  browserRuntime?: ServiceBrowserRuntimeOperationalStatus;
   control_plane?: ServiceControlPlaneStatus;
   service_state: Record<string, unknown> & {
     profilePolicyMigration?: ServiceProfilePolicyMigrationReport | null;

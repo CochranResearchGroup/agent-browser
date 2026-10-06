@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "command": "foundation.inspect",
+  "contract_version": 1,
+  "read_only": true,
+  "resource_kinds": [
+    "installation",
+    "desktop",
+    "generation",
+    "pool",
+    "application_placement",
+    "operation",
+    "viewer_session",
+    "event_cursor"
+  ],
+  "resource_states": [
+    "requested",
+    "provisioning",
+    "ready",
+    "unhealthy",
+    "draining",
+    "removed",
+    "failed",
+    "awaiting_intervention"
+  ],
+  "effect_boundary": "commit_desired_state_before_effects",
+  "effect_evidence": "effect_journal"
+}
