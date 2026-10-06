@@ -14,7 +14,7 @@ for entry in manifest['entries']:
  assert not (root/entry['original_path']).exists() or entry['original_path'] in ['RUNBOOK.md','ROADMAP.md','docs/dev/active-lanes.yaml'],entry['original_path']
 assert len((root/'RUNBOOK.md').read_text().splitlines())<=200
 plan=(root/'docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md').read_text()
-execution=re.search(r'^Execution: (ACTIVE|PAUSED)\b',plan,re.M)
+execution=re.search(r'^Execution: (ACTIVE|PAUSED|COMPLETED)\b',plan,re.M)
 assert execution, 'active plan must declare execution state'
 assert f'P223 version 6 is {execution[1]}' in (root/'RUNBOOK.md').read_text()
 assert 'Current Planning Context' in (root/'AGENTS.md').read_text()
