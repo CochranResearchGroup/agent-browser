@@ -11,6 +11,58 @@
     "closedTabProjection"
   ],
   "properties": {
+    "browserRuntime": {
+      "description": "Read-only, redacted Browser Runtime SQLite health, migration, backup, and launch-admission projection. Unavailable projections expose only a stable failureCode plus current launch admission.",
+      "type": "object",
+      "required": ["schemaVersion", "state", "launchAdmission"],
+      "properties": {
+        "schemaVersion": { "const": "agent-browser.runtime-operational-status.v1" },
+        "state": { "enum": ["available", "unavailable"] },
+        "failureCode": { "type": "string" },
+        "launchAdmission": {
+          "type": "object",
+          "required": [
+            "schemaVersion", "state", "minimumAvailableMemoryBytes",
+            "minimumAvailableDiskBytes", "maximumBrowserProcesses", "reasons"
+          ],
+          "properties": {
+            "schemaVersion": { "const": "agent-browser.browser-launch-admission.v1" },
+            "state": { "enum": ["admitted", "rejected"] },
+            "availableMemoryBytes": { "type": ["integer", "null"], "minimum": 0 },
+            "minimumAvailableMemoryBytes": { "type": "integer", "minimum": 0 },
+            "availableDiskBytes": { "type": ["integer", "null"], "minimum": 0 },
+            "minimumAvailableDiskBytes": { "type": "integer", "minimum": 0 },
+            "hostProcessCount": { "type": ["integer", "null"], "minimum": 0 },
+            "hostProcessLimit": { "type": ["integer", "null"], "minimum": 0 },
+            "browserProcessCount": { "type": ["integer", "null"], "minimum": 0 },
+            "maximumBrowserProcesses": { "type": "integer", "minimum": 0 },
+            "reasons": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        },
+        "storage": {
+          "type": "object",
+          "required": ["integrityState", "databaseBytes", "backupState", "backupSha256"],
+          "properties": {
+            "integrityState": { "const": "ok" },
+            "databaseBytes": { "type": "integer", "minimum": 0 },
+            "backupState": { "enum": ["missing", "verified", "gap"] },
+            "backupSha256": { "type": ["string", "null"] }
+          },
+          "additionalProperties": false
+        },
+        "migration": {
+          "type": "object",
+          "required": ["importedSourceCount", "archiveState"],
+          "properties": {
+            "importedSourceCount": { "type": "integer", "minimum": 0 },
+            "archiveState": { "enum": ["present", "missing", "invalid", "unavailable"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "control_plane": {
       "type": "object",
       "properties": {

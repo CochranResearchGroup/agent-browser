@@ -471,6 +471,18 @@ report does not authorize cleanup by itself. During a bounded upgrade, each
 accepted runtime host must match its recorded PID, process start token, binary
 hash, generation, and socket identity.
 
+For isolated development, run <code>agent-browser-dev install doctor</code>
+or the namespaced development launcher. The check binds the selected binary,
+exact launcher bytes and configured dashboard port. Missing or changed bindings
+require republishing that development installation. Supplying the existing
+<code>AGENT_BROWSER_REMOTE_VIEW_ORIGIN</code>,
+<code>AGENT_BROWSER_REMOTE_VIEW_POOL</code> and
+<code>AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN</code> together during publication
+retains the native provider binding across updates. For that binding,
+<code>remoteViewPrivileges</code> reports read-only provider inventory readiness
+and <code>helperRequired: false</code>. Visible desktop and input acceptance
+remain separate workflow checks.
+
 Runtime health keeps profile access separate from installation convergence.
 Missing legacy profile policies are materialized deterministically. Ambiguous
 identity maps to nonblocking <code>shared-local</code> access and appears on the

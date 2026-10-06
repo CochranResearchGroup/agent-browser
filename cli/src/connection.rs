@@ -918,8 +918,32 @@ fn unsafe_claim_any_allows_daemon_reuse(auth_token_available: bool) -> bool {
         )
 }
 
+/// Give a retained host a bounded opportunity to finish publishing its endpoint.
+/// A supervisor restart may expose metadata before the socket and token are ready.
+fn wait_for_runtime_host_publication(session: &str, timeout: Duration) {
+    if !crate::runtime_host::admission_enabled() {
+        return;
+    }
+    let endpoint = crate::runtime_host::RUNTIME_HOST_ENDPOINT_KEY;
+    let socket_dir = get_socket_dir();
+    if !["pid", "version", "sha256", "token", "identity.json"]
+        .iter()
+        .any(|suffix| socket_dir.join(format!("{endpoint}.{suffix}")).exists())
+    {
+        return;
+    }
+    let started = Instant::now();
+    while started.elapsed() < timeout {
+        if daemon_ready(session) && daemon_auth_token_available(session) {
+            break;
+        }
+        thread::sleep(DAEMON_START_POLL_INTERVAL);
+    }
+}
+
 pub fn ensure_daemon(session: &str, opts: &DaemonOptions) -> Result<DaemonResult, String> {
     cache_runtime_lane_config(session, opts);
+    wait_for_runtime_host_publication(session, Duration::from_secs(5));
     let _startup_lock = acquire_runtime_host_startup_lock(session)?;
     // Socket connectivity is the sole liveness check — no PID check — so
     // callers in a different PID namespace (e.g. unshare) can still reuse

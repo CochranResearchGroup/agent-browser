@@ -1173,6 +1173,7 @@ pub(crate) fn launch_options_from_env() -> LaunchOptions {
         display: None,
         remote_headed: false,
         remote_headed_display_isolation: None,
+        private_launch_environment: None,
     }
 }
 pub(crate) async fn try_auto_restore_state(state: &mut DaemonState) {
@@ -1293,6 +1294,7 @@ pub(crate) async fn handle_launch(cmd: &Value, state: &mut DaemonState) -> Resul
         display: None,
         remote_headed: false,
         remote_headed_display_isolation: None,
+        private_launch_environment: None,
     };
     let effective_cmd = launch_command_with_effective_service_defaults(cmd, &launch_options);
     let retained_remote_headed = retained_remote_headed_launch_hint(&state.session_id, cmd);

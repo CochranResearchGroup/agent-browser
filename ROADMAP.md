@@ -12,7 +12,7 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
-[P223 version 6](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) is the open browser-workflow plan. It remains paused at the operator checkpoint. Its scope is now published independently of the unmerged implementation in `platform/p220-remote-view-consumer`. RUNBOOK owns current evidence and the next bounded packet; this re-anchoring does not resume, publish or accept runtime changes.
+[P223 version 6](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) is the open browser-workflow plan. The operator resumed execution on 2026-10-05 within a checkpoint bound of 1.5 million resumed-thread tokens. Its scope is now published independently of the unmerged implementation in `platform/p220-remote-view-consumer`. RUNBOOK owns current evidence and the next bounded packet; this re-anchoring does not resume, publish or accept runtime changes.
 
 The four-profile governance MCP policy pilot landed through PR #206. Use its compact cited packets and freshness checks instead of bulk policy ingestion.
 

@@ -13,12 +13,12 @@ lanes:
     checkpoint: 3663b39390024520f71b321e66b6d9b07758575b
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: null
-    integration: Implementation lands through protected PRs after the bounded workflow outcome and relevant changed-surface gates
+    integration: Canonical-based source custody uses platform/p223-dependable-browser-workflows; implementation lands through its protected PR after installed qualification and relevant changed-surface gates
     validation_status: Prior M1-M3 scenario acceptance retained; M4 workflow recovery and M5 reproducible use remain incomplete; re-anchoring adds no runtime proof
     validation_ref: null
     work_items: [CochranResearchGroup/agent-browser#202]
-    dependencies: []
-    overlaps: []
-    reconciled_overlaps: []
-    blocker: P223 execution remains paused at the reached operator effort ceiling; explicit resume required
+    dependencies: [CochranResearchGroup/remote-view#310]
+    overlaps: ["CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
+    reconciled_overlaps: ["P211 prepared source is covered by the frozen P220/P219 file disposition; older draft PR 191 is preserved", "P207 tab-refresh behavior is outside this candidate; older draft PR 184 and its branch are preserved"]
+    blocker: Application continuity remains unverified at the interstitial; disposable selector repair awaits installed qualification; consumer protected integration pending
     updated_at: 2026-10-05

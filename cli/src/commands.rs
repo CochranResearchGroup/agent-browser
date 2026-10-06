@@ -2087,6 +2087,8 @@ fn parse_desktop(id: String, rest: &[&str], flags: &Flags) -> Result<Value, Pars
 
 /// Parse one route-bound open, including an optional command-level timeout
 /// that overrides the service control plane's shorter daemon default.
+/// Only caller-selected profiles constrain admission; an implicit startup
+/// default must leave the host free to allocate a disposable profile.
 fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Value, ParseError> {
     let mut cmd = json!({
         "id": id,
@@ -2096,11 +2098,13 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
         "controlInput": "manual_attached_desktop",
         "serviceState": flags.service_state.clone(),
     });
-    if let Some(runtime_profile) = flags.runtime_profile.as_ref() {
-        cmd["runtimeProfile"] = json!(runtime_profile);
-    }
-    if let Some(profile) = flags.profile.as_ref() {
-        cmd["profile"] = json!(profile);
+    if flags.cli_runtime_profile || flags.cli_profile {
+        if let Some(runtime_profile) = flags.runtime_profile.as_ref() {
+            cmd["runtimeProfile"] = json!(runtime_profile);
+        }
+        if let Some(profile) = flags.profile.as_ref() {
+            cmd["profile"] = json!(profile);
+        }
     }
     if let Some(display_isolation) = flags.display_isolation.as_ref() {
         cmd["displayIsolation"] = json!(display_isolation);
@@ -2157,6 +2161,19 @@ fn parse_remote_view_open(id: String, rest: &[&str], flags: &Flags) -> Result<Va
     let mut i = 1;
     while i < rest.len() {
         match rest[i] {
+            "--handoff-ttl-ms" => {
+                let value = required_next(rest, i, "--handoff-ttl-ms", REMOTE_VIEW_OPEN_USAGE)?;
+                let ttl = value
+                    .parse::<u64>()
+                    .ok()
+                    .filter(|ttl| *ttl > 0)
+                    .ok_or_else(|| ParseError::InvalidValue {
+                        message: "Expected positive handoff TTL milliseconds".into(),
+                        usage: REMOTE_VIEW_OPEN_USAGE,
+                    })?;
+                cmd["handoffTtlMs"] = json!(ttl);
+                i += 1;
+            }
             "--url" => {
                 let value = required_next(rest, i, "--url", REMOTE_VIEW_OPEN_USAGE)?;
                 cmd["url"] = json!(normalize_cli_url(&value));
@@ -3541,13 +3558,48 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         "remote-view" | "remote_view" => match rest.first().copied() {
             Some("open") => parse_remote_view_open(id, &rest, flags),
+            Some("inspect" | "extend") => {
+                let operation = rest[0];
+                let valid_id = rest.get(1).is_some_and(|id| !id.is_empty() && id.len() <= 128
+                    && id.bytes().all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')));
+                let usage = "remote-view inspect <handoff-id> | remote-view extend <handoff-id> --ttl-ms <milliseconds>";
+                if !valid_id || (operation == "inspect" && rest.len() != 2)
+                    || (operation == "extend" && (rest.len() != 4 || rest[2] != "--ttl-ms")) {
+                    return Err(ParseError::InvalidValue { message: "Expected retained handoff ID and positive extension TTL".into(), usage });
+                }
+                let mut command = json!({"id":id,"action":"service_remote_view_handoff_resolve",
+                    "handoffId":rest[1],"handoffOperation":operation});
+                if operation == "extend" {
+                    let ttl = rest[3].parse::<u64>().ok().filter(|ttl| *ttl > 0)
+                        .ok_or_else(|| ParseError::InvalidValue { message: "Expected positive TTL milliseconds".into(), usage })?;
+                    command["ttlMs"] = json!(ttl);
+                }
+                Ok(command)
+            }
+            Some("resolve") => {
+                if rest.len() != 2
+                    || rest[1].is_empty()
+                    || rest[1].len() > 128
+                    || !rest[1].bytes().all(|byte| {
+                        byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')
+                    })
+                {
+                    return Err(ParseError::InvalidValue {
+                        message: "Expected one opaque retained handoff ID".to_string(),
+                        usage: "remote-view resolve <handoff-id>",
+                    });
+                }
+                // Resolve only the retained identity; never reopen a closed tab.
+                Ok(json!({"id":id,"action":"service_remote_view_handoff_resolve",
+                    "handoffId":rest[1],"allowReopenClosed":false}))
+            }
             Some(sub) => Err(ParseError::UnknownSubcommand {
                 subcommand: sub.to_string(),
-                valid_options: &["open"],
+                valid_options: &["open", "resolve", "inspect", "extend"],
             }),
             None => Err(ParseError::MissingArguments {
                 context: "remote-view".to_string(),
-                usage: "remote-view <open>",
+                usage: "remote-view <open|resolve|inspect|extend>",
             }),
         },
 
@@ -3556,6 +3608,18 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
 
         // === Service status ===
         "service" => match rest.first().copied() {
+            Some("runtime-backup") => match (rest.get(1).copied(), rest.len()) {
+                (Some("status"), 2) => {
+                    Ok(json!({"id": id, "action": "service_runtime_backup_status"}))
+                }
+                (Some("create"), 2) => {
+                    Ok(json!({"id": id, "action": "service_runtime_backup_create"}))
+                }
+                _ => Err(ParseError::InvalidValue {
+                    message: "Expected runtime-backup status or create".to_string(),
+                    usage: "service runtime-backup <status|create>",
+                }),
+            },
             Some("connections") => {
                 if !matches!(rest.len(), 4 | 5) || rest.get(1) != Some(&"reconcile") || rest.get(2) != Some(&"--plan") || !std::path::Path::new(rest[3]).is_absolute() || (rest.len() == 5 && rest[4] != "--apply") {
                     return Err(ParseError::InvalidValue {
@@ -5145,6 +5209,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
                     "status",
                     "watch",
                     "reconcile",
+                    "runtime-backup",
                     "resources",
                     "gc",
                     "browser-capability",
@@ -5163,7 +5228,7 @@ fn parse_command_inner(args: &[String], flags: &Flags) -> Result<Value, ParseErr
             }),
             None => Err(ParseError::MissingArguments {
                 context: "service".to_string(),
-                usage: "service <state|status|watch|reconcile|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
+                usage: "service <state|status|watch|reconcile|runtime-backup|resources|gc|browser-capability|profiles|sessions|browsers|tabs|cancel|acknowledge|resolve|trace|jobs|incidents|events>",
             }),
         },
 
@@ -9127,6 +9192,26 @@ mod tests {
     }
 
     #[test]
+    fn test_service_runtime_backup_commands() {
+        let status =
+            parse_command(&args("service runtime-backup status"), &default_flags()).unwrap();
+        assert_eq!(status["action"], "service_runtime_backup_status");
+
+        let create =
+            parse_command(&args("service runtime-backup create"), &default_flags()).unwrap();
+        assert_eq!(create["action"], "service_runtime_backup_create");
+
+        for invalid in [
+            "service runtime-backup",
+            "service runtime-backup status extra",
+            "service runtime-backup create extra",
+            "service runtime-backup restore",
+        ] {
+            assert!(parse_command(&args(invalid), &default_flags()).is_err());
+        }
+    }
+
+    #[test]
     fn test_service_gc_defaults_to_dry_run() {
         let cmd = parse_command(&args("service gc"), &default_flags()).unwrap();
 
@@ -9521,6 +9606,35 @@ mod tests {
     }
 
     #[test]
+    fn test_remote_view_open_implicit_default_does_not_select_a_catalog_profile() {
+        let raw = args("remote-view open https://example.com/ --session-name disposable-task");
+        let mut flags = crate::flags::parse_flags(&raw);
+        flags.runtime_profile = Some("default".into());
+        flags.profile = Some("/startup/default/user-data".into());
+        assert!(!flags.cli_runtime_profile && !flags.cli_profile);
+        let cmd = parse_command(&crate::flags::clean_args(&raw), &flags).unwrap();
+        assert!(cmd.get("runtimeProfile").is_none());
+        assert!(cmd.get("profile").is_none());
+        assert_eq!(cmd["sessionName"], "disposable-task");
+    }
+
+    #[test]
+    fn test_remote_view_open_preserves_explicit_default_and_profile_path() {
+        for argument in [
+            "--runtime-profile default",
+            "--profile /srv/browser-profile",
+        ] {
+            let raw = args(&format!("remote-view open https://example.com/ {argument}"));
+            let flags = crate::flags::parse_flags(&raw);
+            let cmd = parse_command(&crate::flags::clean_args(&raw), &flags).unwrap();
+            assert_eq!(cmd["runtimeProfile"], json!(flags.runtime_profile));
+            if flags.cli_profile {
+                assert_eq!(cmd["profile"], "/srv/browser-profile");
+            }
+        }
+    }
+
+    #[test]
     fn test_remote_view_open_builds_route_bound_service_action() {
         let raw = args("--runtime-profile stealthcdp-default --display-isolation shared_display remote-view open linkedin.com --browser-build stealthcdp_chromium --provider rdp_gateway --route-pool-entry-id pool-a --service-name AuraCall --agent-name codex --task-name authenticateLinkedIn --manual-login-launch --dry-run");
         let flags = crate::flags::parse_flags(&raw);
@@ -9575,6 +9689,31 @@ mod tests {
     }
 
     #[test]
+    fn handoff_link_retention_cli_parses_creation_inspection_and_extension() {
+        let raw = args("remote-view open https://synthetic.example/ --handoff-ttl-ms 1000");
+        let flags = crate::flags::parse_flags(&raw);
+        let command = parse_command(&crate::flags::clean_args(&raw), &flags).unwrap();
+        assert_eq!(command["handoffTtlMs"], 1000);
+        let inspect =
+            parse_command(&args("remote-view inspect opaque-id"), &default_flags()).unwrap();
+        assert_eq!(inspect["handoffOperation"], "inspect");
+        let extend = parse_command(
+            &args("remote-view extend opaque-id --ttl-ms 2000"),
+            &default_flags(),
+        )
+        .unwrap();
+        assert_eq!(extend["handoffOperation"], "extend");
+        assert_eq!(extend["ttlMs"], 2000);
+        for invalid in [
+            "remote-view extend opaque-id --ttl-ms 0",
+            "remote-view extend opaque-id --ttl-ms invalid",
+            "remote-view inspect ../id",
+        ] {
+            assert!(parse_command(&args(invalid), &default_flags()).is_err());
+        }
+    }
+
+    #[test]
     fn test_remote_view_open_rejects_invalid_per_job_timeout() {
         for value in ["0", "invalid"] {
             let raw = args(&format!(
@@ -9601,6 +9740,29 @@ mod tests {
         };
         assert!(message
             .contains("--provider rdp_gateway conflicts with --view-stream-provider external_url"));
+    }
+
+    #[test]
+    fn test_remote_view_resolve_addresses_retained_handoff_without_reopen() {
+        let raw = args("remote-view resolve handoff-123");
+        let flags = crate::flags::parse_flags(&raw);
+        let clean = crate::flags::clean_args(&raw);
+        let cmd = parse_command(&clean, &flags).unwrap();
+        assert_eq!(cmd["action"], "service_remote_view_handoff_resolve");
+        assert_eq!(cmd["handoffId"], "handoff-123");
+        assert_eq!(cmd["allowReopenClosed"], false);
+        assert!(cmd.get("url").is_none());
+        for invalid in [
+            "remote-view resolve",
+            "remote-view resolve ../foreign",
+            "remote-view resolve https://foreign.example/view/x",
+            "remote-view resolve handoff-123 extra",
+        ] {
+            let raw = args(invalid);
+            let flags = crate::flags::parse_flags(&raw);
+            let clean = crate::flags::clean_args(&raw);
+            assert!(parse_command(&clean, &flags).is_err(), "{invalid}");
+        }
     }
 
     #[test]

@@ -72,6 +72,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
   const installRoot = resolve(
     env.AGENT_BROWSER_DEV_INSTALL_ROOT || join(userHome, '.local', 'lib', namespace.name),
   );
+  const remoteView = developmentRemoteViewBinding(env, installRoot);
   const pseudoHome = resolve(
     env.AGENT_BROWSER_DEV_HOME || join(userHome, '.local', 'share', namespace.name, 'home'),
   );
@@ -97,6 +98,7 @@ export function developmentRuntimeDescriptor(env = process.env) {
     externalBrowserDiscovery: 'disabled',
     executable: resolve(env.AGENT_BROWSER_DEV_BIN || join(userHome, '.local', 'bin', namespace.name)),
     installRoot,
+    remoteView,
     generations: join(installRoot, 'generations'),
     current: join(installRoot, 'current'),
     pseudoHome,
@@ -129,6 +131,39 @@ export function developmentRuntimeDescriptor(env = process.env) {
   };
   if (namespace.namespace) validateNamespacedRuntimeIsolation(descriptor, env, userHome);
   return descriptor;
+}
+
+/** Preserve the reviewed native provider binding across isolated updates. */
+function developmentRemoteViewBinding(env, installRoot) {
+  const names = ['ORIGIN', 'POOL', 'PUBLIC_ORIGIN', 'APPLICATION'];
+  const explicit = names.some((name) => env[`AGENT_BROWSER_REMOTE_VIEW_${name}`] !== undefined);
+  const retained = readJson(join(installRoot, 'current', 'generation.json'))?.remoteView;
+  if (!explicit && !retained) return null;
+  const binding = explicit ? {
+    origin: env.AGENT_BROWSER_REMOTE_VIEW_ORIGIN,
+    pool: env.AGENT_BROWSER_REMOTE_VIEW_POOL,
+    publicOrigin: env.AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN,
+    application: env.AGENT_BROWSER_REMOTE_VIEW_APPLICATION || 'agent-browser',
+  } : retained;
+  let origin;
+  let publicOrigin;
+  try {
+    origin = new URL(binding.origin);
+    publicOrigin = new URL(binding.publicOrigin);
+  } catch {
+    throw new Error('Native Remote View binding requires valid origin, pool and public origin');
+  }
+  if (origin.protocol !== 'http:' || !['127.0.0.1', '[::1]'].includes(origin.hostname) || origin.port === '0' ||
+      origin.username || origin.password || origin.pathname !== '/' || origin.search || origin.hash ||
+      publicOrigin.protocol !== 'https:' || publicOrigin.username || publicOrigin.password ||
+      publicOrigin.pathname !== '/' || publicOrigin.search || publicOrigin.hash || publicOrigin.port === '0' ||
+      publicOrigin.hostname === 'localhost' || publicOrigin.hostname.endsWith('.localhost') ||
+      /^(?:127\.|0\.0\.0\.0$|\[::1\]$|\[::\]$)/.test(publicOrigin.hostname) ||
+      typeof binding.pool !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(binding.pool) ||
+      typeof binding.application !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(binding.application)) {
+    throw new Error('Native Remote View binding is incomplete or outside the reviewed origin contract');
+  }
+  return binding;
 }
 
 function canonicalProspectivePath(path) {
@@ -180,6 +215,12 @@ export function renderDevelopmentUnits(descriptor, generationBinary) {
     `Environment=AGENT_BROWSER_PRESENTATION_RECOVERY_RESERVE=1`,
     `Environment=AGENT_BROWSER_GUACAMOLE_HEADER_USER=${descriptor.guacamoleHeaderUser}`,
     ...(descriptor.namespace ? [`Environment=AGENT_BROWSER_DEV_NAMESPACE=${descriptor.namespace}`] : []),
+    ...(descriptor.remoteView ? [
+      `Environment=AGENT_BROWSER_REMOTE_VIEW_ORIGIN=${descriptor.remoteView.origin}`,
+      `Environment=AGENT_BROWSER_REMOTE_VIEW_POOL=${descriptor.remoteView.pool}`,
+      `Environment=AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN=${descriptor.remoteView.publicOrigin}`,
+      `Environment=AGENT_BROWSER_REMOTE_VIEW_APPLICATION=${descriptor.remoteView.application}`,
+    ] : []),
   ].join('\n');
   return {
     [descriptor.unitNames.runtimeHost]: `[Unit]
@@ -194,8 +235,12 @@ ${common}
 ExecStart=${generationBinary} session supervisor run-host
 Restart=on-failure
 RestartSec=2
+KillMode=process
 NoNewPrivileges=true
-PrivateTmp=true
+PrivateTmp=false
+StateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp
+StateDirectoryMode=0700
+BindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp
 
 [Install]
 WantedBy=default.target
@@ -245,8 +290,21 @@ export function installDevelopmentRuntime({
   activate = true,
   snapshotProduction = productionSnapshot,
   verifyProduction = assertProductionUnchanged,
+  observeUnit = unitStatus,
 }) {
   const descriptor = developmentRuntimeDescriptor(env);
+  // A non-activating install changes selected manifests, launchers and units.
+  // Refuse before any write if the old process group can still use them.
+  if (!activate) {
+    const unsafeUnits = descriptor.units.filter((name) => {
+      const unit = observeUnit(name, env);
+      return unit.mainPid != null ||
+        !['inactive', 'failed', 'fixture'].includes(unit.activeState);
+    });
+    if (unsafeUnits.length) {
+      throw new Error(`Non-activating publication requires stopped development units: ${unsafeUnits.join(', ')}. Use install with activation to update the complete host/dashboard group.`);
+    }
+  }
   const sourceBinary = resolve(binary);
   if (!existsSync(sourceBinary)) throw new Error(`Development candidate does not exist: ${sourceBinary}`);
   const bytes = readFileSync(sourceBinary);
@@ -288,6 +346,13 @@ export function installDevelopmentRuntime({
     version,
     sha256,
     sourceBinary,
+    remoteView: descriptor.remoteView,
+    installDoctor: {
+      schemaVersion: 1,
+      commandPath: descriptor.executable,
+      commandSha256: createHash('sha256').update(renderDevelopmentLauncher(descriptor, generationBinary)).digest('hex'),
+      dashboardPort: descriptor.dashboardPort,
+    },
     browserExecutable: descriptor.browserExecutable,
     externalBrowserDiscovery: descriptor.externalBrowserDiscovery,
     desktopInputProvider: {
@@ -644,7 +709,12 @@ export AGENT_BROWSER_RUNTIME_HOST=1
 export AGENT_BROWSER_SOCKET_DIR=${shellQuote(descriptor.socketDir)}
 export AGENT_BROWSER_RUNTIME_HOST_INGRESS_STATE=${shellQuote(descriptor.runtimeHostIngressState)}
 export AGENT_BROWSER_DASHBOARD_AUTH_DIR=${shellQuote(descriptor.authDir)}
-export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
+export AGENT_BROWSER_DASHBOARD_PORT=${descriptor.dashboardPort}
+${descriptor.remoteView ? `export AGENT_BROWSER_REMOTE_VIEW_ORIGIN=${shellQuote(descriptor.remoteView.origin)}
+export AGENT_BROWSER_REMOTE_VIEW_POOL=${shellQuote(descriptor.remoteView.pool)}
+export AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN=${shellQuote(descriptor.remoteView.publicOrigin)}
+export AGENT_BROWSER_REMOTE_VIEW_APPLICATION=${shellQuote(descriptor.remoteView.application)}
+` : ''}export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
 export AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}
 export AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}
 export AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1

@@ -7122,7 +7122,10 @@ mod dashboard_asset_tests {
             return;
         }
 
-        assert!(body.contains("Superuser access required"));
+        // The exported page restores authentication before rendering login or
+        // the workspace. Route selection must survive that initial shell.
+        assert!(body.contains("Restoring session"));
+        assert!(body.contains(r#"aria-busy="true""#));
         assert!(body.contains(&format!(r#"initialSection\":\"{expected_section}"#)));
     }
 

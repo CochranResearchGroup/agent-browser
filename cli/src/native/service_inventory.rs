@@ -124,6 +124,19 @@ pub(crate) mod service_commands {
                 browser,
             )?;
         }
+        if let Some(managed) = crate::native::browser_session_store::BrowserSessionSqliteStore::default_session_state_read_only()? {
+            for browser in managed.browsers.values() {
+                let record = managed_browser_inventory_record(browser);
+                if let Some(existing) = service_state.browsers.get(&record.id) {
+                    if existing.pid != record.pid || existing.cdp_endpoint != record.cdp_endpoint
+                        || existing.profile_id != record.profile_id {
+                        return Err("browser_inventory_identity_conflict".into());
+                    }
+                } else {
+                    service_state.browsers.insert(record.id.clone(), record);
+                }
+            }
+        }
         let protected_browser_owner_observations =
             service_state.protected_browser_owner_observations.clone();
         let mut browsers = service_state.browsers.into_values().collect::<Vec<_>>();
@@ -135,6 +148,54 @@ pub(crate) mod service_commands {
             "protectedBrowserOwnerObservations": protected_browser_owner_observations,
         }))
     }
+    /// Project the existing manager identity and endpoint, without assigning new
+    /// launch authority or claiming current CDP or operator-presentation health.
+    fn managed_browser_inventory_record(
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> BrowserProcess {
+        BrowserProcess {
+            id: browser.id.clone(),
+            profile_id: Some(browser.profile_id.clone()),
+            pid: Some(browser.pid),
+            cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+            active_session_ids: browser.active_session_ids.clone(),
+            host: if browser.desktop.is_some() {
+                ServiceBrowserHost::RemoteHeaded
+            } else {
+                ServiceBrowserHost::LocalHeaded
+            },
+            health: ServiceBrowserHealth::Reconnecting,
+            ..BrowserProcess::default()
+        }
+    }
+
+    #[cfg(test)]
+    mod managed_inventory_tests {
+        use super::*;
+        #[test]
+        fn managed_inventory_preserves_exact_owner_endpoint_and_does_not_claim_fresh_health() {
+            let browser = agent_browser_service_model::ManagedBrowserInstance {
+                id: "browser:reviewed:fixture".into(),
+                profile_id: "reviewed".into(),
+                pid: 4242,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: None,
+                active_session_ids: vec!["session:reviewed:1".into()],
+            };
+            let record = managed_browser_inventory_record(&browser);
+            assert_eq!(record.id, browser.id);
+            assert_eq!(record.pid, Some(browser.pid));
+            assert_eq!(
+                record.cdp_endpoint.as_deref(),
+                Some(browser.cdp_endpoint.as_str())
+            );
+            assert_eq!(record.active_session_ids, browser.active_session_ids);
+            assert_eq!(record.health, ServiceBrowserHealth::Reconnecting);
+            assert!(record.last_health_observation.is_none());
+            assert!(record.record_provenance.is_none());
+        }
+    }
+
     /// Return the service-owned tab collection without the full status payload.
     pub(crate) async fn handle_service_tabs(cmd: &Value) -> Result<Value, String> {
         let mut service_state = cmd

@@ -791,7 +791,7 @@ Mode](/service-mode#run-a-guarded-synthetic-desktop-interaction).
 
 ## Service status
 
-For the full service model, including queueing, HTTP and MCP access, browser health recovery, and release validation, see [Service Mode](/service-mode).
+For the full service model, including queueing, HTTP and MCP access, browser health recovery, and release validation, see [Service Mode](/service-mode). <code>service runtime-backup status</code> verifies the current Browser Runtime SQLite backup without changing it. <code>service runtime-backup create</code> performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
 ```bash
 agent-browser service state validate --path /tmp/candidate-state.json --json
@@ -800,6 +800,8 @@ agent-browser service status --watch --interval 1000
 agent-browser service status --full-tab-history
 agent-browser service watch --interval 1000 --count 5
 agent-browser service reconcile       # Probe persisted browser records and update service state
+agent-browser service runtime-backup status # Verify the current Browser Runtime backup without writing
+agent-browser service runtime-backup create # Create and verify an online Browser Runtime backup
 agent-browser service prune-retained  # Dry-run retained closed-tab and inert-browser cleanup
 agent-browser service prune-retained --orphaned-profiles # Dry-run orphaned custom profile cleanup
 agent-browser service prune-retained --display-allocations # Dry-run retained display allocation cleanup

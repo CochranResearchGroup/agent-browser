@@ -1,0 +1,453 @@
+{
+  "schemaVersion": 1,
+  "sourceCheckpoint": "da540f22a6ff851272c5e9b91d7e3117a28bf6cd",
+  "sourcePaths": [
+    "src/consumer_policy.rs",
+    "src/control_runtime.rs",
+    "src/foundation.rs",
+    "src/viewing.rs",
+    "src/desktop_join.rs",
+    "src/desktop/lifecycle.rs",
+    "src/application_pool.rs",
+    "src/control_plane.rs",
+    "src/wave2_join.rs"
+  ],
+  "scope": "Synthetic revision 3 external-mode public request and response shapes; no installed acceptance or mutation reconciliation qualification",
+  "requests": [
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "inventory"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "acquire",
+        "pool_name": "main",
+        "idempotency_key": "browser-capacity-1"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "observe_assignment",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "launch_environment",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "expected_viewing_generation": 19
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "windows",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "expected_viewing_generation": 19
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "activate",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "expected_viewing_generation": 19,
+        "window_id": 42,
+        "idempotency_key": "focus-1"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "events",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "after": 0,
+        "limit": 32
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "issue_view",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "expected_viewing_generation": 19,
+        "audience": "remote_view",
+        "capability": "control",
+        "lifetime_seconds": 300,
+        "idempotency_key": "view-1"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "resolve_view",
+        "route_id": "11111111-1111-4111-8111-111111111111",
+        "audience": "remote_view"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "resolve_embed_view",
+        "route_id": "11111111-1111-4111-8111-111111111111"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "revoke_view",
+        "route_id": "11111111-1111-4111-8111-111111111111",
+        "audience": "remote_view"
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "release",
+        "assignment_id": "assignment-external-1",
+        "expected_generation": 7,
+        "idempotency_key": "release-1",
+        "cleanup": {
+          "schemaVersion": 1,
+          "assignmentId": "assignment-external-1",
+          "lifecycleGeneration": 7,
+          "applicationReferencesClear": true,
+          "pendingRecoveryClear": true,
+          "foregroundLeasesClear": true,
+          "cleanupTasksClear": true
+        }
+      }
+    },
+    {
+      "application": "agent-browser",
+      "request": {
+        "operation": "observe_view",
+        "route_id": "11111111-1111-4111-8111-111111111111",
+        "audience": "remote_view"
+      }
+    }
+  ],
+  "assignment": {
+    "assignmentId": "assignment-external-1",
+    "registrationId": "registration-agent-browser",
+    "poolId": "pool-main",
+    "desktopId": "22222222-2222-4222-8222-222222222222",
+    "generation": 7,
+    "state": "active"
+  },
+  "assignmentObservation": {
+    "schemaVersion": 1,
+    "target": {
+      "assignmentId": "assignment-external-1",
+      "registrationId": "registration-agent-browser",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "lifecycleGeneration": 7,
+      "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+      "viewingGeneration": 19
+    },
+    "readinessScope": "live_resource"
+  },
+  "launchEnvironment": {
+    "schemaVersion": 1,
+    "target": {
+      "assignmentId": "assignment-external-1",
+      "registrationId": "registration-agent-browser",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "lifecycleGeneration": 7,
+      "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+      "viewingGeneration": 19
+    },
+    "environment": {
+      "DISPLAY": ":41",
+      "XAUTHORITY": "/synthetic/private/Xauthority",
+      "REMOTE_VIEW_SLOT_GENERATION": "19",
+      "DBUS_SESSION_BUS_ADDRESS": "unix:path=/synthetic/private/bus",
+      "PULSE_SERVER": "unix:/synthetic/private/audio"
+    },
+    "readinessScope": "live_resource"
+  },
+  "inventory": {
+    "schemaVersion": 1,
+    "registration": {
+      "registrationId": "registration-agent-browser",
+      "consumerKey": "agent-browser",
+      "applicationShape": "browser-desktop"
+    },
+    "policy": {
+      "display_name": "Agent Browser",
+      "enabled": true,
+      "pools": {
+        "main": {
+          "minimum_reserved": 0,
+          "maximum_reserved": 2,
+          "idle_retention_seconds": 60,
+          "allow_scale_in": true
+        }
+      },
+      "root_visibility": "hidden",
+      "capabilities": [
+        "inventory",
+        "acquire",
+        "release",
+        "observe",
+        "control",
+        "windows",
+        "activate",
+        "events"
+      ],
+      "application_mode": "external",
+      "allowed_application_profiles": [],
+      "embed_origins": [
+        "https://synthetic.example"
+      ],
+      "max_grant_seconds": 300
+    },
+    "pools": [
+      {
+        "poolId": "pool-main",
+        "registrationId": "registration-agent-browser",
+        "name": "main",
+        "capacity": 2,
+        "desktopMembers": [
+          "22222222-2222-4222-8222-222222222222"
+        ]
+      }
+    ],
+    "assignments": [
+      {
+        "assignmentId": "assignment-external-1",
+        "registrationId": "registration-agent-browser",
+        "poolId": "pool-main",
+        "desktopId": "22222222-2222-4222-8222-222222222222",
+        "generation": 7,
+        "state": "active"
+      }
+    ],
+    "desktops": [
+      {
+        "desktopId": "22222222-2222-4222-8222-222222222222",
+        "lifecycle": {
+          "generation": 7,
+          "state": "ready",
+          "allocated": true,
+          "readinessScope": "live_resource"
+        }
+      }
+    ]
+  },
+  "windows": {
+    "schemaVersion": 1,
+    "operation": "desktop.windows",
+    "desktopId": "22222222-2222-4222-8222-222222222222",
+    "generation": 7,
+    "viewingGeneration": 19,
+    "windows": [
+      {
+        "id": 42,
+        "title": "Synthetic browser window",
+        "class": "synthetic",
+        "pid": 12345,
+        "x": 0,
+        "y": 0,
+        "width": 800,
+        "height": 600,
+        "active": true,
+        "maximized": false
+      }
+    ]
+  },
+  "activation": {
+    "schemaVersion": 1,
+    "operation": "desktop.window.activate",
+    "desktopId": "22222222-2222-4222-8222-222222222222",
+    "generation": 7,
+    "viewingGeneration": 19,
+    "windowId": 42
+  },
+  "events": {
+    "schemaVersion": 1,
+    "binding": {
+      "registrationId": "registration-agent-browser",
+      "assignmentId": "assignment-external-1",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "lifecycleGeneration": 7
+    },
+    "events": [
+      {
+        "schema_version": 1,
+        "cursor": 1,
+        "operation_id": "synthetic-observation-1",
+        "state": "succeeded",
+        "occurred_unix_ms": 1000,
+        "operationKind": "consumer.observation",
+        "observation": {
+          "observation": "windows",
+          "target": {
+            "assignmentId": "assignment-external-1",
+            "registrationId": "registration-agent-browser",
+            "desktopId": "22222222-2222-4222-8222-222222222222",
+            "lifecycleGeneration": 7,
+            "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+            "viewingGeneration": 19
+          },
+          "windows": {
+            "schemaVersion": 1,
+            "operation": "desktop.windows",
+            "desktopId": "22222222-2222-4222-8222-222222222222",
+            "generation": 7,
+            "viewingGeneration": 19,
+            "windows": [
+              {
+                "id": 42,
+                "title": "Synthetic browser window",
+                "class": "synthetic",
+                "pid": 12345,
+                "x": 0,
+                "y": 0,
+                "width": 800,
+                "height": 600,
+                "active": true,
+                "maximized": false
+              }
+            ]
+          }
+        }
+      },
+      {
+        "schema_version": 1,
+        "cursor": 2,
+        "operation_id": "synthetic-activation-1",
+        "state": "succeeded",
+        "occurred_unix_ms": 1001,
+        "operationKind": "consumer.window.activate",
+        "receipt": {
+          "schemaVersion": 1,
+          "operation": "desktop.window.activate",
+          "desktopId": "22222222-2222-4222-8222-222222222222",
+          "generation": 7,
+          "viewingGeneration": 19,
+          "windowId": 42
+        }
+      }
+    ],
+    "observationState": "refreshed"
+  },
+  "grant": {
+    "schemaVersion": 1,
+    "routeId": "11111111-1111-4111-8111-111111111111",
+    "request": {
+      "idempotencyKey": "consumer-synthetic-owner-replay-key",
+      "target": {
+        "assignmentId": "assignment-external-1",
+        "registrationId": "registration-agent-browser",
+        "desktopId": "22222222-2222-4222-8222-222222222222",
+        "lifecycleGeneration": 7,
+        "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+        "viewingGeneration": 19
+      },
+      "application": "agent-browser",
+      "audience": "remote_view",
+      "capability": "control",
+      "policyRevision": "synthetic-reviewed-policy",
+      "lifetimeSeconds": 300
+    },
+    "issuedAt": 1000,
+    "expiresAt": 301000,
+    "revoked": false
+  },
+  "viewIssuance": {
+    "schemaVersion": 1,
+    "path": "/view/11111111-1111-4111-8111-111111111111",
+    "presentationState": "grant_issued",
+    "grant": {
+      "schemaVersion": 1,
+      "routeId": "11111111-1111-4111-8111-111111111111",
+      "request": {
+        "idempotencyKey": "consumer-synthetic-owner-replay-key",
+        "target": {
+          "assignmentId": "assignment-external-1",
+          "registrationId": "registration-agent-browser",
+          "desktopId": "22222222-2222-4222-8222-222222222222",
+          "lifecycleGeneration": 7,
+          "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+          "viewingGeneration": 19
+        },
+        "application": "agent-browser",
+        "audience": "remote_view",
+        "capability": "control",
+        "policyRevision": "synthetic-reviewed-policy",
+        "lifetimeSeconds": 300
+      },
+      "issuedAt": 1000,
+      "expiresAt": 301000,
+      "revoked": false
+    },
+    "readinessScope": "live_resource"
+  },
+  "viewRevocation": {
+    "schemaVersion": 1,
+    "routeId": "11111111-1111-4111-8111-111111111111",
+    "state": "revoked"
+  },
+  "joinedRelease": {
+    "assignment": {
+      "assignmentId": "assignment-external-1",
+      "registrationId": "registration-agent-browser",
+      "poolId": "pool-main",
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "generation": 7,
+      "state": "released"
+    },
+    "retirement": {
+      "schemaVersion": 1,
+      "desktopId": "22222222-2222-4222-8222-222222222222",
+      "generation": 7,
+      "routes": [
+        "11111111-1111-4111-8111-111111111111"
+      ],
+      "sessions": [
+        "synthetic-viewer-1"
+      ]
+    }
+  },
+  "extensionSourceCheckpoint": "7a1dfe05d48e3ab227323b56fdd62b35e78ca2a0",
+  "viewObservation": {
+    "schemaVersion": 1,
+    "state": "ready",
+    "grant": {
+      "schemaVersion": 1,
+      "routeId": "11111111-1111-4111-8111-111111111111",
+      "request": {
+        "idempotencyKey": "consumer-synthetic-owner-replay-key",
+        "target": {
+          "assignmentId": "assignment-external-1",
+          "registrationId": "registration-agent-browser",
+          "desktopId": "22222222-2222-4222-8222-222222222222",
+          "lifecycleGeneration": 7,
+          "viewingDesktopId": "33333333-3333-4333-8333-333333333333",
+          "viewingGeneration": 19
+        },
+        "application": "agent-browser",
+        "audience": "remote_view",
+        "capability": "control",
+        "policyRevision": "synthetic-reviewed-policy",
+        "lifetimeSeconds": 300
+      },
+      "issuedAt": 1000,
+      "expiresAt": 301000,
+      "revoked": false
+    },
+    "publicOrigin": "https://remote-view.example"
+  }
+}

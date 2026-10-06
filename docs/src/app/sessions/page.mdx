@@ -239,6 +239,8 @@ and existing launch flags.
 
 ## Persistent profiles
 
+When a Remote View provider is configured, ordinary `open` and `remote-view open` both register a new explicit `--runtime-profile <name>` plus `--profile <absolute-directory>` binding. Create the directory first. Reusing the name with another directory, or the directory with another name, fails before browser allocation.
+
 For a custom profile directory that persists state across browser restarts, pass a path to <code>--profile</code>:
 
 ```bash

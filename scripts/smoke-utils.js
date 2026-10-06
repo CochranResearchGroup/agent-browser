@@ -1,7 +1,16 @@
 import { spawn } from 'node:child_process';
 import { request } from 'node:http';
 import { createConnection } from 'node:net';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -39,9 +48,20 @@ export function createSmokeContext({ prefix, session, sessionPrefix, socketDir: 
     socketDir,
     tempHome,
     cleanupTempHome() {
+      makeDirectoriesOwnerWritable(tempHome);
       rmSync(tempHome, { recursive: true, force: true });
     },
   };
+}
+
+function makeDirectoriesOwnerWritable(directory) {
+  if (!existsSync(directory)) return;
+  chmodSync(directory, 0o700);
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      makeDirectoriesOwnerWritable(join(directory, entry.name));
+    }
+  }
 }
 
 export function cargoArgs(args) {
