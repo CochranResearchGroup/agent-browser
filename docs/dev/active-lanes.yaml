@@ -8,17 +8,18 @@ lanes:
     plan_ref: refs/remotes/origin/main
     branch: platform/p220-remote-view-consumer
     target: main
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     checkpoint: 3663b39390024520f71b321e66b6d9b07758575b
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
-    integration_receipt: null
-    integration: Canonical-based source custody uses platform/p223-dependable-browser-workflows; implementation lands through its protected PR after installed qualification and relevant changed-surface gates
-    validation_status: Prior M1-M3 scenario acceptance retained; M4 bounded recovery, native control, continuation and stop/expiry evidence recorded with first guard refusal preserved; M5 protected consumer integration pending
-    validation_ref: null
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/212
+    integration: Canonical consumer merge 85c6fa22e67f9767578110b83584f5573b3c4cfb through PR 212; dirty primary checkout retained without new execution authority
+    validation_status: Bounded revision-6 acceptance complete; prior M1-M3 scenarios retained, M4 supported recovery/control/continuation/stop/expiry observed, M5 isolated update and canonical integration qualified
+    validation_ref: https://github.com/CochranResearchGroup/agent-browser/pull/212
     work_items: [CochranResearchGroup/agent-browser#202]
     dependencies: [CochranResearchGroup/remote-view#310]
     overlaps: ["CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
     reconciled_overlaps: ["P211 prepared source is covered by the frozen P220/P219 file disposition; older draft PR 191 is preserved", "P207 tab-refresh behavior is outside this candidate; older draft PR 184 and its branch are preserved"]
-    blocker: Consumer protected integration pending; original-link restoration unaccepted and application continuity unverified at the interstitial; first cold-read guard refusal retained
+    blocker: null
+    limitations: ["Original expired-link restoration packet remains failed", "Current application authentication unverified at its interstitial", "First cold-read absence guard refusal and unproven transient cause retained", "CI disabled and no required main-branch GitHub checks configured"]
     updated_at: 2026-10-06

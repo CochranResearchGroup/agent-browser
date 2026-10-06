@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated: 2026-10-05
+Updated: 2026-10-06
 
 ## Current direction
 
@@ -12,7 +12,7 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
-[P223 version 6](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) is the open browser-workflow plan. The operator resumed execution on 2026-10-05 within a checkpoint bound of 1.5 million resumed-thread tokens. Its scope is now published independently of the unmerged implementation in `platform/p220-remote-view-consumer`. RUNBOOK owns current evidence and the next bounded packet; this re-anchoring does not resume, publish or accept runtime changes.
+[P223 version 6](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) completed its bounded browser-workflow outcome on 2026-10-06. Consumer source entered canonical main through PR 212, and the provider dependency through Remote View PR 310. RUNBOOK owns the retained acceptance evidence and limitations. Production promotion, formal release and broader qualification remain separate work; this closeout adds no execution authority for them.
 
 The four-profile governance MCP policy pilot landed through PR #206. Use its compact cited packets and freshness checks instead of bulk policy ingestion.
 

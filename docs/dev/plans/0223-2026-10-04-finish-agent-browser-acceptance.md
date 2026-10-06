@@ -1,10 +1,10 @@
 # Plan 0223 | Complete Dependable Browser Workflows
 
 Date: 2026-10-04
-Updated: 2026-10-05
+Updated: 2026-10-06
 Plan version: 6
-State: OPEN
-Execution: ACTIVE after explicit operator resume on 2026-10-05
+State: COMPLETED
+Execution: COMPLETED on 2026-10-06 within the explicit resumed bound
 Product lane: PL-PLATFORM
 Lane: P222
 Work item: [agent-browser#202](https://github.com/CochranResearchGroup/agent-browser/issues/202)
@@ -38,11 +38,21 @@ AuraCall's default profile and unchanged Odollo adapter remain useful existing-c
 
 Preserve prior M1–M3 acceptance only within its recorded scenarios. A contract rewrite adds no installed or platform proof. Keep failures and counterexamples attributable. Do not replace real browser, viewer and cleanup observations with fixture, build or publication success. Avoid exhaustive combinations when qualified provider or client evidence already establishes the relevant behavior.
 
-## Next bounded packet, after explicit resume
+## Executed bounded packet
 
 Use the existing isolated p221 acceptance environment; production publication is excluded. Resolve the retained original-handoff recovery blocker using the already-prepared repair. Verify the original link shows the intended browser, controls respond, normal automation continues, and task cleanup preserves peers. Match the installed source and binary to that observation. Reuse unaffected passes; do not replay the entire acceptance program.
 
 Then address only demonstrated M4/M5 gaps. Each packet names one concrete workflow failure, its expected improvement and the cheapest meaningful checks. An unsuccessful packet records the counterexample and a narrower next action rather than starting another broad redesign or acceptance loop.
+
+## Acceptance readback
+
+Revision 6 is complete within its bounded recorded scenarios. [RUNBOOK](../../../RUNBOOK.md) retains the source, installed evidence and counterexamples. Consumer implementation entered canonical main through [PR 212](https://github.com/CochranResearchGroup/agent-browser/pull/212), merge `85c6fa22e67f9767578110b83584f5573b3c4cfb`; the provider dependency entered through [Remote View PR 310](https://github.com/CochranResearchGroup/remote-view/pull/310).
+
+M1–M3 retain their previously qualified existing-client scenarios. M4 adds valid retained-link recovery, ordinary automation after natural physical idle cleanup, visible native keyboard input, continued automation, peer-preserving task stop and actionable expired/closed-link results. The original link expired during the pause and its restoration packet remains failed. A normal post-expiry handoff reused the original logical browser, session and tab. One first ordinary recovery attempt refused unproven absence without launching; fresh positive evidence preceded its successful retry, and a second natural idle cycle recovered on its first ordinary command. Its unproven transient cause remains a limit on reliability claims.
+
+M5 qualifies isolated p221 update, selected-install diagnostics, disposable launch/read/close/residue cycles and canonical source integration. The installed binary's 864 recorded compile inputs match the merged consumer tree. Canonical CI and Lease Authority workflows are disabled; no GitHub required main-branch checks are configured. Relevant local gates passed, with corrected fixture passes and original failures retained separately.
+
+Production promotion, a formal release and a broad platform matrix remain outside this acceptance. Current application authentication is unverified at its interstitial; this closeout preserves earlier M2 qualification within its recorded scope and adds no new application-authentication claim. It does not resume unrelated paused plans or authorize cleanup of retained dirty checkouts.
 
 ## Follow-ups outside this finish line
 
