@@ -8,6 +8,7 @@ use std::{cell::Cell, path::PathBuf, rc::Rc};
 #[derive(Clone, Copy)]
 enum Mode {
     Success,
+    IdleRecovery,
     UnknownProcess,
     UnknownTab,
     StaleBaseline,
@@ -141,6 +142,40 @@ fn competing_write(root: &std::path::Path) {
         .unwrap();
 }
 impl RemoteViewBrowserProcessEffects for Process {
+    fn prove_recovery_absence(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+    ) -> Result<(), RemoteViewBrowserProcessError> {
+        if self.root.join("idle-process-absent").exists()
+            && !self.root.join("recovery-absence-unknown").exists()
+        {
+            Ok(())
+        } else {
+            Err(RemoteViewBrowserProcessError::Rejected)
+        }
+    }
+
+    fn recover_launch(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        intent: &BrowserLaunchIntent,
+        environment: RemoteViewPrivateLaunchEnvironment,
+        observation: &RemoteViewAssignmentObservation,
+    ) -> Result<BrowserLaunch, RemoteViewBrowserProcessError> {
+        self.prove_recovery_absence(browser, profile)?;
+        let mut launch = self.launch(profile, intent, environment, observation)?;
+        launch.browser_id = browser.id.clone();
+        std::fs::remove_file(self.root.join("idle-process-absent")).unwrap();
+        std::fs::write(
+            self.root.join("recovered-target-generation"),
+            self.calls.get().to_string(),
+        )
+        .unwrap();
+        Ok(launch)
+    }
+
     fn launch(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -195,7 +230,7 @@ impl BrowserSessionEffects for Process {
         Ok(())
     }
     fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
-        Ok(true)
+        Ok(!self.root.join("idle-process-absent").exists())
     }
     fn launch_browser(
         &mut self,
@@ -205,6 +240,9 @@ impl BrowserSessionEffects for Process {
         panic!("ordinary launch must use consumer custody")
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if matches!(self.mode, Mode::IdleRecovery) {
+            std::fs::write(self.root.join("idle-process-absent"), "absent").unwrap();
+        }
         Ok(())
     }
     fn acquire_initial_tab(
@@ -212,7 +250,9 @@ impl BrowserSessionEffects for Process {
         browser: &ManagedBrowserInstance,
         attributed: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
-        let suffix = if attributed.is_empty() {
+        let suffix = if self.root.join("recovered-target-generation").exists() {
+            format!(":recovered-{}", self.calls.get())
+        } else if attributed.is_empty() {
             String::new()
         } else {
             format!(":{}", uuid::Uuid::new_v4())

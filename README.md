@@ -5817,6 +5817,10 @@ for that logical tab before responding. It survives restart and is reused on
 subsequent commands. `browserSession.handoffUrl` is its durable
 `/remote-view/<handoff-id>` path on the authenticated Agent Browser dashboard.
 Resolve relative paths against that dashboard's HTTPS origin.
+Closed or expired handoff links return HTTP 410 with an actionable explanation.
+A closed task requires a new task and handoff; reconnecting its old link cannot
+select a replacement browser. Ordinary browser commands after `close` can start
+a fresh disposable browser, so issue another `close` when that new work ends.
 For this identity, `service_remote_view_handoff_resolve` retains a view request
 before provider issuance and reuses a qualified grant after restart. It reports
 `status=converging` and `operatorVisible.state=pending` until tab-specific
@@ -5871,7 +5875,7 @@ returns `browser_build_reuse_conflict` before navigation. Successful selection
 returns `browserBuildProof` from the actual process executable. This proof does
 not establish operator viewing readiness.
 
-Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
+Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Ordinary automation commands also recover the same retained browser after idle cleanup, so continuation does not require opening the handoff link first. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
 
 Normal client `remote-view open` and `remote-view resolve` use the native Remote View desktop readiness path when the Remote View application provider is configured. They preserve the logical handoff and profile without issuing an extra Agent Browser viewer grant. Remote View retains its existing operator authentication. During a runtime-host restart, client commands briefly wait for the existing endpoint to finish publishing before reporting it unavailable.
 

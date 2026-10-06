@@ -401,15 +401,11 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
                 let _ = stream.write_all(response.as_bytes()).await;
             }
             Err(reason) => {
-                let (status, error) = if reason == "remote_view_handoff_expired" {
-                    ("410 Gone", "remote_view_handoff_expired")
-                } else {
-                    (
-                        "503 Service Unavailable",
-                        "remote_view_presentation_unavailable",
-                    )
-                };
-                write_json_error(&mut stream, status, error).await
+                let html = headers.iter().any(|(name, value)| {
+                    name.eq_ignore_ascii_case("accept") && value.contains("text/html")
+                });
+                let response = super::remote_view_presentation::failure_response(&reason, html);
+                let _ = stream.write_all(response.as_bytes()).await;
             }
         }
         return;

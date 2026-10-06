@@ -6349,6 +6349,7 @@ be extended. Normal open can issue a new link to the same retained tab.
 Link expiry does not close browsers or disconnect native viewers.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
+Ordinary automation also recovers retained idle browsers without opening the link first.
 A lost managed browser can recover after positive process and profile absence.
 A reused PID does not block recovery when current identity proves it unrelated
 and a fresh census proves the retained profile absent. Unknown identity or
@@ -7867,6 +7868,7 @@ Environment:
                                  Managed tab_new retains one request; params.tabRequestId is a stable service retry key.
                                  Unknown creation remains pending across restart and requires exact readback.
                                  Select an exact catalog profile with --runtime-profile; omitted selectors use a disposable profile, including remote-view open.
+                                 Closed or expired links return HTTP 410 with guidance; a closed task needs a new handoff.
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.
                                  Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.

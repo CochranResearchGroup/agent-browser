@@ -1179,7 +1179,8 @@ where
 {
     /// Admit ordinary requests through the configured Remote View owner, or
     /// route to an existing managed session. Only unconfigured, unowned lanes
-    /// return None for legacy routing.
+    /// return None for legacy routing. Retained idle browsers recover through
+    /// the existing fenced owner before refreshing or executing a tab command.
     pub(crate) fn execute_managed_command(
         &mut self,
         session_name: &str,
@@ -1253,6 +1254,17 @@ where
             [session_id] => session_id.clone(),
             _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
         };
+        let browser_id = self
+            .state
+            .sessions
+            .get(&session_id)
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
+            .browser_id
+            .clone();
+        if automatic || self.state.idle_closed_browsers.contains_key(&browser_id) {
+            self.manager()?.recover_retained_browser(&browser_id)?;
+            self.commit_state()?;
+        }
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
             .state

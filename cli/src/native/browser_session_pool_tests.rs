@@ -541,6 +541,125 @@ fn pool_demand_prefers_window_free_desktops_and_retains_healthy_occupied_peers()
 }
 
 #[test]
+fn ordinary_read_recovers_idle_retained_browser_without_opening_handoff() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let original_target = opened["targetId"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    let reaped = consumer.reap(300_101).unwrap();
+    assert_eq!(reaped.closed_browser_ids, vec![browser_id]);
+    assert!(consumer
+        .state()
+        .idle_closed_browsers
+        .contains_key(browser_id));
+    drop(consumer);
+
+    let mut restarted = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let resumed = restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":300_102
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed["success"], true);
+    let mut recovered_identity = resumed["browserSession"].clone();
+    recovered_identity["targetId"] = identity["targetId"].clone();
+    assert_eq!(recovered_identity, identity);
+    assert_eq!(resumed["browserSession"]["targetId"], resumed["targetId"]);
+    assert_ne!(resumed["targetId"], original_target);
+    assert_eq!(calls.get(), 2);
+    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert!(provider.borrow().view_requests.is_empty());
+    assert!(restarted.state().idle_closed_browsers.is_empty());
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *restarted.state()
+    );
+    restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":300_103
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn ordinary_idle_recovery_refuses_unproven_absence_before_launch_or_activity_refresh() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    consumer.reap(300_101).unwrap();
+    let before = consumer.state().clone();
+    std::fs::write(fixture.root.join("recovery-absence-unknown"), "unknown").unwrap();
+    assert_eq!(
+        consumer
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":300_102
+                })
+            )
+            .unwrap_err(),
+        "browser_session_recovery_absence_unproven"
+    );
+    assert_eq!(consumer.state(), &before);
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), before);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn ordinary_first_open_admits_exact_profile_and_reuses_tab_with_navigation_history() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

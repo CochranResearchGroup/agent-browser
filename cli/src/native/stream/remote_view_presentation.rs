@@ -2,6 +2,45 @@
 
 use crate::native::browser_session_remote_view::{public_origin, resolve_handoff_desktop_route};
 
+/// Return actionable terminal link failures without exposing internal identities
+/// or presenting a closed task as a transient provider outage.
+pub(super) fn failure_response(reason: &str, html: bool) -> String {
+    let (status, error, message) = match reason {
+        "remote_view_handoff_expired" => (
+            "410 Gone",
+            "remote_view_handoff_expired",
+            "This handoff link expired. Ask the task owner for a current link.",
+        ),
+        "remote_view_tab_handoff_session_unavailable"
+        | "remote_view_tab_handoff_tab_unavailable"
+        | "remote_view_tab_handoff_browser_unavailable" => (
+            "410 Gone",
+            "remote_view_handoff_target_closed",
+            "The browser task behind this link is no longer available. Start a new task and use its new handoff link.",
+        ),
+        "remote_view_tab_handoff_missing" => (
+            "404 Not Found",
+            "remote_view_handoff_not_found",
+            "This handoff link was not found. Check the link with the task owner.",
+        ),
+        _ => (
+            "503 Service Unavailable",
+            "remote_view_presentation_unavailable",
+            "The desktop is unavailable right now. Keep this link and ask the task owner to check browser readiness before reconnecting.",
+        ),
+    };
+    let (content_type, body) = if html {
+        // Only the fixed messages above enter this page, never the raw reason.
+        ("text/html; charset=utf-8", format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Browser handoff</title><body><main><h1>Browser handoff</h1><p>{message}</p></main></body></html>"))
+    } else {
+        (
+            "application/json",
+            serde_json::json!({"success":false,"error":error,"message":message}).to_string(),
+        )
+    };
+    format!("HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+}
+
 pub(super) fn handoff_id(path: &str) -> Option<&str> {
     let id = path
         .strip_prefix("/api/remote-view/")?
@@ -83,6 +122,37 @@ pub(super) async fn resolve_location(id: &str, _operator: &str) -> Result<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_handoff_failures_are_actionable_and_never_echo_private_reasons() {
+        for reason in [
+            "remote_view_tab_handoff_session_unavailable",
+            "remote_view_tab_handoff_tab_unavailable",
+            "remote_view_tab_handoff_browser_unavailable",
+        ] {
+            let json = failure_response(reason, false);
+            assert!(json.starts_with("HTTP/1.1 410 Gone\r\n"));
+            assert!(json.contains("remote_view_handoff_target_closed"));
+            assert!(json.contains("Start a new task"));
+            assert!(!json.contains(reason));
+            let html = failure_response(reason, true);
+            assert!(html.contains("Content-Type: text/html; charset=utf-8"));
+            assert!(html.contains("Start a new task"));
+            assert!(!html.contains("remote_view_"));
+        }
+        assert!(
+            failure_response("remote_view_handoff_expired", false).starts_with("HTTP/1.1 410 Gone")
+        );
+        assert!(failure_response("remote_view_tab_handoff_missing", false)
+            .starts_with("HTTP/1.1 404 Not Found"));
+        let private_reason = "transport_failed:/private/profile?token=secret";
+        for html in [false, true] {
+            let response = failure_response(private_reason, html);
+            assert!(response.starts_with("HTTP/1.1 503 Service Unavailable"));
+            assert!(!response.contains(private_reason));
+            assert!(response.contains("Keep this link"));
+        }
+    }
 
     #[test]
     fn presentation_rejects_foreign_routes_and_uses_native_desktop_path() {
