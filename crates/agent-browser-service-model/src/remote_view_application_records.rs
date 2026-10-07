@@ -180,6 +180,14 @@ pub struct RemoteViewApplicationWindow {
     pub height: u32,
     pub active: bool,
     pub maximized: bool,
+    /// Optional native window metadata published by current Remote View.
+    /// Older providers omit these observations; they confer no input authority.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dialog: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modal: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub transient_for: Option<u32>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
