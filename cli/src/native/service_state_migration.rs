@@ -618,7 +618,8 @@ fn retained_browser_projection_reference_exists(state: &ServiceState, browser_id
 }
 
 /// Preserve the identity of a browser whose only remaining authority edge is
-/// a single runtime-owner record after its exact process has exited.
+/// a single runtime-owner record after its exact process has exited, including
+/// a validated prior Linux boot even when the numeric PID has been reused.
 ///
 /// This is deliberately narrower than general missing-browser repair. A live
 /// or indeterminate process, a pending transfer, a principal binding, or any
@@ -652,12 +653,7 @@ fn materialize_inert_owner_only_process_placeholders(state: &mut ServiceState) {
                 .browser_process_identities
                 .get(&owner.browser_id)
                 .is_some_and(|identity| {
-                    matches!(
-                        crate::process_identity::recorded_process_is_running(
-                            &identity.process_identity
-                        ),
-                        Ok(false)
-                    )
+                    orphan_process_is_confirmed_dead(&identity.process_identity)
                 })
         })
         .map(|owner| owner.browser_id.clone())
@@ -855,12 +851,7 @@ fn retained_process_identity_is_inert(state: &ServiceState, browser_id: &str) ->
     state
         .browser_process_identities
         .get(browser_id)
-        .is_none_or(|identity| {
-            matches!(
-                crate::process_identity::recorded_process_is_running(&identity.process_identity),
-                Ok(false)
-            )
-        })
+        .is_none_or(|identity| orphan_process_is_confirmed_dead(&identity.process_identity))
 }
 
 fn owner_principal_binding_is_migration_safe(
@@ -1738,6 +1729,56 @@ mod tests {
             migrated["runtimeOwnerRegistry"]["owners"][&profile_identity_digest]["state"],
             "ready"
         );
+
+        #[cfg(target_os = "linux")]
+        {
+            let current = crate::process_identity::current_boot_epoch().unwrap();
+            let prior = if current == "linux:11111111-1111-4111-8111-111111111111" {
+                "linux:22222222-2222-4222-8222-222222222222"
+            } else {
+                "linux:11111111-1111-4111-8111-111111111111"
+            };
+            let mut previous_boot = state.clone();
+            let identity = &mut previous_boot
+                .browser_process_identities
+                .get_mut("session:stale-owner")
+                .unwrap()
+                .process_identity;
+            identity.pid = std::process::id();
+            identity.start_token = format!("{prior}:1");
+            let staged =
+                stage_service_state_migration(&serde_json::to_string(&previous_boot).unwrap())
+                    .unwrap();
+            let migrated: Value = serde_json::from_slice(&staged.bytes).unwrap();
+            assert_eq!(
+                migrated["browsers"]["session:stale-owner"]["health"],
+                "not_started"
+            );
+            assert!(migrated["browserProcessIdentities"]
+                .get("session:stale-owner")
+                .is_none());
+            assert_eq!(
+                migrated["runtimeOwnerRegistry"],
+                serde_json::to_value(&state.runtime_owner_registry).unwrap()
+            );
+            for token in [
+                format!("{current}:1"),
+                "linux:unknown:1".into(),
+                format!("{prior}:invalid"),
+                format!("{prior}:1:extra"),
+            ] {
+                previous_boot
+                    .browser_process_identities
+                    .get_mut("session:stale-owner")
+                    .unwrap()
+                    .process_identity
+                    .start_token = token;
+                assert!(stage_service_state_migration(
+                    &serde_json::to_string(&previous_boot).unwrap()
+                )
+                .is_err());
+            }
+        }
     }
 
     #[test]
