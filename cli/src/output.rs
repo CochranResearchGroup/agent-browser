@@ -5748,6 +5748,9 @@ Development install doctor binds the selected generation, exact launcher bytes
 and configured dashboard port. Republish that development installation when its
 binding is missing or changed. A native Remote View binding uses read-only
 provider inventory readiness; visible pixels and input require workflow checks.
+Native workstation upgrades verify the existing protected lease authority and
+skip RDP helper, XRDP, Docker, Guacamole and legacy group provisioning.
+Partial native settings fail validation; repair missing authority separately.
 Production and isolated development clients share one root-owned protected
 lease-authority socket; a development runtime must verify that endpoint rather
 than launching a second authority daemon.

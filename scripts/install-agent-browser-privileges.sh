@@ -2,6 +2,7 @@
 set -euo pipefail
 
 APPLY=0
+CHECK_LEASE_AUTHORITY=0
 WITH_WORKSTATION_DEPS=0
 UPGRADE_LEASE_AUTHORITY=0
 SEALED_PLAN_DIGEST=""
@@ -46,6 +47,7 @@ usage() {
 Usage: bash scripts/install-agent-browser-privileges.sh [--dry-run|--apply] [--with-workstation-deps] [--upgrade-lease-authority] [--sealed-plan-digest <sha256>] [--sealed-plan-actions <actions>]
 
 Installs the narrow root-owned helper and protected lease-authority service.
+Use --check-lease-authority for read-only authority verification without helper provisioning.
 The helper is protected by a sudoers rule for the agent-browser group so later
 route-user and display-access maintenance can run without repeated prompts.
 The optional workstation dependency phase is Ubuntu 24.04 amd64 only and
@@ -58,6 +60,9 @@ EOF
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --)
+      ;;
+    --check-lease-authority)
+      CHECK_LEASE_AUTHORITY=1
       ;;
     --apply)
       APPLY=1
@@ -166,45 +171,47 @@ if [[ "$HELPER_PATH" != /* ]]; then
   exit 2
 fi
 
-if [[ ! -f "$HELPER_SOURCE" ]]; then
-  echo "Missing helper source: $HELPER_SOURCE" >&2
-  exit 1
-fi
+if [[ "$CHECK_LEASE_AUTHORITY" != "1" ]]; then
+  if [[ ! -f "$HELPER_SOURCE" ]]; then
+    echo "Missing helper source: $HELPER_SOURCE" >&2
+    exit 1
+  fi
 
-if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
-  if [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" ]]; then
-    INSTALLED_LEASE_AUTHORITY_BINARY="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
-    if [[ -x "$INSTALLED_LEASE_AUTHORITY_BINARY" ]]; then
-      LEASE_AUTHORITY_BINARY_SOURCE="$INSTALLED_LEASE_AUTHORITY_BINARY"
+  if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
+    if [[ -r "$LEASE_AUTHORITY_SERVICE_UNIT" ]]; then
+      INSTALLED_LEASE_AUTHORITY_BINARY="$(sed -n 's/^ExecStart=//p' "$LEASE_AUTHORITY_SERVICE_UNIT")"
+      if [[ -x "$INSTALLED_LEASE_AUTHORITY_BINARY" ]]; then
+        LEASE_AUTHORITY_BINARY_SOURCE="$INSTALLED_LEASE_AUTHORITY_BINARY"
+      fi
+    fi
+    if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" && -x "cli/target/release/agent-browser" ]]; then
+      LEASE_AUTHORITY_BINARY_SOURCE="cli/target/release/agent-browser"
+    elif [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]] && command -v agent-browser >/dev/null 2>&1; then
+      LEASE_AUTHORITY_BINARY_SOURCE="$(command -v agent-browser)"
     fi
   fi
-  if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" && -x "cli/target/release/agent-browser" ]]; then
-    LEASE_AUTHORITY_BINARY_SOURCE="cli/target/release/agent-browser"
-  elif [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" ]] && command -v agent-browser >/dev/null 2>&1; then
-    LEASE_AUTHORITY_BINARY_SOURCE="$(command -v agent-browser)"
+  if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" || ! -x "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
+    echo "Set AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE to an executable reviewed agent-browser binary." >&2
+    exit 1
   fi
-fi
-if [[ -z "$LEASE_AUTHORITY_BINARY_SOURCE" || ! -x "$LEASE_AUTHORITY_BINARY_SOURCE" ]]; then
-  echo "Set AGENT_BROWSER_LEASE_AUTHORITY_BINARY_SOURCE to an executable reviewed agent-browser binary." >&2
-  exit 1
-fi
-LEASE_AUTHORITY_BINARY_SHA256="$(sha256sum "$LEASE_AUTHORITY_BINARY_SOURCE" | awk '{print $1}')"
-if [[ ! "$LEASE_AUTHORITY_BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
-  echo "Lease-authority binary SHA-256 is invalid." >&2
-  exit 1
-fi
-LEASE_AUTHORITY_GENERATION="sha256-$LEASE_AUTHORITY_BINARY_SHA256"
-LEASE_AUTHORITY_BANKED_BINARY="$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION/agent-browser"
-if [[ -z "$EXPECTED_HELPER_SHA256" ]]; then
-  EXPECTED_HELPER_SHA256="$(sha256sum "$HELPER_SOURCE" | awk '{print $1}')"
-fi
-if [[ ! "$EXPECTED_HELPER_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
-  echo "Expected helper SHA-256 must be 64 lowercase hexadecimal characters." >&2
-  exit 2
-fi
-if [[ "$(sha256sum "$HELPER_SOURCE" | awk '{print $1}')" != "$EXPECTED_HELPER_SHA256" ]]; then
-  echo "Helper source SHA-256 does not match the embedded installer manifest." >&2
-  exit 1
+  LEASE_AUTHORITY_BINARY_SHA256="$(sha256sum "$LEASE_AUTHORITY_BINARY_SOURCE" | awk '{print $1}')"
+  if [[ ! "$LEASE_AUTHORITY_BINARY_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "Lease-authority binary SHA-256 is invalid." >&2
+    exit 1
+  fi
+  LEASE_AUTHORITY_GENERATION="sha256-$LEASE_AUTHORITY_BINARY_SHA256"
+  LEASE_AUTHORITY_BANKED_BINARY="$LEASE_AUTHORITY_GENERATIONS_ROOT/$LEASE_AUTHORITY_GENERATION/agent-browser"
+  if [[ -z "$EXPECTED_HELPER_SHA256" ]]; then
+    EXPECTED_HELPER_SHA256="$(sha256sum "$HELPER_SOURCE" | awk '{print $1}')"
+  fi
+  if [[ ! "$EXPECTED_HELPER_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+    echo "Expected helper SHA-256 must be 64 lowercase hexadecimal characters." >&2
+    exit 2
+  fi
+  if [[ "$(sha256sum "$HELPER_SOURCE" | awk '{print $1}')" != "$EXPECTED_HELPER_SHA256" ]]; then
+    echo "Helper source SHA-256 does not match the embedded installer manifest." >&2
+    exit 1
+  fi
 fi
 
 expected_sudoers_content() {
@@ -614,6 +621,21 @@ print_install_status() {
     fi
   fi
 }
+
+# This read-only path shares the protected authority contract with installation,
+# without consulting the RDP helper or performing host provisioning.
+if [[ "$CHECK_LEASE_AUTHORITY" == "1" ]]; then
+  if [[ "$APPLY" == "1" || "$WITH_WORKSTATION_DEPS" == "1" || "$UPGRADE_LEASE_AUTHORITY" == "1" ]]; then
+    echo "Lease-authority check cannot be combined with effect flags." >&2
+    exit 2
+  fi
+  if lease_authority_contract_ready; then
+    echo "protected lease authority: ready"
+    exit 0
+  fi
+  echo "protected lease authority: not ready; repair its installation separately" >&2
+  exit 1
+fi
 
 if [[ "$WITH_WORKSTATION_DEPS" == "1" ]]; then
   if [[ "$(uname -m)" != "x86_64" ]]; then
