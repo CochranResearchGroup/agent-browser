@@ -5753,6 +5753,8 @@ Native Remote View origin, pool, application and public origin load from
 Native workstation upgrades verify the existing protected lease authority and
 skip RDP helper, XRDP, Docker, Guacamole and legacy group provisioning.
 Partial native settings fail validation; repair missing authority separately.
+Live-browser upgrades prepare retained sources before verifying writer stability;
+candidate startup remains blocked while a source writer is active.
 Production and isolated development clients share one root-owned protected
 lease-authority socket; a development runtime must verify that endpoint rather
 than launching a second authority daemon.

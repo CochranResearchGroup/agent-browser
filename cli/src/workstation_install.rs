@@ -7796,6 +7796,7 @@ fn complete_runtime_transfer_phase(
                 &prepared.transaction.transaction_id,
                 prepared.transaction.revision,
                 &candidate_socket_dir,
+                false,
             )?;
             let (host_identity, candidate_backend) = capture_runtime_host_identity(
                 &candidate_socket_dir,
@@ -8093,7 +8094,13 @@ fn start_candidate_runtime_host_after_source_prepares(
     transaction_id: &str,
     transaction_revision: u64,
     socket_dir: &Path,
+    verify_source_writers: bool,
 ) -> Result<(), String> {
+    // A retained source can still write until its handoff prepare completes.
+    // Keep the global stability barrier here, before any candidate host starts.
+    if verify_source_writers {
+        require_stable_service_state_revision()?;
+    }
     let bootstrap_session = candidate_runtime_host_bootstrap_session(transaction_id);
     run_candidate_agent_json_in_socket_dir(
         candidate_binary,
@@ -8233,11 +8240,26 @@ fn transfer_discovered_runtimes(
     // activation barrier: no candidate process can enter Service State while
     // an old-generation prepare command is still running.
     let candidate_socket_dir = candidate_runtime_host_socket_dir(transaction_id)?;
+    let verify_source_writers =
+        cooperative_preparations
+            .iter()
+            .flatten()
+            .any(|source| match source {
+                PreparedCooperativeRuntimeTransfer::Handoff {
+                    source_is_runtime_host,
+                    ..
+                }
+                | PreparedCooperativeRuntimeTransfer::CandidateFallback {
+                    source_is_runtime_host,
+                    ..
+                } => *source_is_runtime_host,
+            });
     if let Err(start_error) = start_candidate_runtime_host_after_source_prepares(
         &candidate_binary,
         transaction_id,
         transaction_revision,
         &candidate_socket_dir,
+        verify_source_writers,
     ) {
         let cleanup_errors =
             abort_prepared_runtime_handoffs(&old_binary, &cooperative_preparations);
@@ -9229,7 +9251,6 @@ fn quiesce_browserless_shared_runtime_lanes(
             .map_err(|error| error.message)
         },
     )?;
-    require_stable_service_state_revision()?;
     Ok(closed)
 }
 
@@ -15220,6 +15241,65 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    fn candidate_runtime_host_waits_for_prepared_source_writers_before_launch() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = env::temp_dir().join(format!(
+            "agent-browser-source-writer-barrier-{}",
+            uuid::Uuid::new_v4()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        let binary = root.join("candidate");
+        let launched = root.join("launched");
+        fs::write(&binary, format!("#!/bin/sh\ntouch '{}'\nprintf '%s\\n' '{{\"success\":true,\"data\":{{\"port\":null}}}}'\n", launched.display())).unwrap();
+        fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
+        let state_path =
+            crate::native::service_store::JsonServiceStateStore::default_path().unwrap();
+        fs::create_dir_all(state_path.parent().unwrap()).unwrap();
+        let previous = fs::read(&state_path).ok();
+        fs::write(&state_path, r#"{"stateRevision":11}"#).unwrap();
+        let writer_path = state_path.clone();
+        let writer = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            fs::write(writer_path, r#"{"stateRevision":12}"#).unwrap();
+        });
+        let result = start_candidate_runtime_host_after_source_prepares(
+            &binary,
+            "upgrade-writer-test",
+            9,
+            &root.join("socket"),
+            true,
+        );
+        writer.join().unwrap();
+        let launched_while_writing = launched.exists();
+        let stabilized = start_candidate_runtime_host_after_source_prepares(
+            &binary,
+            "upgrade-writer-test",
+            9,
+            &root.join("socket"),
+            true,
+        );
+        if let Some(previous) = previous {
+            fs::write(&state_path, previous).unwrap();
+        } else {
+            fs::remove_file(&state_path).unwrap();
+        }
+        assert!(result
+            .unwrap_err()
+            .contains("runtime_host_service_state_writer_not_quiesced"));
+        assert!(
+            !launched_while_writing,
+            "candidate must not launch while a prepared source still writes"
+        );
+        stabilized.unwrap();
+        assert!(
+            launched.exists(),
+            "a stable prepared source must allow candidate startup"
+        );
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
     fn candidate_runtime_host_bootstrap_is_claimed_no_browser_stream_status() {
         use std::os::unix::fs::PermissionsExt;
 
@@ -15243,8 +15323,14 @@ mod tests {
         fs::set_permissions(&binary, fs::Permissions::from_mode(0o755)).unwrap();
         let socket_dir = root.join("socket");
 
-        start_candidate_runtime_host_after_source_prepares(&binary, "upgrade-test", 9, &socket_dir)
-            .unwrap();
+        start_candidate_runtime_host_after_source_prepares(
+            &binary,
+            "upgrade-test",
+            9,
+            &socket_dir,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(
             fs::read_to_string(&args_path).unwrap(),
