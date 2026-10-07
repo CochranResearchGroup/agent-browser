@@ -1179,7 +1179,7 @@ fn resume_prepared_payload_transaction(
     if prepared.transaction.state == UpgradeTransactionState::StateMigrationValidated
         && !isolated_root
     {
-        if let Err(error) = crate::install::install_remote_view_privileges(true, true) {
+        if let Err(error) = prepare_workstation_host(true) {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -1189,7 +1189,7 @@ fn resume_prepared_payload_transaction(
                 error,
             ));
         }
-        if !current_process_has_group("agent-browser") || !current_process_has_group("docker") {
+        if workstation_group_refresh_required() {
             return Err(rollback_resumed_transaction(
                 &paths,
                 prepared,
@@ -3192,7 +3192,11 @@ fn run_workstation_install_with_candidate(
         fail(&error, parsed.json);
     }
     if !host_plan.supported {
-        let mut error = "workstation installation requires Ubuntu 24.04 x86_64 with apt-get, apt-cache, bash, sudo, and systemctl".to_string();
+        let mut error = if native_workstation() {
+            "native workstation installation requires Ubuntu 24.04 x86_64 with bash and systemctl"
+        } else {
+            "workstation installation requires Ubuntu 24.04 x86_64 with apt-get, apt-cache, bash, sudo, and systemctl"
+        }.to_string();
         if parsed.mode == InstallMode::Apply {
             if let Ok(path) = record_blocked_upgrade_transaction(
                 &root,
@@ -3285,7 +3289,7 @@ fn run_workstation_install_with_candidate(
     };
 
     if parsed.mode == InstallMode::Apply && !isolated_root {
-        if let Err(error) = crate::install::install_remote_view_privileges(true, parsed.json) {
+        if let Err(error) = prepare_workstation_host(parsed.json) {
             if let Some(prepared) = prepared_payload.as_mut() {
                 let _ = rollback_prepared_payload_transaction(
                     &paths,
@@ -3303,8 +3307,7 @@ fn run_workstation_install_with_candidate(
         }
         phases.push("host-dependencies-prepared");
         host_prepared = true;
-        session_refresh_required =
-            !current_process_has_group("agent-browser") || !current_process_has_group("docker");
+        session_refresh_required = workstation_group_refresh_required();
         if session_refresh_required {
             if let Some(prepared) = prepared_payload.as_mut() {
                 if let Err(error) = rollback_prepared_payload_transaction(
@@ -4124,7 +4127,9 @@ fn reconcile_workstation_locked_for_upgrade(
     transitional_source_sessions: &[String],
 ) -> Result<WorkstationReconcileReport, String> {
     require_installed_payload(paths)?;
-    require_effective_groups()?;
+    if !native_workstation() {
+        require_effective_groups()?;
+    }
     let support_root = &paths.support_dir;
     let candidate_runtime_socket_dir = expected_upgrade
         .map(|upgrade| candidate_runtime_host_socket_dir(&upgrade.transaction_id))
@@ -4192,6 +4197,44 @@ fn reconcile_workstation_after_quiesce(
         name: "chrome-ready",
         success: true,
     });
+
+    if native_workstation() {
+        crate::install::verify_native_workstation_prerequisites()?;
+        steps.push(ReconcileStep {
+            name: "native-provider-and-authority-ready",
+            success: true,
+        });
+        activate_user_units(paths, support_root, &command_env)?;
+        steps.push(ReconcileStep {
+            name: "user-services-active",
+            success: true,
+        });
+        if expected_upgrade.is_some() {
+            restart_stable_dashboard_ingress(paths, support_root, &command_env)?;
+        }
+        verify_final_doctors(
+            paths,
+            support_root,
+            &command_env,
+            expected_upgrade,
+            transitional_source_sessions,
+        )?;
+        steps.push(ReconcileStep {
+            name: "final-doctors-ready",
+            success: true,
+        });
+        let receipt_path = root.join(".agent-browser/convergence/workstation-latest.json");
+        let report = WorkstationReconcileReport {
+            schema_version: "agent-browser.workstation-reconcile.v1",
+            success: true,
+            version: env!("CARGO_PKG_VERSION"),
+            steps,
+            route_pool: Vec::new(),
+            receipt_path: receipt_path.display().to_string(),
+        };
+        write_private_json(&receipt_path, &report)?;
+        return Ok(report);
+    }
 
     let volume_inspect = run_status(
         "docker",
@@ -4540,6 +4583,25 @@ fn run_workstation_backup(json: bool) {
     }
 }
 
+/// Explicit native settings select the native installation lane, including
+/// partial settings, which fail validation rather than provisioning RDP.
+fn native_workstation() -> bool {
+    crate::native::browser_session_remote_view::remote_view_settings_present()
+}
+
+fn workstation_group_refresh_required() -> bool {
+    !native_workstation()
+        && (!current_process_has_group("agent-browser") || !current_process_has_group("docker"))
+}
+
+fn prepare_workstation_host(quiet: bool) -> Result<(), String> {
+    if native_workstation() {
+        crate::install::verify_native_workstation_prerequisites()
+    } else {
+        crate::install::install_remote_view_privileges(true, quiet)
+    }
+}
+
 fn build_host_plan(fixture_root: bool, root: &Path) -> HostPlan {
     let effective_groups = current_process_groups();
     if fixture_root {
@@ -4567,7 +4629,11 @@ fn build_host_plan(fixture_root: bool, root: &Path) -> HostPlan {
                 .map(|value| value.trim_matches('"') == "24.04")
                 .unwrap_or(false)
         });
-    let required_commands = ["apt-get", "apt-cache", "bash", "sudo", "systemctl"];
+    let required_commands: &[&str] = if native_workstation() {
+        &["bash", "systemctl"]
+    } else {
+        &["apt-get", "apt-cache", "bash", "sudo", "systemctl"]
+    };
     let missing_commands = required_commands
         .iter()
         .filter(|command| !command_exists(command))
@@ -4597,6 +4663,14 @@ fn build_host_plan(fixture_root: bool, root: &Path) -> HostPlan {
 }
 
 fn workstation_host_actions() -> Vec<&'static str> {
+    if native_workstation() {
+        return vec![
+            "require at least 6 GiB of free disk capacity before mutation",
+            "verify native Remote View application inventory and admitted pool",
+            "verify existing protected lease authority without host provisioning",
+            "activate Agent Browser user services",
+        ];
+    }
     vec![
         "validate package candidates and no-removal simulation",
         "require at least 6 GiB of free disk capacity before mutation",
@@ -5345,28 +5419,25 @@ fn activate_user_units(
         support_root,
         command_env,
     )?;
+    let mut units = vec![
+        "agent-browser-dashboard-backend.service",
+        "agent-browser-dashboard.service",
+        "agent-browser-runtime-interlock.timer",
+    ];
+    if !native_workstation() {
+        units.push("agent-browser-guacamole-postgres-backup.timer");
+    }
+    let mut args = vec!["--user", "enable", "--now"];
+    args.extend(units.iter().copied());
     run_required(
         "systemctl",
-        &[
-            "--user",
-            "enable",
-            "--now",
-            "agent-browser-dashboard-backend.service",
-            "agent-browser-dashboard.service",
-            "agent-browser-runtime-interlock.timer",
-            "agent-browser-guacamole-postgres-backup.timer",
-        ],
+        &args,
         support_root,
         command_env,
         false,
         "activate workstation user services",
     )?;
-    for unit in [
-        "agent-browser-dashboard-backend.service",
-        "agent-browser-dashboard.service",
-        "agent-browser-runtime-interlock.timer",
-        "agent-browser-guacamole-postgres-backup.timer",
-    ] {
+    for unit in units {
         run_required(
             "systemctl",
             &["--user", "is-active", "--quiet", unit],
@@ -5531,6 +5602,7 @@ fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<QuiescedUserUnits
     let existing_units = WORKSTATION_RECONCILE_QUIESCE_UNITS
         .into_iter()
         .filter(|unit| paths.unit_dir.join(unit).is_file())
+        .filter(|unit| !native_workstation() || !unit.contains("guacamole"))
         .collect::<Vec<_>>();
     let mut prior_states = Vec::new();
     for unit in &existing_units {
@@ -5545,10 +5617,7 @@ fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<QuiescedUserUnits
     }
     let quiesced = QuiescedUserUnits { prior_states };
 
-    if !WORKSTATION_RECONCILE_QUIESCE_UNITS
-        .iter()
-        .any(|unit| paths.unit_dir.join(unit).is_file())
-    {
+    if existing_units.is_empty() {
         return Ok(quiesced);
     }
 
@@ -5561,7 +5630,7 @@ fn quiesce_existing_user_units(paths: &InstallPaths) -> Result<QuiescedUserUnits
         "reload existing workstation user units before reconciliation",
     )?;
     let mut args = vec!["--user", "stop"];
-    args.extend(WORKSTATION_RECONCILE_QUIESCE_UNITS);
+    args.extend(existing_units.iter().copied());
     let stopped = run_required(
         "systemctl",
         &args,
@@ -5710,6 +5779,11 @@ fn verify_final_doctors(
             "/data/remoteControl/ready",
         ),
     ] {
+        if native_workstation() && label == "remote-view doctor" {
+            // The native provider and authority have their own read-only gates;
+            // this historical doctor inspects the RDP route pool.
+            continue;
+        }
         let attempts = if expected_upgrade.is_some() {
             POST_COMMIT_DOCTOR_ATTEMPTS
         } else {
@@ -22236,5 +22310,44 @@ mod tests {
         .unwrap();
 
         assert_eq!(result["state"], "not_configured");
+    }
+    #[test]
+    fn native_workstation_plan_excludes_legacy_privileged_effects() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            "AGENT_BROWSER_REMOTE_VIEW_POOL",
+        ]);
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:19096");
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_POOL", "main");
+        let plan = build_host_plan(true, Path::new("/tmp"));
+        for action in plan.actions {
+            assert!(
+                ![
+                    "sudo",
+                    "privileged helper",
+                    "docker",
+                    "Docker",
+                    "XRDP",
+                    "remote-view host dependencies"
+                ]
+                .iter()
+                .any(|legacy| action.contains(legacy)),
+                "native install proposed legacy effect: {action}"
+            );
+        }
+    }
+    #[test]
+    fn native_workstation_partial_configuration_fails_without_legacy_provisioning() {
+        let guard = EnvGuard::new(&[
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            "AGENT_BROWSER_REMOTE_VIEW_POOL",
+        ]);
+        guard.set("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:19096");
+        guard.remove("AGENT_BROWSER_REMOTE_VIEW_POOL");
+        assert_eq!(
+            prepare_workstation_host(true).unwrap_err(),
+            "native_remote_view_prerequisite_not_ready:pool_missing"
+        );
+        assert!(!workstation_group_refresh_required());
     }
 }

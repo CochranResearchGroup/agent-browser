@@ -611,3 +611,19 @@ if [[ ! -x "$AUTHORITY_BANKED_BINARY" ]]; then
 fi
 
 echo "Install privileges clean-fixture smoke passed"
+
+# Native installation checks the authority without any RDP helper, sudoers, or
+# provisioning effect. Tampered protected bytes still fail closed.
+rm -f "$HELPER_PATH" "$SUDOERS_PATH"
+sudo_count_before_native="$(grep -c '^SUDO ' "$LOG" || true)"
+run_installer_mode --check-lease-authority >/dev/null
+sudo_count_after_native="$(grep -c '^SUDO ' "$LOG" || true)"
+[[ "$sudo_count_before_native" == "$sudo_count_after_native" ]]
+[[ ! -e "$HELPER_PATH" && ! -e "$SUDOERS_PATH" ]]
+printf '\n# tampered protected authority\n' >>"$upgrade_banked_binary"
+if run_installer_mode --check-lease-authority >/dev/null 2>&1; then
+  echo "Native authority check accepted tampered protected bytes." >&2
+  exit 1
+fi
+[[ "$sudo_count_before_native" == "$(grep -c '^SUDO ' "$LOG" || true)" ]]
+echo "native authority check: helper-free, no sudo, tamper rejected"

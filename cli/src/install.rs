@@ -1207,9 +1207,7 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("remote_view_privileges");
     let remote_view_privileges = if development && bound_target.is_none() {
         json!({"mode":"unbound_development","ready":false,"helperRequired":false})
-    } else if development
-        && crate::native::browser_session_remote_view::remote_view_settings_present()
-    {
+    } else if crate::native::browser_session_remote_view::remote_view_settings_present() {
         development_doctor::native_provider_readiness()
     } else {
         remote_view_privilege_status()
@@ -4366,6 +4364,33 @@ fn install_linux_deps() {
         let status = Command::new("sh").arg("-c").arg(&install_cmd).status();
 
         report_install_status(status);
+    }
+}
+
+/// Check the existing protected authority without provisioning legacy RDP users,
+/// helper permissions, Docker, XRDP, or a second authority instance.
+pub(crate) fn verify_native_workstation_prerequisites() -> Result<(), String> {
+    let readiness = development_doctor::native_provider_readiness();
+    if readiness.get("ready").and_then(Value::as_bool) != Some(true) {
+        return Err(format!(
+            "native_remote_view_prerequisite_not_ready:{}",
+            readiness
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown")
+        ));
+    }
+    let mut command = Command::new("bash");
+    command
+        .arg("-c")
+        .arg(REMOTE_VIEW_PRIVILEGE_INSTALLER)
+        .arg("agent-browser-authority-check")
+        .arg("--check-lease-authority");
+    match run_install_doctor_command_with_timeout(command, Duration::from_secs(15)) {
+        InstallDoctorCommandResult::Output(output) if output.status.success() => Ok(()),
+        _ => Err(
+            "protected_lease_authority_not_ready:repair_authority_installation_separately".into(),
+        ),
     }
 }
 
