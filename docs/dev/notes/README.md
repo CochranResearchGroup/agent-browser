@@ -81,6 +81,8 @@ reuse after those contracts are frozen.
 
 ## PL-PLATFORM | Architecture and Infrastructure
 
+- [Production upgrade qualification](2026-10-06-production-upgrade-decision.md): compatibility repairs and exact-pair development acceptance pass; production awaits the interactive helper contract refresh tracked by issue 218.
+
 - [Service roadmap](2026-04-22-agent-browser-service-roadmap.md)
 - [Runtime process identity acceptance](0108-2026-08-10-runtime-process-identity-test-receipt.md)
 - [Runtime lifecycle acceptance series](0117-1-2026-08-20-runtime-lifecycle-slice-a-source-acceptance.md)
