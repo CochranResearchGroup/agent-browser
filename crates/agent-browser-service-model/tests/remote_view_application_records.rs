@@ -99,6 +99,45 @@ fn window_and_activation_results_fence_both_generations_and_exact_window() {
 }
 
 #[test]
+fn current_window_metadata_preserves_strict_shape_and_target_fences() {
+    let fixture = fixture();
+    let target: RemoteViewApplicationTarget =
+        serde_json::from_value(fixture["assignmentObservation"]["target"].clone()).unwrap();
+    let mut value = fixture["windows"].clone();
+    value["windows"][0]["dialog"] = json!(true);
+    value["windows"][0]["modal"] = json!(true);
+    value["windows"][0]["transientFor"] = json!(41);
+    let parsed: RemoteViewApplicationWindows = serde_json::from_value(value.clone()).unwrap();
+    parsed.validate_target(&target).unwrap();
+    assert_eq!(parsed.windows[0].transient_for, Some(41));
+    assert_eq!(serde_json::to_value(parsed).unwrap(), value);
+    for field in ["dialog", "modal", "transientFor"] {
+        let mut malformed = value.clone();
+        malformed["windows"][0][field] = json!("invalid");
+        assert!(serde_json::from_value::<RemoteViewApplicationWindows>(malformed).is_err());
+    }
+    let mut unknown = value.clone();
+    unknown["windows"][0]["unrecognized"] = json!(true);
+    assert!(serde_json::from_value::<RemoteViewApplicationWindows>(unknown).is_err());
+    let mut unknown = value.clone();
+    unknown["unrecognized"] = json!(true);
+    assert!(serde_json::from_value::<RemoteViewApplicationWindows>(unknown).is_err());
+    for (field, changed) in [
+        ("desktopId", json!("wrong-desktop")),
+        ("generation", json!(8)),
+        ("viewingGeneration", json!(20)),
+    ] {
+        let mut stale = value.clone();
+        stale[field] = changed;
+        let stale: RemoteViewApplicationWindows = serde_json::from_value(stale).unwrap();
+        assert_eq!(
+            stale.validate_target(&target),
+            Err(RemoteViewApplicationResponseError::StaleTarget)
+        );
+    }
+}
+
+#[test]
 fn event_pages_reject_wrong_binding_cursor_and_private_or_wrong_target_payloads() {
     let fixture = fixture();
     let assignment: RemoteViewAssignmentRecord =

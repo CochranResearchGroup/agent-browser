@@ -88,6 +88,48 @@ fn fixture() -> Value {
 }
 
 #[test]
+fn window_adapter_accepts_current_provider_dialog_metadata() {
+    let fixture = fixture();
+    let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let mut windows = fixture["windows"].clone();
+    // Current Remote View desktop.windows includes these native observations.
+    windows["windows"][0]["dialog"] = json!(false);
+    windows["windows"][0]["modal"] = json!(false);
+    windows["windows"][0]["transientFor"] = Value::Null;
+    let steps = Rc::new(RefCell::new(VecDeque::from([
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+        (fixture["requests"][4].clone(), Ok(windows)),
+        (
+            fixture["requests"][2].clone(),
+            Ok(fixture["assignmentObservation"].clone()),
+        ),
+    ])));
+    let mut adapter =
+        RemoteViewApplicationAdapter::new("agent-browser".into(), ScriptedTransport(steps.clone()))
+            .unwrap();
+    let observed = adapter
+        .windows(&assignment)
+        .expect("current provider windows must deserialize and pass both generation checks");
+    assert_eq!(observed.windows[0].dialog, Some(false));
+    assert_eq!(observed.windows[0].modal, Some(false));
+    assert_eq!(observed.windows[0].transient_for, None);
+    assert_eq!(
+        observed.windows[0].id,
+        fixture["windows"]["windows"][0]["id"].as_u64().unwrap() as u32
+    );
+    assert_eq!(
+        observed.windows[0].pid,
+        fixture["windows"]["windows"][0]["pid"]
+            .as_u64()
+            .map(|pid| pid as u32)
+    );
+    assert!(steps.borrow().is_empty());
+}
+
+#[test]
 fn read_adapter_consumes_exact_inventory_windows_events_and_retained_views() {
     let fixture = fixture();
     let assignment = serde_json::from_value(fixture["assignment"].clone()).unwrap();
