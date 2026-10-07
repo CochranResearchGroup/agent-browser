@@ -17,6 +17,11 @@ const KNOWN_VARS: &[&str] = &[
     "AGENT_BROWSER_PRODUCTION_PRESENTATION_INVENTORY_PATH",
     "AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER",
     "AGENT_BROWSER_REMOTE_HEADED_DISPLAY",
+    // Keep partial native bindings visible to fail-closed provider validation.
+    "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
+    "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+    "AGENT_BROWSER_REMOTE_VIEW_POOL",
+    "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
     "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
     "AGENT_BROWSER_REMOTE_VIEW_FRAME_URL",
     "AGENT_BROWSER_REMOTE_VIEW_PROVIDER",
@@ -162,6 +167,30 @@ pub fn load_env_file() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_remote_view_binding_is_loaded_from_dotenv() {
+        let bindings = [
+            ("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:19096"),
+            ("AGENT_BROWSER_REMOTE_VIEW_POOL", "main"),
+            ("AGENT_BROWSER_REMOTE_VIEW_APPLICATION", "agent-browser"),
+            (
+                "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+                "https://viewer.example.org",
+            ),
+        ];
+        let content = bindings
+            .iter()
+            .map(|(key, value)| format!("{key}={value}\n"))
+            .collect::<String>();
+        let parsed = parse_dotenv(&content);
+        for (key, value) in bindings {
+            assert_eq!(parsed.get(key).map(String::as_str), Some(value), "{key}");
+        }
+        // A partial binding must remain visible so native validation rejects it
+        // rather than silently selecting legacy RDP provisioning.
+        assert_eq!(parse_dotenv("AGENT_BROWSER_REMOTE_VIEW_POOL=main").len(), 1);
+    }
 
     #[test]
     fn test_parse_dotenv_quotes_and_comments() {
