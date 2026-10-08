@@ -30,7 +30,7 @@ lanes:
     plan_ref: refs/heads/fix/scoped-launch-custody
     branch: fix/scoped-launch-custody
     target: main
-    plan_state: IN_PROGRESS
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#224]
     dependencies: []
@@ -38,3 +38,7 @@ lanes:
     reconciled_overlaps: ["P224 owns only scoped native session custody and regressions; other branches and dirty work are preserved"]
     blocker: null
     updated_at: 2026-10-08
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/225
+    checkpoint: b1cd035c3cecf514b9b15e80c08ddf69aed4b1ec
+    validation_status: Consumer and custody tests, Service Model suite, format and strict Clippy passed; installed native doctor and original retained handoff recovery/control/reconnect accepted
+    limitations: ["Application is at login; application authentication continuity is unverified", "Reused primary checkout retains the sealed artifact; unrelated worktrees remain preserved"]
