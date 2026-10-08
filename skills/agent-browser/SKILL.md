@@ -1751,6 +1751,8 @@ agent-browser open https://app.example.com/dashboard
 
 See [references/authentication.md](references/authentication.md) for OAuth, 2FA, cookie-based auth, and token refresh patterns.
 
+Native cold launches require an absolute profile directory. Invalid relative catalog paths return `browser_session_profile_path_not_absolute`; select an existing managed profile or register the intended absolute directory instead of guessing a replacement. Local capacity failures return `browser_launch_resource_pressure:<reason>`. These preflight failures occur before durable launch custody and may be retried after correcting the cause. Failures after custody admission still require readback; an empty recorded PID does not prove process absence.
+
 When a Remote View provider is configured, ordinary `open` and `remote-view open` both register a new explicit `--runtime-profile <name>` plus `--profile <absolute-directory>` binding. Create the directory first. Reusing the name with another directory, or the directory with another name, fails before browser allocation.
 
 ## Essential Commands

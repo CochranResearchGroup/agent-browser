@@ -125,6 +125,10 @@ impl<D: BrowserRuntimeDriver> ManagedBrowserCommandEffects for BrowserSessionEff
 impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
     for BrowserSessionEffectAdapter<D>
 {
+    fn preflight_launch(&mut self, profile: &BrowserProfileCatalogEntry) -> Result<(), String> {
+        self.runtime.preflight_launch(profile)
+    }
+
     fn prove_recovery_absence(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -341,6 +345,10 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
 }
 
 enum BrowserRuntimeCommand {
+    PreflightLaunch {
+        profile: BrowserProfileCatalogEntry,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     SelectExecutable {
         path: String,
         reply: mpsc::Sender<Result<(), String>>,
@@ -450,6 +458,17 @@ impl BrowserManagerRuntime {
 /// Fresh external-mode process ingress. Durable launch admission is owned by
 /// the coordinator; this adapter consumes private inputs and never retries.
 impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
+    fn preflight_launch(&mut self, profile: &BrowserProfileCatalogEntry) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::PreflightLaunch {
+                profile: profile.clone(),
+                reply,
+            },
+        )
+    }
+
     fn prove_recovery_absence(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -698,6 +717,21 @@ fn run_browser_worker(
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
+            BrowserRuntimeCommand::PreflightLaunch { profile, reply } => {
+                let path = Path::new(&profile.user_data_dir);
+                let result = if !path.is_absolute() {
+                    Err("browser_session_profile_path_not_absolute".to_string())
+                } else if path.exists() && !path.is_dir() {
+                    Err("browser_session_profile_path_not_directory".to_string())
+                } else {
+                    super::browser_launch_admission::observe_browser_launch_admission(
+                        path,
+                        config.maximum_browser_processes,
+                    )
+                    .require_admitted()
+                };
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::SelectExecutable { path, reply } => {
                 config.executable_path = Some(path);
                 let _ = reply.send(Ok(()));
@@ -1359,6 +1393,104 @@ mod tests {
             resolve_remote_view_display(&desktop, &contexts),
             Ok(":47".to_string())
         );
+    }
+
+    // This seam includes the real process adapter and launch coordinator. Neither
+    // provider input acquisition nor durable custody is permitted on preflight failure.
+    struct NoLaunchEffects;
+    impl agent_browser_service_model::RemoteViewApplicationTransport for NoLaunchEffects {
+        fn request(
+            &mut self,
+            _: &agent_browser_service_model::RemoteViewApplicationEnvelope,
+        ) -> Result<Value, agent_browser_service_model::RemoteViewApplicationTransportError>
+        {
+            panic!("preflight must precede provider inputs")
+        }
+    }
+    impl agent_browser_service_model::BrowserLaunchCustodyStore for NoLaunchEffects {
+        fn admit_launch_intent(
+            &mut self,
+            _: &BrowserLaunchIntent,
+            _: &agent_browser_service_model::BrowserSessionState,
+        ) -> Result<
+            agent_browser_service_model::LaunchCustodyAdmission,
+            agent_browser_service_model::LaunchCustodyStoreError,
+        > {
+            panic!("preflight must precede durable custody")
+        }
+        fn observe_launch_intent(
+            &mut self,
+            _: &BrowserLaunchIntent,
+            _: &BrowserLaunch,
+        ) -> Result<(), agent_browser_service_model::LaunchCustodyStoreError> {
+            panic!("no launch")
+        }
+        fn publish_launch_intent(
+            &mut self,
+            _: &BrowserLaunchIntent,
+            _: &agent_browser_service_model::BrowserSessionState,
+            _: &agent_browser_service_model::BrowserSessionState,
+        ) -> Result<(), agent_browser_service_model::LaunchCustodyStoreError> {
+            panic!("no publication")
+        }
+    }
+
+    #[test]
+    fn native_launch_preflight_rejects_relative_profile_before_custody() {
+        let fixture: Value = serde_json::from_str(include_str!(
+            "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let intent = BrowserLaunchIntent {
+            intent_id: "33333333-3333-3333-3333-333333333333".into(),
+            profile_id: "Default".into(),
+            assignment: serde_json::from_value(fixture["assignment"].clone()).unwrap(),
+        };
+        let directory = TempDirectory::new();
+        let cases = [
+            (
+                "Default".to_string(),
+                None,
+                "browser_session_profile_path_not_absolute",
+            ),
+            (
+                directory.0.to_string_lossy().into_owned(),
+                Some(0),
+                "browser_launch_resource_pressure:browser_process_capacity_exhausted",
+            ),
+        ];
+        for (path, limit, reason) in cases {
+            let profile = BrowserProfileCatalogEntry {
+                id: "Default".into(),
+                name: "Default".into(),
+                user_data_dir: path,
+                kind: BrowserProfileKind::Named,
+            };
+            let runtime = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+                maximum_browser_processes: limit,
+                ..BrowserManagerRuntimeConfig::default()
+            })
+            .unwrap();
+            let mut process = BrowserSessionEffectAdapter::new(runtime);
+            let mut adapter = agent_browser_service_model::RemoteViewApplicationAdapter::new(
+                "agent-browser".into(),
+                NoLaunchEffects,
+            )
+            .unwrap();
+            let error = agent_browser_service_model::launch_remote_view_browser(
+                &mut adapter,
+                &mut NoLaunchEffects,
+                &mut process,
+                &intent,
+                &agent_browser_service_model::BrowserSessionState::default(),
+                &profile,
+            )
+            .unwrap_err();
+            assert_eq!(
+                error,
+                agent_browser_service_model::RemoteViewBrowserLaunchError::Preflight(reason.into())
+            );
+        }
     }
 
     #[test]

@@ -374,7 +374,14 @@ impl<
             self.expected.as_ref().expect("qualified baseline"),
             profile,
         )
-        .map_err(|_| "remote_view_session_launch_readback_required".to_string())?;
+        .map_err(|error| match error {
+            RemoteViewBrowserLaunchError::Preflight(reason) => {
+                // No durable claim or process effect exists for this attempt.
+                self.pending = None;
+                reason
+            }
+            _ => "remote_view_session_launch_readback_required".to_string(),
+        })?;
         // Preserve the selected descriptive label for the ordinary manager's
         // full-value comparison. Coordinator custody already qualified UUID and
         // lifecycle generation; the label supplies no placement authority.

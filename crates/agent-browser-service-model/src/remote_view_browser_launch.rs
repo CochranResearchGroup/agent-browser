@@ -17,6 +17,13 @@ pub enum RemoteViewBrowserProcessError {
 /// must validate the supplied observation when consuming it and keep environment
 /// values out of public output, durable custody and diagnostic errors.
 pub trait RemoteViewBrowserProcessEffects {
+    /// Effect-free local admission before durable intent. Errors are public safe
+    /// diagnostic codes, never paths, private environment or provider payloads.
+    /// Adapters without local launch prerequisites may use the default.
+    fn preflight_launch(&mut self, _profile: &BrowserProfileCatalogEntry) -> Result<(), String> {
+        Ok(())
+    }
+
     /// Positive OS process and exact profile census; unavailable evidence fails closed.
     fn prove_recovery_absence(
         &mut self,
@@ -49,6 +56,7 @@ pub trait RemoteViewBrowserProcessEffects {
 #[derive(Debug, Eq, PartialEq)]
 pub enum RemoteViewBrowserLaunchError {
     InvalidProfile,
+    Preflight(String),
     Store(LaunchCustodyStoreError),
     ReadbackRequired,
     Provider(RemoteViewApplicationAdapterError),
@@ -56,7 +64,8 @@ pub enum RemoteViewBrowserLaunchError {
     InvalidLaunchIdentity,
 }
 
-/// Persist intent before acquiring fresh private launch inputs or starting a
+/// Qualify local prerequisites without effects, then persist intent before
+/// acquiring fresh private launch inputs or starting a
 /// process. Existing custody never authorizes another launch. Any later failure
 /// retains that claim for explicit reconciliation. Session publication remains
 /// a separate atomic custody-and-session transaction after the returned launch.
@@ -72,6 +81,9 @@ pub fn launch_remote_view_browser<T: RemoteViewApplicationTransport>(
     if profile.id != intent.profile_id {
         return Err(Error::InvalidProfile);
     }
+    process
+        .preflight_launch(profile)
+        .map_err(Error::Preflight)?;
     match store
         .admit_launch_intent(intent, expected)
         .map_err(Error::Store)?

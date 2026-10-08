@@ -52,7 +52,9 @@ _Avoid_: Client identity, access permission, profile lease
 The durable intent and observed process evidence for one browser launch, bound to
 an exact profile and desktop assignment. An unresolved intent blocks another
 launch or recovery for that profile while unrelated profiles continue through
-their own custody and assignment-generation checks.
+their own custody and assignment-generation checks. Native cold-launch path and
+capacity preflight precedes durable intent; failure there creates no process
+claim. Failure after intent admission still requires exact reconciliation.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
 
 **Request provenance**:
