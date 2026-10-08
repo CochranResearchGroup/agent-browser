@@ -142,6 +142,14 @@ fn competing_write(root: &std::path::Path) {
         .unwrap();
 }
 impl RemoteViewBrowserProcessEffects for Process {
+    fn preflight_launch(&mut self, _profile: &BrowserProfileCatalogEntry) -> Result<(), String> {
+        if self.root.join("preflight-pressure").exists() {
+            Err("browser_launch_resource_pressure:browser_process_capacity_exhausted".into())
+        } else {
+            Ok(())
+        }
+    }
+
     fn prove_recovery_absence(
         &mut self,
         _browser: &ManagedBrowserInstance,
@@ -351,6 +359,41 @@ impl ManagedBrowserCommandEffects for Process {
             "data":{"targetId":tab.target_id, "url":"https://synthetic.example/"},
             "targetId": tab.target_id, "url": "https://synthetic.example/"}))
     }
+}
+
+#[test]
+fn consumer_preflight_failure_preserves_reason_and_allows_same_host_retry() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let pressure = fixture.root.join("preflight-pressure");
+    std::fs::write(&pressure, "synthetic pressure").unwrap();
+    let error = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap_err();
+    assert_eq!(
+        error,
+        "browser_launch_resource_pressure:browser_process_capacity_exhausted"
+    );
+    assert_eq!(calls.get(), 0);
+    assert_eq!(requests.get(), 0);
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+    std::fs::remove_file(pressure).unwrap();
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 101))
+        .unwrap();
+    assert_eq!(opened.profile_id, "profile-a");
+    assert_eq!(calls.get(), 1);
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
 }
 
 #[test]

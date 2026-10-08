@@ -5732,6 +5732,8 @@ Ordinary browser diagnostics remain available during the outage.
 
 ## Remote View application runtime
 
+Native cold launches require an absolute profile directory. Invalid relative catalog paths return `browser_session_profile_path_not_absolute`; select an existing managed profile or register the intended absolute directory instead of guessing a replacement. Local capacity failures return `browser_launch_resource_pressure:<reason>`. These preflight failures occur before durable launch custody and may be retried after correcting the cause. Failures after custody admission still require readback; an empty recorded PID does not prove process absence.
+
 A retained view request is replayed with its original key after an interrupted
 reply. When the provider proves that grant terminal, the client records that
 outcome and renews the view once under the same durable handoff. Ambiguous

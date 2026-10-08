@@ -42,3 +42,19 @@ lanes:
     checkpoint: b1cd035c3cecf514b9b15e80c08ddf69aed4b1ec
     validation_status: Consumer and custody tests, Service Model suite, format and strict Clippy passed; installed native doctor and original retained handoff recovery/control/reconnect accepted
     limitations: ["Application is at login; application authentication continuity is unverified", "Reused primary checkout retains the sealed artifact; unrelated worktrees remain preserved"]
+  - id: P225
+    product_lane: PL-BUGFIX
+    objective: Reject invalid native cold launches before durable custody
+    plan: docs/dev/plans/0225-2026-10-08-default-launch-preflight.md
+    branch: fix/default-launch-preflight
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#227]
+    dependencies: []
+    overlaps: ["P224", "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
+    reconciled_overlaps: ["P224 integrated; P225 owns cold-launch preflight only; unrelated checkouts and prior sealed candidate preserved"]
+    blocker: null
+    updated_at: 2026-10-08
+    validation_status: Real-adapter and same-host retry regressions red then green; browser-session and model suites, format, strict Clippy and docs checks passed
+    limitations: ["Source-only repair; installed runtime and historical Default claim unchanged", "Prior sealed candidate retained in reused checkout"]

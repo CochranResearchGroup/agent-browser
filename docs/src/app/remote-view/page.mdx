@@ -555,6 +555,8 @@ inspection recourse; it must not be treated as an automatic convergence retry.
 
 ## Remote View application runtime
 
+Native cold launches require an absolute profile directory. Invalid relative catalog paths return `browser_session_profile_path_not_absolute`; select an existing managed profile or register the intended absolute directory instead of guessing a replacement. Local capacity failures return `browser_launch_resource_pressure:<reason>`. These preflight failures occur before durable launch custody and may be retried after correcting the cause. Failures after custody admission still require readback; an empty recorded PID does not prove process absence.
+
 With origin and pool configured, `remote-view open` uses the managed browser
 session owner instead of requiring a historical presentation route first. An
 explicit runtime profile and absolute existing profile directory register one
