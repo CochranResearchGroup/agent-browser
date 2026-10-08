@@ -1,7 +1,7 @@
 # P224: Scope unfinished native launch custody
 
 Product lane: PL-BUGFIX
-Status: IN_PROGRESS
+Status: COMPLETED
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/224
 Branch: fix/scoped-launch-custody
 Checkout: agent-browser-p204, reused from a clean integrated branch after inventory.
@@ -52,3 +52,35 @@ checks that the retained native handoff resolves as operator-visible ready;
 its final execution passed in 0.14s. Original authenticated browser presentation
 still reproduces the user's exact unavailable message on the old installation.
 Production publication and original-link recovery remain pending.
+
+## Installed acceptance
+
+Source integrated through PR 225, merge
+`ea42b7181f8dac4fae9ad4926c50c617c2fe681a`. The sealed production binary
+SHA256 is `2b7487260770c53422bcbdb4cca338cf8a4aed1b25e4c09a048987cc26c0d9d3`.
+It passed three isolated fresh-profile launch/read/close/residue cycles with
+production unchanged. The supported production install transaction accepted
+those exact bytes, and the installed native doctor passed.
+
+The original ordinary browser command succeeded after installation. The same
+retained handoff opened the native desktop through existing authentication,
+showed the intended application login page, and reconnected successfully.
+Native mouse/keyboard input produced a synthetic address-bar marker; Escape
+restored the page and ordinary automation read the unchanged URL afterward.
+The logical browser, profile, active sessions and exact handoff binding were
+preserved. The unrelated unfinished claim remained byte-equivalent by curated
+record hash. No manual runtime-state repair or reboot occurred. Application
+login continuity is not accepted: the application is at its login page.
+Private browser artifacts and runtime receipts remain outside the repository.
+
+Preserved harness limits: initial build-result parsing stopped before any
+installation; one canvas locator click timed out before input and the corrected
+coordinate-based check passed. The new isolated namespace had no published local
+ingress and no native provider binding, so its general doctor reported missing
+ingress and its local-mode install doctor reported legacy helper prerequisites.
+No legacy helper repair or ingress publication was attempted. The standalone
+candidate doctor against the old production selection reported expected executable
+mismatch; installed native doctor passed after the guarded transaction selected
+the candidate. These failed probes are not relabeled as clean doctor results.
+The three temporary isolated services were stopped and disabled after smoke;
+the authenticated observer page was closed and shared observer resources preserved.
