@@ -48,6 +48,13 @@ _Avoid_: Policy edit, lease release, process kill
 Internal evidence that binds an exact managed browser or runtime process to its profile, executable, process instance, endpoint, and owner generation before lifecycle effects occur.
 _Avoid_: Client identity, access permission, profile lease
 
+**Browser launch custody**:
+The durable intent and observed process evidence for one browser launch, bound to
+an exact profile and desktop assignment. An unresolved intent blocks another
+launch or recovery for that profile while unrelated profiles continue through
+their own custody and assignment-generation checks.
+_Avoid_: Global runtime lock, browser readiness, profile access policy
+
 **Request provenance**:
 The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.
 _Avoid_: Log message, caller label, lane selector

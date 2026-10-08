@@ -23,3 +23,18 @@ lanes:
     blocker: null
     limitations: ["Original expired-link restoration packet remains failed", "Current application authentication unverified at its interstitial", "First cold-read absence guard refusal and unproven transient cause retained", "CI disabled and no required main-branch GitHub checks configured"]
     updated_at: 2026-10-06
+  - id: P224
+    product_lane: PL-BUGFIX
+    objective: Recover retained browser sessions despite unrelated unfinished native launches
+    plan: docs/dev/plans/0224-2026-10-08-scoped-native-launch-custody.md
+    plan_ref: refs/heads/fix/scoped-launch-custody
+    branch: fix/scoped-launch-custody
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#224]
+    dependencies: []
+    overlaps: ["CochranResearchGroup/agent-browser#218", "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
+    reconciled_overlaps: ["P224 owns only scoped native session custody and regressions; other branches and dirty work are preserved"]
+    blocker: null
+    updated_at: 2026-10-08

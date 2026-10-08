@@ -192,8 +192,14 @@ impl RemoteViewBrowserProcessEffects for Process {
         );
         let mut peer = open_store(&self.root, false);
         let records = peer.unpublished_launch_records().unwrap();
-        assert_eq!(records.len(), 1);
-        assert_eq!(records[0].intent, *intent);
+        assert_eq!(
+            records
+                .iter()
+                .filter(|record| record.intent.profile_id == profile.id)
+                .count(),
+            1
+        );
+        assert!(records.iter().any(|record| record.intent == *intent));
         self.calls.set(self.calls.get() + 1);
         if matches!(self.mode, Mode::UnknownProcess) {
             return Err(RemoteViewBrowserProcessError::OutcomeUnknown);
@@ -440,11 +446,11 @@ fn consumer_host_failed_launch_or_publication_retains_claim_without_restart_retr
         );
         assert!(peer.load_session_state().unwrap().browsers.is_empty());
         drop(host);
-        let result = fixture.effects(Mode::Success, calls.clone(), requests.clone());
-        match result {
-            Err(error) => assert_eq!(error, "remote_view_session_launch_readback_required"),
-            Ok(_) => panic!("restart must retain unresolved claim"),
-        }
+        let mut restarted = fixture.host(Mode::Success, calls.clone(), requests.clone());
+        assert!(restarted
+            .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 102))
+            .is_err());
+        assert_eq!(peer.unpublished_launch_records().unwrap(), records);
         assert_eq!(calls.get(), 1);
         assert_eq!(requests.get(), 4);
     }
