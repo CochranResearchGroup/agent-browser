@@ -95,36 +95,7 @@ pub(super) fn runtime_effects(
         None => Ok(RuntimeSessionEffects::Local(local)),
         Some(context) => {
             let mut store = BrowserSessionSqliteStore::default_sqlite()?;
-            let pending = store
-                .unpublished_launch_records()
-                .map_err(|_| "remote_view_session_custody_unavailable")?;
-            if !pending.is_empty() {
-                let state = store.load_session_state()?;
-                let catalog = store.load_profile_catalog()?.catalog;
-                for claim in pending {
-                    let browser = state
-                        .browsers
-                        .values()
-                        .find(|browser| browser.profile_id == claim.intent.profile_id)
-                        .ok_or("remote_view_session_launch_readback_required")?;
-                    let profile = catalog
-                        .profiles
-                        .get(&browser.profile_id)
-                        .or_else(|| {
-                            state
-                                .disposable_profiles
-                                .get(&browser.profile_id)
-                                .map(|p| &p.profile)
-                        })
-                        .ok_or("remote_view_session_launch_readback_required")?;
-                    local
-                        .prove_recovery_absence(browser, profile)
-                        .map_err(|_| "remote_view_session_launch_readback_required")?;
-                    store
-                        .reconcile_absent_unobserved_recovery(&claim, &state, browser)
-                        .map_err(|_| "remote_view_session_launch_readback_required")?;
-                }
-            }
+            reconcile_pending_recoveries(&mut local, &mut store)?;
             Ok(RuntimeSessionEffects::Remote(Box::new(
                 RemoteViewSessionEffects::new(local, context.adapter, store, Vec::new(), || {
                     uuid::Uuid::new_v4().to_string()
@@ -134,6 +105,52 @@ pub(super) fn runtime_effects(
             )))
         }
     }
+}
+
+/// Reconcile only retained recovery claims with proven absence. Cold launches,
+/// observed outcomes and uncertain profiles retain custody without blocking the
+/// construction of effects for unrelated sessions. Profile-scoped admission
+/// refuses any remaining claim before another launch for that profile.
+pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
+    local: &mut E,
+    store: &mut BrowserSessionSqliteStore,
+) -> Result<(), String> {
+    let pending = store
+        .unpublished_launch_records()
+        .map_err(|_| "remote_view_session_custody_unavailable")?;
+    if pending.is_empty() {
+        return Ok(());
+    }
+    let state = store.load_session_state()?;
+    let catalog = store.load_profile_catalog()?.catalog;
+    for claim in pending {
+        if claim.observed_pid.is_some() || claim.observed_browser_id.is_some() {
+            continue;
+        }
+        let Some(browser) = state
+            .browsers
+            .values()
+            .find(|browser| browser.profile_id == claim.intent.profile_id)
+        else {
+            continue;
+        };
+        let Some(profile) = catalog.profiles.get(&browser.profile_id).or_else(|| {
+            state
+                .disposable_profiles
+                .get(&browser.profile_id)
+                .map(|p| &p.profile)
+        }) else {
+            continue;
+        };
+        if local.prove_recovery_absence(browser, profile).is_err() {
+            continue;
+        }
+        match store.reconcile_absent_unobserved_recovery(&claim, &state, browser) {
+            Ok(()) | Err(LaunchCustodyStoreError::Conflict) => {}
+            Err(_) => return Err("remote_view_session_custody_unavailable".into()),
+        }
+    }
+    Ok(())
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {

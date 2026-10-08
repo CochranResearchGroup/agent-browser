@@ -4,8 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Composes existing browser effects with public consumer transport and process
 /// custody. Assignments are transient provider context, not a reservation ledger.
-/// Unresolved claims block construction and later operations until explicit
-/// reconciliation. No automatic recovery or new intent bypass is provided.
+/// Unresolved claims block launches and recovery for their own profile. Other
+/// profiles may continue; durable admission still fences conflicting assignments.
+/// A launch attempted by this adapter remains blocking until publication.
 pub struct RemoteViewSessionEffects<E, T, S> {
     effects: E,
     adapter: RemoteViewApplicationAdapter<T>,
@@ -24,11 +25,10 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
     pub fn new(
         effects: E,
         adapter: RemoteViewApplicationAdapter<T>,
-        mut store: S,
+        store: S,
         assignments: Vec<RemoteViewAssignmentRecord>,
         next_intent_id: fn() -> String,
     ) -> Result<Self, String> {
-        Self::require_clear_custody(&mut store)?;
         let mut by_desktop = BTreeMap::new();
         let mut ids = BTreeSet::new();
         for assignment in assignments {
@@ -74,11 +74,13 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
         self
     }
 
-    fn require_clear_custody(store: &mut S) -> Result<(), String> {
-        if !store
+    fn require_clear_profile_custody(&mut self, profile_id: &str) -> Result<(), String> {
+        if self
+            .store
             .unpublished_launch_records()
             .map_err(|_| "remote_view_session_custody_unavailable".to_string())?
-            .is_empty()
+            .iter()
+            .any(|record| record.intent.profile_id == profile_id)
         {
             return Err("remote_view_session_launch_readback_required".into());
         }
@@ -109,6 +111,7 @@ impl<
         navigation: &[BrowserNavigationRecord],
     ) -> Result<BrowserRecovery, String> {
         self.require_operation()?;
+        self.require_clear_profile_custody(&profile.id)?;
         self.effects
             .prove_recovery_absence(browser, profile)
             .map_err(|_| "browser_session_recovery_absence_unproven")?;
@@ -322,7 +325,6 @@ impl<
         if self.pending.is_some() {
             return Err("remote_view_session_launch_readback_required".into());
         }
-        Self::require_clear_custody(&mut self.store)?;
         self.effects.begin_operation(expected)?;
         self.expected = Some(expected.clone());
         Ok(())
@@ -347,6 +349,7 @@ impl<
         desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         self.require_operation()?;
+        self.require_clear_profile_custody(&profile.id)?;
         let desktop = desktop.ok_or_else(|| "remote_view_session_desktop_required".to_string())?;
         let assignment = self
             .assignments

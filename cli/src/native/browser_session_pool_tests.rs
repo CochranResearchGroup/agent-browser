@@ -615,6 +615,109 @@ fn ordinary_read_recovers_idle_retained_browser_without_opening_handoff() {
 }
 
 #[test]
+fn ordinary_idle_recovery_preserves_unrelated_unfinished_launch() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let original_target = opened["targetId"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    let reaped = consumer.reap(300_101).unwrap();
+    assert_eq!(reaped.closed_browser_ids, vec![browser_id]);
+    assert!(consumer
+        .state()
+        .idle_closed_browsers
+        .contains_key(browser_id));
+    drop(consumer);
+
+    let mut store = fixture.store(false);
+    let assignment = provider.borrow().assignments[0].clone();
+    let unrelated = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: "profile-b".into(),
+        assignment,
+    };
+    let baseline = store.load_session_state().unwrap();
+    store.admit_launch_intent(&unrelated, &baseline).unwrap();
+    let retained_claim = store.unpublished_launch_records().unwrap();
+    crate::native::browser_session_remote_view::reconcile_pending_recoveries(
+        &mut Process {
+            mode: Mode::IdleRecovery,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        &mut store,
+    )
+    .unwrap();
+    assert_eq!(store.unpublished_launch_records().unwrap(), retained_claim);
+
+    let mut restarted = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let resumed = restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":300_102
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed["success"], true);
+    let mut recovered_identity = resumed["browserSession"].clone();
+    recovered_identity["targetId"] = identity["targetId"].clone();
+    assert_eq!(recovered_identity, identity);
+    assert_eq!(resumed["browserSession"]["targetId"], resumed["targetId"]);
+    assert_ne!(resumed["targetId"], original_target);
+    let handoff_id = identity["handoffId"].as_str().unwrap();
+    provider.borrow_mut().window_pid = Some(restarted.state().browsers[browser_id].pid);
+    let handoff = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "nativeDesktop":true, "activityAtMs":300_103,
+    }));
+    assert_eq!(handoff["success"], true, "{handoff}");
+    assert_eq!(handoff["data"]["operatorVisible"]["state"], "ready");
+    assert_eq!(handoff["data"]["targetId"], resumed["targetId"]);
+    assert_eq!(calls.get(), 2);
+    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert!(provider.borrow().view_requests.is_empty());
+    assert!(restarted.state().idle_closed_browsers.is_empty());
+    assert_eq!(
+        fixture.store(false).unpublished_launch_records().unwrap(),
+        retained_claim
+    );
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *restarted.state()
+    );
+    restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":300_103
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
 fn ordinary_idle_recovery_refuses_unproven_absence_before_launch_or_activity_refresh() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

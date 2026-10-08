@@ -367,26 +367,33 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                     ]
                 );
             }
-            assert!(RemoteViewSessionEffects::new(
+            let mut restarted = RemoteViewSessionEffects::new(
                 Runtime {
                     evidence: evidence.clone(),
                     absent,
                     fail_restoration,
-                    next_target: 0
+                    next_target: 0,
                 },
                 RemoteViewApplicationAdapter::new(
                     "agent-browser".into(),
                     Transport {
                         evidence: evidence.clone(),
-                        fixture: f
-                    }
+                        fixture: f,
+                    },
                 )
                 .unwrap(),
                 Store(evidence.clone()),
                 vec![],
-                || "44444444-4444-4444-4444-444444444444".into()
+                || "44444444-4444-4444-4444-444444444444".into(),
             )
-            .is_err());
+            .unwrap();
+            restarted.begin_operation(&state).unwrap();
+            assert_eq!(
+                restarted
+                    .recover_browser(&browser, &profile, &tabs, &navigation)
+                    .unwrap_err(),
+                "remote_view_session_launch_readback_required"
+            );
         }
     }
 }
