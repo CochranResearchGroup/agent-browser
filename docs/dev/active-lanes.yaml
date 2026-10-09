@@ -58,3 +58,17 @@ lanes:
     updated_at: 2026-10-08
     validation_status: Real-adapter and same-host retry regressions red then green; browser-session and model suites, format, strict Clippy and docs checks passed
     limitations: ["Source-only repair; installed runtime and historical Default claim unchanged", "Prior sealed candidate retained in reused checkout"]
+  - id: P226
+    product_lane: PL-BUGFIX
+    objective: Grow native desktop capacity on independent browser demand
+    plan: docs/dev/plans/0226-2026-10-08-native-desktop-demand.md
+    branch: fix/native-desktop-demand
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#229]
+    dependencies: []
+    overlaps: [P225, "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
+    reconciled_overlaps: ["P225 integrated; clean p204 checkout reused; prior sealed candidates retained; old branches preserved"]
+    blocker: null
+    updated_at: 2026-10-08

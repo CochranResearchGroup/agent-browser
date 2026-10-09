@@ -1,7 +1,7 @@
 //! Demand-driven public pool preparation, with durable request identity.
 use crate::*;
 
-/// Agent Browser's desired service capacity, bounded by Remote View policy.
+/// Agent Browser's warm capacity minimum, bounded by Remote View policy.
 /// This is demand, not a copy of Remote View allocation state.
 pub struct RemoteViewSessionPool {
     pub name: String,
@@ -89,9 +89,50 @@ pub fn prepare_remote_view_session_pool<
             .collect::<Vec<_>>()
     };
     let mut assignments = active(&inventory);
-    // The desired capacity bounds this operation's number of acquisitions.
-    // A cached result that makes no progress stops, rather than spinning.
-    while assignments.len() < pool.desired_desktops as usize {
+    loop {
+        let mut desktop_ids = std::collections::BTreeSet::new();
+        let mut candidates = Vec::new();
+        let mut occupied = false;
+        for assignment in &assignments {
+            if !desktop_ids.insert(assignment.desktop_id.clone()) {
+                return Err("remote_view_session_assignment_invalid".into());
+            }
+            // A failed observation never qualifies a desktop as free.
+            let Ok(windows) = adapter.windows(assignment) else {
+                continue;
+            };
+            if !windows.windows.is_empty() {
+                occupied = true;
+                continue;
+            }
+            candidates.push(RemoteViewDesktopCandidate {
+                ready: true,
+                desktop: RemoteViewFixedDesktop {
+                    desktop_id: assignment.desktop_id.clone(),
+                    generation: assignment.generation,
+                    friendly_route_label: assignment.desktop_id.clone(),
+                },
+            });
+        }
+        let warm_minimum_met = assignments.len() >= pool.desired_desktops as usize;
+        if warm_minimum_met && !candidates.is_empty() {
+            return Ok(RemoteViewPreparedSessionPool {
+                assignments,
+                desktops: candidates,
+            });
+        }
+        if assignments.len() >= maximum as usize {
+            return Err(if occupied {
+                "remote_view_pool_capacity_exhausted"
+            } else {
+                "remote_view_runtime_assignment_unavailable"
+            }
+            .into());
+        }
+        // Once the minimum is met, unknown observations cannot justify growth.
+        if warm_minimum_met && !occupied {
+            return Err("remote_view_runtime_assignment_unavailable".into());
+        }
         let key = store
             .pool_acquisition_request_key(&adapter.application, &pool.name, &assignments)
             .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
@@ -107,37 +148,4 @@ pub fn prepare_remote_view_session_pool<
         }
         assignments = refreshed;
     }
-    let mut desktop_ids = std::collections::BTreeSet::new();
-    let mut candidates = Vec::new();
-    for assignment in &assignments {
-        if !desktop_ids.insert(assignment.desktop_id.clone()) {
-            return Err("remote_view_session_assignment_invalid".into());
-        }
-        // Windows observation refreshes both independent generations before
-        // and after the read. A failed peer cannot erase healthy candidates.
-        let Ok(windows) = adapter.windows(assignment) else {
-            continue;
-        };
-        candidates.push((
-            !windows.windows.is_empty(),
-            RemoteViewDesktopCandidate {
-                ready: true,
-                desktop: RemoteViewFixedDesktop {
-                    desktop_id: assignment.desktop_id.clone(),
-                    generation: assignment.generation,
-                    friendly_route_label: assignment.desktop_id.clone(),
-                },
-            },
-        ));
-    }
-    if candidates.is_empty() {
-        return Err("remote_view_runtime_assignment_unavailable".into());
-    }
-    // Window-free desktops win ties in the ordinary manager's browser count.
-    // Occupied desktops remain eligible and no window titles are retained.
-    candidates.sort_by_key(|(occupied, _)| *occupied);
-    Ok(RemoteViewPreparedSessionPool {
-        assignments,
-        desktops: candidates.into_iter().map(|(_, desktop)| desktop).collect(),
-    })
 }
