@@ -155,6 +155,14 @@ pub enum LaunchCustodyAdmission {
 /// current session state and commits session state plus custody together.
 /// Implementations must retain unknown outcomes for explicit reconciliation.
 pub trait BrowserLaunchCustodyStore {
+    /// Only durable joined release completion permits recovery on a new
+    /// assignment. Missing provider inventory is insufficient evidence.
+    fn assignment_release_confirmed(
+        &mut self,
+        _assignment: &crate::RemoteViewAssignmentRecord,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        Ok(false)
+    }
     /// Admit replacement custody for an exact published browser. Implementations
     /// retain prior launch history and reject competing profile claims or release fences.
     fn admit_recovery_launch_intent(

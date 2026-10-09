@@ -29,6 +29,8 @@ pub enum RemoteViewApplicationMutationOutcome {
     IssueViewTerminal,
     RevokeView(RemoteViewApplicationViewRevocation),
     Release(RemoteViewJoinedReleaseOutcome),
+    /// Exact public response proves the guarded release made no effects.
+    ReleaseIdleDeferred,
 }
 
 /// A pending record survives ambiguous transport or process interruption.
@@ -101,6 +103,9 @@ impl RemoteViewApplicationEnvelope {
                 idempotency_key, ..
             }
             | RemoteViewApplicationRequest::Release {
+                idempotency_key, ..
+            }
+            | RemoteViewApplicationRequest::ReleaseIdle {
                 idempotency_key, ..
             } => {
                 if idempotency_key.is_empty()
@@ -215,7 +220,34 @@ fn parse_outcome(
         RemoteViewApplicationRequest::RevokeView { .. } => {
             serde_json::from_value(value).map(RemoteViewApplicationMutationOutcome::RevokeView)
         }
-        RemoteViewApplicationRequest::Release { .. } => {
+        RemoteViewApplicationRequest::ReleaseIdle {
+            assignment_id,
+            expected_generation,
+            ..
+        } if value.get("state").and_then(Value::as_str) == Some("retained") => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct Deferred {
+                schema_version: u32,
+                operation: String,
+                state: String,
+                assignment_id: String,
+                generation: u64,
+            }
+            let retained: Deferred = serde_json::from_value(value)
+                .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+            if retained.schema_version != 1
+                || retained.operation != "release_idle"
+                || retained.state != "retained"
+                || &retained.assignment_id != assignment_id
+                || retained.generation != *expected_generation
+            {
+                return Err(RemoteViewApplicationResponseError::InvalidTarget);
+            }
+            return Ok(RemoteViewApplicationMutationOutcome::ReleaseIdleDeferred);
+        }
+        RemoteViewApplicationRequest::Release { .. }
+        | RemoteViewApplicationRequest::ReleaseIdle { .. } => {
             serde_json::from_value(value).map(RemoteViewApplicationMutationOutcome::Release)
         }
         _ => return Err(RemoteViewApplicationResponseError::InvalidShape),
@@ -224,6 +256,85 @@ fn parse_outcome(
 }
 
 impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
+    /// Resume only an exact fenced, idempotent idle release. A lost response
+    /// cannot authorize a different target or a second provider retirement.
+    pub fn reconcile_idle_release(
+        &mut self,
+        record: &RemoteViewApplicationMutationRecord,
+        target: &RemoteViewApplicationReleaseTarget,
+        store: &mut impl RemoteViewApplicationMutationStore,
+    ) -> Result<RemoteViewApplicationMutationOutcome, RemoteViewApplicationAdapterError> {
+        if record.schema_version != 1
+            || record.envelope.application != self.application
+            || record.outcome.is_some()
+            || !matches!(&record.envelope.request,RemoteViewApplicationRequest::ReleaseIdle { assignment_id,expected_generation,expected_retirement,.. }
+                if assignment_id == &target.assignment.assignment_id && *expected_generation == target.assignment.generation
+                && expected_retirement.routes == target.route_ids && expected_retirement.sessions == target.viewer_session_ids
+                && expected_retirement.desktop_id == target.assignment.desktop_id && expected_retirement.generation == target.assignment.generation)
+        {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        match store
+            .claim(&record.envelope)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?
+        {
+            RemoteViewApplicationMutationClaim::Existing(current) if *current == *record => (),
+            _ => return Err(RemoteViewApplicationAdapterError::MutationReadbackRequired),
+        }
+        let response = self.request(record.envelope.request.clone())?;
+        let outcome = parse_outcome(&record.envelope.request, response)?;
+        match &outcome {
+            RemoteViewApplicationMutationOutcome::Release(released) => {
+                target.validate_outcome(released)?
+            }
+            RemoteViewApplicationMutationOutcome::ReleaseIdleDeferred => (),
+            _ => return Err(RemoteViewApplicationResponseError::InvalidShape.into()),
+        }
+        store
+            .complete(&record.envelope, &outcome)
+            .map_err(RemoteViewApplicationAdapterError::MutationStore)?;
+        Ok(outcome)
+    }
+    /// Consume current application cleanup admission and request owner-guarded
+    /// idle release. The provider rechecks viewers while holding its native lock.
+    pub fn release_idle(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+        observation: &crate::RemoteViewIdleAssignmentObservation,
+        cleanup: RemoteViewApplicationCleanupPermit,
+        idempotency_key: String,
+        store: &mut impl RemoteViewApplicationMutationStore,
+    ) -> Result<RemoteViewJoinedReleaseOutcome, RemoteViewApplicationAdapterError> {
+        let target = observation.release_target(assignment)?;
+        if !observation.idle {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
+        }
+        let cleanup = cleanup
+            .into_acknowledgement(&target)
+            .map_err(|_| RemoteViewApplicationResponseError::InvalidTarget)?;
+        let request = RemoteViewApplicationRequest::ReleaseIdle {
+            assignment_id: assignment.assignment_id.clone(),
+            expected_generation: assignment.generation,
+            expected_viewing_generation: observation.target.viewing_generation,
+            idempotency_key,
+            cleanup,
+            expected_retirement: observation.retirement.clone(),
+        };
+        let outcome = self.mutate(request, store, |outcome, _| match outcome {
+            RemoteViewApplicationMutationOutcome::Release(released) => {
+                target.validate_outcome(released)
+            }
+            RemoteViewApplicationMutationOutcome::ReleaseIdleDeferred => Ok(()),
+            _ => Err(RemoteViewApplicationResponseError::InvalidShape),
+        })?;
+        match outcome {
+            RemoteViewApplicationMutationOutcome::Release(released) => Ok(released),
+            RemoteViewApplicationMutationOutcome::ReleaseIdleDeferred => {
+                Err(RemoteViewApplicationAdapterError::IdleReleaseDeferred)
+            }
+            _ => unreachable!(),
+        }
+    }
     /// Resolve an interrupted acquisition using its original provider idempotency
     /// key. Only acquisitions support this replay; all other uncertain effects
     /// retain their existing readback requirement.

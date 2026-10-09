@@ -32,6 +32,8 @@ pub enum RemoteViewApplicationAdapterError {
     MutationStore(crate::RemoteViewApplicationMutationStoreError),
     MutationReadbackRequired,
     ViewGrantTerminal,
+    /// Owner proved no release effect occurred because activity resumed.
+    IdleReleaseDeferred,
     Transport(RemoteViewApplicationTransportError),
     Response(RemoteViewApplicationResponseError),
 }
@@ -56,6 +58,21 @@ pub struct RemoteViewApplicationAdapter<T> {
 }
 
 impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
+    /// Qualified owner idleness, including native viewers and process ownership.
+    pub fn observe_idle(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+    ) -> Result<crate::RemoteViewIdleAssignmentObservation, RemoteViewApplicationAdapterError> {
+        let response = self.request(RemoteViewApplicationRequest::ObserveIdle {
+            assignment_id: assignment.assignment_id.clone(),
+            expected_generation: assignment.generation,
+        })?;
+        let observation: crate::RemoteViewIdleAssignmentObservation =
+            serde_json::from_value(response)
+                .map_err(|_| RemoteViewApplicationResponseError::InvalidShape)?;
+        observation.release_target(assignment)?;
+        Ok(observation)
+    }
     pub fn new(
         application: String,
         transport: T,

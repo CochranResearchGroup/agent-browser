@@ -115,18 +115,45 @@ impl<
         self.effects
             .prove_recovery_absence(browser, profile)
             .map_err(|_| "browser_session_recovery_absence_unproven")?;
-        let assignment = self
+        let mut assignment = self
             .store
             .published_launch_assignment(browser)
             .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
-        let desktop = browser
+        let mut desktop = browser
             .desktop
             .as_ref()
-            .ok_or("browser_session_recovery_desktop_missing")?;
+            .ok_or("browser_session_recovery_desktop_missing")?
+            .clone();
         if assignment.desktop_id != desktop.desktop_id
             || assignment.generation != desktop.generation
         {
             return Err("browser_session_recovery_assignment_conflict".into());
+        }
+        if self
+            .store
+            .assignment_release_confirmed(&assignment)
+            .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?
+        {
+            let pool = self
+                .pool
+                .as_ref()
+                .ok_or("browser_session_recovery_pool_missing")?;
+            let prepared =
+                prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+            desktop = prepared
+                .desktops
+                .first()
+                .ok_or("browser_session_recovery_desktop_unavailable")?
+                .desktop
+                .clone();
+            assignment = prepared
+                .assignments
+                .into_iter()
+                .find(|assignment| {
+                    assignment.desktop_id == desktop.desktop_id
+                        && assignment.generation == desktop.generation
+                })
+                .ok_or("browser_session_recovery_assignment_unavailable")?;
         }
         let intent = BrowserLaunchIntent {
             intent_id: (self.next_intent_id)(),
@@ -175,6 +202,7 @@ impl<
         let mut restored_browser = browser.clone();
         restored_browser.pid = launch.pid;
         restored_browser.cdp_endpoint = launch.cdp_endpoint.clone();
+        restored_browser.desktop = launch.desktop.clone();
         let mut target_ids = BTreeMap::new();
         // Custody remains unpublished throughout restoration. A crash or failed
         // restoration cannot authorize another process or duplicate tab replay.
@@ -392,6 +420,24 @@ impl<
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         self.require_operation()?;
         self.effects.browser_is_live(browser)
+    }
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        self.require_operation()?;
+        if self.pool.is_none() {
+            return self.effects.permits_idle_browser_close(browser);
+        }
+        let assignment = self
+            .store
+            .published_launch_assignment(browser)
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        let observation = self
+            .adapter
+            .observe_idle(&assignment)
+            .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
+        Ok(!observation.viewer_active)
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;

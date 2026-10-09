@@ -4,7 +4,27 @@ Updated: 2026-10-06
 
 ## Current execution
 
-P223 version 6 is COMPLETED within the bounded revision-6 scenarios on 2026-10-06, before the operator's 1.5 million resumed-thread token checkpoint bound. Preserve the prior exhausted allowance and failures. [The current plan](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) owns scope. No active execution packet remains.
+P227 is ACTIVE under issue 233: shared-profile verification, profile-aware retention and ready-spare/wrap-around/shrink behavior. The branch-local [plan](docs/dev/plans/0227-2026-10-08-alice-bob-reconciliation.md) owns acceptance. Start 2026-10-09 03:16 UTC; checkpoint by 06:06 UTC or before two million tokens. Isolated installed synthetic validation is authorized; production upgrade and reboot are excluded.
+
+### P227 acceptance checkpoint
+
+| Requirement | Source qualification | Installed evidence | Integration |
+| --- | --- | --- | --- |
+| Intentional shared profile with separate task tabs | Consumer regressions passed | Alice/Bob shared stored data, retained independent tab values and URLs; Alice closure preserved Bob | Pending consumer PR |
+| Durable/disposable retention and restart | Full Service Model suite and 46 consumer tests passed: unlimited durable default, configurable finite TTL, legacy finite links preserved, disposable inactivity and peer-safe data cleanup | New durable handoffs have no expiry; shared data survived physical browser recovery and final-session closure | Pending consumer PR |
+| Ready spare and wrap-around | Placement, persistence and unrelated-pending-history regressions passed | Background spare growth; three-desktop limit; four profiles with Eve wrapping onto Bob's desktop, separate browsers and correct peer URLs | Pending consumer PR |
+| Continuous cooldown, reset, minimum and regrowth | Provider 900-second controlled clock, reset/reacquisition, restart and minimum tests passed | Five-second fixture override shrank excess native capacity, retained one ready desktop and regrew for later profiles | Provider PR 340; consumer pending |
+| Native viewer and automation return | Focus and retained handoff contracts passed | Same Bob handoff redirected to native viewer, actual WebSocket pixels and mouse/keyboard input; ordinary automation read the exact synthetic value and shared storage | Pending consumer PR |
+| Current activity protection and exact cleanup | Viewer, deferred/lost release reply and canceled-fence regressions passed | Windowless non-dumpable X11 client prevented retirement evidence; probe closed. Final task closure, all assignments released/desktops removed; own services stopped and disabled; Docker stack/network removed; fresh own-process census empty | Provider PR 340; consumer pending |
+| Guidance and validation | Format, strict workspace Clippy, client contracts, Lease Authority architecture/116 tests, docs build and handoff/link checks passed | Updated guidance published only into p227 pseudo-home; shared production skills preserved | Pending consumer PR |
+
+The isolated Agent Browser candidate is SHA256 `c48612f961a70d41cb6ba3194774d22b865ad8df73ecc5409c8740982beac6cf`; native provider after final adoption is `9af629206fbd55de30ee44cecf2e503f258ba1fdd09182f0248c3ee11deb9ca8`. Provider full serial validation passed 367 tests with 10 opt-in tests ignored. Synthetic receipts and captures are retained privately under the task's evidence directory, not copied into product sources.
+
+Preserve limitations and failed attempts: the first ordinary retained-browser recovery refused with `browser_session_recovery_absence_unproven`; a fresh census and one retry recovered it, without an established transient cause. The first profile-open harness omitted an existing directory and failed before launch. A viewer harness used Node-side DNS and failed; its own observer was closed. A handoff during provider authentication reload failed window readback; it succeeded after exact service adoption. The dashboard-auth script completed its checks, then failed in Node/Undici shutdown; subsequent browser-based login and actual viewer flow passed. Initial fixture audio-port and outdated host-harness failures remain retained. A raw cleanup request used the wrong cleanup field casing and was rejected before release; the corrected public request completed. None of these receipts is relabeled as a clean first-attempt aggregate.
+
+This is private installed synthetic qualification, not public ingress, production Authelia, ten-browser stress, production upgrade or formal release. Production Agent Browser retains SHA256 `d43c9a848a7f31ef2c7a6bd675bcd12f9d323b4d5b670cfb0d02bdcb9fb1dc22`; the preserved p221 controller remains PID 1225. Remaining gate: issue-linked source integration and canonical readback.
+
+P223 version 6 is COMPLETED within the bounded revision-6 scenarios on 2026-10-06, before the operator's 1.5 million resumed-thread token checkpoint bound. Preserve the prior exhausted allowance and failures. [The current plan](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) owns scope. Its execution packet is closed.
 
 M1–M3 retain prior acceptance within their recorded scenarios. M4 qualifies valid retained-link and ordinary idle recovery, actual native control, continued automation, explicit stop and actionable expiry. The original expired-link restoration packet remains failed. Current application authentication is unverified, and the first ordinary cold-read guard refusal and its unproven transient cause remain attributable. M5 qualifies isolated update/diagnostics and canonical source integration. Production promotion and broader platform/release work remain excluded.
 

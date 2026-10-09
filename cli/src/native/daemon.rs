@@ -732,7 +732,13 @@ impl RuntimeHostRouter {
     async fn reap_browser_sessions(&self) -> Result<(), String> {
         let browser_sessions = self.browser_sessions.clone();
         tokio::task::spawn_blocking(move || {
-            super::browser_session_host::reap_shared_browser_sessions(browser_sessions)
+            let reaped =
+                super::browser_session_host::reap_shared_browser_sessions(browser_sessions);
+            // Provider provisioning runs after the shared host lock is released.
+            // Even a failed reap must not suppress independent spare maintenance.
+            let replenished =
+                super::browser_session_remote_view::replenish_configured_remote_view_pool();
+            reaped.and(replenished)
         })
         .await
         .map_err(|error| format!("browser_session_reap_join_failed:{error}"))?
@@ -770,7 +776,10 @@ fn spawn_browser_session_reaper(router: RuntimeHostRouter) -> tokio::task::JoinH
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         interval.tick().await;
         loop {
-            interval.tick().await;
+            tokio::select! {
+                _ = interval.tick() => {},
+                _ = super::browser_session_remote_view::pool_maintenance_requested() => {},
+            }
             if let Err(error) = router.reap_browser_sessions().await {
                 let _ = writeln!(std::io::stderr(), "Browser session reaper error: {error}");
             }

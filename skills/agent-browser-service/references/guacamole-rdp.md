@@ -1,64 +1,42 @@
-# Use Guacamole and RDP presentation
+# Native Remote View presentation
 
-Use this guide when a person must see or control a service-owned browser.
+Use the configured native Remote View integration when a person needs to see or
+control a browser. Agent Browser owns the profile, browser, sessions and tabs;
+Remote View owns desktop allocation, authentication and viewer operation.
 
-## Decide whether presentation is required
+## Open and reconnect
 
-Browser automation and operator presentation are separate capabilities. Do not
-reserve a Guacamole route for ordinary CDP work unless the access plan or site
-policy selects `rdp_gateway`, `remote_headed`, or manual attached control.
+Supply the task session and session name explicitly. Select its durable profile
+when retained authentication is needed; omitted profile selection is disposable.
+Request `remote_view_open` for the selected task. Require
+`operatorVisible.state=ready`, then share only the returned `handoffUrl`.
+Resolve a relative handoff path against the configured public Agent Browser
+origin, which serves its resolver. Keep an absolute URL unchanged.
 
-If presentation is required, run the no-launch route preflight or request
-`remote_view_open`. Let Agent Browser select the route. Do not choose a route
-from process lists or stale dashboard tiles.
+Never share `providerExternalUrl`, a raw Guacamole URL, `routeBinding`, a local
+embed, dashboard embed or health URL. Do not construct the link from the provider
+control or native viewer hostname. Reconnect by opening the same durable handoff;
+a viewer disconnect does not require another browser or another handoff.
 
-## Handle an occupied route pool
+## Capacity and foreground work
 
-When all route entries are checked out:
+New independent profiles prefer ready vacant desktops. Background maintenance
+replenishes one spare where limits and current resources allow. At the configured
+limit, placement wraps around eligible desktops. Same-profile tasks reuse their
+browser and keep separate attributed tabs. Serialize physical foreground input
+and human control; background tab-targeted automation can continue independently.
 
-1. Preserve every browser and profile.
-2. Inspect the typed preflight or request result.
-3. Reuse the requested browser's current route when available.
-4. Wait when another active controller makes every route non-parkable.
-5. Request an explicit route switch only when the operator needs the new
-   presentation now.
+Native Remote View owns idle cooldown, fresh viewer/process checks and physical
+retirement. Preserve direct-use and foreign resources. Do not release another
+viewer's desktop, run broad GC or kill a browser to make a request succeed.
 
-Route switch may park another live browser's presentation while preserving its
-browser process and profile. Agent Browser rejects parking when an active
-controller lease is protected unless the caller has explicit takeover
-authority. Parking can still interrupt an observer, so do not request it as an
-automatic workaround for ordinary automation.
+## Diagnose the exact request
 
-Add route capacity only after measured demand shows that more than two
-simultaneous non-preemptible operator desktops are required. A one-time
-checked-out snapshot is not capacity evidence.
+Use its typed error and current native owner evidence. Legacy route-pool counts,
+XRDP sessions, root-helper readiness or unrelated ownership history cannot prove
+that the selected native request is blocked. Genuine current conflicts for the
+selected profile or desktop remain blockers. Report the exact affected browser,
+presentation or maintenance operation and its safe next action.
 
-## Share and reconnect a handoff
-
-Share only `handoffUrl`, shaped as `/remote-view/<handoff-id>`, after
-`operatorVisible.state=ready`.
-
-Never share:
-
-- `providerExternalUrl`
-- a raw Guacamole URL
-- a `routeBinding` URL
-- `localEmbedUrl`
-- `dashboardEmbedUrl`
-- `healthUrl`
-
-Reconnect by opening the same durable handoff. Do not launch another browser
-because a route, display, or viewer lease changed.
-
-## Distinguish view operations
-
-- `service_remote_view_route_preflight` reads presentation eligibility without
-  launching.
-- `remote_view_open` launches or reuses a browser and establishes a durable
-  presentation.
-- `service_remote_view_browser_reattach` restores presentation for a retained
-  browser without launching Chrome.
-- `service_remote_view_route_switch` moves a specific retained browser to an
-  available or parkable route.
-- Viewer and controller lease actions manage observation and control. They do
-  not own browser lifecycle.
+Legacy XRDP route-switch and helper procedures apply only when that legacy
+provider has been explicitly selected. They are not native handoff prerequisites.

@@ -22,7 +22,7 @@ struct RequestHead {
     idempotency_key: String,
 }
 
-fn records(
+pub(super) fn records(
     connection: &Connection,
 ) -> Result<Vec<RemoteViewApplicationMutationRecord>, RemoteViewApplicationMutationStoreError> {
     use RemoteViewApplicationMutationStoreError as Error;
@@ -61,6 +61,31 @@ fn records(
 }
 
 impl RemoteViewPoolRequestStore for BrowserSessionSqliteStore {
+    fn pool_assignment_available(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+    ) -> Result<bool, RemoteViewApplicationMutationStoreError> {
+        super::browser_launch_custody_store::assignment_available(
+            self.remote_view_mutation_connection(),
+            assignment,
+        )
+        .map_err(|_| RemoteViewApplicationMutationStoreError::Unavailable)
+    }
+    fn confirmed_pool_acquisitions(
+        &mut self,
+        application: &str,
+        pool: &str,
+    ) -> Result<Vec<RemoteViewAssignmentRecord>, RemoteViewApplicationMutationStoreError> {
+        Ok(records(self.remote_view_mutation_connection())?.into_iter().filter_map(|record| {
+            if record.envelope.application == application
+                && matches!(&record.envelope.request, RemoteViewApplicationRequest::Acquire { pool_name, .. } if pool_name == pool) {
+                if let Some(RemoteViewApplicationMutationOutcome::Acquire(assignment)) = record.outcome {
+                    return Some(assignment);
+                }
+            }
+            None
+        }).collect())
+    }
     fn pending_pool_acquisitions(
         &mut self,
         application: &str,

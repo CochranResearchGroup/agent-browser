@@ -13,11 +13,49 @@ pub struct RemoteViewPreparedSessionPool {
     pub desktops: Vec<RemoteViewDesktopCandidate>,
 }
 
+/// Background maintenance for an already-used pool. An unused environment
+/// does not acquire desktops merely because its daemon is running.
+pub fn replenish_remote_view_session_pool<
+    T: RemoteViewApplicationTransport,
+    S: RemoteViewPoolRequestStore,
+>(
+    adapter: &mut RemoteViewApplicationAdapter<T>,
+    store: &mut S,
+    pool: &RemoteViewSessionPool,
+) -> Result<Option<RemoteViewPreparedSessionPool>, String> {
+    let inventory = adapter
+        .inventory()
+        .map_err(|_| "remote_view_runtime_inventory_unavailable".to_string())?;
+    let used = inventory
+        .pools
+        .iter()
+        .find(|entry| entry.name == pool.name)
+        .is_some_and(|entry| {
+            inventory.assignments.iter().any(|assignment| {
+                assignment.pool_id == entry.pool_id
+                    && assignment.state == RemoteViewAssignmentState::Active
+            })
+        });
+    if !used {
+        return Ok(None);
+    }
+    prepare_remote_view_session_pool(adapter, store, pool).map(Some)
+}
+
 /// Owns a durable acquisition request head and its unresolved public requests.
 /// Concurrent callers must receive the same unsubmitted/pending key. A new key
 /// after completion requires an exact active acquisition or confirmed release;
 /// absence from provider inventory alone cannot retire a previous request.
 pub trait RemoteViewPoolRequestStore: RemoteViewApplicationMutationStore {
+    fn pool_assignment_available(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+    ) -> Result<bool, RemoteViewApplicationMutationStoreError>;
+    fn confirmed_pool_acquisitions(
+        &mut self,
+        application: &str,
+        pool: &str,
+    ) -> Result<Vec<RemoteViewAssignmentRecord>, RemoteViewApplicationMutationStoreError>;
     fn pending_pool_acquisitions(
         &mut self,
         application: &str,
@@ -48,16 +86,22 @@ pub fn prepare_remote_view_session_pool<
     let pending = store
         .pending_pool_acquisitions(&adapter.application, &pool.name)
         .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?;
+    let mut unresolved = false;
     for record in pending {
         if !matches!(&record.envelope.request,
             RemoteViewApplicationRequest::Acquire { pool_name, .. } if pool_name == &pool.name)
         {
             return Err("remote_view_pool_acquisition_readback_required".into());
         }
-        adapter
-            .reconcile_acquisition(&record, store)
-            .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
+        unresolved |= adapter.reconcile_acquisition(&record, store).is_err();
     }
+    let confirmed = if unresolved {
+        store
+            .confirmed_pool_acquisitions(&adapter.application, &pool.name)
+            .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?
+    } else {
+        Vec::new()
+    };
     let mut inventory = adapter
         .inventory()
         .map_err(|_| "remote_view_runtime_inventory_unavailable".to_string())?;
@@ -92,35 +136,61 @@ pub fn prepare_remote_view_session_pool<
     loop {
         let mut desktop_ids = std::collections::BTreeSet::new();
         let mut candidates = Vec::new();
+        let mut observed = Vec::new();
         let mut occupied = false;
         let mut unavailable = false;
         for assignment in &assignments {
             if !desktop_ids.insert(assignment.desktop_id.clone()) {
                 return Err("remote_view_session_assignment_invalid".into());
             }
+            // A separate uncertain acquisition cannot invalidate an already
+            // confirmed free destination, nor qualify its own unknown result.
+            if unresolved && !confirmed.contains(assignment) {
+                continue;
+            }
+            if !store
+                .pool_assignment_available(assignment)
+                .map_err(|_| "remote_view_pool_custody_unavailable".to_string())?
+            {
+                unavailable = true;
+                continue;
+            }
             // A failed observation never qualifies a desktop as free.
             let Ok(windows) = adapter.windows(assignment) else {
                 unavailable = true;
                 continue;
             };
-            if !windows.windows.is_empty() {
-                occupied = true;
-                continue;
-            }
-            candidates.push(RemoteViewDesktopCandidate {
+            let candidate = RemoteViewDesktopCandidate {
                 ready: true,
                 desktop: RemoteViewFixedDesktop {
                     desktop_id: assignment.desktop_id.clone(),
                     generation: assignment.generation,
                     friendly_route_label: assignment.desktop_id.clone(),
                 },
-            });
+            };
+            observed.push(candidate.clone());
+            if !windows.windows.is_empty() {
+                occupied = true;
+                continue;
+            }
+            candidates.push(candidate);
         }
         let warm_minimum_met = assignments.len() >= pool.desired_desktops as usize;
         if warm_minimum_met && !candidates.is_empty() {
             return Ok(RemoteViewPreparedSessionPool {
                 assignments,
                 desktops: candidates,
+            });
+        }
+        if unresolved {
+            return Err("remote_view_pool_acquisition_readback_required".into());
+        }
+        // At the growth limit known healthy occupied desktops are eligible
+        // for wrap-around. Unknown peers never become placement candidates.
+        if assignments.len() >= maximum as usize && !observed.is_empty() {
+            return Ok(RemoteViewPreparedSessionPool {
+                assignments,
+                desktops: observed,
             });
         }
         if warm_minimum_met && unavailable {

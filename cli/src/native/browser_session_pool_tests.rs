@@ -22,6 +22,10 @@ struct Provider {
     pool_maximum: Option<u32>,
     window_pid: Option<u32>,
     inactive_window: bool,
+    viewer_active_desktops: std::collections::BTreeSet<String>,
+    defer_idle_release: bool,
+    lose_idle_release_reply: bool,
+    idle_release_requests: Vec<String>,
 }
 struct PoolTransport {
     provider: Rc<RefCell<Provider>>,
@@ -36,6 +40,57 @@ impl RemoteViewApplicationTransport for PoolTransport {
         assert_eq!(envelope.application, "agent-browser");
         let fixture = wire();
         match &envelope.request {
+            RemoteViewApplicationRequest::ObserveIdle { assignment_id, .. } => {
+                provider.operations.push("observe_idle");
+                let assignment = provider
+                    .assignments
+                    .iter()
+                    .find(|a| &a.assignment_id == assignment_id)
+                    .unwrap();
+                let mut observed = fixture["assignmentObservation"].clone();
+                observed["target"]["assignmentId"] = assignment.assignment_id.clone().into();
+                observed["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                let viewer = provider
+                    .viewer_active_desktops
+                    .contains(&assignment.desktop_id);
+                observed["retirement"] = serde_json::json!({"schemaVersion":1,"desktopId":assignment.desktop_id,
+                    "generation":assignment.generation,"routes":[],"sessions":[]});
+                observed["idle"] = serde_json::json!(
+                    !viewer
+                        && !provider.occupied_desktops.contains(&assignment.desktop_id)
+                        && provider.window_pid.is_none()
+                );
+                observed["viewerActive"] = viewer.into();
+                Ok(observed)
+            }
+            RemoteViewApplicationRequest::ReleaseIdle {
+                assignment_id,
+                expected_retirement,
+                idempotency_key,
+                ..
+            } => {
+                provider.operations.push("release_idle");
+                provider.idle_release_requests.push(idempotency_key.clone());
+                let defer = provider.defer_idle_release;
+                let assignment = provider
+                    .assignments
+                    .iter_mut()
+                    .find(|a| &a.assignment_id == assignment_id)
+                    .unwrap();
+                if defer {
+                    return Ok(
+                        serde_json::json!({"schemaVersion":1,"operation":"release_idle","state":"retained",
+                        "assignmentId":assignment_id,"generation":assignment.generation}),
+                    );
+                }
+                assignment.state = RemoteViewAssignmentState::Released;
+                let outcome =
+                    serde_json::json!({"assignment":assignment,"retirement":expected_retirement});
+                if provider.lose_idle_release_reply {
+                    return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                }
+                Ok(outcome)
+            }
             RemoteViewApplicationRequest::Inventory {} => {
                 provider.operations.push("inventory");
                 let mut inventory = fixture["inventory"].clone();
@@ -465,11 +520,11 @@ fn pool_demand_acquires_a_free_desktop_for_an_independent_browser() {
             .iter()
             .map(|assignment| assignment.desktop_id.clone()),
     );
+    let overflow = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
     assert_eq!(
-        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
-            .err()
-            .unwrap(),
-        "remote_view_pool_capacity_exhausted"
+        overflow.desktops.len(),
+        2,
+        "at the growth limit occupied healthy desktops remain eligible for wrap-around"
     );
     assert_eq!(provider.borrow().acquisitions.len(), 2);
 }
@@ -1921,4 +1976,637 @@ fn handoff_link_retention_extension_and_expiry_do_not_change_browser_or_issue_vi
     assert!(consumer.state().remote_view_tab_handoffs[&id]
         .check_link_at(126)
         .is_err());
+}
+
+#[test]
+fn durable_named_handoff_has_no_default_expiry_across_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert!(opened["browserSession"]["handoffExpiresAtMs"].is_null());
+    drop(consumer);
+    let consumer = host(&fixture, provider, calls);
+    let link = &consumer.state().remote_view_tab_handoffs[&id];
+    assert_eq!(link.expires_at_ms, None);
+    link.check_link_at(86_400_101).unwrap();
+}
+
+#[test]
+fn configured_durable_retention_survives_restart_and_applies_to_new_links() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = serde_json::to_value(&original).unwrap();
+    configured["retentionPolicy"] = serde_json::json!({"durableHandoffTtlMs":10, "disposableHandoffTtlMs":20, "disposableInactivityMs":30});
+    let configured: BrowserSessionState = serde_json::from_value(configured).unwrap();
+    store
+        .compare_and_save_session_state(&original, &configured)
+        .unwrap();
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(opened["browserSession"]["handoffExpiresAtMs"], 110);
+    drop(consumer);
+    let consumer = host(&fixture, provider, calls);
+    assert_eq!(
+        consumer.state().remote_view_tab_handoffs[&id].expires_at_ms,
+        Some(110)
+    );
+    assert_eq!(
+        consumer.state().remote_view_tab_handoffs[&id]
+            .check_link_at(110)
+            .unwrap_err(),
+        "remote_view_handoff_expired"
+    );
+}
+
+#[test]
+fn disposable_inactivity_expires_work_and_reaps_only_unreferenced_profile_data() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = serde_json::to_value(&original).unwrap();
+    configured["retentionPolicy"] = serde_json::json!({"durableHandoffTtlMs":null, "disposableHandoffTtlMs":20, "disposableInactivityMs":30});
+    store
+        .compare_and_save_session_state(&original, &serde_json::from_value(configured).unwrap())
+        .unwrap();
+    let mut consumer = host(&fixture, provider, calls);
+    let opened = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let identity = &opened["browserSession"];
+    let session = identity["sessionId"].as_str().unwrap().to_owned();
+    let profile = identity["profileId"].as_str().unwrap().to_owned();
+    assert_eq!(identity["handoffExpiresAtMs"], 120);
+    assert!(consumer.reap(129).unwrap().expired_session_ids.is_empty());
+    assert_eq!(
+        consumer.reap(130).unwrap().expired_session_ids,
+        vec![session]
+    );
+    assert!(consumer.state().disposable_profiles.contains_key(&profile));
+    assert!(consumer
+        .reap(300_129)
+        .unwrap()
+        .deleted_disposable_profile_ids
+        .is_empty());
+    assert_eq!(
+        consumer
+            .reap(300_130)
+            .unwrap()
+            .deleted_disposable_profile_ids,
+        vec![profile]
+    );
+    assert!(consumer.state().disposable_profiles.is_empty());
+}
+
+#[test]
+fn native_overflow_wraps_after_restart_without_same_profile_advancing_cursor() {
+    let fixture = Fixture::new();
+    let mut catalog = fixture.store(false).load_profile_catalog().unwrap().catalog;
+    for id in ["profile-c", "profile-d", "profile-e"] {
+        catalog.profiles.insert(
+            id.into(),
+            BrowserProfileCatalogEntry {
+                id: id.into(),
+                name: id.into(),
+                user_data_dir: fixture.root.join(id).to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Named,
+            },
+        );
+    }
+    fixture.store(false).save_profile_catalog(&catalog).unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let mut opened = Vec::new();
+    for (i, profile) in ["profile-a", "profile-b", "profile-c", "profile-d"]
+        .iter()
+        .enumerate()
+    {
+        let item = consumer
+            .open(OpenBrowserSession::exact_profile(
+                format!("Task{i}"),
+                *profile,
+                100 + i as u64,
+            ))
+            .unwrap();
+        let desktop = consumer.state().browsers[&item.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id
+            .clone();
+        provider
+            .borrow_mut()
+            .occupied_desktops
+            .insert(desktop.clone());
+        opened.push((item, desktop));
+    }
+    assert_ne!(opened[0].1, opened[1].1);
+    assert_eq!(opened[2].1, opened[0].1);
+    assert_eq!(opened[3].1, opened[1].1);
+    consumer
+        .close_session(
+            &opened[1].0.session_id,
+            SessionEndReason::ExplicitClose,
+            110,
+        )
+        .unwrap();
+    let peer = consumer
+        .open(OpenBrowserSession::exact_profile("Peer", "profile-a", 111))
+        .unwrap();
+    assert_eq!(peer.browser_id, opened[0].0.browser_id);
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls);
+    let next = consumer
+        .open(OpenBrowserSession::exact_profile("Next", "profile-e", 112))
+        .unwrap();
+    assert_eq!(
+        consumer.state().browsers[&next.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id,
+        opened[0].1
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn background_pool_replenishes_one_spare_without_launching_or_duplicating() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    let mut maintenance = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    assert!(
+        replenish_remote_view_session_pool(&mut maintenance, &mut store, &pool)
+            .unwrap()
+            .is_none()
+    );
+    assert!(provider.borrow().acquisitions.is_empty());
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let first = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let desktop = consumer.state().browsers[&first.browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider.borrow_mut().occupied_desktops.insert(desktop);
+    let spare = replenish_remote_view_session_pool(&mut maintenance, &mut store, &pool)
+        .unwrap()
+        .unwrap();
+    assert_eq!(spare.assignments.len(), 2);
+    assert_eq!(spare.desktops.len(), 1);
+    assert_eq!(calls.get(), 1);
+    let second = replenish_remote_view_session_pool(&mut maintenance, &mut store, &pool)
+        .unwrap()
+        .unwrap();
+    assert_eq!(second.desktops, spare.desktops);
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    let next = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 101))
+        .unwrap();
+    assert_eq!(
+        consumer.state().browsers[&next.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id,
+        spare.desktops[0].desktop.desktop_id
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn unknown_spare_acquisition_cannot_block_a_separately_confirmed_free_desktop() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let first = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let desktop = consumer.state().browsers[&first.browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(desktop.clone());
+    provider.borrow_mut().lose_reply = true;
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    assert!(replenish_remote_view_session_pool(
+        &mut adapter(&fixture, provider.clone()),
+        &mut fixture.store(false),
+        &pool
+    )
+    .is_err());
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    consumer
+        .close_session(&first.session_id, SessionEndReason::ExplicitClose, 101)
+        .unwrap();
+    provider.borrow_mut().occupied_desktops.remove(&desktop);
+    let next = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 102))
+        .unwrap();
+    assert_eq!(
+        consumer.state().browsers[&next.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id,
+        desktop
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    assert_eq!(
+        fixture
+            .store(false)
+            .pending_pool_acquisitions("agent-browser", "main")
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn configured_handoff_overflow_is_rejected_before_profile_or_browser_effects() {
+    let fixture = Fixture::new();
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = original.clone();
+    configured.retention_policy.durable_handoff_ttl_ms = Some(u64::MAX);
+    store
+        .compare_and_save_session_state(&original, &configured)
+        .unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    assert!(consumer.execute_managed_command("Alice",&serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/","profileId":"profile-a","activityAtMs":100
+    })).is_err());
+    assert_eq!(calls.get(), 0);
+    assert!(provider.borrow().acquisitions.is_empty());
+    assert!(consumer.state().sessions.is_empty());
+}
+
+#[test]
+fn native_idle_pool_returns_capacity_and_recovers_same_logical_handoff() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        pool_maximum: Some(3),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let mut opened = Vec::new();
+    for (name, profile) in [("Alice", "profile-a"), ("Bob", "profile-b")] {
+        let response = consumer
+            .execute_managed_command(
+                name,
+                &serde_json::json!({"action":"navigate",
+            "url":"https://synthetic.example/","profileId":profile,"activityAtMs":100}),
+            )
+            .unwrap()
+            .unwrap();
+        let browser = response["browserSession"]["browserId"].as_str().unwrap();
+        provider.borrow_mut().occupied_desktops.insert(
+            consumer.state().browsers[browser]
+                .desktop
+                .as_ref()
+                .unwrap()
+                .desktop_id
+                .clone(),
+        );
+        opened.push(response);
+    }
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    replenish_remote_view_session_pool(
+        &mut adapter(&fixture, provider.clone()),
+        &mut fixture.store(false),
+        &pool,
+    )
+    .unwrap();
+    assert_eq!(provider.borrow().acquisitions.len(), 3);
+    assert_eq!(consumer.reap(300_100).unwrap().closed_browser_ids.len(), 2);
+    provider.borrow_mut().occupied_desktops.clear();
+    super::super::browser_session_pool_maintenance::maintain_pool(
+        &mut adapter(&fixture, provider.clone()),
+        &mut fixture.store(false),
+        &pool,
+    )
+    .unwrap();
+    assert_eq!(
+        provider
+            .borrow()
+            .assignments
+            .iter()
+            .filter(|a| a.state == RemoteViewAssignmentState::Active)
+            .count(),
+        1
+    );
+    drop(consumer);
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let resumed = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({"action":"get_url","activityAtMs":300_101}),
+        )
+        .unwrap()
+        .unwrap();
+    for field in ["handoffId", "browserId", "sessionId", "tabId"] {
+        assert_eq!(
+            resumed["browserSession"][field],
+            opened[1]["browserSession"][field]
+        );
+    }
+    assert_ne!(
+        resumed["browserSession"]["targetId"],
+        opened[1]["browserSession"]["targetId"]
+    );
+    assert_eq!(calls.get(), 3);
+}
+
+#[test]
+fn native_idle_cleanup_keeps_viewer_attached_browser_running() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(&fixture, provider.clone(), calls, Mode::IdleRecovery);
+    consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action":"navigate","profileId":"profile-a",
+        "url":"https://synthetic.example/","activityAtMs":100}),
+        )
+        .unwrap()
+        .unwrap();
+    let desktop = consumer
+        .state()
+        .browsers
+        .values()
+        .next()
+        .unwrap()
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .insert(desktop.clone());
+    assert!(consumer
+        .reap(300_100)
+        .unwrap()
+        .closed_browser_ids
+        .is_empty());
+    assert!(!fixture.root.join("idle-process-absent").exists());
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .remove(&desktop);
+    assert_eq!(consumer.reap(300_101).unwrap().closed_browser_ids.len(), 1);
+}
+
+#[test]
+fn native_idle_release_deferral_and_lost_reply_preserve_exact_custody() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        pool_maximum: Some(3),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls);
+    let first = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    provider.borrow_mut().occupied_desktops.insert(
+        consumer.state().browsers[&first.browser_id]
+            .desktop
+            .as_ref()
+            .unwrap()
+            .desktop_id
+            .clone(),
+    );
+    let second = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 100))
+        .unwrap();
+    let desktop = consumer.state().browsers[&second.browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(desktop.clone());
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    let mut coordinator = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    replenish_remote_view_session_pool(&mut coordinator, &mut store, &pool).unwrap();
+    consumer
+        .close_session(&second.session_id, SessionEndReason::ExplicitClose, 101)
+        .unwrap();
+    provider.borrow_mut().occupied_desktops.remove(&desktop);
+    provider.borrow_mut().defer_idle_release = true;
+    super::super::browser_session_pool_maintenance::maintain_pool(
+        &mut coordinator,
+        &mut store,
+        &pool,
+    )
+    .unwrap();
+    assert!(store.idle_release_obligations().unwrap().is_empty());
+    assert_eq!(
+        provider
+            .borrow()
+            .assignments
+            .iter()
+            .filter(|a| a.state == RemoteViewAssignmentState::Active)
+            .count(),
+        3
+    );
+    provider.borrow_mut().defer_idle_release = false;
+    provider.borrow_mut().lose_idle_release_reply = true;
+    assert_eq!(
+        super::super::browser_session_pool_maintenance::maintain_pool(
+            &mut coordinator,
+            &mut store,
+            &pool
+        )
+        .unwrap_err(),
+        "remote_view_release_readback_required"
+    );
+    assert_eq!(store.idle_release_obligations().unwrap().len(), 1);
+    provider.borrow_mut().lose_idle_release_reply = false;
+    super::super::browser_session_pool_maintenance::maintain_pool(
+        &mut coordinator,
+        &mut store,
+        &pool,
+    )
+    .unwrap();
+    assert!(store.idle_release_obligations().unwrap().is_empty());
+    let requests = &provider.borrow().idle_release_requests;
+    assert_eq!(requests.len(), 3);
+    assert_ne!(requests[0], requests[1]);
+    assert_eq!(requests[1], requests[2]);
+    assert_eq!(provider.borrow().acquisitions.len(), 3);
+}
+
+#[test]
+fn canceled_idle_release_permit_cannot_submit_after_work_resumes() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut coordinator = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    let prepared = prepare_remote_view_session_pool(
+        &mut coordinator,
+        &mut store,
+        &RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        },
+    )
+    .unwrap();
+    let assignment = &prepared.assignments[0];
+    let observation = coordinator.observe_idle(assignment).unwrap();
+    let target = observation.release_target(assignment).unwrap();
+    let clear = RemoteViewApplicationObligationInventory::Complete(Vec::new());
+    let snapshot = RemoteViewApplicationCleanupSnapshot {
+        schema_version: 1,
+        assignment_id: assignment.assignment_id.clone(),
+        desktop_id: assignment.desktop_id.clone(),
+        lifecycle_generation: assignment.generation,
+        pending_recovery: clear.clone(),
+        foreground_leases: clear.clone(),
+        cleanup_tasks: clear,
+    };
+    let release_id = uuid::Uuid::new_v4().to_string();
+    let permit = store
+        .admit_idle_assignment_release(&target, &snapshot, &release_id)
+        .unwrap();
+    assert!(!store.pool_assignment_available(assignment).unwrap());
+    store
+        .cancel_unsubmitted_or_deferred_idle_release(&release_id)
+        .unwrap();
+    assert!(store.pool_assignment_available(assignment).unwrap());
+    assert!(coordinator
+        .release_idle(
+            assignment,
+            &observation,
+            permit,
+            release_id.into(),
+            &mut store
+        )
+        .is_err());
+    assert!(provider.borrow().idle_release_requests.is_empty());
+    assert_eq!(
+        provider.borrow().assignments[0].state,
+        RemoteViewAssignmentState::Active
+    );
+}
+
+#[test]
+fn native_idle_viewer_protects_disposable_expiry_and_profile_data() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = serde_json::to_value(&original).unwrap();
+    configured["retentionPolicy"] = serde_json::json!({
+        "durableHandoffTtlMs":null, "disposableHandoffTtlMs":20, "disposableInactivityMs":30});
+    store
+        .compare_and_save_session_state(&original, &serde_json::from_value(configured).unwrap())
+        .unwrap();
+    let mut consumer = host_mode(&fixture, provider.clone(), calls, Mode::IdleRecovery);
+    let opened = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let browser_id = opened["browserSession"]["browserId"].as_str().unwrap();
+    let desktop = consumer.state().browsers[browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .insert(desktop.clone());
+    assert!(consumer.reap(130).unwrap().expired_session_ids.is_empty());
+    assert!(!fixture.root.join("idle-process-absent").exists());
+    assert_eq!(consumer.state().disposable_profiles.len(), 1);
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .remove(&desktop);
+    assert_eq!(consumer.reap(131).unwrap().expired_session_ids.len(), 1);
+    assert_eq!(
+        consumer
+            .reap(300_131)
+            .unwrap()
+            .deleted_disposable_profile_ids
+            .len(),
+        1
+    );
 }

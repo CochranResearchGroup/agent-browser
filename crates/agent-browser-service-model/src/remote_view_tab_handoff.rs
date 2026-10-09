@@ -6,6 +6,36 @@ use crate::{
     BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
 };
 
+/// Persisted profile-aware retention. None means no automatic durable-link expiry.
+/// Changes apply to newly issued links, never rewriting an existing expiry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserRetentionPolicy {
+    pub durable_handoff_ttl_ms: Option<u64>,
+    pub disposable_handoff_ttl_ms: u64,
+    pub disposable_inactivity_ms: u64,
+}
+impl Default for BrowserRetentionPolicy {
+    fn default() -> Self {
+        Self {
+            durable_handoff_ttl_ms: None,
+            disposable_handoff_ttl_ms: DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+            disposable_inactivity_ms: 24 * 60 * 60 * 1_000,
+        }
+    }
+}
+impl BrowserRetentionPolicy {
+    pub fn validate(&self) -> Result<(), String> {
+        if self.durable_handoff_ttl_ms == Some(0)
+            || self.disposable_handoff_ttl_ms == 0
+            || self.disposable_inactivity_ms == 0
+        {
+            return Err("browser_retention_policy_invalid".into());
+        }
+        Ok(())
+    }
+}
+
 /// A durable handoff addresses one logical session and tab, never a desktop URL.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -154,10 +184,23 @@ pub const DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 impl RemoteViewTabHandoff {
     /// Initialize once. Reading or reopening a link never renews its lifetime.
     pub fn initialize_link_retention(&mut self, now_ms: u64, ttl_ms: u64) -> Result<(), String> {
-        let expiry = link_expiry(now_ms, ttl_ms)?;
-        if self.expires_at_ms.is_none() {
+        self.initialize_profile_retention(now_ms, Some(ttl_ms))
+    }
+
+    /// Initialize a new link once; None retains a durable link without expiry.
+    /// The creation marker distinguishes an initialized unlimited link from a
+    /// legacy record awaiting its one-time finite migration.
+    pub fn initialize_profile_retention(
+        &mut self,
+        now_ms: u64,
+        ttl_ms: Option<u64>,
+    ) -> Result<(), String> {
+        let expiry = ttl_ms.map(|ttl| link_expiry(now_ms, ttl)).transpose()?;
+        if self.created_at_ms.is_none() {
             self.created_at_ms = Some(now_ms);
-            self.expires_at_ms = Some(expiry);
+            if self.expires_at_ms.is_none() {
+                self.expires_at_ms = expiry;
+            }
         }
         Ok(())
     }
@@ -175,6 +218,9 @@ impl RemoteViewTabHandoff {
     pub fn extend_link_retention(&mut self, now_ms: u64, ttl_ms: u64) -> Result<(), String> {
         self.check_link_at(now_ms)?;
         let expiry = link_expiry(now_ms, ttl_ms)?;
+        if self.created_at_ms.is_some() && self.expires_at_ms.is_none() {
+            return Ok(());
+        }
         self.initialize_link_retention(now_ms, ttl_ms)?;
         self.expires_at_ms = Some(self.expires_at_ms.unwrap_or(expiry).max(expiry));
         Ok(())

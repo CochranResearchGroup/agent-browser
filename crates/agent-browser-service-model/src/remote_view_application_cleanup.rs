@@ -124,6 +124,11 @@ pub fn prepare_remote_view_application_cleanup(
     }
     let mut associated = BTreeSet::new();
     for (browser_id, retained) in &state.remote_view_presentations {
+        // A positively closed physical browser retains logical continuity,
+        // not a desktop reservation. Pending operations are checked below.
+        if state.idle_closed_browsers.contains_key(browser_id) {
+            continue;
+        }
         if retained.assignment_id != assignment.assignment_id {
             if retained.desktop_id == assignment.desktop_id
                 && retained.state != RemoteViewPresentationRetentionState::Released
@@ -149,6 +154,9 @@ pub fn prepare_remote_view_application_cleanup(
         if browser.id != *browser_id {
             return Err(Error::InvalidEvidence);
         }
+        if state.idle_closed_browsers.contains_key(browser_id) {
+            continue;
+        }
         if let Some(desktop) = &browser.desktop {
             if desktop.desktop_id == assignment.desktop_id {
                 if desktop.generation != assignment.generation {
@@ -165,7 +173,9 @@ pub fn prepare_remote_view_application_cleanup(
         if session.id != *session_id {
             return Err(Error::InvalidEvidence);
         }
-        if associated.contains(session.browser_id.as_str()) {
+        if associated.contains(session.browser_id.as_str())
+            && !state.idle_closed_browsers.contains_key(&session.browser_id)
+        {
             return Err(Error::ApplicationReferencesRemain);
         }
         if !state.browsers.contains_key(&session.browser_id) {
@@ -176,7 +186,9 @@ pub fn prepare_remote_view_application_cleanup(
         if tab.id != *tab_id {
             return Err(Error::InvalidEvidence);
         }
-        if associated.contains(tab.browser_id.as_str()) {
+        if associated.contains(tab.browser_id.as_str())
+            && !state.idle_closed_browsers.contains_key(&tab.browser_id)
+        {
             return Err(Error::ApplicationReferencesRemain);
         }
         if !state.browsers.contains_key(&tab.browser_id) {
@@ -204,6 +216,14 @@ pub fn prepare_remote_view_application_cleanup(
 /// one transaction and retain its assignment fence across ambiguous outcomes.
 /// Independent inventories still require scoped owner evidence from the caller.
 pub trait BrowserReleaseCustodyStore {
+    fn admit_idle_assignment_release(
+        &mut self,
+        _target: &RemoteViewApplicationReleaseTarget,
+        _snapshot: &RemoteViewApplicationCleanupSnapshot,
+        _release_id: &str,
+    ) -> Result<RemoteViewApplicationCleanupPermit, crate::LaunchCustodyStoreError> {
+        Err(crate::LaunchCustodyStoreError::Unavailable)
+    }
     fn complete_assignment_release(
         &mut self,
         target: &RemoteViewApplicationReleaseTarget,

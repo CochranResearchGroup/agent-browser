@@ -29,6 +29,11 @@ When `sharedAcquisition.mode` is `tab_new`, copy the returned top-level
 `browserId` and `sessionName` into `service_request`. Request a new attributed
 tab instead of launching another Chrome process on the same profile directory.
 
+Give independent tasks distinct session names. Their attributed tabs can run in
+the background, but cookies and persistent site storage remain shared. Coordinate
+logout, account switching and competing application mutations. Serialize physical
+foreground input, including human input.
+
 Release the service tab handle when your task finishes. Tab release preserves
 the shared browser and other clients' tabs.
 

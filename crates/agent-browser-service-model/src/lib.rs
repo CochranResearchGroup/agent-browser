@@ -51,8 +51,8 @@ mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
     resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
-    retain_remote_view_tab_handoff_at, RemoteViewTabHandoff, RemoteViewTabHandoffTarget,
-    RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+    retain_remote_view_tab_handoff_at, BrowserRetentionPolicy, RemoteViewTabHandoff,
+    RemoteViewTabHandoffTarget, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
 };
 mod request_provenance;
 mod runtime_owner_projection;
@@ -239,7 +239,7 @@ pub use remote_view_application_records::{
 pub use remote_view_application_response::{
     RemoteViewApplicationReadinessScope, RemoteViewApplicationResponseError,
     RemoteViewApplicationTarget, RemoteViewAssignmentObservation,
-    RemoteViewPrivateLaunchEnvironment,
+    RemoteViewIdleAssignmentObservation, RemoteViewPrivateLaunchEnvironment,
 };
 pub use remote_view_consumer::{
     allocated_desktop_candidate, allocated_desktop_runtime_context, exact_release_reference,
@@ -336,6 +336,6 @@ pub use remote_view_session_effects::{
 
 mod remote_view_session_pool;
 pub use remote_view_session_pool::{
-    prepare_remote_view_session_pool, RemoteViewPoolRequestStore, RemoteViewPreparedSessionPool,
-    RemoteViewSessionPool,
+    prepare_remote_view_session_pool, replenish_remote_view_session_pool,
+    RemoteViewPoolRequestStore, RemoteViewPreparedSessionPool, RemoteViewSessionPool,
 };

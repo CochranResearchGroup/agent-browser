@@ -83,6 +83,19 @@ impl RemoteViewApplicationMutationStore for Store {
     }
 }
 impl RemoteViewPoolRequestStore for Store {
+    fn pool_assignment_available(
+        &mut self,
+        _: &RemoteViewAssignmentRecord,
+    ) -> Result<bool, RemoteViewApplicationMutationStoreError> {
+        panic!("retained desktop needs no placement")
+    }
+    fn confirmed_pool_acquisitions(
+        &mut self,
+        _: &str,
+        _: &str,
+    ) -> Result<Vec<RemoteViewAssignmentRecord>, RemoteViewApplicationMutationStoreError> {
+        panic!("retained desktop needs no acquisition")
+    }
     fn pending_pool_acquisitions(
         &mut self,
         _: &str,

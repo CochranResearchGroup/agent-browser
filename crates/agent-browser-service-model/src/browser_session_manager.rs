@@ -120,6 +120,15 @@ pub trait BrowserSessionEffects {
         desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String>;
 
+    /// Automatic expiry must preserve a browser while its desktop is being
+    /// viewed. Explicit session close follows its separate user intent.
+    fn permits_idle_browser_close(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        Ok(true)
+    }
+
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
 
     fn acquire_initial_tab(
@@ -440,6 +449,9 @@ pub struct ManagedBrowserTabRequest {
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
     pub schema_version: String,
+    pub retention_policy: crate::BrowserRetentionPolicy,
+    /// Last native placement, advanced only by a successful independent launch.
+    pub last_remote_view_desktop_id: Option<String>,
     pub next_session_sequence: u64,
     pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
@@ -467,6 +479,8 @@ impl Default for BrowserSessionState {
     fn default() -> Self {
         Self {
             schema_version: BROWSER_SESSION_STATE_SCHEMA_V1.to_string(),
+            retention_policy: crate::BrowserRetentionPolicy::default(),
+            last_remote_view_desktop_id: None,
             next_session_sequence: 0,
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
@@ -940,7 +954,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         if recovered.launch.browser_id != browser.id
             || recovered.launch.pid == 0
             || recovered.launch.cdp_endpoint.is_empty()
-            || recovered.launch.desktop != browser.desktop
+            || (recovered.launch.desktop != browser.desktop
+                && !self.state.idle_closed_browsers.contains_key(&browser.id))
             || recovered.target_ids.len() != tabs.len()
             || targets.len() != tabs.len()
             || tabs.iter().any(|tab| {
@@ -953,10 +968,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_session_recovery_identity_conflict".into());
         }
         let mut current = browser;
+        let relocated = current.desktop != recovered.launch.desktop;
+        current.desktop = recovered.launch.desktop;
         current.pid = recovered.launch.pid;
         current.cdp_endpoint = recovered.launch.cdp_endpoint;
         self.state.idle_closed_browsers.remove(&current.id);
         self.state.browsers.insert(current.id.clone(), current);
+        if relocated {
+            // The logical URL survives placement changes. Its previous provider
+            // grant was retired with the old assignment and cannot be reused.
+            for handoff in self.state.remote_view_tab_handoffs.values_mut() {
+                if tabs.iter().any(|tab| tab.id == handoff.tab_id) {
+                    handoff.view = None;
+                }
+            }
+        }
         for tab in tabs {
             self.state
                 .tabs
@@ -992,11 +1018,41 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                         .map(|desktop| desktop.desktop_id.clone())
                 })
                 .collect::<Vec<_>>();
-            Some(select_least_crowded_remote_view_desktop(candidates, &live_desktop_ids)?.desktop)
+            if refreshed.is_some() {
+                let ready = candidates
+                    .iter()
+                    .filter(|candidate| candidate.ready)
+                    .collect::<Vec<_>>();
+                if ready.is_empty() {
+                    return Err("remote_view_desktop_unavailable".into());
+                }
+                // Provider order is stable. A missing prior desktop starts at
+                // the first eligible member; retained profile reuse skips this.
+                let index = self
+                    .state
+                    .last_remote_view_desktop_id
+                    .as_ref()
+                    .and_then(|last| {
+                        ready
+                            .iter()
+                            .position(|candidate| &candidate.desktop.desktop_id == last)
+                    })
+                    .map_or(0, |index| (index + 1) % ready.len());
+                Some(ready[index].desktop.clone())
+            } else {
+                Some(
+                    select_least_crowded_remote_view_desktop(candidates, &live_desktop_ids)?
+                        .desktop,
+                )
+            }
         };
         let mut launch = self.effects.launch_browser(profile, desktop.as_ref())?;
         if launch.desktop != desktop {
             return Err("browser_session_launch_desktop_mismatch".to_string());
+        }
+        if refreshed.is_some() {
+            self.state.last_remote_view_desktop_id =
+                desktop.as_ref().map(|desktop| desktop.desktop_id.clone());
         }
         launch.desktop = desktop;
         Ok(launch)
@@ -1578,22 +1634,73 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         now_ms: u64,
         protected_session_ids: &BTreeSet<String>,
     ) -> Result<ReapBrowserSessionsResult, String> {
-        let externally_protected_session_ids = self
+        let mut externally_protected_session_ids = self
             .externally_protected_session_ids
             .union(protected_session_ids)
             .cloned()
             .collect::<BTreeSet<_>>();
-        let protected_session_ids = self
+        let mut protected_session_ids = self
             .protected_session_ids
             .union(protected_session_ids)
             .cloned()
             .collect::<BTreeSet<_>>();
+        // Qualify viewer protection before either logical expiry or physical
+        // idle close. It also protects disposable sessions from quota eviction.
+        let candidates = self
+            .state
+            .browsers
+            .values()
+            .filter(|browser| {
+                !self.state.idle_closed_browsers.contains_key(&browser.id)
+                    && browser.active_session_ids.iter().any(|id| {
+                        self.state.sessions.get(id).is_some_and(|session| {
+                            session.expires_at_ms <= now_ms
+                                || (self
+                                    .state
+                                    .disposable_profiles
+                                    .contains_key(&session.profile_id)
+                                    && now_ms.saturating_sub(session.last_activity_at_ms)
+                                        >= self.state.retention_policy.disposable_inactivity_ms)
+                        })
+                    })
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for browser in candidates {
+            if !self.effects.permits_idle_browser_close(&browser)? {
+                externally_protected_session_ids.extend(browser.active_session_ids.iter().cloned());
+                protected_session_ids.extend(browser.active_session_ids.iter().cloned());
+            }
+        }
+        for session in self.state.sessions.values() {
+            if self
+                .state
+                .disposable_profiles
+                .contains_key(&session.profile_id)
+            {
+                let expired = now_ms.saturating_sub(session.last_activity_at_ms)
+                    >= self.state.retention_policy.disposable_inactivity_ms;
+                if expired && !externally_protected_session_ids.contains(&session.id) {
+                    protected_session_ids.remove(&session.id);
+                }
+            }
+        }
         let expired_session_ids = self
             .state
             .sessions
             .values()
             .filter(|session| {
-                session.expires_at_ms <= now_ms && !protected_session_ids.contains(&session.id)
+                let expired = if self
+                    .state
+                    .disposable_profiles
+                    .contains_key(&session.profile_id)
+                {
+                    now_ms.saturating_sub(session.last_activity_at_ms)
+                        >= self.state.retention_policy.disposable_inactivity_ms
+                } else {
+                    session.expires_at_ms <= now_ms
+                };
+                expired && !protected_session_ids.contains(&session.id)
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
