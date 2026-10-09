@@ -73,4 +73,4 @@ lanes:
     blocker: null
     updated_at: 2026-10-08
     validation_status: Four distinct synthetic browser desktops; two authenticated handoff markers and continued automation; isolated sealed candidate checks and installed doctor passed
-    limitations: ["Ten-browser stress not run", "Provider fresh missing-mapping acceptance remains under RV-067"]
+    limitations: ["Ten-browser stress not run", "Failed first fixture retained; corrected automatic mapping loop passed"]
