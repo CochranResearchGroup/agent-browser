@@ -81,10 +81,14 @@ lanes:
     plan_ref: refs/heads/platform/alice-bob-reconciliation
     branch: platform/alice-bob-reconciliation
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
+    owner: ecochran76
+    checkpoint: e770a9432c912ebdf674294fa9e7b399f6554a3f
+    remote_ref: refs/heads/platform/alice-bob-reconciliation
+    integration: merge
     work_items: [CochranResearchGroup/agent-browser#233]
-    dependencies: []
+    dependencies: ["CochranResearchGroup/remote-view#340 integrated"]
     overlaps: [P224, P226, "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
     reconciled_overlaps: ["P224 and P226 integrated; P227 owns their current consumer follow-up; retained historical branches are not merged"]
     blocker: null
