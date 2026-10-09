@@ -28,3 +28,9 @@ The first compile attempt stalled in sccache compiler-version discovery and was 
 Review uses the recorded batch baseline and issue 229 as the spec. Standards and Spec axes run separately in the primary context.
 
 Private provider unit reconciliation verified every recorded file hash, retained the exact files and integration record, and recreated the installation-bound current units through the supported installer. Repeat install returned no_change. No desktop or application restart occurred during that reconciliation.
+
+## Installed follow-up
+
+PR 230 entered canonical main and the sealed candidate passed three isolated cycles and installed doctor. The live second-browser request failed because new native desktops lacked viewer mappings. The original source allowed additional bounded acquisitions alongside unknown readbacks. Preserve that failed installed acceptance; it is not a pass.
+
+Provider dependency: Remote View issue 334 / plan 0067 provisions a missing viewer mapping before managed readiness. The consumer follow-up stops growth when a new assignment has unknown window readiness. Red regression returned capacity_exhausted instead of assignment_unavailable and made another acquisition; the repaired behavior must stop at two. Branch: fix/native-desktop-readiness.

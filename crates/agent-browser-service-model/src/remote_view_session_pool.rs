@@ -93,12 +93,14 @@ pub fn prepare_remote_view_session_pool<
         let mut desktop_ids = std::collections::BTreeSet::new();
         let mut candidates = Vec::new();
         let mut occupied = false;
+        let mut unavailable = false;
         for assignment in &assignments {
             if !desktop_ids.insert(assignment.desktop_id.clone()) {
                 return Err("remote_view_session_assignment_invalid".into());
             }
             // A failed observation never qualifies a desktop as free.
             let Ok(windows) = adapter.windows(assignment) else {
+                unavailable = true;
                 continue;
             };
             if !windows.windows.is_empty() {
@@ -120,6 +122,9 @@ pub fn prepare_remote_view_session_pool<
                 assignments,
                 desktops: candidates,
             });
+        }
+        if warm_minimum_met && unavailable {
+            return Err("remote_view_runtime_assignment_unavailable".into());
         }
         if assignments.len() >= maximum as usize {
             return Err(if occupied {

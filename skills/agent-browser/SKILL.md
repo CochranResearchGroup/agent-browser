@@ -3655,7 +3655,9 @@ assignment in current inventory before launch. Failed reconciliation returns
 
 Browser placement reads current public inventory and windows, then refreshes
 exact desktop identity before launch. Occupied desktops retain their assignments but are excluded from new-browser
-placement. Unknown window observations cannot qualify a desktop as free. Managed commands address the session's current
+placement. Unknown window observations cannot qualify a desktop as free.
+If no free desktop is proven and a peer has unknown readiness, placement stops
+without another acquisition. Reconcile that desktop before retrying. Managed commands address the session's current
 tab through its managed owner, without a second legacy tab-catalog lookup.
 Conflicting explicit target selectors are rejected. Agent Browser launches its own browser with fresh private environment inputs
 from Remote View. Local sessions use their existing runtime when these settings
