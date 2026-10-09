@@ -3,7 +3,7 @@
 Date: 2026-10-08
 Plan version: 2
 Consolidation: required
-State: OPEN
+State: CLOSED
 Product lane: PL-PLATFORM
 Owner: primary agent
 Branch: platform/alice-bob-reconciliation
@@ -110,3 +110,5 @@ Installed checkpoint, 2026-10-09 04:44 UTC: isolated p227 demonstrated shared pr
 Ordinary Alice continuation after browser inactivity failed with `browser_session_recovery_absence_unproven`; preserve this installed failure and its unproven transient cause. A fresh profile/process census followed by one retry recovered the original task URL. Closing Alice then preserved Bob's browser, original task URL and shared storage. Independent Carol and Dave profiles grew the pool to three desktops; Eve wrapped onto Bob's desktop with a distinct browser/profile. All four task URLs remained correct. Closing Carol and Dave closed only their browsers. Full native human-input/automation-return acceptance, cooldown/reset qualification and final cleanup/integration remain open. The private synthetic hostname is not externally published. Source gates do not substitute for these installed checks; the plan remains OPEN.
 
 Native viewer checkpoint: the same retained Bob handoff resolved from the private Agent Browser HTTPS origin into the native desktop viewer, using isolated dashboard authentication and a synthetic native authentication fixture. The connected WebSocket displayed the intended Chrome tab. Viewer mouse and keyboard input entered a synthetic value in the page; ordinary Bob automation read that exact value and the shared storage afterward. No extra viewer grant or dashboard navigation was needed for the handoff. This qualifies the private installed flow, not public ingress or production Authelia. The first harness attempt failed Node-side DNS resolution; its exact observer was closed and confirmed absent. A separate handoff attempt during authentication configuration reload failed native window readback; after completed service adoption the normal handoff succeeded. Preserve both failed attempts. Provider full serial tests and current format check passed. Cooldown/reset qualification, final cleanup and source integration remain open.
+
+Final closeout: all four delivery outcomes are qualified within the controlled-clock and isolated installed workflows recorded in RUNBOOK. Cleanup is complete and source is integrated through Agent Browser PR 234 (`e770a9432c912ebdf674294fa9e7b399f6554a3f`) and Remote View PR 340 (`7bcff5a7d16a7de3848e5812a07815678b0e3f04`). Earlier checkpoints preserve their then-open gates; this closeout supersedes them. Keep the initial recovery refusal and unproven transient cause attributable. Public ingress, production Authelia, ten-browser stress, production promotion and formal release were excluded, not silently accepted. No production upgrade or reboot occurred. Memory disposition: forbidden; no explicit user memory-write request.
