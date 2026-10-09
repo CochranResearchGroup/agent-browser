@@ -29,6 +29,10 @@ pub(super) fn matching_kind(
             )
             | (Request::RevokeView { .. }, Outcome::RevokeView(_))
             | (Request::Release { .. }, Outcome::Release(_))
+            | (
+                Request::ReleaseIdle { .. },
+                Outcome::Release(_) | Outcome::ReleaseIdleDeferred
+            )
     )
 }
 
@@ -62,6 +66,14 @@ impl RemoteViewApplicationMutationStore for BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
+        if matches!(
+            &envelope.request,
+            agent_browser_service_model::RemoteViewApplicationRequest::ReleaseIdle { .. }
+        ) && !super::browser_launch_custody_store::idle_release_admitted(&transaction, envelope)
+            .map_err(|_| Error::InvalidRecord)?
+        {
+            return Err(Error::Conflict);
+        }
         let existing: Option<RemoteViewApplicationMutationRecord> =
             load_optional_document(&transaction, &key, SCHEMA).map_err(|_| Error::InvalidRecord)?;
         let claim = if let Some(record) = existing {

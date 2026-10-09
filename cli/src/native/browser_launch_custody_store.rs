@@ -29,6 +29,8 @@ struct Ledger {
     release_fences: BTreeMap<String, RemoteViewApplicationReleaseTarget>,
     #[serde(default)]
     release_outcomes: BTreeMap<String, RemoteViewJoinedReleaseOutcome>,
+    #[serde(default)]
+    idle_release_fences: BTreeSet<String>,
 }
 
 fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
@@ -64,6 +66,13 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
             .validate_outcome(outcome)
             .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
     }
+    if ledger
+        .idle_release_fences
+        .iter()
+        .any(|id| !ledger.release_fences.contains_key(id))
+    {
+        return Err(LaunchCustodyStoreError::InvalidRecord);
+    }
     Ok(ledger)
 }
 /// Exact terminal retirement evidence, used to advance acquisition request
@@ -89,6 +98,105 @@ fn assignment_fenced(
                     || assignment.generation < target.assignment.generation))
     })
 }
+
+pub(super) fn assignment_available(
+    connection: &Connection,
+    assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+) -> Result<bool, LaunchCustodyStoreError> {
+    Ok(!assignment_fenced(&ledger(connection)?, assignment))
+}
+
+pub(crate) struct IdleReleaseObligation {
+    pub release_id: String,
+    pub target: RemoteViewApplicationReleaseTarget,
+    pub record: Option<agent_browser_service_model::RemoteViewApplicationMutationRecord>,
+}
+
+/// A permit cannot submit after another process cancels its unsubmitted fence.
+pub(super) fn idle_release_admitted(
+    connection: &Connection,
+    envelope: &agent_browser_service_model::RemoteViewApplicationEnvelope,
+) -> Result<bool, LaunchCustodyStoreError> {
+    use agent_browser_service_model::RemoteViewApplicationRequest as Request;
+    let Request::ReleaseIdle {
+        assignment_id,
+        expected_generation,
+        idempotency_key,
+        expected_retirement,
+        cleanup,
+        ..
+    } = &envelope.request
+    else {
+        return Ok(false);
+    };
+    let records = ledger(connection)?;
+    Ok(records.idle_release_fences.contains(idempotency_key)
+        && records
+            .release_fences
+            .get(idempotency_key)
+            .is_some_and(|target| {
+                target.assignment.assignment_id == *assignment_id
+                    && target.assignment.generation == *expected_generation
+                    && expected_retirement.desktop_id == target.assignment.desktop_id
+                    && expected_retirement.generation == *expected_generation
+                    && expected_retirement.routes == target.route_ids
+                    && expected_retirement.sessions == target.viewer_session_ids
+                    && cleanup.validates_target(assignment_id, *expected_generation)
+            }))
+}
+
+impl BrowserSessionSqliteStore {
+    pub(crate) fn idle_release_obligations(
+        &mut self,
+    ) -> Result<Vec<IdleReleaseObligation>, String> {
+        use agent_browser_service_model::RemoteViewApplicationRequest as Request;
+        let records = ledger(self.remote_view_mutation_connection())
+            .map_err(|_| "remote_view_release_custody_unavailable")?;
+        let mutations =
+            super::remote_view_pool_request_store::records(self.remote_view_mutation_connection())
+                .map_err(|_| "remote_view_release_custody_unavailable")?;
+        Ok(records.idle_release_fences.iter().filter(|id| !records.release_outcomes.contains_key(*id)).map(|id|
+            IdleReleaseObligation { release_id:id.clone(),target:records.release_fences[id].clone(),
+                record:mutations.iter().find(|record| matches!(&record.envelope.request,Request::ReleaseIdle { idempotency_key,.. } if idempotency_key == id)).cloned(),
+            }).collect())
+    }
+
+    /// Only a never-submitted request or an exact owner deferral can lift this
+    /// fence. Ambiguous transport and partial release keep their obligation.
+    pub(crate) fn cancel_unsubmitted_or_deferred_idle_release(
+        &mut self,
+        release_id: &str,
+    ) -> Result<(), String> {
+        use agent_browser_service_model::{
+            RemoteViewApplicationMutationOutcome as Outcome,
+            RemoteViewApplicationRequest as Request,
+        };
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| "remote_view_release_custody_unavailable")?;
+        let mut records =
+            ledger(&transaction).map_err(|_| "remote_view_release_custody_unavailable")?;
+        if !records.idle_release_fences.contains(release_id)
+            || records.release_outcomes.contains_key(release_id)
+        {
+            return Err("remote_view_release_cancellation_invalid".into());
+        }
+        let mutations = super::remote_view_pool_request_store::records(&transaction)
+            .map_err(|_| "remote_view_release_custody_unavailable")?;
+        let mutation = mutations.iter().find(|record| matches!(&record.envelope.request,Request::ReleaseIdle { idempotency_key,.. } if idempotency_key == release_id));
+        if mutation.is_some_and(|record| record.outcome != Some(Outcome::ReleaseIdleDeferred)) {
+            return Err("remote_view_release_readback_required".into());
+        }
+        records.release_fences.remove(release_id);
+        records.idle_release_fences.remove(release_id);
+        save_document(&transaction, DOCUMENT, SCHEMA, &records)
+            .map_err(|_| "remote_view_release_custody_unavailable")?;
+        transaction
+            .commit()
+            .map_err(|_| "remote_view_release_custody_unavailable".to_string())
+    }
+}
 fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustodyStoreError> {
     load_optional_document::<Option<BrowserSessionState>>(
         connection,
@@ -100,6 +208,12 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
 }
 
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
+    fn assignment_release_confirmed(
+        &mut self,
+        assignment: &agent_browser_service_model::RemoteViewAssignmentRecord,
+    ) -> Result<bool, LaunchCustodyStoreError> {
+        assignment_release_completed(self.remote_view_mutation_connection(), assignment)
+    }
     fn published_launch_assignment(
         &mut self,
         browser: &agent_browser_service_model::ManagedBrowserInstance,
@@ -126,7 +240,12 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         record
             .confirm_publication(&state)
             .map_err(|_| LaunchCustodyStoreError::Conflict)?;
-        if assignment_fenced(&ledger, &record.intent.assignment) {
+        if assignment_fenced(&ledger, &record.intent.assignment)
+            && !assignment_release_completed(
+                self.remote_view_mutation_connection(),
+                &record.intent.assignment,
+            )?
+        {
             return Err(LaunchCustodyStoreError::ReleaseFenced);
         }
         Ok(record.intent.assignment)
@@ -227,6 +346,14 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
 }
 
 impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
+    fn admit_idle_assignment_release(
+        &mut self,
+        target: &RemoteViewApplicationReleaseTarget,
+        snapshot: &RemoteViewApplicationCleanupSnapshot,
+        release_id: &str,
+    ) -> Result<RemoteViewApplicationCleanupPermit, LaunchCustodyStoreError> {
+        self.admit_release(target, snapshot, release_id, true)
+    }
     fn complete_assignment_release(
         &mut self,
         target: &RemoteViewApplicationReleaseTarget,
@@ -262,6 +389,18 @@ impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
         target: &RemoteViewApplicationReleaseTarget,
         snapshot: &RemoteViewApplicationCleanupSnapshot,
         release_id: &str,
+    ) -> Result<RemoteViewApplicationCleanupPermit, LaunchCustodyStoreError> {
+        self.admit_release(target, snapshot, release_id, false)
+    }
+}
+
+impl BrowserSessionSqliteStore {
+    fn admit_release(
+        &mut self,
+        target: &RemoteViewApplicationReleaseTarget,
+        snapshot: &RemoteViewApplicationCleanupSnapshot,
+        release_id: &str,
+        idle: bool,
     ) -> Result<RemoteViewApplicationCleanupPermit, LaunchCustodyStoreError> {
         use LaunchCustodyStoreError as Error;
         if uuid::Uuid::parse_str(release_id).is_err() || target.validate().is_err() {
@@ -300,6 +439,9 @@ impl BrowserReleaseCustodyStore for BrowserSessionSqliteStore {
         records
             .release_fences
             .insert(release_id.into(), target.clone());
+        if idle {
+            records.idle_release_fences.insert(release_id.into());
+        }
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)?;
         Ok(permit)
@@ -324,6 +466,9 @@ fn validate_browser_publication(
         return Err(LaunchCustodyStoreError::LaunchPending);
     }
     if state.browsers.values().any(|browser| {
+        if state.idle_closed_browsers.contains_key(&browser.id) {
+            return false;
+        }
         browser.desktop.as_ref().is_some_and(|desktop| {
             records.release_fences.iter().any(|(id, target)| {
                 if target.assignment.desktop_id != desktop.desktop_id {
@@ -996,7 +1141,12 @@ impl BrowserSessionSqliteStore {
             if state.browsers.get(&browser.id) != Some(browser)
                 || browser.profile_id != intent.profile_id
                 || prior.len() != 1
-                || prior[0].intent.assignment != intent.assignment
+                || (prior[0].intent.assignment != intent.assignment
+                    && (!state.idle_closed_browsers.contains_key(&browser.id)
+                        || !assignment_release_completed(
+                            &transaction,
+                            &prior[0].intent.assignment,
+                        )?))
                 || prior[0].clone().confirm_publication(&state).is_err()
             {
                 return Err(Error::Conflict);
@@ -1015,6 +1165,9 @@ impl BrowserSessionSqliteStore {
                     || record.intent.assignment.desktop_id == intent.assignment.desktop_id)
                 && record.intent.assignment != intent.assignment
         }) || state.browsers.values().any(|browser| {
+            if state.idle_closed_browsers.contains_key(&browser.id) {
+                return false;
+            }
             browser.desktop.as_ref().is_some_and(|desktop| {
                 desktop.desktop_id == intent.assignment.desktop_id
                     && desktop.generation != intent.assignment.generation

@@ -5,6 +5,20 @@ use super::remote_view_application_http::RemoteViewApplicationHttp;
 use agent_browser_service_model::*;
 use std::time::Duration;
 
+static POOL_MAINTENANCE: std::sync::LazyLock<tokio::sync::Notify> =
+    std::sync::LazyLock::new(tokio::sync::Notify::new);
+
+/// Coalesce launch-triggered spare work without provisioning under the host lock.
+pub(crate) fn request_pool_maintenance() {
+    if remote_view_settings_present() {
+        POOL_MAINTENANCE.notify_one();
+    }
+}
+
+pub(crate) async fn pool_maintenance_requested() {
+    POOL_MAINTENANCE.notified().await;
+}
+
 type LocalEffects = BrowserSessionEffectAdapter<BrowserManagerRuntime>;
 type RemoteEffects =
     RemoteViewSessionEffects<LocalEffects, RemoteViewApplicationHttp, BrowserSessionSqliteStore>;
@@ -41,6 +55,22 @@ pub(super) fn configured_remote_view() -> Result<Option<RemoteViewRuntimeContext
         setting("AGENT_BROWSER_REMOTE_VIEW_APPLICATION")?,
         setting("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT")?,
     )
+}
+
+/// Run from the background reaper after releasing the session-host mutex.
+/// Public acquisition custody coalesces requests from other daemon processes;
+/// no foreground operation waits for spare provisioning.
+pub(crate) fn replenish_configured_remote_view_pool() -> Result<(), String> {
+    let Some(mut context) = configured_remote_view()? else {
+        return Ok(());
+    };
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    super::browser_session_pool_maintenance::maintain_pool(
+        &mut context.adapter,
+        &mut store,
+        &context.pool,
+    )?;
+    Ok(())
 }
 
 fn runtime_context(
@@ -242,6 +272,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         match self {
             Self::Local(effects) => effects.launch_browser(profile, desktop),
             Self::Remote(effects) => effects.launch_browser(profile, desktop),
+        }
+    }
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        match self {
+            Self::Local(effects) => effects.permits_idle_browser_close(browser),
+            Self::Remote(effects) => effects.permits_idle_browser_close(browser),
         }
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {

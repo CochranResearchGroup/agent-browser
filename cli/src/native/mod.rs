@@ -36,6 +36,7 @@ pub mod browser_session_authority;
 mod browser_session_consumer_tests;
 #[allow(dead_code)]
 pub(crate) mod browser_session_host;
+pub(crate) mod browser_session_pool_maintenance;
 pub(crate) mod browser_session_remote_view;
 #[allow(dead_code)]
 pub(crate) mod browser_session_runtime;

@@ -1,9 +1,17 @@
 # Session Management
 
-Multiple isolated browser sessions for concurrent browsing and daemon separation.
+Named sessions give concurrent tasks separate tabs. Profile selection determines whether browser data is shared or isolated.
 Use runtime profiles for persistent browser identity and long-lived auth state.
 
 **Related**: [authentication.md](authentication.md) for login patterns, [SKILL.md](../SKILL.md) for quick start.
+
+## Sharing a profile between tasks
+
+Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.
+
+Tab-targeted automation can run without either tab being physically visible. Serialize foreground desktop clicks, keyboard input and human control. Separate tabs share cookies, login/logout state and persistent site storage: coordinate account switches, logout and conflicting application changes. Choose separate profiles when independent state is required.
+
+Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
 
 ## Contents
 
@@ -33,24 +41,20 @@ agent-browser --session public get text body
 
 ## Session Isolation Properties
 
-Each session has independent:
-- Cookies
-- LocalStorage / SessionStorage
-- IndexedDB
-- Cache
-- Browsing history
-- Open tabs
+Each task has independently addressed tabs. Tasks sharing a profile share cookies,
+local storage, IndexedDB, cache and history. Use distinct profiles when those data
+must be isolated. Session storage follows the site and tab behavior.
 
 ## Session State Persistence
 
-`--session` isolates daemons and tabs. It does not replace runtime profiles.
+`--session` identifies the task and its tabs. It does not replace runtime profiles.
 If you need a browser identity that survives manual sign-in and later agent
 reuse, prefer `--runtime-profile`.
 
 ### Runtime Profile Plus Session
 
 You can combine a named runtime profile with a named session when you need both
-persistent identity and daemon isolation:
+persistent identity and distinct task tabs:
 
 ```bash
 agent-browser --session reviewer-a --runtime-profile work open https://app.example.com

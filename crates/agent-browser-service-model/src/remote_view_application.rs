@@ -29,6 +29,10 @@ pub enum RemoteViewApplicationRequest {
         assignment_id: String,
         expected_generation: u64,
     },
+    ObserveIdle {
+        assignment_id: String,
+        expected_generation: u64,
+    },
     LaunchEnvironment {
         assignment_id: String,
         expected_generation: u64,
@@ -82,6 +86,14 @@ pub enum RemoteViewApplicationRequest {
         expected_generation: u64,
         idempotency_key: String,
         cleanup: RemoteViewApplicationCleanup,
+    },
+    ReleaseIdle {
+        assignment_id: String,
+        expected_generation: u64,
+        expected_viewing_generation: u64,
+        idempotency_key: String,
+        cleanup: RemoteViewApplicationCleanup,
+        expected_retirement: crate::RemoteViewDesktopViewingRetirement,
     },
 }
 

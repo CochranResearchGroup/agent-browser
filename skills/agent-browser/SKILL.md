@@ -6,6 +6,14 @@ allowed-tools: Bash(npx agent-browser:*), Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+## Sharing a profile between tasks
+
+Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.
+
+Tab-targeted automation can run without either tab being physically visible. Serialize foreground desktop clicks, keyboard input and human control. Separate tabs share cookies, login/logout state and persistent site storage: coordinate account switches, logout and conflicting application changes. Choose separate profiles when independent state is required.
+
+Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
+
 ## Product purpose
 
 Use Agent Browser when reusable browser operation, task-appropriate profiles,
@@ -43,7 +51,9 @@ maintenance commands. Never point namespaced writable roots at default
 development or production. Require a separate reviewed public ingress binding
 and exact route ownership; a new home alone is not isolation. No namespace
 keeps legacy development behavior.
-The first bootstrap has one `sudo -v` boundary. Every recurring installed
+The following privilege-helper instructions apply only to explicitly selected legacy XRDP workstation installation. Native Remote View uses its own desktop owner; these checks are not prerequisites for an ordinary native launch or handoff.
+
+The legacy bootstrap has one `sudo -v` boundary. Every recurring installed
 route-user, XRDP restart, and route-display action then uses the fixed
 root-owned helper through passwordless `sudo -n`. Compatible helper versions
 are retained across byte-only bundle drift, and maintenance fails closed
@@ -436,7 +446,7 @@ override applies only after managed browsers are already absent. Full shutdown
 is an explicit digest-bound transaction that ends reviewed managed browser
 lanes so installation can replace a runtime that cannot cooperate.
 
-The CLI uses Chrome/Chromium via CDP directly. For this fork, install the native binary from the GitHub releases at `CochranResearchGroup/agent-browser`; npm, Homebrew, and Cargo are not authoritative release channels. Run `agent-browser install` to download Chrome. Run `agent-browser install --with-deps --with-remote-view-privileges` on Linux when Guacamole/RDP remote viewing should be configured in the same one-time installer flow; this installs the `agent-browser` group, root-owned privilege helper, and sudoers rule used for route-user setup, XRDP restart, and route-display access without repeated sudo prompts. When `--with-deps` is combined with `--with-remote-view-privileges`, the privilege installer runs first so its explicit `sudo -v` boundary authorizes later dependency installation. Re-running that install on an already-provisioned machine exits before privileged changes when the helper's bounded command and capability contract, sudoers policy, group, and membership are ready. Exact helper-byte drift remains visible as provenance but does not force an interactive refresh when the installed root-owned helper is compatible. Run `agent-browser install stealthcdp-chromium` when the preferred patched Chromium release should be installed under the stable `%LOCALAPPDATA%\chromium-stealthcdp/current` or WSL-mounted equivalent. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths to Windows form for Chrome arguments, including profile, cache, download, extension, and positional path values, and adds `--no-sandbox` because this host mode requires it for the patched Windows build to expose DevTools. Run `agent-browser doctor windows-browser` to diagnose WSL to Windows browser CDP routing without changing firewall, `.wslconfig`, SSH, or profile state; add `--scan-ports --firewall` for a bounded scan of common browser/debug ports plus localhost listeners and a read-only Windows firewall and Hyper-V firewall query through PowerShell when available. The doctor reports `profileSmoke.available`, `profileSmoke.command`, and `profileSmoke.reason` so operators can see when the Windows profile-write smoke is ready to run. Run `agent-browser doctor remote-view` before mutating Guacamole or RDP setup; it is read-only and reports install state, RDP gateway readiness, private display allocator state, Guacamole local and public route readiness, XRDP policy, existing `agent-browser-rdp` and route-specific user inventory, one-time privileged helper readiness, remote-view config file presence with keys only, route-display state, agent display access to those XRDP displays, stable issue codes with remediation text, drift findings, and the next setup action. Prefer the existing `agent-browser-rdp` user unless the doctor shows route-specific users are required for display isolation. Run `agent-browser setup windows-browser --print-powershell` to print a reviewed Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall rules, fixed CDP ports, SSH tunnel fallback, and rollback commands; add `--doctor` to embed current route diagnostics as PowerShell comments and infer `nat` mode when mirrored networking is not active. The agent-browser command is preview-only, the generated script is dry-run by default until a Windows operator reruns it with `-Apply`, and the script reminds operators to run the profile smoke when doctor says it is available. When the Windows SSM debug instance is provisioned, `pnpm test:windows-browser-setup-powershell-live` verifies that the generated setup script parses on Windows, stays dry-run, prints rollback commands, and does not report creating firewall rules. On WSL hosts with the Windows `chromium-stealthcdp` artifact installed, `pnpm test:wsl-windows-chromium-profile-live` verifies the headed launch path with a Windows-mounted profile and fails on captured `/mnt/...` path or write-failure evidence. Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. To update, replace the binary from the latest GitHub release. After an upgrade or browser-manifest change, run `agent-browser install doctor` to check that the command on `PATH`, the installed package binary, the checkout binary when present, the no-launch launchConfig readiness view, the no-launch service-status probe, no-launch resource GC readiness-impacting candidate counts, and Linux remote-view privilege readiness agree.
+The CLI uses Chrome/Chromium via CDP directly. For this fork, install the native binary from the GitHub releases at `CochranResearchGroup/agent-browser`; npm, Homebrew, and Cargo are not authoritative release channels. Run `agent-browser install` to download Chrome. For an explicitly requested legacy XRDP setup only, run `agent-browser install --with-deps --with-remote-view-privileges` on Linux when Guacamole/RDP remote viewing should be configured in the same one-time installer flow; this installs the `agent-browser` group, root-owned privilege helper, and sudoers rule used for route-user setup, XRDP restart, and route-display access without repeated sudo prompts. When `--with-deps` is combined with `--with-remote-view-privileges`, the privilege installer runs first so its explicit `sudo -v` boundary authorizes later dependency installation. Re-running that install on an already-provisioned machine exits before privileged changes when the helper's bounded command and capability contract, sudoers policy, group, and membership are ready. Exact helper-byte drift remains visible as provenance but does not force an interactive refresh when the installed root-owned helper is compatible. Run `agent-browser install stealthcdp-chromium` when the preferred patched Chromium release should be installed under the stable `%LOCALAPPDATA%\chromium-stealthcdp/current` or WSL-mounted equivalent. When WSL launches that Windows `chrome.exe`, agent-browser translates mounted Windows paths to Windows form for Chrome arguments, including profile, cache, download, extension, and positional path values, and adds `--no-sandbox` because this host mode requires it for the patched Windows build to expose DevTools. Run `agent-browser doctor windows-browser` to diagnose WSL to Windows browser CDP routing without changing firewall, `.wslconfig`, SSH, or profile state; add `--scan-ports --firewall` for a bounded scan of common browser/debug ports plus localhost listeners and a read-only Windows firewall and Hyper-V firewall query through PowerShell when available. The doctor reports `profileSmoke.available`, `profileSmoke.command`, and `profileSmoke.reason` so operators can see when the Windows profile-write smoke is ready to run. Run `agent-browser doctor remote-view` before mutating Guacamole or RDP setup; it is read-only and reports install state, RDP gateway readiness, private display allocator state, Guacamole local and public route readiness, XRDP policy, existing `agent-browser-rdp` and route-specific user inventory, one-time privileged helper readiness, remote-view config file presence with keys only, route-display state, agent display access to those XRDP displays, stable issue codes with remediation text, drift findings, and the next setup action. Prefer the existing `agent-browser-rdp` user unless the doctor shows route-specific users are required for display isolation. Run `agent-browser setup windows-browser --print-powershell` to print a reviewed Windows PowerShell helper for mirrored networking, scoped Hyper-V firewall rules, fixed CDP ports, SSH tunnel fallback, and rollback commands; add `--doctor` to embed current route diagnostics as PowerShell comments and infer `nat` mode when mirrored networking is not active. The agent-browser command is preview-only, the generated script is dry-run by default until a Windows operator reruns it with `-Apply`, and the script reminds operators to run the profile smoke when doctor says it is available. When the Windows SSM debug instance is provisioned, `pnpm test:windows-browser-setup-powershell-live` verifies that the generated setup script parses on Windows, stays dry-run, prints rollback commands, and does not report creating firewall rules. On WSL hosts with the Windows `chromium-stealthcdp` artifact installed, `pnpm test:wsl-windows-chromium-profile-live` verifies the headed launch path with a Windows-mounted profile and fails on captured `/mnt/...` path or write-failure evidence. Existing Chrome, Brave, Playwright, and Puppeteer installations are detected automatically. To update, replace the binary from the latest GitHub release. After an upgrade or browser-manifest change, run `agent-browser install doctor` to check that the command on `PATH`, the installed package binary, the checkout binary when present, the no-launch launchConfig readiness view, the no-launch service-status probe, no-launch resource GC readiness-impacting candidate counts, and Linux remote-view privilege readiness agree.
 
 ## Shared service operating contract
 
@@ -3642,11 +3652,11 @@ pool name. Set `AGENT_BROWSER_REMOTE_VIEW_APPLICATION` when the application
 selector differs from the default `agent-browser`. Set origin and pool together.
 Set `AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT` to the warm desktop minimum
 (default: `1`), within the application's Remote View pool policy. A new browser
-request acquires missing assignments and grows the pool on demand when all observed
-desktops are occupied, up to the provider policy maximum. It selects a window-free
-desktop; `remote_view_pool_capacity_exhausted` means that the pool has reached its
-limit without a free desktop. Close completed work or raise the provider policy
-limit before retrying. Sessions sharing one profile continue to share one browser. Status,
+request prefers a ready window-free desktop, with background replenishment of one
+ready spare when capacity permits. At the provider limit, independent profiles
+wrap around eligible healthy desktops; existing browsers stay in place. Unknown
+or unsafe destinations remain excluded. Sessions sharing one profile continue to
+share one browser and use separate task tabs. Status,
 healthy session reuse and runtime construction do not allocate desktops.
 An interrupted acquisition retains its original request across restart. The next
 placement request reconciles that same provider idempotency key and requires the
@@ -3654,15 +3664,19 @@ assignment in current inventory before launch. Failed reconciliation returns
 `remote_view_pool_acquisition_readback_required`; it does not allocate using a new key.
 
 Browser placement reads current public inventory and windows, then refreshes
-exact desktop identity before launch. Occupied desktops retain their assignments but are excluded from new-browser
-placement. Unknown window observations cannot qualify a desktop as free.
-If no free desktop is proven and a peer has unknown readiness, placement stops
-without another acquisition. Reconcile that desktop before retrying. Managed commands address the session's current
+exact desktop identity before launch. Occupied healthy desktops retain their
+assignments and become eligible for wrap-around only at the growth limit. Unknown
+window observations cannot qualify a desktop as free or eligible for wrap-around.
+An unrelated unavailable destination does not veto a separately proven usable
+one. If no eligible destination is proven, placement returns an actionable error. Managed commands address the session's current
 tab through its managed owner, without a second legacy tab-catalog lookup.
 Conflicting explicit target selectors are rejected. Agent Browser launches its own browser with fresh private environment inputs
 from Remote View. Local sessions use their existing runtime when these settings
-are absent. Tab focus, view renewal and automatic capacity shrink remain under development
-in Plan 220. Reducing the warm minimum does not immediately return assignments.
+are absent. When two or more assignments are positively unused, background
+maintenance returns excess assignments while retaining one ready spare. Native
+Remote View owns physical retirement under its configured continuous idle
+cooldown. Configure `idle_retention_seconds = 900` for the initial 15-minute
+cooldown and `minimum_reserved = 1`; resumed use resets eligibility.
 
 With Remote View configured, an ordinary `open` request admits a managed session
 automatically. Socket and queued ordinary browser commands use the same managed
@@ -3742,8 +3756,9 @@ Normal client `remote-view open` and `remote-view resolve` use the native Remote
 
 With the Remote View application provider, named-session batches keep their selected runtime profile and browser build. The shared browser owner launches or restores the browser when the navigation command runs.
 
-Handoff links have a 24-hour default retention, separate from browser idle cleanup
-and Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
+New durable-profile handoffs have no default time expiry. Disposable-profile
+handoffs default to 24 hours. Both are separate from browser idle cleanup and
+Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
 <milliseconds>` selects a positive lifetime for a newly issued link. JSON exposes
 `handoffCreatedAtMs` and `handoffExpiresAtMs`. `remote-view inspect <handoff-id>`
 shows expiry even after the link expires. `remote-view extend <handoff-id> --ttl-ms
@@ -3752,11 +3767,23 @@ longer expiry. Extension does not restore a browser or issue a viewer grant.
 Expired links return `remote_view_handoff_expired` (HTTP 410 on the deep-link
 endpoint); opening or extending them cannot revive them. A subsequent normal
 open can issue a new opaque link to the same retained tab. An already-connected
-native viewer remains connected. Legacy links receive the default retention once
+native viewer remains connected. Legacy links receive historical 24-hour retention once
 when the shared owner first loads the upgraded state; restarts do not renew them.
 Service callers use `service_remote_view_handoff_resolve` with
 `params.handoffOperation` set to `inspect` or `extend`; extension also supplies
 positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
+
+Retention defaults are persisted in Browser Runtime SQLite. Explicit startup
+settings update that policy; omitted settings preserve it across restart.
+`AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS` selects durable link retention (0 means
+no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects a positive
+disposable link lifetime; `AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a
+positive disposable inactivity lifetime. Disposable defaults are 86400000 ms.
+Policy changes apply to newly issued links. Existing finite links keep their
+expiry, including already-expired links. Legacy links with no creation marker
+receive the historical finite 24-hour retention once. Extending an unlimited
+link preserves its unlimited lifetime. Explicitly closed tasks remain closed.
+
 
 Explicit native Remote View build selections are retained per runtime profile.
 Later launches and retained-browser recovery restore that profile's executable,

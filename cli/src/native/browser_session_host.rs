@@ -130,7 +130,7 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
-        validate_handoff_ttl(&command, current_unix_ms())?;
+        validate_handoff_ttl(&command, current_unix_ms(), &agent_browser_service_model::BrowserRetentionPolicy::default())?;
         let selected_build = optional_string(&command, "browserBuild");
         let selected_executable = match selected_build {
             None => None,
@@ -408,7 +408,7 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         BrowserSessionEffectAdapter::new(runtime),
         remote_view,
     )?;
-    BrowserSessionHost::load(
+    let mut host = BrowserSessionHost::load(
         store,
         effects,
         &legacy_state_path,
@@ -424,7 +424,26 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
             }),
             exact_url_history_maximum_bytes: 64 * 1024 * 1024,
         },
-    )
+    )?;
+    let mut policy = host.state.retention_policy.clone();
+    if std::env::var_os("AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS").is_some() {
+        let ttl = configured_u64("AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS", 0)?;
+        policy.durable_handoff_ttl_ms = (ttl != 0).then_some(ttl);
+    }
+    if std::env::var_os("AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS").is_some() {
+        policy.disposable_handoff_ttl_ms =
+            configured_u64("AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS", 86_400_000)?;
+    }
+    if std::env::var_os("AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS").is_some() {
+        policy.disposable_inactivity_ms =
+            configured_u64("AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS", 86_400_000)?;
+    }
+    policy.validate()?;
+    if host.state.retention_policy != policy {
+        host.state.retention_policy = policy;
+        host.commit_state()?;
+    }
+    Ok(host)
 }
 
 fn configured_u64(name: &str, default: u64) -> Result<u64, String> {
@@ -558,6 +577,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     ) -> Result<Self, String> {
         let previous = persistence.load_session_state()?;
         let mut state = previous.clone();
+        state.retention_policy.validate()?;
         for link in state.remote_view_tab_handoffs.values_mut() {
             link.initialize_link_retention(
                 current_unix_ms(),
@@ -1073,6 +1093,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         )?;
         self.persisted_state = self.state.clone();
         self.effects.acknowledge_launch_publication();
+        if intent.is_some() {
+            super::browser_session_remote_view::request_pool_maintenance();
+        }
         Ok(())
     }
 
@@ -1192,6 +1215,7 @@ where
                 .get("activityAtMs")
                 .and_then(serde_json::Value::as_u64)
                 .unwrap_or_else(current_unix_ms),
+            &self.state.retention_policy,
         )?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
@@ -1306,13 +1330,22 @@ where
                 now_ms,
             )?;
             let ttl = match command.get("handoffTtlMs") {
-                Some(value) => value
-                    .as_u64()
-                    .filter(|ttl| *ttl > 0)
-                    .ok_or("remote_view_handoff_ttl_invalid")?,
-                None => agent_browser_service_model::DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+                Some(value) => Some(
+                    value
+                        .as_u64()
+                        .filter(|ttl| *ttl > 0)
+                        .ok_or("remote_view_handoff_ttl_invalid")?,
+                ),
+                None if self
+                    .state
+                    .disposable_profiles
+                    .contains_key(&session.profile_id) =>
+                {
+                    Some(self.state.retention_policy.disposable_handoff_ttl_ms)
+                }
+                None => self.state.retention_policy.durable_handoff_ttl_ms,
             };
-            record.initialize_link_retention(now_ms, ttl)?;
+            record.initialize_profile_retention(now_ms, ttl)?;
             self.state
                 .remote_view_tab_handoffs
                 .insert(record.id.clone(), record.clone());
@@ -2103,7 +2136,23 @@ fn response_identity_tab(
 }
 
 /// Reject malformed creation TTLs before profile registration or browser effects.
-fn validate_handoff_ttl(command: &serde_json::Value, now_ms: u64) -> Result<(), String> {
+fn validate_handoff_ttl(
+    command: &serde_json::Value,
+    now_ms: u64,
+    policy: &agent_browser_service_model::BrowserRetentionPolicy,
+) -> Result<(), String> {
+    policy.validate()?;
+    for ttl in [
+        policy.durable_handoff_ttl_ms,
+        Some(policy.disposable_handoff_ttl_ms),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        now_ms
+            .checked_add(ttl)
+            .ok_or("browser_retention_policy_invalid")?;
+    }
     if let Some(value) = command.get("handoffTtlMs") {
         let ttl = value
             .as_u64()

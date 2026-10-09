@@ -331,9 +331,14 @@ impl BrowserSessionEffects for Process {
     }
     fn delete_disposable_profile(
         &mut self,
-        _allocation: &ManagedDisposableProfile,
+        allocation: &ManagedDisposableProfile,
     ) -> Result<(), String> {
-        Err("not used by named fixture".into())
+        std::fs::write(
+            self.root.join("deleted-disposable-profile"),
+            &allocation.profile.id,
+        )
+        .unwrap();
+        Ok(())
     }
 }
 
@@ -348,7 +353,7 @@ impl ManagedBrowserCommandEffects for Process {
     ) -> Result<Value, String> {
         assert!(tab.target_id.starts_with(&format!("target:{}", browser.id)));
         assert!(!session_id.is_empty());
-        assert_eq!(session_name, "Alice");
+        assert!(matches!(session_name, "Alice" | "Bob"));
         if command["action"] == "navigate" {
             return Ok(
                 serde_json::json!({"id": command["id"], "success": command["url"] != "https://synthetic.example/failure", "data": {"url": command["url"], "headers": command["headers"], "waitUntil": command["waitUntil"]}}),
@@ -462,6 +467,69 @@ fn consumer_host_open_reuse_and_colocation_publish_real_custody() {
     assert_eq!(reused.session_id, alice.session_id);
     assert_eq!(calls.get(), 2);
     assert_eq!(requests.get(), 8);
+}
+
+#[test]
+fn consumer_shared_profile_tabs_route_independently_and_close_preserves_peer() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests);
+    let alice = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let bob = host
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 101))
+        .unwrap();
+    assert_eq!(alice.browser_id, bob.browser_id);
+    assert_ne!(alice.session_id, bob.session_id);
+    // Initial tabs are acquired lazily by the first addressed command.
+    for name in ["Alice", "Bob"] {
+        host.execute_managed_command(
+            name,
+            &serde_json::json!({"action":"get_url", "activityAtMs":102}),
+        )
+        .unwrap()
+        .unwrap();
+    }
+    let alice_tab = host.state().sessions[&alice.session_id]
+        .current_tab_id
+        .clone()
+        .unwrap();
+    let bob_tab = host.state().sessions[&bob.session_id]
+        .current_tab_id
+        .clone()
+        .unwrap();
+    assert_ne!(alice_tab, bob_tab);
+    let alice_target = host.state().tabs[&alice_tab].target_id.clone();
+    let bob_target = host.state().tabs[&bob_tab].target_id.clone();
+    assert_ne!(alice_target, bob_target);
+    for (name, target) in [("Alice", &alice_target), ("Bob", &bob_target)] {
+        let result = host
+            .execute_managed_command(
+                name,
+                &serde_json::json!({"action":"get_url", "activityAtMs":102}),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["targetId"], *target);
+    }
+    host.close_session(&alice.session_id, SessionEndReason::ExplicitClose, 103)
+        .unwrap();
+    assert!(!host.state().sessions.contains_key(&alice.session_id));
+    assert!(host.state().browsers.contains_key(&bob.browser_id));
+    let continued = host
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({"action":"get_url", "activityAtMs":104}),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(continued["targetId"], bob_target);
+    host.close_session(&bob.session_id, SessionEndReason::ExplicitClose, 105)
+        .unwrap();
+    assert!(host.state().browsers.is_empty());
+    assert_eq!(calls.get(), 1);
 }
 
 #[test]

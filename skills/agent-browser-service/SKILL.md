@@ -1,6 +1,6 @@
 ---
 name: agent-browser-service
-description: Operate shared, authenticated, service-owned Agent Browser work when profile selection, retained-browser reuse, Guacamole or RDP presentation, route capacity, doctor findings, or runtime cleanup could affect the request. Use for persistent browser work and troubleshooting; use the general agent-browser skill for isolated throwaway page automation.
+description: Operate shared, authenticated, service-owned Agent Browser work when profile selection, retained-browser reuse, native Remote View presentation, route capacity, doctor findings, or runtime cleanup could affect the request. Use for persistent browser work and troubleshooting; use the general agent-browser skill for isolated throwaway page automation.
 ---
 
 # Agent Browser Service
@@ -8,6 +8,84 @@ description: Operate shared, authenticated, service-owned Agent Browser work whe
 Let Agent Browser own browser lifecycle, profile leases, retained-browser reuse,
 route selection, handoffs, and cleanup. Your job is to declare the browser
 intent, follow the returned plan, and report the exact blocked axis.
+
+## Current native Remote View workflow
+
+When the installed runtime has `AGENT_BROWSER_REMOTE_VIEW_ORIGIN` and
+`AGENT_BROWSER_REMOTE_VIEW_POOL` configured, Remote View owns desktop allocation,
+transport and authentication. Agent Browser owns the browser and its profile.
+Use the configured integration; omit RDP stream, route-pool and display overrides.
+
+For a human handoff, supply both session selectors explicitly:
+
+```bash
+agent-browser --json --session operator-review --session-name operator-review \
+  remote-view open https://example.com/secure
+```
+
+An omitted profile selector uses a disposable profile. Add
+`--runtime-profile <existing-profile-id>` when saved authentication or persistent
+profile continuity is needed. Keep the same session and profile for follow-up
+commands. Do not replace a requested persistent profile with a disposable one.
+Require `operatorVisible.state=ready`, share only the returned `handoffUrl`, and
+reopen that same durable URL for viewer reconnection. The operator uses existing
+Remote View authentication. Continue ordinary automation in the same browser.
+Return, store, and reopen only `handoffUrl`, shaped as `/remote-view/<handoff-id>`.
+Never share `providerExternalUrl`, a raw Guacamole URL or a route-binding URL
+as the operator handoff.
+
+
+### Complete external handoff URL
+
+A returned `handoffUrl` may be an absolute HTTPS URL or a relative
+`/remote-view/<handoff-id>` path. Keep an absolute URL unchanged. Resolve a
+relative path against the configured **public Agent Browser origin**, which
+serves the handoff resolver. Do not prepend `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
+(the provider control API), `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` (the native
+viewer origin), a raw provider URL, or a loopback address.
+
+For example, with public Agent Browser origin `https://browser.example.com`,
+`/remote-view/<handoff-id>` becomes
+`https://browser.example.com/remote-view/<handoff-id>`. Return a clickable complete
+HTTPS link to the person. If the public Agent Browser origin is not known,
+inspect its installed ingress configuration rather than guessing from the
+Remote View provider hostname. Resolving the URL does not create a new handoff.
+
+### Diagnose the requested operation
+
+`browser_session_field_missing:sessionName` is a missing request field, not a
+desktop outage. Inspect the failed request for effects, then correct the missing
+`--session-name` before another open. `--session` alone does not supply it.
+Software clients must pass `sessionName` at the top level of the request.
+
+`production_presentation_inventory_scope_mismatch`, a zero admitted maximum in
+the legacy `presentationCapacity` projection, missing legacy route X11 sockets,
+or ownership warnings about unrelated browsers do not establish that a native
+open is blocked. Use the exact request's typed failure and current native
+provider evidence. Preserve genuine ownership failures for the selected profile;
+do not bypass them or clean up another task's browser. Distinguish browser
+acquisition, native presentation and runtime maintenance.
+
+## Shared-profile tasks and retention
+
+Choose one named session and tab per task. Deliberately select the same durable
+profile when both tasks need its login, cookies and persistent site storage;
+Agent Browser reuses one browser. Address each task through its own session.
+Background tab automation does not require either tab to be physically visible.
+Serialize foreground desktop input and human control. Coordinate logout, account
+switching and conflicting application changes because profile data is shared.
+
+Close only the completed task session; preserve its peers and the durable profile.
+Use a disposable profile for work that does not need retained identity. Durable
+logical handoffs default to no time expiry; disposable handoffs and inactivity
+have finite configurable retention. Explicit close remains terminal. Handoff
+retention does not promise a continuously running browser or viewer connection.
+
+Native capacity prefers a ready vacant desktop and replenishes one spare in the
+background where possible. At the configured limit, placement wraps around
+eligible desktops. Automatic shrink belongs to Remote View and must preserve
+active viewers, current work and one ready spare. Unrelated legacy projections
+are not proof that the requested native launch is unavailable.
 
 ## Start with intent
 
@@ -51,7 +129,7 @@ agent-browser --json service access-plan \
    service request result.
 2. **Operator presentation** attaches a healthy browser to a view route. Route
    occupancy blocks presentation only when the requested workflow requires a
-   Guacamole or RDP view and Agent Browser returns a route blocker.
+   native desktop view and the exact request returns a presentation blocker.
 3. **Runtime maintenance** reports installation, multiplicity, cleanup, and
    retention health. A doctor warning is not a request blocker unless scoped
    readiness or the request result classifies it as one.

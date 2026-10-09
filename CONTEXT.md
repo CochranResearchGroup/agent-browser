@@ -4,6 +4,12 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
+
+**Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
+
+**Ready spare desktop**: A usable vacant desktop prepared for the next independent browser. Maintain one when capacity permits; wrap-around handles overflow, and configurable cooldown retires excess unused desktops.
+
 **Development publication**:
 An isolated generation installation whose activation coordinates the runtime host and dashboard process group. Non-activating publication requires stopped units before changing executable bindings. Host retirement preserves retained browser children and persistent private temporary storage.
 

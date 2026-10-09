@@ -88,6 +88,47 @@ pub struct RemoteViewAssignmentObservation {
     pub readiness_scope: RemoteViewApplicationReadinessScope,
 }
 
+/// Native owner evidence for returning unused capacity. Old providers that do
+/// not support this observation cannot qualify an automatic release.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewIdleAssignmentObservation {
+    pub schema_version: u32,
+    pub target: RemoteViewApplicationTarget,
+    pub readiness_scope: RemoteViewApplicationReadinessScope,
+    pub retirement: crate::RemoteViewDesktopViewingRetirement,
+    pub idle: bool,
+    pub viewer_active: bool,
+}
+
+impl RemoteViewIdleAssignmentObservation {
+    pub fn release_target(
+        &self,
+        assignment: &RemoteViewAssignmentRecord,
+    ) -> Result<crate::RemoteViewApplicationReleaseTarget, RemoteViewApplicationResponseError> {
+        RemoteViewAssignmentObservation {
+            schema_version: self.schema_version,
+            target: self.target.clone(),
+            readiness_scope: self.readiness_scope,
+        }
+        .validate_live_assignment(assignment)?;
+        if self.retirement.schema_version != 1
+            || self.retirement.desktop_id != assignment.desktop_id
+            || self.retirement.generation != assignment.generation
+            || (self.idle && (!self.retirement.sessions.is_empty() || self.viewer_active))
+        {
+            return Err(RemoteViewApplicationResponseError::InvalidTarget);
+        }
+        let target = crate::RemoteViewApplicationReleaseTarget {
+            assignment: assignment.clone(),
+            route_ids: self.retirement.routes.clone(),
+            viewer_session_ids: self.retirement.sessions.clone(),
+        };
+        target.validate()?;
+        Ok(target)
+    }
+}
+
 impl RemoteViewAssignmentObservation {
     /// Validate an observation against the retained acquisition, without
     /// equating viewing generation to lifecycle generation.
