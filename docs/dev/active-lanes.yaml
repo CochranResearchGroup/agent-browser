@@ -64,11 +64,13 @@ lanes:
     plan: docs/dev/plans/0226-2026-10-08-native-desktop-demand.md
     branch: fix/native-desktop-readiness
     target: main
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#229]
     dependencies: []
     overlaps: [P225, "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
     reconciled_overlaps: ["P225 integrated; clean p204 checkout reused; prior sealed candidates retained; old branches preserved"]
     blocker: null
     updated_at: 2026-10-08
+    validation_status: Four distinct synthetic browser desktops; two authenticated handoff markers and continued automation; isolated sealed candidate checks and installed doctor passed
+    limitations: ["Ten-browser stress not run", "Provider fresh missing-mapping acceptance remains under RV-067"]
