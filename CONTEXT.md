@@ -217,3 +217,7 @@ _Avoid_: Compatibility owner, permanent facade
 **Cohesive green checkpoint**:
 A durable commit that binds one interdependent remediation invariant to its focused validation and rollback boundary. Plan 0106 uses these checkpoints instead of reconstructing retroactive one-commit-per-responsibility history; the 615-record responsibility and packet ledger remains intact.
 _Avoid_: Retroactive packet commit, grouped unvalidated change
+
+**Native desktop demand**:
+A new browser's need for a free Remote View desktop. Pool preparation keeps the configured warm minimum and acquires additional assignments only when observed desktops are occupied, bounded by provider policy. Sessions reusing one profile reuse its browser and desktop.
+_Avoid_: Session count, eager maximum reservation, presentation slot

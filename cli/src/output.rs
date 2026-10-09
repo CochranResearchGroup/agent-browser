@@ -7870,7 +7870,7 @@ Environment:
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
   AGENT_BROWSER_REMOTE_VIEW_POOL   Application pool name (required with origin; interrupted acquisitions reuse their key)
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
-  AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Desired desktops (default: 1; bounded by pool policy)
+  AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Warm desktop minimum (default: 1; demand grows to pool limit)
                                  Configured Remote View admits ordinary open requests as managed sessions.
                                  Socket and queued commands share the managed owner; queued policy and confirmation still apply.
                                  Managed tab_new retains one request; params.tabRequestId is a stable service retry key.

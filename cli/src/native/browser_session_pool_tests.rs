@@ -17,6 +17,7 @@ struct Provider {
     all_views_terminal: bool,
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
+    occupied_desktops: std::collections::BTreeSet<String>,
     window_pid: Option<u32>,
     inactive_window: bool,
 }
@@ -114,15 +115,25 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 if provider.inactive_window {
                     windows["windows"][0]["active"] = serde_json::json!(false);
                 }
-                if provider.empty_desktop.as_ref() == Some(&assignment.desktop_id) {
+                if provider.empty_desktop.as_ref() == Some(&assignment.desktop_id)
+                    || (provider.window_pid.is_none()
+                        && !provider.occupied_desktops.contains(&assignment.desktop_id))
+                {
                     windows["windows"] = serde_json::json!([]);
                 }
                 Ok(windows)
             }
-            RemoteViewApplicationRequest::LaunchEnvironment { .. } => {
+            RemoteViewApplicationRequest::LaunchEnvironment { assignment_id, .. } => {
                 provider.operations.push("launch_environment");
-                assert_eq!(provider.assignments.len(), 1);
-                Ok(fixture["launchEnvironment"].clone())
+                let assignment = provider
+                    .assignments
+                    .iter()
+                    .find(|assignment| assignment.assignment_id == *assignment_id)
+                    .unwrap();
+                let mut environment = fixture["launchEnvironment"].clone();
+                environment["target"]["assignmentId"] = assignment.assignment_id.clone().into();
+                environment["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                Ok(environment)
             }
             RemoteViewApplicationRequest::IssueView {
                 idempotency_key,
@@ -311,10 +322,19 @@ fn pool_demand_empty_open_acquires_once_and_status_reuse_restart_do_not_allocate
         .unwrap();
     assert_eq!(provider.borrow().operations.len(), requests);
     assert_eq!(calls.get(), 1);
-    restarted
+    let first_desktop = provider.borrow().assignments[0].desktop_id.clone();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(first_desktop);
+    let other = restarted
         .open(OpenBrowserSession::exact_profile("Other", "profile-b", 103))
         .unwrap();
-    assert_eq!(provider.borrow().acquisitions.len(), 1);
+    assert_ne!(
+        restarted.state().browsers[&opened.browser_id].desktop,
+        restarted.state().browsers[&other.browser_id].desktop
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
     assert_eq!(calls.get(), 2);
     let mut store = fixture.store(false);
     assert!(store
@@ -398,6 +418,47 @@ fn pool_demand_policy_bounds_growth_and_completed_absence_requires_release_proof
         "remote_view_pool_acquisition_readback_required"
     );
     assert_eq!(provider.borrow().acquisitions, keys);
+}
+
+#[test]
+fn pool_demand_acquires_a_free_desktop_for_an_independent_browser() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut adapter = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    let first = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    let occupied = first.desktops[0].desktop.desktop_id.clone();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(occupied.clone());
+    let second = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    assert_eq!(
+        provider.borrow().acquisitions.len(),
+        2,
+        "independent browser demand must grow beyond the warm minimum"
+    );
+    assert!(second
+        .desktops
+        .iter()
+        .any(|candidate| candidate.desktop.desktop_id != occupied));
+    provider.borrow_mut().occupied_desktops.extend(
+        second
+            .assignments
+            .iter()
+            .map(|assignment| assignment.desktop_id.clone()),
+    );
+    assert_eq!(
+        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
+            .err()
+            .unwrap(),
+        "remote_view_pool_capacity_exhausted"
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
 }
 
 #[test]
@@ -516,7 +577,7 @@ fn pool_request_advances_after_exact_completed_retirement_and_preserves_history(
 }
 
 #[test]
-fn pool_demand_prefers_window_free_desktops_and_retains_healthy_occupied_peers() {
+fn pool_demand_excludes_occupied_desktops_and_retains_their_assignments() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
     let mut adapter = adapter(&fixture, provider.clone());
@@ -528,10 +589,15 @@ fn pool_demand_prefers_window_free_desktops_and_retains_healthy_occupied_peers()
     let prepared = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
     let first = prepared.assignments[0].clone();
     let second = prepared.assignments[1].clone();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(first.desktop_id.clone());
     provider.borrow_mut().empty_desktop = Some(second.desktop_id.clone());
     let prepared = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
     assert_eq!(prepared.desktops[0].desktop.desktop_id, second.desktop_id);
-    assert_eq!(prepared.desktops.len(), 2);
+    assert_eq!(prepared.desktops.len(), 1);
+    assert_eq!(prepared.assignments.len(), 2);
     provider.borrow_mut().empty_desktop = None;
     provider.borrow_mut().unavailable_assignment = Some(first.assignment_id);
     let prepared = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
