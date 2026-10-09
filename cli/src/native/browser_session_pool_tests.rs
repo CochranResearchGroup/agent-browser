@@ -18,6 +18,8 @@ struct Provider {
     unavailable_assignment: Option<String>,
     empty_desktop: Option<String>,
     occupied_desktops: std::collections::BTreeSet<String>,
+    fail_new_windows: bool,
+    pool_maximum: Option<u32>,
     window_pid: Option<u32>,
     inactive_window: bool,
 }
@@ -37,6 +39,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
             RemoteViewApplicationRequest::Inventory {} => {
                 provider.operations.push("inventory");
                 let mut inventory = fixture["inventory"].clone();
+                if let Some(maximum) = provider.pool_maximum {
+                    inventory["policy"]["pools"]["main"]["maximum_reserved"] = maximum.into();
+                }
                 inventory["assignments"] = serde_json::to_value(&provider.assignments).unwrap();
                 inventory["pools"][0]["desktopMembers"] = serde_json::json!(provider
                     .assignments
@@ -102,6 +107,14 @@ impl RemoteViewApplicationTransport for PoolTransport {
             }
             RemoteViewApplicationRequest::Windows { assignment_id, .. } => {
                 provider.operations.push("windows");
+                if provider.fail_new_windows
+                    && provider
+                        .assignments
+                        .first()
+                        .is_some_and(|first| first.assignment_id != *assignment_id)
+                {
+                    return Err(RemoteViewApplicationTransportError::Unavailable);
+                }
                 let assignment = provider
                     .assignments
                     .iter()
@@ -457,6 +470,34 @@ fn pool_demand_acquires_a_free_desktop_for_an_independent_browser() {
             .err()
             .unwrap(),
         "remote_view_pool_capacity_exhausted"
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn pool_demand_unknown_new_desktop_stops_before_another_acquisition() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        pool_maximum: Some(3),
+        ..Provider::default()
+    }));
+    let mut adapter = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    let first = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    provider
+        .borrow_mut()
+        .occupied_desktops
+        .insert(first.assignments[0].desktop_id.clone());
+    provider.borrow_mut().fail_new_windows = true;
+    assert_eq!(
+        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
+            .err()
+            .unwrap(),
+        "remote_view_runtime_assignment_unavailable"
     );
     assert_eq!(provider.borrow().acquisitions.len(), 2);
 }

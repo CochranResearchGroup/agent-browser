@@ -62,7 +62,7 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Grow native desktop capacity on independent browser demand
     plan: docs/dev/plans/0226-2026-10-08-native-desktop-demand.md
-    branch: fix/native-desktop-demand
+    branch: fix/native-desktop-readiness
     target: main
     plan_state: IN_PROGRESS
     custody_state: ACTIVE_WORKTREE
