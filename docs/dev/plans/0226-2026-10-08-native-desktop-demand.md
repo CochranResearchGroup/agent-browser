@@ -3,7 +3,7 @@
 Product lane: PL-BUGFIX
 Work item: https://github.com/CochranResearchGroup/agent-browser/issues/229
 Branch: fix/native-desktop-demand
-Status: IN_PROGRESS
+Status: COMPLETED
 
 ## Outcome
 
@@ -34,3 +34,13 @@ Private provider unit reconciliation verified every recorded file hash, retained
 PR 230 entered canonical main and the sealed candidate passed three isolated cycles and installed doctor. The live second-browser request failed because new native desktops lacked viewer mappings. The original source allowed additional bounded acquisitions alongside unknown readbacks. Preserve that failed installed acceptance; it is not a pass.
 
 Provider dependency: Remote View issue 334 / plan 0067 provisions a missing viewer mapping before managed readiness. The consumer follow-up stops growth when a new assignment has unknown window readiness. Red regression returned capacity_exhausted instead of assignment_unavailable and made another acquisition; the repaired behavior must stop at two. Branch: fix/native-desktop-readiness.
+
+## Bounded installed acceptance
+
+PRs 230 and 231 are merged. All 33 consumer tests, Service Model tests, format, strict workspace Clippy and documentation checks passed. The final sealed production-shaped candidate passed three isolated open/read/close/residue cycles, supported production installation and install doctor.
+
+Four synthetic independent browsers opened on four distinct native desktops. Two authenticated opaque handoffs displayed distinct synthetic markers, reconnected through the same URLs after software adoption, and continued automation succeeded. All four synthetic browsers were closed. The isolated development services were stopped and disabled. Existing user sessions and profiles were preserved; reboot remained deferred.
+
+Qualification is bounded: ten configured slots is not ten-browser simultaneous stress acceptance. Existing shared-profile browsers retain their placement. Remote View PR 337 is installed with passing runtime adoption and doctor; its plan 0067 records the accepted fresh missing-mapping loop and preserves the failed first shrink/restore fixture. Private raw runtime receipts remain outside product sources. Memory disposition: forbidden because the provider requires explicit memory-write authorization.
+
+Final provider-dependent proof: after exact owner retirement and viewer projection reconciliation, a normal independent-browser request allocated a new lifecycle desktop whose native slot had no mapping. The installed provider automatically created the mapping and returned a ready handoff without a manual provision during that request. Five independent synthetic browsers were simultaneously ready on separate desktops. This is bounded workflow acceptance, not ten-browser stress qualification.
