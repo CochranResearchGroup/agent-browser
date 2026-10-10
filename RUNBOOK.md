@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-10 P228 acquisition closeout
+
+P228 is CLOSED under issue 236. Consumer PR 237 and provider PR 348 are integrated. Installed synthetic acceptance reached twelve independent browser profiles across ten native desktops with wraparound. All task closures passed; fresh process readback found zero test browser residue. Exact recovery retired a stale failed production reservation while preserving the foreign development desktop. Reboot remains deferred. Human continuation, durable profile continuity and retention timing remain separate lifecycle checks.
+
 P227 is COMPLETED under issue 233 within its bounded synthetic workflows: shared-profile operation, profile-aware retention and ready-spare/wrap-around/shrink behavior. The branch-local [plan](docs/dev/plans/0227-2026-10-08-alice-bob-reconciliation.md) owns acceptance. Start 2026-10-09 03:16 UTC; checkpoint by 06:06 UTC or before two million tokens. Isolated installed synthetic validation is authorized; production upgrade and reboot are excluded.
 
 ### P227 acceptance checkpoint

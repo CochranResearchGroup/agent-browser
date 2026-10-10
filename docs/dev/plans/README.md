@@ -1,6 +1,6 @@
 # Active plan index
 
-[P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) repairs issue 236 exposed by installed pressure testing.
+[P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) is CLOSED: PR 237 integrated and installed twelve-browser pressure acceptance passed on 2026-10-10.
 
 [P227 shared profiles, retention and desktop capacity](0227-2026-10-08-alice-bob-reconciliation.md) is CLOSED under issue 233 after the four agreed behavior steps, isolated installed validation, cleanup and canonical source integration through PR 234. RUNBOOK preserves the failed attempts and qualification limits.
 
