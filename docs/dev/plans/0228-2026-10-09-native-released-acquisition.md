@@ -1,8 +1,8 @@
 # P228 Native released acquisition regrowth
 
 Date: 2026-10-09
-Plan version: 1
-State: OPEN
+Plan version: 2
+State: CLOSED
 Product lane: PL-BUGFIX
 Owner: primary agent
 Branch: fix/native-released-acquisition
@@ -22,4 +22,12 @@ Install the reviewed candidate through the supported guarded upgrade. Repeat the
 
 ## Current State
 
-Remote View admission and exact failed-reservation recovery are integrated in provider PR 348 and installed. The two-browser repro passed. The first twelve-browser repeat failed after native test cleanup because Agent Browser required local release custody despite an explicit exact native released record. The consumer regression failed before repair and now passes. Pool-demand and broader consumer tests, the complete Service Model suite, strict workspace Clippy, format, handoff documentation checks, docs build and active planning audit pass. Source integration and installed pressure acceptance remain pending.
+Consumer PR 237 integrated the exact native Released-record repair. Installed acquisition acceptance passed on 2026-10-10: twelve disposable browsers ready, twelve independent profiles and URL/marker checks, ten native desktop assignments at the configured cap, and wraparound onto two occupied desktops. All twelve task closes passed; fresh process readback found no test browser residue and one warm assignment remained. Foreign development desktop process identities were preserved. Remote View selected resources without Agent Browser choosing a display.
+
+The first stable repeat exposed a retained failed native reservation on an occupied development display. Exact native lifecycle reconciliation, drain and removal retired only that failed production reservation; the next repeat passed. Current Remote View already includes provider PR 348 collision admission and retired-reservation recovery. No additional source change, broad cleanup or reboot was needed. Earlier failed evidence remains retained outside the product repository.
+
+The installed Agent Browser generation contains the PR 237 runtime change, and install doctor passed. The provider running and installed binary identities matched throughout the accepted repeat. Earlier focused regressions, full Service Model tests, formatting, strict workspace Clippy and documentation gates remain the source qualification; no Rust changed during acceptance closeout.
+
+## Acceptance boundary
+
+This closes acquisition regrowth, ten-desktop capacity and wraparound for synthetic browser workflows. Actual human handoff, durable storage across close/reopen, and production retention timing are separate lifecycle checks. The accepted pressure run does not establish external viewer pixels, private-site authentication or all browser workflows. The source branch remains retained; its clean checkout was removed after verified remote integration and sealed binary preservation.

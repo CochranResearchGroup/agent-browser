@@ -99,11 +99,15 @@ lanes:
     plan: docs/dev/plans/0228-2026-10-09-native-released-acquisition.md
     branch: fix/native-released-acquisition
     target: main
-    plan_state: OPEN
-    custody_state: ACTIVE_WORKTREE
+    plan_state: CLOSED
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#236]
     dependencies: [CochranResearchGroup/remote-view#347]
     overlaps: [P227]
     reconciled_overlaps: ["P227 is integrated; this repair changes only native release readback and acquisition head advancement"]
     blocker: null
-    updated_at: 2026-10-09
+    updated_at: 2026-10-10
+    checkpoint: 4e6a657495684ae86078ac61cf8b0c931622c3d3
+    remote_ref: refs/heads/fix/native-released-acquisition
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/237
+    validation_status: Installed twelve-browser pressure passed at ten desktops with wraparound; own browsers closed without process residue; foreign desktop preserved
