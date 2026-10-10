@@ -93,3 +93,17 @@ lanes:
     reconciled_overlaps: ["P224 and P226 integrated; P227 owns their current consumer follow-up; retained historical branches are not merged"]
     blocker: null
     updated_at: 2026-10-09
+  - id: P228
+    product_lane: PL-BUGFIX
+    objective: Regrow browser desktop demand after exact native assignment release
+    plan: docs/dev/plans/0228-2026-10-09-native-released-acquisition.md
+    branch: fix/native-released-acquisition
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#236]
+    dependencies: [CochranResearchGroup/remote-view#347]
+    overlaps: [P227]
+    reconciled_overlaps: ["P227 is integrated; this repair changes only native release readback and acquisition head advancement"]
+    blocker: null
+    updated_at: 2026-10-09

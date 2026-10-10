@@ -2610,3 +2610,38 @@ fn native_idle_viewer_protects_disposable_expiry_and_profile_data() {
         1
     );
 }
+
+#[test]
+fn pool_demand_regrows_after_exact_native_release_without_local_release_receipt() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let mut adapter = adapter(&fixture, provider.clone());
+    let mut store = fixture.store(false);
+    let pool = RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    };
+    let first = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    provider.borrow_mut().assignments[0].state = RemoteViewAssignmentState::Released;
+    let next = prepare_remote_view_session_pool(&mut adapter, &mut store, &pool).unwrap();
+    assert_ne!(
+        first.assignments[0].assignment_id,
+        next.assignments[0].assignment_id
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+    let history = store
+        .confirmed_pool_acquisitions("agent-browser", "main")
+        .unwrap();
+    assert_eq!(history[0].state, RemoteViewAssignmentState::Active);
+    let mut changed = provider.borrow_mut();
+    changed.assignments[1].state = RemoteViewAssignmentState::Released;
+    changed.assignments[1].generation += 1;
+    drop(changed);
+    assert_eq!(
+        prepare_remote_view_session_pool(&mut adapter, &mut store, &pool)
+            .err()
+            .unwrap(),
+        "remote_view_pool_acquisition_readback_required"
+    );
+    assert_eq!(provider.borrow().acquisitions.len(), 2);
+}

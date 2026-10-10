@@ -7848,6 +7848,8 @@ Configuration:
 
   Use `agent-browser runtime create <name>` to register a managed profile in
   ~/.agent-browser/config.json.
+  Exact native assignment release permits fresh desktop demand; missing or
+  changed assignment identity still requires acquisition readback.
   With a configured Remote View provider, ordinary open and remote-view open
   register an explicit --runtime-profile name plus --profile absolute-directory
   binding. Create the directory first; conflicting name/path bindings fail

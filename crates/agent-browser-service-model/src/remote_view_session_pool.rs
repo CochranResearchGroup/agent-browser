@@ -44,8 +44,9 @@ pub fn replenish_remote_view_session_pool<
 
 /// Owns a durable acquisition request head and its unresolved public requests.
 /// Concurrent callers must receive the same unsubmitted/pending key. A new key
-/// after completion requires an exact active acquisition or confirmed release;
-/// absence from provider inventory alone cannot retire a previous request.
+/// after completion requires an exact active acquisition or confirmed release,
+/// including a matching native Released record. Observed assignments include
+/// terminal records; inventory absence alone cannot retire a previous request.
 pub trait RemoteViewPoolRequestStore: RemoteViewApplicationMutationStore {
     fn pool_assignment_available(
         &mut self,
@@ -65,7 +66,7 @@ pub trait RemoteViewPoolRequestStore: RemoteViewApplicationMutationStore {
         &mut self,
         application: &str,
         pool: &str,
-        active_assignments: &[RemoteViewAssignmentRecord],
+        observed_assignments: &[RemoteViewAssignmentRecord],
     ) -> Result<String, RemoteViewApplicationMutationStoreError>;
 }
 
@@ -209,7 +210,7 @@ pub fn prepare_remote_view_session_pool<
             return Err("remote_view_runtime_assignment_unavailable".into());
         }
         let key = store
-            .pool_acquisition_request_key(&adapter.application, &pool.name, &assignments)
+            .pool_acquisition_request_key(&adapter.application, &pool.name, &inventory.assignments)
             .map_err(|_| "remote_view_pool_acquisition_readback_required".to_string())?;
         let acquired = adapter
             .acquire(pool.name.clone(), key, store)

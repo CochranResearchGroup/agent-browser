@@ -102,7 +102,7 @@ impl RemoteViewPoolRequestStore for BrowserSessionSqliteStore {
         &mut self,
         application: &str,
         pool: &str,
-        active_assignments: &[RemoteViewAssignmentRecord],
+        observed_assignments: &[RemoteViewAssignmentRecord],
     ) -> Result<String, RemoteViewApplicationMutationStoreError> {
         use RemoteViewApplicationMutationStoreError as Error;
         if pool.is_empty() {
@@ -153,7 +153,12 @@ impl RemoteViewPoolRequestStore for BrowserSessionSqliteStore {
                     }
                     match record.outcome {
                         Some(RemoteViewApplicationMutationOutcome::Acquire(assignment)) => {
-                            if !active_assignments.contains(&assignment)
+                            // Native inventory is terminal authority when every
+                            // identity field matches the historical acquisition.
+                            let mut released = assignment.clone();
+                            released.state = RemoteViewAssignmentState::Released;
+                            if !observed_assignments.contains(&assignment)
+                                && !observed_assignments.contains(&released)
                                 && !assignment_release_completed(&transaction, &assignment)
                                     .map_err(|_| Error::InvalidRecord)?
                             {
