@@ -86,6 +86,9 @@ background where possible. At the configured limit, placement wraps around
 eligible desktops. Automatic shrink belongs to Remote View and must preserve
 active viewers, current work and one ready spare. Unrelated legacy projections
 are not proof that the requested native launch is unavailable.
+An exact native released assignment allows fresh browser demand. Missing native
+inventory or a changed assignment identity still requires readback; do not edit
+acquisition history to bypass it.
 
 ## Start with intent
 
