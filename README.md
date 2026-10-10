@@ -5807,6 +5807,9 @@ An interrupted acquisition retains its original request across restart. The next
 placement request reconciles that same provider idempotency key and requires the
 assignment in current inventory before launch. Failed reconciliation returns
 `remote_view_pool_acquisition_readback_required`; it does not allocate using a new key.
+An exact native released assignment permits the next demand to use a fresh
+acquisition key without rewriting history. Assignment, registration, pool,
+desktop and generation must match; inventory absence alone is insufficient.
 
 Browser placement reads current public inventory and windows, then refreshes
 exact desktop identity before launch. Occupied healthy desktops retain their

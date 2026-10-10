@@ -1,5 +1,7 @@
 # Active plan index
 
+[P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) repairs issue 236 exposed by installed pressure testing.
+
 [P227 shared profiles, retention and desktop capacity](0227-2026-10-08-alice-bob-reconciliation.md) is CLOSED under issue 233 after the four agreed behavior steps, isolated installed validation, cleanup and canonical source integration through PR 234. RUNBOOK preserves the failed attempts and qualification limits.
 
 [P225 native launch preflight](0225-2026-10-08-default-launch-preflight.md) completed its source repair for issue 227; installed runtime and the historical Default claim remain unchanged.
