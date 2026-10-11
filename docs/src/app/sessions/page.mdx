@@ -215,6 +215,12 @@ from idle cleanup. Use <code>--leave-open false close</code> to end the task
 explicitly; peer tasks remain active. After a graceful runtime-host stop,
 the next command on the same session and profile reattaches its retained browser.
 
+During an upgrade admission drain, managed browser effects return
+<code>runtime_admission_draining</code>. Reads of an existing live task remain available;
+a read that needs a browser launch, physical recovery, or a new tab is blocked.
+Use the owning upgrade transaction's status and recovery commands before retrying;
+do not remove the drain marker to bypass it.
+
 Service-mode profile and session records can also be declared under
 <code>service.profiles</code> and <code>service.sessions</code>. These records
 describe profile allocation strategy, keyring posture, caller ownership,

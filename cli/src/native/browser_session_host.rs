@@ -123,6 +123,7 @@ pub(crate) async fn execute_shared_remote_view_open(
     command: serde_json::Value,
 ) -> Result<Option<serde_json::Value>, String> {
     tokio::task::spawn_blocking(move || {
+        require_managed_runtime_admission("launch", &command)?;
         let mut shared = shared
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
@@ -879,6 +880,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         {
             return Err("browser_session_leave_open_invalid".into());
         }
+        require_managed_runtime_admission(
+            match action {
+                "browser_session_status" => "service_status",
+                "browser_session_open" | "remote_view_open" => "launch",
+                "browser_session_navigate" => "navigate",
+                "browser_session_close" => "close",
+                _ => action,
+            },
+            command,
+        )?;
         let now_ms = command
             .get("activityAtMs")
             .and_then(serde_json::Value::as_u64)
@@ -932,9 +943,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         &self.state,
                         handoff_id,
                     )?;
-                    self.manager()?
-                        .recover_retained_browser(&retained.browser.id)?;
-                    self.commit_state()?;
+                    self.recover_browser_for_command(&retained.browser.id, command)?;
                     let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
                         &self.state,
                         handoff_id,
@@ -1096,6 +1105,29 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         ))
     }
 
+    /// Attach a live recorded browser during drain, but admit any physical
+    /// recovery through the same upgrade authority as an explicit launch.
+    fn recover_browser_for_command(
+        &mut self,
+        browser_id: &str,
+        command: &serde_json::Value,
+    ) -> Result<(), String> {
+        // Use the same publication and operation fence as manager recovery.
+        let _ = self.manager()?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("browser_session_browser_missing")?
+            .clone();
+        if self.effects.browser_is_live(&browser)? {
+            return Ok(());
+        }
+        require_managed_runtime_admission("launch", command)?;
+        self.manager()?.recover_retained_browser(browser_id)?;
+        self.commit_state()
+    }
+
     fn compact_navigation_history(&mut self) -> Result<(), String> {
         self.state
             .compact_navigation_history(self.exact_url_history_maximum_bytes)?;
@@ -1146,6 +1178,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     return Err("browser_session_profile_selector_conflict".into());
                 }
             } else {
+                require_managed_runtime_admission("launch", command)?;
                 if self
                     .catalog
                     .profiles
@@ -1266,6 +1299,7 @@ where
                 .unwrap_or_else(current_unix_ms),
             &self.state.retention_policy,
         )?;
+        require_managed_runtime_admission(command["action"].as_str().unwrap_or_default(), command)?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
         if automatic && command["action"] == "tab_new" {
@@ -1302,6 +1336,7 @@ where
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
             [] if automatic => {
+                require_managed_runtime_admission("launch", command)?;
                 if self.state.managed_tab_requests.values().any(|request| {
                     request.response.is_none()
                         && (request.session_name == session_name
@@ -1327,7 +1362,6 @@ where
             [session_id] => session_id.clone(),
             _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
         };
-        self.apply_leave_open_choice(&session_id, command)?;
         let browser_id = self
             .state
             .sessions
@@ -1335,10 +1369,11 @@ where
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
             .browser_id
             .clone();
-        // Liveness also attaches the exact recorded browser after host restart.
-        // Existing named sessions need it without automatic native admission.
-        self.manager()?.recover_retained_browser(&browser_id)?;
-        self.commit_state()?;
+        self.recover_browser_for_command(&browser_id, command)?;
+        if self.state.sessions[&session_id].current_tab_id.is_none() {
+            require_managed_runtime_admission("tab_new", command)?;
+        }
+        self.apply_leave_open_choice(&session_id, command)?;
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
             .state
@@ -1648,6 +1683,16 @@ where
         }
         Ok(selected)
     }
+}
+
+/// Managed dispatch precedes the native action adapter, so it must enforce
+/// that adapter's admission authority before its own profile/browser effects.
+fn require_managed_runtime_admission(
+    action: &str,
+    command: &serde_json::Value,
+) -> Result<(), String> {
+    let path = crate::runtime_adoption::runtime_admission_drain_path()?;
+    crate::runtime_adoption::require_runtime_admission(&path, action, command)
 }
 
 fn session_close_disposition_name(

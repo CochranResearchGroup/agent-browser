@@ -99,3 +99,7 @@ Complete browser work with less effort and fewer failures. Use a task-appropriat
 ## Context boundary
 
 Start with [the active plan index](docs/dev/plans/README.md). Historical plans are reference-only. [P223 revision 5](docs/history/2026-10-05-legacy-planning/p223-plan-v5.md) preserves the earlier scope; its removed mechanism and access requirements are not current instructions.
+
+## Managed upgrade admission repair, 2026-10-11
+
+[P235](docs/dev/plans/0235-2026-10-11-managed-admission-drain.md) repairs issue 251: managed dispatch now enforces the existing upgrade drain before browser effects, including launch or recovery initiated by a read. Existing live observations and status remain available. The public sentinel red/green/control and real same-PID/CDP continuation during drain pass with exact cleanup; 91 broker tests, exact installer claims, 39 output tests, format, strict Clippy and docs pass. [The source receipt](docs/dev/notes/0235-2026-10-11-managed-admission-drain-repair.md) preserves failed drafts and qualification limits. No installed publication or reboot. The installer fixture's unseeded ordinary profile and orphan cleanup remain a separate bounded defect.

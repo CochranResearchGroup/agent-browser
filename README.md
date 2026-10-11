@@ -1864,6 +1864,11 @@ leave-open preference survives host restart and protects the retained task from
 idle cleanup. Use `--leave-open false close` to end that task explicitly;
 peer tasks keep their browser. After a graceful runtime-host stop, the next
 command on the same session and profile reattaches its retained browser.
+During an upgrade admission drain, managed browser effects return
+`runtime_admission_draining`. Reads of an existing live task remain available;
+a read that needs a browser launch, physical recovery, or a new tab is blocked.
+Use the owning upgrade transaction's status and recovery commands before retrying;
+do not remove the drain marker to bypass it.
 Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.

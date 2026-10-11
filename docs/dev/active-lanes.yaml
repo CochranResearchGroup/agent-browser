@@ -222,3 +222,19 @@ lanes:
     checkpoint: ec0b3c2f4afc5b366b8482093695de0d3dc22740
     remote_ref: refs/heads/fix/host-token-cleanup-249
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/250
+  - id: P235
+    product_lane: PL-BUGFIX
+    objective: Block unadmitted managed browser effects during upgrade while preserving observations
+    plan: docs/dev/plans/0235-2026-10-11-managed-admission-drain.md
+    branch: fix/managed-admission-drain-251
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#251]
+    dependencies: []
+    overlaps: [P232]
+    reconciled_overlaps: ["P235 owns managed admission; P232 owns protected enrollment; each owns catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Public drain and no-drain control pass; live same-PID/CDP read and blocked navigation pass; 91 broker tests, exact installer claim, 39 output tests, fmt, strict Clippy and docs pass
+    limitations: ["No installed publication or reboot", "Legacy provider/helper restoration excluded"]
