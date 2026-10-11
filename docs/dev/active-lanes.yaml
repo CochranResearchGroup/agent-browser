@@ -175,7 +175,7 @@ lanes:
     branch: fix/upgrade-progress-181
     target: main
     plan_state: COMPLETED
-    custody_state: INTEGRATION_READY
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#181]
     dependencies: []
     overlaps: []
