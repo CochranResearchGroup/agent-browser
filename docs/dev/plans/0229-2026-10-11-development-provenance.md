@@ -1,6 +1,6 @@
 # Repair development runtime provenance
 
-Product lane: PL-PLATFORM
+Product lane: PL-BUGFIX
 Work item: #79
 Branch: fix/development-provenance-79
 State: IN_PROGRESS

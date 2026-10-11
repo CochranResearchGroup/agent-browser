@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readCandidateBuildSource } from './candidate-build.js';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -271,8 +272,7 @@ try {
   assert.match(units[descriptor.unitNames.runtimeHost], /^StateDirectory=agent-browser\/runtime-tmp\/%N\/tmp agent-browser\/runtime-tmp\/%N\/var-tmp$/m);
   const sourceManifestPath = join(fixture, 'candidate-manifest.json');
   const candidateSource = {
-    commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
-    tree: execFileSync('git', ['rev-parse', 'HEAD^{tree}'], { encoding: 'utf8' }).trim(),
+    ...readCandidateBuildSource(process.cwd()),
     state: 'clean',
   };
   writeFileSync(sourceManifestPath, JSON.stringify({

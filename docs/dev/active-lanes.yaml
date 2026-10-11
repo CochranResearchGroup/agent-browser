@@ -142,7 +142,7 @@ lanes:
     validation_status: Documentation links, reviewed policy source hashes and diff hygiene verified; all original issues reviewed
     updated_at: 2026-10-10
   - id: P229
-    product_lane: PL-PLATFORM
+    product_lane: PL-BUGFIX
     objective: Restore coherent isolated development runtime and legacy SQLite compatibility
     plan: docs/dev/plans/0229-2026-10-11-development-provenance.md
     branch: fix/development-provenance-79

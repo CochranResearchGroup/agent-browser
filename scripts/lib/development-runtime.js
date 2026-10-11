@@ -320,12 +320,13 @@ export function installDevelopmentRuntime({
     if (candidate.schemaVersion !== 'agent-browser.candidate-manifest.v1' ||
         candidate.binarySha256 !== sha256 || candidate.source?.state !== 'clean' ||
         !/^[0-9a-f]{40}$/.test(candidate.source?.commit || '') ||
-        !/^[0-9a-f]{40}$/.test(candidate.source?.tree || '')) {
+        !/^[0-9a-f]{64}$/.test(candidate.source?.tree || '')) {
       throw new Error('Development candidate source binding mismatch');
     }
-    const tree = execFileSync('git', ['rev-parse', `${candidate.source.commit}^{tree}`], {
-      encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
+    const treeBytes = execFileSync('git', ['cat-file', 'tree', `${candidate.source.commit}^{tree}`], {
+      timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const tree = createHash('sha256').update(treeBytes).digest('hex');
     if (tree !== candidate.source.tree) throw new Error('Development candidate source binding mismatch');
     source = { commit: candidate.source.commit, tree, state: 'clean' };
     sourceManifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
