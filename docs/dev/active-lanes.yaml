@@ -181,3 +181,6 @@ lanes:
     overlaps: []
     validation_status: Public red/green, 188 workstation tests, strict Clippy, fmt and docs passed; pre-existing JS fixture failure and exact cleanup retained; no installed publication
     updated_at: 2026-10-11
+    checkpoint: c7ff6f6df4fade7eb1262144c6ce493acf82501f
+    remote_ref: refs/heads/fix/upgrade-progress-181
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/245

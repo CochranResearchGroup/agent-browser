@@ -10,3 +10,5 @@ The current public status drops checkpoint timing and the recorded convergence d
 Validation: public red/green fixture, focused provider-free status/transition tests, Rust format and strict workspace Clippy, and all user-facing documentation surfaces. Build time remains distinct from apply time. A passing projection fixture cannot qualify a production-shaped upgrade or an untested wait.
 
 Accepted bounded source evidence: [repair receipt](../notes/0231-2026-10-11-upgrade-progress-repair.md). Issue #181 remains open for the wider qualification explicitly listed there. The pre-existing JavaScript installer fixture failure is retained, not counted as a passing gate.
+
+Canonical integration: [PR 245](https://github.com/CochranResearchGroup/agent-browser/pull/245).
