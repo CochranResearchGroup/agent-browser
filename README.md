@@ -1862,7 +1862,9 @@ is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
 `close` to preserve the managed browser and its task for continuation. The
 leave-open preference survives host restart and protects the retained task from
 idle cleanup. Use `--leave-open false close` to end that task explicitly;
-peer tasks keep their browser. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
+peer tasks keep their browser. After a graceful runtime-host stop, the next
+command on the same session and profile reattaches its retained browser.
+Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
 

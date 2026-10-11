@@ -7841,6 +7841,8 @@ Configuration:
   Set `launch.leaveOpen` or pass `--leave-open` when you want `close` to
   preserve the managed browser and task for continuation, including idle
   protection across host restart. Use `--leave-open false close` to end the task.
+  After a graceful runtime-host stop, the next command on the same session and
+  profile reattaches its retained browser.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`

@@ -1271,7 +1271,9 @@ content size, for example `960x640`. Set `runtimeProfiles.<name>.launch.leaveOpe
 `--leave-open` when you want `close` to preserve a managed runtime-profile
 browser and its task for continuation. This preference survives host restart
 and protects the task from idle cleanup. Use `--leave-open false close` to
-end the task explicitly; peer tasks remain active.
+end the task explicitly; peer tasks remain active. After a graceful runtime-host
+stop, use the same session and profile: the next command reattaches the retained
+browser.
 Development executable replacement uses the two-phase `agent-browser handoff`
 protocol. `prepare` keeps the old daemon authoritative and returns a candidate
 session. Run `resume --source-session <old>` in that candidate, then run

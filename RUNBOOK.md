@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P234 graceful host restart
+
+[P234](docs/dev/plans/0234-2026-10-11-host-token-cleanup.md) completes the bounded #249 repair. The [receipt](docs/dev/notes/0234-2026-10-11-host-restart-repair.md) retains the incomplete-metadata failure and subsequent first-getter attachment failure. Owner-qualified token cleanup and existing fenced browser attachment now pass the original same-PID/CDP continuation loop without explicit reopen, followed by exact close and zero residue. Browser-session, daemon, connection and quality/docs gates pass. This supersedes P233's identified direct-host restart gap; #183 remains open for broader failed-upgrade shutdown qualification. No installed publication or reboot. Protected-enrollment PR246 and its active checkout remain preserved.
+
 ### 2026-10-11 P233 managed leave-open
 
 [P233](docs/dev/plans/0233-2026-10-11-managed-leave-open.md) completes the bounded close repair for #247. The [receipt](docs/dev/notes/0233-2026-10-11-managed-leave-open-repair.md) records public red/green, same-PID/CDP survival after host termination, live-host continuation, explicit false close and zero residue. The CLI core suite passes 1,114 tests after preserving and correcting its stale installer source anchor. Automatic continuation after direct host termination still fails on incomplete endpoint metadata and remains #183 evidence. No installed publication or reboot. The active protected-enrollment checkout and its draft PR 246 remain preserved.

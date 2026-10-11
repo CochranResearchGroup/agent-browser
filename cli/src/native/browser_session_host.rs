@@ -1335,10 +1335,10 @@ where
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
             .browser_id
             .clone();
-        if automatic || self.state.idle_closed_browsers.contains_key(&browser_id) {
-            self.manager()?.recover_retained_browser(&browser_id)?;
-            self.commit_state()?;
-        }
+        // Liveness also attaches the exact recorded browser after host restart.
+        // Existing named sessions need it without automatic native admission.
+        self.manager()?.recover_retained_browser(&browser_id)?;
+        self.commit_state()?;
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
             .state
@@ -1698,6 +1698,8 @@ mod tests {
     struct FixtureRuntime {
         launches: usize,
         live: bool,
+        attachment_required: bool,
+        attached: bool,
         next_tab: usize,
         pending_intent: Option<BrowserLaunchIntent>,
         acknowledgements: std::rc::Rc<std::cell::Cell<u32>>,
@@ -1713,6 +1715,7 @@ mod tests {
             }
         }
         fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
+            self.attached = self.live;
             Ok(self.live)
         }
 
@@ -1787,6 +1790,9 @@ mod tests {
             session_name: &str,
             command: &serde_json::Value,
         ) -> Result<serde_json::Value, String> {
+            if self.attachment_required && !self.attached {
+                return Err("browser_session_runtime_browser_missing".into());
+            }
             Ok(serde_json::json!({
                 "id": command.get("id").cloned().unwrap_or_default(),
                 "success": true,
@@ -2006,6 +2012,71 @@ mod tests {
                 .unwrap(),
             host.state
         );
+    }
+
+    #[test]
+    fn first_named_task_command_after_restart_attaches_existing_browser() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work", "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+        };
+        let (first, tab_id) = {
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+                &legacy_path,
+                config.clone(),
+            )
+            .unwrap();
+            let opened = host
+                .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap();
+            let tab = host.handle_command(&serde_json::json!({
+                "action": "browser_session_tab_new", "sessionName": "alice",
+                "profileId": "work", "activityAtMs": 1_100
+            }));
+            assert_eq!(tab["success"], true);
+            (opened, tab["data"]["tabId"].as_str().unwrap().to_string())
+        };
+        let mut restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                attachment_required: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        let result = restarted
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({
+                    "action": "title", "profileId": "work", "activityAtMs": 1_500
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["data"]["browserId"], first.browser_id);
+        assert_eq!(result["data"]["sessionId"], first.session_id);
+        assert_eq!(result["data"]["tabId"], tab_id);
+        assert_eq!(restarted.state().browsers.len(), 1);
+        assert_eq!(restarted.state().tabs.len(), 1);
     }
 
     #[test]

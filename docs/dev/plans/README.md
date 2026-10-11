@@ -19,3 +19,5 @@
 - [P231: upgrade progress](0231-2026-10-11-upgrade-progress.md), issue #181; completed bounded source repair; wider qualification remains open.
 
 - [P233: managed leave-open](0233-2026-10-11-managed-leave-open.md), issue #247; completed bounded close repair; standalone-host restart remains #183.
+
+- [P234: graceful host token cleanup](0234-2026-10-11-host-token-cleanup.md), issue #249; completed graceful-host restart and direct retained-task continuation repair.
