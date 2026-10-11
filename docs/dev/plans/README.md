@@ -1,5 +1,7 @@
 # Active plan index
 
+[P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.
+
 [P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) is CLOSED: PR 237 integrated and installed twelve-browser pressure acceptance passed on 2026-10-10.
 
 [P227 shared profiles, retention and desktop capacity](0227-2026-10-08-alice-bob-reconciliation.md) is CLOSED under issue 233 after the four agreed behavior steps, isolated installed validation, cleanup and canonical source integration through PR 234. RUNBOOK preserves the failed attempts and qualification limits.

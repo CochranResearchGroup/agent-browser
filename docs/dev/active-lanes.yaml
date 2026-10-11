@@ -111,3 +111,20 @@ lanes:
     remote_ref: refs/heads/fix/native-released-acquisition
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/237
     validation_status: Installed twelve-browser pressure passed at ten desktops with wraparound; own browsers closed without process residue; foreign desktop preserved
+  - id: P207
+    product_lane: PL-BUGFIX
+    objective: Preserve caller custody and explicit cleanup evidence during tab refresh
+    plan: docs/dev/plans/0207-2026-10-10-tab-refresh-caller-custody.md
+    branch: fix/p207-current-custody
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#175]
+    dependencies: []
+    overlaps: ["CochranResearchGroup/agent-browser#184", P227]
+    reconciled_overlaps: ["P227 integrated; this checkout alone adapts PR 184 refresh surfaces; original branch and dirty primary work preserved"]
+    blocker: null
+    updated_at: 2026-10-10
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/239
+    validation_status: Public two-subject recovery/reuse/cleanup, seven selected Rust fixtures, format, strict Clippy, clients and docs passed
+    limitations: ["Full CLI unit binary compilation reached 4 GiB before tests ran", "Smoke-only candidate; production runtime unchanged"]

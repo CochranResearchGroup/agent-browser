@@ -4,6 +4,12 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-10 P207 caller-custody refresh
+
+[P207](docs/dev/plans/0207-2026-10-10-tab-refresh-caller-custody.md) qualifies issue 175's bounded source repair. [PR 239](https://github.com/CochranResearchGroup/agent-browser/pull/239) owns canonical integration and supersedes the refresh implementation in PR 184. Distinct client subjects sharing one physical browser passed replacement persistence, compatible canonical reuse, caller-only duplicate cleanup and peer preservation. Fresh test process census was empty. Seven actual-function Rust fixtures, format, strict Clippy, client contracts, parity, docs links and the active planning audit passed.
+
+Preserve the limits: the first browser fixture did not establish separate custody; the corrected baseline reproduced peer adoption. An optimized compile hit a 4 GiB cap, initial Clippy hit 2 GiB before a 4 GiB run passed, and the full CLI focused unit binary hit 4 GiB before tests ran. That unit lane is not passed; the bounded decision relies on selected actual-function fixtures and the reproduced public workflow. The unoptimized candidate was smoke-only. Production promotion and broader regression qualification remain separate. PR 191 is unchanged; reboot remains deferred. The policy-wiring checker also fails its unchanged baseline requirement for a direct policy 0047 link; policy loading is outside this repair. Private receipts retain the failed and passed attempts. Memory disposition: forbidden; no memory-write authorization.
+
 ### 2026-10-10 P228 acquisition closeout
 
 P228 is CLOSED under issue 236. Consumer PR 237 and provider PR 348 are integrated. Installed synthetic acceptance reached twelve independent browser profiles across ten native desktops with wraparound. All task closures passed; fresh process readback found zero test browser residue. Exact recovery retired a stale failed production reservation while preserving the foreign development desktop. Reboot remains deferred. Human continuation, durable profile continuity and retention timing remain separate lifecycle checks.
