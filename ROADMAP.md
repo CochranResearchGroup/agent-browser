@@ -12,6 +12,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
+[P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) owns the bounded incremental installer observation repair for #181, including its reviewed candidate entry point. Source qualification remains separate from production-shaped installation.
+
 [P227](docs/dev/plans/0227-2026-10-08-alice-bob-reconciliation.md) completed the bounded shared-profile, retention and desktop-capacity outcome: intentional profile sharing with independent task tabs, configured durable/disposable retention, one ready spare, wrap-around overflow and safe shrink after the configured cooldown. Controlled-clock and isolated installed workflows, cleanup and PR 234 qualify this bounded outcome. RUNBOOK preserves failures and limits; production promotion remains separate.
 
 [P223 version 6](docs/dev/plans/0223-2026-10-04-finish-agent-browser-acceptance.md) completed its bounded browser-workflow outcome on 2026-10-06. Consumer source entered canonical main through PR 212, and the provider dependency through Remote View PR 310. RUNBOOK owns the retained acceptance evidence and limitations. Production promotion, formal release and broader qualification remain separate work; this closeout adds no execution authority for them.

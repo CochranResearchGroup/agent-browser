@@ -523,6 +523,27 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+For incremental observations, run
+`agent-browser install workstation --apply --json --progress-json 2>install-progress.jsonl`.
+The same option is available on `candidate install --apply --json`; its observer
+starts before reviewing and hashing the sealed candidate and continues through
+the workstation transaction. Artifact verification and install authority are unchanged.
+Stdout remains one terminal JSON report. Stderr receives newline-delimited
+`agent-browser.workstation-install-observation.v1` records at one-second
+intervals while stderr is writable, with an initial observation. Normal observer
+completion emits a final observer record. Each record
+identifies the current invocation or transaction phase. `heartbeat` means the
+observer is alive; only `lastProgressAt` identifies durable work progress.
+Observations neither update a transaction nor extend its validation deadline.
+A successful apply adds a terminal `progressEmission` receipt with delivery state and
+`applyElapsedMs` for this workstation apply invocation, excluding builds.
+Slow or failed stderr output has a bounded 250-millisecond finish wait and a
+reported delivery failure; it does not stall or undo the installation.
+An apply failure retains the existing terminal error report and exits the observer
+with the process; it need not emit a final observer record or delivery receipt.
+Inspect the durable transaction for its final phase.
+The option requires both `--apply` and `--json`.
+
 The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
 `lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
 The deadline applies to runtime-host convergence; it is not a build-time budget.
@@ -2462,6 +2483,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `-p, --provider <name>` | Cloud browser provider (or `AGENT_BROWSER_PROVIDER` env) |
 | `--device <name>` | iOS device name, e.g. "iPhone 15 Pro" (or `AGENT_BROWSER_IOS_DEVICE` env) |
 | `--json` | JSON output (for agents) |
+| `--progress-json` | Incremental workstation install observations on stderr; requires `--apply --json` |
 | `--annotate` | Annotated screenshot with numbered element labels (or `AGENT_BROWSER_ANNOTATE` env) |
 | `--screenshot-dir <path>` | Default screenshot output directory (or `AGENT_BROWSER_SCREENSHOT_DIR` env) |
 | `--screenshot-quality <n>` | JPEG quality 0-100 (or `AGENT_BROWSER_SCREENSHOT_QUALITY` env) |

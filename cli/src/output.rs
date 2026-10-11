@@ -5673,7 +5673,7 @@ Usage: agent-browser candidate status [--json]
        agent-browser candidate inspect --manifest <path> --input-closure <path> [--json]
        agent-browser candidate build --repo-root <source-checkout> --artifact-class <fast_iteration|production_shaped> [--target <triple>] [--feature <name>] [--reviewed-environment-input <name=sha256>] [--retry-failed-operation <id>|--recover-active-operation <id>] <--dry-run|--apply> [--json]
        agent-browser candidate test --repo-root <source-checkout> --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> --suite-revision <commit> --selection <candidate-kernel|candidate-build-adapter|candidate-cli> [--recover-active-run <id>] <--dry-run|--apply> [--json]
-       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json]
+       agent-browser candidate install --binary <path> --manifest <path> --input-closure <path> --sealed-artifact <path> <--dry-run|--apply> [--json] [--progress-json]
        agent-browser candidate recover <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]
        agent-browser candidate coordinate <queue|cancel-active|discard-queued|supersede|activate-queued> --request-id <id> --candidate-id <id> --artifact-id <id> [--operation-id <id>] --expected-revision <revision> --expected-fencing-generation <generation> [--json]
 
@@ -5705,6 +5705,8 @@ transaction or runtime state. Install apply is an explicit production effect:
 it binds the sealed artifact and coordination custody into the existing
 workstation transaction. An identical concurrent request joins and performs no
 second install.
+Use --apply --json --progress-json for incremental stderr observations, beginning
+with candidate review. Heartbeats report observer liveness, not durable progress.
 Recover delegates the exact transaction guard to the existing workstation
 resume, rollback, or zero-effect close action. It never selects the latest
 transaction implicitly.
@@ -5731,7 +5733,7 @@ Examples:
 agent-browser install - Install browser binaries
 
 Usage: agent-browser install [--with-deps] [--with-remote-view-privileges]
-       agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]
+       agent-browser install workstation <--dry-run|--apply> [--json] [--progress-json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]
        agent-browser install workstation status [--json]
        agent-browser install workstation recover --transaction-id <id> [--json]
        agent-browser install workstation finalize [--json]
@@ -6029,6 +6031,7 @@ Options:
   --force              Replace an existing chromium-stealthcdp artifact
   --dry-run            Plan workstation payload installation without mutation
   --apply              Materialize the installed workstation payload
+  --progress-json      Emit incremental observations on stderr; requires --apply --json
   --force-browserless-upgrade
                        Bypass stale presentation history only when a stable census proves no owned live browser remains
   --runtime-replacement-policy <preserve|full-shutdown>
@@ -6058,6 +6061,7 @@ Examples:
   agent-browser install --with-deps --with-remote-view-privileges
   agent-browser install workstation --dry-run --json
   agent-browser install workstation --apply --json
+  agent-browser install workstation --apply --json --progress-json 2>install-progress.jsonl
   agent-browser install workstation --apply --force-browserless-upgrade --json
   agent-browser install workstation --dry-run --runtime-replacement-policy full-shutdown --json
   agent-browser install workstation --apply --runtime-replacement-policy full-shutdown --expected-runtime-replacement-plan-digest <sha256> --json

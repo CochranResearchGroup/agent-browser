@@ -255,3 +255,23 @@ lanes:
     reconciled_overlaps: ["P231, P233, P234 and P235 are integrated through 3028ea34; P232 owns the resulting enrollment and exact-profile reconciliation repair plus matching user guidance"]
     validation_status: Source qualified; final native replay, provider-free session selection, format, strict Clippy and pinned CLI smokes passed; merge and installed acceptance unperformed
     updated_at: 2026-10-11
+  - id: P236
+    product_lane: PL-BUGFIX
+    objective: Expose truthful incremental observations during workstation install
+    plan: docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md
+    plan_ref: refs/heads/fix/upgrade-progress-stream-181
+    branch: fix/upgrade-progress-stream-181
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#181]
+    dependencies: [P231]
+    overlaps: [P232]
+    reconciled_overlaps: ["P236 owns installer progress and upgrade-only shared guidance; P232 preserves enrollment and recovery ownership, each owns its plan/catalog/index entry; branch-local P232 registration retained despite canonical omission"]
+    blocker: null
+    validation_status: Final source passes candidate and workstation public success/failure progress with zero residue, 242 affected Rust tests and strict workspace Clippy; format, feature docs and unchanged compatibility gates retained
+    limitations: ["Unsealed debug source candidate", "Installed production upgrade and separate build/apply receipt qualification remain open", "CI disabled"]
+    updated_at: 2026-10-11
+    checkpoint: aefeb390be9e30224f618d15901e54d47165c14f
+    remote_ref: refs/heads/fix/upgrade-progress-stream-181
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/256
