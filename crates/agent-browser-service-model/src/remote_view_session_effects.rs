@@ -103,6 +103,52 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn reconcile_profile_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<BrowserRecovery>, String> {
+        self.require_operation()?;
+        let Some(mut recovered) = self
+            .effects
+            .reconcile_profile_browser(profile, browser, tabs, navigation)?
+        else {
+            return Ok(None);
+        };
+        // Physical reuse does not inherit an old presentation location. Join
+        // only current native window evidence for this exact browser process.
+        recovered.launch.desktop = None;
+        if let Ok(inventory) = self.adapter.inventory() {
+            let mut matches = Vec::new();
+            for assignment in inventory
+                .assignments
+                .into_iter()
+                .filter(|assignment| assignment.state == RemoteViewAssignmentState::Active)
+            {
+                if self.adapter.windows(&assignment).is_ok_and(|windows| {
+                    windows
+                        .windows
+                        .iter()
+                        .any(|window| window.pid == Some(recovered.launch.pid))
+                }) {
+                    matches.push(assignment);
+                }
+            }
+            if let [assignment] = matches.as_slice() {
+                recovered.launch.desktop = Some(RemoteViewFixedDesktop {
+                    desktop_id: assignment.desktop_id.clone(),
+                    generation: assignment.generation,
+                    friendly_route_label: "Existing profile browser".into(),
+                });
+                self.assignments
+                    .insert(assignment.desktop_id.clone(), assignment.clone());
+            }
+        }
+        Ok(Some(recovered))
+    }
+
     fn recover_browser(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -115,15 +161,44 @@ impl<
         self.effects
             .prove_recovery_absence(browser, profile)
             .map_err(|_| "browser_session_recovery_absence_unproven")?;
-        let mut assignment = self
-            .store
-            .published_launch_assignment(browser)
-            .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
-        let mut desktop = browser
-            .desktop
+        let borrowed = self
+            .expected
             .as_ref()
-            .ok_or("browser_session_recovery_desktop_missing")?
-            .clone();
+            .expect("qualified baseline")
+            .shared_browser_ids
+            .contains(&browser.id);
+        let (mut assignment, mut desktop) =
+            if let Some(desktop) = browser.desktop.as_ref().filter(|_| !borrowed) {
+                let assignment = self
+                    .store
+                    .published_launch_assignment(browser)
+                    .map_err(|_| "browser_session_recovery_prior_custody_unavailable")?;
+                (assignment, desktop.clone())
+            } else {
+                // Local and borrowed browsers have no native launch custody to
+                // inherit. Current profile absence qualifies a fresh placement.
+                let pool = self
+                    .pool
+                    .as_ref()
+                    .ok_or("browser_session_recovery_pool_missing")?;
+                let prepared =
+                    prepare_remote_view_session_pool(&mut self.adapter, &mut self.store, pool)?;
+                let desktop = prepared
+                    .desktops
+                    .first()
+                    .ok_or("browser_session_recovery_desktop_unavailable")?
+                    .desktop
+                    .clone();
+                let assignment = prepared
+                    .assignments
+                    .into_iter()
+                    .find(|assignment| {
+                        assignment.desktop_id == desktop.desktop_id
+                            && assignment.generation == desktop.generation
+                    })
+                    .ok_or("browser_session_recovery_assignment_unavailable")?;
+                (assignment, desktop)
+            };
         if assignment.desktop_id != desktop.desktop_id
             || assignment.generation != desktop.generation
         {
@@ -451,6 +526,17 @@ impl<
         self.require_operation()?;
         self.effects
             .acquire_initial_tab(browser, attributed_target_ids)
+    }
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        session: &ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.require_operation()?;
+        self.effects
+            .acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
     }
     fn create_tab(
         &mut self,

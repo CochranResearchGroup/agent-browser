@@ -243,7 +243,7 @@ lanes:
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/253
   - id: P232
     product_lane: PL-BUGFIX
-    objective: Reuse exact existing protected enrollment during ordinary profile open
+    objective: Reconcile exact existing enrollment and current browser during ordinary profile open
     plan: docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md
     branch: fix/profile-enrollment-reuse
     target: main
@@ -251,7 +251,7 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#244]
     dependencies: []
-    overlaps: [P231]
-    reconciled_overlaps: ["P231 owns upgrade and shared user documentation in the original checkout; P232 owns Lease Authority and recovery"]
-    validation_status: Enrollment red/green, 117 Lease Authority tests, format and strict workspace Clippy passed; live-browser recovery remains open
+    overlaps: [P231, P233, P234, P235]
+    reconciled_overlaps: ["P231, P233, P234 and P235 are integrated through 3028ea34; P232 owns the resulting enrollment and exact-profile reconciliation repair plus matching user guidance"]
+    validation_status: Enrollment qualified; workflow source checkpoint has passing Service Model and prior synthetic workflow receipts; final native replay and strict workspace Clippy pending host admission
     updated_at: 2026-10-11

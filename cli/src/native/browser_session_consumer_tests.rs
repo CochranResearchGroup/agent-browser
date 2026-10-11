@@ -8,6 +8,7 @@ use std::{cell::Cell, path::PathBuf, rc::Rc};
 #[derive(Clone, Copy)]
 enum Mode {
     Success,
+    LiveProfileReuse,
     IdleRecovery,
     UnknownProcess,
     UnknownTab,
@@ -251,6 +252,31 @@ impl RemoteViewBrowserProcessEffects for Process {
     }
 }
 impl BrowserSessionEffects for Process {
+    fn reconcile_profile_browser(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<BrowserRecovery>, String> {
+        if !matches!(self.mode, Mode::LiveProfileReuse) {
+            return Ok(None);
+        }
+        Ok(Some(BrowserRecovery {
+            launch: BrowserLaunch {
+                browser_id: browser
+                    .map(|browser| browser.id.clone())
+                    .unwrap_or_else(|| "shared-browser".into()),
+                pid: 91,
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                desktop: None,
+            },
+            target_ids: tabs
+                .iter()
+                .map(|tab| (tab.id.clone(), tab.target_id.clone()))
+                .collect(),
+        }))
+    }
     fn begin_operation(&mut self, _expected: &BrowserSessionState) -> Result<(), String> {
         if matches!(self.mode, Mode::StaleBaseline) {
             competing_write(&self.root);

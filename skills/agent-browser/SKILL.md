@@ -3728,6 +3728,8 @@ before provider issuance and reuses a qualified grant after restart. It reports
 `status=converging` and `operatorVisible.state=pending` until tab-specific
 presentation is proved. Grant issuance alone does not mean the tab is visible.
 
+On Linux, opening an explicit profile first reconciles its current browser from physical profile, process and CDP evidence. Missing or stale inventory is repaired during acquisition. Each task gets its own tab, and closing a task preserves peer tabs and browsers whose lifecycle it does not own. Retained local-browser sessions with a free profile can resume on a native Remote View desktop while keeping their logical session identity. Desktop identity comes from current native window evidence.
+
 `service browsers` includes existing Browser Session Manager records using their
 exact browser ID, PID, active session IDs and canonical `cdpEndpoint`. This
 read-only projection creates no runtime state and does not establish fresh CDP

@@ -6376,6 +6376,11 @@ Link expiry does not close browsers or disconnect native viewers.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
 Ordinary automation also recovers retained idle browsers without opening the link first.
+On Linux, exact-profile opens reconcile current process and CDP evidence before
+placement. Stale inventory does not require manual attach or revision repair.
+Tasks own separate tabs; closing a task preserves peers and borrowed browsers.
+Retained local sessions can recover on a current native desktop when the profile
+is free, keeping their logical session identity.
 A lost managed browser can recover after positive process and profile absence.
 A reused PID does not block recovery when current identity proves it unrelated
 and a fresh census proves the retained profile absent. Unknown identity or

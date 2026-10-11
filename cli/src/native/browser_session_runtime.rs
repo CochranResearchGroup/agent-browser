@@ -1,6 +1,6 @@
 //! BrowserManager-backed effects for the ordinary Browser Session Manager.
 
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::fs;
 use std::path::Path;
 use std::sync::mpsc;
@@ -36,6 +36,17 @@ pub(crate) struct BrowserManagerRuntimeConfig {
 }
 
 pub(crate) trait BrowserRuntimeDriver {
+    fn reconcile_profile_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[agent_browser_service_model::BrowserNavigationRecord],
+    ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+        let _ = (profile, browser, tabs, navigation);
+        Ok(None)
+    }
+
     fn select_browser_executable(&mut self, _path: String) -> Result<(), String> {
         Err("browser_build_selection_unsupported".into())
     }
@@ -62,6 +73,15 @@ pub(crate) trait BrowserRuntimeDriver {
         browser: &ManagedBrowserInstance,
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String>;
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _session: &agent_browser_service_model::ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.acquire_initial_tab(browser, attributed_target_ids)
+    }
     fn create_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -161,6 +181,27 @@ impl<D: RemoteViewBrowserProcessEffects> RemoteViewBrowserProcessEffects
 }
 
 impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdapter<D> {
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        session: &agent_browser_service_model::ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.runtime
+            .acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
+    }
+    fn reconcile_profile_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[agent_browser_service_model::BrowserNavigationRecord],
+    ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+        self.runtime
+            .reconcile_profile_browser(profile, browser, tabs, navigation)
+    }
+
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.runtime.select_browser_executable(path)
     }
@@ -345,6 +386,17 @@ fn create_private_directory(path: &Path) -> Result<(), String> {
 }
 
 enum BrowserRuntimeCommand {
+    ReconcileProfile {
+        profile: BrowserProfileCatalogEntry,
+        browser: Option<ManagedBrowserInstance>,
+        tabs: Vec<ManagedBrowserTab>,
+        navigation: Vec<agent_browser_service_model::BrowserNavigationRecord>,
+        reply: mpsc::Sender<Result<Option<agent_browser_service_model::BrowserRecovery>, String>>,
+    },
+    OperationBaseline {
+        shared_browser_ids: BTreeSet<String>,
+        reply: mpsc::Sender<Result<(), String>>,
+    },
     PreflightLaunch {
         profile: BrowserProfileCatalogEntry,
         reply: mpsc::Sender<Result<(), String>>,
@@ -370,6 +422,10 @@ enum BrowserRuntimeCommand {
     },
     AcquireInitialTab {
         browser: ManagedBrowserInstance,
+        session_context: Option<(
+            BrowserProfileCatalogEntry,
+            agent_browser_service_model::ManagedBrowserSession,
+        )>,
         attributed_target_ids: Vec<String>,
         reply: mpsc::Sender<Result<BrowserTabAcquisition, String>>,
     },
@@ -548,6 +604,56 @@ impl RemoteViewBrowserProcessEffects for BrowserManagerRuntime {
 }
 
 impl BrowserRuntimeDriver for BrowserManagerRuntime {
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        session: &agent_browser_service_model::ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::AcquireInitialTab {
+                browser: browser.clone(),
+                session_context: Some((profile.clone(), session.clone())),
+                attributed_target_ids: attributed_target_ids.to_vec(),
+                reply,
+            },
+        )
+    }
+    fn reconcile_profile_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[agent_browser_service_model::BrowserNavigationRecord],
+    ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::ReconcileProfile {
+                profile: profile.clone(),
+                browser: browser.cloned(),
+                tabs: tabs.to_vec(),
+                navigation: navigation.to_vec(),
+                reply,
+            },
+        )
+    }
+    fn begin_operation(
+        &mut self,
+        expected: &agent_browser_service_model::BrowserSessionState,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::OperationBaseline {
+                shared_browser_ids: expected.shared_browser_ids.clone(),
+                reply,
+            },
+        )
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -606,6 +712,7 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             receiver,
             BrowserRuntimeCommand::AcquireInitialTab {
                 browser: browser.clone(),
+                session_context: None,
                 attributed_target_ids: attributed_target_ids.to_vec(),
                 reply,
             },
@@ -714,9 +821,126 @@ fn run_browser_worker(
     mut config: BrowserManagerRuntimeConfig,
 ) {
     let mut browsers = HashMap::<String, DaemonState>::new();
+    let mut shared_browser_tabs = HashMap::<String, BTreeSet<String>>::new();
+    let mut reconciled_targets = HashMap::<(String, String), String>::new();
     let mut next_browser_sequence = 0_u64;
     while let Ok(command) = receiver.recv() {
         match command {
+            BrowserRuntimeCommand::OperationBaseline {
+                shared_browser_ids,
+                reply,
+            } => {
+                for id in shared_browser_ids {
+                    shared_browser_tabs.entry(id).or_default();
+                }
+                let _ = reply.send(Ok(()));
+            }
+            BrowserRuntimeCommand::ReconcileProfile {
+                profile,
+                browser,
+                tabs,
+                navigation,
+                reply,
+            } => {
+                let result = runtime.block_on(async {
+                    if browser
+                        .as_ref()
+                        .is_some_and(|browser| browser.profile_id != profile.id)
+                    {
+                        return Err("browser_session_recovery_identity_conflict".into());
+                    }
+                    let Some((launch, mut manager)) = attach_current_profile_browser(
+                        &profile,
+                        browser.as_ref().map(|browser| browser.id.as_str()),
+                        None,
+                    )
+                    .await?
+                    else {
+                        return Ok(None);
+                    };
+                    let live_targets = manager
+                        .tab_list(true)
+                        .iter()
+                        .filter_map(|tab| tab["targetId"].as_str().map(str::to_owned))
+                        .collect::<BTreeSet<_>>();
+                    let mut target_ids = std::collections::BTreeMap::new();
+                    for tab in &tabs {
+                        let key = (launch.browser_id.clone(), tab.id.clone());
+                        let target = if live_targets.contains(&tab.target_id) {
+                            tab.target_id.clone()
+                        } else if let Some(target) = reconciled_targets
+                            .get(&key)
+                            .filter(|target| live_targets.contains(*target))
+                        {
+                            target.clone()
+                        } else {
+                            let url = navigation
+                                .iter()
+                                .filter(|row| {
+                                    row.tab_id == tab.id && row.browser_id == tab.browser_id
+                                })
+                                .max_by_key(|row| row.visited_at_ms)
+                                .map(|row| row.url.as_str());
+                            #[cfg(target_os = "linux")]
+                            let target = {
+                                let physical = ManagedBrowserInstance {
+                                    id: launch.browser_id.clone(),
+                                    profile_id: profile.id.clone(),
+                                    pid: launch.pid,
+                                    cdp_endpoint: launch.cdp_endpoint.clone(),
+                                    desktop: launch.desktop.clone(),
+                                    active_session_ids: Vec::new(),
+                                };
+                                let attributed = tabs
+                                    .iter()
+                                    .map(|tab| tab.target_id.clone())
+                                    .chain(target_ids.values().cloned())
+                                    .collect::<Vec<_>>();
+                                let acquired =
+                                    super::browser_session_profile_reuse::acquire_task_tab(
+                                        &mut manager,
+                                        &physical,
+                                        &profile,
+                                        "retained-tab",
+                                        &tab.id,
+                                        &attributed,
+                                    )
+                                    .await?;
+                                if acquired.created {
+                                    if let Some(url) = url {
+                                        manager.navigate(url, WaitUntil::DomContentLoaded).await?;
+                                    }
+                                }
+                                acquired.acquisition.target_id
+                            };
+                            #[cfg(not(target_os = "linux"))]
+                            let target = {
+                                let created = manager.tab_new_background(url).await?;
+                                created["targetId"]
+                                    .as_str()
+                                    .ok_or("browser_session_recovery_target_missing")?
+                                    .to_owned()
+                            };
+                            reconciled_targets.insert(key, target.clone());
+                            target
+                        };
+                        target_ids.insert(tab.id.clone(), target);
+                    }
+                    let mut state = DaemonState::new();
+                    state.browser = Some(manager);
+                    state.browser_session_manager_owned = true;
+                    browsers.insert(launch.browser_id.clone(), state);
+                    shared_browser_tabs
+                        .entry(launch.browser_id.clone())
+                        .or_default()
+                        .extend(target_ids.values().cloned());
+                    Ok(Some(agent_browser_service_model::BrowserRecovery {
+                        launch,
+                        target_ids,
+                    }))
+                });
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::PreflightLaunch { profile, reply } => {
                 let path = Path::new(&profile.user_data_dir);
                 let result = if !path.is_absolute() {
@@ -748,6 +972,18 @@ fn run_browser_worker(
                 reply,
             } => {
                 let result = runtime.block_on(async {
+                    if recovery_browser.is_none() && environment.is_none() && desktop.is_none() {
+                        if let Some((launch, manager)) =
+                            attach_current_profile_browser(&profile, None, None).await?
+                        {
+                            let mut state = DaemonState::new();
+                            state.browser = Some(manager);
+                            state.browser_session_manager_owned = true;
+                            browsers.insert(launch.browser_id.clone(), state);
+                            shared_browser_tabs.insert(launch.browser_id.clone(), BTreeSet::new());
+                            return Ok(launch);
+                        }
+                    }
                     if let Some(browser) = &recovery_browser {
                         prove_browser_recovery_absence(browser, &profile)?;
                         browsers.remove(&browser.id);
@@ -807,12 +1043,28 @@ fn run_browser_worker(
                     let mut state = DaemonState::new();
                     state.browser = Some(manager);
                     state.browser_session_manager_owned = true;
+                    shared_browser_tabs.remove(&browser_id);
+                    reconciled_targets.retain(|(id, _), _| id != &browser_id);
                     browsers.insert(browser_id, state);
                     Ok(launch)
                 });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Close { browser, reply } => {
+                if let Some(targets) = shared_browser_tabs.remove(&browser.id) {
+                    let result = runtime.block_on(async {
+                        if let Some(mut state) = browsers.remove(&browser.id) {
+                            if let Some(manager) = state.browser.as_mut() {
+                                for target in targets {
+                                    manager.tab_close_target_id_for_release(&target).await?;
+                                }
+                            }
+                        }
+                        Ok(())
+                    });
+                    let _ = reply.send(result);
+                    continue;
+                }
                 let result = match browsers.remove(&browser.id) {
                     Some(mut state) => runtime.block_on(async {
                         let manager = state
@@ -840,15 +1092,41 @@ fn run_browser_worker(
             }
             BrowserRuntimeCommand::AcquireInitialTab {
                 browser,
+                session_context,
                 attributed_target_ids,
                 reply,
             } => {
+                #[cfg(not(target_os = "linux"))]
+                let _ = session_context.as_ref();
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
                         let manager = state
                             .browser
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                            #[cfg(target_os = "linux")]
+                            if let Some((profile, session)) = session_context.as_ref() {
+                                let acquisition =
+                                    super::browser_session_profile_reuse::acquire_task_tab(
+                                        manager,
+                                        &browser,
+                                        profile,
+                                        "session",
+                                        &session.name,
+                                        &attributed_target_ids,
+                                    )
+                                    .await?
+                                    .acquisition;
+                                targets.insert(acquisition.target_id.clone());
+                                return Ok(acquisition);
+                            }
+                            let tab = manager.tab_new_background(None).await?;
+                            let acquisition =
+                                tab_acquisition(tab, BrowserTabSource::SessionInitial)?;
+                            targets.insert(acquisition.target_id.clone());
+                            return Ok(acquisition);
+                        }
                         if let Some(tab) = manager.tab_list(true).into_iter().find(|tab| {
                             tab.get("targetId")
                                 .and_then(Value::as_str)
@@ -872,8 +1150,16 @@ fn run_browser_worker(
                             .browser
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
-                        let tab = manager.tab_new(None).await?;
-                        tab_acquisition(tab, BrowserTabSource::ExplicitNew)
+                        let tab = if shared_browser_tabs.contains_key(&browser.id) {
+                            manager.tab_new_background(None).await?
+                        } else {
+                            manager.tab_new(None).await?
+                        };
+                        let acquisition = tab_acquisition(tab, BrowserTabSource::ExplicitNew)?;
+                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                            targets.insert(acquisition.target_id.clone());
+                        }
+                        Ok(acquisition)
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
                 };
@@ -884,19 +1170,26 @@ fn run_browser_worker(
                 tab,
                 reply,
             } => {
-                let result = match browsers.get_mut(&browser.id) {
-                    Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
-                        manager
-                            .tab_close_target_id_for_release(&tab.target_id)
-                            .await?;
-                        Ok(())
-                    }),
-                    None => Err("browser_session_runtime_browser_missing".to_string()),
-                };
+                let result = runtime.block_on(async {
+                    if !recorded_browser_is_live(&mut browsers, &browser).await? {
+                        return if !recorded_browser_process_exists(&browser) {
+                            Ok(())
+                        } else {
+                            Err("browser_session_reattach_unresponsive".into())
+                        };
+                    }
+                    let manager = browsers
+                        .get_mut(&browser.id)
+                        .and_then(|state| state.browser.as_mut())
+                        .ok_or("browser_session_runtime_browser_missing")?;
+                    manager
+                        .tab_close_target_id_for_release(&tab.target_id)
+                        .await?;
+                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                        targets.remove(&tab.target_id);
+                    }
+                    Ok(())
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Navigate {
@@ -954,6 +1247,19 @@ fn run_browser_worker(
                             .browser
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        if let Some(marker) = manager
+                            .pages_list()
+                            .into_iter()
+                            .find(|page| {
+                                page.target_id == tab.target_id
+                                    && page.url.starts_with("about:blank#agent-browser-task-")
+                            })
+                            .map(|page| page.url)
+                        {
+                            let _ = manager
+                                .clear_initial_task_marker(&tab.target_id, &marker)
+                                .await;
+                        }
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         state.session_id = session_id;
                         state.session_name = Some(session_name);
@@ -1013,6 +1319,50 @@ fn resolve_remote_view_display(
     Ok(context.display_name.clone())
 }
 
+/// Current OS and CDP evidence, rather than saved inventory, qualifies reuse.
+#[cfg(target_os = "linux")]
+async fn attach_current_profile_browser(
+    profile: &BrowserProfileCatalogEntry,
+    browser_id: Option<&str>,
+    desktop: Option<RemoteViewFixedDesktop>,
+) -> Result<Option<(BrowserLaunch, BrowserManager)>, String> {
+    let path = Path::new(&profile.user_data_dir);
+    let Some(before) =
+        super::browser_session_profile_reuse::current_profile_browser_identity(path)?
+    else {
+        return Ok(None);
+    };
+    let pid = before.pid;
+    let expected = path
+        .canonicalize()
+        .map_err(|_| "browser_session_profile_unavailable")?;
+    let (port, browser_path) = super::cdp::chrome::read_devtools_active_port(&expected)
+        .filter(|(port, path)| *port != 0 && path.starts_with("/devtools/browser/"))
+        .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
+    let endpoint = format!("ws://127.0.0.1:{port}{browser_path}");
+    let manager = attach_verified_browser_endpoint(&endpoint, pid, before).await?;
+    Ok(Some((
+        BrowserLaunch {
+            browser_id: browser_id
+                .map(str::to_owned)
+                .unwrap_or_else(|| format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4())),
+            pid,
+            cdp_endpoint: manager.get_cdp_url().into(),
+            desktop,
+        },
+        manager,
+    )))
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn attach_current_profile_browser(
+    _profile: &BrowserProfileCatalogEntry,
+    _browser_id: Option<&str>,
+    _desktop: Option<RemoteViewFixedDesktop>,
+) -> Result<Option<(BrowserLaunch, BrowserManager)>, String> {
+    Ok(None)
+}
+
 async fn recorded_browser_is_live(
     browsers: &mut HashMap<String, DaemonState>,
     browser: &ManagedBrowserInstance,
@@ -1050,17 +1400,50 @@ async fn recorded_browser_is_live(
     Ok(manager.is_connection_alive().await)
 }
 
+pub(super) async fn attach_verified_browser_endpoint(
+    endpoint: &str,
+    pid: u32,
+    before: crate::process_identity::ObservedProcessIdentity,
+) -> Result<BrowserManager, String> {
+    let endpoint = super::browser::resolve_cdp_url(endpoint).await?;
+    let client =
+        std::sync::Arc::new(agent_browser_cdp::client::CdpClient::connect(&endpoint).await?);
+    let processes = client
+        .send_command_no_params("SystemInfo.getProcessInfo", None)
+        .await?;
+    let matches = processes
+        .get("processInfo")
+        .and_then(Value::as_array)
+        .is_some_and(|processes| {
+            processes.iter().any(|process| {
+                process["type"] == "browser" && process["id"].as_u64() == Some(u64::from(pid))
+            })
+        });
+    if !matches
+        || crate::process_identity::observe_process(pid)
+            != crate::process_identity::ProcessObservation::Observed(before)
+    {
+        return Err("browser_session_profile_endpoint_identity_conflict".into());
+    }
+    BrowserManager::connect_cdp_background(endpoint, client).await
+}
+
 async fn attach_recorded_browser(
     browser: &ManagedBrowserInstance,
 ) -> Result<BrowserManager, String> {
-    if !recorded_browser_process_exists(browser) {
-        return Err("browser_session_recorded_process_missing".to_string());
-    }
-    let manager = BrowserManager::connect_cdp(&browser.cdp_endpoint)
+    let before = match crate::process_identity::observe_process(browser.pid) {
+        crate::process_identity::ProcessObservation::Observed(identity)
+            if identity.browser_family.is_some() && identity.start_token.is_some() =>
+        {
+            identity
+        }
+        _ => return Err("browser_session_recorded_process_missing".into()),
+    };
+    let manager = attach_verified_browser_endpoint(&browser.cdp_endpoint, browser.pid, before)
         .await
         .map_err(|error| format!("browser_session_reattach_failed:{error}"))?;
     if !manager.is_connection_alive().await {
-        return Err("browser_session_reattach_unresponsive".to_string());
+        return Err("browser_session_reattach_unresponsive".into());
     }
     Ok(manager)
 }
@@ -1093,14 +1476,20 @@ fn prove_browser_recovery_absence(
     browser: &ManagedBrowserInstance,
     profile: &BrowserProfileCatalogEntry,
 ) -> Result<(), String> {
-    if browser.profile_id != profile.id || browser.pid == 0 {
+    if browser.profile_id != profile.id {
+        return Err("browser_session_recovery_process_absence_unproven".into());
+    }
+    #[cfg(not(target_os = "linux"))]
+    if browser.pid == 0 {
         return Err("browser_session_recovery_process_absence_unproven".into());
     }
     let expected = fs::canonicalize(&profile.user_data_dir)
         .map_err(|_| "browser_session_recovery_profile_unavailable")?;
-    // A retained PID can be reused while the browser is stopped. Prove its
-    // current identity unrelated before the independent full profile census;
-    // never signal that process or treat incomplete identity as absence.
+    // On Linux the requested profile's current lock and open files qualify
+    // occupancy. A saved PID may now belong to unrelated work.
+    #[cfg(target_os = "linux")]
+    prove_current_profile_lock_absence(&expected)?;
+    #[cfg(not(target_os = "linux"))]
     prove_recovery_pid_absence(
         crate::process_identity::observe_process(browser.pid),
         &expected,
@@ -1117,13 +1506,21 @@ fn prove_browser_recovery_absence(
             .map(|value| value.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         if args.is_empty() {
+            #[cfg(target_os = "linux")]
+            continue;
+            #[cfg(not(target_os = "linux"))]
             return Err("browser_session_recovery_profile_census_unavailable".into());
         }
         if let Some(path) =
             crate::process_identity::command_line_option_value(&args, "--user-data-dir")
         {
-            let observed = fs::canonicalize(path)
-                .map_err(|_| "browser_session_recovery_profile_census_unavailable")?;
+            let observed = match fs::canonicalize(path) {
+                Ok(path) => path,
+                #[cfg(target_os = "linux")]
+                Err(_) => continue,
+                #[cfg(not(target_os = "linux"))]
+                Err(_) => return Err("browser_session_recovery_profile_census_unavailable".into()),
+            };
             if observed == expected {
                 return Err("browser_session_recovery_profile_occupied".into());
             }
@@ -1132,6 +1529,16 @@ fn prove_browser_recovery_absence(
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
+fn prove_current_profile_lock_absence(expected: &Path) -> Result<(), String> {
+    if super::browser_session_profile_reuse::current_profile_browser_identity(expected)?.is_some() {
+        Err("browser_session_recovery_profile_occupied".into())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(any(not(target_os = "linux"), test))]
 fn prove_recovery_pid_absence(
     observation: crate::process_identity::ProcessObservation,
     expected_profile: &std::path::Path,
@@ -1511,6 +1918,447 @@ mod tests {
         let error = runtime.launch_browser(&profile, None).unwrap_err();
         assert!(error.starts_with("browser_launch_resource_pressure:"));
         assert!(error.contains("browser_process_capacity_exhausted"));
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn existing_profile_browser_is_reused_without_saved_inventory() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "reuse-fixture".into(),
+            name: "Reuse fixture".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let mut owner = BrowserManagerRuntime::start(config.clone()).unwrap();
+        let original = owner.launch_browser(&profile, None).unwrap();
+        let browser = ManagedBrowserInstance {
+            id: original.browser_id.clone(),
+            profile_id: profile.id.clone(),
+            pid: original.pid,
+            cdp_endpoint: original.cdp_endpoint.clone(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let mut reuse_config = config;
+        reuse_config.executable_path = Some(
+            directory
+                .0
+                .join("next-launch-only")
+                .to_string_lossy()
+                .into_owned(),
+        );
+        let mut restarted = BrowserManagerRuntime::start(reuse_config).unwrap();
+        let reused = restarted.launch_browser(&profile, None);
+        #[cfg(target_os = "linux")]
+        let parent_reuse = {
+            let lock =
+                fs::read_link(Path::new(&profile.user_data_dir).join("SingletonLock")).unwrap();
+            std::os::unix::fs::symlink(lock, directory.0.join("SingletonLock")).unwrap();
+            let mut parent_profile = profile.clone();
+            parent_profile.user_data_dir = directory.0.to_string_lossy().into_owned();
+            restarted.reconcile_profile_browser(&parent_profile, None, &[], &[])
+        };
+        // Always release only the synthetic owner's exact process on failure.
+        owner.close_browser(&browser).unwrap();
+        let reused = reused.expect("opening the exact live profile must reuse its browser");
+        assert_eq!(reused.pid, original.pid);
+        assert_eq!(reused.cdp_endpoint, original.cdp_endpoint);
+        #[cfg(target_os = "linux")]
+        assert!(
+            parent_reuse.unwrap().is_none(),
+            "a parent directory is not the same physical profile"
+        );
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn shared_profile_acquisition_and_close_preserve_peer_work() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "peer-fixture".into(),
+            name: "Peer fixture".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let mut owner = BrowserManagerRuntime::start(config.clone()).unwrap();
+        let original = owner.launch_browser(&profile, None).unwrap();
+        let peer = ManagedBrowserInstance {
+            id: original.browser_id,
+            profile_id: profile.id.clone(),
+            pid: original.pid,
+            cdp_endpoint: original.cdp_endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let acquired = owner.acquire_initial_tab(&peer, &[]).unwrap();
+        let peer_tab = ManagedBrowserTab {
+            id: acquired.tab_id,
+            target_id: acquired.target_id,
+            browser_id: peer.id.clone(),
+            session_id: "bob".into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        owner
+            .navigate(
+                &peer,
+                &peer_tab,
+                "data:text/html,<title>Bob retained work</title>",
+            )
+            .unwrap();
+        let mut requester = BrowserManagerRuntime::start(config).unwrap();
+        let result = (|| -> Result<(), String> {
+            let launch = requester.launch_browser(&profile, None)?;
+            let alice = ManagedBrowserInstance {
+                id: launch.browser_id,
+                profile_id: profile.id.clone(),
+                pid: launch.pid,
+                cdp_endpoint: launch.cdp_endpoint,
+                desktop: None,
+                active_session_ids: vec![],
+            };
+            let acquired = requester.acquire_initial_tab(&alice, &[])?;
+            if acquired.target_id == peer_tab.target_id {
+                return Err("Alice acquisition adopted Bob's existing tab".into());
+            }
+            requester.close_browser(&alice)?;
+            if !recorded_browser_process_exists(&peer) {
+                return Err("closing Alice closed Bob's browser".into());
+            }
+            let title = owner.execute_command(
+                &peer,
+                &peer_tab,
+                "bob",
+                "bob",
+                &serde_json::json!({"id":"peer-title", "action":"title"}),
+            )?;
+            if title["data"]["title"] != "Bob retained work" {
+                return Err("Bob's original work changed".into());
+            }
+            Ok(())
+        })();
+        owner.close_browser(&peer).unwrap();
+        result.expect("shared profile task must preserve its peer");
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn shared_profile_open_replay_after_lost_publication_reuses_its_owned_tab() {
+        use agent_browser_service_model::{
+            BrowserProfileCatalog, BrowserSessionManager, BrowserSessionManagerConfig,
+            BrowserSessionState, OpenBrowserSession,
+        };
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "publication-replay".into(),
+            name: "Publication replay".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let mut owner = BrowserManagerRuntime::start(config.clone()).unwrap();
+        let launch = owner.launch_browser(&profile, None).unwrap();
+        let physical = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: profile.id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let catalog = BrowserProfileCatalog {
+            profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile.clone())]),
+            ..Default::default()
+        };
+        let policy = BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        };
+        let result = (|| -> Result<(), String> {
+            let mut uncommitted = BrowserSessionState::default();
+            let mut first =
+                BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone())?);
+            let target = {
+                let mut manager = BrowserSessionManager::new(
+                    &mut uncommitted,
+                    &catalog,
+                    &mut first,
+                    policy.clone(),
+                );
+                let acquired = manager.open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    1_000,
+                ))?;
+                manager
+                    .tab_for_navigation(&acquired.session_id, 1_000)?
+                    .target_id
+            };
+            // The tab exists, but publication failed and a fresh process loads the old baseline.
+            drop(first);
+            let mut committed = BrowserSessionState::default();
+            let mut restarted =
+                BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone())?);
+            let (resumed, replayed_target) = {
+                let mut manager =
+                    BrowserSessionManager::new(&mut committed, &catalog, &mut restarted, policy);
+                let resumed = manager.open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    2_000,
+                ))?;
+                let target = manager
+                    .tab_for_navigation(&resumed.session_id, 2_000)?
+                    .target_id;
+                (resumed, target)
+            };
+            if replayed_target != target {
+                return Err("publication retry created another Alice tab".into());
+            }
+            if committed.browsers[&resumed.browser_id].pid != physical.pid {
+                return Err("publication retry replaced the shared browser".into());
+            }
+            Ok(())
+        })();
+        owner.close_browser(&physical).unwrap();
+        result.expect("initial acquisition must survive publication loss and requester restart");
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn free_profile_recovery_ignores_unrelated_browser_profile_metadata() {
+        let directory = TempDirectory::new();
+        let occupied = BrowserProfileCatalogEntry {
+            id: "unrelated-browser".into(),
+            name: "Unrelated browser".into(),
+            user_data_dir: directory.0.join("occupied").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let mut owner = BrowserManagerRuntime::start(BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        })
+        .unwrap();
+        let launch = owner.launch_browser(&occupied, None).unwrap();
+        let live = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: occupied.id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        // The unrelated process remains live while its old argv path becomes stale.
+        fs::rename(&occupied.user_data_dir, directory.0.join("moved-occupied")).unwrap();
+        let free = BrowserProfileCatalogEntry {
+            id: "free-profile".into(),
+            name: "Free profile".into(),
+            user_data_dir: directory.0.join("free").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        fs::create_dir(&free.user_data_dir).unwrap();
+        let retained = ManagedBrowserInstance {
+            id: "retained-free".into(),
+            profile_id: free.id.clone(),
+            pid: live.pid,
+            cdp_endpoint: "ws://127.0.0.1:1/devtools/browser/stale".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let result = owner.prove_recovery_absence(&retained, &free);
+        let peer_survived = recorded_browser_process_exists(&live);
+        owner.close_browser(&live).unwrap();
+        assert!(
+            peer_survived,
+            "absence checks must leave unrelated browsers running"
+        );
+        result.expect("unrelated profile metadata must not veto a free profile");
+    }
+
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn ordinary_open_reconciles_stale_inventory_and_preserves_alice_bob() {
+        use agent_browser_service_model::{
+            BrowserProfileCatalog, BrowserSessionManager, BrowserSessionManagerConfig,
+            BrowserSessionState, ManagedBrowserCommandEffects, OpenBrowserSession,
+            SessionEndReason,
+        };
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "ordinary-reuse".into(),
+            name: "Ordinary reuse".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let catalog = BrowserProfileCatalog {
+            profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile.clone())]),
+            ..Default::default()
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let policy = BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        };
+        let mut owner =
+            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap());
+        let mut state = BrowserSessionState::default();
+        let (alice, bob) = {
+            let mut manager =
+                BrowserSessionManager::new(&mut state, &catalog, &mut owner, policy.clone());
+            let alice = manager
+                .open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    1_000,
+                ))
+                .unwrap();
+            manager
+                .navigate(
+                    &alice.session_id,
+                    "data:text/html,<title>Alice work</title>",
+                    1_000,
+                )
+                .unwrap();
+            let bob = manager
+                .open(OpenBrowserSession::exact_profile("bob", &profile.id, 2_000))
+                .unwrap();
+            manager
+                .navigate(
+                    &bob.session_id,
+                    "data:text/html,<title>Bob work</title>",
+                    2_000,
+                )
+                .unwrap();
+            (alice, bob)
+        };
+        let original = state.browsers[&alice.browser_id].clone();
+        let alice_tab = state.tabs[state.sessions[&alice.session_id]
+            .current_tab_id
+            .as_ref()
+            .unwrap()]
+        .clone();
+        owner.close_tab(&original, &alice_tab).unwrap();
+        state
+            .leave_open_session_ids
+            .extend([alice.session_id.clone(), bob.session_id.clone()]);
+        state.browsers.get_mut(&alice.browser_id).unwrap().pid = u32::MAX;
+        state
+            .browsers
+            .get_mut(&alice.browser_id)
+            .unwrap()
+            .cdp_endpoint = "ws://127.0.0.1:1/devtools/browser/stale".into();
+        let mut state: BrowserSessionState =
+            serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+        let unpublished_baseline = state.clone();
+        let mut requester =
+            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap());
+        let result = (|| -> Result<(), String> {
+            {
+                let mut manager = BrowserSessionManager::new(
+                    &mut state,
+                    &catalog,
+                    &mut requester,
+                    policy.clone(),
+                );
+                let resumed = manager.open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    3_000,
+                ))?;
+                if resumed.session_id != alice.session_id || resumed.browser_id != alice.browser_id
+                {
+                    return Err("continuation changed Alice's logical identity".into());
+                }
+                let repeated = manager.open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    4_000,
+                ))?;
+                if repeated != resumed {
+                    return Err("replay changed acquisition identity".into());
+                }
+            }
+            let restored = state.tabs[&alice_tab.id].clone();
+            requester.execute_command(&state.browsers[&alice.browser_id], &restored,
+                &alice.session_id, "alice", &serde_json::json!({"id":"alice-progress", "action":"eval", "script":"document.title='Alice progressed'"}))?;
+            drop(requester);
+            state = unpublished_baseline.clone();
+            requester =
+                BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone())?);
+            {
+                let mut manager = BrowserSessionManager::new(
+                    &mut state,
+                    &catalog,
+                    &mut requester,
+                    policy.clone(),
+                );
+                manager.open(OpenBrowserSession::exact_profile(
+                    "alice",
+                    &profile.id,
+                    4_500,
+                ))?;
+            }
+            if state.tabs[&alice_tab.id].target_id != restored.target_id {
+                return Err("retained recovery publication retry duplicated Alice's target".into());
+            }
+            let title = requester.execute_command(
+                &state.browsers[&alice.browser_id],
+                &state.tabs[&alice_tab.id],
+                &alice.session_id,
+                "alice",
+                &serde_json::json!({"id":"alice-preserved", "action":"title"}),
+            )?;
+            if title["data"]["title"] != "Alice progressed" {
+                return Err("recovery replay reset Alice's work".into());
+            }
+            state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+            drop(requester);
+            requester =
+                BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone())?);
+            requester.begin_operation(&state)?;
+            {
+                let mut manager = BrowserSessionManager::new(
+                    &mut state,
+                    &catalog,
+                    &mut requester,
+                    policy.clone(),
+                );
+                manager.close_session(&alice.session_id, SessionEndReason::ExplicitClose, 5_000)?;
+            }
+            let browser = &state.browsers[&bob.browser_id];
+            let bob_tab = &state.tabs[state.sessions[&bob.session_id]
+                .current_tab_id
+                .as_ref()
+                .unwrap()];
+            let title = requester.execute_command(
+                browser,
+                bob_tab,
+                &bob.session_id,
+                "bob",
+                &serde_json::json!({"id":"bob-after-alice", "action":"title"}),
+            )?;
+            if title["data"]["title"] != "Bob work" {
+                return Err("Alice continuation or close changed Bob's work".into());
+            }
+            Ok(())
+        })();
+        owner.close_browser(&original).unwrap();
+        result.expect("ordinary stale-inventory continuation must preserve both tasks");
     }
 
     #[test]

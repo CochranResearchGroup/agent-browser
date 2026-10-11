@@ -184,6 +184,19 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn reconcile_profile_browser(
+        &mut self,
+        profile: &BrowserProfileCatalogEntry,
+        browser: Option<&ManagedBrowserInstance>,
+        tabs: &[ManagedBrowserTab],
+        navigation: &[agent_browser_service_model::BrowserNavigationRecord],
+    ) -> Result<Option<agent_browser_service_model::BrowserRecovery>, String> {
+        match self {
+            Self::Local(e) => e.reconcile_profile_browser(profile, browser, tabs, navigation),
+            Self::Remote(e) => e.reconcile_profile_browser(profile, browser, tabs, navigation),
+        }
+    }
+
     fn recover_browser(
         &mut self,
         browser: &ManagedBrowserInstance,
@@ -297,6 +310,28 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         match self {
             Self::Local(effects) => effects.acquire_initial_tab(browser, attributed_target_ids),
             Self::Remote(effects) => effects.acquire_initial_tab(browser, attributed_target_ids),
+        }
+    }
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+        session: &agent_browser_service_model::ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        match self {
+            Self::Local(effects) => effects.acquire_session_initial_tab(
+                browser,
+                profile,
+                session,
+                attributed_target_ids,
+            ),
+            Self::Remote(effects) => effects.acquire_session_initial_tab(
+                browser,
+                profile,
+                session,
+                attributed_target_ids,
+            ),
         }
     }
     fn create_tab(
