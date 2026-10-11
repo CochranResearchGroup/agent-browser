@@ -12,6 +12,7 @@
     "agent-browser": "./bin/agent-browser.js"
   },
   "scripts": {
+    "prototype:native-dashboard": "pnpm --dir packages/dashboard dev --hostname 127.0.0.1 --port 3187",
     "captcha-lab:start": "pnpm --filter agent-browser-captcha-lab start",
     "test:captcha-lab": "pnpm --filter agent-browser-captcha-lab test",
     "test:captcha-guard-contract": "node scripts/test-captcha-guard-contract.js",

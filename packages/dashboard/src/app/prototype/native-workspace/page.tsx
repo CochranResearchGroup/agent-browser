@@ -1,0 +1,44 @@
+"use client";
+// Throwaway P237 layout study: three variants, synthetic data, no service requests.
+// A separate route avoids mounting the retired dashboard's live synchronization hooks.
+import { useEffect, useState } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ChevronDown, ChevronRight, Clock, Maximize, Trash2 } from "lucide-react";
+
+const tabs = [
+  { id: "invoice", title: "Review invoice", url: "https://example.invalid/invoice", origin: "Accounts assistant", purpose: "Check the invoice before approval", desktop: "Work desktop" },
+  { id: "shipment", title: "Track shipment", url: "https://example.invalid/shipment", origin: "Fulfillment assistant", purpose: "Review a delivery exception", desktop: "Work desktop" },
+  { id: "login", title: "Sign in", url: "https://example.invalid/login", origin: "Research assistant", purpose: "Complete authentication", desktop: "Research desktop" },
+];
+const names = ["A: Desktop with handoff shelf", "B: Desktop with handoff side panel", "C: Handoff desk with desktop pane"];
+export default function NativeWorkspacePrototype() {
+  const [variant, setVariant] = useState(0);
+  const [selected, setSelected] = useState(tabs[0]);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({"Work desktop": true, "Research desktop": true});
+  const [query, setQuery] = useState("");
+  const [menu, setMenu] = useState<string | null>(null);
+  const [modal, setModal] = useState<"properties" | "lifetimes" | "delete" | "share" | null>(null);
+  const [links, setLinks] = useState(tabs.map(t => t.id));
+  const [policies, setPolicies] = useState<Record<string, {link: string; tab: string}>>(Object.fromEntries(tabs.map(t => [t.id, {link: "Perpetual", tab: "Until used, then configured idle policy"}])));
+  const linkLifetime = policies[selected.id].link;
+  const tabLifetime = policies[selected.id].tab;
+  const setLinkLifetime = (link: string) => setPolicies(p => ({...p, [selected.id]: {...p[selected.id], link}}));
+  const setTabLifetime = (tab: string) => setPolicies(p => ({...p, [selected.id]: {...p[selected.id], tab}}));
+  function change(next: number) {
+    const n = (next + 3) % 3; setVariant(n);
+    const url = new URL(window.location.href); url.searchParams.set("variant", String.fromCharCode(65+n)); window.history.replaceState(null, "", url);
+  }
+  useEffect(() => {
+    const key = new URLSearchParams(window.location.search).get("variant"); setVariant(Math.max(0, ["A", "B", "C"].indexOf(key || "A")));
+  }, []);
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if ((event.target as HTMLElement).closest("input,textarea,select,[contenteditable], [role=dialog]")) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") { event.preventDefault(); change(variant + (event.key === "ArrowLeft" ? -1 : 1)); }
+    };
+    window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler);
+  }, [variant]);
+  const table = <section className="rounded-lg border border-border bg-card p-4 min-w-0 overflow-auto"><h2 className="font-semibold mb-3">Handoffs <span className="text-muted-foreground text-sm">{links.length} links</span></h2><table className="w-full text-sm text-left"><thead><tr className="text-muted-foreground border-b"><th className="pb-2">Task / link</th><th>Created by</th><th>Link lifetime</th><th>Tab policy</th><th>Actions</th></tr></thead><tbody>{tabs.filter(t => links.includes(t.id)).map(t => <tr key={t.id} className="border-b"><td className="py-3"><a className="text-blue-400 underline" href={`#handoff-${t.id}`} onClick={e => {e.preventDefault();setSelected(t);setModal("share");}}>{t.title}</a><div className="text-xs text-muted-foreground">Synthetic handoff · Pending human</div></td><td>{t.origin}</td><td>{policies[t.id].link}</td><td>{policies[t.id].tab}</td><td><div className="flex gap-3"><button aria-label={`Manage lifetimes for ${t.title}`} onClick={() => {setSelected(t);setModal("lifetimes");}}><Clock size={16}/></button><button aria-label={`Delete link for ${t.title}`} onClick={() => {setSelected(t);setModal("delete");}}><Trash2 size={16}/></button></div></td></tr>)}</tbody></table></section>;
+  const viewer = <section className="min-w-0 flex flex-col rounded-lg border border-border overflow-hidden"><header className="flex justify-between p-3 border-b"><div><b>{selected.title}</b><p className="text-xs text-muted-foreground">{selected.desktop} · Browser maximized · Tab selected</p></div><Maximize size={18}/></header><div className="flex-1 min-h-64 bg-muted/20 flex flex-col items-center justify-center gap-3 text-muted-foreground"><Maximize size={32}/><span>Native Remote View desktop</span><small>Synthetic placeholder for layout review</small></div></section>;
+  return <main className="h-screen bg-background text-foreground flex flex-col text-sm"><header className="px-5 py-4 border-b flex justify-between"><b>Agent Browser</b><span className="text-muted-foreground">Layout preview · Synthetic workspaces</span></header><div className="flex flex-1 min-h-0"><aside className="w-64 shrink-0 border-r p-4"><h1 className="font-semibold text-lg mb-4">Desktops</h1><input aria-label="Find desktop or tab" placeholder="Find desktop or tab" value={query} onChange={e => setQuery(e.target.value)} className="w-full bg-muted rounded p-2 mb-5"/><p className="text-muted-foreground mb-3">Workspaces</p>{["Work desktop", "Research desktop"].map(desktop => <section key={desktop} className="mb-5"><p className="text-muted-foreground mb-2">{desktop}</p><button className="flex items-center gap-2 mb-2" onClick={() => setExpanded(x => ({...x, [desktop]: !x[desktop]}))}>{expanded[desktop] ? <ChevronDown size={16}/> : <ChevronRight size={16}/>} Chrome</button>{expanded[desktop] && tabs.filter(t => t.desktop === desktop && `${t.title} ${t.purpose}`.toLowerCase().includes(query.toLowerCase())).map(t => <div key={t.id} className="relative"><button className={`w-full text-left pl-6 py-2 rounded ${selected.id === t.id ? "bg-muted" : ""}`} onClick={() => setSelected(t)} onContextMenu={e => {e.preventDefault();setSelected(t);setMenu(t.id);}}>{t.title}</button>{menu === t.id && <div className="absolute z-20 bg-popover border rounded shadow-lg p-2 left-4 top-9 w-44"><button className="block p-2" onClick={() => {setLinks(x => x.includes(t.id) ? x : [...x,t.id]);setMenu(null);setModal("share");}}>Share / get link</button><button className="block p-2" onClick={() => {setModal("properties");setMenu(null);}}>Properties</button><button className="block p-2" onClick={() => setMenu(null)}>Dismiss</button></div>}</div>)}</section>)}</aside><div className={`flex-1 min-w-0 p-5 pb-20 gap-4 grid ${variant === 0 ? "grid-rows-[1fr_auto]" : variant === 1 ? "grid-cols-[1fr_580px]" : "grid-cols-[1fr_40%]"}`}>{variant === 2 ? <>{table}{viewer}</> : <>{viewer}{table}</>}</div></div><Dialog open={modal !== null} onOpenChange={open => !open && setModal(null)}><DialogContent><DialogHeader><DialogTitle>{modal === "share" ? "Handoff link" : modal === "properties" ? "Tab properties" : modal === "delete" ? "Delete handoff link?" : "Independent lifetimes"}</DialogTitle><DialogDescription>{selected.title}</DialogDescription></DialogHeader>{modal === "share" ? <><p>This synthetic link represents the durable operator URL.</p><code className="break-all">https://example.invalid/remote-view/demo-{selected.id}</code><p className="text-muted-foreground">Link: {linkLifetime}. Tab: {tabLifetime}.</p></> : modal === "properties" ? <dl className="space-y-3"><dt>Created by</dt><dd>{selected.origin}</dd><dt>Purpose</dt><dd>{selected.purpose}</dd><dt>Source</dt><dd>{selected.url}</dd></dl> : modal === "delete" ? <><p>This revokes the link. The tab and browser remain open.</p><button className="bg-destructive rounded p-2" onClick={() => {setLinks(x => x.filter(id => id !== selected.id));setModal(null);}}>Delete link</button></> : <><label>Link lifetime<input value={linkLifetime} onChange={e => setLinkLifetime(e.target.value)} className="block bg-muted p-2 w-full mt-1"/></label><label>Tab lifetime<input value={tabLifetime} onChange={e => setTabLifetime(e.target.value)} className="block bg-muted p-2 w-full mt-1"/></label><p className="text-muted-foreground">A valid link recreates an expired target tab. A browser closes when its last live tab ends.</p></>}</DialogContent></Dialog>{process.env.NODE_ENV !== "production" && <nav aria-label="Prototype variants" className="fixed bottom-4 left-1/2 -translate-x-1/2 bg-white text-black shadow-xl rounded-full px-4 py-3 flex gap-4"><button onClick={() => change(variant-1)} aria-label="Previous variant">←</button><span>{names[variant]}</span><button onClick={() => change(variant+1)} aria-label="Next variant">→</button></nav>}</main>;
+}
