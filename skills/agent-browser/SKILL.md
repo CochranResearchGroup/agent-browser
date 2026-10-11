@@ -1518,6 +1518,8 @@ uses your active owned tab or sole owned tab; ambiguous or unattributed targets
 require an exact owned handle. Another client's active tab is never a fallback.
 After detached manual seeding closes, verify the profile through the service
 control plane rather than editing profile JSON. Use
+Freshness evidence updates preserve the selected profile allocation, aliases and access policy. On `profile_freshness_invalid`, no profile effect occurred; inspect profiles and correct the input before retrying. Do not normalize legacy allocation as part of a freshness update.
+
 `agent-browser service profiles <profile-id> verify-seeding <target-service-id> --state fresh --evidence <probe-evidence>`
 Add `--account-id <id>` or `--account-ids <id,id>` when the operator has a
 safe account label to associate with the verified profile.

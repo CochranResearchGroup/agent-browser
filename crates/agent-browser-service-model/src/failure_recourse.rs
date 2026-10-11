@@ -135,6 +135,26 @@ pub fn operator_focus_failure_code(error: &str) -> Option<&str> {
 }
 
 pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
+    // Emitted only by freshness input checks before the profile is changed.
+    // Storage/commit errors keep their original uncertainty classification.
+    if error.starts_with("profile_freshness_invalid:") {
+        return ServiceFailureRecourse {
+            schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
+            code: "profile_freshness_invalid".to_string(),
+            axis: ServiceFailureAxis::Request,
+            phase: ServiceFailurePhase::IngressValidation,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::DoNotRetry,
+            recommended_action: "correct_profile_freshness_request".to_string(),
+            executable_next_action: Some(serde_json::json!({
+                "action": "service_profiles", "executable": true,
+                "request": {"action": "service_profiles"}
+            })),
+            safe_next_actions: vec!["inspect_service_profiles".to_string()],
+            hard_stops: vec!["blind_retry".to_string()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     // Desktop interaction validates controller authority before it can emit an
     // input event. Preserve that native certainty instead of projecting the
     // conservative generic operation-failure fallback.

@@ -155,3 +155,16 @@ lanes:
     reconciled_overlaps: ["Historical dirty root and local policy commits archived; this session owns the clean current checkout"]
     validation_status: Store and doctor regressions, publication fixtures, format, strict Clippy, both installed doctors and three disposable browser cycles passed; production unchanged
     updated_at: 2026-10-11
+  - id: P230
+    product_lane: PL-BUGFIX
+    objective: Preserve profile policy during readiness-only updates
+    plan: docs/dev/plans/0230-2026-10-11-profile-freshness.md
+    branch: fix/profile-freshness-176
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#176]
+    dependencies: []
+    overlaps: []
+    validation_status: Two regressions, 31 configuration tests, six recourse tests, clients, fmt, strict Clippy and docs passed; three public synthetic cases and exact cleanup passed
+    updated_at: 2026-10-11
