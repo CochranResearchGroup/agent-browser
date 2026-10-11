@@ -2472,9 +2472,18 @@ async function main() {
       refreshed: true,
       decision: 'exact_handle_still_valid',
       serviceTabHandle: tabHandle,
+      duplicateCleanupAttempted: false,
+      peerCleanupAttempted: false,
+      duplicateTargetCleanup: {
+        policy: 'preserve',
+        attempted: false,
+        closedCount: 0,
+        closedTargets: [],
+        failedTargets: [],
+      },
     },
   });
-  await requestServiceTabHandleRefresh({
+  const refreshResponse = await requestServiceTabHandleRefresh({
     baseUrl: 'http://127.0.0.1:4849',
     fetch: refreshRecorder.fetch,
     serviceTabHandle: tabHandle,
@@ -2482,6 +2491,9 @@ async function main() {
   });
   assert.equal(refreshRecorder.calls[0].body.action, 'tab_handle_refresh');
   assert.equal(refreshRecorder.calls[0].body.repairPolicy, 'reject_only');
+  assert.equal(refreshResponse.data.duplicateCleanupAttempted, false);
+  assert.equal(refreshResponse.data.peerCleanupAttempted, false);
+  assert.equal(refreshResponse.data.duplicateTargetCleanup.attempted, false);
   const refreshAliasRecorder = createFetchRecorder({ success: true, data: { ok: true } });
   await refreshServiceTabHandle({
     baseUrl: 'http://127.0.0.1:4849',
