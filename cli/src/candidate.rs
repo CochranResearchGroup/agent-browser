@@ -29,6 +29,7 @@ struct InstallArguments {
     input_closure: String,
     sealed_artifact: String,
     mode: CandidateInstallMode,
+    progress_json: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -58,6 +59,8 @@ struct CoordinationArguments {
 }
 
 /// Run a candidate command without starting or connecting to a browser daemon.
+/// JSON apply may opt into the workstation observer before sealed-byte review;
+/// observations never weaken artifact or install custody validation.
 pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
     let operation = args.get(1).map(String::as_str).unwrap_or("status");
     let result = match operation {
@@ -83,6 +86,9 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
         "build" => crate::candidate_build::run_candidate_build(args, json_output),
         "test" => crate::candidate_test::run_candidate_test(args, json_output),
         "install" => parse_install_arguments(args).and_then(|parsed| {
+            if parsed.progress_json && !json_output {
+                return Err("--progress-json requires --apply and --json".to_string());
+            }
             let manifest = fs::read(&parsed.manifest)
                 .map_err(|error| format!("failed to read candidate manifest: {error}"))?;
             let closure = fs::read(&parsed.input_closure)
@@ -103,6 +109,7 @@ pub(crate) fn run_candidate_command(args: &[String], json_output: bool) {
                         &closure,
                         &sealed_artifact,
                         json_output,
+                        parsed.progress_json,
                     )
                 }
             }
@@ -360,6 +367,7 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
     let mut input_closure = None;
     let mut sealed_artifact = None;
     let mut mode = None;
+    let mut progress_json = false;
     let mut index = 0;
     while index < args.len() {
         let argument = args[index].as_str();
@@ -375,6 +383,10 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
             }
             "--apply" => {
                 set_install_mode(&mut mode, CandidateInstallMode::Apply)?;
+                None
+            }
+            "--progress-json" => {
+                progress_json = true;
                 None
             }
             unknown => return Err(format!("Unknown candidate install argument: {unknown}")),
@@ -396,6 +408,9 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
     let mode = mode.ok_or_else(|| {
         "candidate install requires exactly one of --dry-run or --apply".to_string()
     })?;
+    if progress_json && mode != CandidateInstallMode::Apply {
+        return Err("--progress-json requires --apply and --json".to_string());
+    }
     Ok(InstallArguments {
         binary: binary.ok_or_else(|| "candidate install requires --binary <path>".to_string())?,
         manifest: manifest
@@ -405,6 +420,7 @@ fn parse_install_arguments(args: &[String]) -> Result<InstallArguments, String> 
         sealed_artifact: sealed_artifact
             .ok_or_else(|| "candidate install requires --sealed-artifact <path>".to_string())?,
         mode,
+        progress_json,
     })
 }
 
@@ -797,6 +813,44 @@ mod tests {
         assert!(error.contains("workstation_payload_source_digest_mismatch"));
 
         fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn reviewed_candidate_apply_accepts_incremental_progress() {
+        let parsed = parse_install_arguments(&args(&[
+            "candidate",
+            "install",
+            "--binary",
+            "/tmp/agent-browser",
+            "--manifest",
+            "/tmp/manifest.json",
+            "--input-closure",
+            "/tmp/closure.json",
+            "--sealed-artifact",
+            "/tmp/sealed.json",
+            "--apply",
+            "--progress-json",
+        ]));
+        assert!(
+            parsed.is_ok(),
+            "reviewed candidate apply must route progress: {parsed:?}"
+        );
+        assert!(parsed.unwrap().progress_json);
+        let dry_run = parse_install_arguments(&args(&[
+            "candidate",
+            "install",
+            "--binary",
+            "/tmp/agent-browser",
+            "--manifest",
+            "/tmp/manifest.json",
+            "--input-closure",
+            "/tmp/closure.json",
+            "--sealed-artifact",
+            "/tmp/sealed.json",
+            "--dry-run",
+            "--progress-json",
+        ]));
+        assert!(dry_run.unwrap_err().contains("requires --apply and --json"));
     }
 
     #[test]

@@ -228,6 +228,27 @@ freshness, and blocking reconciliation incidents. Use
 selected generation, latest transaction, runtime dispositions, blocker, and
 seven readiness axes.
 
+For incremental observations, run
+`agent-browser install workstation --apply --json --progress-json 2>install-progress.jsonl`.
+The same option is available on `candidate install --apply --json`; its observer
+starts before reviewing and hashing the sealed candidate and continues through
+the workstation transaction. Artifact verification and install authority are unchanged.
+Stdout remains one terminal JSON report. Stderr receives newline-delimited
+`agent-browser.workstation-install-observation.v1` records at one-second
+intervals while stderr is writable, with an initial observation. Normal observer
+completion emits a final observer record. Each record
+identifies the current invocation or transaction phase. `heartbeat` means the
+observer is alive; only `lastProgressAt` identifies durable work progress.
+Observations neither update a transaction nor extend its validation deadline.
+A successful apply adds a terminal `progressEmission` receipt with delivery state and
+`applyElapsedMs` for this workstation apply invocation, excluding builds.
+Slow or failed stderr output has a bounded 250-millisecond finish wait and a
+reported delivery failure; it does not stall or undo the installation.
+An apply failure retains the existing terminal error report and exits the observer
+with the process; it need not emit a final observer record or delivery receipt.
+Inspect the durable transaction for its final phase.
+The option requires both `--apply` and `--json`.
+
 The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
 `lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
 The deadline applies to runtime-host convergence; it is not a build-time budget.

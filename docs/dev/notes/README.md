@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Incremental upgrade observations](0236-2026-10-11-incremental-upgrade-progress.md)
+
 - [Managed upgrade admission repair](0235-2026-10-11-managed-admission-drain-repair.md)
 
 - [Graceful host restart repair](0234-2026-10-11-host-restart-repair.md)

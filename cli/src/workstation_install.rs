@@ -1,5 +1,9 @@
 //! Source-free Linux workstation installation.
 //!
+//! `--apply --json --progress-json` observes this invocation on stderr while
+//! retaining one terminal stdout report. Observer heartbeats cannot advance
+//! durable progress or validation deadlines.
+//!
 //! The workstation installer stages the release binary, support assets,
 //! manifests, and rendered unit templates in a sealed generation before
 //! atomically selecting it. Stable command and unit links resolve through that
@@ -43,6 +47,7 @@ use crate::runtime_replacement::{
 };
 
 mod current_selection;
+mod progress;
 mod retention_hold;
 
 const INSTALL_SCHEMA_VERSION: &str = "agent-browser.workstation-install.v1";
@@ -3107,7 +3112,11 @@ pub(crate) fn run_reviewed_candidate_install(
     closure_bytes: &[u8],
     sealed_artifact_bytes: &[u8],
     json: bool,
+    progress_json: bool,
 ) -> ! {
+    let observer = progress_json
+        .then(|| progress::Observer::start().unwrap_or_else(|error| fail(&error, json)));
+    progress::phase("reviewing_candidate");
     let candidate = ReviewedCandidatePayload::from_documents(
         binary_path.to_path_buf(),
         manifest_bytes,
@@ -3127,13 +3136,21 @@ pub(crate) fn run_reviewed_candidate_install(
     if json {
         args.push("--json".to_string());
     }
-    run_workstation_install_with_candidate(&args, Some(candidate));
+    run_workstation_install_with_observer(&args, Some(candidate), observer);
     std::process::exit(0);
 }
 
 fn run_workstation_install_with_candidate(
     args: &[String],
     reviewed_candidate: Option<ReviewedCandidatePayload>,
+) {
+    run_workstation_install_with_observer(args, reviewed_candidate, None);
+}
+
+fn run_workstation_install_with_observer(
+    args: &[String],
+    reviewed_candidate: Option<ReviewedCandidatePayload>,
+    progress_observer: Option<progress::Observer>,
 ) {
     let parsed = match parse_workstation_install_args(args) {
         Ok(parsed) => parsed,
@@ -3150,6 +3167,11 @@ fn run_workstation_install_with_candidate(
         Ok(root) => root,
         Err(error) => fail(&error, parsed.json),
     };
+    let progress_observer = progress_observer.or_else(|| {
+        args.iter()
+            .any(|arg| arg == "--progress-json")
+            .then(|| progress::Observer::start().unwrap_or_else(|error| fail(&error, parsed.json)))
+    });
     let mut paths = install_paths(&root);
     let mut phases = vec!["plan-validated"];
     let isolated_root = env::var_os("AGENT_BROWSER_WORKSTATION_ROOT").is_some();
@@ -3299,6 +3321,7 @@ fn run_workstation_install_with_candidate(
         phases.push("prior-install-transaction-converged");
     }
     let mut prepared_payload = if parsed.mode == InstallMode::Apply {
+        progress::phase("preparing_payload");
         let preparation = match reviewed_candidate.as_ref() {
             Some(candidate) => prepare_coordinated_reviewed_candidate_payload_transaction(
                 &root,
@@ -3671,11 +3694,19 @@ fn run_workstation_install_with_candidate(
         next_action,
     };
 
+    let progress_emission = progress_observer.map(progress::Observer::finish);
     if parsed.json {
+        let output = if let Some(emission) = progress_emission {
+            serde_json::to_value(&report).and_then(|mut output| {
+                output["progressEmission"] = emission;
+                serde_json::to_string_pretty(&output)
+            })
+        } else {
+            serde_json::to_string_pretty(&report)
+        };
         println!(
             "{}",
-            serde_json::to_string_pretty(&report)
-                .unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
+            output.unwrap_or_else(|_| r#"{"success":false,"error":"serialization failed"}"#.into())
         );
     } else {
         println!(
@@ -7249,7 +7280,9 @@ fn persist_upgrade_transition(
         persist_full_terminal_transaction_detail(path, transaction)?;
         make_terminal_transaction_old_reader_compatible(transaction);
     }
-    write_private_json_atomic(path, transaction)
+    write_private_json_atomic(path, transaction)?;
+    progress::transaction(transaction);
+    Ok(())
 }
 
 fn persist_full_terminal_transaction_detail(
@@ -12180,6 +12213,7 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
             "--dry-run" => set_mode(&mut mode, InstallMode::DryRun)?,
             "--apply" => set_mode(&mut mode, InstallMode::Apply)?,
             "--json" => json = true,
+            "--progress-json" => {}
             "--force-browserless-upgrade" => force_browserless_upgrade = true,
             "--runtime-replacement-policy" => {
                 if runtime_replacement_policy_seen {
@@ -12251,6 +12285,9 @@ fn parse_workstation_install_args(args: &[String]) -> Result<WorkstationInstallA
     let mode = mode.ok_or_else(|| {
         "Choose exactly one of --dry-run or --apply for workstation installation".to_string()
     })?;
+    if args.iter().any(|arg| arg == "--progress-json") && (mode != InstallMode::Apply || !json) {
+        return Err("--progress-json requires --apply and --json".to_string());
+    }
     if runtime_replacement_policy == RuntimeReplacementPolicy::FullShutdown
         && mode == InstallMode::Apply
         && expected_runtime_replacement_plan_digest.is_none()
@@ -12328,7 +12365,7 @@ fn parse_port(value: Option<&String>, flag: &str) -> Result<u16, String> {
 }
 
 fn workstation_usage() -> &'static str {
-    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
+    "Usage: agent-browser install workstation <--dry-run|--apply> [--json] [--progress-json] [--force-browserless-upgrade] [--runtime-replacement-policy <preserve|full-shutdown>] [--expected-runtime-replacement-plan-digest <sha256>] [--dashboard-port <port>] [--guacamole-port <port>]\n       agent-browser install workstation status [--json]\n       agent-browser install workstation recover --transaction-id <id> [--json]\n       agent-browser install workstation finalize [--json]\n       agent-browser install workstation gc <--dry-run|--apply> [--json]\n       agent-browser install transactions list [--json]\n       agent-browser install transactions inspect --transaction-id <id> [--json]\n       agent-browser install transactions <resume|rollback|close> --transaction-id <id> --expected-revision <revision> --candidate-generation <generation> --census-digest <sha256|none> [--json]"
 }
 
 #[derive(Debug)]
@@ -15612,6 +15649,37 @@ mod tests {
     }
 
     #[test]
+    fn parses_incremental_json_progress_only_for_json_apply() {
+        let args = [
+            "install",
+            "workstation",
+            "--apply",
+            "--json",
+            "--progress-json",
+        ]
+        .map(str::to_string);
+        let parsed = parse_workstation_install_args(&args)
+            .expect("an operator can request progress without changing terminal JSON");
+        assert_eq!(parsed.mode, InstallMode::Apply);
+        assert!(parsed.json);
+        for flags in [
+            vec!["install", "workstation", "--apply", "--progress-json"],
+            vec![
+                "install",
+                "workstation",
+                "--dry-run",
+                "--json",
+                "--progress-json",
+            ],
+        ] {
+            let args = flags.into_iter().map(str::to_string).collect::<Vec<_>>();
+            assert!(parse_workstation_install_args(&args)
+                .unwrap_err()
+                .contains("--progress-json requires --apply and --json"));
+        }
+    }
+
+    #[test]
     fn parses_explicit_dry_run() {
         let args = vec![
             "install".to_string(),
@@ -18096,6 +18164,59 @@ mod tests {
             persisted.checkpoints.last().unwrap().recorded_at
         );
         assert_eq!(persisted.successor_fields["futureEvidence"], "preserved");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn upgrade_progress_observes_only_successfully_persisted_checkpoints() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-progress-wire-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut transaction = new_upgrade_transaction(
+            &install_paths(&root),
+            "synthetic".into(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        let path = transaction_path(&root, &transaction.transaction_id);
+        let (result, observation) = progress::capture(|| {
+            persist_upgrade_transition(
+                &path,
+                &mut transaction,
+                crate::runtime_adoption::UpgradeTransactionState::CandidateStaged,
+                "candidate_payload_staged",
+            )
+        });
+        result.unwrap();
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(observation["transactionRevision"], persisted.revision);
+        assert_eq!(
+            observation["lastProgressAt"],
+            persisted.checkpoints.last().unwrap().recorded_at
+        );
+        let public = serde_json::to_string(&observation).unwrap();
+        assert!(!public.contains(&root.display().to_string()));
+        assert!(!public.contains("candidateBinarySha256"));
+        let blocked_parent = root.join("not-a-directory");
+        fs::write(&blocked_parent, b"block publication").unwrap();
+        let (result, unpublished) = progress::capture(|| {
+            persist_upgrade_transition(
+                &blocked_parent.join("checkpoint.json"),
+                &mut transaction,
+                crate::runtime_adoption::UpgradeTransactionState::AdmissionDraining,
+                "admission_draining",
+            )
+        });
+        assert!(result.is_err());
+        assert!(
+            unpublished.is_null(),
+            "a failed durable write must not appear as progress"
+        );
+        let retained: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        assert_eq!(retained, persisted);
         fs::remove_dir_all(root).unwrap();
     }
 
