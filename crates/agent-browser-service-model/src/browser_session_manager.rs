@@ -46,6 +46,18 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 pub trait BrowserSessionEffects {
+    /// Reconcile a currently live exact-profile browser before placement or replacement.
+    /// Return only verified attachment and task-target identities; do not launch or close peers.
+    fn reconcile_profile_browser(
+        &mut self,
+        _profile: &BrowserProfileCatalogEntry,
+        _browser: Option<&ManagedBrowserInstance>,
+        _tabs: &[ManagedBrowserTab],
+        _navigation: &[BrowserNavigationRecord],
+    ) -> Result<Option<BrowserRecovery>, String> {
+        Ok(None)
+    }
+
     /// Recover only after positive process and profile absence. The adapter
     /// retains launch custody until the host publishes the replacement atomically.
     fn recover_browser(
@@ -136,6 +148,19 @@ pub trait BrowserSessionEffects {
         browser: &ManagedBrowserInstance,
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String>;
+
+    /// Acquire this named task's first tab without replaying an observed effect
+    /// when session publication fails. Profile and task context are authoritative
+    /// request inputs, rather than inferred bootstrap-tab ownership.
+    fn acquire_session_initial_tab(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        _profile: &BrowserProfileCatalogEntry,
+        _session: &ManagedBrowserSession,
+        attributed_target_ids: &[String],
+    ) -> Result<BrowserTabAcquisition, String> {
+        self.acquire_initial_tab(browser, attributed_target_ids)
+    }
 
     fn create_tab(
         &mut self,
@@ -455,6 +480,9 @@ pub struct BrowserSessionState {
     pub next_session_sequence: u64,
     pub next_disposable_sequence: u64,
     pub browsers: BTreeMap<String, ManagedBrowserInstance>,
+    /// Attached shared browsers retain their external lifecycle owner across restart.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub shared_browser_ids: BTreeSet<String>,
     /// Explicit profile build choices survive other clients and owner restarts.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub profile_executables: BTreeMap<String, String>,
@@ -488,6 +516,7 @@ impl Default for BrowserSessionState {
             next_session_sequence: 0,
             next_disposable_sequence: 0,
             browsers: BTreeMap::new(),
+            shared_browser_ids: BTreeSet::new(),
             profile_executables: BTreeMap::new(),
             idle_closed_browsers: BTreeMap::new(),
             remote_view_presentations: BTreeMap::new(),
@@ -779,7 +808,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .get(&session.browser_id)
                 .cloned()
                 .ok_or_else(|| "browser_session_browser_missing".to_string())?;
-            if self.effects.browser_is_live(&browser)? {
+            if self.effects.browser_is_live(&browser)?
+                || self.reconcile_existing_browser(&browser, &profile)?
+            {
                 let stored = self
                     .state
                     .sessions
@@ -832,7 +863,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .find(|browser| browser.profile_id == profile.id)
             .cloned();
         let (browser_id, disposition, launched) = if let Some(browser) = reusable_browser {
-            if self.effects.browser_is_live(&browser)? {
+            if self.effects.browser_is_live(&browser)?
+                || self.reconcile_existing_browser(&browser, &profile)?
+            {
                 (browser.id, SessionBrowserDisposition::Reused, None)
             } else if browser
                 .active_session_ids
@@ -927,13 +960,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         if self.effects.browser_is_live(&browser)? {
             return Ok(());
         }
-        if !browser
-            .active_session_ids
-            .iter()
-            .any(|id| self.protected_session_ids.contains(id))
-        {
-            return Err("browser_session_recovery_not_retained".into());
-        }
         let profile = self
             .catalog
             .profiles
@@ -946,6 +972,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
             .ok_or("browser_session_recovery_profile_missing")?
             .clone();
+        if self.reconcile_existing_browser(&browser, &profile)? {
+            return Ok(());
+        }
+        if !browser
+            .active_session_ids
+            .iter()
+            .any(|id| self.protected_session_ids.contains(id))
+        {
+            return Err("browser_session_recovery_not_retained".into());
+        }
         let tabs = self
             .state
             .tabs
@@ -962,11 +998,54 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             &tabs,
             &self.state.navigation_history,
         )?;
+        let browser_id = browser.id.clone();
+        self.publish_recovery(browser, tabs, recovered, false)?;
+        // A positively absent replacement has fresh launch custody; prior shared attachment does not transfer.
+        self.state.shared_browser_ids.remove(&browser_id);
+        Ok(())
+    }
+
+    fn reconcile_existing_browser(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        profile: &BrowserProfileCatalogEntry,
+    ) -> Result<bool, String> {
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser.id)
+            .cloned()
+            .collect::<Vec<_>>();
+        let Some(recovered) = self.effects.reconcile_profile_browser(
+            profile,
+            Some(browser),
+            &tabs,
+            &self.state.navigation_history,
+        )?
+        else {
+            return Ok(false);
+        };
+        self.publish_recovery(browser.clone(), tabs, recovered, true)?;
+        self.state.shared_browser_ids.insert(browser.id.clone());
+        Ok(true)
+    }
+
+    fn publish_recovery(
+        &mut self,
+        browser: ManagedBrowserInstance,
+        tabs: Vec<ManagedBrowserTab>,
+        recovered: BrowserRecovery,
+        current_desktop_rebind: bool,
+    ) -> Result<(), String> {
         let targets = recovered.target_ids.values().collect::<BTreeSet<_>>();
         if recovered.launch.browser_id != browser.id
             || recovered.launch.pid == 0
             || recovered.launch.cdp_endpoint.is_empty()
-            || (recovered.launch.desktop != browser.desktop
+            || (!current_desktop_rebind
+                && !self.state.shared_browser_ids.contains(&browser.id)
+                && browser.desktop.is_some()
+                && recovered.launch.desktop != browser.desktop
                 && !self.state.idle_closed_browsers.contains_key(&browser.id))
             || recovered.target_ids.len() != tabs.len()
             || targets.len() != tabs.len()
@@ -1011,6 +1090,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     ) -> Result<BrowserLaunch, String> {
         if let Some(path) = self.state.profile_executables.get(&profile.id) {
             self.effects.select_browser_executable(path.clone())?;
+        }
+        if let Some(reconciled) = self
+            .effects
+            .reconcile_profile_browser(profile, None, &[], &[])?
+        {
+            if reconciled.launch.pid == 0
+                || reconciled.launch.cdp_endpoint.is_empty()
+                || !reconciled.target_ids.is_empty()
+            {
+                return Err("browser_session_recovery_identity_conflict".into());
+            }
+            self.state
+                .shared_browser_ids
+                .insert(reconciled.launch.browser_id.clone());
+            return Ok(reconciled.launch);
         }
         let refreshed = self.effects.remote_view_desktop_candidates()?;
         let candidates = refreshed
@@ -1264,7 +1358,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 remaining_session.current_tab_id = Some(acquisition.tab_id);
             }
         }
-        if !idle_closed && final_session {
+        if !idle_closed && final_session && !self.state.shared_browser_ids.contains(&browser.id) {
             self.effects.close_browser(&browser)?;
         } else if !idle_closed {
             for tab in &tabs {
@@ -1300,7 +1394,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             reason,
         });
 
-        let disposition = if final_session {
+        let disposition = if final_session && !self.state.shared_browser_ids.contains(&browser.id) {
             self.state.browsers.remove(&session.browser_id);
             self.state.idle_closed_browsers.remove(&session.browser_id);
             SessionCloseDisposition::BrowserClosed
@@ -1374,9 +1468,23 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|tab| tab.browser_id == browser.id)
             .map(|tab| tab.target_id.clone())
             .collect::<Vec<_>>();
-        let acquisition = self
-            .effects
-            .acquire_initial_tab(&browser, &attributed_target_ids)?;
+        let profile = self.catalog.profiles.get(&session.profile_id).or_else(|| {
+            self.state
+                .disposable_profiles
+                .get(&session.profile_id)
+                .map(|p| &p.profile)
+        });
+        let acquisition = if let Some(profile) = profile {
+            self.effects.acquire_session_initial_tab(
+                &browser,
+                profile,
+                &session,
+                &attributed_target_ids,
+            )?
+        } else {
+            self.effects
+                .acquire_initial_tab(&browser, &attributed_target_ids)?
+        };
         if !matches!(
             acquisition.source,
             BrowserTabSource::Bootstrap | BrowserTabSource::SessionInitial
@@ -1696,6 +1804,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .values()
             .filter(|browser| {
                 !self.state.idle_closed_browsers.contains_key(&browser.id)
+                    && !self.state.shared_browser_ids.contains(&browser.id)
                     && browser.active_session_ids.iter().any(|id| {
                         self.state.sessions.get(id).is_some_and(|session| {
                             session.expires_at_ms <= now_ms
@@ -1767,6 +1876,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .values()
             .filter(|browser| {
                 !self.state.idle_closed_browsers.contains_key(&browser.id)
+                    && !self.state.shared_browser_ids.contains(&browser.id)
                     && !browser.active_session_ids.is_empty()
                     && browser.active_session_ids.iter().all(|id| {
                         self.state
@@ -2003,8 +2113,20 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         ended_at_ms: u64,
     ) -> Result<(), String> {
         if !self.state.idle_closed_browsers.contains_key(&browser.id) {
-            self.effects.close_browser(browser)?;
+            if self.state.shared_browser_ids.contains(&browser.id) {
+                for tab in self
+                    .state
+                    .tabs
+                    .values()
+                    .filter(|tab| tab.browser_id == browser.id)
+                {
+                    self.effects.close_tab(browser, tab)?;
+                }
+            } else {
+                self.effects.close_browser(browser)?;
+            }
         }
+        self.state.shared_browser_ids.remove(&browser.id);
         let session_ids = browser.active_session_ids.clone();
         for session_id in session_ids {
             self.state.leave_open_session_ids.remove(&session_id);

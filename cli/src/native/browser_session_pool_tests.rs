@@ -703,6 +703,159 @@ fn pool_demand_excludes_occupied_desktops_and_retains_their_assignments() {
 }
 
 #[test]
+fn ordinary_live_profile_reuse_joins_current_native_desktop_without_launch() {
+    let fixture = Fixture::new();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(wire()["assignment"].clone()).unwrap();
+    let provider = Rc::new(RefCell::new(Provider {
+        assignments: vec![assignment.clone()],
+        window_pid: Some(91),
+        ..Default::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::LiveProfileReuse,
+    );
+    let command =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(opened["success"], true);
+    assert_eq!(calls.get(), 0);
+    assert!(provider.borrow().acquisitions.is_empty());
+    let browser = consumer.state().browsers.values().next().unwrap();
+    assert_eq!(browser.pid, 91);
+    let desktop = browser
+        .desktop
+        .as_ref()
+        .expect("current native window must identify its desktop");
+    assert_eq!(desktop.desktop_id, assignment.desktop_id);
+    assert_eq!(desktop.generation, assignment.generation);
+}
+
+#[test]
+fn ordinary_read_recovers_exited_borrowed_browser_with_fresh_native_custody() {
+    let fixture = Fixture::new();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(wire()["assignment"].clone()).unwrap();
+    let provider = Rc::new(RefCell::new(Provider {
+        assignments: vec![assignment],
+        window_pid: Some(91),
+        ..Default::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let command =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::LiveProfileReuse,
+    );
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(calls.get(), 0);
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    assert!(consumer.state().shared_browser_ids.contains(browser_id));
+    drop(consumer);
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let mut consumer = host_mode(&fixture, provider, calls.clone(), Mode::IdleRecovery);
+    let resumed = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(resumed["success"], true);
+    assert_eq!(
+        resumed["browserSession"]["sessionId"],
+        identity["sessionId"]
+    );
+    assert_eq!(
+        resumed["browserSession"]["browserId"],
+        identity["browserId"]
+    );
+    assert_eq!(calls.get(), 1);
+    assert!(!consumer.state().shared_browser_ids.contains(browser_id));
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn ordinary_read_recovers_retained_local_browser_on_native_desktop() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let command =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let before = store.load_session_state().unwrap();
+    let mut local = before.clone();
+    for browser in local.browsers.values_mut() {
+        browser.desktop = None;
+    }
+    local
+        .leave_open_session_ids
+        .extend(local.sessions.keys().cloned());
+    store
+        .compare_and_save_session_state(&before, &local)
+        .unwrap();
+    store
+        .remote_view_mutation_connection()
+        .execute(
+            "DELETE FROM state_documents WHERE kind = 'browser_launch_custody'",
+            [],
+        )
+        .unwrap();
+    drop(store);
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let result = resumed
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true);
+    assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+    assert_eq!(calls.get(), 2);
+    assert!(resumed
+        .state()
+        .browsers
+        .values()
+        .all(|browser| browser.desktop.is_some()));
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
 fn ordinary_read_recovers_idle_retained_browser_without_opening_handoff() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
@@ -1537,6 +1690,9 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
             };
             let request: Value = serde_json::from_str(&text).unwrap();
             let result = match request["method"].as_str().unwrap() {
+                "SystemInfo.getProcessInfo" => serde_json::json!({"processInfo":[{
+                    "type":"browser", "id":std::process::id()
+                }]}),
                 "Target.getTargets" => serde_json::json!({"targetInfos":[{
                     "targetId":target, "type":"page", "title":"Fixture",
                     "url":"https://synthetic.example/", "attached":false

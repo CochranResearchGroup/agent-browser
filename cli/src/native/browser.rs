@@ -729,6 +729,31 @@ impl BrowserManager {
         Ok(manager)
     }
 
+    /// Attach to a verified shared profile without selecting or activating a peer tab.
+    pub(crate) async fn connect_cdp_background(
+        ws_url: String,
+        client: Arc<CdpClient>,
+    ) -> Result<Self, String> {
+        let mut manager = Self {
+            client,
+            browser_process: None,
+            retained_profile: None,
+            ws_url,
+            pages: Vec::new(),
+            active_page_index: 0,
+            default_timeout_ms: 25_000,
+            download_path: None,
+            ignore_https_errors: false,
+            visited_origins: HashSet::new(),
+            bootstrap_mode: CdpBootstrapMode::Eager,
+            eager_session_ids: HashSet::new(),
+        };
+        manager
+            .discover_and_attach_targets_with_activation(false)
+            .await?;
+        Ok(manager)
+    }
+
     pub async fn connect_cdp(url: &str) -> Result<Self, String> {
         Self::connect_cdp_inner(url, false, None).await
     }
@@ -872,6 +897,13 @@ impl BrowserManager {
     }
 
     async fn discover_and_attach_targets(&mut self) -> Result<(), String> {
+        self.discover_and_attach_targets_with_activation(true).await
+    }
+
+    async fn discover_and_attach_targets_with_activation(
+        &mut self,
+        activate: bool,
+    ) -> Result<(), String> {
         self.client
             .send_command_typed::<_, Value>(
                 "Target.setDiscoverTargets",
@@ -891,6 +923,9 @@ impl BrowserManager {
             .filter(should_track_target)
             .collect();
 
+        if page_targets.is_empty() && !activate {
+            return Ok(());
+        }
         if page_targets.is_empty() {
             // Create a new tab
             let result: CreateTargetResult = self
@@ -924,7 +959,9 @@ impl BrowserManager {
                 target_type: "page".to_string(),
             });
             self.active_page_index = 0;
-            self.activate_page(self.active_page_index).await?;
+            if activate {
+                self.activate_page(self.active_page_index).await?;
+            }
             self.enable_domains(&attach_result.session_id).await?;
         } else {
             for target in &page_targets {
@@ -955,7 +992,9 @@ impl BrowserManager {
                 .position(|page| page.url != "about:blank" && !page.url.is_empty())
                 .unwrap_or(0);
             let session_id = self.pages[self.active_page_index].session_id.clone();
-            self.activate_page(self.active_page_index).await?;
+            if activate {
+                self.activate_page(self.active_page_index).await?;
+            }
             self.enable_domains(&session_id).await?;
         }
 
@@ -1701,15 +1740,26 @@ impl BrowserManager {
     }
 
     pub async fn tab_new(&mut self, url: Option<&str>) -> Result<Value, String> {
+        self.tab_new_with_activation(url, true).await
+    }
+
+    /// Create a task tab while leaving the current desktop's foreground selection alone.
+    pub(crate) async fn tab_new_background(&mut self, url: Option<&str>) -> Result<Value, String> {
+        self.tab_new_with_activation(url, false).await
+    }
+
+    async fn tab_new_with_activation(
+        &mut self,
+        url: Option<&str>,
+        activate: bool,
+    ) -> Result<Value, String> {
         let target_url = url.unwrap_or("about:blank");
 
         let result: CreateTargetResult = self
             .client
             .send_command_typed(
                 "Target.createTarget",
-                &CreateTargetParams {
-                    url: target_url.to_string(),
-                },
+                &json!({ "url": target_url, "background": !activate }),
                 None,
             )
             .await?;
@@ -1737,7 +1787,9 @@ impl BrowserManager {
             target_type: "page".to_string(),
         });
         self.active_page_index = index;
-        self.activate_page(index).await?;
+        if activate {
+            self.activate_page(index).await?;
+        }
 
         Ok(json!({
             "index": index,
@@ -1829,6 +1881,34 @@ impl BrowserManager {
         let mut result = self.tab_switch(index).await?;
         result["targetId"] = json!(target_id);
         Ok(result)
+    }
+
+    /// Remove only an owned initial blank-page marker. Compare in the live
+    /// document and retain history state so concurrent operator work survives.
+    pub(crate) async fn clear_initial_task_marker(
+        &mut self,
+        target_id: &str,
+        marker_url: &str,
+    ) -> Result<(), String> {
+        let session = self
+            .page_session_for_target(target_id)
+            .ok_or("browser_session_tab_target_missing")?
+            .to_owned();
+        let marker = serde_json::to_string(marker_url).map_err(|error| error.to_string())?;
+        let result = self.client.send_command("Runtime.evaluate", Some(json!({
+            "expression": format!("(() => {{ if (location.href !== {marker}) return false; history.replaceState(history.state, '', 'about:blank'); return true; }})()"),
+            "returnByValue": true,
+        })), Some(&session)).await?;
+        if result["result"]["value"] == true {
+            if let Some(page) = self
+                .pages
+                .iter_mut()
+                .find(|page| page.target_id == target_id)
+            {
+                page.url = "about:blank".into();
+            }
+        }
+        Ok(())
     }
 
     /// Close the selected attached target, verifying its disappearance before
@@ -2653,7 +2733,7 @@ fn lightpanda_target_init_timeout(last_error: Option<&str>) -> String {
     message
 }
 
-async fn resolve_cdp_url(input: &str) -> Result<String, String> {
+pub(crate) async fn resolve_cdp_url(input: &str) -> Result<String, String> {
     if input.starts_with("ws://") || input.starts_with("wss://") {
         return Ok(input.to_string());
     }

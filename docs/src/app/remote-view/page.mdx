@@ -610,6 +610,8 @@ Remote View owns physical retirement under its configured continuous idle
 cooldown. Configure `idle_retention_seconds = 900` for the initial 15-minute
 cooldown and `minimum_reserved = 1`; resumed use resets eligibility.
 
+On Linux, opening an explicit profile first reconciles its current browser from physical profile, process and CDP evidence. Missing or stale inventory is repaired during acquisition. Each task gets its own tab, and closing a task preserves peer tabs and browsers whose lifecycle it does not own. Retained local-browser sessions with a free profile can resume on a native Remote View desktop while keeping their logical session identity. Desktop identity comes from current native window evidence.
+
 With Remote View configured, an ordinary `open` request admits a managed session
 automatically. Socket and queued ordinary browser commands use the same managed
 session owner. Queued commands preserve explicit profile selectors and apply

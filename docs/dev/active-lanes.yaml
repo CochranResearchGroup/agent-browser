@@ -241,6 +241,20 @@ lanes:
     checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0
     remote_ref: refs/heads/fix/managed-admission-claim-251
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/253
+  - id: P232
+    product_lane: PL-BUGFIX
+    objective: Reconcile exact existing enrollment and current browser during ordinary profile open
+    plan: docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md
+    branch: fix/profile-enrollment-reuse
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#244]
+    dependencies: []
+    overlaps: [P231, P233, P234, P235]
+    reconciled_overlaps: ["P231, P233, P234 and P235 are integrated through 3028ea34; P232 owns the resulting enrollment and exact-profile reconciliation repair plus matching user guidance"]
+    validation_status: Source qualified; final native replay, provider-free session selection, format, strict Clippy and pinned CLI smokes passed; merge and installed acceptance unperformed
+    updated_at: 2026-10-11
   - id: P236
     product_lane: PL-BUGFIX
     objective: Expose truthful incremental observations during workstation install

@@ -1138,16 +1138,19 @@ impl BrowserSessionSqliteStore {
                         && record.observed_pid == Some(browser.pid)
                 })
                 .collect::<Vec<_>>();
+            let prior_conflict = if let [prior] = prior.as_slice() {
+                (prior.intent.assignment != intent.assignment
+                    && (!state.idle_closed_browsers.contains_key(&browser.id)
+                        || !assignment_release_completed(&transaction, &prior.intent.assignment)?))
+                    || (*prior).clone().confirm_publication(&state).is_err()
+            } else {
+                !prior.is_empty()
+                    || (browser.desktop.is_some()
+                        && !state.shared_browser_ids.contains(&browser.id))
+            };
             if state.browsers.get(&browser.id) != Some(browser)
                 || browser.profile_id != intent.profile_id
-                || prior.len() != 1
-                || (prior[0].intent.assignment != intent.assignment
-                    && (!state.idle_closed_browsers.contains_key(&browser.id)
-                        || !assignment_release_completed(
-                            &transaction,
-                            &prior[0].intent.assignment,
-                        )?))
-                || prior[0].clone().confirm_publication(&state).is_err()
+                || prior_conflict
             {
                 return Err(Error::Conflict);
             }

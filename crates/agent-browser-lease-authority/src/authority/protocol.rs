@@ -1466,7 +1466,12 @@ impl LeaseAuthorityProtocolKernel {
         let current_revision = current_registration
             .as_ref()
             .map_or(0, |registration| registration.revision);
-        if current_revision != request.expected_resource_revision {
+        // Ordinary acquisition sends zero without caller revision choreography.
+        // Reusing an exact active enrollment is a no-op on resource authority;
+        // explicit nonzero revision requests retain compare-and-swap fencing.
+        if current_revision != request.expected_resource_revision
+            && request.expected_resource_revision != 0
+        {
             return Err(LeaseAuthorityProtocolError {
                 code: "lease_authority_protocol_profile_enrollment_stale_revision",
             });
@@ -1497,20 +1502,46 @@ impl LeaseAuthorityProtocolKernel {
                 code: "lease_authority_protocol_principal_revision_exhausted",
             });
         }
-        let registered = register_profile_capability(
-            &mut principals,
-            ServicePrincipalRegistrationRequest {
-                principal_id: principal_id.clone(),
-                display_name: None,
-                profile_id: request.profile_id.clone(),
-                registered_at: Some(now.clone()),
-                registered_by: Some(format!("lease-authority-peer-uid:{operator_uid}")),
-            },
-            raw_capability,
-        )
-        .map_err(|error| LeaseAuthorityProtocolError {
-            code: error.code.as_str(),
-        })?;
+        let existing_capability = if current_registration.is_some() {
+            let authenticated = authenticate_profile_capability(
+                &principals,
+                raw_capability,
+                Some(&request.profile_id),
+            )
+            .map_err(|error| LeaseAuthorityProtocolError {
+                code: error.code.as_str(),
+            })?;
+            if authenticated.principal_id != principal_id {
+                return Err(LeaseAuthorityProtocolError {
+                    code: "lease_authority_protocol_resource_registration_conflict",
+                });
+            }
+            principals
+                .profile_capabilities
+                .get(&authenticated.capability_id)
+                .cloned()
+        } else {
+            None
+        };
+        let capability = if let Some(existing) = existing_capability {
+            existing
+        } else {
+            register_profile_capability(
+                &mut principals,
+                ServicePrincipalRegistrationRequest {
+                    principal_id: principal_id.clone(),
+                    display_name: None,
+                    profile_id: request.profile_id.clone(),
+                    registered_at: Some(now.clone()),
+                    registered_by: Some(format!("lease-authority-peer-uid:{operator_uid}")),
+                },
+                raw_capability,
+            )
+            .map_err(|error| LeaseAuthorityProtocolError {
+                code: error.code.as_str(),
+            })?
+            .capability
+        };
 
         let mut resources = self.state.resources.registrations.clone();
         let resource_revision = if let Some(existing) = current_registration.as_ref() {
@@ -1543,8 +1574,8 @@ impl LeaseAuthorityProtocolKernel {
             request_digest,
             idempotency_key: request.idempotency_key.clone(),
             principal_id,
-            capability_id: registered.capability.capability_id,
-            capability_revision: registered.capability.revision,
+            capability_id: capability.capability_id,
+            capability_revision: capability.revision,
             profile_id: request.profile_id,
             physical_identity_digest: physical_identity_digest.to_string(),
             resource_revision,
@@ -8615,6 +8646,91 @@ mod tests {
                 .replace("\"receiptId\":", &format!("{forbidden}\"receiptId\":"));
             assert!(decode_lease_authority_request(injected.as_bytes()).is_err());
         }
+    }
+
+    #[test]
+    fn existing_profile_enrollment_with_new_request_key_remains_acquisition_ready() {
+        let raw = "synthetic-enrollment-capability-more-than-thirty-two-characters";
+        let physical = "sha256:1111111111111111111111111111111111111111111111111111111111111111";
+        let request = |key: &str| EnrollProfileLeaseAuthorityPayload {
+            raw_capability: LeaseAuthoritySecret(raw.as_bytes().to_vec()),
+            profile_id: "synthetic-existing".into(),
+            profile_path: "/private/synthetic-existing".into(),
+            expected_resource_revision: 0,
+            idempotency_key: key.into(),
+        };
+        let mut kernel = test_kernel(
+            super::super::LeaseAuthorityState::default(),
+            ServicePrincipalRegistry::default(),
+        );
+        let first = kernel
+            .enroll_profile(request("first"), 1000, physical, "2026-09-01T12:00:00Z")
+            .unwrap();
+        let encoded = kernel.encode_protected_state().unwrap();
+        let mut restarted =
+            LeaseAuthorityProtocolKernel::from_protected_state(&encoded, test_load_context())
+                .unwrap();
+        let reused = restarted
+            .enroll_profile(
+                request("next-worker"),
+                1000,
+                physical,
+                "2026-09-01T12:01:00Z",
+            )
+            .expect("ordinary open must reuse exact active enrollment");
+        assert_eq!(reused.receipt.capability_id, first.receipt.capability_id);
+        assert_eq!(
+            reused.receipt.resource_revision,
+            first.receipt.resource_revision
+        );
+        assert_eq!(restarted.state.principals, kernel.state.principals);
+        assert_eq!(
+            serde_json::to_value(&restarted.state.resources).unwrap(),
+            serde_json::to_value(&kernel.state.resources).unwrap()
+        );
+        let before = restarted.encode_protected_state().unwrap();
+        for (uid, identity, revision, raw_token) in [
+            (1001, physical, 0, raw),
+            (
+                1000,
+                "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+                0,
+                raw,
+            ),
+            (1000, physical, 9, raw),
+            (
+                1000,
+                physical,
+                0,
+                "synthetic-foreign-capability-more-than-thirty-two-characters",
+            ),
+        ] {
+            let mut invalid = request("invalid-reuse");
+            invalid.expected_resource_revision = revision;
+            invalid.raw_capability = LeaseAuthoritySecret(raw_token.as_bytes().to_vec());
+            assert!(restarted
+                .enroll_profile(invalid, uid, identity, "2026-09-01T12:01:00Z")
+                .is_err());
+            assert_eq!(restarted.encode_protected_state().unwrap(), before);
+        }
+        let LeaseAuthorityProtocolResponse::Acquired(acquired) = restarted
+            .acquire(
+                AcquireLeaseAuthorityPayload {
+                    raw_capability: LeaseAuthoritySecret(raw.as_bytes().to_vec()),
+                    resource: LeaseResourceKey::profile("synthetic-existing"),
+                    parent_claim_id: None,
+                    mode: LeaseClaimMode::Ephemeral,
+                    expected_claim_revision: Some(0),
+                    idempotency_key: "open-after-reuse".into(),
+                    recovery_controller_id: None,
+                },
+                "2026-09-01T12:01:01Z",
+            )
+            .unwrap();
+        assert_eq!(
+            acquired.claim.unwrap().capability_id(),
+            first.receipt.capability_id
+        );
     }
 
     #[test]
