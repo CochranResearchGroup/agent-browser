@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Graceful host restart repair](0234-2026-10-11-host-restart-repair.md)
+
 - [Managed leave-open close repair](0233-2026-10-11-managed-leave-open-repair.md)
 
 - [Profile freshness repair](0230-2026-10-11-profile-freshness-repair.md)

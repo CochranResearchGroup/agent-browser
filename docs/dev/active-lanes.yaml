@@ -203,3 +203,19 @@ lanes:
     checkpoint: df46b9a7e2a43cfad30325999fd5313a8ff540eb
     remote_ref: refs/heads/fix/managed-leave-open-247
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/248
+  - id: P234
+    product_lane: PL-BUGFIX
+    objective: Allow admitted host restart after graceful owner exit
+    plan: docs/dev/plans/0234-2026-10-11-host-token-cleanup.md
+    branch: fix/host-token-cleanup-249
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#249]
+    dependencies: [P233]
+    overlaps: [P232]
+    reconciled_overlaps: ["P234 owns daemon endpoint cleanup and ordinary task attachment; P232 owns protected enrollment; each owns its catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Original public direct continuation and minimized reopen pass with exact cleanup; 87 browser-session, 12 daemon, 46 connection tests, fmt, strict Clippy and docs pass
+    limitations: ["No installed publication or reboot", "Broader failed-upgrade verification remains issue183"]

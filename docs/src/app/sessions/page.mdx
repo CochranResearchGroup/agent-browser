@@ -212,7 +212,8 @@ Use <code>--leave-open</code> or <code>runtimeProfiles.work.launch.leaveOpen</co
 when you want <code>close</code> to preserve the managed browser and its task
 for continuation. The preference survives host restart and protects the task
 from idle cleanup. Use <code>--leave-open false close</code> to end the task
-explicitly; peer tasks remain active.
+explicitly; peer tasks remain active. After a graceful runtime-host stop,
+the next command on the same session and profile reattaches its retained browser.
 
 Service-mode profile and session records can also be declared under
 <code>service.profiles</code> and <code>service.sessions</code>. These records

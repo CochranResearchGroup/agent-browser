@@ -229,3 +229,5 @@ _Avoid_: Retroactive packet commit, grouped unvalidated change
 **Native desktop demand**:
 A new browser's need for a free Remote View desktop. Pool preparation keeps the configured warm minimum and acquires additional assignments only when observed desktops are occupied, bounded by provider policy. Sessions reusing one profile reuse its browser and desktop.
 _Avoid_: Session count, eager maximum reservation, presentation slot
+
+**Graceful host restart**: The exiting host removes authentication metadata only while it owns the endpoint and matching token. Ordinary commands on an existing managed task check and attach its recorded live browser before using its tab, including headless named sessions. Physical recovery stays with the existing fenced owner.
