@@ -25,3 +25,5 @@ Move the existing native attribution before managed dispatch, preserving caller 
 The claimed-wire follow-up and complete source-free installer acceptance pass. Exact owned cleanup retires two hosts with zero residue, including the intentional assertion-failure case. Native attribution runs before managed dispatch without changing claim authority. Twelve daemon tests, the admission contract and strict Clippy pass; primary unchanged-input gates remain applicable. Source qualification only; installed publication and reboot remain excluded.
 
 Follow-up source checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0.
+
+Follow-up integration: [PR253](https://github.com/CochranResearchGroup/agent-browser/pull/253), merge 28aa65a0927d39c5687c319920e3f4b1c45e77f8. Issue251 is closed; the topic branch is retired.

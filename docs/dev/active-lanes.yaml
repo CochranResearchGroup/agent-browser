@@ -229,15 +229,15 @@ lanes:
     branch: fix/managed-admission-claim-251
     target: main
     plan_state: COMPLETED
-    custody_state: READY_FOR_INTEGRATION
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#251]
     dependencies: []
     overlaps: [P232]
     reconciled_overlaps: ["P235 owns managed admission; P232 owns protected enrollment; each owns catalog/index additions"]
-    blocker: none
+    blocker: null
     updated_at: 2026-10-11
     validation_status: Full installer and claimed wire pass; own finalizer retires two hosts with zero residue; failure cleanup and exclusion fences pass; 12 daemon tests, admission contract and strict Clippy pass; primary unchanged-input gates retained
     limitations: ["No installed publication or reboot", "Legacy provider/helper restoration excluded"]
     checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0
     remote_ref: refs/heads/fix/managed-admission-claim-251
-    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/252
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/253
