@@ -210,7 +210,7 @@ lanes:
     branch: fix/host-token-cleanup-249
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#249]
     dependencies: [P233]
     overlaps: [P232]
@@ -219,3 +219,6 @@ lanes:
     updated_at: 2026-10-11
     validation_status: Original public direct continuation and minimized reopen pass with exact cleanup; 87 browser-session, 12 daemon, 46 connection tests, fmt, strict Clippy and docs pass
     limitations: ["No installed publication or reboot", "Broader failed-upgrade verification remains issue183"]
+    checkpoint: ec0b3c2f4afc5b366b8482093695de0d3dc22740
+    remote_ref: refs/heads/fix/host-token-cleanup-249
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/250
