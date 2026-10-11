@@ -23,6 +23,6 @@
 - [P234: graceful host token cleanup](0234-2026-10-11-host-token-cleanup.md), issue #249; completed graceful-host restart and direct retained-task continuation repair.
 
 - [P235: managed upgrade admission](0235-2026-10-11-managed-admission-drain.md), issue #251; ordinary drain repair integrated; claimed-wire and complete installer acceptance follow-up qualified.
-- [P232: existing protected enrollment reuse](0232-2026-10-11-profile-enrollment-reuse.md), issue #244; source integrated and ordinary production profile sharing accepted; protected authority upgrade awaits host authentication.
+- [P232: existing protected enrollment reuse](0232-2026-10-11-profile-enrollment-reuse.md), issue #244; completed ordinary production profile sharing repair; erroneous privileged upgrade gate withdrawn under Alice/Bob G20 and G41.
 
 - [P236: incremental upgrade progress](0236-2026-10-11-incremental-upgrade-progress.md), issue #181; bounded public progress source repair complete; wider installed acceptance remains open.
