@@ -253,5 +253,5 @@ lanes:
     dependencies: []
     overlaps: [P231, P233, P234, P235]
     reconciled_overlaps: ["P231, P233, P234 and P235 are integrated through 3028ea34; P232 owns the resulting enrollment and exact-profile reconciliation repair plus matching user guidance"]
-    validation_status: Enrollment qualified; workflow source checkpoint has passing Service Model and prior synthetic workflow receipts; final native replay and strict workspace Clippy pending host admission
+    validation_status: Source qualified; final native replay, provider-free session selection, format, strict Clippy and pinned CLI smokes passed; merge and installed acceptance unperformed
     updated_at: 2026-10-11

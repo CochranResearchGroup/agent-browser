@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#244
 Branch: fix/profile-enrollment-reuse
 Baseline: 624c22e8df7f7f79a18b8d4b09d859f20473d817
-State: OPEN; enrollment qualified, workflow source checkpoint awaiting final qualification
+State: OPEN; source qualified; merge and installed acceptance unperformed
 
 Restore ordinary opening of an existing exact profile without caller revision choreography. Test the protected enrollment seam across persisted state with a new request key. Preserve operator, physical identity, active capability and explicit revision fencing. Investigate recovery absence failures without modifying real profiles or production.
 
@@ -18,9 +18,9 @@ The restart/new-request regression failed with the exact stale-revision code bef
 
 Standards review against the baseline found no accepted violations. Spec review qualifies exact active enrollment reuse only. This restores existing acquisition behavior without a new public flag or request shape; existing user guidance remains accurate. New or changed capability rotation is outside this repair.
 
-## Remaining workflow packet
+## Workflow packet scope
 
-Ordinary recovery still needs to reconcile a live profile browser against stale session inventory before attempting a replacement launch. Do not infer absence from the saved PID, clear a live singleton lock or close an operator-used browser. Preserve peer tabs and authentication. Reproduce through ordinary acquisition and the public recovery seam, then add an exact live-browser reuse transition and qualify no duplicate process or tab on replay and partial failure. Installed publication and acceptance remain unperformed.
+Ordinary recovery must reconcile a live profile browser against stale session inventory before attempting a replacement launch. Do not infer absence from the saved PID, clear a live singleton lock or close an operator-used browser. Preserve peer tabs and authentication. Reproduce through ordinary acquisition and the public recovery seam, then add an exact live-browser reuse transition and qualify no duplicate process or tab on replay and partial failure. Installed publication and acceptance remain unperformed.
 
 Runtime observations and incident identifiers remain private, outside tracked product sources. Memory disposition: forbidden; no explicit user memory-write request.
 
@@ -36,7 +36,7 @@ No production runtime effect is part of this repair. Synthetic browser processes
 
 Initial task-tab acquisition is part of ordinary session continuity. Qualify a tab created before a failed session publication, then reload the old baseline in a fresh requester and repeat the same named task. Reuse its observed target without creating another tab or browser. The seam must receive the exact catalog profile and task identity rather than infer ownership from an unrelated bootstrap page. Any private effect evidence belongs with profile runtime state, outside tracked product files; malformed unrelated history must remain diagnostic and cannot veto acquisition.
 
-## Workflow source checkpoint
+## Historical workflow source checkpoint
 
 The source now reconciles an exact current Linux Chrome profile before replacement, acquires separate background task tabs, preserves borrowed browser processes on task close, and rejoins current native desktop inventory when it can prove placement. An exited borrowed browser can acquire fresh owned native launch custody. Fresh owned launches clear the worker's prior borrowed lifecycle state. Configured executable selection applies to subsequent launches and does not veto current-browser reuse.
 
@@ -58,4 +58,18 @@ The retained-target publication regression was observed red with `retained recov
 
 The final provider-free session selection passed 96 tests, with the six real-browser fixtures explicitly ignored and separately executed. Its first run failed one queued-handoff fixture: the mock did not answer the newly required CDP process-identity probe. The mock now returns its actual server process ID. Retained endpoint qualification requires a current executable, stable kernel start token and matching CDP browser PID; executable-name classification does not confer custody. The corrected full selection passed in 23.31 seconds. The first failures remain attributable fixture and product evidence, not erased retries.
 
-Final workspace format and strict Clippy passed. Lease Authority source and Cargo.lock are unchanged since the qualified enrollment checkpoint, so its 117-test receipt remains applicable; its architecture check passed again. The latest Service Model receipt remains applicable because subsequent edits are confined to native adapters and fixtures. Exact-code CLI build and no-launch service/installation checks are the remaining source gates. Production installation and actual operator-viewer acceptance remain excluded.
+Final workspace format and strict Clippy passed. Lease Authority source and Cargo.lock are unchanged since the qualified enrollment checkpoint, so its 117-test receipt remains applicable; its architecture check passed again. The latest Service Model receipt remains applicable because subsequent edits are confined to native adapters and fixtures. Exact-code CLI build and all seven pinned no-launch service/installation checks subsequently passed. Production installation and actual operator-viewer acceptance remain excluded.
+
+## Final source qualification
+
+The CLI built from code commit `7a2a8bd458884c55da044794cd69fd140aeb3811` has SHA256 `4519582f502321d2f6b7cef618f3672458cfe2877d9cb0822b5591337cc43eac`. A private immutable candidate copy passed service-contract metadata, MCP resource reads, profile-source and site-policy provenance, HTTP and MCP incident summaries, and workstation installation. No production binary was replaced. The installation fixture proved two owned hosts and zero residue. Temporary no-launch smoke hosts were retired using exact candidate and runtime-home ownership; this cleanup does not touch production processes. Fresh OS census found zero remaining candidate hosts.
+
+### Standards review
+
+Serial review against freshly fetched origin/main corrected configured-executable drift, borrowed lifecycle state, physical profile evidence and retained endpoint identity qualification. Final format and strict workspace Clippy passed. No blocking finding remains in this bounded source packet. Prior Lease Authority, Service Model, client, documentation and unchanged workstation receipts are reused only for unchanged inputs. The optional policy-wiring failure remains unrelated baseline debt.
+
+### Spec review
+
+G05 and G23 are covered by stale/absent inventory reuse, current physical profile evidence and free-profile recovery despite unrelated stale metadata. G43 is covered by one browser with separate background task targets and publication replay without duplicate targets. G44 is covered by peer-preserving borrowed close and final owned-browser release across requester restart. The retained-publication fixture additionally preserves subsequent Alice page work and Bob's target. No blocking finding remains for these tested transitions.
+
+This qualifies Linux synthetic Chrome source behavior. It does not prove the original historical absence failure's root cause, the entire failure matrix, other platforms, transport failure plus journal loss, or actual native operator-viewer acceptance. Production installation, provider effects, real-profile cleanup and merge remain unperformed. The plan stays OPEN and its worktree is retained for integration. Memory disposition: forbidden because no explicit memory-write request was given.
