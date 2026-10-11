@@ -12,4 +12,4 @@
 
 [Historical plans](../../history/2026-10-05-legacy-planning/README.md), including P223 revision 5, are reference-only. Do not load them as startup instructions or infer execution authority from old OPEN states.
 
-- [P229: development runtime provenance](0229-2026-10-11-development-provenance.md), issue #79; active bounded repair.
+- [P229: development runtime provenance](0229-2026-10-11-development-provenance.md), issue #79; completed bounded development repair.

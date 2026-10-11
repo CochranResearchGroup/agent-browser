@@ -147,10 +147,11 @@ lanes:
     plan: docs/dev/plans/0229-2026-10-11-development-provenance.md
     branch: fix/development-provenance-79
     target: main
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#79]
     dependencies: []
     overlaps: [P222]
     reconciled_overlaps: ["Historical dirty root and local policy commits archived; this session owns the clean current checkout"]
+    validation_status: Store and doctor regressions, publication fixtures, format, strict Clippy, both installed doctors and three disposable browser cycles passed; production unchanged
     updated_at: 2026-10-11
