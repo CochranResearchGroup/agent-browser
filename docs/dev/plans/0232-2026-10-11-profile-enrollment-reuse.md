@@ -2,9 +2,9 @@
 
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#244
-Branch: fix/profile-enrollment-reuse
+Branch: fix/profile-runtime-acceptance-244; source repair integrated from fix/profile-enrollment-reuse
 Baseline: 624c22e8df7f7f79a18b8d4b09d859f20473d817
-State: OPEN; source qualified; merge and installed acceptance unperformed
+State: OPEN; source integrated and ordinary production workflow accepted; protected authority upgrade pending host authentication
 
 Restore ordinary opening of an existing exact profile without caller revision choreography. Test the protected enrollment seam across persisted state with a new request key. Preserve operator, physical identity, active capability and explicit revision fencing. Investigate recovery absence failures without modifying real profiles or production.
 
@@ -87,3 +87,11 @@ The production-shaped release candidate is bound to source `c28e7a4997c811efcc8d
 Those exact bytes passed installed acceptance in a separate development namespace: one browser with distinct Alice/Bob task targets, independent page titles, Alice close preserving Bob, final close, and fresh zero test-browser residue. Three disposable launch/read/close cycles passed. The installed CLI doctor passed. Production and the default development identities were preserved. The namespaced composite doctor reports only unpublished local web ingress; all executable, supervisor, listener, browser and protected-authority readiness checks pass. This is scoped local browser acceptance, not native human-viewer or public-ingress qualification.
 
 Production promotion and exact real-profile opening are next under the operator's existing authorization. The protected authority still runs an older banked executable; its exact supported upgrade plan preserves protected state and requires host sudo authentication. No cached general sudo authorization is available to this agent. No helper privilege expansion or alternate root-write path is authorized or attempted.
+
+## Production ordinary-profile acceptance
+
+PR246 merged through `0dc7b2b5845e08e681b948b69cb66c2da05f098e`. Fresh canonical remote readback proves sealed source `c28e7a49` in its ancestry; the only later source difference is this qualification document, absent from the executable-input closure. Candidate install preflight verified production-shaped reuse eligibility and no competing operation. The supported preservation transaction reached accepted revision 13 in approximately 40 seconds. The installed executable digest matches the development-qualified sealed bytes and production doctor passes.
+
+Two ordinary named tasks successfully opened one existing production profile and returned the same browser PID. Closing the first task preserved the second; both task closes preserved the existing borrowed browser. Only owned blank acceptance tabs were used. This qualifies ordinary acquisition and peer preservation, not application login or accounting actions. Runtime identities and receipts remain private.
+
+The protected authority retains its prior banked executable, so the protected enrollment repair is not yet installed there. Host sudo authentication is unavailable to this agent. A guarded manual authority operation is prepared privately: exact prior unit and binary guards, exact candidate digest, unchanged hardening and protected state, serialized execution, retained old unit and error rollback. It does not invoke the shell adapter's unavailable Rust-sealed upgrade-action path or fabricate a plan digest. Operator terminal execution and post-upgrade protected enrollment verification remain pending. The current plan remains OPEN.

@@ -245,7 +245,7 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Reconcile exact existing enrollment and current browser during ordinary profile open
     plan: docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md
-    branch: fix/profile-enrollment-reuse
+    branch: fix/profile-runtime-acceptance-244
     target: main
     plan_state: OPEN
     custody_state: ACTIVE_WORKTREE
@@ -253,7 +253,7 @@ lanes:
     dependencies: []
     overlaps: [P231, P233, P234, P235]
     reconciled_overlaps: ["P231, P233, P234 and P235 are integrated through 3028ea34; P232 owns the resulting enrollment and exact-profile reconciliation repair plus matching user guidance"]
-    validation_status: Source qualified; final native replay, provider-free session selection, format, strict Clippy and pinned CLI smokes passed; merge and installed acceptance unperformed
+    validation_status: Source integrated through PR246; sealed release passed isolated development and ordinary production profile sharing; production doctor passes; protected authority upgrade awaits host authentication
     updated_at: 2026-10-11
   - id: P236
     product_lane: PL-BUGFIX
