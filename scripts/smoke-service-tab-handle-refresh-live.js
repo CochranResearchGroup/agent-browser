@@ -119,6 +119,7 @@ async function serviceRequest(body, label) {
       agentName,
       taskName,
       targetServiceId,
+      clientSubjectId: agentName,
       runtimeProfile: profileId,
       jobTimeoutMs: 60000,
       ...body,
@@ -355,7 +356,7 @@ try {
   assert(rejectRefresh.data?.duplicateCleanupAttempted === false, `reject refresh attempted duplicate cleanup: ${JSON.stringify(rejectRefresh.data)}`);
   assert(rejectRefresh.data?.peerCleanupAttempted === false, `reject refresh attempted peer cleanup: ${JSON.stringify(rejectRefresh.data)}`);
 
-  const peerTask = { agentName: 'peer-agent', taskName: 'peer-task' };
+  const peerTask = { agentName: 'peer-agent', taskName: 'peer-task', clientSubjectId: 'peer-agent' };
   const peerTab = await serviceRequest(
     { ...peerTask, action: 'tab_new', params: { headless: true, url: 'about:blank' } },
     'peer blank tab_new',
@@ -364,7 +365,8 @@ try {
   assert(peerHandle?.valid === true, 'peer tab did not return a valid handle');
   if (peerHandle.sessionName) routedSessions.add(peerHandle.sessionName);
   assert(peerHandle.browserId === browserId, 'peer did not share the browser');
-  assert(peerHandle.sessionName !== handle.sessionName, 'peer did not have independent caller custody');
+  assert(handle.profileAccess?.subjectId === agentName, 'caller lacks canonical subject custody');
+  assert(peerHandle.profileAccess?.subjectId === peerTask.clientSubjectId, 'peer lacks independent canonical subject custody');
 
   const openRefresh = await serviceRequest(
     {
@@ -394,13 +396,34 @@ try {
   );
   const ownBlankHandle = ownBlank.data?.serviceTabHandle;
   assert(ownBlankHandle?.valid === true, 'own duplicate did not return a valid handle');
-  const cleanupRefresh = await serviceRequest(
+  await serviceRequest(
+    { action: 'tab_close', serviceTabHandle: replacementHandle },
+    'canonical replacement tab_close',
+  );
+  const ownReuse = await serviceRequest(
     { action: 'tab_handle_refresh', serviceTabHandle: replacementHandle,
+      repairPolicy: 'reuse_compatible', desiredUrl: primaryUrl },
+    'caller-bound compatible reuse',
+  );
+  const reusedHandle = ownReuse.data?.serviceTabHandle;
+  assert(ownReuse.data?.decision === 'reused_compatible_target', 'own compatible target was not reused');
+  assert(reusedHandle?.tabId === ownBlankHandle.tabId, 'reuse did not return the canonical tab ID');
+  assert(reusedHandle?.targetId === ownBlankHandle.targetId, 'reuse returned the wrong target');
+  assert(reusedHandle?.profileAccess?.subjectId === agentName, 'reuse lost caller custody');
+  assert(reusedHandle?.traceFilter?.agentName === agentName, 'reuse lost caller attribution');
+  const ownDuplicate = await serviceRequest(
+    { action: 'tab_new', params: { url: 'about:blank' } },
+    'second own duplicate tab_new',
+  );
+  const ownDuplicateHandle = ownDuplicate.data?.serviceTabHandle;
+  assert(ownDuplicateHandle?.valid === true, 'second own duplicate did not return a valid handle');
+  const cleanupRefresh = await serviceRequest(
+    { action: 'tab_handle_refresh', serviceTabHandle: reusedHandle,
       repairPolicy: 'replace_duplicates', desiredUrl: primaryUrl },
     'caller duplicate cleanup',
   );
   const closedTargets = cleanupRefresh.data?.duplicateTargetCleanup?.closedTargets ?? [];
-  assert(closedTargets.some((target) => target.targetId === ownBlankHandle.targetId),
+  assert(closedTargets.some((target) => target.targetId === ownDuplicateHandle.targetId),
     'cleanup did not close the caller-owned blank duplicate');
   assert(!closedTargets.some((target) => target.targetId === peerHandle.targetId),
     'cleanup closed the peer target');

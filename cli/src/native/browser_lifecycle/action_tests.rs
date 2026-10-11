@@ -1132,6 +1132,42 @@ fn test_tab_handle_refresh_replace_duplicates_preserves_peer_targets() {
         "caller-a-duplicate"
     )
     .is_none());
+
+    // The shared-profile relay can use one physical session. Canonical child
+    // subjects still distinguish its independent callers.
+    for tab in service_state.tabs.values_mut() {
+        let subject = if tab
+            .target_id
+            .as_deref()
+            .is_some_and(|id| id.starts_with("caller-b"))
+        {
+            "caller-b"
+        } else {
+            "caller-a"
+        };
+        tab.owner_session_id = Some("caller-a".to_string());
+        tab.session_id = Some("caller-a".to_string());
+        tab.principal_id = None;
+        tab.profile_access = Some(
+            serde_json::from_value(json!({
+                "subjectId": subject,
+                "identityAssurance": "self-declared",
+                "parentPolicyRevision": 1,
+                "accessDecisionId": format!("decision:{subject}"),
+                "permissions": ["profile_use", "tab_control_own", "tab_close_own"]
+            }))
+            .unwrap(),
+        );
+    }
+    let duplicates = caller_bound_compatible_duplicate_live_pages(
+        &service_state,
+        stale_handle.as_object().unwrap(),
+        &pages,
+        &selected_target_id,
+        Some("https://books.example"),
+    );
+    assert_eq!(duplicates.len(), 1);
+    assert_eq!(duplicates[0]["targetId"], "caller-a-duplicate");
 }
 #[test]
 fn test_tab_handle_refresh_selects_compatible_duplicate_live_pages() {

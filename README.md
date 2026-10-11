@@ -4423,7 +4423,7 @@ using the current service session and optional `desiredUrl` hint.
 Compatible reuse requires canonical Service State custody for the same caller.
 `open_if_missing` persists a canonical replacement when no caller-bound target
 exists. `replace_duplicates` closes only compatible same-caller targets and
-preserves foreign or unattributed peers. Every response includes
+preserves foreign or unattributed peers. Structured refresh responses include
 `duplicateCleanupAttempted`, `peerCleanupAttempted`, and nested
 `duplicateTargetCleanup` evidence. `service_remote_view_route_preflight`, HTTP
 `GET /api/service/remote-view/route-preflight`, MCP
