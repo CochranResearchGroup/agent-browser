@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P230 freshness repair
+
+[P230](docs/dev/plans/0230-2026-10-11-profile-freshness.md) completes #176 at the bounded source and public synthetic seams. The [receipt](docs/dev/notes/0230-2026-10-11-profile-freshness-repair.md) records policy preservation, typed pre-effect input rejection, red/green regressions and three public disposable cases. Installed runtimes and real profiles were unchanged. Issue #84 is next for current qualification; reboot remains deferred.
+
 ### 2026-10-11 P229 development repair
 
 [P229](docs/dev/plans/0229-2026-10-11-development-provenance.md) completes the bounded #79 repair. The [receipt](docs/dev/notes/0229-2026-10-11-development-runtime-repair.md) records failed repros, source qualification and installed headless acceptance. Development source provenance is retained, legacy SQLite state is preserved, both doctors and three disposable launch/read/close cycles pass, and production is unchanged. The root checkout is reconciled with recoverable historical work; no surplus registered worktrees existed. Issue #176 is next. Reboot remains deferred.

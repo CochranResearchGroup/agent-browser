@@ -4836,6 +4836,8 @@ Use `summarizeServiceProfileAcquisition()` on the helper result when a client
 needs compact log, trace, dashboard, or operator output for selected profile,
 registration, due-monitor, browser-preflight, access-plan attention, and
 CDP-free launch availability state.
+Freshness updates preserve existing allocation, service aliases and access policy, including legacy records already selectable by access planning. Invalid freshness input returns `profile_freshness_invalid` with `no_effect`; inspect profiles and correct the request.
+
 The decision includes `freshnessUpdate`, which names the selected profile,
 target identities, HTTP route, MCP tool, and `updateServiceProfileFreshness`
 client helper to use after a bounded auth probe reports current login state.

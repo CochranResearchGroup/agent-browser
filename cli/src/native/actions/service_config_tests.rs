@@ -559,3 +559,102 @@ async fn test_service_reconcile_response_matches_contract() {
     assert_eq!(result["data"]["reconciled"], true);
     let _ = fs::remove_dir_all(&home);
 }
+
+#[tokio::test]
+async fn issue176_selectable_legacy_profile_freshness_preserves_policy() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("issue176-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    let mut daemon = DaemonState::new();
+    for (allocation, aliases) in [
+        (ProfileAllocationPolicy::PerService, vec!["Demo", "demo"]),
+        (ProfileAllocationPolicy::SharedService, vec!["Demo", "demo"]),
+        (ProfileAllocationPolicy::PerService, vec!["Demo"]),
+    ] {
+        let profile = BrowserProfile {
+            id: "fixture".into(),
+            allocation,
+            shared_service_ids: aliases.into_iter().map(str::to_string).collect(),
+            target_service_ids: vec!["demo".into()],
+            persistent: true,
+            access_policy: Some(crate::native::service_profile_access_policy::ServiceProfileAccessPolicy::shared_local_default("fixture")),
+            ..BrowserProfile::default()
+        };
+        let mut persisted = ServiceState::default();
+        persisted.profiles.insert("fixture".into(), profile.clone());
+        store.save(&persisted).unwrap();
+        let selected = select_service_profile_for_request(
+            &persisted,
+            &ProfileSelectionRequest {
+                service_name: Some("Demo".into()),
+                target_service_ids: vec!["demo".into()],
+                ..ProfileSelectionRequest::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(selected.profile_id, "fixture");
+        let response = Box::pin(super::execute_command(&json!({
+            "action":"service_profile_freshness_update", "id":"issue176-update", "profileId":"fixture",
+            "freshness":{"targetServiceId":"demo","readinessState":"fresh","readinessEvidence":"synthetic","updateAuthenticatedServiceIds":false}
+        }), &mut daemon)).await;
+        assert_eq!(response["success"], true, "{response}");
+        let after = store.load().unwrap();
+        let updated = &after.profiles["fixture"];
+        assert_eq!(updated.allocation, profile.allocation);
+        assert_eq!(updated.shared_service_ids, profile.shared_service_ids);
+        assert_eq!(updated.access_policy, profile.access_policy);
+        assert_eq!(
+            updated.authenticated_service_ids,
+            profile.authenticated_service_ids
+        );
+        assert_eq!(updated.target_readiness[0].evidence, "synthetic");
+        let mut before_fields = serde_json::to_value(&profile).unwrap();
+        let mut after_fields = serde_json::to_value(updated).unwrap();
+        for value in [&mut before_fields, &mut after_fields] {
+            value.as_object_mut().unwrap().remove("targetReadiness");
+        }
+        assert_eq!(after_fields, before_fields);
+    }
+    fs::remove_dir_all(home).unwrap();
+}
+
+#[tokio::test]
+async fn issue176_invalid_freshness_is_no_effect_with_unchanged_state() {
+    let guard = EnvGuard::new(&["HOME"]);
+    let home = unique_socket_dir("issue176-invalid-home");
+    fs::create_dir_all(&home).unwrap();
+    guard.set("HOME", home.to_str().unwrap());
+    let store = JsonServiceStateStore::new(JsonServiceStateStore::default_path().unwrap());
+    let mut persisted = ServiceState::default();
+    persisted.profiles.insert(
+        "fixture".into(),
+        BrowserProfile {
+            id: "fixture".into(),
+            ..BrowserProfile::default()
+        },
+    );
+    store.save(&persisted).unwrap();
+    let before = serde_json::to_value(store.load().unwrap().profiles).unwrap();
+    let mut daemon = DaemonState::new();
+    let mut response = Box::pin(super::execute_command(&json!({
+        "action":"service_profile_freshness_update","id":"issue176-invalid","profileId":"fixture","freshness":{}
+    }), &mut daemon)).await;
+    crate::native::service_failure::attach_service_failure_recourse_for_action(
+        &mut response,
+        "service_profile_freshness_update",
+    );
+    assert_eq!(response["success"], false);
+    assert_eq!(
+        serde_json::to_value(store.load().unwrap().profiles).unwrap(),
+        before
+    );
+    assert_eq!(
+        response["failure"]["effectState"], "no_effect",
+        "{response}"
+    );
+    assert_eq!(response["failure"]["code"], "profile_freshness_invalid");
+    assert!(response["failure"]["executableNextAction"].is_object());
+    fs::remove_dir_all(home).unwrap();
+}

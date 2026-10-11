@@ -348,11 +348,12 @@ pub fn update_profile_freshness(
     id: &str,
     update: ProfileFreshnessUpdate,
 ) -> Result<BrowserProfile, String> {
-    validate_entity_id(id, "profile")?;
+    validate_entity_id(id, "profile")
+        .map_err(|error| format!("profile_freshness_invalid:{error}"))?;
     let targets = update.target_ids();
     if targets.is_empty() {
         return Err(
-            "profile freshness update requires loginId, siteId, targetServiceId, or targetServiceIds"
+            "profile_freshness_invalid:profile freshness update requires loginId, siteId, targetServiceId, or targetServiceIds"
                 .to_string(),
         );
     }
@@ -360,7 +361,9 @@ pub fn update_profile_freshness(
     let last_verified_at = update.last_verified_at.clone().unwrap_or_else(now_rfc3339);
     let updated_profile = {
         let Some(profile) = state.profiles.get_mut(id) else {
-            return Err(format!("profile '{id}' does not exist"));
+            return Err(format!(
+                "profile_freshness_invalid:profile '{id}' does not exist"
+            ));
         };
 
         for target in &targets {
@@ -450,7 +453,8 @@ pub fn update_profile_freshness(
             }
         }
 
-        validate_profile_policy(profile)?;
+        // Allocation and access policy are unchanged by readiness evidence.
+        // Revalidating legacy policy here contradicts existing profile selection.
         profile.clone()
     };
 
@@ -802,8 +806,9 @@ pub fn upsert_persisted_profile(id: &str, body: Value) -> Result<BrowserProfile,
 
 /// Update one persisted profile's freshness rows under the serialized state mutator.
 pub fn update_persisted_profile_freshness(id: &str, body: Value) -> Result<BrowserProfile, String> {
-    let update = serde_json::from_value::<ProfileFreshnessUpdate>(body)
-        .map_err(|err| format!("Invalid profile freshness update: {err}"))?;
+    let update = serde_json::from_value::<ProfileFreshnessUpdate>(body).map_err(|err| {
+        format!("profile_freshness_invalid:Invalid profile freshness update: {err}")
+    })?;
     let repository = LockedServiceStateRepository::default_json()?;
     update_profile_freshness_in_repository(&repository, id, update)
 }

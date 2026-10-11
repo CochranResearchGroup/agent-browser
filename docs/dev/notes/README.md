@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Profile freshness repair](0230-2026-10-11-profile-freshness-repair.md)
+
 - [Development runtime repair](0229-2026-10-11-development-runtime-repair.md)
 
 - [Native confirm timeout](0160-2026-09-08-soylei-native-confirm-timeout-report.md)
