@@ -26,3 +26,5 @@
 - [P232: existing protected enrollment reuse](0232-2026-10-11-profile-enrollment-reuse.md), issue #244; completed ordinary production profile sharing repair; erroneous privileged upgrade gate withdrawn under Alice/Bob G20 and G41.
 
 - [P236: incremental upgrade progress](0236-2026-10-11-incremental-upgrade-progress.md), issue #181; bounded public progress source repair complete; wider installed acceptance remains open.
+
+- [P238: workflow-focused MCP](0238-2026-10-11-workflow-mcp.md), #255 and spec #262; implementation with isolated installed workflow qualification.

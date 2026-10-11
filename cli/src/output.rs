@@ -7365,7 +7365,7 @@ Usage:
   agent-browser runtime attach [name]
 
 Commands:
-  create [name]         Create a named runtime profile and persist it to user config
+  create [name]         Create a named persistent profile for runtime and service planning
   list                  Show configured and on-disk runtime profiles
   status [name]         Show PID, profile path, DevTools reachability, and targets
   login [url]           Launch a detached headed browser for manual sign-in

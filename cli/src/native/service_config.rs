@@ -342,6 +342,58 @@ pub fn upsert_profile(
     Ok(profile)
 }
 
+/// Join supported named runtime creation to the existing managed-profile catalog.
+/// Existing policy, readiness and authentication metadata are preserved. A different
+/// physical directory is a concrete configuration conflict, not a revision ceremony.
+pub fn register_runtime_profile(id: &str, user_data_dir: &str) -> Result<BrowserProfile, String> {
+    agent_browser_lease_authority::validate_runtime_profile_name(id)?;
+    let requested = std::fs::canonicalize(user_data_dir)
+        .map_err(|err| format!("runtime_profile_directory_unavailable: {err}"))?;
+    let snapshot = super::service_store::load_default_service_state_snapshot()?;
+    let observed_path = snapshot
+        .profiles
+        .get(id)
+        .and_then(|profile| profile.user_data_dir.clone());
+    if let Some(existing) = observed_path.as_deref() {
+        let existing = std::fs::canonicalize(existing)
+            .map_err(|err| format!("runtime_profile_directory_unavailable: {err}"))?;
+        if existing != requested {
+            return Err(format!(
+                "runtime_profile_directory_conflict: profile {id} already names another directory"
+            ));
+        }
+    }
+    // All filesystem observation precedes this replayable pure state transform.
+    // Re-read metadata on each replay so concurrent policy/readiness edits survive.
+    super::service_store::mutate_default_service_state(|state| {
+        let mut profile = state
+            .profiles
+            .get(id)
+            .cloned()
+            .unwrap_or_else(|| BrowserProfile {
+                id: id.to_string(),
+                name: id.to_string(),
+                persistent: true,
+                ..BrowserProfile::default()
+            });
+        if profile
+            .user_data_dir
+            .as_deref()
+            .is_some_and(|path| path != user_data_dir && Some(path) != observed_path.as_deref())
+        {
+            return Err(format!("runtime_profile_directory_conflict: profile {id} changed directory during registration"));
+        }
+        profile.user_data_dir = Some(user_data_dir.to_string());
+        validate_profile_policy(&profile)?;
+        state.profiles.insert(id.to_string(), profile.clone());
+        state
+            .entity_sources
+            .profiles
+            .insert(id.to_string(), ServiceEntitySource::PersistedState);
+        Ok(profile)
+    })
+}
+
 /// Merge target-readiness freshness evidence into one persisted profile record.
 pub fn update_profile_freshness(
     state: &mut ServiceState,

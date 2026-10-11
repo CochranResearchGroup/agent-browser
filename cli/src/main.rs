@@ -987,6 +987,19 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 browser_family.as_deref(),
             ) {
                 Ok(config_path) => {
+                    // Runtime creation and service planning share the same exact profile.
+                    // Repeated creation preserves an existing profile's policy and state.
+                    if let Err(err) = native::service_config::register_runtime_profile(
+                        &runtime_name,
+                        &user_data_dir,
+                    ) {
+                        if flags.json {
+                            print_json_error(err);
+                        } else {
+                            eprintln!("{} {}", color::error_indicator(), err);
+                        }
+                        exit(1);
+                    }
                     if flags.json {
                         print_json_value(json!({
                             "created": true,

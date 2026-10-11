@@ -1471,6 +1471,8 @@ or otherwise mix browser families unless the operator explicitly forces it with
 `AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true`. Start with a blank managed
 profile for a new browser family.
 
+Named runtime creation also registers the exact profile for service planning. Repeating creation preserves existing profile policy and authentication metadata. A conflicting physical directory is a configuration error.
+
 To create and track a managed profile explicitly, use:
 
 ```bash
