@@ -6,7 +6,7 @@ Updated: 2026-10-06
 
 ### 2026-10-11 P232 installed checkpoint
 
-[P232](docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md) source repair is integrated through PR246. One sealed release candidate passed isolated installed Alice/Bob sharing and three disposable cycles, then the preservation transaction accepted production publication. Production doctor and two tasks on one existing profile pass, with peer and borrowed-browser preservation. The protected authority still runs its prior banked executable; a guarded manual upgrade awaits operator host authentication and protected enrollment readback. P232 and issue244 remain open. Application authentication and native human-viewer acceptance are separate.
+[P232](docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md) is complete for ordinary-profile repair. PR246 integrated the source; the same sealed release passed isolated sharing and disposable cycles, production preservation publication, doctor, and two tasks on one existing profile with peer and borrowed-browser preservation. The proposed privileged authority upgrade was an incorrect gate: Alice/Bob G20 and G41 retire those prerequisites. The unexecuted procedure is cancelled without protected-service effects. Application authentication, native human-viewer acceptance and full compiled legacy-authority removal are separate qualifications.
 
 ### 2026-10-11 P236 incremental install observations
 

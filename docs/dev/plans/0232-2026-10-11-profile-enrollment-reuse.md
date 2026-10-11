@@ -4,7 +4,7 @@ Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#244
 Branch: fix/profile-runtime-acceptance-244; source repair integrated from fix/profile-enrollment-reuse
 Baseline: 624c22e8df7f7f79a18b8d4b09d859f20473d817
-State: OPEN; source integrated and ordinary production workflow accepted; protected authority upgrade pending host authentication
+State: COMPLETED; source integrated and ordinary production profile workflow accepted
 
 Restore ordinary opening of an existing exact profile without caller revision choreography. Test the protected enrollment seam across persisted state with a new request key. Preserve operator, physical identity, active capability and explicit revision fencing. Investigate recovery absence failures without modifying real profiles or production.
 
@@ -86,7 +86,7 @@ The production-shaped release candidate is bound to source `c28e7a4997c811efcc8d
 
 Those exact bytes passed installed acceptance in a separate development namespace: one browser with distinct Alice/Bob task targets, independent page titles, Alice close preserving Bob, final close, and fresh zero test-browser residue. Three disposable launch/read/close cycles passed. The installed CLI doctor passed. Production and the default development identities were preserved. The namespaced composite doctor reports only unpublished local web ingress; all executable, supervisor, listener, browser and protected-authority readiness checks pass. This is scoped local browser acceptance, not native human-viewer or public-ingress qualification.
 
-Production promotion and exact real-profile opening are next under the operator's existing authorization. The protected authority still runs an older banked executable; its exact supported upgrade plan preserves protected state and requires host sudo authentication. No cached general sudo authorization is available to this agent. No helper privilege expansion or alternate root-write path is authorized or attempted.
+The subsequent production checkpoint records promotion and ordinary profile opening under the operator's existing authorization. The initial checkpoint incorrectly proposed upgrading a legacy protected authority. That proposed gate is withdrawn by the contract correction below.
 
 ## Production ordinary-profile acceptance
 
@@ -94,4 +94,12 @@ PR246 merged through `0dc7b2b5845e08e681b948b69cb66c2da05f098e`. Fresh canonical
 
 Two ordinary named tasks successfully opened one existing production profile and returned the same browser PID. Closing the first task preserved the second; both task closes preserved the existing borrowed browser. Only owned blank acceptance tabs were used. This qualifies ordinary acquisition and peer preservation, not application login or accounting actions. Runtime identities and receipts remain private.
 
-The protected authority retains its prior banked executable, so the protected enrollment repair is not yet installed there. Host sudo authentication is unavailable to this agent. A guarded manual authority operation is prepared privately: exact prior unit and binary guards, exact candidate digest, unchanged hardening and protected state, serialized execution, retained old unit and error rollback. It does not invoke the shell adapter's unavailable Rust-sealed upgrade-action path or fabricate a plan digest. Operator terminal execution and post-upgrade protected enrollment verification remain pending. The current plan remains OPEN.
+## Contract correction and completion
+
+The operator corrected the proposed privileged upgrade gate. The existing [Alice/Bob contract reconciliation](../notes/2026-10-08-alice-bob-contract-reconciliation.md), G20 and G41, already retires the old privileged helper and legacy runtime prerequisites. Their presence in an installation does not establish an ordinary-profile launch or repair prerequisite. Requiring sudo authentication or upgrading that service for this packet was an incorrect completion criterion.
+
+The unexecuted private upgrade procedure is cancelled; its original bytes are retained privately and its executable entrypoint now exits without effects. No protected service, unit, bank or state was changed. Prior instructions to run that procedure are withdrawn.
+
+P232 is complete for its bounded ordinary-profile repair: source integration, isolated installed sharing, production publication, production doctor, and two ordinary tasks sharing an existing browser with peer-preserving close all passed. The earlier enrollment unit-test receipt remains source evidence only; it is not an installed protected-service acceptance claim. Full removal of legacy compiled authority code is not qualified by this packet. Application authentication, native human-viewer acceptance, other platforms and the original historical absence failure's root cause retain their stated limits. The worktree and sealed candidate are retained; no checkout closeout or artifact deletion is claimed.
+
+Memory correction supersedes the earlier pending-authority-upgrade checkpoint. Queue acceptance is recorded separately from persistence or retrieval proof.
