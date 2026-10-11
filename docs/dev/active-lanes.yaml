@@ -249,7 +249,7 @@ lanes:
     branch: fix/upgrade-progress-stream-181
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#181]
     dependencies: [P231]
     overlaps: [P232]
@@ -258,6 +258,6 @@ lanes:
     validation_status: Final source passes candidate and workstation public success/failure progress with zero residue, 242 affected Rust tests and strict workspace Clippy; format, feature docs and unchanged compatibility gates retained
     limitations: ["Unsealed debug source candidate", "Installed production upgrade and separate build/apply receipt qualification remain open", "CI disabled"]
     updated_at: 2026-10-11
-    checkpoint: 8cd1921891f6ed113d9a6acde2e97c4d6a74c10d
+    checkpoint: aefeb390be9e30224f618d15901e54d47165c14f
     remote_ref: refs/heads/fix/upgrade-progress-stream-181
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/256
