@@ -265,6 +265,8 @@
     "drill:rdp-guac-postgres-restore": "bash scripts/guacamole-postgres-durability.sh restore-drill",
     "install:privileges": "bash scripts/install-agent-browser-privileges.sh",
     "test:install-privileges-clean-fixture": "bash scripts/smoke-install-privileges-clean-fixture.sh",
+    "test:candidate-progress-fixture": "AGENT_BROWSER_PROGRESS_FIXTURE_MODE=candidate node scripts/test-workstation-progress-fixture.js",
+    "test:workstation-progress-fixture": "node scripts/test-workstation-progress-fixture.js",
     "test:workstation-install-fixture": "node scripts/test-fixture-runtime-cleanup.js && node scripts/test-workstation-install-fixture.js",
     "test:plan-0134-repro-fixtures": "node scripts/test-plan-0134-repro-fixtures.js",
     "test:guacamole-display-keyboard-focus": "node scripts/test-guacamole-display-keyboard-focus.js",

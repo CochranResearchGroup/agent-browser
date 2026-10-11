@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P236 incremental install observations
+
+[P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) is OPEN. The [source note](docs/dev/notes/0236-2026-10-11-incremental-upgrade-progress.md) preserves the terminal-only public red and repaired workstation success/failure loops. The candidate option rejection now has actual parser red/green and an adapter correction awaiting full compilation and public wire qualification. Initial full installer compatibility passes with two owned hosts retired and zero residue. Quality gates remain pending; no runtime publication or production qualification.
+
 ### 2026-10-11 P234 graceful host restart
 
 [P234](docs/dev/plans/0234-2026-10-11-host-token-cleanup.md) completes the bounded #249 repair. The [receipt](docs/dev/notes/0234-2026-10-11-host-restart-repair.md) retains the incomplete-metadata failure and subsequent first-getter attachment failure. Owner-qualified token cleanup and existing fenced browser attachment now pass the original same-PID/CDP continuation loop without explicit reopen, followed by exact close and zero residue. Browser-session, daemon, connection and quality/docs gates pass. This supersedes P233's identified direct-host restart gap; #183 remains open for broader failed-upgrade shutdown qualification. No installed publication or reboot. Protected-enrollment PR246 and its active checkout remain preserved.

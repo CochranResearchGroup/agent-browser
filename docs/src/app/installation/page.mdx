@@ -301,6 +301,23 @@ reconciliation incidents from the same receipts. Use
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
 selected-generation, migration, blocker, admission, and terminal-state view.
+For incremental observations, run
+`agent-browser install workstation --apply --json --progress-json 2>install-progress.jsonl`.
+The same option is available on `candidate install --apply --json`; its observer
+starts before reviewing and hashing the sealed candidate and continues through
+the workstation transaction. Artifact verification and install authority are unchanged.
+Stdout remains one terminal JSON report. Stderr receives newline-delimited
+`agent-browser.workstation-install-observation.v1` records at one-second
+intervals, with an initial observation and a final observer record. Each record
+identifies the current invocation or transaction phase. `heartbeat` means the
+observer is alive; only `lastProgressAt` identifies durable work progress.
+Observations neither update a transaction nor extend its validation deadline.
+The terminal `progressEmission` receipt includes observer delivery state and
+`applyElapsedMs` for this workstation apply invocation, excluding builds.
+Slow or failed stderr output has a bounded 250-millisecond finish wait and a
+reported delivery failure; it does not stall or undo the installation.
+The option requires both `--apply` and `--json`.
+
 The latest transaction includes <code>phaseStartedAt</code>, <code>phaseElapsedMs</code>,
 <code>lastProgressAt</code>, <code>deadlineAt</code>, <code>deadlineScope</code>, and <code>progressObservedAt</code>.
 The deadline applies to runtime-host convergence; it is not a build-time budget.

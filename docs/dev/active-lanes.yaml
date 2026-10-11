@@ -241,3 +241,20 @@ lanes:
     checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0
     remote_ref: refs/heads/fix/managed-admission-claim-251
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/253
+  - id: P236
+    product_lane: PL-BUGFIX
+    objective: Expose truthful incremental observations during workstation install
+    plan: docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md
+    plan_ref: refs/heads/fix/upgrade-progress-stream-181
+    branch: fix/upgrade-progress-stream-181
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#181]
+    dependencies: [P231]
+    overlaps: [P232]
+    reconciled_overlaps: ["P236 owns installer progress and upgrade-only shared guidance; P232 preserves enrollment and recovery ownership, each owns its plan/catalog/index entry; branch-local P232 registration retained despite canonical omission"]
+    blocker: null
+    validation_status: Initial workstation repair passes 192 Rust tests, public success/failure progress and full installer cleanup; actual candidate parser red/green passes; adapter compile and strict Clippy pending
+    limitations: ["Unsealed debug source candidate", "Installed production upgrade and separate build/apply receipt qualification remain open", "CI disabled"]
+    updated_at: 2026-10-11
