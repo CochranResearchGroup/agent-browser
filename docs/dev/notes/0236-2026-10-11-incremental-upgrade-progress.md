@@ -1,7 +1,7 @@
 # Incremental workstation install observations
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P236 / #181
 Related lanes: none
 Baseline: da19973fa5b60a58cfe26a3143df3c6d35d87ff1
@@ -25,3 +25,23 @@ This is isolated source qualification. No production or development runtime was 
 The original issue reports candidate install. The initial workstation repair did not expose its option there: a public zero-effect invocation returned Unknown candidate install argument before reading any artifact. The exact parser, mode helper, types and source regression were extracted into a small standard-library-only Rust fixture. It reproduced that rejection and passes after repair, including dry-run exclusion. This is actual parser evidence, not a full CLI or sealed-install gate. The full CLI red-test waiter never compiled and was cancelled; it is not a behavioral result.
 
 Candidate apply now passes its explicit progress choice into the reviewed adapter. Global JSON mode remains required. The adapter starts the same observer before sealed document review and binary hashing, then transfers it to the existing workstation apply function. Artifact verification, coordination custody and install authority are unchanged. Whole CLI compilation, affected Rust tests and the corrected candidate public wire remain pending under host resource admission. No merge readiness is asserted.
+
+## Final source qualification
+
+Frozen executable source is 8cd1921891f6ed113d9a6acde2e97c4d6a74c10d. Its immutable debug CLI SHA256 is 544f69bc5f19316dde5e94e74a6ac5addffa10a32e671e6509b411dae802fa38. The user waived the previous host reserve; compilation passed with an 8 GiB reserve, 4 GiB hard cap, no swap and one job. This did not change shared admission defaults or take custody of foreign work.
+
+| Requirement | Evidence | Qualification |
+| --- | --- | --- |
+| Reviewed candidate early output | 68 observations; first after 75 ms; apply 66,296 ms | Actual public adapter with synthetic sealed fixture inputs |
+| Workstation early output | 57 observations; first after 100 ms; apply 55,775 ms | Actual public isolated apply |
+| Failure termination | Both injected units-staged failures returned exit 1 within the fixture bound | Existing terminal error semantics preserved |
+| Exact cleanup | Both independently observed cleanup receipts found zero residue | No fixture-owned host retirement required |
+| Candidate mode and parser | All 11 candidate Rust tests passed at frozen source | Full CLI test binary, including the new regression |
+| Workspace quality | Strict workspace Clippy passed with warnings denied | Final frozen source, 4 GiB hard cap |
+| Installer compatibility | Earlier complete no-progress fixture passed; two exact hosts retired, zero residue | Reused because the adapter correction adds an optional observer and delegates the unchanged disabled-mode installation body; final workstation tests cover the helper interactions |
+| Documentation and format | Final feature docs build and format check passed | Retained unchanged-input gates; closeout prose receives links and planning checks |
+| Installed qualification | Unverified | No publication; synthetic seals are not production-shaped build evidence |
+
+All 192 final workstation Rust tests passed in 656.52 seconds, including durable-write failure, heartbeat truthfulness, blocked-output completion and installer recovery. All 39 help-output tests passed. These final-source gates replace the pending adapter qualification; integration remains a separate boundary.
+
+Wire logs and exact fixture roots intentionally remain in the operator-local temporary evidence directory. The tracked commands `pnpm test:candidate-progress-fixture` and `pnpm test:workstation-progress-fixture`, with `AGENT_BROWSER_FIXTURE_BIN` set to an immutable binary built from the source above, reproduce the qualification. This note preserves the durable identity, measured outcomes and limits without copying runtime state into the repository. Earlier scoped OOMs, cancelled waiters and older-binary results remain preserved as distinct evidence.

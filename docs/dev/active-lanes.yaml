@@ -248,13 +248,16 @@ lanes:
     plan_ref: refs/heads/fix/upgrade-progress-stream-181
     branch: fix/upgrade-progress-stream-181
     target: main
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#181]
     dependencies: [P231]
     overlaps: [P232]
     reconciled_overlaps: ["P236 owns installer progress and upgrade-only shared guidance; P232 preserves enrollment and recovery ownership, each owns its plan/catalog/index entry; branch-local P232 registration retained despite canonical omission"]
     blocker: null
-    validation_status: Initial workstation repair passes 192 Rust tests, public success/failure progress and full installer cleanup; actual candidate parser red/green passes; adapter compile and strict Clippy pending
+    validation_status: Final source passes candidate and workstation public success/failure progress with zero residue, 242 affected Rust tests and strict workspace Clippy; format, feature docs and unchanged compatibility gates retained
     limitations: ["Unsealed debug source candidate", "Installed production upgrade and separate build/apply receipt qualification remain open", "CI disabled"]
     updated_at: 2026-10-11
+    checkpoint: 8cd1921891f6ed113d9a6acde2e97c4d6a74c10d
+    remote_ref: refs/heads/fix/upgrade-progress-stream-181
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/256

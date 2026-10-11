@@ -6,7 +6,7 @@ Updated: 2026-10-06
 
 ### 2026-10-11 P236 incremental install observations
 
-[P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) is OPEN. The [source note](docs/dev/notes/0236-2026-10-11-incremental-upgrade-progress.md) preserves the terminal-only public red and repaired workstation success/failure loops. The candidate option rejection now has actual parser red/green and an adapter correction awaiting full compilation and public wire qualification. Initial full installer compatibility passes with two owned hosts retired and zero residue. Quality gates remain pending; no runtime publication or production qualification.
+[P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) completes the bounded source repair. The [accepted source note](docs/dev/notes/0236-2026-10-11-incremental-upgrade-progress.md) binds the final binary, public candidate and workstation success/failure observations, zero cleanup residue, 242 affected Rust tests, strict Clippy, format and retained documentation/compatibility gates. PR256 owns integration. No runtime publication or production-shaped qualification is claimed; wider #181 remains open.
 
 ### 2026-10-11 P234 graceful host restart
 

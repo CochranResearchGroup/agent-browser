@@ -3,7 +3,7 @@
 Product lane: PL-BUGFIX
 Work item: #181
 Branch: fix/upgrade-progress-stream-181
-State: OPEN
+State: COMPLETED
 Version: 2
 Lane: P236
 
@@ -32,3 +32,9 @@ Production publication, provider restoration, private authentication, reboot and
 The original issue uses candidate install. Its current public adapter rejects progress-json before reading any artifact; a zero-effect public invocation reproduces the missing route. Ranked hypotheses are parser rejection, loss during reviewed-payload adaptation and preflight verification outside the observer. The parser rejection is established; canonical source also shows the reviewed adapter builds new workstation arguments after verification.
 
 Route the same opt-in observer through the reviewed candidate adapter before expensive binary verification, then transfer it to workstation apply. Preserve global JSON restrictions, artifact seals, source verification and coordination custody. Add a parser regression before repair and qualify the actual candidate entry point with synthetic sealed evidence or a typed early failure. Reuse passed workstation gates only for unchanged inputs; rerun affected adapter and public checks after this correction. No production installation authority is added.
+
+## Outcome
+
+The bounded source outcome is complete. The final debug CLI built from frozen executable source 8cd1921891f6ed113d9a6acde2e97c4d6a74c10d passes both public progress success/failure fixtures, with first output within 100 milliseconds and zero cleanup residue. Final candidate, workstation and output suites pass with 11, 192 and 39 tests; strict workspace Clippy and format pass. The [accepted source note](../notes/0236-2026-10-11-incremental-upgrade-progress.md) binds identities, measurements, retained gates and limitations.
+
+PR256 owns integration. This completion does not close wider issue 181 or qualify a production-shaped build, installed runtime, provider or separate build/apply receipts. The user waived the previous host reserve for validation; the original resource window and cumulative evidence remain preserved.
