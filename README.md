@@ -523,6 +523,16 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
+`lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
+The deadline applies to runtime-host convergence; it is not a build-time budget.
+`lastProgressAt` is the last durable checkpoint, while `progressObservedAt`
+is the time of this status read. Reading status never invents a heartbeat.
+Older transactions report a null phase start and elapsed time when their
+recorded evidence cannot identify the current phase start.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A command timeout returns immediately with
+`post_commit_validation_command_timeout` rather than retrying a stalled command.
 Legacy migration preserves an inert, unbound session whose profile row is
 missing by materializing a persistent placeholder profile. The placeholder
 restores referential identity only and grants no principal authority. A missing
@@ -1849,8 +1859,17 @@ browser family, launch settings, auth session name, and service login hints. A s
 login hosts for that service, so agents can switch to detached `runtime login`.
 Use the attachable manual-login flow only for sites where DevTools during login
 is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
-`close` to detach from a managed runtime-profile browser instead of shutting it
-down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
+`close` to preserve the managed browser and its task for continuation. The
+leave-open preference survives host restart and protects the retained task from
+idle cleanup. Use `--leave-open false close` to end that task explicitly;
+peer tasks keep their browser. After a graceful runtime-host stop, the next
+command on the same session and profile reattaches its retained browser.
+During an upgrade admission drain, managed browser effects return
+`runtime_admission_draining`. Reads of an existing live task remain available;
+a read that needs a browser launch, physical recovery, or a new tab is blocked.
+Use the owning upgrade transaction's status and recovery commands before retrying;
+do not remove the drain marker to bypass it.
+Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
 
@@ -2429,6 +2448,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
 | `--runtime-profile <name>` | Managed runtime profile name (or `AGENT_BROWSER_RUNTIME_PROFILE` env) |
 | `--profile <path>` | Persistent custom user-data-dir path (or `AGENT_BROWSER_PROFILE` env) |
+| `--leave-open [true/false]` | Preserve the managed browser and task on close; explicit false ends the task |
 | `--state <path>` | Load storage state from JSON file (or `AGENT_BROWSER_STATE` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
 | `--executable-path <path>` | Custom browser executable (or `AGENT_BROWSER_EXECUTABLE_PATH` env) |

@@ -59,6 +59,23 @@ fn unix_socket_path_is_owned(path: &Path, identity: UnixSocketIdentity) -> bool 
     unix_socket_identity(path) == Some(identity)
 }
 
+/// Remove authentication metadata only for the endpoint and token this host
+/// still owns. A replacement token or unreadable file remains evidence.
+fn cleanup_owned_auth_token(
+    socket_dir: &Path,
+    endpoint_key: &str,
+    expected_token: &str,
+    owns_endpoint: bool,
+) {
+    if !owns_endpoint || expected_token.is_empty() {
+        return;
+    }
+    let token_path = socket_dir.join(format!("{endpoint_key}.token"));
+    if fs::read_to_string(&token_path).is_ok_and(|token| token.trim() == expected_token) {
+        let _ = fs::remove_file(token_path);
+    }
+}
+
 fn secure_daemon_dir(path: &std::path::Path) {
     #[cfg(unix)]
     {
@@ -326,7 +343,7 @@ pub async fn run_daemon(session: &str) {
         socket_listener,
         &socket_path,
         session,
-        daemon_auth_token,
+        daemon_auth_token.clone(),
         stream_client,
         stream_server_instance,
         idle_timeout_ms,
@@ -343,6 +360,13 @@ pub async fn run_daemon(session: &str) {
         socket_identity.is_some_and(|identity| unix_socket_path_is_owned(&socket_path, identity));
     #[cfg(windows)]
     let owns_session_artifacts = true;
+
+    cleanup_owned_auth_token(
+        &socket_dir,
+        &endpoint_key,
+        daemon_auth_token.as_str(),
+        owns_session_artifacts,
+    );
 
     #[cfg(unix)]
     if owns_session_artifacts {
@@ -1116,6 +1140,24 @@ async fn handle_connection<S>(
                     .get("action")
                     .and_then(|value| value.as_str())
                     .map(str::to_owned);
+                // Managed routing needs the same native caller attribution as
+                // the fallback lane before it evaluates an installer claim.
+                if action
+                    .as_deref()
+                    .is_some_and(|action| action.starts_with("browser_session_"))
+                    || !super::actions::action_skips_browser_launch(
+                        cmd["action"].as_str().unwrap_or(""),
+                    )
+                    || matches!(
+                        cmd["action"].as_str(),
+                        Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
+                    )
+                {
+                    super::service_request_provenance::attribute_native_session(
+                        &mut cmd,
+                        &lane_session,
+                    );
+                }
                 if action.as_deref() == Some("service_remote_view_handoff_resolve") {
                     if let Some(response) =
                         router.try_handle_browser_session_handoff(cmd.clone()).await
@@ -1191,17 +1233,6 @@ async fn handle_connection<S>(
                 };
                 let control_plane = lane.control_plane.clone();
                 crate::runtime_host::reconcile_lane_profile_defaults(&mut cmd, &lane.config);
-                if !super::actions::action_skips_browser_launch(
-                    cmd["action"].as_str().unwrap_or(""),
-                ) || matches!(
-                    cmd["action"].as_str(),
-                    Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
-                ) {
-                    super::service_request_provenance::attribute_native_session(
-                        &mut cmd,
-                        &lane_session,
-                    );
-                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());
@@ -1406,6 +1437,32 @@ mod tests {
     #[allow(unused_imports)]
     use super::*;
 
+    #[test]
+    fn auth_token_cleanup_preserves_replacement_and_unknown_metadata() {
+        let root = std::env::temp_dir().join(format!("ab-auth-cleanup-{}", uuid::Uuid::new_v4()));
+        fs::create_dir_all(&root).unwrap();
+        let token_path = root.join("runtime-host.token");
+        fs::write(&token_path, "replacement-token").unwrap();
+        cleanup_owned_auth_token(&root, "runtime-host", "retiring-token", true);
+        assert_eq!(
+            fs::read_to_string(&token_path).unwrap(),
+            "replacement-token"
+        );
+
+        fs::write(&token_path, "retiring-token").unwrap();
+        cleanup_owned_auth_token(&root, "runtime-host", "retiring-token", false);
+        assert!(token_path.is_file());
+        cleanup_owned_auth_token(&root, "runtime-host", "", true);
+        assert!(token_path.is_file());
+        cleanup_owned_auth_token(&root, "runtime-host", "retiring-token", true);
+        assert!(!token_path.exists());
+
+        fs::write(&token_path, [0xff]).unwrap();
+        cleanup_owned_auth_token(&root, "runtime-host", "retiring-token", true);
+        assert_eq!(fs::read(&token_path).unwrap(), [0xff]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
     #[tokio::test]
     async fn closing_last_runtime_lane_does_not_stop_shared_host() {
         let guard = crate::test_utils::EnvGuard::new(&[
@@ -1603,6 +1660,15 @@ mod tests {
         let retiring_identity =
             unix_socket_identity(&socket_path).expect("retiring socket should have an identity");
         assert!(unix_socket_path_is_owned(&socket_path, retiring_identity));
+        let token_path = fixture_dir.join("handoff.token");
+        fs::write(&token_path, "retiring-token").unwrap();
+        cleanup_owned_auth_token(
+            &fixture_dir,
+            "handoff",
+            "retiring-token",
+            unix_socket_path_is_owned(&socket_path, retiring_identity),
+        );
+        assert!(!token_path.exists());
 
         fs::remove_file(&socket_path).expect("retiring socket path should be unlinked");
         let replacement_listener =
@@ -1611,10 +1677,22 @@ mod tests {
             !unix_socket_path_is_owned(&socket_path, retiring_identity),
             "retiring daemon must not own the replacement socket path"
         );
+        fs::write(&token_path, "retiring-token").unwrap();
+        cleanup_owned_auth_token(
+            &fixture_dir,
+            "handoff",
+            "retiring-token",
+            unix_socket_path_is_owned(&socket_path, retiring_identity),
+        );
+        assert!(
+            token_path.is_file(),
+            "replacement endpoint metadata must remain"
+        );
 
         drop(retiring_listener);
         drop(replacement_listener);
         fs::remove_file(&socket_path).expect("replacement socket path should be removed");
+        fs::remove_file(&token_path).unwrap();
         fs::remove_dir(&fixture_dir).expect("fixture directory should be removed");
     }
 

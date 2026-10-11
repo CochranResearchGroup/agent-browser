@@ -49,3 +49,13 @@ Completed-source dispositions do not claim new exhaustive installed qualificatio
 ## Setup and validation
 
 The six docs/agents files configure the engineering skills without creating a competing domain glossary. CONTEXT.md remains the domain authority. Default triage roles replace obsolete reviewed state/triage and state/ready labels; stale coordination labels are retired on these reviewed issues. Scoped rejected requests #72 and #82 are recorded under .out-of-scope. Validation covers local documentation links, reviewed manifest source hashes and diff hygiene. No Rust or browser behavior changes.
+
+## Reconciliation checkpoint, 2026-10-11
+
+The table above preserves the initial review. Subsequent bounded repairs closed #79 (PR242), #176 (PR243), #247 (PR248), #249 (PR250) and #251 (PR252 and claimed-wire follow-up PR253). The latter three qualify ordinary leave-open, direct retained-task continuation after host restart, and managed upgrade admission through public synthetic workflows. Only #79 published the isolated development candidate. No production publication or reboot occurred.
+
+#84 still needs non-isolated cooperative-transfer acceptance. #105 has two ten-profile synthetic cycles with zero residue, but needs representative churn/soak and resource-retention decisions. #181 integrates truthful progress and timeout behavior through PR245; heartbeat, build/apply receipts and installed qualification remain. #183 has bounded failed-upgrade browser preservation evidence and the independent lifecycle fixes above; broader explicit shutdown and multi-generation qualification remains open.
+
+#164 needs the maintainer's merge-policy decision; CI remains operator-disabled. #75 and #96 need a concrete read-only consumer acceptance target. #66, #68, #74, #81, #199 and #203 remain deferred present-product questions or features; archived milestones do not authorize their execution.
+
+The enrollment worktree and draft PR246 remain protected pending ordinary live recovery evidence. Integrated repair topics are retired. Original dirty root work is preserved in a backup reference, archive branch and verified recovery bundle outside this review. The next bounded packet should address one remaining runtime acceptance question, rather than reopen the retired provider architecture or begin all deferred features.

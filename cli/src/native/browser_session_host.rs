@@ -123,6 +123,7 @@ pub(crate) async fn execute_shared_remote_view_open(
     command: serde_json::Value,
 ) -> Result<Option<serde_json::Value>, String> {
     tokio::task::spawn_blocking(move || {
+        require_managed_runtime_admission("launch", &command)?;
         let mut shared = shared
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
@@ -873,6 +874,22 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if command
+            .get("leaveOpen")
+            .is_some_and(|value| !value.is_boolean())
+        {
+            return Err("browser_session_leave_open_invalid".into());
+        }
+        require_managed_runtime_admission(
+            match action {
+                "browser_session_status" => "service_status",
+                "browser_session_open" | "remote_view_open" => "launch",
+                "browser_session_navigate" => "navigate",
+                "browser_session_close" => "close",
+                _ => action,
+            },
+            command,
+        )?;
         let now_ms = command
             .get("activityAtMs")
             .and_then(serde_json::Value::as_u64)
@@ -926,9 +943,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         &self.state,
                         handoff_id,
                     )?;
-                    self.manager()?
-                        .recover_retained_browser(&retained.browser.id)?;
-                    self.commit_state()?;
+                    self.recover_browser_for_command(&retained.browser.id, command)?;
                     let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
                         &self.state,
                         handoff_id,
@@ -983,13 +998,25 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             "browser_session_close" => {
                 let session_id = self.session_id_from_command(command)?;
-                let closed =
-                    self.close_session(&session_id, SessionEndReason::ExplicitClose, now_ms)?;
+                let preserve = match command.get("leaveOpen") {
+                    Some(value) => value
+                        .as_bool()
+                        .ok_or("browser_session_leave_open_invalid")?,
+                    None => self.state.leave_open_session_ids.contains(&session_id),
+                };
+                let closed = if preserve {
+                    let result = self.manager()?.preserve_session(&session_id)?;
+                    self.commit_state()?;
+                    result
+                } else {
+                    self.close_session(&session_id, SessionEndReason::ExplicitClose, now_ms)?
+                };
                 Ok(serde_json::json!({
                     "closed": true,
                     "sessionId": closed.session_id,
                     "browserId": closed.browser_id,
                     "disposition": session_close_disposition_name(closed.disposition),
+                    "taskRetained": preserve,
                 }))
             }
             "browser_session_navigate" => {
@@ -1078,6 +1105,29 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         ))
     }
 
+    /// Attach a live recorded browser during drain, but admit any physical
+    /// recovery through the same upgrade authority as an explicit launch.
+    fn recover_browser_for_command(
+        &mut self,
+        browser_id: &str,
+        command: &serde_json::Value,
+    ) -> Result<(), String> {
+        // Use the same publication and operation fence as manager recovery.
+        let _ = self.manager()?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("browser_session_browser_missing")?
+            .clone();
+        if self.effects.browser_is_live(&browser)? {
+            return Ok(());
+        }
+        require_managed_runtime_admission("launch", command)?;
+        self.manager()?.recover_retained_browser(browser_id)?;
+        self.commit_state()
+    }
+
     fn compact_navigation_history(&mut self) -> Result<(), String> {
         self.state
             .compact_navigation_history(self.exact_url_history_maximum_bytes)?;
@@ -1128,6 +1178,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     return Err("browser_session_profile_selector_conflict".into());
                 }
             } else {
+                require_managed_runtime_admission("launch", command)?;
                 if self
                     .catalog
                     .profiles
@@ -1168,7 +1219,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
             )
         };
-        self.open(request)
+        let opened = self.open(request)?;
+        self.apply_leave_open_choice(&opened.session_id, command)?;
+        Ok(opened)
+    }
+
+    /// Retain managed task identity and physical occupancy rather than claiming
+    /// that an externally consumed browser's profile became available.
+    fn apply_leave_open_choice(
+        &mut self,
+        session_id: &str,
+        command: &serde_json::Value,
+    ) -> Result<(), String> {
+        match command.get("leaveOpen") {
+            Some(serde_json::Value::Bool(true)) => {
+                self.manager()?.preserve_session(session_id)?;
+                self.commit_state()?;
+            }
+            Some(serde_json::Value::Bool(false)) => {
+                self.manager()?;
+                self.state.leave_open_session_ids.remove(session_id);
+                self.commit_state()?;
+            }
+            Some(_) => return Err("browser_session_leave_open_invalid".into()),
+            None => {}
+        }
+        Ok(())
     }
 
     fn session_id_from_command(&self, command: &serde_json::Value) -> Result<String, String> {
@@ -1209,6 +1285,12 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        if command
+            .get("leaveOpen")
+            .is_some_and(|value| !value.is_boolean())
+        {
+            return Err("browser_session_leave_open_invalid".into());
+        }
         validate_handoff_ttl(
             command,
             command
@@ -1217,6 +1299,7 @@ where
                 .unwrap_or_else(current_unix_ms),
             &self.state.retention_policy,
         )?;
+        require_managed_runtime_admission(command["action"].as_str().unwrap_or_default(), command)?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
         if automatic && command["action"] == "tab_new" {
@@ -1253,6 +1336,7 @@ where
             .collect::<Vec<_>>();
         let session_id = match matching_ids.as_slice() {
             [] if automatic => {
+                require_managed_runtime_admission("launch", command)?;
                 if self.state.managed_tab_requests.values().any(|request| {
                     request.response.is_none()
                         && (request.session_name == session_name
@@ -1285,10 +1369,11 @@ where
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
             .browser_id
             .clone();
-        if automatic || self.state.idle_closed_browsers.contains_key(&browser_id) {
-            self.manager()?.recover_retained_browser(&browser_id)?;
-            self.commit_state()?;
+        self.recover_browser_for_command(&browser_id, command)?;
+        if self.state.sessions[&session_id].current_tab_id.is_none() {
+            require_managed_runtime_admission("tab_new", command)?;
         }
+        self.apply_leave_open_choice(&session_id, command)?;
         let tab = self.tab_for_navigation(&session_id, now_ms)?;
         let session = self
             .state
@@ -1600,6 +1685,16 @@ where
     }
 }
 
+/// Managed dispatch precedes the native action adapter, so it must enforce
+/// that adapter's admission authority before its own profile/browser effects.
+fn require_managed_runtime_admission(
+    action: &str,
+    command: &serde_json::Value,
+) -> Result<(), String> {
+    let path = crate::runtime_adoption::runtime_admission_drain_path()?;
+    crate::runtime_adoption::require_runtime_admission(&path, action, command)
+}
+
 fn session_close_disposition_name(
     disposition: agent_browser_service_model::SessionCloseDisposition,
 ) -> &'static str {
@@ -1648,6 +1743,8 @@ mod tests {
     struct FixtureRuntime {
         launches: usize,
         live: bool,
+        attachment_required: bool,
+        attached: bool,
         next_tab: usize,
         pending_intent: Option<BrowserLaunchIntent>,
         acknowledgements: std::rc::Rc<std::cell::Cell<u32>>,
@@ -1663,6 +1760,7 @@ mod tests {
             }
         }
         fn browser_is_live(&mut self, _browser: &ManagedBrowserInstance) -> Result<bool, String> {
+            self.attached = self.live;
             Ok(self.live)
         }
 
@@ -1737,6 +1835,9 @@ mod tests {
             session_name: &str,
             command: &serde_json::Value,
         ) -> Result<serde_json::Value, String> {
+            if self.attachment_required && !self.attached {
+                return Err("browser_session_runtime_browser_missing".into());
+            }
             Ok(serde_json::json!({
                 "id": command.get("id").cloned().unwrap_or_default(),
                 "success": true,
@@ -1956,6 +2057,71 @@ mod tests {
                 .unwrap(),
             host.state
         );
+    }
+
+    #[test]
+    fn first_named_task_command_after_restart_attaches_existing_browser() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles": {"work": {
+                "id": "work", "name": "Work",
+                "userDataDir": directory.0.join("work"),
+                "profileClass": "durable_named"
+            }}})
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+        };
+        let (first, tab_id) = {
+            let mut host = BrowserSessionHost::load(
+                BrowserSessionJsonStore::new(&directory.0),
+                BrowserSessionEffectAdapter::new(FixtureRuntime::default()),
+                &legacy_path,
+                config.clone(),
+            )
+            .unwrap();
+            let opened = host
+                .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+                .unwrap();
+            let tab = host.handle_command(&serde_json::json!({
+                "action": "browser_session_tab_new", "sessionName": "alice",
+                "profileId": "work", "activityAtMs": 1_100
+            }));
+            assert_eq!(tab["success"], true);
+            (opened, tab["data"]["tabId"].as_str().unwrap().to_string())
+        };
+        let mut restarted = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                attachment_required: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        let result = restarted
+            .execute_managed_command(
+                "alice",
+                &serde_json::json!({
+                    "action": "title", "profileId": "work", "activityAtMs": 1_500
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["data"]["browserId"], first.browser_id);
+        assert_eq!(result["data"]["sessionId"], first.session_id);
+        assert_eq!(result["data"]["tabId"], tab_id);
+        assert_eq!(restarted.state().browsers.len(), 1);
+        assert_eq!(restarted.state().tabs.len(), 1);
     }
 
     #[test]

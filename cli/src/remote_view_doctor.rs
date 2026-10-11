@@ -24,7 +24,7 @@ const DOCTOR_DISPLAY_ACCESS_TIMEOUT: Duration = Duration::from_secs(3);
 const DOCTOR_COMMAND_POLL_INTERVAL: Duration = Duration::from_millis(25);
 static DOCTOR_COMMAND_OUTPUT_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-enum DoctorCommandResult {
+pub(crate) enum DoctorCommandResult {
     Output(Output),
     Timeout { stdout: String, stderr: String },
     SpawnError(String),
@@ -2433,7 +2433,10 @@ fn state_sources() -> Vec<Value> {
     ]
 }
 
-fn run_command_with_timeout(mut command: Command, timeout: Duration) -> DoctorCommandResult {
+pub(crate) fn run_command_with_timeout(
+    mut command: Command,
+    timeout: Duration,
+) -> DoctorCommandResult {
     let output_id = DOCTOR_COMMAND_OUTPUT_COUNTER.fetch_add(1, Ordering::Relaxed);
     let output_prefix = env::temp_dir().join(format!(
         "agent-browser-remote-view-doctor-command-{}-{output_id}",

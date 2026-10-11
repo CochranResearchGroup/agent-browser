@@ -8,6 +8,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 
+**Leave-open close**: Preserves the managed task and its live browser for continuation, including across host restart and idle cleanup. It retains occupied profile custody. Explicit `--leave-open false close` ends the task; a full-shutdown operation overrides the preference.
+
 **Ready spare desktop**: A usable vacant desktop prepared for the next independent browser. Maintain one when capacity permits; wrap-around handles overflow, and configurable cooldown retires excess unused desktops.
 
 **Development publication**:
@@ -227,3 +229,5 @@ _Avoid_: Retroactive packet commit, grouped unvalidated change
 **Native desktop demand**:
 A new browser's need for a free Remote View desktop. Pool preparation keeps the configured warm minimum and acquires additional assignments only when observed desktops are occupied, bounded by provider policy. Sessions reusing one profile reuse its browser and desktop.
 _Avoid_: Session count, eager maximum reservation, presentation slot
+
+**Graceful host restart**: The exiting host removes authentication metadata only while it owns the endpoint and matching token. Ordinary commands on an existing managed task check and attach its recorded live browser before using its tab, including headless named sessions. Physical recovery stays with the existing fenced owner.

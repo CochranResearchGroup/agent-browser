@@ -466,6 +466,10 @@ pub struct BrowserSessionState {
     pub remote_view_tab_handoffs: BTreeMap<String, crate::RemoteViewTabHandoff>,
     pub managed_tab_requests: BTreeMap<String, ManagedBrowserTabRequest>,
     pub sessions: BTreeMap<String, ManagedBrowserSession>,
+    /// Explicit leave-open keeps the task and its physical browser occupied
+    /// until an explicit close clears the preference, including across restart.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub leave_open_session_ids: BTreeSet<String>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     pub tab_history: Vec<TerminalBrowserTab>,
@@ -490,6 +494,7 @@ impl Default for BrowserSessionState {
             remote_view_tab_handoffs: BTreeMap::new(),
             managed_tab_requests: BTreeMap::new(),
             sessions: BTreeMap::new(),
+            leave_open_session_ids: BTreeSet::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
             tab_history: Vec::new(),
@@ -695,21 +700,28 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         config: BrowserSessionManagerConfig,
     ) -> Self {
         // A valid handoff retains logical identity, not a permanent process.
-        // External operation custody separately prevents physical idle closure.
+        // External operation custody and explicit leave-open separately prevent physical idle closure.
         // Historical, closed and conflicting bindings confer no retention.
-        let protected_session_ids = state
+        let mut protected_session_ids: BTreeSet<String> = state
             .remote_view_tab_handoffs
             .keys()
             .filter_map(|id| crate::resolve_remote_view_tab_handoff(state, id).ok())
             .map(|target| target.session.id)
             .collect();
+        let leave_open_session_ids = state
+            .leave_open_session_ids
+            .iter()
+            .filter(|id| state.sessions.contains_key(*id))
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        protected_session_ids.extend(leave_open_session_ids.iter().cloned());
         Self {
             state,
             catalog,
             effects,
             config,
             protected_session_ids,
-            externally_protected_session_ids: BTreeSet::new(),
+            externally_protected_session_ids: leave_open_session_ids,
         }
     }
 
@@ -1142,6 +1154,37 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         }
     }
 
+    /// Preserve the exact live browser and logical task without releasing
+    /// occupied profile custody or closing any peer's tab. This is not an
+    /// external ownership release. Explicit close remains the terminal action.
+    pub fn preserve_session(
+        &mut self,
+        session_id: &str,
+    ) -> Result<CloseBrowserSessionResult, String> {
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
+        let browser = self
+            .state
+            .browsers
+            .get(&session.browser_id)
+            .ok_or("browser_session_browser_missing")?;
+        if self.state.idle_closed_browsers.contains_key(&browser.id)
+            || !self.effects.browser_is_live(browser)?
+        {
+            return Err("browser_session_preserve_requires_live_browser".into());
+        }
+        self.state.leave_open_session_ids.insert(session.id.clone());
+        Ok(CloseBrowserSessionResult {
+            session_id: session.id,
+            browser_id: session.browser_id,
+            disposition: SessionCloseDisposition::BrowserPreserved,
+        })
+    }
+
     pub fn close_session(
         &mut self,
         session_id: &str,
@@ -1230,6 +1273,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         }
 
         self.state.sessions.remove(session_id);
+        self.state.leave_open_session_ids.remove(session_id);
         for tab in tabs {
             self.state.tabs.remove(&tab.id);
             self.state.tab_history.push(TerminalBrowserTab {
@@ -1963,6 +2007,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         }
         let session_ids = browser.active_session_ids.clone();
         for session_id in session_ids {
+            self.state.leave_open_session_ids.remove(&session_id);
             if let Some(session) = self.state.sessions.remove(&session_id) {
                 let tabs = self
                     .state

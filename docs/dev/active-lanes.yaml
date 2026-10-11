@@ -168,6 +168,79 @@ lanes:
     overlaps: []
     validation_status: Two regressions, 31 configuration tests, six recourse tests, clients, fmt, strict Clippy and docs passed; three public synthetic cases and exact cleanup passed
     updated_at: 2026-10-11
+  - id: P231
+    product_lane: PL-BUGFIX
+    objective: Expose truthful upgrade phase timing and convergence deadline
+    plan: docs/dev/plans/0231-2026-10-11-upgrade-progress.md
+    branch: fix/upgrade-progress-181
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#181]
+    dependencies: []
+    overlaps: []
+    validation_status: Public red/green, 188 workstation tests, strict Clippy, fmt and docs passed; pre-existing JS fixture failure and exact cleanup retained; no installed publication
+    updated_at: 2026-10-11
+    checkpoint: c7ff6f6df4fade7eb1262144c6ce493acf82501f
+    remote_ref: refs/heads/fix/upgrade-progress-181
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/245
+  - id: P233
+    product_lane: PL-BUGFIX
+    objective: Honor managed-profile leave-open close for continued browser work
+    plan: docs/dev/plans/0233-2026-10-11-managed-leave-open.md
+    branch: fix/managed-leave-open-247
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#247]
+    dependencies: []
+    overlaps: [P232]
+    reconciled_overlaps: ["P233 owns browser session close and leave-open documentation; P232 owns protected enrollment; each owns its catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Public close red/green and same-PID survival, live-host continuation, 50 consumers, 329 model, six replacement, 1114 core tests, fmt, strict Clippy and docs passed; host restart failure retained under issue183
+    limitations: ["Production publication and reboot excluded", "Failed-upgrade shutdown qualification remains issue183"]
+    checkpoint: df46b9a7e2a43cfad30325999fd5313a8ff540eb
+    remote_ref: refs/heads/fix/managed-leave-open-247
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/248
+  - id: P234
+    product_lane: PL-BUGFIX
+    objective: Allow admitted host restart after graceful owner exit
+    plan: docs/dev/plans/0234-2026-10-11-host-token-cleanup.md
+    branch: fix/host-token-cleanup-249
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#249]
+    dependencies: [P233]
+    overlaps: [P232]
+    reconciled_overlaps: ["P234 owns daemon endpoint cleanup and ordinary task attachment; P232 owns protected enrollment; each owns its catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Original public direct continuation and minimized reopen pass with exact cleanup; 87 browser-session, 12 daemon, 46 connection tests, fmt, strict Clippy and docs pass
+    limitations: ["No installed publication or reboot", "Broader failed-upgrade verification remains issue183"]
+    checkpoint: ec0b3c2f4afc5b366b8482093695de0d3dc22740
+    remote_ref: refs/heads/fix/host-token-cleanup-249
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/250
+  - id: P235
+    product_lane: PL-BUGFIX
+    objective: Block unadmitted managed browser effects during upgrade while preserving observations
+    plan: docs/dev/plans/0235-2026-10-11-managed-admission-drain.md
+    branch: fix/managed-admission-claim-251
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#251]
+    dependencies: []
+    overlaps: [P232]
+    reconciled_overlaps: ["P235 owns managed admission; P232 owns protected enrollment; each owns catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Full installer and claimed wire pass; own finalizer retires two hosts with zero residue; failure cleanup and exclusion fences pass; 12 daemon tests, admission contract and strict Clippy pass; primary unchanged-input gates retained
+    limitations: ["No installed publication or reboot", "Legacy provider/helper restoration excluded"]
+    checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0
+    remote_ref: refs/heads/fix/managed-admission-claim-251
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/253
   - id: P232
     product_lane: PL-BUGFIX
     objective: Reuse exact existing protected enrollment during ordinary profile open

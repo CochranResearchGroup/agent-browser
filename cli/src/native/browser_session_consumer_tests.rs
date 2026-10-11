@@ -49,7 +49,7 @@ impl Fixture {
         requests: Rc<Cell<u32>>,
     ) -> Result<Effects, String> {
         let f = wire();
-        RemoteViewSessionEffects::new(
+        let effects = RemoteViewSessionEffects::new(
             Process {
                 mode,
                 root: self.root.clone(),
@@ -60,7 +60,15 @@ impl Fixture {
             self.store(false),
             vec![serde_json::from_value(f["assignment"].clone()).unwrap()],
             || uuid::Uuid::new_v4().to_string(),
-        )
+        )?;
+        if self.root.join("automatic-pool").exists() {
+            effects.with_pool(RemoteViewSessionPool {
+                name: "main".into(),
+                desired_desktops: 1,
+            })
+        } else {
+            Ok(effects)
+        }
     }
     fn host(&self, mode: Mode, calls: Rc<Cell<u32>>, requests: Rc<Cell<u32>>) -> Host {
         let assignment: RemoteViewAssignmentRecord =
@@ -117,6 +125,12 @@ impl RemoteViewApplicationTransport for Transport {
         assert_eq!(envelope.application, "agent-browser");
         self.requests.set(self.requests.get() + 1);
         match envelope.request {
+            RemoteViewApplicationRequest::Inventory {} => Ok(wire()["inventory"].clone()),
+            RemoteViewApplicationRequest::Windows { .. } => {
+                let mut windows = wire()["windows"].clone();
+                windows["windows"] = serde_json::json!([]);
+                Ok(windows)
+            }
             RemoteViewApplicationRequest::ObserveAssignment { .. } => {
                 Ok(wire()["assignmentObservation"].clone())
             }
@@ -359,7 +373,10 @@ impl ManagedBrowserCommandEffects for Process {
                 serde_json::json!({"id": command["id"], "success": command["url"] != "https://synthetic.example/failure", "data": {"url": command["url"], "headers": command["headers"], "waitUntil": command["waitUntil"]}}),
             );
         }
-        assert_eq!(command["action"], "get_url");
+        assert!(matches!(
+            command["action"].as_str(),
+            Some("get_url" | "url")
+        ));
         Ok(serde_json::json!({"id":command["id"], "success":true,
             "data":{"targetId":tab.target_id, "url":"https://synthetic.example/"},
             "targetId": tab.target_id, "url": "https://synthetic.example/"}))
@@ -587,3 +604,275 @@ fn consumer_host_stale_baseline_rejects_before_provider_read_or_process() {
 
 #[path = "browser_session_pool_tests.rs"]
 mod pool_tests;
+
+#[test]
+fn consumer_leave_open_close_preserves_exact_browser_and_task_for_continuation() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    host.execute_managed_command(
+        "Alice",
+        &serde_json::json!({"action":"get_url", "activityAtMs":101}),
+    )
+    .unwrap()
+    .unwrap();
+    let browser = host.state().browsers[&opened.browser_id].clone();
+    let session = host.state().sessions[&opened.session_id].clone();
+    let response = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":true, "activityAtMs":102
+    }));
+    assert_eq!(response["success"], true);
+    assert_eq!(response["data"]["disposition"], "browser_preserved");
+    assert_eq!(host.state().browsers[&opened.browser_id], browser);
+    assert_eq!(host.state().sessions[&opened.session_id], session);
+    drop(host);
+    let mut restarted = fixture.host(Mode::Success, calls.clone(), requests);
+    let reaped = restarted.reap(400_000).unwrap();
+    assert!(reaped.closed_browser_ids.is_empty());
+    assert!(reaped.expired_session_ids.is_empty());
+    let continued = restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action":"get_url", "activityAtMs":400_001}),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(continued["browserSession"]["browserId"], opened.browser_id);
+    assert_eq!(continued["browserSession"]["sessionId"], opened.session_id);
+    assert_eq!(calls.get(), 1);
+    let closed = restarted.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":false, "activityAtMs":400_002
+    }));
+    assert_eq!(closed["success"], true);
+    assert_eq!(closed["data"]["disposition"], "browser_closed");
+    assert!(restarted.state().sessions.is_empty());
+    assert!(restarted.state().browsers.is_empty());
+}
+
+#[test]
+fn consumer_leave_open_launch_preference_survives_repeat_close_and_preserves_peers() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests);
+    let opened = host.handle_command(&serde_json::json!({
+        "action":"browser_session_open", "sessionName":"Alice",
+        "profileId":"profile-a", "leaveOpen":true, "activityAtMs":100
+    }));
+    assert_eq!(opened["success"], true);
+    let session_id = opened["data"]["sessionId"].as_str().unwrap().to_string();
+    let browser_id = opened["data"]["browserId"].as_str().unwrap().to_string();
+    let bob = host
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 101))
+        .unwrap();
+    assert_eq!(bob.browser_id, browser_id);
+    for now in [102, 103] {
+        let preserved = host.handle_command(&serde_json::json!({
+            "action":"browser_session_close", "sessionId":session_id, "activityAtMs":now
+        }));
+        assert_eq!(preserved["success"], true);
+        assert_eq!(preserved["data"]["disposition"], "browser_preserved");
+        assert_eq!(preserved["data"]["taskRetained"], true);
+        assert_eq!(host.state().sessions.len(), 2);
+    }
+    let closed = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":session_id,
+        "leaveOpen":false, "activityAtMs":104
+    }));
+    assert_eq!(closed["success"], true);
+    assert_eq!(closed["data"]["taskRetained"], false);
+    assert!(!host.state().leave_open_session_ids.contains(&session_id));
+    assert!(!host.state().sessions.contains_key(&session_id));
+    assert!(host.state().sessions.contains_key(&bob.session_id));
+    assert!(host.state().browsers.contains_key(&browser_id));
+    host.close_session(&bob.session_id, SessionEndReason::ExplicitClose, 105)
+        .unwrap();
+    assert!(host.state().leave_open_session_ids.is_empty());
+    assert!(host.state().browsers.is_empty());
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn consumer_leave_open_close_rejects_stale_publication_without_retention() {
+    let fixture = Fixture::new();
+    let mut host = fixture.host(Mode::Success, Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    competing_write(&fixture.root);
+    let response = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":true, "activityAtMs":101
+    }));
+    assert_eq!(response["success"], false);
+    assert_eq!(response["error"], "browser_session_publication_conflict");
+    assert!(host.state().leave_open_session_ids.is_empty());
+    assert!(host.state().browsers.contains_key(&opened.browser_id));
+}
+
+fn seed_upgrade_admission_drain(root: &std::path::Path, malformed: bool) {
+    let path = root.join(".agent-browser/runtime-adoption/admission-drain.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let body = if malformed {
+        "invalid-json".to_string()
+    } else {
+        serde_json::json!({
+            "schemaVersion": "agent-browser.runtime-adoption.v1",
+            "transactionId": "upgrade-fixture", "candidateGenerationId": "candidate-fixture",
+            "transactionRevision": 7, "recordedAt": "2026-10-11T06:30:00Z"
+        })
+        .to_string()
+    };
+    std::fs::write(path, body).unwrap();
+}
+
+#[test]
+fn consumer_upgrade_drain_blocks_explicit_open_before_publication() {
+    for malformed in [false, true] {
+        let fixture = Fixture::new();
+        let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+        guard.set("HOME", fixture.root.to_str().unwrap());
+        let calls = Rc::new(Cell::new(0));
+        let requests = Rc::new(Cell::new(0));
+        let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+        let before = host.state().clone();
+        let catalog = fixture.store(false).load_profile_catalog().unwrap().catalog;
+        let path = fixture.root.join("new-profile");
+        std::fs::create_dir(&path).unwrap();
+        seed_upgrade_admission_drain(&fixture.root, malformed);
+        let result = host.handle_command(&serde_json::json!({
+            "action": "browser_session_navigate", "sessionName": "Alice",
+            "profileId": "new-profile", "runtimeProfile": "new-profile", "profile": path,
+            "url": "https://synthetic.example/", "activityAtMs": 100,
+            "runtimeAdmissionClaim": {"transactionId": "upgrade-fixture", "transactionRevision": 7}
+        }));
+        let expected = if malformed {
+            "runtime_admission_drain_invalid"
+        } else {
+            "runtime_admission_draining"
+        };
+        assert!(
+            result["error"]
+                .as_str()
+                .unwrap_or_default()
+                .starts_with(expected),
+            "{result}"
+        );
+        assert_eq!(host.state(), &before);
+        assert_eq!(
+            fixture.store(false).load_profile_catalog().unwrap().catalog,
+            catalog
+        );
+        assert_eq!(calls.get(), 0);
+        assert_eq!(requests.get(), 0);
+        assert!(fixture
+            .store(false)
+            .unpublished_launch_records()
+            .unwrap()
+            .is_empty());
+        let status = host.handle_command(&serde_json::json!({"action":"browser_session_status"}));
+        assert_eq!(status["success"], true);
+    }
+}
+
+#[test]
+fn consumer_upgrade_drain_blocks_implicit_open_from_observation() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
+    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+    guard.set("HOME", fixture.root.to_str().unwrap());
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let before = host.state().clone();
+    seed_upgrade_admission_drain(&fixture.root, false);
+    let error = host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"url", "profileId":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap_err();
+    assert!(error.starts_with("runtime_admission_draining"), "{error}");
+    assert_eq!(host.state(), &before);
+    assert_eq!(calls.get(), 0);
+    assert_eq!(requests.get(), 0);
+}
+
+#[test]
+fn consumer_upgrade_drain_keeps_live_observation_but_blocks_physical_recovery() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("automatic-pool"), "enabled").unwrap();
+    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+    guard.set("HOME", fixture.root.to_str().unwrap());
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::IdleRecovery, calls.clone(), requests.clone());
+    let command = serde_json::json!({"action":"url", "profileId":"profile-a", "activityAtMs":100});
+    let first = host
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    seed_upgrade_admission_drain(&fixture.root, false);
+    let live = host
+        .execute_managed_command("Alice", &command)
+        .unwrap()
+        .unwrap();
+    assert_eq!(live["success"], true);
+    assert_eq!(live["browserSession"], first["browserSession"]);
+    assert_eq!(calls.get(), 1);
+    let before = host.state().clone();
+    let provider_requests = requests.get();
+    for action in ["navigate", "close", "tab_new"] {
+        let error = host
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action": action, "profileId": "profile-a", "url": "https://synthetic.example/"
+                }),
+            )
+            .unwrap_err();
+        assert!(error.starts_with("runtime_admission_draining"), "{error}");
+        assert_eq!(host.state(), &before);
+        assert_eq!(calls.get(), 1);
+        assert_eq!(requests.get(), provider_requests);
+    }
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let error = host.execute_managed_command("Alice", &command).unwrap_err();
+    assert!(error.starts_with("runtime_admission_draining"), "{error}");
+    assert_eq!(host.state(), &before);
+    assert_eq!(calls.get(), 1);
+    assert_eq!(requests.get(), provider_requests);
+}
+
+#[test]
+fn consumer_upgrade_drain_observation_without_owned_tab_cannot_create_one() {
+    let fixture = Fixture::new();
+    let guard = crate::test_utils::EnvGuard::new(&["HOME"]);
+    guard.set("HOME", fixture.root.to_str().unwrap());
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    host.open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let before = host.state().clone();
+    seed_upgrade_admission_drain(&fixture.root, false);
+    let error = host
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"url", "profileId":"profile-a", "activityAtMs":101
+            }),
+        )
+        .unwrap_err();
+    assert!(error.starts_with("runtime_admission_draining"), "{error}");
+    assert_eq!(host.state(), &before);
+    assert_eq!(calls.get(), 1);
+}

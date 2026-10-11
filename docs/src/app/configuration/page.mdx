@@ -118,8 +118,12 @@ detached <code>runtime login</code> when the effective site policy requires
 CDP-free operation. Use the
 attachable manual-login flow only for sites where DevTools during login is
 accepted. Set <code>launch.leaveOpen</code> or pass
-<code>--leave-open</code> when you want <code>close</code> to detach from a
-managed runtime-profile browser instead of shutting it down. Set
+<code>--leave-open</code> when you want <code>close</code> to preserve the
+managed browser and its task for continuation. The preference survives host
+restart and protects the task from idle cleanup. Use
+<code>--leave-open false close</code> to end the task explicitly; peer tasks remain active.
+After a graceful runtime-host stop, the next command on the same session and
+profile reattaches its retained browser. Set
 <code>preferences.defaultViewport</code> to a <code>WIDTHxHEIGHT</code> value,
 such as <code>960x640</code>, when a runtime profile should resize the browser
 content area after launch and before the requested command runs.

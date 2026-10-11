@@ -15,7 +15,7 @@ import {
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { basename, dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -31,6 +31,13 @@ const drainBlockedRoot = join(fixtureRoot, 'drain-blocked-workstation');
 const home = join(fixtureRoot, 'home');
 const xdgRoot = join(fixtureRoot, 'xdg');
 const agentBrowser = resolveAgentBrowser();
+const fixtureRunId = process.env.AGENT_BROWSER_FIXTURE_RUN_ID || randomUUID();
+const fixtureEnv = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith('AGENT_BROWSER_')),
+);
+fixtureEnv.AGENT_BROWSER_FIXTURE_RUN_ID = fixtureRunId;
+fixtureEnv.AGENT_BROWSER_FIXTURE_BIN = agentBrowser;
+const fixtureBinarySha256 = sha256(agentBrowser);
 
 const expectedUnits = new Set([
   'agent-browser-dashboard-backend.service',
@@ -248,7 +255,7 @@ try {
     }),
   );
   const admissionEnv = {
-    ...process.env,
+    ...fixtureEnv,
     HOME: home,
     XDG_RUNTIME_DIR: xdgRoot,
     AGENT_BROWSER_RUNTIME_HOST: '1',
@@ -374,6 +381,8 @@ try {
     /runtime_admission_draining/,
     'secondary route-viewer commands must retain exact claimed launch admission',
   );
+  const ordinaryProfilePath = join(fixtureRoot, 'ordinary-profile-user-data');
+  mkdirSync(ordinaryProfilePath, { recursive: true });
   const ordinaryProfileAdmission = spawnSync(
     installedBinary,
     [
@@ -381,7 +390,9 @@ try {
       '--session',
       'ordinary-profile',
       '--runtime-profile',
-      'bill-soylei',
+      'fixture-ordinary',
+      '--profile',
+      ordinaryProfilePath,
       '--executable-path',
       '/bin/false',
       'open',
@@ -654,7 +665,7 @@ try {
     {
       encoding: 'utf8',
       env: {
-        ...process.env,
+        ...fixtureEnv,
         HOME: home,
         PATH: `${fakeBin}:/usr/bin:/bin`,
         AGENT_BROWSER_RDP_ROUTE_POOL_JSON: '',
@@ -981,8 +992,21 @@ try {
 
   console.log('Workstation install source-free fixture passed');
 } finally {
+  cleanupFixtureRuntimeHosts();
   makeTreeWritable(fixtureRoot);
   rmSync(fixtureRoot, { recursive: true, force: true });
+}
+
+function cleanupFixtureRuntimeHosts() {
+  const result = spawnSync('/usr/bin/python3', [
+    join(repoRoot, 'scripts', 'lib', 'fixture-runtime-cleanup.py'),
+    home, fixtureRunId, fixtureBinarySha256,
+  ], { encoding: 'utf8', timeout: 15_000 });
+  assert.equal(result.status, 0,
+    `Exact fixture-host cleanup failed; home retained at ${home}:\n${result.stdout}${result.stderr}`);
+  const receipt = JSON.parse(result.stdout);
+  assert.deepEqual(receipt.residue, []);
+  console.log(`Fixture runtime-host cleanup passed: ${receipt.retired.length} owned hosts, zero residue`);
 }
 
 function makeTreeWritable(path) {
@@ -1025,7 +1049,7 @@ function runInstaller(root, flags, extraEnv = {}) {
     encoding: 'utf8',
     maxBuffer: 64 * 1024 * 1024,
     env: {
-      ...process.env,
+      ...fixtureEnv,
       HOME: home,
       XDG_CONFIG_HOME: join(xdgRoot, 'config'),
       XDG_DATA_HOME: join(xdgRoot, 'data'),
@@ -1045,7 +1069,7 @@ function assertWorkstationInterface() {
     cwd: fixtureRoot,
     encoding: 'utf8',
     env: {
-      ...process.env,
+      ...fixtureEnv,
       HOME: home,
       PATH: `${fakeBin}:/usr/bin:/bin`,
     },

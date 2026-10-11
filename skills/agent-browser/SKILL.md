@@ -228,6 +228,17 @@ freshness, and blocking reconciliation incidents. Use
 selected generation, latest transaction, runtime dispositions, blocker, and
 seven readiness axes.
 
+The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
+`lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
+The deadline applies to runtime-host convergence; it is not a build-time budget.
+`lastProgressAt` is the last durable checkpoint, while `progressObservedAt`
+is the time of this status read. Reading status never invents a heartbeat.
+Older transactions report a null phase start and elapsed time when their
+recorded evidence cannot identify the current phase start.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A command timeout returns immediately with
+`post_commit_validation_command_timeout` rather than retrying a stalled command.
+
 After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
 
 The axes are `payloadReady`,
@@ -1257,8 +1268,17 @@ then relaunch the same runtime profile for automation. Use
 where DevTools during manual login is known to be accepted. Treat
 `runtimeProfiles.<name>.preferences.defaultViewport` as a `WIDTHxHEIGHT` default
 content size, for example `960x640`. Set `runtimeProfiles.<name>.launch.leaveOpen` or pass
-`--leave-open` when you want `close` to detach from a managed runtime-profile
-browser instead of shutting it down.
+`--leave-open` when you want `close` to preserve a managed runtime-profile
+browser and its task for continuation. This preference survives host restart
+and protects the task from idle cleanup. Use `--leave-open false close` to
+end the task explicitly; peer tasks remain active. After a graceful runtime-host
+stop, use the same session and profile: the next command reattaches the retained
+browser.
+During an upgrade admission drain, managed browser effects return
+`runtime_admission_draining`. Reads of an existing live task remain available;
+a read that needs a browser launch, physical recovery, or a new tab is blocked.
+Use the owning upgrade transaction's status and recovery commands before retrying;
+do not remove the drain marker to bypass it.
 Development executable replacement uses the two-phase `agent-browser handoff`
 protocol. `prepare` keeps the old daemon authoritative and returns a candidate
 session. Run `resume --source-session <old>` in that candidate, then run

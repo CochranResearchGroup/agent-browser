@@ -3745,8 +3745,15 @@ pub fn print_response_with_opts(resp: &Response, action: Option<&str>, opts: &Ou
         }
         // Closed (browser or tab)
         if data.get("closed").is_some() {
-            let label = match action {
-                Some("tab_close") => "Tab closed",
+            let label = match (
+                action,
+                data.get("disposition").and_then(serde_json::Value::as_str),
+                data.get("taskRetained")
+                    .and_then(serde_json::Value::as_bool),
+            ) {
+                (Some("tab_close"), _, _) => "Tab closed",
+                (_, Some("browser_preserved"), Some(true)) => "Browser and task preserved",
+                (_, Some("browser_preserved"), _) => "Task closed; browser preserved",
                 _ => "Browser closed",
             };
             println!("{} {}", color::success_indicator(), label);
@@ -5750,6 +5757,12 @@ binding is missing or changed. A native Remote View binding uses read-only
 provider inventory readiness; visible pixels and input require workflow checks.
 Headless development doctor does not require legacy RDP helpers. Required legacy
 presentation remains an explicit development publication choice.
+Workstation status reports recorded phase start, elapsed milliseconds, last
+checkpoint time, and the runtime-host convergence deadline. Status observation
+is separate from progress; an older unproven phase start remains null.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A timed-out command returns immediately with
+post_commit_validation_command_timeout; it does not consume the remaining retries.
 Older SQLite migration evidence is read without replacing browser/profile state.
 Sealed development publication retains its source commit and candidate manifest
 digest independently of the original build path. Unsealed binaries have no source proof.
@@ -7374,7 +7387,7 @@ Global Options:
   --runtime-profile <name>      Select runtime profile name
   --profile <path>              Use a custom persistent user-data-dir path, distinct from named runtime profiles
                                 Native cold launch requires an absolute directory; path/capacity preflight failures can be retried after correction.
-  --leave-open                  Detach on close instead of shutting down a managed runtime-profile browser
+  --leave-open                  Preserve the managed browser and task on close; false ends the task
   --executable-path <path>      Custom browser executable
   --headed                      Ignored for runtime login; manual login is always headed
   --attachable                  Keep DevTools enabled for runtime login so a later runtime attach can bind to the live browser; avoid for initial Google sign-in, sync, passkey, or plugin setup
@@ -7673,8 +7686,8 @@ Authentication:
                              (or AGENT_BROWSER_PROFILE env). If omitted,
                              agent-browser uses the selected runtime profile,
                              defaulting to ~/.agent-browser/runtime-profiles/default/user-data
-  --leave-open              Detach on close instead of shutting down a managed
-                            runtime-profile browser
+  --leave-open              Preserve the managed browser and task on close;
+                            --leave-open false close ends the task
   --session-name <name>      Auto-save/restore cookies and localStorage by name
                              (or AGENT_BROWSER_SESSION_NAME env)
   --state <path>             Load saved auth state (cookies + storage) from JSON file
@@ -7826,7 +7839,14 @@ Configuration:
   not block unattended workflows. For ordinary sites, agents can use the
   attachable manual-login flow when DevTools during login is accepted.
   Set `launch.leaveOpen` or pass `--leave-open` when you want `close` to
-  detach from a managed runtime-profile browser instead of shutting it down.
+  preserve the managed browser and task for continuation, including idle
+  protection across host restart. Use `--leave-open false close` to end the task.
+  After a graceful runtime-host stop, the next command on the same session and
+  profile reattaches its retained browser.
+  During upgrade admission drain, managed browser effects return
+  runtime_admission_draining. Reads of a live task remain available; reads
+  needing launch, physical recovery, or a new tab are blocked. Use the owning
+  upgrade transaction's status and recovery commands before retrying.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`

@@ -4,6 +4,18 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P234 graceful host restart
+
+[P234](docs/dev/plans/0234-2026-10-11-host-token-cleanup.md) completes the bounded #249 repair. The [receipt](docs/dev/notes/0234-2026-10-11-host-restart-repair.md) retains the incomplete-metadata failure and subsequent first-getter attachment failure. Owner-qualified token cleanup and existing fenced browser attachment now pass the original same-PID/CDP continuation loop without explicit reopen, followed by exact close and zero residue. Browser-session, daemon, connection and quality/docs gates pass. This supersedes P233's identified direct-host restart gap; #183 remains open for broader failed-upgrade shutdown qualification. No installed publication or reboot. Protected-enrollment PR246 and its active checkout remain preserved.
+
+### 2026-10-11 P233 managed leave-open
+
+[P233](docs/dev/plans/0233-2026-10-11-managed-leave-open.md) completes the bounded close repair for #247. The [receipt](docs/dev/notes/0233-2026-10-11-managed-leave-open-repair.md) records public red/green, same-PID/CDP survival after host termination, live-host continuation, explicit false close and zero residue. The CLI core suite passes 1,114 tests after preserving and correcting its stale installer source anchor. Automatic continuation after direct host termination still fails on incomplete endpoint metadata and remains #183 evidence. No installed publication or reboot. The active protected-enrollment checkout and its draft PR 246 remain preserved.
+
+### 2026-10-11 P231 upgrade progress
+
+[P231](docs/dev/plans/0231-2026-10-11-upgrade-progress.md) completes the bounded source repair for #181. The [receipt](docs/dev/notes/0231-2026-10-11-upgrade-progress-repair.md) records public status red/green, typed stalled-doctor rejection, 188 workstation tests and quality gates. The JS installer fixture remains failed on both prior and candidate binaries; its corrected private probe and exact eight-host cleanup are retained for the next diagnosis. #181 remains open for wider progress and installed-upgrade evidence. No installed publication or reboot. #105 remains open after two synthetic ten-browser cycles with exact cleanup; resource configuration, terminal retention and representative soak remain unqualified.
+
 ### 2026-10-11 P230 freshness repair
 
 [P230](docs/dev/plans/0230-2026-10-11-profile-freshness.md) completes #176 at the bounded source and public synthetic seams. The [receipt](docs/dev/notes/0230-2026-10-11-profile-freshness-repair.md) records policy preservation, typed pre-effect input rejection, red/green regressions and three public disposable cases. Installed runtimes and real profiles were unchanged. Issue #84 is next for current qualification; reboot remains deferred.
@@ -87,3 +99,7 @@ Complete browser work with less effort and fewer failures. Use a task-appropriat
 ## Context boundary
 
 Start with [the active plan index](docs/dev/plans/README.md). Historical plans are reference-only. [P223 revision 5](docs/history/2026-10-05-legacy-planning/p223-plan-v5.md) preserves the earlier scope; its removed mechanism and access requirements are not current instructions.
+
+## Managed upgrade admission repair, 2026-10-11
+
+[P235](docs/dev/plans/0235-2026-10-11-managed-admission-drain.md) repairs issue 251: managed dispatch now enforces the existing upgrade drain before browser effects, including launch or recovery initiated by a read. Existing live observations and status remain available. The public sentinel red/green/control and real same-PID/CDP continuation during drain pass with exact cleanup; 91 broker tests, exact installer claims, 39 output tests, format, strict Clippy and docs pass. [The source receipt](docs/dev/notes/0235-2026-10-11-managed-admission-drain-repair.md) preserves failed drafts and qualification limits. No installed publication or reboot. The claimed-wire follow-up moves existing native attribution before managed dispatch. The complete source-free installer fixture now passes with its own synthetic profile and exact cleanup of two owned hosts, zero residue; failed attempts remain in the receipt. This is source qualification only.

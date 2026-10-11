@@ -16,4 +16,11 @@
 
 - [P230: profile freshness consistency](0230-2026-10-11-profile-freshness.md), issue #176; completed bounded source repair.
 
+- [P231: upgrade progress](0231-2026-10-11-upgrade-progress.md), issue #181; completed bounded source repair; wider qualification remains open.
+
+- [P233: managed leave-open](0233-2026-10-11-managed-leave-open.md), issue #247; completed bounded close repair; normal standalone-host restart is repaired by P234.
+
+- [P234: graceful host token cleanup](0234-2026-10-11-host-token-cleanup.md), issue #249; completed graceful-host restart and direct retained-task continuation repair.
+
+- [P235: managed upgrade admission](0235-2026-10-11-managed-admission-drain.md), issue #251; ordinary drain repair integrated; claimed-wire and complete installer acceptance follow-up qualified.
 - [P232: existing protected enrollment reuse](0232-2026-10-11-profile-enrollment-reuse.md), issue #244; enrollment source qualified, ordinary live-browser reconciliation remains open.
