@@ -1140,6 +1140,24 @@ async fn handle_connection<S>(
                     .get("action")
                     .and_then(|value| value.as_str())
                     .map(str::to_owned);
+                // Managed routing needs the same native caller attribution as
+                // the fallback lane before it evaluates an installer claim.
+                if action
+                    .as_deref()
+                    .is_some_and(|action| action.starts_with("browser_session_"))
+                    || !super::actions::action_skips_browser_launch(
+                        cmd["action"].as_str().unwrap_or(""),
+                    )
+                    || matches!(
+                        cmd["action"].as_str(),
+                        Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
+                    )
+                {
+                    super::service_request_provenance::attribute_native_session(
+                        &mut cmd,
+                        &lane_session,
+                    );
+                }
                 if action.as_deref() == Some("service_remote_view_handoff_resolve") {
                     if let Some(response) =
                         router.try_handle_browser_session_handoff(cmd.clone()).await
@@ -1215,17 +1233,6 @@ async fn handle_connection<S>(
                 };
                 let control_plane = lane.control_plane.clone();
                 crate::runtime_host::reconcile_lane_profile_defaults(&mut cmd, &lane.config);
-                if !super::actions::action_skips_browser_launch(
-                    cmd["action"].as_str().unwrap_or(""),
-                ) || matches!(
-                    cmd["action"].as_str(),
-                    Some("close" | "tab_close" | "tab_handle_release" | "tab_handle_refresh")
-                ) {
-                    super::service_request_provenance::attribute_native_session(
-                        &mut cmd,
-                        &lane_session,
-                    );
-                }
 
                 if let Some(ref tx) = idle_reset_tx {
                     let _ = tx.try_send(());
