@@ -168,3 +168,16 @@ lanes:
     overlaps: []
     validation_status: Two regressions, 31 configuration tests, six recourse tests, clients, fmt, strict Clippy and docs passed; three public synthetic cases and exact cleanup passed
     updated_at: 2026-10-11
+  - id: P231
+    product_lane: PL-BUGFIX
+    objective: Expose truthful upgrade phase timing and convergence deadline
+    plan: docs/dev/plans/0231-2026-10-11-upgrade-progress.md
+    branch: fix/upgrade-progress-181
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATION_READY
+    work_items: [CochranResearchGroup/agent-browser#181]
+    dependencies: []
+    overlaps: []
+    validation_status: Public red/green, 188 workstation tests, strict Clippy, fmt and docs passed; pre-existing JS fixture failure and exact cleanup retained; no installed publication
+    updated_at: 2026-10-11

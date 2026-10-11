@@ -5750,6 +5750,12 @@ binding is missing or changed. A native Remote View binding uses read-only
 provider inventory readiness; visible pixels and input require workflow checks.
 Headless development doctor does not require legacy RDP helpers. Required legacy
 presentation remains an explicit development publication choice.
+Workstation status reports recorded phase start, elapsed milliseconds, last
+checkpoint time, and the runtime-host convergence deadline. Status observation
+is separate from progress; an older unproven phase start remains null.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A timed-out command returns immediately with
+post_commit_validation_command_timeout; it does not consume the remaining retries.
 Older SQLite migration evidence is read without replacing browser/profile state.
 Sealed development publication retains its source commit and candidate manifest
 digest independently of the original build path. Unsealed binaries have no source proof.
