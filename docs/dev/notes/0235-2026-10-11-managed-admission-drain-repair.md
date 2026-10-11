@@ -31,3 +31,5 @@ The complete source-free installer fixture passes, including exact claimed admis
 Twelve daemon tests, the admission contract test and strict workspace Clippy pass. Primary broker, output and documentation gates remain applicable because their inputs are unchanged. The follow-up public wire, ordinary drain, cold getter and real live continuation loops all leave zero owned residue. Accepted unsealed debug binary SHA256: e9492d48e92b4b044d6229dd0507a4d637c91593f0d22d3fe31c274cc9d7e9f6. Compatibility profile labels in the synthetic installer test do not imply legacy provider provisioning. No production or development installation was published by this follow-up, and reboot remains deferred.
 
 Follow-up source checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0. Final format and documentation links also pass.
+
+Follow-up integration: [PR253](https://github.com/CochranResearchGroup/agent-browser/pull/253), merge 28aa65a0927d39c5687c319920e3f4b1c45e77f8. Issue251 is closed.
