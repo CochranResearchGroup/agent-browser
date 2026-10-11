@@ -574,3 +574,17 @@ Review canonical changes before explicitly refreshing manifest hashes. Never aut
 
 - Keep tenant-scoped or user-scoped runtime state out of the product repo unless the repo's runtime-state policy explicitly says it belongs in a separately governed tracked state surface.
 - Re-check boundary policy before copying runtime facts, artifacts, or fieldwork output into tracked repo files.
+
+## Agent skills
+
+### Issue tracker
+
+Use this fork's GitHub Issues with bounded repository plans and execution receipts. See [tracker conventions](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+Apply the explicit category and state role mapping, keeping lane and effect labels separate. See [triage labels](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Use the existing single-context CONTEXT.md and applicable ADRs. See [domain documentation](docs/agents/domain.md) and [Codex conventions](docs/agents/codex-stack.md).
