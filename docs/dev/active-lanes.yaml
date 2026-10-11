@@ -128,3 +128,16 @@ lanes:
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/239
     validation_status: Public two-subject recovery/reuse/cleanup, seven selected Rust fixtures, format, strict Clippy, clients and docs passed
     limitations: ["Full CLI unit binary compilation reached 4 GiB before tests ran", "Smoke-only candidate; production runtime unchanged"]
+  - id: ISSUE240
+    product_lane: PL-PLATFORM
+    objective: Configure engineering skills and reconcile post-overhaul issue backlog
+    branch: platform/skill-triage-setup
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#240]
+    dependencies: []
+    overlaps: [P222]
+    reconciled_overlaps: ["Approved AGENTS addition is made in the clean task checkout; dirty root custody remains untouched"]
+    validation_status: Documentation links, reviewed policy source hashes and diff hygiene verified; all original issues reviewed
+    updated_at: 2026-10-10
