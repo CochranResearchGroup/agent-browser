@@ -1859,8 +1859,10 @@ browser family, launch settings, auth session name, and service login hints. A s
 login hosts for that service, so agents can switch to detached `runtime login`.
 Use the attachable manual-login flow only for sites where DevTools during login
 is accepted. Set `launch.leaveOpen` or pass `--leave-open` when you want
-`close` to detach from a managed runtime-profile browser instead of shutting it
-down. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
+`close` to preserve the managed browser and its task for continuation. The
+leave-open preference survives host restart and protects the retained task from
+idle cleanup. Use `--leave-open false close` to end that task explicitly;
+peer tasks keep their browser. Set `preferences.defaultViewport` to a `WIDTHxHEIGHT` value, such as
 `960x640`, when a runtime profile should resize the browser content area after
 launch and before the requested command runs.
 
@@ -2439,6 +2441,7 @@ This is useful for multimodal AI models that can reason about visual layout, unl
 | `--session-name <name>` | Auto-save/restore session state (or `AGENT_BROWSER_SESSION_NAME` env) |
 | `--runtime-profile <name>` | Managed runtime profile name (or `AGENT_BROWSER_RUNTIME_PROFILE` env) |
 | `--profile <path>` | Persistent custom user-data-dir path (or `AGENT_BROWSER_PROFILE` env) |
+| `--leave-open [true/false]` | Preserve the managed browser and task on close; explicit false ends the task |
 | `--state <path>` | Load storage state from JSON file (or `AGENT_BROWSER_STATE` env) |
 | `--headers <json>` | Set HTTP headers scoped to the URL's origin |
 | `--executable-path <path>` | Custom browser executable (or `AGENT_BROWSER_EXECUTABLE_PATH` env) |

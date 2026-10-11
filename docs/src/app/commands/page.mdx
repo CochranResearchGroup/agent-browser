@@ -1459,8 +1459,10 @@ that value came from inherited <code>DISPLAY</code>. Service status can then
 associate the manual browser with the governed remote-view route for that
 display, allowing its detected dashboard tile to expose the available remote
 View or Control action.
-Use <code>--leave-open</code> when you want <code>close</code> to detach from a
-managed runtime-profile browser instead of shutting it down.
+Use <code>--leave-open</code> when you want <code>close</code> to preserve the
+managed browser and its task for continuation. The preference survives host
+restart and protects the task from idle cleanup. Use
+<code>--leave-open false close</code> to end the task explicitly; peer tasks remain active.
 Runtime profiles can declare <code>browserFamily</code>. agent-browser refuses
 to launch a marked profile with a different resolved browser family unless the
 operator sets <code>AGENT_BROWSER_ALLOW_PROFILE_BROWSER_MISMATCH=true</code>.

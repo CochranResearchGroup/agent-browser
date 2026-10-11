@@ -5051,7 +5051,7 @@ mod tests {
             workstation,
             &[
                 "prepare_payload_transaction_with_replacement(",
-                "crate::install::install_remote_view_privileges(true, parsed.json)",
+                "prepare_workstation_host(parsed.json)",
                 "activate_prepared_payload_transaction(prepared, &paths, isolated_root)",
                 "quiesce_existing_user_units(&paths)",
                 "commit_prepared_payload_transaction(&paths, &parsed, prepared)",

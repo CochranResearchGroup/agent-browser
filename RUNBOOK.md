@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P233 managed leave-open
+
+[P233](docs/dev/plans/0233-2026-10-11-managed-leave-open.md) completes the bounded close repair for #247. The [receipt](docs/dev/notes/0233-2026-10-11-managed-leave-open-repair.md) records public red/green, same-PID/CDP survival after host termination, live-host continuation, explicit false close and zero residue. The CLI core suite passes 1,114 tests after preserving and correcting its stale installer source anchor. Automatic continuation after direct host termination still fails on incomplete endpoint metadata and remains #183 evidence. No installed publication or reboot. The active protected-enrollment checkout and its draft PR 246 remain preserved.
+
 ### 2026-10-11 P231 upgrade progress
 
 [P231](docs/dev/plans/0231-2026-10-11-upgrade-progress.md) completes the bounded source repair for #181. The [receipt](docs/dev/notes/0231-2026-10-11-upgrade-progress-repair.md) records public status red/green, typed stalled-doctor rejection, 188 workstation tests and quality gates. The JS installer fixture remains failed on both prior and candidate binaries; its corrected private probe and exact eight-host cleanup are retained for the next diagnosis. #181 remains open for wider progress and installed-upgrade evidence. No installed publication or reboot. #105 remains open after two synthetic ten-browser cycles with exact cleanup; resource configuration, terminal retention and representative soak remain unqualified.

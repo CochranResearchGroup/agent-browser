@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Managed leave-open close repair](0233-2026-10-11-managed-leave-open-repair.md)
+
 - [Profile freshness repair](0230-2026-10-11-profile-freshness-repair.md)
 
 - [Development runtime repair](0229-2026-10-11-development-runtime-repair.md)

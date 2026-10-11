@@ -184,3 +184,22 @@ lanes:
     checkpoint: c7ff6f6df4fade7eb1262144c6ce493acf82501f
     remote_ref: refs/heads/fix/upgrade-progress-181
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/245
+  - id: P233
+    product_lane: PL-BUGFIX
+    objective: Honor managed-profile leave-open close for continued browser work
+    plan: docs/dev/plans/0233-2026-10-11-managed-leave-open.md
+    branch: fix/managed-leave-open-247
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#247]
+    dependencies: []
+    overlaps: [P232]
+    reconciled_overlaps: ["P233 owns browser session close and leave-open documentation; P232 owns protected enrollment; each owns its catalog/index additions"]
+    blocker: null
+    updated_at: 2026-10-11
+    validation_status: Public close red/green and same-PID survival, live-host continuation, 50 consumers, 329 model, six replacement, 1114 core tests, fmt, strict Clippy and docs passed; host restart failure retained under issue183
+    limitations: ["Production publication and reboot excluded", "Failed-upgrade shutdown qualification remains issue183"]
+    checkpoint: df46b9a7e2a43cfad30325999fd5313a8ff540eb
+    remote_ref: refs/heads/fix/managed-leave-open-247
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/248

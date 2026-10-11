@@ -338,7 +338,16 @@ impl RuntimeReplacementEffects for LiveRuntimeReplacementEffects<'_> {
             return Err(crate::validation::session_name_error(session_name));
         }
         let mut child = Command::new(&self.source_binary)
-            .args(["--json", "--session", session_name, "close"])
+            // Full shutdown deliberately ends the task, overriding a retained
+            // leave-open preference before checking exact browser exit.
+            .args([
+                "--json",
+                "--session",
+                session_name,
+                "--leave-open",
+                "false",
+                "close",
+            ])
             .env(crate::runtime_host::RUNTIME_HOST_ENV, "1")
             .env("AGENT_BROWSER_SOCKET_DIR", &self.source_socket_dir)
             .env(
