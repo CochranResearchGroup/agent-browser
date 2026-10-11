@@ -9,11 +9,11 @@ lanes:
     branch: platform/p220-remote-view-consumer
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     checkpoint: 3663b39390024520f71b321e66b6d9b07758575b
     remote_ref: refs/remotes/origin/platform/p220-remote-view-consumer
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/212
-    integration: Canonical consumer merge 85c6fa22e67f9767578110b83584f5573b3c4cfb through PR 212; dirty primary checkout retained without new execution authority
+    integration: Canonical consumer merge 85c6fa22e67f9767578110b83584f5573b3c4cfb through PR 212; original dirty root archived before canonical reconciliation; no new execution authority
     validation_status: Bounded revision-6 acceptance complete; prior M1-M3 scenarios retained, M4 supported recovery/control/continuation/stop/expiry observed, M5 isolated update and canonical integration qualified
     validation_ref: https://github.com/CochranResearchGroup/agent-browser/pull/212
     work_items: [CochranResearchGroup/agent-browser#202]
@@ -31,7 +31,7 @@ lanes:
     branch: fix/scoped-launch-custody
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#224]
     dependencies: []
     overlaps: ["CochranResearchGroup/agent-browser#218", "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
@@ -49,7 +49,7 @@ lanes:
     branch: fix/default-launch-preflight
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#227]
     dependencies: []
     overlaps: ["P224", "CochranResearchGroup/agent-browser#191", "CochranResearchGroup/agent-browser#184"]
@@ -141,3 +141,17 @@ lanes:
     reconciled_overlaps: ["Approved AGENTS addition is made in the clean task checkout; dirty root custody remains untouched"]
     validation_status: Documentation links, reviewed policy source hashes and diff hygiene verified; all original issues reviewed
     updated_at: 2026-10-10
+  - id: P229
+    product_lane: PL-BUGFIX
+    objective: Restore coherent isolated development runtime and legacy SQLite compatibility
+    plan: docs/dev/plans/0229-2026-10-11-development-provenance.md
+    branch: fix/development-provenance-79
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#79]
+    dependencies: []
+    overlaps: [P222]
+    reconciled_overlaps: ["Historical dirty root and local policy commits archived; this session owns the clean current checkout"]
+    validation_status: Store and doctor regressions, publication fixtures, format, strict Clippy, both installed doctors and three disposable browser cycles passed; production unchanged
+    updated_at: 2026-10-11

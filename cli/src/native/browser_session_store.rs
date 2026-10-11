@@ -303,9 +303,36 @@ impl BrowserSessionSqliteStore {
                 .map_err(|error| format!("browser_runtime_migration_receipt_missing:{error}"))
         };
         let archive_directory = PathBuf::from(read("migration_archive")?);
-        let imported_source_count = read("imported_source_count")?
-            .parse::<usize>()
-            .map_err(|error| format!("browser_runtime_migration_receipt_invalid:{error}"))?;
+        // Earlier runtime databases recorded each source instead of a summary
+        // key. Read that authoritative evidence without reimporting JSON or
+        // rewriting the database. A malformed present summary still fails.
+        let summary: Option<String> = self
+            .connection
+            .query_row(
+                "SELECT value FROM runtime_metadata WHERE key = 'imported_source_count'",
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|error| format!("browser_runtime_migration_receipt_failed:{error}"))?;
+        let imported_source_count = match summary {
+            Some(value) => value
+                .parse::<usize>()
+                .map_err(|error| format!("browser_runtime_migration_receipt_invalid:{error}"))?,
+            None => self
+                .connection
+                .query_row(
+                    "SELECT COUNT(*) FROM migration_sources WHERE imported = 1",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(|error| format!("browser_runtime_migration_receipt_missing:{error}"))
+                .and_then(|count| {
+                    usize::try_from(count).map_err(|error| {
+                        format!("browser_runtime_migration_receipt_invalid:{error}")
+                    })
+                })?,
+        };
         Ok(BrowserRuntimeMigrationReceipt {
             imported_source_count,
             archive_directory,
@@ -1302,6 +1329,42 @@ mod tests {
         let authoritative = store.load_or_import_profile_catalog(&legacy_path).unwrap();
         assert!(!authoritative.imported_legacy_profiles);
         assert!(authoritative.catalog.profiles.contains_key("work"));
+    }
+
+    #[test]
+    fn issue79_preserves_legacy_sqlite_migration_provenance_and_state() {
+        let directory = TempDirectory::new("legacy-sqlite-receipt");
+        let legacy_path = directory.0.join("state.json");
+        let json_store = BrowserSessionJsonStore::new(&directory.0);
+        let mut state = BrowserSessionState::default();
+        state.next_session_sequence = 42;
+        json_store.save_session_state(&state).unwrap();
+        let (store, original) =
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
+        store.connection.execute_batch("DELETE FROM runtime_metadata WHERE key='imported_source_count';
+            CREATE TABLE migration_sources(source_path TEXT PRIMARY KEY, sha256 TEXT NOT NULL, archive_name TEXT NOT NULL, imported INTEGER NOT NULL);
+            INSERT INTO migration_sources VALUES ('a','digest','a',1),('b','digest','b',1),('c','digest','c',0);").unwrap();
+        drop(store);
+        fs::write(&legacy_path, "{} ").unwrap();
+        let (store, receipt) =
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
+        assert_eq!(receipt.imported_source_count, 2);
+        assert_eq!(receipt.archive_directory, original.archive_directory);
+        assert_eq!(
+            store.load_session_state().unwrap().next_session_sequence,
+            42
+        );
+        assert_eq!(
+            store
+                .connection
+                .query_row(
+                    "SELECT count(*) FROM runtime_metadata WHERE key='imported_source_count'",
+                    [],
+                    |r| r.get::<_, i64>(0)
+                )
+                .unwrap(),
+            0
+        );
     }
 
     #[test]

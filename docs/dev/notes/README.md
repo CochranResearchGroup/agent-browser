@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Development runtime repair](0229-2026-10-11-development-runtime-repair.md)
+
 - [Native confirm timeout](0160-2026-09-08-soylei-native-confirm-timeout-report.md)
 - [Service State lock repair evidence](0167-2026-09-11-plan-0167-service-state-lock-repair-evidence.md)
 - [Retained tab identity and profile-path launch conflict](0168-2026-09-12-retained-tab-session-identity-conflict-and-profile-path-launch.md)

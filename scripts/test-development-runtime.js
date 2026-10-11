@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import assert from 'node:assert/strict';
+import { readCandidateBuildSource } from './candidate-build.js';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
@@ -269,7 +270,24 @@ try {
   assert.match(units[descriptor.unitNames.runtimeHost], /^PrivateTmp=false$/m,
     'retained browsers must not lose private temporary storage on host retirement');
   assert.match(units[descriptor.unitNames.runtimeHost], /^StateDirectory=agent-browser\/runtime-tmp\/%N\/tmp agent-browser\/runtime-tmp\/%N\/var-tmp$/m);
+  const sourceManifestPath = join(fixture, 'candidate-manifest.json');
+  const candidateSource = {
+    ...readCandidateBuildSource(process.cwd()),
+    state: 'clean',
+  };
+  writeFileSync(sourceManifestPath, JSON.stringify({
+    schemaVersion: 'agent-browser.candidate-manifest.v1',
+    binarySha256: createHash('sha256').update(readFileSync(fakeBinary)).digest('hex'),
+    source: candidateSource,
+  }));
   const installed = installDevelopmentRuntime({ binary: fakeBinary, env, activate: false });
+  assert.deepEqual(JSON.parse(readFileSync(join(installed.generation.path, 'generation.json'), 'utf8')).source, candidateSource,
+    'publication must retain the sealed source commit independently of the original binary path');
+  writeFileSync(sourceManifestPath, JSON.stringify({ schemaVersion: 'agent-browser.candidate-manifest.v1', binarySha256: '0'.repeat(64), source: candidateSource }));
+  assert.throws(() => installDevelopmentRuntime({ binary: fakeBinary, env, activate: false }), /candidate source binding mismatch/);
+  rmSync(sourceManifestPath);
+
+  assert.equal(JSON.parse(readFileSync(join(installed.generation.path, 'generation.json'), 'utf8')).installDoctor.legacyPresentationRequired, false);
   // Non-activating publication must not replace executable-bound files while
   // any member of the running host/dashboard group still owns the old binary.
   const replacementBinary = join(fixture, 'replacement-agent-browser');
@@ -337,7 +355,8 @@ try {
   assert.equal(installed.success, true);
   assert.equal(installed.production.unchanged, true);
   const defaultBefore = defaultDevelopmentSnapshot(namespacedEnv);
-  const parallelInstalled = installDevelopmentRuntime({ binary: fakeBinary, env: namespacedEnv, activate: false });
+  const parallelInstalled = installDevelopmentRuntime({ binary: fakeBinary, env: { ...namespacedEnv, AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED: '1' }, activate: false });
+  assert.equal(JSON.parse(readFileSync(join(parallelInstalled.generation.path, 'generation.json'), 'utf8')).installDoctor.legacyPresentationRequired, true);
   assert.equal(parallelInstalled.defaultDevelopment.unchanged, true);
   assert.deepEqual(defaultDevelopmentSnapshot(namespacedEnv), defaultBefore);
   assert.notEqual(parallelInstalled.generation.path, installed.generation.path);

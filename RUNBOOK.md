@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P229 development repair
+
+[P229](docs/dev/plans/0229-2026-10-11-development-provenance.md) completes the bounded #79 repair. The [receipt](docs/dev/notes/0229-2026-10-11-development-runtime-repair.md) records failed repros, source qualification and installed headless acceptance. Development source provenance is retained, legacy SQLite state is preserved, both doctors and three disposable launch/read/close cycles pass, and production is unchanged. The root checkout is reconciled with recoverable historical work; no surplus registered worktrees existed. Issue #176 is next. Reboot remains deferred.
+
 ### 2026-10-10 P207 caller-custody refresh
 
 [P207](docs/dev/plans/0207-2026-10-10-tab-refresh-caller-custody.md) qualifies issue 175's bounded source repair. [PR 239](https://github.com/CochranResearchGroup/agent-browser/pull/239) owns canonical integration and supersedes the refresh implementation in PR 184. Distinct client subjects sharing one physical browser passed replacement persistence, compatible canonical reuse, caller-only duplicate cleanup and peer preservation. Fresh test process census was empty. Seven actual-function Rust fixtures, format, strict Clippy, client contracts, parity, docs links and the active planning audit passed.
