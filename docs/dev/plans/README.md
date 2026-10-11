@@ -15,3 +15,5 @@
 - [P229: development runtime provenance](0229-2026-10-11-development-provenance.md), issue #79; completed bounded development repair.
 
 - [P230: profile freshness consistency](0230-2026-10-11-profile-freshness.md), issue #176; completed bounded source repair.
+
+- [P232: existing protected enrollment reuse](0232-2026-10-11-profile-enrollment-reuse.md), issue #244; enrollment source qualified, ordinary live-browser reconciliation remains open.

@@ -168,3 +168,17 @@ lanes:
     overlaps: []
     validation_status: Two regressions, 31 configuration tests, six recourse tests, clients, fmt, strict Clippy and docs passed; three public synthetic cases and exact cleanup passed
     updated_at: 2026-10-11
+  - id: P232
+    product_lane: PL-BUGFIX
+    objective: Reuse exact existing protected enrollment during ordinary profile open
+    plan: docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md
+    branch: fix/profile-enrollment-reuse
+    target: main
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#244]
+    dependencies: []
+    overlaps: [P231]
+    reconciled_overlaps: ["P231 owns upgrade and shared user documentation in the original checkout; P232 owns Lease Authority and recovery"]
+    validation_status: Enrollment red/green, 117 Lease Authority tests, format and strict workspace Clippy passed; live-browser recovery remains open
+    updated_at: 2026-10-11
