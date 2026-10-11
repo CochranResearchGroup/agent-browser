@@ -22,4 +22,4 @@
 
 - [P234: graceful host token cleanup](0234-2026-10-11-host-token-cleanup.md), issue #249; completed graceful-host restart and direct retained-task continuation repair.
 
-- [P235: managed upgrade admission](0235-2026-10-11-managed-admission-drain.md), issue #251; completed bounded managed-admission repair.
+- [P235: managed upgrade admission](0235-2026-10-11-managed-admission-drain.md), issue #251; ordinary drain repair integrated; claimed-wire and complete installer acceptance follow-up qualified.

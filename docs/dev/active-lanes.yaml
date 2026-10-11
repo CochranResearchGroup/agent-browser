@@ -226,18 +226,18 @@ lanes:
     product_lane: PL-BUGFIX
     objective: Block unadmitted managed browser effects during upgrade while preserving observations
     plan: docs/dev/plans/0235-2026-10-11-managed-admission-drain.md
-    branch: fix/managed-admission-drain-251
+    branch: fix/managed-admission-claim-251
     target: main
     plan_state: COMPLETED
-    custody_state: INTEGRATED
+    custody_state: READY_FOR_INTEGRATION
     work_items: [CochranResearchGroup/agent-browser#251]
     dependencies: []
     overlaps: [P232]
     reconciled_overlaps: ["P235 owns managed admission; P232 owns protected enrollment; each owns catalog/index additions"]
-    blocker: null
+    blocker: none
     updated_at: 2026-10-11
-    validation_status: Public drain and no-drain control pass; live same-PID/CDP read and blocked navigation pass; 91 broker tests, exact installer claim, 39 output tests, fmt, strict Clippy and docs pass
+    validation_status: Full installer and claimed wire pass; own finalizer retires two hosts with zero residue; failure cleanup and exclusion fences pass; 12 daemon tests, admission contract and strict Clippy pass; primary unchanged-input gates retained
     limitations: ["No installed publication or reboot", "Legacy provider/helper restoration excluded"]
-    checkpoint: cf520bddb910b5d4f957dd9c11a73b69799e76dc
-    remote_ref: refs/heads/fix/managed-admission-drain-251
+    checkpoint: c5200fad027065f02e7ed72bbe5583b7305d4ab0
+    remote_ref: refs/heads/fix/managed-admission-claim-251
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/252
