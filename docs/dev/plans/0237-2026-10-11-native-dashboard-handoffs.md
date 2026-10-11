@@ -41,7 +41,13 @@ Run relevant dashboard/client parity and contract gates, documentation/link/plan
 
 ## Current evidence and next action
 
-Only confirmed requirements and source inspection exist for the new outcome. No replacement, lifecycle implementation or retirement is qualified. Build and publish the throwaway UI prototype, collect the operator's layout/slice feedback, then drive one complete public red/green slice at a time. Carry the full requirement inventory forward until all final gates pass.
+The confirmed model checkpoint is commit 6a1b454a. The throwaway prototype is separately preserved at 4ca606ac on `prototype/native-dashboard-261`; it must stay out of main. Type checking and rendered synthetic interactions pass, including independent per-record policy edits and link deletion preserving the tab. Layout feedback is pending. These checks qualify no native or lifecycle effects.
+
+Current source at base 3e5a3867 already gives durable-profile links a perpetual default through `BrowserRetentionPolicy::durable_handoff_ttl_ms = None`. Disposable links have a finite default. Do not describe all current links as five-minute links or replace existing configuration blindly. The five-minute defaults in `browser_session_host.rs` are session idle and disposable cleanup settings, distinct from link validity.
+
+A concrete recovery gap exists before owner recovery: `stream/remote_view_presentation.rs::resolve_location` checks link validity, then calls `resolve_remote_view_tab_handoff` to join session/tab/browser records before starting the owner daemon. The join rejects a missing tab; the HTTP failure mapper currently returns 410 with instructions to start a new task. A still-valid link therefore cannot use this entry point to recreate a missing expired tab. This is source evidence, not a new executed browser test. The link record currently retains session/tab IDs and view issuance; recreation intent and expiry-versus-explicit-close semantics require inspection at the existing durable task authority rather than an invented replacement URL.
+
+Next independent lifecycle work: inspect durable task intent and expiry cleanup, establish a meaningful regression at the authenticated public handoff seam for a still-valid link after tab expiry, then implement configuration-driven retention and recovery while preserving peer tabs and explicit revocation. Check both durable and disposable defaults and finite overrides. Layout selection gates production UI replacement, not this independent lifecycle investigation. Carry the full requirement inventory forward until all final gates pass.
 
 ## Resource boundary
 
