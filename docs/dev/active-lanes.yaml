@@ -229,7 +229,7 @@ lanes:
     branch: fix/managed-admission-drain-251
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#251]
     dependencies: []
     overlaps: [P232]
@@ -238,3 +238,6 @@ lanes:
     updated_at: 2026-10-11
     validation_status: Public drain and no-drain control pass; live same-PID/CDP read and blocked navigation pass; 91 broker tests, exact installer claim, 39 output tests, fmt, strict Clippy and docs pass
     limitations: ["No installed publication or reboot", "Legacy provider/helper restoration excluded"]
+    checkpoint: cf520bddb910b5d4f957dd9c11a73b69799e76dc
+    remote_ref: refs/heads/fix/managed-admission-drain-251
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/252

@@ -13,3 +13,5 @@ Use the existing CLI admission authority at managed request boundaries before pr
 P235 owns managed host admission and CLI action classification. P232 owns protected enrollment in its active checkout; each owns catalog/index additions. Preserve that worktree and its draft PR.
 
 The existing authority now gates managed boundaries and implicit physical effects. Four corrected red regressions pass, as do 91 broker tests, exact installer claims, 39 output tests, format, strict Clippy and docs checks. Original sentinel reproduction, no-drain control and same-PID/CDP live continuation during drain pass with zero residue. [The repair receipt](../notes/0235-2026-10-11-managed-admission-drain-repair.md) retains scope and failures. No installed publication or reboot.
+
+Canonical integration: [PR 252](https://github.com/CochranResearchGroup/agent-browser/pull/252), source checkpoint cf520bddb910b5d4f957dd9c11a73b69799e76dc.
