@@ -2227,6 +2227,9 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
         consumer.reap(130).unwrap().expired_session_ids,
         vec![session_id]
     );
+    // The external provider observes the second synthetic process launch.
+    // A valid handoff still requires an owned, active native window.
+    provider.borrow_mut().window_pid = Some(44);
     drop(consumer);
     let mut consumer = host(&fixture, provider, calls);
     let reopened = consumer.handle_command(&serde_json::json!({
@@ -2236,6 +2239,48 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     assert_eq!(reopened["success"], true, "{reopened}");
     assert_eq!(reopened["data"]["handoffId"], handoff_id);
     assert_eq!(reopened["data"]["operatorVisible"]["state"], "ready");
+}
+
+#[test]
+fn valid_handoff_can_extend_after_target_expiry_without_recreation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = original.clone();
+    configured.retention_policy.disposable_handoff_ttl_ms = 1_000;
+    configured.retention_policy.disposable_inactivity_ms = 30;
+    store
+        .compare_and_save_session_state(&original, &configured)
+        .unwrap();
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/expired-task", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(consumer.reap(130).unwrap().expired_session_ids.len(), 1);
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let extended = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"extend", "ttlMs":2_000, "activityAtMs":131
+    }));
+    assert_eq!(extended["success"], true, "{extended}");
+    assert_eq!(extended["data"]["handoffId"], id);
+    assert_eq!(extended["data"]["expiresAtMs"], 2_131);
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":132
+    }));
+    assert_eq!(inspected["data"]["expiresAtMs"], 2_131);
+    assert_eq!(calls.get(), 1, "link management must not launch a browser");
+    assert!(provider.borrow().view_requests.is_empty());
 }
 
 #[test]

@@ -233,6 +233,7 @@ pub struct CloseBrowserTabResult {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BrowserProfileIntent {
     Exact { profile_id: String },
+    ExistingDisposable { profile_id: String },
     Disposable { policy_id: String },
 }
 
@@ -244,6 +245,21 @@ pub struct OpenBrowserSession {
 }
 
 impl OpenBrowserSession {
+    /// Select one recorded disposable allocation without allocating or guessing
+    /// another task's profile. Unknown allocations fail before browser effects.
+    pub fn existing_disposable(
+        session_name: impl Into<String>,
+        profile_id: impl Into<String>,
+        activity_at_ms: u64,
+    ) -> Self {
+        Self {
+            session_name: session_name.into(),
+            profile_intent: BrowserProfileIntent::ExistingDisposable {
+                profile_id: profile_id.into(),
+            },
+            activity_at_ms,
+        }
+    }
     pub fn exact_profile(
         session_name: impl Into<String>,
         profile_id: impl Into<String>,
@@ -1169,6 +1185,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         request: &OpenBrowserSession,
     ) -> Result<BrowserProfileCatalogEntry, String> {
         match &request.profile_intent {
+            BrowserProfileIntent::ExistingDisposable { profile_id } => self
+                .state
+                .disposable_profiles
+                .get(profile_id)
+                .map(|allocation| allocation.profile.clone())
+                .ok_or_else(|| format!("browser_disposable_profile_not_found:{profile_id}")),
             BrowserProfileIntent::Exact { profile_id } => {
                 let profile = self
                     .catalog
@@ -1366,6 +1388,14 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             }
         }
 
+        for link in self
+            .state
+            .remote_view_tab_handoffs
+            .values_mut()
+            .filter(|link| link.session_id == session_id)
+        {
+            link.target_expired = reason != SessionEndReason::ExplicitClose;
+        }
         self.state.sessions.remove(session_id);
         self.state.leave_open_session_ids.remove(session_id);
         for tab in tabs {

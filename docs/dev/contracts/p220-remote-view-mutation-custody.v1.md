@@ -372,6 +372,15 @@ recovers an idle-cleaned browser and focuses the addressed owned window before
 returning native presentation readiness. Logical identities stay stable during
 recovery; physical targets and CDP endpoints may change.
 
+For automatic task expiry, the handoff can retain a resume capsule containing
+the task name, profile or disposable-policy identity, and destination URL. The
+capsule survives navigation-history compaction. Recreation freezes an ordinary
+tab-creation request before effects and publishes the replacement session/tab
+binding on the original handoff only after successful navigation. Link identity
+and its original expiry stay unchanged. Unknown creation outcomes require
+readback rather than another creation attempt. This restores access to the task
+destination, not lost in-memory page state.
+
 Ordinary configured commands publish their handoff through the existing SQLite
 aggregate transaction and return `browserSession.handoffId` and `handoffUrl`.
 A live binding reuses its opaque ID. After link expiry, a subsequent normal
@@ -387,8 +396,10 @@ Opening a link or restarting the owner does not renew retention.
 `service_remote_view_handoff_resolve` supports `handoffOperation=inspect` to
 report link status without browser effects, and `handoffOperation=extend` with
 positive `ttlMs` to ensure at least that much remaining lifetime. Extension
-preserves any longer expiry and commits only link metadata. Expired links and
-closed bindings cannot be extended. Link expiry does not close a browser,
+preserves any longer expiry and commits only link metadata. Link validity is
+independent of target lifetime. A valid link remains extendable
+after automatic target expiry without recreating the target. Expired links
+cannot be extended. Link expiry does not close a browser,
 change native authentication, issue a viewer grant or disconnect a viewer.
 
 Historical grant-backed presentation APIs and their ledger tests remain separate

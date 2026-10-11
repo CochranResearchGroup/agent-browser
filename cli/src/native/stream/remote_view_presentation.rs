@@ -88,9 +88,15 @@ pub(super) async fn resolve_location(id: &str, _operator: &str) -> Result<String
                     .map_err(|_| "remote_view_clock_invalid")?
                     .as_millis() as u64,
             )?;
-        let target =
-            agent_browser_service_model::resolve_remote_view_tab_handoff(&state, &handoff)?;
-        Ok::<_, String>(target.session.name)
+        let intent = agent_browser_service_model::remote_view_handoff_resume_intent(
+            &state,
+            &handoff,
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "remote_view_clock_invalid")?
+                .as_millis() as u64,
+        )?;
+        Ok::<_, String>(intent.session_name)
     })
     .await
     .map_err(|_| "remote_view_presentation_join_failed")??;

@@ -50,8 +50,9 @@ mod remote_view_consumer;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
-    resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
-    retain_remote_view_tab_handoff_at, BrowserRetentionPolicy, RemoteViewTabHandoff,
+    remote_view_handoff_resume_intent, resolve_remote_view_tab_handoff,
+    retain_remote_view_tab_handoff, retain_remote_view_tab_handoff_at, BrowserRetentionPolicy,
+    RemoteViewTabHandoff, RemoteViewTabHandoffRecreation, RemoteViewTabHandoffResumeIntent,
     RemoteViewTabHandoffTarget, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
 };
 mod request_provenance;

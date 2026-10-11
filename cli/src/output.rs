@@ -6357,7 +6357,10 @@ Usage: agent-browser remote-view open [url] [options]
        agent-browser remote-view inspect <handoff-id>
        agent-browser remote-view extend <handoff-id> --ttl-ms <milliseconds>
 
-Resolve addresses an existing logical handoff and refuses closed sessions.
+Resolve addresses an existing logical handoff and refuses explicitly closed tasks.
+A valid link recreates an automatically expired task tab from retained intent.
+The same URL and link expiry are preserved; unrelated current tabs are not substituted.
+Unknown creation outcomes require readback rather than blind retries.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Native desktop links do not require a viewer grant.
 Retained handoffs preserve logical tabs, not indefinite browser processes.
@@ -6374,7 +6377,8 @@ Provider read failures before launch create no new process claim.
 New durable-profile links have no default expiry; disposable links default to
 24 hours. Existing finite links keep their expiry. open --handoff-ttl-ms selects a new link's
 positive lifetime. inspect reports expiry; extend --ttl-ms ensures at least that
-much remaining time. Expired links return remote_view_handoff_expired and cannot
+much remaining time, including after target expiry, without recreating a tab or browser.
+Expired links return remote_view_handoff_expired and cannot
 be extended. Normal open can issue a new link to the same retained tab.
 Link expiry does not close browsers or disconnect native viewers.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned

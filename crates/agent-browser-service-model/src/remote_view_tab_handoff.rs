@@ -50,6 +50,31 @@ pub struct RemoteViewTabHandoff {
     pub expires_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<RemoteViewTabView>,
+    /// Task intent survives automatic tab expiry and history compaction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume: Option<RemoteViewTabHandoffResumeIntent>,
+    /// A frozen creation request prevents duplicate tabs after an uncertain effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recreation: Option<RemoteViewTabHandoffRecreation>,
+    /// Automatic retirement permits recreation; explicit close remains distinct.
+    #[serde(default)]
+    pub target_expired: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabHandoffResumeIntent {
+    pub session_name: String,
+    pub profile_id: String,
+    pub disposable_policy_id: Option<String>,
+    pub url: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabHandoffRecreation {
+    pub request_id: String,
+    pub requested_at_ms: u64,
 }
 
 /// A request retained before issuance, with its qualified outcome when known.
@@ -103,6 +128,9 @@ pub fn retain_remote_view_tab_handoff_at(
         view: None,
         created_at_ms: None,
         expires_at_ms: None,
+        resume: None,
+        recreation: None,
+        target_expired: false,
     };
     join(state, &proposed)?;
     if let Some(existing) = state.remote_view_tab_handoffs.get(handoff_id) {
@@ -142,6 +170,83 @@ pub fn resolve_remote_view_tab_handoff(
         return Err("remote_view_tab_handoff_record_conflict".into());
     }
     join(state, record)
+}
+
+/// Read task intent before owner recovery without substituting a current tab.
+/// Legacy records can derive intent from retained terminal history, but only
+/// after positively identifying automatic expiry of their addressed target.
+pub fn remote_view_handoff_resume_intent(
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    now_ms: u64,
+) -> Result<RemoteViewTabHandoffResumeIntent, String> {
+    let link = state
+        .remote_view_tab_handoffs
+        .get(handoff_id)
+        .ok_or("remote_view_tab_handoff_missing")?;
+    if link.id != handoff_id {
+        return Err("remote_view_tab_handoff_record_conflict".into());
+    }
+    link.check_link_at(now_ms)?;
+    let live = resolve_remote_view_tab_handoff(state, handoff_id);
+    if let Ok(target) = live.as_ref() {
+        return Ok(RemoteViewTabHandoffResumeIntent {
+            session_name: target.session.name.clone(),
+            profile_id: target.session.profile_id.clone(),
+            disposable_policy_id: state
+                .disposable_profiles
+                .get(&target.session.profile_id)
+                .map(|allocation| allocation.policy_id.clone()),
+            url: link
+                .resume
+                .as_ref()
+                .and_then(|intent| intent.url.clone())
+                .or_else(|| {
+                    state
+                        .navigation_history
+                        .iter()
+                        .filter(|row| row.tab_id == link.tab_id)
+                        .max_by_key(|row| row.visited_at_ms)
+                        .map(|row| row.url.clone())
+                }),
+        });
+    }
+    if !matches!(
+        live.as_ref().unwrap_err().as_str(),
+        "remote_view_tab_handoff_session_unavailable"
+            | "remote_view_tab_handoff_tab_unavailable"
+            | "remote_view_tab_handoff_browser_unavailable"
+    ) {
+        return Err(live.unwrap_err());
+    }
+    let ended = state
+        .session_history
+        .iter()
+        .rev()
+        .find(|session| session.id == link.session_id);
+    let automatic =
+        ended.is_some_and(|session| session.reason != crate::SessionEndReason::ExplicitClose);
+    if !link.target_expired && !automatic {
+        return Err(live.unwrap_err());
+    }
+    if let Some(intent) = &link.resume {
+        return Ok(intent.clone());
+    }
+    let ended = ended.ok_or("remote_view_handoff_resume_intent_missing")?;
+    Ok(RemoteViewTabHandoffResumeIntent {
+        session_name: ended.name.clone(),
+        profile_id: ended.profile_id.clone(),
+        disposable_policy_id: state
+            .disposable_profiles
+            .get(&ended.profile_id)
+            .map(|allocation| allocation.policy_id.clone()),
+        url: state
+            .navigation_history
+            .iter()
+            .filter(|row| row.tab_id == link.tab_id)
+            .max_by_key(|row| row.visited_at_ms)
+            .map(|row| row.url.clone()),
+    })
 }
 
 fn join(
