@@ -523,6 +523,16 @@ a usable password or project label fails closed.
 `agent-browser install workstation status --json` reports the selected and
 candidate generations, migration dispositions, blockers, admission state, and
 terminal result without exposing private paths, endpoints, or profile evidence.
+The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
+`lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
+The deadline applies to runtime-host convergence; it is not a build-time budget.
+`lastProgressAt` is the last durable checkpoint, while `progressObservedAt`
+is the time of this status read. Reading status never invents a heartbeat.
+Older transactions report a null phase start and elapsed time when their
+recorded evidence cannot identify the current phase start.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A command timeout returns immediately with
+`post_commit_validation_command_timeout` rather than retrying a stalled command.
 Legacy migration preserves an inert, unbound session whose profile row is
 missing by materializing a persistent placeholder profile. The placeholder
 restores referential identity only and grants no principal authority. A missing

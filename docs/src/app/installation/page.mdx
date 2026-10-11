@@ -301,6 +301,16 @@ reconciliation incidents from the same receipts. Use
 protected PostgreSQL backup operation invoked by the installed timer. Use
 <code>agent-browser install workstation status --json</code> for a redacted
 selected-generation, migration, blocker, admission, and terminal-state view.
+The latest transaction includes <code>phaseStartedAt</code>, <code>phaseElapsedMs</code>,
+<code>lastProgressAt</code>, <code>deadlineAt</code>, <code>deadlineScope</code>, and <code>progressObservedAt</code>.
+The deadline applies to runtime-host convergence; it is not a build-time budget.
+<code>lastProgressAt</code> is the last durable checkpoint, while <code>progressObservedAt</code>
+is the time of this status read. Reading status never invents a heartbeat.
+Older transactions report a null phase start and elapsed time when their
+recorded evidence cannot identify the current phase start.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A command timeout returns immediately with
+<code>post_commit_validation_command_timeout</code> rather than retrying a stalled command.
 Legacy migration materializes a persistent placeholder profile only for an
 inert session with no principal, work capability, browser, or tab. The
 placeholder restores referential identity without granting authority. An

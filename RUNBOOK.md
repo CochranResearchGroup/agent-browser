@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P231 upgrade progress
+
+[P231](docs/dev/plans/0231-2026-10-11-upgrade-progress.md) completes the bounded source repair for #181. The [receipt](docs/dev/notes/0231-2026-10-11-upgrade-progress-repair.md) records public status red/green, typed stalled-doctor rejection, 188 workstation tests and quality gates. The JS installer fixture remains failed on both prior and candidate binaries; its corrected private probe and exact eight-host cleanup are retained for the next diagnosis. #181 remains open for wider progress and installed-upgrade evidence. No installed publication or reboot. #105 remains open after two synthetic ten-browser cycles with exact cleanup; resource configuration, terminal retention and representative soak remain unqualified.
+
 ### 2026-10-11 P230 freshness repair
 
 [P230](docs/dev/plans/0230-2026-10-11-profile-freshness.md) completes #176 at the bounded source and public synthetic seams. The [receipt](docs/dev/notes/0230-2026-10-11-profile-freshness-repair.md) records policy preservation, typed pre-effect input rejection, red/green regressions and three public disposable cases. Installed runtimes and real profiles were unchanged. Issue #84 is next for current qualification; reboot remains deferred.

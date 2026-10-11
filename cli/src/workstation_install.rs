@@ -2179,10 +2179,17 @@ fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
         &dashboard_ingress,
     );
     let summary = latest.as_ref().map(|transaction| {
+        let progress = upgrade_transaction_progress(transaction, time::OffsetDateTime::now_utc());
         serde_json::json!({
             "transactionId": transaction.transaction_id,
             "state": transaction.state,
             "revision": transaction.revision,
+            "phaseStartedAt": progress["phaseStartedAt"],
+            "phaseElapsedMs": progress["phaseElapsedMs"],
+            "lastProgressAt": progress["lastProgressAt"],
+            "deadlineAt": progress["deadlineAt"],
+            "deadlineScope": "runtime_host_convergence",
+            "progressObservedAt": progress["observedAt"],
             "oldGenerationId": transaction.old_generation_id,
             "candidateGenerationId": transaction.candidate_generation_id,
             "runtimeMigrations": transaction.runtime_migrations.iter().map(|migration| serde_json::json!({
@@ -2212,6 +2219,46 @@ fn workstation_upgrade_status_for_root(root: &Path) -> Result<Value, String> {
         "stateSchemaCompatibility": state_schema_compatibility,
         "latestTransaction": summary,
     }))
+}
+
+/// Projects recorded progress without treating a status read as a heartbeat.
+/// Older transactions expose an unknown phase start unless a named checkpoint
+/// proves it. The deadline governs runtime-host convergence, not the build.
+fn upgrade_transaction_progress(
+    transaction: &crate::runtime_adoption::UpgradeTransaction,
+    now: time::OffsetDateTime,
+) -> Value {
+    let phase = serde_json::to_value(transaction.state).unwrap_or(Value::Null);
+    let recorded = transaction
+        .successor_fields
+        .get("installProgress")
+        .filter(|value| value["phase"] == phase);
+    let phase_start = recorded
+        .and_then(|value| value["phaseStartedAt"].as_str())
+        .or_else(|| {
+            transaction
+                .checkpoints
+                .iter()
+                .rev()
+                .find(|checkpoint| Some(checkpoint.name.as_str()) == phase.as_str())
+                .map(|checkpoint| checkpoint.recorded_at.as_str())
+        });
+    let elapsed = phase_start
+        .and_then(|value| chrono::DateTime::parse_from_rfc3339(value).ok())
+        .and_then(|start| {
+            u64::try_from(
+                (now.unix_timestamp_nanos() / 1_000_000 - i128::from(start.timestamp_millis()))
+                    .max(0),
+            )
+            .ok()
+        });
+    serde_json::json!({
+        "phaseStartedAt": phase_start,
+        "phaseElapsedMs": elapsed,
+        "lastProgressAt": transaction.checkpoints.last().map(|checkpoint| &checkpoint.recorded_at),
+        "deadlineAt": transaction.runtime_host_convergence.as_ref().map(|record| &record.deadline_at),
+        "observedAt": now.format(&time::format_description::well_known::Rfc3339).ok(),
+    })
 }
 
 fn install_transaction_classification(
@@ -4899,6 +4946,34 @@ fn run_observed(
         .map_err(|error| format!("Unable to run installed workstation command {command}: {error}"))
 }
 
+/// Bounds each read-only final doctor independently of the retry count.
+/// The timeout runner reaps only the child command spawned for this probe.
+fn run_final_doctor_observed_with_timeout(
+    command: &str,
+    args: &[&str],
+    current_dir: &Path,
+    command_env: &[(String, String)],
+    timeout: std::time::Duration,
+) -> Result<Output, String> {
+    let mut process = Command::new(command);
+    process
+        .args(args)
+        .current_dir(current_dir)
+        .stdin(Stdio::null());
+    apply_command_environment(&mut process, command_env);
+    match crate::remote_view_doctor::run_command_with_timeout(process, timeout) {
+        crate::remote_view_doctor::DoctorCommandResult::Output(output) => Ok(output),
+        crate::remote_view_doctor::DoctorCommandResult::Timeout { .. } => Err(format!(
+            "post_commit_validation_command_timeout:{}:{}ms",
+            args.join(" "),
+            timeout.as_millis()
+        )),
+        crate::remote_view_doctor::DoctorCommandResult::SpawnError(error) => Err(format!(
+            "post_commit_validation_command_unavailable:{error}"
+        )),
+    }
+}
+
 fn run_required(
     command: &str,
     args: &[&str],
@@ -5791,7 +5866,7 @@ fn verify_final_doctors(
         };
         let mut last_failure = None;
         for attempt in 0..attempts {
-            let output = run_observed(
+            let output = run_final_doctor_observed_with_timeout(
                 paths
                     .binary
                     .to_str()
@@ -5799,6 +5874,7 @@ fn verify_final_doctors(
                 &args,
                 support_root,
                 command_env,
+                std::time::Duration::from_secs(45),
             )?;
             let payload: Value = serde_json::from_slice(&output.stdout)
                 .map_err(|error| format!("{label} JSON parse failed: {error}"))?;
@@ -7142,13 +7218,31 @@ fn persist_upgrade_transition(
     checkpoint_name: &str,
 ) -> Result<(), String> {
     let revision = transaction.revision;
+    let previous_state = transaction.state;
+    let recorded_at = runtime_adoption_timestamp();
     crate::runtime_adoption::transition_upgrade_transaction(
         transaction,
         revision,
         next_state,
         checkpoint_name,
-        &runtime_adoption_timestamp(),
+        &recorded_at,
     )?;
+    let phase = serde_json::to_value(next_state).unwrap_or(Value::Null);
+    let previous_progress = transaction.successor_fields.get("installProgress");
+    let phase_start = if previous_state == next_state {
+        previous_progress
+            .filter(|value| value["phase"] == phase)
+            .and_then(|value| value["phaseStartedAt"].as_str())
+            .map(str::to_string)
+    } else {
+        Some(recorded_at.clone())
+    };
+    transaction.successor_fields.insert(
+        "installProgress".into(),
+        serde_json::json!({
+            "phase": phase, "phaseStartedAt": phase_start,
+        }),
+    );
     if next_state == crate::runtime_adoption::UpgradeTransactionState::FailedPreservedOldGeneration
         && terminal_transaction_requires_old_reader_projection(transaction)
     {
@@ -17947,6 +18041,120 @@ mod tests {
         );
         assert!(!paths.generations_dir.exists());
         assert!(!paths.current_selector.exists());
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn upgrade_progress_doctor_command_timeout_is_actionable_and_bounded() {
+        let started = std::time::Instant::now();
+        let result = run_final_doctor_observed_with_timeout(
+            "/bin/sh",
+            &["-c", "exec sleep 0.2"],
+            &env::temp_dir(),
+            &[],
+            std::time::Duration::from_millis(5),
+        );
+        assert!(
+            result.is_err(),
+            "a nonconverging doctor must return a typed timeout"
+        );
+        assert!(result
+            .unwrap_err()
+            .starts_with("post_commit_validation_command_timeout:"));
+        assert!(started.elapsed() < std::time::Duration::from_millis(150));
+    }
+
+    #[test]
+    fn upgrade_progress_phase_start_is_persisted_without_losing_successor_fields() {
+        let root = env::temp_dir().join(format!(
+            "agent-browser-progress-transition-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut transaction = new_upgrade_transaction(
+            &install_paths(&root),
+            "synthetic".into(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction
+            .successor_fields
+            .insert("futureEvidence".into(), serde_json::json!("preserved"));
+        let path = transaction_path(&root, &transaction.transaction_id);
+        persist_upgrade_transition(
+            &path,
+            &mut transaction,
+            crate::runtime_adoption::UpgradeTransactionState::CandidateStaged,
+            "candidate_payload_staged",
+        )
+        .unwrap();
+        let persisted: crate::runtime_adoption::UpgradeTransaction =
+            serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+        let progress = upgrade_transaction_progress(&persisted, time::OffsetDateTime::now_utc());
+        assert_eq!(
+            progress["phaseStartedAt"],
+            persisted.checkpoints.last().unwrap().recorded_at
+        );
+        assert_eq!(persisted.successor_fields["futureEvidence"], "preserved");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn upgrade_progress_read_never_fabricates_a_checkpoint() {
+        let root = env::temp_dir();
+        let mut transaction = new_upgrade_transaction(
+            &install_paths(&root),
+            "synthetic".into(),
+            "a".repeat(64),
+            "b".repeat(64),
+        );
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+        transaction.checkpoints[0].recorded_at = "2026-10-11T04:00:00Z".into();
+        let now = time::OffsetDateTime::from_unix_timestamp(1791691260).unwrap();
+        let unknown = upgrade_transaction_progress(&transaction, now);
+        assert!(unknown["phaseStartedAt"].is_null());
+        assert!(unknown["phaseElapsedMs"].is_null());
+        transaction.checkpoints[0].name = "post_commit_validating".into();
+        let first = upgrade_transaction_progress(&transaction, now);
+        let later = upgrade_transaction_progress(&transaction, now + time::Duration::seconds(1));
+        assert_eq!(first["phaseElapsedMs"], 60_000);
+        assert_eq!(later["phaseElapsedMs"], 61_000);
+        assert_eq!(first["lastProgressAt"], later["lastProgressAt"]);
+        assert_ne!(first["observedAt"], later["observedAt"]);
+        transaction.checkpoints[0].recorded_at = "invalid".into();
+        assert!(upgrade_transaction_progress(&transaction, now)["phaseElapsedMs"].is_null());
+    }
+
+    #[test]
+    fn upgrade_progress_status_exposes_recorded_phase_timing_and_deadline() {
+        let root = env::temp_dir().join(format!("agent-browser-progress-{}", uuid::Uuid::new_v4()));
+        let paths = install_paths(&root);
+        let mut transaction =
+            new_upgrade_transaction(&paths, "synthetic".into(), "a".repeat(64), "b".repeat(64));
+        transaction.state = crate::runtime_adoption::UpgradeTransactionState::PostCommitValidating;
+        transaction.checkpoints = vec![crate::runtime_adoption::UpgradeCheckpoint {
+            name: "post_commit_validating".into(),
+            transaction_revision: 1,
+            recorded_at: "2026-10-11T04:00:00Z".into(),
+        }];
+        write_private_json_atomic(
+            &transaction_path(&root, &transaction.transaction_id),
+            &transaction,
+        )
+        .unwrap();
+        let status = workstation_upgrade_status_for_root(&root).unwrap();
+        let summary = &status["latestTransaction"];
+        assert_eq!(summary["phaseStartedAt"], "2026-10-11T04:00:00Z");
+        assert_eq!(summary["lastProgressAt"], "2026-10-11T04:00:00Z");
+        assert!(summary["phaseElapsedMs"].as_u64().is_some());
+        assert_eq!(
+            summary["deadlineAt"],
+            transaction
+                .runtime_host_convergence
+                .as_ref()
+                .unwrap()
+                .deadline_at
+        );
         fs::remove_dir_all(root).unwrap();
     }
 

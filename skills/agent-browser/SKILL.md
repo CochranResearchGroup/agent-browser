@@ -228,6 +228,17 @@ freshness, and blocking reconciliation incidents. Use
 selected generation, latest transaction, runtime dispositions, blocker, and
 seven readiness axes.
 
+The latest transaction includes `phaseStartedAt`, `phaseElapsedMs`,
+`lastProgressAt`, `deadlineAt`, `deadlineScope`, and `progressObservedAt`.
+The deadline applies to runtime-host convergence; it is not a build-time budget.
+`lastProgressAt` is the last durable checkpoint, while `progressObservedAt`
+is the time of this status read. Reading status never invents a heartbeat.
+Older transactions report a null phase start and elapsed time when their
+recorded evidence cannot identify the current phase start.
+Each final validation doctor has a 45-second command timeout and at most four
+attempts separated by two seconds. A command timeout returns immediately with
+`post_commit_validation_command_timeout` rather than retrying a stalled command.
+
 After an unrelated failed upgrade preserved its old generation, a later selected installation can prove readiness through current evidence. On Linux, `currentSelectionEvidence` reports validation of the sealed payload hashes, stable selector, live dashboard manifest and accepted journey, and exact host boot, process, executable and socket identity. A failure retains its diagnostic reason. Active or uncertain transactions remain blocking, and historical records are preserved.
 
 The axes are `payloadReady`,
