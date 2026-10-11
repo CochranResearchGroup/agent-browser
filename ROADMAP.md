@@ -12,6 +12,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) owns the simple native desktop dashboard replacement and independent configurable handoff link/tab lifetimes for #261 and #260. Review a synthetic layout prototype before replacing the operator UI; qualify lifecycle behavior and native tab selection with concrete browser workflows.
+
 [P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) owns the bounded incremental installer observation repair for #181, including its reviewed candidate entry point. Source qualification remains separate from production-shaped installation.
 
 [P227](docs/dev/plans/0227-2026-10-08-alice-bob-reconciliation.md) completed the bounded shared-profile, retention and desktop-capacity outcome: intentional profile sharing with independent task tabs, configured durable/disposable retention, one ready spare, wrap-around overflow and safe shrink after the configured cooldown. Controlled-clock and isolated installed workflows, cleanup and PR 234 qualify this bounded outcome. RUNBOOK preserves failures and limits; production promotion remains separate.

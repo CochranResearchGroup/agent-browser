@@ -4,6 +4,10 @@ Updated: 2026-10-06
 
 ## Current execution
 
+### 2026-10-11 P237 dashboard and handoff lifecycle
+
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS in `platform/native-dashboard-261`. CONTEXT.md records the settled separation of link lifetime, tab lifetime and explicit link deletion, including recreation through a still-valid link. The next gate is review of a synthetic dashboard prototype. No replacement UI or lifecycle implementation is accepted yet; installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
+
 ### 2026-10-11 P232 installed checkpoint
 
 [P232](docs/dev/plans/0232-2026-10-11-profile-enrollment-reuse.md) is complete for ordinary-profile repair. PR246 integrated the source; the same sealed release passed isolated sharing and disposable cycles, production preservation publication, doctor, and two tasks on one existing profile with peer and borrowed-browser preservation. The proposed privileged authority upgrade was an incorrect gate: Alice/Bob G20 and G41 retire those prerequisites. The unexecuted procedure is cancelled without protected-service effects. Application authentication, native human-viewer acceptance and full compiled legacy-authority removal are separate qualifications.

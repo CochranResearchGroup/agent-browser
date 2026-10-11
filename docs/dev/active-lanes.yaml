@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P237
+    product_lane: PL-PLATFORM
+    objective: Replace operator dashboard with native browser-tab workspace and independent handoff lifetimes
+    plan: docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md
+    plan_ref: refs/heads/platform/native-dashboard-261
+    branch: platform/native-dashboard-261
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#261, CochranResearchGroup/agent-browser#260]
+    dependencies: []
+    overlaps: [P232, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
+    reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
+    validation_status: Confirmed model and source reference only; prototype and feature acceptance pending
+    updated_at: 2026-10-11
   - id: P222
     product_lane: PL-PLATFORM
     objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup

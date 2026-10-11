@@ -1,5 +1,7 @@
 # Active plan index
 
+[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS for issues #261 and #260. Confirmed domain rules are recorded; prototype review and actual lifecycle/native-workspace acceptance remain required.
+
 [P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.
 
 [P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) is CLOSED: PR 237 integrated and installed twelve-browser pressure acceptance passed on 2026-10-10.

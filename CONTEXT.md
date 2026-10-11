@@ -6,6 +6,16 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
+**Handoff link lifetime**: The configurable period during which a handoff link can be used. The default is perpetual. Link expiry does not end the target tab or delete the link record.
+
+**Tab lifetime**: The independent, configurable retention of a task's tab. An unused human handoff can protect its tab according to the pending-human retention policy. Ending one tab preserves its peers; the browser closes when its last live tab ends.
+
+**Handoff link deletion**: Explicit revocation of a handoff link, separate from its lifetime and its target tab's lifetime. It does not close the target tab or browser.
+
+**Handoff target recreation**: Opening a still-valid link recreates its expired target tab from retained target metadata in an eligible browser, or wakes a browser as needed. This restores target access rather than promising recovery of lost in-memory page state.
+
+**Pending-human retention**: Configured protection for a handed-off tab before confirmed human use. Its duration and pressure policy are independent of link validity; four hours is an example configuration value rather than a fixed timeout.
+
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 
 **Leave-open close**: Preserves the managed task and its live browser for continuation, including across host restart and idle cleanup. It retains occupied profile custody. Explicit `--leave-open false close` ends the task; a full-shutdown operation overrides the preference.
