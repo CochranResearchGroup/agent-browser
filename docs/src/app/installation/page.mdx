@@ -471,6 +471,8 @@ report does not authorize cleanup by itself. During a bounded upgrade, each
 accepted runtime host must match its recorded PID, process start token, binary
 hash, generation, and socket identity.
 
+Headless development validation does not require legacy RDP helpers. Explicitly configured native or required legacy presentation providers keep their own readiness checks. Older SQLite migration evidence is read without replacing browser or profile state. Sealed development publication retains the source commit, tree and candidate manifest digest independently of the original build path. Unsealed binaries do not imply source provenance.
+
 For isolated development, run <code>agent-browser-dev install doctor</code>
 or the namespaced development launcher. The check binds the selected binary,
 exact launcher bytes and configured dashboard port. Missing or changed bindings

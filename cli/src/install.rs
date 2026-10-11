@@ -1207,6 +1207,8 @@ fn install_doctor_report(flags: &Flags) -> serde_json::Value {
     install_doctor_trace("remote_view_privileges");
     let remote_view_privileges = if development && bound_target.is_none() {
         json!({"mode":"unbound_development","ready":false,"helperRequired":false})
+    } else if let Some(target) = bound_target {
+        target.presentation_readiness()
     } else if crate::native::browser_session_remote_view::remote_view_settings_present() {
         development_doctor::native_provider_readiness()
     } else {

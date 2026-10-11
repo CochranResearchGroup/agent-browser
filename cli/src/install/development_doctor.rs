@@ -11,6 +11,8 @@ pub(super) struct Binding {
     command_path: std::path::PathBuf,
     command_sha256: String,
     dashboard_port: u16,
+    #[serde(default)]
+    legacy_presentation_required: bool,
 }
 
 impl Binding {
@@ -20,6 +22,15 @@ impl Binding {
         result["launcherSha256"] = json!(self.command_sha256);
         result["scope"] = json!("development_selected_generation");
         result
+    }
+
+    pub(super) fn presentation_readiness(&self) -> Value {
+        select_presentation_readiness(
+            crate::native::browser_session_remote_view::remote_view_settings_present(),
+            self.legacy_presentation_required,
+            native_provider_readiness,
+            super::remote_view_privilege_status,
+        )
     }
 
     pub(super) fn dashboard_target(&self) -> (String, String, u16) {
@@ -103,9 +114,56 @@ fn load_binding_with_command(
     Ok(binding)
 }
 
+/// Select prerequisites for the bound development workflow without borrowing production.
+fn select_presentation_readiness(
+    native: bool,
+    legacy_required: bool,
+    native_probe: impl FnOnce() -> Value,
+    legacy_probe: impl FnOnce() -> Value,
+) -> Value {
+    if native {
+        native_probe()
+    } else if legacy_required {
+        legacy_probe()
+    } else {
+        json!({"mode":"headless_development", "ready":true, "helperRequired":false})
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn issue79_headless_development_does_not_probe_legacy_helper() {
+        let status = select_presentation_readiness(
+            false,
+            false,
+            || panic!("native provider not selected"),
+            || serde_json::json!({"mode":"legacy", "ready":false}),
+        );
+        assert_eq!(status["mode"], "headless_development");
+        assert_eq!(status["ready"], true);
+        assert_eq!(status["helperRequired"], false);
+        assert_eq!(
+            select_presentation_readiness(
+                false,
+                true,
+                || panic!("native provider not selected"),
+                || serde_json::json!({"mode":"legacy"})
+            )["mode"],
+            "legacy"
+        );
+        assert_eq!(
+            select_presentation_readiness(
+                true,
+                false,
+                || serde_json::json!({"mode":"native_remote_view", "ready":false}),
+                || panic!("legacy provider not selected")
+            )["ready"],
+            false
+        );
+    }
 
     struct Fixture {
         root: std::path::PathBuf,

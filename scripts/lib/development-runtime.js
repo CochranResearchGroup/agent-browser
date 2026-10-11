@@ -309,6 +309,27 @@ export function installDevelopmentRuntime({
   if (!existsSync(sourceBinary)) throw new Error(`Development candidate does not exist: ${sourceBinary}`);
   const bytes = readFileSync(sourceBinary);
   const sha256 = createHash('sha256').update(bytes).digest('hex');
+  // Retain the sealed source identity independently of a disposable build path.
+  // Ordinary unsealed binaries remain usable but carry no invented source proof.
+  const sourceManifestPath = join(dirname(sourceBinary), 'candidate-manifest.json');
+  let source = null;
+  let sourceManifestSha256 = null;
+  if (existsSync(sourceManifestPath)) {
+    const manifestBytes = readFileSync(sourceManifestPath);
+    const candidate = JSON.parse(manifestBytes);
+    if (candidate.schemaVersion !== 'agent-browser.candidate-manifest.v1' ||
+        candidate.binarySha256 !== sha256 || candidate.source?.state !== 'clean' ||
+        !/^[0-9a-f]{40}$/.test(candidate.source?.commit || '') ||
+        !/^[0-9a-f]{40}$/.test(candidate.source?.tree || '')) {
+      throw new Error('Development candidate source binding mismatch');
+    }
+    const tree = execFileSync('git', ['rev-parse', `${candidate.source.commit}^{tree}`], {
+      encoding: 'utf8', timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (tree !== candidate.source.tree) throw new Error('Development candidate source binding mismatch');
+    source = { commit: candidate.source.commit, tree, state: 'clean' };
+    sourceManifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
+  }
   const version = binaryVersion(sourceBinary, env);
   const generationId = `${version}-${sha256.slice(0, 12)}`;
   const generationDir = join(descriptor.generations, generationId);
@@ -346,12 +367,15 @@ export function installDevelopmentRuntime({
     version,
     sha256,
     sourceBinary,
+    source,
+    sourceManifestSha256,
     remoteView: descriptor.remoteView,
     installDoctor: {
       schemaVersion: 1,
       commandPath: descriptor.executable,
       commandSha256: createHash('sha256').update(renderDevelopmentLauncher(descriptor, generationBinary)).digest('hex'),
       dashboardPort: descriptor.dashboardPort,
+      legacyPresentationRequired: env.AGENT_BROWSER_DEV_PRESENTATION_PROVIDER_REQUIRED === '1',
     },
     browserExecutable: descriptor.browserExecutable,
     externalBrowserDiscovery: descriptor.externalBrowserDiscovery,

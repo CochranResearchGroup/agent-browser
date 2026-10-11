@@ -76,6 +76,8 @@ agent-browser install
 
 ### Isolated development runtime
 
+Headless development validation does not require legacy RDP helpers. Explicitly configured native or required legacy presentation providers retain their own readiness checks. Older SQLite migration evidence remains authoritative and is read without replacing browser or profile state. Sealed development publication retains the source commit, tree and candidate manifest digest independently of the original build path. Unsealed binaries do not imply source provenance.
+
 On the maintained Linux workstation, experimental source builds run beside the
 production installation. They use the `agent-browser-dev` executable, separate
 immutable generations and state, dedicated user services, and dashboard ports
