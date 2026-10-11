@@ -2192,6 +2192,53 @@ fn configured_durable_retention_survives_restart_and_applies_to_new_links() {
 }
 
 #[test]
+fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut configured = original.clone();
+    configured.retention_policy.disposable_handoff_ttl_ms = 1_000;
+    configured.retention_policy.disposable_inactivity_ms = 30;
+    store
+        .compare_and_save_session_state(&original, &configured)
+        .unwrap();
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/expired-task",
+                "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let handoff_id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let session_id = opened["browserSession"]["sessionId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    assert_eq!(
+        consumer.reap(130).unwrap().expired_session_ids,
+        vec![session_id]
+    );
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls);
+    let reopened = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "nativeDesktop":true, "activityAtMs":131
+    }));
+    assert_eq!(reopened["success"], true, "{reopened}");
+    assert_eq!(reopened["data"]["handoffId"], handoff_id);
+    assert_eq!(reopened["data"]["operatorVisible"]["state"], "ready");
+}
+
+#[test]
 fn disposable_inactivity_expires_work_and_reaps_only_unreferenced_profile_data() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
