@@ -17,3 +17,5 @@
 - [P230: profile freshness consistency](0230-2026-10-11-profile-freshness.md), issue #176; completed bounded source repair.
 
 - [P231: upgrade progress](0231-2026-10-11-upgrade-progress.md), issue #181; completed bounded source repair; wider qualification remains open.
+
+- [P233: managed leave-open](0233-2026-10-11-managed-leave-open.md), issue #247; completed bounded close repair; standalone-host restart remains #183.

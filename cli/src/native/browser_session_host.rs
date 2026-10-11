@@ -873,6 +873,12 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .get("action")
             .and_then(serde_json::Value::as_str)
             .ok_or_else(|| "browser_session_action_missing".to_string())?;
+        if command
+            .get("leaveOpen")
+            .is_some_and(|value| !value.is_boolean())
+        {
+            return Err("browser_session_leave_open_invalid".into());
+        }
         let now_ms = command
             .get("activityAtMs")
             .and_then(serde_json::Value::as_u64)
@@ -983,13 +989,25 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             "browser_session_close" => {
                 let session_id = self.session_id_from_command(command)?;
-                let closed =
-                    self.close_session(&session_id, SessionEndReason::ExplicitClose, now_ms)?;
+                let preserve = match command.get("leaveOpen") {
+                    Some(value) => value
+                        .as_bool()
+                        .ok_or("browser_session_leave_open_invalid")?,
+                    None => self.state.leave_open_session_ids.contains(&session_id),
+                };
+                let closed = if preserve {
+                    let result = self.manager()?.preserve_session(&session_id)?;
+                    self.commit_state()?;
+                    result
+                } else {
+                    self.close_session(&session_id, SessionEndReason::ExplicitClose, now_ms)?
+                };
                 Ok(serde_json::json!({
                     "closed": true,
                     "sessionId": closed.session_id,
                     "browserId": closed.browser_id,
                     "disposition": session_close_disposition_name(closed.disposition),
+                    "taskRetained": preserve,
                 }))
             }
             "browser_session_navigate" => {
@@ -1168,7 +1186,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 activity_at_ms,
             )
         };
-        self.open(request)
+        let opened = self.open(request)?;
+        self.apply_leave_open_choice(&opened.session_id, command)?;
+        Ok(opened)
+    }
+
+    /// Retain managed task identity and physical occupancy rather than claiming
+    /// that an externally consumed browser's profile became available.
+    fn apply_leave_open_choice(
+        &mut self,
+        session_id: &str,
+        command: &serde_json::Value,
+    ) -> Result<(), String> {
+        match command.get("leaveOpen") {
+            Some(serde_json::Value::Bool(true)) => {
+                self.manager()?.preserve_session(session_id)?;
+                self.commit_state()?;
+            }
+            Some(serde_json::Value::Bool(false)) => {
+                self.manager()?;
+                self.state.leave_open_session_ids.remove(session_id);
+                self.commit_state()?;
+            }
+            Some(_) => return Err("browser_session_leave_open_invalid".into()),
+            None => {}
+        }
+        Ok(())
     }
 
     fn session_id_from_command(&self, command: &serde_json::Value) -> Result<String, String> {
@@ -1209,6 +1252,12 @@ where
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        if command
+            .get("leaveOpen")
+            .is_some_and(|value| !value.is_boolean())
+        {
+            return Err("browser_session_leave_open_invalid".into());
+        }
         validate_handoff_ttl(
             command,
             command
@@ -1278,6 +1327,7 @@ where
             [session_id] => session_id.clone(),
             _ => return Err(format!("browser_session_name_ambiguous:{session_name}")),
         };
+        self.apply_leave_open_choice(&session_id, command)?;
         let browser_id = self
             .state
             .sessions

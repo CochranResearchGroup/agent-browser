@@ -1268,8 +1268,10 @@ then relaunch the same runtime profile for automation. Use
 where DevTools during manual login is known to be accepted. Treat
 `runtimeProfiles.<name>.preferences.defaultViewport` as a `WIDTHxHEIGHT` default
 content size, for example `960x640`. Set `runtimeProfiles.<name>.launch.leaveOpen` or pass
-`--leave-open` when you want `close` to detach from a managed runtime-profile
-browser instead of shutting it down.
+`--leave-open` when you want `close` to preserve a managed runtime-profile
+browser and its task for continuation. This preference survives host restart
+and protects the task from idle cleanup. Use `--leave-open false close` to
+end the task explicitly; peer tasks remain active.
 Development executable replacement uses the two-phase `agent-browser handoff`
 protocol. `prepare` keeps the old daemon authoritative and returns a candidate
 session. Run `resume --source-session <old>` in that candidate, then run

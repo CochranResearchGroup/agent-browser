@@ -587,3 +587,114 @@ fn consumer_host_stale_baseline_rejects_before_provider_read_or_process() {
 
 #[path = "browser_session_pool_tests.rs"]
 mod pool_tests;
+
+#[test]
+fn consumer_leave_open_close_preserves_exact_browser_and_task_for_continuation() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests.clone());
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    host.execute_managed_command(
+        "Alice",
+        &serde_json::json!({"action":"get_url", "activityAtMs":101}),
+    )
+    .unwrap()
+    .unwrap();
+    let browser = host.state().browsers[&opened.browser_id].clone();
+    let session = host.state().sessions[&opened.session_id].clone();
+    let response = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":true, "activityAtMs":102
+    }));
+    assert_eq!(response["success"], true);
+    assert_eq!(response["data"]["disposition"], "browser_preserved");
+    assert_eq!(host.state().browsers[&opened.browser_id], browser);
+    assert_eq!(host.state().sessions[&opened.session_id], session);
+    drop(host);
+    let mut restarted = fixture.host(Mode::Success, calls.clone(), requests);
+    let reaped = restarted.reap(400_000).unwrap();
+    assert!(reaped.closed_browser_ids.is_empty());
+    assert!(reaped.expired_session_ids.is_empty());
+    let continued = restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action":"get_url", "activityAtMs":400_001}),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(continued["browserSession"]["browserId"], opened.browser_id);
+    assert_eq!(continued["browserSession"]["sessionId"], opened.session_id);
+    assert_eq!(calls.get(), 1);
+    let closed = restarted.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":false, "activityAtMs":400_002
+    }));
+    assert_eq!(closed["success"], true);
+    assert_eq!(closed["data"]["disposition"], "browser_closed");
+    assert!(restarted.state().sessions.is_empty());
+    assert!(restarted.state().browsers.is_empty());
+}
+
+#[test]
+fn consumer_leave_open_launch_preference_survives_repeat_close_and_preserves_peers() {
+    let fixture = Fixture::new();
+    let calls = Rc::new(Cell::new(0));
+    let requests = Rc::new(Cell::new(0));
+    let mut host = fixture.host(Mode::Success, calls.clone(), requests);
+    let opened = host.handle_command(&serde_json::json!({
+        "action":"browser_session_open", "sessionName":"Alice",
+        "profileId":"profile-a", "leaveOpen":true, "activityAtMs":100
+    }));
+    assert_eq!(opened["success"], true);
+    let session_id = opened["data"]["sessionId"].as_str().unwrap().to_string();
+    let browser_id = opened["data"]["browserId"].as_str().unwrap().to_string();
+    let bob = host
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 101))
+        .unwrap();
+    assert_eq!(bob.browser_id, browser_id);
+    for now in [102, 103] {
+        let preserved = host.handle_command(&serde_json::json!({
+            "action":"browser_session_close", "sessionId":session_id, "activityAtMs":now
+        }));
+        assert_eq!(preserved["success"], true);
+        assert_eq!(preserved["data"]["disposition"], "browser_preserved");
+        assert_eq!(preserved["data"]["taskRetained"], true);
+        assert_eq!(host.state().sessions.len(), 2);
+    }
+    let closed = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":session_id,
+        "leaveOpen":false, "activityAtMs":104
+    }));
+    assert_eq!(closed["success"], true);
+    assert_eq!(closed["data"]["taskRetained"], false);
+    assert!(!host.state().leave_open_session_ids.contains(&session_id));
+    assert!(!host.state().sessions.contains_key(&session_id));
+    assert!(host.state().sessions.contains_key(&bob.session_id));
+    assert!(host.state().browsers.contains_key(&browser_id));
+    host.close_session(&bob.session_id, SessionEndReason::ExplicitClose, 105)
+        .unwrap();
+    assert!(host.state().leave_open_session_ids.is_empty());
+    assert!(host.state().browsers.is_empty());
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn consumer_leave_open_close_rejects_stale_publication_without_retention() {
+    let fixture = Fixture::new();
+    let mut host = fixture.host(Mode::Success, Rc::new(Cell::new(0)), Rc::new(Cell::new(0)));
+    let opened = host
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    competing_write(&fixture.root);
+    let response = host.handle_command(&serde_json::json!({
+        "action":"browser_session_close", "sessionId":opened.session_id,
+        "leaveOpen":true, "activityAtMs":101
+    }));
+    assert_eq!(response["success"], false);
+    assert_eq!(response["error"], "browser_session_publication_conflict");
+    assert!(host.state().leave_open_session_ids.is_empty());
+    assert!(host.state().browsers.contains_key(&opened.browser_id));
+}

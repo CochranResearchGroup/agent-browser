@@ -8,6 +8,8 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 
+**Leave-open close**: Preserves the managed task and its live browser for continuation, including across host restart and idle cleanup. It retains occupied profile custody. Explicit `--leave-open false close` ends the task; a full-shutdown operation overrides the preference.
+
 **Ready spare desktop**: A usable vacant desktop prepared for the next independent browser. Maintain one when capacity permits; wrap-around handles overflow, and configurable cooldown retires excess unused desktops.
 
 **Development publication**:

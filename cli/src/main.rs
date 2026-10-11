@@ -718,6 +718,11 @@ fn attribute_native_request_identity(command: &mut serde_json::Value, session: &
 }
 
 fn apply_browser_session_manager_route(command: &mut serde_json::Value, flags: &Flags) -> bool {
+    // Managed commands bypass prestart launch, so carry the preservation
+    // preference on the command itself, including an explicit false override.
+    if flags.leave_open || flags.cli_leave_open {
+        command["leaveOpen"] = json!(flags.leave_open);
+    }
     let Some(action) = command.get("action").and_then(serde_json::Value::as_str) else {
         return false;
     };
@@ -3197,8 +3202,8 @@ fn main() {
             }
         }
 
-        if flags.leave_open {
-            cmd_obj.insert("leaveOpen".to_string(), json!(true));
+        if flags.leave_open || flags.cli_leave_open {
+            cmd_obj.insert("leaveOpen".to_string(), json!(flags.leave_open));
         }
 
         // Add profile path if specified. A live runtime profile attaches by CDP
@@ -4553,6 +4558,25 @@ mod tests {
         assert_eq!(command["action"], "browser_session_close");
         assert_eq!(command["sessionName"], "alice");
         assert_eq!(command["profileId"], "work");
+    }
+
+    #[test]
+    fn managed_close_preserves_explicit_leave_open_choice() {
+        let guard = EnvGuard::new(&[crate::runtime_host::RUNTIME_HOST_ENV]);
+        guard.set(crate::runtime_host::RUNTIME_HOST_ENV, "1");
+        for choice in ["true", "false"] {
+            let flags = parse_flags(&[
+                "agent-browser".to_string(),
+                "--session".to_string(),
+                "alice".to_string(),
+                "--leave-open".to_string(),
+                choice.to_string(),
+                "close".to_string(),
+            ]);
+            let mut command = json!({ "action": "close" });
+            assert!(apply_browser_session_manager_route(&mut command, &flags));
+            assert_eq!(command["leaveOpen"], choice == "true");
+        }
     }
 
     #[test]

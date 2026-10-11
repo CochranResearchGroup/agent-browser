@@ -209,8 +209,10 @@ Runtime-profile config can include service login hints. For example,
 agent-browser to warn when automation navigates to known Google login hosts, so
 agents can switch to detached <code>runtime login</code> before continuing.
 Use <code>--leave-open</code> or <code>runtimeProfiles.work.launch.leaveOpen</code>
-when you want <code>close</code> to detach from that managed runtime-profile browser
-instead of shutting it down.
+when you want <code>close</code> to preserve the managed browser and its task
+for continuation. The preference survives host restart and protects the task
+from idle cleanup. Use <code>--leave-open false close</code> to end the task
+explicitly; peer tasks remain active.
 
 Service-mode profile and session records can also be declared under
 <code>service.profiles</code> and <code>service.sessions</code>. These records
