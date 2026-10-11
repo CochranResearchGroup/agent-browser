@@ -1690,6 +1690,9 @@ async fn queued_action_executor_resolves_managed_handoff_through_the_registered_
             };
             let request: Value = serde_json::from_str(&text).unwrap();
             let result = match request["method"].as_str().unwrap() {
+                "SystemInfo.getProcessInfo" => serde_json::json!({"processInfo":[{
+                    "type":"browser", "id":std::process::id()
+                }]}),
                 "Target.getTargets" => serde_json::json!({"targetInfos":[{
                     "targetId":target, "type":"page", "title":"Fixture",
                     "url":"https://synthetic.example/", "attached":false

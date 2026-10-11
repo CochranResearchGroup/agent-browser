@@ -1431,9 +1431,11 @@ pub(super) async fn attach_verified_browser_endpoint(
 async fn attach_recorded_browser(
     browser: &ManagedBrowserInstance,
 ) -> Result<BrowserManager, String> {
+    // The current CDP browser PID and stable kernel identity qualify a retained
+    // endpoint. Executable-name classification is only a hint, not custody.
     let before = match crate::process_identity::observe_process(browser.pid) {
         crate::process_identity::ProcessObservation::Observed(identity)
-            if identity.browser_family.is_some() && identity.start_token.is_some() =>
+            if identity.executable_path.is_some() && identity.start_token.is_some() =>
         {
             identity
         }
@@ -2294,8 +2296,23 @@ mod tests {
                 }
             }
             let restored = state.tabs[&alice_tab.id].clone();
-            requester.execute_command(&state.browsers[&alice.browser_id], &restored,
-                &alice.session_id, "alice", &serde_json::json!({"id":"alice-progress", "action":"eval", "script":"document.title='Alice progressed'"}))?;
+            let progress = requester.execute_command(
+                &state.browsers[&alice.browser_id], &restored, &alice.session_id, "alice",
+                &serde_json::json!({"id":"alice-progress", "action":"evaluate", "script":"document.title='Alice progressed'"}),
+            )?;
+            if progress["success"] != true {
+                return Err(format!("Alice progress fixture failed: {progress}"));
+            }
+            let progressed = requester.execute_command(
+                &state.browsers[&alice.browser_id],
+                &restored,
+                &alice.session_id,
+                "alice",
+                &serde_json::json!({"id":"alice-progress-observed", "action":"title"}),
+            )?;
+            if progressed["data"]["title"] != "Alice progressed" {
+                return Err("Alice progress fixture did not change its page".into());
+            }
             drop(requester);
             state = unpublished_baseline.clone();
             requester =
