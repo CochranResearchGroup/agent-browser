@@ -1274,6 +1274,11 @@ and protects the task from idle cleanup. Use `--leave-open false close` to
 end the task explicitly; peer tasks remain active. After a graceful runtime-host
 stop, use the same session and profile: the next command reattaches the retained
 browser.
+During an upgrade admission drain, managed browser effects return
+`runtime_admission_draining`. Reads of an existing live task remain available;
+a read that needs a browser launch, physical recovery, or a new tab is blocked.
+Use the owning upgrade transaction's status and recovery commands before retrying;
+do not remove the drain marker to bypass it.
 Development executable replacement uses the two-phase `agent-browser handoff`
 protocol. `prepare` keeps the old daemon authoritative and returns a candidate
 session. Run `resume --source-session <old>` in that candidate, then run

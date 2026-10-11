@@ -7843,6 +7843,10 @@ Configuration:
   protection across host restart. Use `--leave-open false close` to end the task.
   After a graceful runtime-host stop, the next command on the same session and
   profile reattaches its retained browser.
+  During upgrade admission drain, managed browser effects return
+  runtime_admission_draining. Reads of a live task remain available; reads
+  needing launch, physical recovery, or a new tab are blocked. Use the owning
+  upgrade transaction's status and recovery commands before retrying.
   Set `preferences.defaultViewport` to a WIDTHxHEIGHT value such as 960x640
   to resize the browser content area after launch and before the command runs.
   Set `service.reconcileIntervalMs` or pass `--service-reconcile-interval`
