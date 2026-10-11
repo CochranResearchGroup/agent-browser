@@ -6374,13 +6374,14 @@ Explicit build choices persist per profile for launch and recovery across restar
 Retained recovery reconciles unobserved claims after exact profile process absence.
 Provider read failures before launch create no new process claim.
 
-New durable-profile links have no default expiry; disposable links default to
-24 hours. Existing finite links keep their expiry. open --handoff-ttl-ms selects a new link's
+New durable-profile and disposable links default to perpetual lifetime.
+Existing finite links keep their expiry. open --handoff-ttl-ms selects a new link's
 positive lifetime. inspect reports expiry; extend --ttl-ms ensures at least that
 much remaining time, including after target expiry, without recreating a tab or browser.
 Expired links return remote_view_handoff_expired and cannot
 be extended. Normal open can issue a new link to the same retained tab.
 Link expiry does not close browsers or disconnect native viewers.
+Upgrades preserve legacy link expiry, including perpetual links.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
 Ordinary automation also recovers retained idle browsers without opening the link first.
@@ -7915,7 +7916,7 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_APPLICATION Application selector (default: agent-browser)
   AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT Warm desktop minimum (default: 1; demand grows to pool limit)
   AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS Durable handoff TTL; 0 means unlimited (default: 0)
-  AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS Positive disposable handoff TTL (default: 86400000)
+  AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS Disposable link TTL; 0 is perpetual (default: 0)
   AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS Positive disposable inactivity retention (default: 86400000)
   Explicit retention settings persist in SQLite; omission preserves configured values.
                                  Configured Remote View admits ordinary open requests as managed sessions.

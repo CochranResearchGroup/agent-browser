@@ -6,20 +6,20 @@ use crate::{
     BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
 };
 
-/// Persisted profile-aware retention. None means no automatic durable-link expiry.
+/// Persisted profile-aware retention. None means no automatic link expiry.
 /// Changes apply to newly issued links, never rewriting an existing expiry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserRetentionPolicy {
     pub durable_handoff_ttl_ms: Option<u64>,
-    pub disposable_handoff_ttl_ms: u64,
+    pub disposable_handoff_ttl_ms: Option<u64>,
     pub disposable_inactivity_ms: u64,
 }
 impl Default for BrowserRetentionPolicy {
     fn default() -> Self {
         Self {
             durable_handoff_ttl_ms: None,
-            disposable_handoff_ttl_ms: DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+            disposable_handoff_ttl_ms: None,
             disposable_inactivity_ms: 24 * 60 * 60 * 1_000,
         }
     }
@@ -27,7 +27,7 @@ impl Default for BrowserRetentionPolicy {
 impl BrowserRetentionPolicy {
     pub fn validate(&self) -> Result<(), String> {
         if self.durable_handoff_ttl_ms == Some(0)
-            || self.disposable_handoff_ttl_ms == 0
+            || self.disposable_handoff_ttl_ms == Some(0)
             || self.disposable_inactivity_ms == 0
         {
             return Err("browser_retention_policy_invalid".into());
@@ -283,7 +283,8 @@ fn join(
     })
 }
 
-/// Default retention for newly issued and once-migrated legacy operator links.
+/// Historical finite TTL retained for explicit compatibility callers.
+/// Current new-link defaults are perpetual.
 pub const DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 
 impl RemoteViewTabHandoff {
@@ -292,9 +293,9 @@ impl RemoteViewTabHandoff {
         self.initialize_profile_retention(now_ms, Some(ttl_ms))
     }
 
-    /// Initialize a new link once; None retains a durable link without expiry.
+    /// Initialize a new link once; None retains a link without expiry.
     /// The creation marker distinguishes an initialized unlimited link from a
-    /// legacy record awaiting its one-time finite migration.
+    /// legacy record awaiting its one-time creation-metadata migration.
     pub fn initialize_profile_retention(
         &mut self,
         now_ms: u64,

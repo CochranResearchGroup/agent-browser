@@ -697,8 +697,8 @@ Normal client `remote-view open` and `remote-view resolve` use the native Remote
 
 With the Remote View application provider, named-session batches keep their selected runtime profile and browser build. The shared browser owner launches or restores the browser when the navigation command runs.
 
-New durable-profile handoffs have no default time expiry. Disposable-profile
-handoffs default to 24 hours. Both are separate from browser idle cleanup and
+New durable-profile and disposable-profile handoffs default to perpetual
+link lifetime. Both are separate from browser idle cleanup and
 Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
 <milliseconds>` selects a positive lifetime for a newly issued link. JSON exposes
 `handoffCreatedAtMs` and `handoffExpiresAtMs`. `remote-view inspect <handoff-id>`
@@ -709,8 +709,8 @@ Extension does not recreate a tab, restore a browser or issue a viewer grant.
 Expired links return `remote_view_handoff_expired` (HTTP 410 on the deep-link
 endpoint); opening or extending them cannot revive them. A subsequent normal
 open can issue a new opaque link to the same retained tab. An already-connected
-native viewer remains connected. Legacy links receive historical 24-hour retention once
-when the shared owner first loads the upgraded state; restarts do not renew them.
+native viewer remains connected. Legacy links keep their recorded expiry, including no expiry, when the
+shared owner loads the upgraded state; restarts do not renew them.
 Service callers use `service_remote_view_handoff_resolve` with
 `params.handoffOperation` set to `inspect` or `extend`; extension also supplies
 positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
@@ -718,12 +718,15 @@ positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
 Retention defaults are persisted in Browser Runtime SQLite. Explicit startup
 settings update that policy; omitted settings preserve it across restart.
 `AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS` selects durable link retention (0 means
-no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects a positive
-disposable link lifetime; `AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a
-positive disposable inactivity lifetime. Disposable defaults are 86400000 ms.
+no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects disposable
+link retention (0 means no time expiry). Both link defaults are 0.
+`AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a positive disposable
+inactivity lifetime, defaulting to 86400000 ms. Existing persisted finite policy
+values remain configured until explicitly changed; set the matching link setting
+to 0 to make newly issued links perpetual.
 Policy changes apply to newly issued links. Existing finite links keep their
 expiry, including already-expired links. Legacy links with no creation marker
-receive the historical finite 24-hour retention once. Extending an unlimited
+receive creation metadata once without adding or changing their expiry. Extending an unlimited
 link preserves its unlimited lifetime. Explicitly closed tasks remain closed.
 
 

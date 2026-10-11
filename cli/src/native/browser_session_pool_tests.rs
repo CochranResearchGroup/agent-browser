@@ -2156,6 +2156,81 @@ fn durable_named_handoff_has_no_default_expiry_across_restart() {
 }
 
 #[test]
+fn disposable_handoff_defaults_perpetual_across_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert!(
+        opened["browserSession"]["handoffExpiresAtMs"].is_null(),
+        "{opened}"
+    );
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":2_678_400_100_u64
+    }));
+    assert_eq!(inspected["success"], true, "{inspected}");
+    assert_eq!(inspected["data"]["expired"], false);
+    assert!(inspected["data"]["expiresAtMs"].is_null());
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn legacy_handoff_without_expiry_stays_perpetual_after_upgrade() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    drop(consumer);
+    // Supply the historical document shape to the persisted-state boundary.
+    // The old record has no creation marker and no configured link expiry.
+    let mut store = fixture.store(false);
+    let original = store.load_session_state().unwrap();
+    let mut legacy = serde_json::to_value(&original).unwrap();
+    let link = legacy["remoteViewTabHandoffs"][&id]
+        .as_object_mut()
+        .unwrap();
+    link.remove("createdAtMs");
+    link.remove("expiresAtMs");
+    store
+        .compare_and_save_session_state(&original, &serde_json::from_value(legacy).unwrap())
+        .unwrap();
+    for _ in 0..2 {
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let inspected = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"inspect", "activityAtMs":u64::MAX
+        }));
+        assert_eq!(inspected["success"], true, "{inspected}");
+        assert_eq!(inspected["data"]["expired"], false, "{inspected}");
+        assert!(inspected["data"]["expiresAtMs"].is_null(), "{inspected}");
+    }
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
 fn configured_durable_retention_survives_restart_and_applies_to_new_links() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
@@ -2199,7 +2274,7 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     let mut store = fixture.store(false);
     let original = store.load_session_state().unwrap();
     let mut configured = original.clone();
-    configured.retention_policy.disposable_handoff_ttl_ms = 1_000;
+    configured.retention_policy.disposable_handoff_ttl_ms = Some(1_000);
     configured.retention_policy.disposable_inactivity_ms = 30;
     store
         .compare_and_save_session_state(&original, &configured)
@@ -2249,7 +2324,7 @@ fn valid_handoff_can_extend_after_target_expiry_without_recreation() {
     let mut store = fixture.store(false);
     let original = store.load_session_state().unwrap();
     let mut configured = original.clone();
-    configured.retention_policy.disposable_handoff_ttl_ms = 1_000;
+    configured.retention_policy.disposable_handoff_ttl_ms = Some(1_000);
     configured.retention_policy.disposable_inactivity_ms = 30;
     store
         .compare_and_save_session_state(&original, &configured)

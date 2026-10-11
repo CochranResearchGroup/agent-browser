@@ -432,8 +432,8 @@ pub(crate) fn load_default_browser_session_host() -> Result<DefaultBrowserSessio
         policy.durable_handoff_ttl_ms = (ttl != 0).then_some(ttl);
     }
     if std::env::var_os("AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS").is_some() {
-        policy.disposable_handoff_ttl_ms =
-            configured_u64("AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS", 86_400_000)?;
+        let ttl = configured_u64("AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS", 0)?;
+        policy.disposable_handoff_ttl_ms = (ttl != 0).then_some(ttl);
     }
     if std::env::var_os("AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS").is_some() {
         policy.disposable_inactivity_ms =
@@ -580,10 +580,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         let mut state = previous.clone();
         state.retention_policy.validate()?;
         for link in state.remote_view_tab_handoffs.values_mut() {
-            link.initialize_link_retention(
-                current_unix_ms(),
-                agent_browser_service_model::DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
-            )?;
+            // Migration adds creation metadata without imposing a new lifetime
+            // on an existing link or renewing its recorded finite expiry.
+            link.initialize_profile_retention(current_unix_ms(), None)?;
         }
         if state != previous {
             persistence.compare_and_save_session_state(&previous, &state)?;
@@ -1518,7 +1517,7 @@ where
                     .disposable_profiles
                     .contains_key(&session.profile_id) =>
                 {
-                    Some(self.state.retention_policy.disposable_handoff_ttl_ms)
+                    self.state.retention_policy.disposable_handoff_ttl_ms
                 }
                 None => self.state.retention_policy.durable_handoff_ttl_ms,
             };
@@ -2475,7 +2474,7 @@ fn validate_handoff_ttl(
     policy.validate()?;
     for ttl in [
         policy.durable_handoff_ttl_ms,
-        Some(policy.disposable_handoff_ttl_ms),
+        policy.disposable_handoff_ttl_ms,
     ]
     .into_iter()
     .flatten()

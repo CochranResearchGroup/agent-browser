@@ -388,8 +388,10 @@ request can retain a new opaque ID for the same target while preserving the old
 expired record. Local unconfigured commands do not acquire these identities.
 
 The aggregate records optional `createdAtMs` and `expiresAtMs` for backward
-compatibility. The upgraded owner initializes legacy links once with the
-24-hour default and compare-and-saves that migration. New links accept positive
+compatibility. The upgraded owner adds creation metadata once to legacy links
+without imposing an expiry or changing an existing one, then compare-and-saves
+that migration. New durable and disposable links default perpetual; persisted
+finite configuration remains configurable for newly issued links. New links accept positive
 `handoffTtlMs`; responses expose `handoffCreatedAtMs` and `handoffExpiresAtMs`.
 Opening a link or restarting the owner does not renew retention.
 
