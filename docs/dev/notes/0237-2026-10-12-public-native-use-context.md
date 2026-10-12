@@ -67,3 +67,47 @@ fixture failures are retained in the temporary P237 main-reconciliation handoff.
 The source behavior and qualification boundary are recorded here without raw
 logs, credentials or operator runtime state. No installation, private account
 login, live provider mutation or CI dispatch was performed.
+
+## Uninterrupted synthetic HTTPS qualification
+
+The subsequent opt-in fixture opens the opaque URL directly in disposable
+Chrome through a task-owned HTTPS relay. It does not extract a Location into a
+second navigation. The browser follows the production public 303 to the native
+viewer on the same HTTPS origin; native synthetic authentication, actual
+gateway use confirmation and the real private provider/owner join complete
+without any dashboard-login request. WebSocket passes in 25.99 seconds and HTTP
+fallback in 25.90 seconds. Matching private provider and owner first-use
+timestamps, cleared pending retention, immutable replay and nonzero visible
+display remain required. Metadata-only relay evidence records the actual
+opaque document navigation and native use POST.
+
+The first HTTPS run failed before the opaque request because the script
+sandbox's URL object did not expose browser URL properties. A minimal sandbox
+probe confirmed that limitation; validation now runs inside Chrome. The first
+fixture failure is retained, and neither that failure nor its correction is
+classified as a product RED or an erased flaky retry. Both corrected transport
+runs use the same immutable candidate pair:
+
+- Agent Browser: `ec466b4b918e723862f4de391005772a02e0962a03a181fdbfd119cc588a7120`.
+- Remote View: `2384893366f3ba1236972d9913e0294e4e5b4e9d9fce3f3c1c1e754f7335d79f`.
+
+The driver owns its certificate, loopback relay, disposable Chrome profile and
+created process groups. After both runs, fresh process-group readbacks found
+no non-zombie residue. It leaves the shared browser daemon and unrelated
+browsers intact. Synthetic certificate trust is confined to that task-owned
+Chrome process. These checks qualify uninterrupted source-level synthetic
+HTTPS navigation, not production certificate trust, private operator login,
+real Guacamole desktop contents or installed provider behavior.
+
+Reproduce with the opt-in Remote View
+`tests/native_handoff_public_tls_driver.py`, supplying absolute immutable
+Agent Browser and Remote View test executable paths, the reviewed Linux Chrome
+executable, a fresh artifact directory and either ws or http transport. The
+fixture preserves logs and cleanup receipts even on failure. Use the repository
+Cargo admission wrapper to build candidates. No live effects or installation
+are implied.
+
+This supersedes the earlier split-navigation proof limit only for the
+synthetic source workflow. Retained-URL recovery, physical native selection,
+provider-backed qualification, chosen replacement UI and canonical P237
+integration remain open.

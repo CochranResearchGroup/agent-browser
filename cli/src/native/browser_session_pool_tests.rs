@@ -4642,6 +4642,8 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
     );
     let public_http = descriptor["publicHttp"].as_bool().unwrap_or(false);
     let public_locator = descriptor["publicLocator"].as_bool().unwrap_or(false);
+    let public_html = descriptor["publicHtml"].as_bool().unwrap_or(false);
+    assert!(!public_html || (public_http && public_locator));
     // Acceptance uses context produced by the actual authorized handoff,
     // never a test-side registration or diagnostic URL rewrite.
     let locator_prepared = public_locator.then(|| {
@@ -4660,10 +4662,14 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
             "Alice",
             id,
             public_locator,
+            public_html,
+            descriptor["publicOrigin"].as_str(),
         )
     });
     let mut presentation_path = None;
-    let registered = if let Some(harness) = public.as_mut() {
+    let registered = if public_html {
+        locator_prepared.expect("public browser handoff must already have native context")
+    } else if let Some(harness) = public.as_mut() {
         let mut prepared = locator_prepared;
         loop {
             match harness.next() {
@@ -4722,7 +4728,7 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         .unwrap()
         .pending_human_tabs
         .contains_key(tab));
-    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"pending","correlationId":correlation,"handoffId":id,"pendingHuman":true,"presentationPath":presentation_path})).unwrap()).unwrap();
+    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"pending","correlationId":correlation,"handoffId":id,"pendingHuman":true,"presentationPath":presentation_path,"publicEndpoint":public.as_ref().map(|harness|harness.origin.as_str()),"handoffPath":format!("/remote-view/{id}")})).unwrap()).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
         let result = if public_locator {
@@ -4795,6 +4801,7 @@ enum NativePublicEvent {
 
 #[cfg(unix)]
 struct NativePublicHarness {
+    origin: String,
     events: std::sync::mpsc::Receiver<NativePublicEvent>,
     _runtime: tokio::runtime::Runtime,
     _readiness: std::net::TcpListener,
@@ -4808,6 +4815,8 @@ impl NativePublicHarness {
         session: &str,
         handoff: &str,
         public_locator: bool,
+        server_only: bool,
+        public_origin: Option<&str>,
     ) -> Self {
         use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
         let sockets = root.join("public-sockets");
@@ -4817,7 +4826,7 @@ impl NativePublicHarness {
         std::env::remove_var("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
         std::env::set_var(
             "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
-            "https://desktops.example.invalid",
+            public_origin.unwrap_or("https://desktops.example.invalid"),
         );
         std::env::set_var(
             "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
@@ -4903,7 +4912,7 @@ impl NativePublicHarness {
             .unwrap();
         let (sender, events) = std::sync::mpsc::channel();
         let handoff = handoff.to_owned();
-        runtime.block_on(async {
+        let origin = runtime.block_on(async {
             let unix = tokio::net::UnixListener::bind(crate::connection::get_socket_path(session))
                 .unwrap();
             let commands = sender.clone();
@@ -4941,6 +4950,10 @@ impl NativePublicHarness {
             tokio::spawn(crate::native::stream::run_native_handoff_http_fixture(
                 listener,
             ));
+            if server_only {
+                return origin;
+            }
+            let server_origin = origin.clone();
             tokio::spawn(async move {
                 let result = async {
                     let client = reqwest::Client::builder()
@@ -5000,8 +5013,10 @@ impl NativePublicHarness {
                 };
                 let _ = sender.send(event);
             });
+            server_origin
         });
         Self {
+            origin,
             events,
             _runtime: runtime,
             _readiness: readiness,
