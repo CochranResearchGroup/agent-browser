@@ -283,9 +283,9 @@ lanes:
     target: main
     plan_state: IN_PROGRESS
     custody_state: ACTIVE_WORKTREE
-    work_items: [CochranResearchGroup/agent-browser#255, CochranResearchGroup/agent-browser#262, CochranResearchGroup/agent-browser#263]
+    work_items: [CochranResearchGroup/agent-browser#255, CochranResearchGroup/agent-browser#262, CochranResearchGroup/agent-browser#263, CochranResearchGroup/agent-browser#264]
     dependencies: []
     overlaps: [P237]
-    reconciled_overlaps: ["P238 owns MCP/profile-planning/skills; P237 owns dashboard and native link/tab lifecycle; consume existing handoff seam and preserve foreign fixtures"]
-    validation_status: CLI profile planning qualified; debug MCP sharing/replay/scoped-close fixtures pass; legacy configured-profile repair and installed qualification pending
+    reconciled_overlaps: ["P238 owns MCP/profile-planning/skills and narrow read-only public handoff locator/HTTP dispatch; P237 owns dashboard UI and native link/tab lifecycle/models; consume existing handoff seam and preserve foreign fixtures"]
+    validation_status: Isolated installed profile/task lifecycle accepted for263; native handoff/continuation264 next; whole255 incomplete
     updated_at: 2026-10-11

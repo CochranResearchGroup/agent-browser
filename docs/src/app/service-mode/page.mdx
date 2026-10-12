@@ -8,6 +8,12 @@ Replay the same task key to return its current page and preserve edits without n
 
 Select `profileMode: "existing"` to require an already registered profile. For temporary work, select `profileMode: "disposable"` and omit `profile`.
 
+Call `browser_handoff` with `taskId` for a complete authenticated HTTPS `handoffUrl`. The MCP server uses `AGENT_BROWSER_PUBLIC_ORIGIN`, this Agent Browser service's public origin, to complete the owner's durable link. `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN` separately locates the native desktop viewer. Operators configure these origins; task callers receive the complete link. A missing service origin returns `remote_view_public_origin_missing` in JSON-RPC `error.data.message` with configuration guidance. Handoff preserves the task and current page for subsequent page actions.
+
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+
+After human assistance, call `browser_continue` with the same `taskId` to obtain its current profile, browser, tab and URL. Continuation observes the current page without navigating or creating another task. Subsequent page actions use that same task ID.
+
 Service mode turns agent-browser from a single CLI session helper into a persistent browser control plane. It keeps service-owned state for profiles, sessions, browsers, tabs, jobs, incidents, events, site policies, providers, and challenges so multiple agents and software clients can share browser automation without racing each other.
 
 Profile ACL admission denials preserve `profile_access_denied` on the

@@ -5572,6 +5572,12 @@ fn call_service_mcp_tool(
     if name == "browser_close" {
         return workflow::close(arguments, session);
     }
+    if name == "browser_handoff" {
+        return workflow::handoff(arguments, session);
+    }
+    if name == "browser_continue" {
+        return workflow::continue_task(arguments, session);
+    }
     let task_session = if name.starts_with("browser_") {
         optional_string_argument(arguments, "taskId")?
             .map(workflow::task_session)

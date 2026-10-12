@@ -7070,6 +7070,8 @@ Commands:
 Browser task workflow:
   browser_open          Resolve a profile and open a task tab using profile, taskKey, and url
   browser_close         End only the task returned by browser_open
+  browser_handoff       Return this task's complete HTTPS link to native Remote View authentication
+  browser_continue      Continue in the same task's current page after human assistance
   Page actions accept taskId. Reuse taskKey to replay the same task without another tab.
   profileMode selects persistent, existing, or disposable profile behavior.
 
@@ -7929,6 +7931,7 @@ Environment:
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.
                                  Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.
+  AGENT_BROWSER_PUBLIC_ORIGIN    Authenticated public HTTPS origin of this Agent Browser service, used by MCP browser_handoff.
   AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN Reviewed external HTTPS origin for click-driven top-level viewing.
                                  The authenticated handoff page opens an already-published grant; browser lifecycle needs no public origin.
                                  Managed open readiness joins addressed-tab owned-window proof with current installed Remote View transport and matching public HTTPS origin. Viewer pixels/input require live acceptance.

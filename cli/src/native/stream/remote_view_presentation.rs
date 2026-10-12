@@ -53,6 +53,29 @@ pub(super) fn handoff_id(path: &str) -> Option<&str> {
     .then_some(id)
 }
 
+pub(super) fn public_handoff_id(path: &str) -> Option<&str> {
+    let id = path.strip_prefix("/remote-view/")?;
+    (!id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_')))
+    .then_some(id)
+}
+
+/// Read the current owned route without launching, recovering or focusing a browser.
+/// The destination's native Remote View authentication protects desktop access.
+pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> {
+    let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
+        .map_err(|_| "remote_view_public_origin_missing")?;
+    let origin = public_origin(&configured)?;
+    let id = id.to_string();
+    let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&id))
+        .await
+        .map_err(|_| "remote_view_presentation_join_failed")??;
+    presentation_url(&origin, &route)
+}
+
 fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {
     let slot = route
         .strip_prefix('/')

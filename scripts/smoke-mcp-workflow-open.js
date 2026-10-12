@@ -72,6 +72,8 @@ try {
   assert.notEqual(bob.taskId, task.taskId);
   assert.notEqual(bob.tabId, task.tabId);
   await call('browser_fill', { taskId: bob.taskId, selector: '#draft', value: 'Bob draft' });
+  await assert.rejects(call('browser_handoff', { taskId: task.taskId }),
+    /remote_view_public_origin_missing/);
   const alicePage = await call('browser_snapshot', { taskId: task.taskId });
   assert(JSON.stringify(alicePage).includes('Alice draft'), 'Bob must preserve Alice page edits');
   assert(!JSON.stringify(alicePage).includes('Bob draft'), 'Alice actions must not target Bob');
@@ -81,6 +83,13 @@ try {
   assert.equal(replay.tabId, task.tabId, 'replay must not allocate a duplicate tab');
   const replayPage = await call('browser_snapshot', { taskId: task.taskId });
   assert(JSON.stringify(replayPage).includes('Alice draft'), 'replay must preserve existing page edits');
+  const continued = await call('browser_continue', { taskId: task.taskId });
+  assert.equal(continued.taskId, task.taskId);
+  assert.equal(continued.browserId, task.browserId);
+  assert.equal(continued.tabId, task.tabId);
+  assert.equal(continued.url, request.url);
+  const continuedPage = await call('browser_snapshot', { taskId: task.taskId });
+  assert(JSON.stringify(continuedPage).includes('Alice draft'), 'continuation preserves page edits');
   await call('browser_close', { taskId: task.taskId });
   tasks.splice(tasks.indexOf(task), 1);
   const survivingPage = await call('browser_snapshot', { taskId: bob.taskId });

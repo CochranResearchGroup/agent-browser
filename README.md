@@ -29,6 +29,12 @@ Call `browser_open` with `profile`, `profileMode: "persistent"`, `taskKey`, and 
 
 Choose `profileMode: "existing"` to require an already registered profile. Choose `profileMode: "disposable"` and omit `profile` for temporary work. Distinct task keys on the same profile receive distinct tabs in one healthy browser. Workflow results use the MCP text payload's `success`, `data`, and `error` envelope.
 
+Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
+
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+
+After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
+
 For shared, authenticated, profile-sensitive, or operator-visible work, read
 `agent-browser://operating-guide` and call `service_access_plan` before
 `service_request`. Agent Browser owns profile selection, retained-browser

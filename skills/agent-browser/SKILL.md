@@ -12,6 +12,12 @@ Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", 
 
 Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
 
+For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `data.operatorVisible.state: "ready"`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
+
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+
+When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
+
 ## Sharing a profile between tasks
 
 Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.

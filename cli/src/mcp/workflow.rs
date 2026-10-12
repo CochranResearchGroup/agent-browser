@@ -31,6 +31,18 @@ pub(super) fn tools() -> Vec<Value> {
             "inputSchema":{"type":"object","additionalProperties":false,
                 "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
         }),
+        json!({
+            "name":"browser_handoff", "title":"Hand a browser task to a person",
+            "description":"Focus this task's current page and return its durable authenticated HTTPS Remote View link. Preserve the task, profile and page for later automation.",
+            "inputSchema":{"type":"object","additionalProperties":false,
+                "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
+        }),
+        json!({
+            "name":"browser_continue", "title":"Continue a browser task",
+            "description":"Resume ordinary automation in this task's current page after human assistance. Return its current identity and URL without navigating or creating another task.",
+            "inputSchema":{"type":"object","additionalProperties":false,
+                "properties":{"taskId":{"type":"string"}},"required":["taskId"]}
+        }),
     ]
 }
 
@@ -229,6 +241,107 @@ pub(super) fn close(arguments: &Value, session: &str) -> Result<Value, JsonRpcEr
         session,
         json!({}),
         data,
+        false,
+    ))
+}
+
+/// Continuation is an ordinary addressed page read through the existing owner,
+/// not executable transfer, viewer admission, or a separate profile acquisition.
+pub(super) fn continue_task(
+    arguments: &Value,
+    transport_session: &str,
+) -> Result<Value, JsonRpcError> {
+    let task_id = required_string_argument(arguments, "taskId")?;
+    let session_name = task_session(task_id)?;
+    let observed = execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),
+        "action":"url","sessionName":session_name}),
+        transport_session,
+    )?;
+    let current_url = observed["url"]
+        .as_str()
+        .ok_or_else(|| issue("browser_task_current_url_missing"))?;
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+    let state = store.load_session_state().map_err(issue)?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .ok_or_else(|| issue("browser_task_not_found_after_continue"))?;
+    let tab_id = task
+        .current_tab_id
+        .as_deref()
+        .filter(|id| state.tabs.contains_key(*id))
+        .ok_or_else(|| issue("browser_task_current_tab_missing"))?;
+    Ok(super::tool_response_from_payload(
+        "browser_continue",
+        transport_session,
+        json!({}),
+        json!({"taskId":task_id,"profileId":task.profile_id,"browserId":task.browser_id,
+            "tabId":tab_id,"url":current_url}),
+        false,
+    ))
+}
+
+/// Complete the owner's durable link using server configuration, never a
+/// provider route or a caller-supplied URL. Remote View retains viewer ownership.
+pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
+    let task_id = required_string_argument(arguments, "taskId")?;
+    let configured_origin = std::env::var("AGENT_BROWSER_PUBLIC_ORIGIN").map_err(|_| {
+        issue("remote_view_public_origin_missing: configure AGENT_BROWSER_PUBLIC_ORIGIN with this Agent Browser service's authenticated HTTPS origin")
+    })?;
+    let origin = crate::native::browser_session_remote_view::public_origin(&configured_origin)
+        .map_err(issue)?;
+    let session_name = task_session(task_id)?;
+    // A harmless current-URL read retains the task's handoff through its existing
+    // owner. It neither navigates the page nor issues a temporary viewer grant.
+    execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),"action":"url",
+        "sessionName":session_name}),
+        transport_session,
+    )?;
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+    let state = store.load_session_state().map_err(issue)?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .ok_or_else(|| issue("browser_task_not_found_after_handoff"))?;
+    let tab_id = task
+        .current_tab_id
+        .as_deref()
+        .ok_or_else(|| issue("browser_task_current_tab_missing"))?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| issue("remote_view_clock_invalid"))?
+        .as_millis() as u64;
+    let retained = state
+        .remote_view_tab_handoffs
+        .values()
+        .find(|link| {
+            link.session_id == task_id
+                && link.tab_id == tab_id
+                && link.check_link_at(now_ms).is_ok()
+        })
+        .ok_or_else(|| issue("remote_view_tab_handoff_missing"))?;
+    let presentation = execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),
+        "action":"service_remote_view_handoff_resolve","handoffId":retained.id,
+        "nativeDesktop":true}),
+        transport_session,
+    )?;
+    if presentation["operatorVisible"]["state"] != "ready" {
+        return Err(issue("browser_handoff_presentation_pending"));
+    }
+    let handoff_url = origin
+        .join(&format!("/remote-view/{}", retained.id))
+        .map_err(|_| issue("remote_view_handoff_url_invalid"))?;
+    Ok(super::tool_response_from_payload(
+        "browser_handoff",
+        transport_session,
+        json!({}),
+        json!({"taskId":task_id,"handoffId":retained.id,"handoffUrl":handoff_url.as_str(),
+            "operatorVisible":presentation["operatorVisible"]}),
         false,
     ))
 }
