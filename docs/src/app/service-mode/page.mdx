@@ -2,6 +2,26 @@
 
 ## MCP browser tasks
 
+If `browser_open` is absent from the client's callable tools, configure its MCP
+integration with the installed `agent-browser mcp serve` stdio command and
+reconnect to refresh the catalog. Continue through the installed CLI while
+fixing integration. Verify actual client exposure separately from a direct
+server listing.
+
+Codex MCP configuration:
+
+```toml
+[mcp_servers.agent-browser]
+command = "agent-browser"
+args = ["mcp", "serve"]
+```
+
+Pin the reviewed absolute installed path for candidate qualification. Reconnect
+after an executable or catalog update. Server configuration owns runtime and
+public-origin settings; task callers use the workflow arguments.
+
+Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+
 Call `browser_open` with a named `profile`, `profileMode: "persistent"`, a stable `taskKey`, and `url`. The operation creates or reuses that profile and opens one independent task tab. Its MCP text result contains `success`, `data`, and `error`; `data.taskId` targets subsequent page actions and `browser_close`.
 
 Replay the same task key to return its current page and preserve edits without navigating again. Different task keys share a healthy same-profile browser through separate tabs. Closing one task preserves its peers and persistent profile data. Existing borrowed browsers remain open after the final task ends.

@@ -25,6 +25,28 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 ### MCP browser tasks
 
+If the client cannot call `browser_open`, configure its MCP integration with
+the installed `agent-browser mcp serve` stdio command and reconnect to refresh
+the catalog. Continue through the installed CLI while fixing integration.
+Verify the client's callable tools; a direct server listing proves only server
+advertisement. `pnpm smoke:mcp-supported-client` qualifies an explicitly pinned
+installed candidate and skill through Codex without starting a model turn.
+
+For Codex, register the installed executable in its MCP configuration:
+
+```toml
+[mcp_servers.agent-browser]
+command = "agent-browser"
+args = ["mcp", "serve"]
+```
+
+Use the reviewed absolute executable path when qualifying a specific candidate.
+Restart the client connection after updating the executable or catalog. Keep
+runtime and public-origin configuration on the server; ordinary task arguments
+carry the profile, task key, URL and returned task ID.
+
+Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+
 Call `browser_open` with `profile`, `profileMode: "persistent"`, `taskKey`, and `url` to create or reuse a named profile and open one independent task tab. Replay the same task key to return its current page and preserve edits without navigating again. Use the returned `data.taskId` on page actions such as `browser_snapshot`, `browser_click`, and `browser_fill`, then call `browser_close` with that task ID. Closing a task preserves peers, borrowed browsers, and persistent profile data.
 
 Choose `profileMode: "existing"` to require an already registered profile. Choose `profileMode: "disposable"` and omit `profile` for temporary work. Distinct task keys on the same profile receive distinct tabs in one healthy browser. Workflow results use the MCP text payload's `success`, `data`, and `error` envelope.

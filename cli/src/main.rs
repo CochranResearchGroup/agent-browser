@@ -2150,9 +2150,40 @@ fn main() {
 
     if has_help {
         if let Some(cmd) = clean.first() {
+            // Help is read-only. Reject unsupported paths before falling back
+            // to a broad command listing, and focus profile creation help.
+            if cmd == "runtime" {
+                if let Some(subcommand) = clean.get(1) {
+                    if subcommand == "create" {
+                        print_command_help("runtime create");
+                        return;
+                    }
+                    if !["list", "status", "login", "attach"].contains(&subcommand.as_str()) {
+                        let message = format!("Unknown runtime subcommand: {subcommand}\nUse agent-browser runtime create --help to create a profile, or agent-browser runtime --help for supported commands.");
+                        if flags.json {
+                            print_json_error_with_type(message, "unknown_subcommand");
+                        } else {
+                            eprintln!("{}", color::red(&message));
+                        }
+                        exit(1);
+                    }
+                }
+            }
             if print_command_help(cmd) {
                 return;
             }
+            let guidance = if cmd == "runtime-profile" {
+                "Use agent-browser runtime create --help to create a named profile."
+            } else {
+                "Use agent-browser --help to list supported commands."
+            };
+            let message = format!("Unknown command: {cmd}\n{guidance}");
+            if flags.json {
+                print_json_error_with_type(message, "unknown_command");
+            } else {
+                eprintln!("{}", color::red(&message));
+            }
+            exit(1);
         }
         print_help();
         return;

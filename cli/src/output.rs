@@ -7092,6 +7092,8 @@ Workflow:
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
   Retired authority MCP operations and the legacy catalog are unavailable.
+  If browser_open is absent in your client, configure agent-browser mcp serve
+  and reconnect. Continue with the installed CLI while correcting integration.
 
 Examples:
   agent-browser mcp serve
@@ -7278,6 +7280,25 @@ Global Options:
 Examples:
   agent-browser profiles
   agent-browser profiles --json
+"##
+        }
+
+        "runtime create" => {
+            r##"
+agent-browser runtime create - Create or reuse a named persistent profile
+
+Usage: agent-browser runtime create [name] [--browser-family <family>] [--set-default]
+
+The profile is registered for runtime and service access planning. Repeating
+creation preserves its user-data directory and existing profile configuration.
+
+Options:
+  --browser-family <family>  chrome, chromium, brave, edge, or unknown
+  --set-default              Select this profile as the default
+  --json                     Return the creation record as JSON
+
+Example:
+  agent-browser runtime create editorial --browser-family chromium
 "##
         }
 
