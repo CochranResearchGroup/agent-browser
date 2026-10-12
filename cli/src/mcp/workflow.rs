@@ -94,8 +94,15 @@ fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
 }
 
 fn execute(command: Value, session: &str) -> Result<Value, JsonRpcError> {
-    ensure_transport(session)?;
-    let response = send_command(command, session)
+    // Runtime-host dispatch selects the managed lane before action execution.
+    // Keep that transport lane bound to the addressed task, as page tools do.
+    let session = command
+        .get("sessionName")
+        .and_then(Value::as_str)
+        .unwrap_or(session)
+        .to_string();
+    ensure_transport(&session)?;
+    let response = send_command(command, &session)
         .map_err(|error| issue(format!("workflow_transport_failed:{error}")))?;
     if !response.success {
         return Err(issue(
