@@ -359,6 +359,29 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
+    // Public locators only read the retained owned route. Native Remote View
+    // authenticates the destination; this GET performs no browser recovery.
+    if method == "GET" && path.starts_with("/remote-view/") {
+        let Some(id) = super::remote_view_presentation::public_handoff_id(path) else {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_handoff_path_invalid",
+            )
+            .await;
+            return;
+        };
+        let response = match super::remote_view_presentation::resolve_public_location(id).await {
+            Ok(location) => format!("HTTP/1.1 303 See Other\r\nLocation: {location}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
+            Err(reason) => {
+                let html = headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("accept") && value.contains("text/html"));
+                super::remote_view_presentation::failure_response(&reason, html)
+            }
+        };
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+
     let authenticated_dashboard_user = if path.starts_with("/api/") {
         match dashboard_auth::authenticate_headers(&headers) {
             Ok(Some(identity)) => Some(identity.username),
@@ -3814,6 +3837,29 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn public_handoff_reports_readiness_without_dashboard_login() {
+        let origin = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN"]);
+        origin.remove("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN");
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            handle_dashboard_connection(stream).await;
+        });
+        let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+        client.write_all(b"GET /remote-view/opaque-a HTTP/1.1\r\nHost: browser.example\r\nConnection: close\r\n\r\n").await.unwrap();
+        let mut response = Vec::new();
+        timeout(Duration::from_secs(2), client.read_to_end(&mut response))
+            .await
+            .unwrap()
+            .unwrap();
+        server.await.unwrap();
+        assert_eq!(http_response_status(&response), Some(503));
+        assert!(String::from_utf8_lossy(&response).contains("remote_view_presentation_unavailable"));
+        assert!(!String::from_utf8_lossy(&response).contains("Location:"));
+    }
 
     #[tokio::test]
     async fn tab_presentation_endpoint_authenticates_before_provider_resolution() {

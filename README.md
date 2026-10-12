@@ -23,17 +23,55 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 ## Service integration reference
 
-For shared, authenticated, profile-sensitive, or operator-visible work, read
-`agent-browser://operating-guide` and call `service_access_plan` before
-`service_request`. Agent Browser owns profile selection, retained-browser
-reuse, lease serialization, route selection, durable handoffs, reconciliation,
-and garbage collection.
+### MCP browser tasks
 
-Keep browser acquisition, Guacamole/RDP presentation, and runtime maintenance
-as separate readiness axes. A checked-out route pool blocks only a required
-operator view, and a global doctor advisory blocks work only when the requested
-action or scoped readiness evidence says it does. Use the packaged
-`agent-browser-service` skill for the complete agent workflow.
+If the client cannot call `browser_open`, configure its MCP integration with
+the installed `agent-browser mcp serve` stdio command and reconnect to refresh
+the catalog. Continue through the installed CLI while fixing integration.
+Verify the client's callable tools; a direct server listing proves only server
+advertisement. `pnpm smoke:mcp-supported-client` qualifies an explicitly pinned
+installed candidate and skill through Codex without starting a model turn.
+
+For Codex, register the installed executable in its MCP configuration:
+
+```toml
+[mcp_servers.agent-browser]
+command = "agent-browser"
+args = ["mcp", "serve"]
+```
+
+Use the reviewed absolute executable path when qualifying a specific candidate.
+Restart the client connection after updating the executable or catalog. Keep
+runtime and public-origin configuration on the server; ordinary task arguments
+carry the profile, task key, URL and returned task ID.
+
+Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+
+Call `browser_open` with `profile`, `profileMode: "persistent"`, `taskKey`, and `url` to create or reuse a named profile and open one independent task tab. Replay the same task key to return its current page and preserve edits without navigating again. Use the returned `data.taskId` on page actions such as `browser_snapshot`, `browser_click`, and `browser_fill`, then call `browser_close` with that task ID. Closing a task preserves peers, borrowed browsers, and persistent profile data.
+
+Choose `profileMode: "existing"` to require an already registered profile. Choose `profileMode: "disposable"` and omit `profile` for temporary work. Distinct task keys on the same profile receive distinct tabs in one healthy browser. Workflow results use the MCP text payload's `success`, `data`, and `error` envelope.
+
+Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
+
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+
+After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
+
+The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+`browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
+task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
+this scope. Use `browser_discover` for one advanced operation's argument schema,
+then `browser_command` with `taskId`, `action` and page arguments in `params`.
+Diagnostic and administrative discovery points to supported CLI/API operations.
+Retired lease, recovery, repair and reset MCP tools are unavailable, including
+through advanced dispatch. There is no legacy catalog mode. Contract metadata reports `mcpCatalog` and each named adapter's `mcp.available`; retained CLI/API contract names do not imply callable MCP tools.
+
+
+Use the workflow tools directly. Agent Browser owns profile/session coordination;
+Remote View owns the native desktop and viewer. Request advanced metadata only
+when needed, and use the supported CLI/API for service diagnostics or maintenance.
 
 ## Installation
 
@@ -2242,6 +2280,8 @@ If you need a different persistent identity, pass `--runtime-profile <name>` or
 because another job is already using the browser.
 
 ## Named runtime profiles
+
+`runtime create` also registers the exact persistent profile for service access planning. Repeating creation preserves its existing policy and authentication metadata. A conflicting physical directory returns an actionable configuration error.
 
 Use a named runtime profile when the operator intentionally wants a separate
 persistent browser/account lane. Do not create one merely because another

@@ -1,8 +1,24 @@
 # Runbook
 
-Updated: 2026-10-06
+Updated: 2026-10-12
 
 ## Current execution
+
+### 2026-10-12 P238 workflow MCP
+
+[P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) qualifies spec #262 and
+#255 through isolated installed generation `0.28.0-8240863884ed`. The default
+catalog is 12 tools / 6,381 schema bytes; Codex 0.162.1 exposes those tools and
+21 resources, reads the compact guide and discovers the 7.1 KB skill. Persistent,
+existing and disposable tasks, profile planning, replay, task tabs, scoped close,
+ready HTTPS native handoff, real viewer input and same-task continuation pass.
+Unknown help fails concisely. Native provider and task census are zero own
+residue. [PR267](https://github.com/CochranResearchGroup/agent-browser/pull/267)
+owns integration. Production, default development, shared client configuration
+and P237 are unchanged; no production publication, formal release or account
+authentication is claimed. The plan retains review, validation reuse and the
+unchanged policy-wiring baseline failure. The sealed P232 candidate and
+enrollment worktree remain retained.
 
 ### 2026-10-11 P232 installed checkpoint
 
