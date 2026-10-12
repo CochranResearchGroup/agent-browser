@@ -16,7 +16,7 @@
     "test:captcha-lab": "pnpm --filter agent-browser-captcha-lab test",
     "test:captcha-guard-contract": "node scripts/test-captcha-guard-contract.js",
     "version:sync": "node scripts/sync-version.js",
-    "test:policy-wiring": "node scripts/test-policy-wiring.js",
+    "test:policy-wiring": "node scripts/test-policy-wiring.js && node --test scripts/test-policy-wiring.test.js",
     "version": "npm run version:sync && git add cli/Cargo.toml Cargo.lock",
     "validation:select": "node scripts/dev/select-validation.js",
     "test:p220-p219-file-disposition": "node scripts/dev/test-p220-p219-file-disposition.mjs",
