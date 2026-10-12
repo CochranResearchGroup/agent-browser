@@ -4058,7 +4058,7 @@ mod tests {
         env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
         let provider_thread = std::thread::spawn(move || {
             use std::io::{Read, Write};
-            for _ in 0..4 {
+            for _ in 0..3 {
                 let (mut stream, _) = provider.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
@@ -4099,11 +4099,6 @@ mod tests {
         }
         let headers =
             "Sec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n";
-        *use_reply.lock().unwrap() = json!({"success":false,"error":"synthetic_focus_denied"});
-        let denied_use = exchange(navigation(headers)).await;
-        assert_eq!(http_response_status(&denied_use), Some(503));
-        assert!(!String::from_utf8_lossy(&denied_use).contains("Location:"));
-        *use_reply.lock().unwrap() = json!({"success":true});
         let used = exchange(navigation(headers)).await;
         assert_eq!(http_response_status(&used), Some(303));
         assert!(

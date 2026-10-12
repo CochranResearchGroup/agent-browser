@@ -235,6 +235,24 @@ mod tests {
     }
 
     #[test]
+    fn authenticated_navigation_without_native_viewer_use_cannot_acknowledge_first_use() {
+        let headers = vec![
+            ("Sec-Fetch-User".into(), "?1".into()),
+            ("Sec-Fetch-Mode".into(), "navigate".into()),
+            ("Sec-Fetch-Dest".into(), "document".into()),
+        ];
+        let ready = serde_json::json!({"success":true,"data":{
+            "handoffId":"handoff-a","tabId":"tab-a","targetId":"target-a",
+            "operatorVisible":{"state":"ready"}
+        }});
+        assert!(
+            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &headers, &ready)
+                .is_none(),
+            "authenticated navigation and target readiness alone acknowledged native viewer use"
+        );
+    }
+
+    #[test]
     fn terminal_handoff_failures_are_actionable_and_never_echo_private_reasons() {
         for reason in [
             "remote_view_tab_handoff_session_unavailable",
