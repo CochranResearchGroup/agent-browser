@@ -532,6 +532,21 @@ mod tests {
 /// Remote View owns viewer authentication and lifetime; this read only joins
 /// the retained handoff to its current external desktop assignment.
 pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> {
+    read_handoff_desktop_presentation(id, false).map(|(route, _)| route)
+}
+
+/// Read the owned route and current private observation together. This does not
+/// register context, acknowledge use, recover a browser or focus a target.
+pub(crate) fn resolve_handoff_desktop_presentation(
+    id: &str,
+) -> Result<(String, Option<String>), String> {
+    read_handoff_desktop_presentation(id, true)
+}
+
+fn read_handoff_desktop_presentation(
+    id: &str,
+    include_native_context: bool,
+) -> Result<(String, Option<String>), String> {
     let store = BrowserSessionSqliteStore::default_sqlite()?;
     let state = store.load_session_state()?;
     state
@@ -550,7 +565,65 @@ pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> 
         .adapter
         .inventory()
         .map_err(|_| "remote_view_runtime_inventory_unavailable")?;
-    owned_desktop_route(&inventory, &desktop.desktop_id, desktop.generation)
+    let route = owned_desktop_route(&inventory, &desktop.desktop_id, desktop.generation)?;
+    let binding = include_native_context
+        .then(|| {
+            state.remote_view_tab_handoffs[id]
+                .native_observation
+                .as_ref()
+        })
+        .flatten();
+    let correlation = match binding {
+        None => None,
+        Some(binding) => {
+            let digest = remote_view_native_target_digest(id, &target)?;
+            let observation = binding
+                .observation
+                .as_ref()
+                .ok_or("remote_view_native_registration_missing")?;
+            if binding.target_digest != digest
+                || observation.target_digest != digest
+                || observation.target != binding.provider_target
+                || binding.provider_target.desktop_id != desktop.desktop_id
+                || binding.provider_target.lifecycle_generation != desktop.generation
+            {
+                return Err("remote_view_human_use_target_changed".into());
+            }
+            let assignment = inventory
+                .assignments
+                .iter()
+                .find(|assignment| {
+                    binding
+                        .provider_target
+                        .validate_assignment(assignment)
+                        .is_ok()
+                })
+                .ok_or("remote_view_human_use_target_changed")?;
+            let read = context
+                .adapter
+                .observe_native_handoff_use_state(assignment, observation)
+                .map_err(|_| "remote_view_native_use_unavailable")?;
+            if read.state == RemoteViewNativeHandoffUseState::Expired {
+                return Err("remote_view_native_observation_expired".into());
+            }
+            // Mutable activity does not fence a physical target. Rejoin only
+            // its exact identity and registration after the private read.
+            let current = store.load_session_state()?;
+            let current_link = current
+                .remote_view_tab_handoffs
+                .get(id)
+                .ok_or("remote_view_tab_handoff_missing")?;
+            current_link.check_link_at(current_view_time_ms())?;
+            let current_target = resolve_remote_view_tab_handoff(&current, id)?;
+            if remote_view_native_target_digest(id, &current_target)? != digest
+                || current_link.native_observation.as_ref() != Some(binding)
+            {
+                return Err("remote_view_human_use_target_changed".into());
+            }
+            Some(observation.correlation_id.clone())
+        }
+    };
+    Ok((route, correlation))
 }
 
 fn owned_desktop_route(

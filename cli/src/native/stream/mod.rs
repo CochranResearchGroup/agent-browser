@@ -25,6 +25,10 @@ pub(crate) use dashboard::{
     dashboard_service_status_with_transports, service_status_dashboard_cli_fallback_fixture,
     service_status_handler_fixture, service_status_http_body_fixture,
 };
+#[cfg(all(test, unix))]
+pub(crate) use dashboard::{
+    native_handoff_http_fixture_credentials, run_native_handoff_http_fixture,
+};
 pub(crate) use http::{
     runtime_manifest_json, runtime_manifest_json_for_executable,
     service_profile_lookup_response_for_state,

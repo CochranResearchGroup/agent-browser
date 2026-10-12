@@ -93,6 +93,8 @@ reuse after those contracts are frozen.
 
 ## PL-PLATFORM | Architecture and Infrastructure
 
+- [Public handoff native-use context repair](0237-2026-10-12-public-native-use-context.md)
+
 - [Production upgrade qualification](2026-10-06-production-upgrade-decision.md): compatibility repairs and exact-pair development acceptance pass; production awaits the interactive helper contract refresh tracked by issue 218.
 
 - [Service roadmap](2026-04-22-agent-browser-service-roadmap.md)

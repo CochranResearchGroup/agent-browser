@@ -4236,7 +4236,7 @@ fn native_use_owner_reconciles_registration_restart_generation_and_publication_c
     let mut consumer = host(&fixture, provider.clone(), calls.clone());
     let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
         "action":"navigate","url":"https://synthetic.example/native-use","profileId":"profile-a",
-        "activityAtMs":100,"humanHandoff":true,"pendingHumanRetentionMs":0
+        "activityAtMs":100,"humanHandoff":false,"pendingHumanRetentionMs":0
     })).unwrap().unwrap();
     let id = opened["browserSession"]["handoffId"].as_str().unwrap();
     let tab = opened["browserSession"]["tabId"].as_str().unwrap();
@@ -4251,6 +4251,11 @@ fn native_use_owner_reconciles_registration_restart_generation_and_publication_c
         "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":at
     }))
     };
+    let held = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,
+        "handoffOperation":"prepare_human","pendingHumanRetentionMs":0,"activityAtMs":105
+    }));
+    assert_eq!(held["success"], true);
     provider.borrow_mut().lose_native_registration_reply = true;
     let lost = prepare(&mut consumer, 110);
     assert_eq!(lost["success"], false, "{lost}");
@@ -4289,7 +4294,16 @@ fn native_use_owner_reconciles_registration_restart_generation_and_publication_c
         "native_use_expired"
     );
     assert!(consumer.state().pending_human_tabs.contains_key(tab));
-    let fresh = prepare(&mut consumer, 114);
+    // The real owner reaper renews short provider context without extending
+    // the perpetual link or releasing a pending-human hold.
+    let held_before_refresh = consumer.state().pending_human_tabs[tab].clone();
+    consumer.reap(114).unwrap();
+    assert_eq!(
+        consumer.state().pending_human_tabs[tab],
+        held_before_refresh
+    );
+    provider.borrow_mut().native_observation_expired = false;
+    let fresh = prepare(&mut consumer, 115);
     assert_eq!(fresh["success"], true, "{fresh}");
     assert_ne!(
         fresh["data"]["correlationId"],
@@ -4553,6 +4567,7 @@ fn native_use_processing_delay_does_not_replace_actual_use_with_poll_time() {
 
 /// Opt-in cross-repository fixture. The native viewer and private producer run
 /// in Remote View's isolated test process; physical browser custody is synthetic.
+#[cfg(unix)]
 #[test]
 #[ignore = "requires the task-owned Remote View native viewer fixture"]
 fn native_viewer_use_composes_with_actual_provider_owner() {
@@ -4625,10 +4640,76 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         fixture.store(false).load_session_state().unwrap(),
         "public presentation reader must observe the actual owner database"
     );
-    let registered = consumer.handle_command(&serde_json::json!({
+    let public_http = descriptor["publicHttp"].as_bool().unwrap_or(false);
+    let public_locator = descriptor["publicLocator"].as_bool().unwrap_or(false);
+    // Acceptance uses context produced by the actual authorized handoff,
+    // never a test-side registration or diagnostic URL rewrite.
+    let locator_prepared = public_locator.then(|| {
+        let observation = consumer.state().remote_view_tab_handoffs[id]
+            .native_observation
+            .as_ref()
+            .and_then(|binding| binding.observation.as_ref())
+            .expect("native handoff must prepare observation before publishing its link");
+        serde_json::json!({"success":true,"data":{"correlationId":observation.correlation_id}})
+    });
+
+    let mut public = public_http.then(|| {
+        NativePublicHarness::start(
+            &fixture.root,
+            descriptor["ownerUrl"].as_str().unwrap(),
+            "Alice",
+            id,
+            public_locator,
+        )
+    });
+    let mut presentation_path = None;
+    let registered = if let Some(harness) = public.as_mut() {
+        let mut prepared = locator_prepared;
+        loop {
+            match harness.next() {
+                NativePublicEvent::Command(command, reply) => {
+                    let result = consumer.handle_command(&command);
+                    assert_eq!(result["success"], true, "{result}");
+                    if command["handoffOperation"] == "prepare_native_use" {
+                        prepared = Some(result.clone());
+                    }
+                    reply.send(result).unwrap();
+                }
+                NativePublicEvent::Presented(location) => {
+                    let prepared =
+                        prepared.expect("HTTP redirect did not register with actual owner");
+                    let correlation = prepared["data"]["correlationId"].as_str().unwrap();
+                    let route = reqwest::Url::parse(&location)
+                        .expect("public presentation location must be absolute");
+                    assert_eq!(route.host_str(), Some("desktops.example.invalid"));
+                    assert_eq!(
+                        route
+                            .query_pairs()
+                            .find(|(key, _)| key == "handoff-observation")
+                            .map(|(_, value)| value.into_owned()),
+                        Some(correlation.to_owned())
+                    );
+                    presentation_path = Some(format!(
+                        "{}{}",
+                        route.path(),
+                        route
+                            .query()
+                            .map(|query| format!("?{query}"))
+                            .unwrap_or_default()
+                    ));
+                    break prepared;
+                }
+                NativePublicEvent::Failed(reason) => {
+                    panic!("actual public HTTP request failed: {reason}")
+                }
+            }
+        }
+    } else {
+        consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
         "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":now()
-    }));
+        }))
+    };
     assert_eq!(registered["success"], true, "{registered}");
     let correlation = registered["data"]["correlationId"].as_str().unwrap();
     let pending = consumer.handle_command(&serde_json::json!({
@@ -4641,12 +4722,27 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         .unwrap()
         .pending_human_tabs
         .contains_key(tab));
-    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"pending","correlationId":correlation,"handoffId":id,"pendingHuman":true})).unwrap()).unwrap();
+    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"pending","correlationId":correlation,"handoffId":id,"pendingHuman":true,"presentationPath":presentation_path})).unwrap()).unwrap();
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
     loop {
-        let result = consumer.handle_command(&serde_json::json!({
+        let result = if public_locator {
+            consumer
+                .reap(now())
+                .expect("public handoff owner reaping failed");
+            serde_json::json!({"success":true,"data":{"status":if consumer.state().pending_human_tabs.contains_key(tab) {"native_use_pending"} else {"human_use_confirmed"}}})
+        } else if let Some(harness) = public.as_mut() {
+            let NativePublicEvent::Command(command, reply) = harness.next() else {
+                panic!("unexpected HTTP fixture event after presentation");
+            };
+            assert_eq!(command["handoffOperation"], "observe_native_use");
+            let result = consumer.handle_command(&command);
+            reply.send(result.clone()).unwrap();
+            result
+        } else {
+            consumer.handle_command(&serde_json::json!({
             "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":now()
-        }));
+            }))
+        };
         assert_eq!(result["success"], true, "{result}");
         if result["data"]["status"] == "human_use_confirmed" {
             break;
@@ -4688,4 +4784,233 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
     assert_eq!(calls.get(), 1);
     assert!(provider.borrow().view_requests.is_empty());
     std::fs::write(status_path,serde_json::to_vec(&serde_json::json!({"stage":"confirmed","correlationId":correlation,"handoffId":id,"pendingHuman":false,"firstHumanUseAtMs":first,"providerUseAtMs":observation.used.as_ref().unwrap().recorded_at_ms,"replayStatus":replay["data"]["status"]})).unwrap()).unwrap();
+}
+
+#[cfg(unix)]
+enum NativePublicEvent {
+    Command(Value, tokio::sync::oneshot::Sender<Value>),
+    Presented(String),
+    Failed(String),
+}
+
+#[cfg(unix)]
+struct NativePublicHarness {
+    events: std::sync::mpsc::Receiver<NativePublicEvent>,
+    _runtime: tokio::runtime::Runtime,
+    _readiness: std::net::TcpListener,
+}
+
+#[cfg(unix)]
+impl NativePublicHarness {
+    fn start(
+        root: &Path,
+        owner_url: &str,
+        session: &str,
+        handoff: &str,
+        public_locator: bool,
+    ) -> Self {
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
+        let sockets = root.join("public-sockets");
+        std::fs::create_dir(&sockets).unwrap();
+        std::env::set_var("AGENT_BROWSER_SOCKET_DIR", &sockets);
+        std::env::set_var("AGENT_BROWSER_DASHBOARD_AUTH_DIR", root.join("public-auth"));
+        std::env::remove_var("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        std::env::set_var(
+            "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+            "https://desktops.example.invalid",
+        );
+        std::env::set_var(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            owner_url.strip_suffix("/v1/consumer").unwrap(),
+        );
+        std::env::set_var("AGENT_BROWSER_REMOTE_VIEW_APPLICATION", "agent-browser");
+        std::env::set_var("AGENT_BROWSER_REMOTE_VIEW_POOL", "main");
+        std::env::remove_var("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
+        if public_locator {
+            // Exercise the actual public reader against retained registration
+            // states before any renderer can publish use. Each rejected read
+            // must leave owner state untouched.
+            let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+            let original = store.load_session_state().unwrap();
+            for partial in [false, true] {
+                let mut rejected = original.clone();
+                let binding = rejected
+                    .remote_view_tab_handoffs
+                    .get_mut(handoff)
+                    .unwrap()
+                    .native_observation
+                    .as_mut()
+                    .unwrap();
+                let expected = if partial {
+                    binding.observation = None;
+                    "remote_view_native_registration_missing"
+                } else {
+                    binding.target_digest = "0".repeat(64);
+                    "remote_view_human_use_target_changed"
+                };
+                store
+                    .compare_and_save_session_state(&original, &rejected)
+                    .unwrap();
+                assert_eq!(
+                    crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(handoff)
+                        .unwrap_err(),
+                    expected
+                );
+                assert_eq!(store.load_session_state().unwrap(), rejected);
+                store
+                    .compare_and_save_session_state(&rejected, &original)
+                    .unwrap();
+            }
+            let (_, correlation) =
+                crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(
+                    handoff,
+                )
+                .unwrap();
+            assert_eq!(
+                correlation.as_deref(),
+                original.remote_view_tab_handoffs[handoff]
+                    .native_observation
+                    .as_ref()
+                    .unwrap()
+                    .observation
+                    .as_ref()
+                    .map(|observation| observation.correlation_id.as_str())
+            );
+            assert_eq!(store.load_session_state().unwrap(), original);
+        }
+        let credentials = crate::native::stream::native_handoff_http_fixture_credentials();
+        let credentials = std::fs::read_to_string(credentials).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .unwrap()
+            .to_owned();
+        let token = uuid::Uuid::new_v4().to_string();
+        crate::connection::write_daemon_auth_token(session, &token).unwrap();
+        let readiness = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        std::fs::write(
+            sockets.join(format!("{session}.stream")),
+            readiness.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .unwrap();
+        let (sender, events) = std::sync::mpsc::channel();
+        let handoff = handoff.to_owned();
+        runtime.block_on(async {
+            let unix = tokio::net::UnixListener::bind(crate::connection::get_socket_path(session))
+                .unwrap();
+            let commands = sender.clone();
+            tokio::spawn(async move {
+                loop {
+                    let (socket, _) = unix.accept().await.unwrap();
+                    let mut stream = tokio::io::BufReader::new(socket);
+                    let mut line = String::new();
+                    // Broker readiness checks connect without sending a command.
+                    if stream.read_line(&mut line).await.unwrap() == 0 {
+                        continue;
+                    }
+                    let command: Value = serde_json::from_str(&line).unwrap();
+                    assert!(
+                        command["_agentBrowserAuthToken"].as_str() == Some(token.as_str()),
+                        "synthetic daemon authentication failed"
+                    );
+                    let (reply, result) = tokio::sync::oneshot::channel();
+                    if commands
+                        .send(NativePublicEvent::Command(command, reply))
+                        .is_err()
+                    {
+                        break;
+                    }
+                    let result = result.await.unwrap();
+                    stream
+                        .get_mut()
+                        .write_all(format!("{result}\n").as_bytes())
+                        .await
+                        .unwrap();
+                }
+            });
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let origin = format!("http://{}", listener.local_addr().unwrap());
+            tokio::spawn(crate::native::stream::run_native_handoff_http_fixture(
+                listener,
+            ));
+            tokio::spawn(async move {
+                let result = async {
+                    let client = reqwest::Client::builder()
+                        .no_proxy()
+                        .redirect(reqwest::redirect::Policy::none())
+                        .timeout(std::time::Duration::from_secs(25))
+                        .build()
+                        .unwrap();
+                    let request = if public_locator {
+                        client.get(format!("{origin}/remote-view/{handoff}"))
+                    } else {
+                        let login = client
+                            .post(format!("{origin}/api/dashboard-auth/login"))
+                            .json(&serde_json::json!({"username":"admin","password":password}))
+                            .send()
+                            .await
+                            .map_err(|e| e.to_string())?;
+                        if login.status().as_u16() != 200 {
+                            return Err("synthetic HTTP login failed".to_string());
+                        }
+                        let cookie = login
+                            .headers()
+                            .get("set-cookie")
+                            .ok_or("synthetic signed cookie missing")?
+                            .to_str()
+                            .map_err(|e| e.to_string())?
+                            .split(';')
+                            .next()
+                            .unwrap()
+                            .to_owned();
+                        client
+                            .get(format!("{origin}/api/remote-view/{handoff}/presentation"))
+                            .header("cookie", cookie)
+                    };
+                    let presented = request
+                        .header("sec-fetch-site", "same-origin")
+                        .header("sec-fetch-mode", "navigate")
+                        .header("sec-fetch-dest", "document")
+                        .send()
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    if presented.status().as_u16() != 303 {
+                        return Err(format!("HTTP presentation status {}", presented.status()));
+                    }
+                    Ok(presented
+                        .headers()
+                        .get("location")
+                        .ok_or("presentation location missing")?
+                        .to_str()
+                        .map_err(|e| e.to_string())?
+                        .to_owned())
+                }
+                .await;
+                let event = match result {
+                    Ok(location) => NativePublicEvent::Presented(location),
+                    Err(reason) => NativePublicEvent::Failed(reason),
+                };
+                let _ = sender.send(event);
+            });
+        });
+        Self {
+            events,
+            _runtime: runtime,
+            _readiness: readiness,
+        }
+    }
+
+    fn next(&self) -> NativePublicEvent {
+        self.events
+            .recv_timeout(std::time::Duration::from_secs(30))
+            .expect("public HTTP/owner continuation made no progress")
+    }
 }

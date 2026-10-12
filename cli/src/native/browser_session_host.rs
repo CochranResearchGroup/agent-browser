@@ -983,18 +983,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
     }
 
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
-        // One durable observation per pass bounds private transport work under
-        // the host mutex. Foreground handoff polling handles normal first use.
+        // One handoff per pass bounds private transport work under the host
+        // mutex. Refresh pending context through the owner, so a perpetual
+        // public link does not depend on dashboard navigation for registration.
         let candidates = self
             .state
             .remote_view_tab_handoffs
             .values()
             .filter(|link| {
                 link.check_link_at(now_ms).is_ok()
-                    && link
-                        .native_observation
-                        .as_ref()
-                        .is_some_and(|binding| binding.observation.is_some())
+                    && (self.state.pending_human_tabs.contains_key(&link.tab_id)
+                        || link
+                            .native_observation
+                            .as_ref()
+                            .is_some_and(|binding| binding.observation.is_some()))
                     && self.state.tabs.contains_key(&link.tab_id)
                     && (self.state.pending_human_tabs.contains_key(&link.tab_id)
                         || self
@@ -1008,7 +1010,14 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         if !candidates.is_empty() {
             let id = &candidates[self.native_use_cursor % candidates.len()];
             self.native_use_cursor = self.native_use_cursor.wrapping_add(1);
-            self.consume_native_handoff_use(id, now_ms)?;
+            let id = id.clone();
+            match self.prepare_native_handoff_observation(&id, now_ms) {
+                Ok(_) => {
+                    self.consume_native_handoff_use(&id, now_ms)?;
+                }
+                Err(reason) if reason == "remote_view_native_observation_unsupported" => {}
+                Err(reason) => return Err(reason),
+            }
         }
         let result = self.manager()?.reap(now_ms)?;
         self.commit_state()?;
@@ -2013,11 +2022,32 @@ where
                     .as_ref()
                     .ok_or("remote_view_tab_handoff_missing")?
                     .id;
-                self.handle_command_result(&serde_json::json!({
-                    "action":"service_remote_view_handoff_resolve", "handoffId":id,
-                    "handoffOperation":"prepare_human", "pendingHumanRetentionMs":ttl,
-                    "activityAtMs":now_ms,
-                }))?;
+                // An uncertain registration retains its exact key and hold
+                // until the owner reconciles it; replay must not discard intent.
+                let registration_pending = self
+                    .state
+                    .pending_human_tabs
+                    .get(&tab.id)
+                    .is_some_and(|hold| hold.handoff_id == *id)
+                    && self.state.remote_view_tab_handoffs[id]
+                        .native_observation
+                        .as_ref()
+                        .is_some_and(|binding| binding.observation.is_none());
+                if !registration_pending {
+                    self.handle_command_result(&serde_json::json!({
+                        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+                        "handoffOperation":"prepare_human", "pendingHumanRetentionMs":ttl,
+                        "activityAtMs":now_ms,
+                    }))?;
+                }
+                // Registration is continuity context, never evidence of use.
+                // Prepare it while the authorized task owner produces the
+                // handoff; the public locator remains a read-only projection.
+                match self.prepare_native_handoff_observation(id, now_ms) {
+                    Ok(_) => {}
+                    Err(reason) if reason == "remote_view_native_observation_unsupported" => {}
+                    Err(reason) => return Err(reason),
+                }
             }
         }
         if let Some(object) = response.as_object_mut() {

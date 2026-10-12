@@ -249,6 +249,23 @@ pub async fn run_dashboard_server(port: u16) {
     }
 }
 
+/// Bind synthetic handoff acceptance to the production HTTP handler without
+/// bootstrapping a second browser owner or racing for a fixture port.
+#[cfg(all(test, unix))]
+pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
+    loop {
+        let (stream, _) = listener.accept().await.unwrap();
+        tokio::spawn(handle_dashboard_connection(stream));
+    }
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn native_handoff_http_fixture_credentials() -> std::path::PathBuf {
+    dashboard_auth::ensure_dashboard_auth_config()
+        .unwrap()
+        .bootstrap_credential_file
+}
+
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) = ensure_dashboard_service_backend_with_retry(
         || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),

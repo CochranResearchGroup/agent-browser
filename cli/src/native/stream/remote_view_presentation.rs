@@ -70,10 +70,19 @@ pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> 
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
     let id = id.to_string();
-    let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&id))
-        .await
-        .map_err(|_| "remote_view_presentation_join_failed")??;
-    presentation_url(&origin, &route)
+    let (route, correlation) = tokio::task::spawn_blocking(move || {
+        crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(&id)
+    })
+    .await
+    .map_err(|_| "remote_view_presentation_join_failed")??;
+    let mut location = url::Url::parse(&presentation_url(&origin, &route)?)
+        .map_err(|_| "remote_view_presentation_path_invalid")?;
+    if let Some(correlation) = correlation {
+        location
+            .query_pairs_mut()
+            .append_pair("handoff-observation", &correlation);
+    }
+    Ok(location.to_string())
 }
 
 fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {
