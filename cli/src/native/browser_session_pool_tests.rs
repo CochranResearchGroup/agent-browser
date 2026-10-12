@@ -2452,6 +2452,48 @@ fn explicit_human_handoff_prepares_configured_hold_and_agent_work_does_not() {
 }
 
 #[test]
+fn public_human_use_request_preserves_pending_hold() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        window_pid: Some(43),
+        ..Provider::default()
+    }));
+    let mut consumer = host(&fixture, provider, Rc::new(Cell::new(0)));
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a",
+        "activityAtMs":100, "humanHandoff":true, "pendingHumanRetentionMs":50
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let request = serde_json::json!({
+        "action":"service_remote_view_handoff_resolve",
+        "params":{
+            "handoffId":id, "handoffOperation":"confirm_human_use", "activityAtMs":110,
+            "humanUseEvidence":{
+                "source":"authenticated_presentation_navigation", "operator":"fabricated-operator",
+                "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]
+            }
+        }
+    });
+    if let Ok(command) = crate::native::stream::service_request_adapter_fixture(
+        &serde_json::to_string(&request).unwrap(),
+    ) {
+        consumer.handle_command(&command);
+    }
+    let retained = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":111
+    }));
+    assert_eq!(
+        retained["data"]["pendingHuman"]["awaitingUse"], true,
+        "public request consumed pending human hold: {retained}"
+    );
+    assert!(
+        retained["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null(),
+        "public request fabricated first human use: {retained}"
+    );
+}
+
+#[test]
 fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider {

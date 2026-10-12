@@ -749,6 +749,16 @@ pub(crate) fn normalize_service_request(
                 "params must be a JSON object",
             )
         })?;
+        // First human use is acknowledged only by authenticated presentation
+        // navigation. Public service callers cannot supply that internal proof.
+        if params.get("handoffOperation").and_then(Value::as_str) == Some("confirm_human_use")
+            || params.contains_key("humanUseEvidence")
+        {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidRequest,
+                "human-use acknowledgement requires authenticated presentation navigation",
+            ));
+        }
         for (key, value) in params {
             if !matches!(
                 key.as_str(),
@@ -2595,6 +2605,57 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
+    }
+
+    #[test]
+    fn public_service_request_cannot_fabricate_authenticated_human_use() {
+        let request = json!({
+            "action": "service_remote_view_handoff_resolve",
+            "params": {
+                "handoffId": "synthetic-pending-handoff",
+                "handoffOperation": "confirm_human_use",
+                "humanUseEvidence": {
+                    "source": "authenticated_presentation_navigation",
+                    "operator": "fabricated-operator",
+                    "tabId": "synthetic-tab",
+                    "targetId": "synthetic-target"
+                }
+            }
+        });
+        let body = serde_json::to_string(&request).unwrap();
+        let commands = [
+            (
+                "normalizer",
+                normalize(request.clone())
+                    .ok()
+                    .map(|normalized| normalized.command),
+            ),
+            (
+                "HTTP",
+                crate::native::stream::service_request_adapter_fixture(&body).ok(),
+            ),
+            (
+                "MCP",
+                crate::mcp::service_request_adapter_fixture(&request).ok(),
+            ),
+        ];
+        let accepting = commands
+            .iter()
+            .filter_map(|(name, command)| {
+                command
+                    .as_ref()
+                    .filter(|command| {
+                        command["handoffOperation"] == "confirm_human_use"
+                            && command["humanUseEvidence"]["source"]
+                                == "authenticated_presentation_navigation"
+                    })
+                    .map(|_| *name)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            accepting.is_empty(),
+            "public adapters forwarded fabricated authenticated human-use evidence: {accepting:?}"
+        );
     }
 
     #[test]

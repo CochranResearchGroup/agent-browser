@@ -2002,6 +2002,39 @@ mod tests {
             .is_none());
         assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
         state.jobs.clear();
+        let unclaimed = state.clone();
+        let now = chrono::Utc::now();
+        state
+            .acquire_lease_claim(agent_browser_lease_authority::AcquireLeaseClaimRequest {
+                resource: agent_browser_lease_authority::LeaseResourceKey::profile(
+                    &allocations[0].profile.id,
+                ),
+                parent_claim_id: None,
+                principal_id: "synthetic-profile-user".into(),
+                capability_id: "synthetic-profile-capability".into(),
+                capability_revision: 1,
+                mode: agent_browser_lease_authority::LeaseClaimMode::Ephemeral,
+                expected_claim_revision: 0,
+                idempotency_key: "synthetic-profile-claim".into(),
+                now: now.to_rfc3339(),
+                expires_at: (now + chrono::Duration::minutes(5)).to_rfc3339(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: Some("synthetic-boot".into()),
+                owner_generation: None,
+            })
+            .unwrap();
+        store.save(&state).unwrap();
+        assert!(
+            effects
+                .acquire_disposable_retirement_guard(&allocations, &[])
+                .unwrap()
+                .is_none(),
+            "current canonical profile claim protects an orphan allocation"
+        );
+        assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
+        // Restore the independent unclaimed fixture, not a simulated claim release.
+        state = unclaimed;
         store.save(&state).unwrap();
         let guard = effects
             .acquire_disposable_retirement_guard(&allocations, &[])
