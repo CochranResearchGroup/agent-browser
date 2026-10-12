@@ -1,6 +1,9 @@
 //! Capacity demand through the actual host, pool coordinator and SQLite owner.
+use super::super::browser_session_host::BrowserSessionPersistence;
+use super::super::browser_session_store::BrowserProfileCatalogLoad;
 use super::*;
 use std::cell::RefCell;
+use std::path::Path;
 
 #[derive(Default)]
 struct Provider {
@@ -417,6 +420,19 @@ fn host_mode_clock(
     BrowserSessionSqliteStore,
     RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
 > {
+    host_with_persistence(fixture, provider, calls, mode, clock, fixture.store(false))
+}
+fn host_with_persistence<P: BrowserSessionPersistence>(
+    fixture: &Fixture,
+    provider: Rc<RefCell<Provider>>,
+    calls: Rc<Cell<u32>>,
+    mode: Mode,
+    clock: fn() -> u64,
+    persistence: P,
+) -> BrowserSessionHost<
+    P,
+    RemoteViewSessionEffects<Process, PoolTransport, BrowserSessionSqliteStore>,
+> {
     let effects = RemoteViewSessionEffects::new(
         Process {
             mode,
@@ -436,7 +452,7 @@ fn host_mode_clock(
     .unwrap()
     .with_view_clock(clock);
     BrowserSessionHost::load(
-        fixture.store(false),
+        persistence,
         effects,
         &fixture.root.join("unused.json"),
         BrowserSessionHostConfig {
@@ -4273,4 +4289,215 @@ fn native_use_owner_reconciles_registration_restart_generation_and_publication_c
         "ordinary native use must issue no viewer grant"
     );
     assert_eq!(calls.get(), 1);
+}
+
+/// Inject only the publication reply boundary; all database operations and
+/// provider custody continue through the actual SQLite store.
+struct NativeUseReplyFailure {
+    store: BrowserSessionSqliteStore,
+    mode: Rc<Cell<u8>>,
+    attempts: Rc<Cell<u32>>,
+}
+impl BrowserSessionPersistence for NativeUseReplyFailure {
+    fn publish_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+    ) -> Result<(), String> {
+        let publishes_use = state.tab_metadata.iter().any(|(id, metadata)| {
+            metadata.first_human_use_at_ms.is_some()
+                && expected
+                    .tab_metadata
+                    .get(id)
+                    .is_none_or(|old| old.first_human_use_at_ms.is_none())
+        });
+        if publishes_use && self.mode.get() != 0 {
+            let mode = self.mode.replace(0);
+            self.attempts.set(self.attempts.get() + 1);
+            if mode == 2 {
+                BrowserSessionPersistence::publish_session_state(
+                    &mut self.store,
+                    expected,
+                    state,
+                    intent,
+                )?;
+                return Err("synthetic_native_use_reply_lost_after_commit".into());
+            }
+            return Err("synthetic_native_use_publication_unavailable".into());
+        }
+        BrowserSessionPersistence::publish_session_state(&mut self.store, expected, state, intent)
+    }
+    fn load_session_state(&self) -> Result<BrowserSessionState, String> {
+        self.store.load_session_state()
+    }
+    fn compare_and_save_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+    ) -> Result<(), String> {
+        self.store.compare_and_save_session_state(expected, state)
+    }
+    fn load_or_import_profile_catalog(
+        &self,
+        _path: &Path,
+    ) -> Result<BrowserProfileCatalogLoad, String> {
+        self.store.load_profile_catalog()
+    }
+    fn save_profile_catalog(&self, catalog: &BrowserProfileCatalog) -> Result<(), String> {
+        self.store.save_profile_catalog(catalog)
+    }
+}
+
+#[test]
+fn native_use_publication_failure_preserves_durable_truth_and_exact_retry() {
+    for fault in [1, 2] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider {
+            window_pid: Some(43),
+            ..Provider::default()
+        }));
+        let calls = Rc::new(Cell::new(0));
+        let mode = Rc::new(Cell::new(0));
+        let attempts = Rc::new(Cell::new(0));
+        let mut consumer = host_with_persistence(
+            &fixture,
+            provider.clone(),
+            calls.clone(),
+            Mode::Success,
+            || 2001,
+            NativeUseReplyFailure {
+                store: fixture.store(false),
+                mode: mode.clone(),
+                attempts: attempts.clone(),
+            },
+        );
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate","url":"https://synthetic.example/publication","profileId":"profile-a",
+            "activityAtMs":100,"humanHandoff":true,"pendingHumanRetentionMs":0
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+        let registered = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+            "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":110
+        }));
+        assert_eq!(registered["success"], true, "{registered}");
+        provider.borrow_mut().native_used_at_ms = Some(150);
+        mode.set(fault);
+        let first = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":160
+        }));
+        assert_eq!(
+            attempts.get(),
+            1,
+            "fault injection must reach first-use publication after focus"
+        );
+        let durable = fixture.store(false).load_session_state().unwrap();
+        if fault == 1 {
+            assert_eq!(first["success"], false, "{first}");
+            assert!(durable.pending_human_tabs.contains_key(tab));
+            assert!(durable.tab_metadata[tab].first_human_use_at_ms.is_none());
+        } else {
+            assert_eq!(
+                first["success"], true,
+                "exact durable readback must reconcile a lost publication reply: {first}"
+            );
+            assert!(!durable.pending_human_tabs.contains_key(tab));
+            assert_eq!(durable.tab_metadata[tab].first_human_use_at_ms, Some(150));
+        }
+        let inspected = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":161
+        }));
+        assert_eq!(inspected["success"], true, "{inspected}");
+        assert_eq!(
+            inspected["data"]["taskMetadata"]["firstHumanUseAtMs"],
+            serde_json::to_value(durable.tab_metadata[tab].first_human_use_at_ms).unwrap(),
+            "uncommitted first-use evidence leaked into Properties: {inspected}"
+        );
+        assert_eq!(
+            inspected["data"]["pendingHuman"].is_null(),
+            !durable.pending_human_tabs.contains_key(tab),
+            "uncommitted hold release leaked into Properties"
+        );
+        let retry = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":170
+        }));
+        assert_eq!(retry["success"], true, "{retry}");
+        let durable = fixture.store(false).load_session_state().unwrap();
+        assert_eq!(durable.tab_metadata[tab].first_human_use_at_ms, Some(150));
+        assert!(!durable.pending_human_tabs.contains_key(tab));
+        assert!(durable.remote_view_tab_handoffs[id].expires_at_ms.is_none());
+        assert_eq!(
+            provider.borrow().native_observations.len(),
+            1,
+            "publication failure must not register another viewer attempt"
+        );
+        assert_eq!(calls.get(), 1);
+    }
+}
+
+#[test]
+fn native_use_processing_delay_does_not_replace_actual_use_with_poll_time() {
+    for (newer_activity, peer_activity) in [(None, false), (Some(180), false), (None, true)] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider {
+            window_pid: Some(43),
+            ..Provider::default()
+        }));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls);
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/delayed-use","profileId":"profile-a",
+        "activityAtMs":100,"humanHandoff":true,"pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+        let registered = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+        "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":110
+    }));
+        assert_eq!(registered["success"], true, "{registered}");
+        if let Some(at_ms) = newer_activity {
+            let session_id = consumer.state().tabs[tab].session_id.clone();
+            consumer
+                .navigate(&session_id, "https://synthetic.example/delayed-use", at_ms)
+                .unwrap();
+        }
+        let session_id = consumer.state().tabs[tab].session_id.clone();
+        let peer = if peer_activity {
+            let created = consumer.new_tab(&session_id, 180).unwrap();
+            consumer
+                .navigate(&session_id, "https://synthetic.example/peer", 190)
+                .unwrap();
+            Some(created.tab_id)
+        } else {
+            None
+        };
+        let session_before = consumer.state().sessions[&session_id].clone();
+        provider.borrow_mut().native_used_at_ms = Some(150);
+        let used = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":200
+    }));
+        assert_eq!(used["success"], true, "{used}");
+        assert_eq!(
+            consumer.state().tabs[tab].last_activity_at_ms,
+            newer_activity.unwrap_or(150),
+            "private observation processing time replaced actual native human-use time"
+        );
+        assert_eq!(
+            consumer.state().tab_metadata[tab].first_human_use_at_ms,
+            Some(150)
+        );
+        let session = &consumer.state().sessions[&session_id];
+        assert_eq!(session.current_tab_id.as_deref(), Some(tab));
+        assert_eq!(
+            session.last_activity_at_ms,
+            session_before.last_activity_at_ms.max(150)
+        );
+        assert!(session.expires_at_ms >= session_before.expires_at_ms);
+        if let Some(peer) = peer {
+            assert_eq!(consumer.state().tabs[&peer].last_activity_at_ms, 190);
+        }
+    }
 }

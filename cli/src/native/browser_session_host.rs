@@ -927,7 +927,18 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 serde_json::json!({"handoffId":id,"tabId":target.tab.id,"status":"human_use_already_confirmed"}),
             );
         }
-        self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+        let activity_at_ms = used_at_ms.max(target.tab.last_activity_at_ms);
+        let session_activity_at_ms = target.session.last_activity_at_ms;
+        let session_expires_at_ms = target.session.expires_at_ms;
+        self.manager()?.focus_browser(
+            &target.browser.id,
+            Some(&target.tab.target_id),
+            activity_at_ms,
+        )?;
+        if let Some(session) = self.state.sessions.get_mut(&target.session.id) {
+            session.last_activity_at_ms = session.last_activity_at_ms.max(session_activity_at_ms);
+            session.expires_at_ms = session.expires_at_ms.max(session_expires_at_ms);
+        }
         self.state.pending_human_tabs.remove(&target.tab.id);
         self.state
             .tab_metadata
@@ -957,7 +968,21 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .and_then(|link| link.native_observation.as_mut())
             .ok_or("remote_view_native_registration_missing")?
             .observation = Some(read.observation);
-        self.commit_state()?;
+        if let Err(error) = self.commit_state() {
+            // A lost reply is successful only when the complete proposed
+            // aggregate is already durable. Otherwise discard staged use so
+            // Properties and a later retry retain the last published truth.
+            if self
+                .persistence
+                .load_session_state()
+                .is_ok_and(|state| state == self.state)
+            {
+                self.persisted_state = self.state.clone();
+            } else {
+                self.state = self.persisted_state.clone();
+                return Err(error);
+            }
+        }
         Ok(
             serde_json::json!({"handoffId":id,"tabId":target.tab.id,"status":"human_use_confirmed","usedAtMs":used_at_ms}),
         )
