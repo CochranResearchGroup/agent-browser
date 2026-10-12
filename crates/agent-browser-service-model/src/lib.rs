@@ -47,6 +47,7 @@ mod remote_view_application_mutation;
 mod remote_view_application_records;
 mod remote_view_application_response;
 mod remote_view_consumer;
+mod remote_view_native_handoff;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
@@ -260,6 +261,11 @@ pub use remote_view_consumer::{
     RemoteViewViewerSessionState, RemoteViewViewerSessionStatus, RemoteViewViewingRoute,
     REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
     REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
+};
+pub use remote_view_native_handoff::{
+    RemoteViewNativeHandoffObservation, RemoteViewNativeHandoffUse,
+    RemoteViewNativeObservationClock, RemoteViewNativeUseContext, RemoteViewNativeUseEvidence,
+    REMOTE_VIEW_NATIVE_HANDOFF_SOURCE_CHECKPOINT,
 };
 pub use remote_view_retention::{
     detach_remote_view_presentation, project_remote_view_operator_handoff,

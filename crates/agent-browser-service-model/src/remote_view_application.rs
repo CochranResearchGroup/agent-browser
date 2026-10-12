@@ -29,6 +29,21 @@ pub enum RemoteViewApplicationRequest {
         assignment_id: String,
         expected_generation: u64,
     },
+    /// Correlate ordinary native viewing with the current owned assignment.
+    /// Registration adds no viewer grant and cannot assert successful use.
+    RegisterNativeHandoffObservation {
+        assignment_id: String,
+        expected_generation: u64,
+        expected_viewing_generation: u64,
+        target_digest: String,
+        idempotency_key: String,
+        lifetime_ms: u64,
+    },
+    /// Read provider-qualified native use; consumers cannot publish it.
+    ObserveNativeHandoffUse {
+        correlation_id: String,
+        target_digest: String,
+    },
     ObserveIdle {
         assignment_id: String,
         expected_generation: u64,
