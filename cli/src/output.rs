@@ -6365,7 +6365,7 @@ Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
 Public service requests reject human-use evidence and the internal acknowledgement
-operation. Authenticated presentation navigation acknowledges actual human use.
+operation. Native provider evidence and the exact browser owner establish actual use.
 Managed commands accept serviceName, agentName, humanName, originKind, taskName,
 purpose, requestId and jobId as descriptive context, never authenticated identity.
 Optional pressureInactivityMs opts into measured disposable quota retirement;
@@ -6385,9 +6385,10 @@ Automatic expiry retires unprotected empty peers without creating replacement ta
 Active viewers defer retirement; shared browsers remain outside process custody.
 Software prepare_human with pendingHumanRetentionMs records a separate unused-tab hold.
 Positive values set its maximum duration; 0 sets no automatic deadline.
-Owner confirm_human_use requires an exact-target acknowledgement; agent readiness
-resolution preserves the pending hold. Authenticated user document navigation after
-readiness acknowledges use; prefetch/background requests retain the hold.
+Authenticated navigation registers a continuation with the native viewer. Redirects
+and readiness preserve the hold. Only a delivered native display frame acknowledged
+by its authenticated connection, joined to the exact current target, establishes use.
+Private owner polling consumes qualified use; prefetch/background requests retain the hold.
 Native remote_view_open prepares the human hold automatically. Configure its maximum
 with pendingHumanRetentionMs or AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS (default 0).
 Invalid or overflowing pending deadlines are rejected before browser effects.

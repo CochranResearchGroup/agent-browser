@@ -141,6 +141,91 @@ impl<
         S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn native_handoff_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        self.adapter
+            .observe_assignment(&assignment)
+            .map(|observed| observed.target)
+            .map_err(|_| "remote_view_native_target_unavailable".into())
+    }
+    fn register_native_handoff_observation(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        provider_target: &RemoteViewApplicationTarget,
+        target_digest: &str,
+        idempotency_key: &str,
+    ) -> Result<RemoteViewNativeHandoffObservation, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        if self
+            .adapter
+            .observe_assignment(&assignment)
+            .map_err(|_| "remote_view_native_target_unavailable")?
+            .target
+            != *provider_target
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let observation = self
+            .adapter
+            .register_native_handoff_observation(
+                &assignment,
+                target_digest.into(),
+                idempotency_key.into(),
+                300_000,
+            )
+            .map_err(|_| "remote_view_native_registration_unavailable")?;
+        if observation.target != *provider_target {
+            return Err("remote_view_native_target_changed".into());
+        }
+        Ok(observation)
+    }
+
+    fn observe_native_handoff_use(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        registered: &RemoteViewNativeHandoffObservation,
+    ) -> Result<RemoteViewNativeHandoffUseRead, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        self.adapter
+            .observe_native_handoff_use_state(&assignment, registered)
+            .map_err(|_| "remote_view_native_use_unavailable".into())
+    }
     fn reconcile_profile_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,

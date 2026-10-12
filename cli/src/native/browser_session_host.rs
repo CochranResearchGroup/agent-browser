@@ -596,6 +596,7 @@ pub(crate) struct BrowserSessionHost<P, E> {
     persisted_state: BrowserSessionState,
     manager_config: BrowserSessionManagerConfig,
     exact_url_history_maximum_bytes: u64,
+    native_use_cursor: usize,
 }
 
 impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<P, E> {
@@ -646,6 +647,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 remote_view_desktops: config.remote_view_desktops,
             },
             exact_url_history_maximum_bytes: config.exact_url_history_maximum_bytes,
+            native_use_cursor: 0,
         })
     }
 
@@ -759,7 +761,236 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         Ok(result)
     }
 
+    fn native_handoff_target(
+        &self,
+        id: &str,
+        now_ms: u64,
+    ) -> Result<
+        (
+            agent_browser_service_model::RemoteViewTabHandoffTarget,
+            String,
+        ),
+        String,
+    > {
+        self.state
+            .remote_view_tab_handoffs
+            .get(id)
+            .ok_or("remote_view_tab_handoff_missing")?
+            .check_link_at(now_ms)?;
+        let target = agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, id)?;
+        let digest = agent_browser_service_model::remote_view_native_target_digest(id, &target)?;
+        Ok((target, digest))
+    }
+
+    fn prepare_native_handoff_observation(
+        &mut self,
+        id: &str,
+        now_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        use agent_browser_service_model::{
+            RemoteViewNativeHandoffUseState, RemoteViewTabNativeObservation,
+        };
+        let (target, digest) = self.native_handoff_target(id, now_ms)?;
+        self.effects.begin_operation(&self.persisted_state)?;
+        let provider_target = self.effects.native_handoff_assignment_target(&target)?;
+        if self.native_handoff_target(id, now_ms)?.1 != digest
+            || self.persistence.load_session_state()? != self.persisted_state
+        {
+            return Err("remote_view_human_use_target_changed".into());
+        }
+        let previous = self
+            .state
+            .remote_view_tab_handoffs
+            .get(id)
+            .and_then(|link| link.native_observation.clone());
+        let mut replace = previous.as_ref().is_none_or(|binding| {
+            binding.target_digest != digest || binding.provider_target != provider_target
+        });
+        if let Some(binding) = previous.as_ref().filter(|binding| {
+            binding.target_digest == digest && binding.provider_target == provider_target
+        }) {
+            if let Some(observation) = &binding.observation {
+                self.effects.begin_operation(&self.persisted_state)?;
+                let read = self
+                    .effects
+                    .observe_native_handoff_use(&target, observation)?;
+                if self.native_handoff_target(id, now_ms)?.1 != digest
+                    || self.persistence.load_session_state()? != self.persisted_state
+                {
+                    return Err("remote_view_human_use_target_changed".into());
+                }
+                replace = read.state == RemoteViewNativeHandoffUseState::Expired;
+            }
+        }
+        if replace {
+            self.state
+                .remote_view_tab_handoffs
+                .get_mut(id)
+                .ok_or("remote_view_tab_handoff_missing")?
+                .native_observation = Some(RemoteViewTabNativeObservation {
+                target_digest: digest.clone(),
+                provider_target: provider_target.clone(),
+                idempotency_key: uuid::Uuid::new_v4().to_string(),
+                observation: None,
+            });
+            self.commit_state()?;
+        }
+        let binding = self
+            .state
+            .remote_view_tab_handoffs
+            .get(id)
+            .and_then(|link| link.native_observation.clone())
+            .ok_or("remote_view_native_registration_missing")?;
+        let observation = match binding.observation {
+            Some(observation) => observation,
+            None => {
+                self.effects.begin_operation(&self.persisted_state)?;
+                let observation = self.effects.register_native_handoff_observation(
+                    &target,
+                    &binding.provider_target,
+                    &digest,
+                    &binding.idempotency_key,
+                )?;
+                if self.native_handoff_target(id, now_ms)?.1 != digest
+                    || self.persistence.load_session_state()? != self.persisted_state
+                {
+                    return Err("remote_view_human_use_target_changed".into());
+                }
+                self.state
+                    .remote_view_tab_handoffs
+                    .get_mut(id)
+                    .and_then(|link| link.native_observation.as_mut())
+                    .ok_or("remote_view_native_registration_missing")?
+                    .observation = Some(observation.clone());
+                self.commit_state()?;
+                observation
+            }
+        };
+        Ok(
+            serde_json::json!({"handoffId":id,"tabId":target.tab.id,"targetId":target.tab.target_id,"correlationId":observation.correlation_id,"status":"native_use_pending"}),
+        )
+    }
+
+    /// Successful-use facts come only from the private provider transport. The
+    /// host joins current state again before native focus and one-time mutation.
+    fn consume_native_handoff_use(
+        &mut self,
+        id: &str,
+        now_ms: u64,
+    ) -> Result<serde_json::Value, String> {
+        use agent_browser_service_model::RemoteViewNativeHandoffUseState;
+        let (target, digest) = self.native_handoff_target(id, now_ms)?;
+        let binding = self
+            .state
+            .remote_view_tab_handoffs
+            .get(id)
+            .and_then(|link| link.native_observation.clone())
+            .ok_or("remote_view_native_registration_missing")?;
+        if binding.target_digest != digest {
+            return Err("remote_view_human_use_target_changed".into());
+        }
+        let observation = binding
+            .observation
+            .as_ref()
+            .ok_or("remote_view_native_registration_missing")?;
+        if observation.target_digest != digest || observation.target != binding.provider_target {
+            return Err("remote_view_human_use_target_changed".into());
+        }
+        self.effects.begin_operation(&self.persisted_state)?;
+        let read = self
+            .effects
+            .observe_native_handoff_use(&target, observation)?;
+        if self.native_handoff_target(id, now_ms)?.1 != digest
+            || self.persistence.load_session_state()? != self.persisted_state
+        {
+            return Err("remote_view_human_use_target_changed".into());
+        }
+        if read.state != RemoteViewNativeHandoffUseState::Used {
+            return Ok(
+                serde_json::json!({"handoffId":id,"tabId":target.tab.id,"status":if read.state == RemoteViewNativeHandoffUseState::Expired {"native_use_expired"} else {"native_use_pending"}}),
+            );
+        }
+        let used_at_ms = read
+            .observation
+            .used
+            .as_ref()
+            .ok_or("remote_view_human_use_evidence_invalid")?
+            .recorded_at_ms;
+        if !self.state.pending_human_tabs.contains_key(&target.tab.id)
+            && self
+                .state
+                .tab_metadata
+                .get(&target.tab.id)
+                .is_some_and(|metadata| metadata.first_human_use_at_ms.is_some())
+        {
+            return Ok(
+                serde_json::json!({"handoffId":id,"tabId":target.tab.id,"status":"human_use_already_confirmed"}),
+            );
+        }
+        self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+        self.state.pending_human_tabs.remove(&target.tab.id);
+        self.state
+            .tab_metadata
+            .entry(target.tab.id.clone())
+            .or_default()
+            .first_human_use_at_ms
+            .get_or_insert(used_at_ms);
+        let metadata = self.state.tab_metadata.get(&target.tab.id).cloned();
+        let resume = agent_browser_service_model::remote_view_handoff_resume_intent(
+            &self.state,
+            id,
+            now_ms,
+        )?;
+        for link in self
+            .state
+            .remote_view_tab_handoffs
+            .values_mut()
+            .filter(|link| link.tab_id == target.tab.id && link.session_id == target.session.id)
+        {
+            link.resume
+                .get_or_insert_with(|| resume.clone())
+                .task_metadata = metadata.clone();
+        }
+        self.state
+            .remote_view_tab_handoffs
+            .get_mut(id)
+            .and_then(|link| link.native_observation.as_mut())
+            .ok_or("remote_view_native_registration_missing")?
+            .observation = Some(read.observation);
+        self.commit_state()?;
+        Ok(
+            serde_json::json!({"handoffId":id,"tabId":target.tab.id,"status":"human_use_confirmed","usedAtMs":used_at_ms}),
+        )
+    }
+
     pub(crate) fn reap(&mut self, now_ms: u64) -> Result<ReapBrowserSessionsResult, String> {
+        // One durable observation per pass bounds private transport work under
+        // the host mutex. Foreground handoff polling handles normal first use.
+        let candidates = self
+            .state
+            .remote_view_tab_handoffs
+            .values()
+            .filter(|link| {
+                link.check_link_at(now_ms).is_ok()
+                    && link
+                        .native_observation
+                        .as_ref()
+                        .is_some_and(|binding| binding.observation.is_some())
+                    && self.state.tabs.contains_key(&link.tab_id)
+                    && (self.state.pending_human_tabs.contains_key(&link.tab_id)
+                        || self
+                            .state
+                            .tab_metadata
+                            .get(&link.tab_id)
+                            .is_none_or(|metadata| metadata.first_human_use_at_ms.is_none()))
+            })
+            .map(|link| link.id.clone())
+            .collect::<Vec<_>>();
+        if !candidates.is_empty() {
+            let id = &candidates[self.native_use_cursor % candidates.len()];
+            self.native_use_cursor = self.native_use_cursor.wrapping_add(1);
+            self.consume_native_handoff_use(id, now_ms)?;
+        }
         let result = self.manager()?.reap(now_ms)?;
         self.commit_state()?;
         Ok(result)
@@ -1012,62 +1243,8 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     self.state
                         .pending_human_tabs
                         .insert(target.tab.id.clone(), hold.clone());
-                    self.commit_state()?;
-                    return Ok(
-                        serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
-                        "status":"pending_human","pendingHuman":hold}),
-                    );
-                }
-                if command["handoffOperation"] == "confirm_human_use" {
-                    // The authenticated presentation adapter supplies this
-                    // acknowledgement; ordinary agent readiness never does.
-                    let evidence = &command["humanUseEvidence"];
-                    if evidence["source"] != "authenticated_presentation_navigation"
-                        || evidence["operator"]
-                            .as_str()
-                            .is_none_or(|name| name.trim().is_empty())
-                    {
-                        return Err("remote_view_human_use_evidence_invalid".into());
-                    }
-                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
-                        &self.state,
-                        handoff_id,
-                    )?;
-                    if evidence["tabId"] != target.tab.id
-                        || evidence["targetId"] != target.tab.target_id
-                    {
-                        return Err("remote_view_human_use_target_changed".into());
-                    }
-                    if !self.state.pending_human_tabs.contains_key(&target.tab.id)
-                        && self
-                            .state
-                            .tab_metadata
-                            .get(&target.tab.id)
-                            .is_some_and(|metadata| metadata.first_human_use_at_ms.is_some())
-                    {
-                        return Ok(
-                            serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
-                            "status":"human_use_already_confirmed"}),
-                        );
-                    }
-                    self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
-                    self.state.pending_human_tabs.remove(&target.tab.id);
-                    // Record use only after qualified exact-target focus, without
-                    // treating the acknowledging operator as creation attribution.
-                    self.state
-                        .tab_metadata
-                        .entry(target.tab.id.clone())
-                        .or_default()
-                        .first_human_use_at_ms
-                        .get_or_insert(now_ms);
-                    let metadata = self.state.tab_metadata.get(&target.tab.id).cloned();
-                    let resume = agent_browser_service_model::remote_view_handoff_resume_intent(
-                        &self.state,
-                        handoff_id,
-                        now_ms,
-                    )?;
-                    // All links to this actual tab retain the same use history
-                    // after its automatic retirement removes live tab metadata.
+                    // A new hold requires a new native observation. Historical
+                    // qualified use must not release another handoff attempt.
                     for link in self
                         .state
                         .remote_view_tab_handoffs
@@ -1076,17 +1253,33 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             link.tab_id == target.tab.id && link.session_id == target.session.id
                         })
                     {
-                        // Legacy links gain only currently qualified recovery
-                        // context, preserving unknown historical attribution.
-                        link.resume
-                            .get_or_insert_with(|| resume.clone())
-                            .task_metadata = metadata.clone();
+                        link.native_observation = None;
                     }
                     self.commit_state()?;
                     return Ok(
                         serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
-                        "status":"human_use_confirmed","usedAtMs":now_ms}),
+                        "status":"pending_human","pendingHuman":hold}),
                     );
+                }
+                if command["handoffOperation"] == "prepare_native_use" {
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        handoff_id,
+                    )?;
+                    if command["expectedTabId"] != target.tab.id
+                        || command["expectedTargetId"] != target.tab.target_id
+                    {
+                        return Err("remote_view_human_use_target_changed".into());
+                    }
+                    return self.prepare_native_handoff_observation(handoff_id, now_ms);
+                }
+                if command["handoffOperation"] == "confirm_human_use"
+                    || command["handoffOperation"] == "observe_native_use"
+                {
+                    if command.get("humanUseEvidence").is_some() {
+                        return Err("remote_view_human_use_evidence_invalid".into());
+                    }
+                    return self.consume_native_handoff_use(handoff_id, now_ms);
                 }
                 if command["handoffOperation"] == "set_tab_lifetime" {
                     let ttl = command["tabInactivityMs"]
@@ -2397,6 +2590,7 @@ mod tests {
             persisted_state: initial.clone(),
             manager_config: BrowserSessionManagerConfig::default(),
             exact_url_history_maximum_bytes: 1024,
+            native_use_cursor: 0,
         };
         host.state.browsers.insert(
             launch.browser_id.clone(),

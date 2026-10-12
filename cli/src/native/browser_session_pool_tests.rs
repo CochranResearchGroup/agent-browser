@@ -26,6 +26,12 @@ struct Provider {
     defer_idle_release: bool,
     lose_idle_release_reply: bool,
     idle_release_requests: Vec<String>,
+    native_observations: std::collections::BTreeMap<String, Value>,
+    native_used_at_ms: Option<u64>,
+    native_observation_expired: bool,
+    lose_native_registration_reply: bool,
+    native_viewing_generation: Option<u64>,
+    native_competing_publication: bool,
 }
 struct PoolTransport {
     provider: Rc<RefCell<Provider>>,
@@ -40,6 +46,91 @@ impl RemoteViewApplicationTransport for PoolTransport {
         assert_eq!(envelope.application, "agent-browser");
         let fixture = wire();
         match &envelope.request {
+            RemoteViewApplicationRequest::RegisterNativeHandoffObservation {
+                assignment_id,
+                expected_generation,
+                expected_viewing_generation,
+                target_digest,
+                idempotency_key,
+                lifetime_ms,
+            } => {
+                use sha2::{Digest, Sha256};
+                provider
+                    .operations
+                    .push("register_native_handoff_observation");
+                let state = open_store(&self.root, false).load_session_state().unwrap();
+                assert!(
+                    state.remote_view_tab_handoffs.values().any(|link| link
+                        .native_observation
+                        .as_ref()
+                        .is_some_and(|binding| binding.idempotency_key == *idempotency_key
+                            && binding.target_digest == *target_digest)),
+                    "provider registration must follow durable intent"
+                );
+                let assignment = provider
+                    .assignments
+                    .iter()
+                    .find(|a| a.assignment_id == *assignment_id)
+                    .unwrap();
+                let mut target = fixture["assignmentObservation"]["target"].clone();
+                target["assignmentId"] = assignment.assignment_id.clone().into();
+                target["desktopId"] = assignment.desktop_id.clone().into();
+                if let Some(generation) = provider.native_viewing_generation {
+                    target["viewingGeneration"] = generation.into();
+                }
+                assert_eq!(target["lifecycleGeneration"], *expected_generation);
+                assert_eq!(target["viewingGeneration"], *expected_viewing_generation);
+                let mut hash = Sha256::new();
+                hash.update((envelope.application.len() as u64).to_be_bytes());
+                hash.update(envelope.application.as_bytes());
+                hash.update(idempotency_key.as_bytes());
+                let record = provider.native_observations.entry(idempotency_key.clone()).or_insert_with(|| serde_json::json!({
+                    "correlationId":format!("{:x}", Sha256::digest(idempotency_key.as_bytes())),
+                    "requestDigest":format!("{:x}",hash.finalize()),"application":envelope.application,
+                    "target":target,"targetDigest":target_digest,"clock":{"bootId":"synthetic-boot","elapsedMs":100},
+                    "lifetimeMs":lifetime_ms,"used":null,
+                })).clone();
+                if provider.lose_native_registration_reply {
+                    return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                }
+                Ok(serde_json::json!({"schemaVersion":1,"observation":record}))
+            }
+            RemoteViewApplicationRequest::ObserveNativeHandoffUse {
+                correlation_id,
+                target_digest,
+            } => {
+                provider.operations.push("observe_native_handoff_use");
+                let used_at = provider.native_used_at_ms;
+                let expired = provider.native_observation_expired;
+                if provider.native_competing_publication {
+                    provider.native_competing_publication = false;
+                    let mut store = open_store(&self.root, false);
+                    let before = store.load_session_state().unwrap();
+                    let mut after = before.clone();
+                    after.next_session_sequence += 1;
+                    store
+                        .compare_and_save_session_state(&before, &after)
+                        .unwrap();
+                }
+                let record = provider
+                    .native_observations
+                    .values_mut()
+                    .find(|record| record["correlationId"] == *correlation_id)
+                    .unwrap();
+                assert_eq!(record["targetDigest"], *target_digest);
+                if record["used"].is_null() && !expired {
+                    if let Some(at) = used_at {
+                        record["used"] = serde_json::json!({"recordedAtMs":at,"evidence":{"frameSync":12,"context":{
+                            "correlationId":correlation_id,"operator":"native-operator","viewerConnectionId":"native-connection",
+                            "desktopId":record["target"]["viewingDesktopId"],"lifecycleGeneration":record["target"]["lifecycleGeneration"],
+                            "viewingGeneration":record["target"]["viewingGeneration"],"targetDigest":target_digest
+                        }}});
+                    }
+                }
+                Ok(
+                    serde_json::json!({"schemaVersion":1,"state":if !record["used"].is_null() {"used"} else if expired {"expired"} else {"pending"},"observation":record}),
+                )
+            }
             RemoteViewApplicationRequest::ObserveIdle { assignment_id, .. } => {
                 provider.operations.push("observe_idle");
                 let assignment = provider
@@ -158,6 +249,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 let mut observation = fixture["assignmentObservation"].clone();
                 observation["target"]["assignmentId"] = assignment.assignment_id.clone().into();
                 observation["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                if let Some(generation) = provider.native_viewing_generation {
+                    observation["target"]["viewingGeneration"] = generation.into();
+                }
                 Ok(observation)
             }
             RemoteViewApplicationRequest::Windows { assignment_id, .. } => {
@@ -177,6 +271,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     .unwrap();
                 let mut windows = fixture["windows"].clone();
                 windows["desktopId"] = assignment.desktop_id.clone().into();
+                if let Some(generation) = provider.native_viewing_generation {
+                    windows["viewingGeneration"] = generation.into();
+                }
                 if let Some(pid) = provider.window_pid {
                     windows["windows"][0]["pid"] = serde_json::json!(pid);
                 }
@@ -2570,12 +2667,24 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
             "rejected acknowledgement must not record use"
         );
     }
+    let registered = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+        "expectedTabId":opened["browserSession"]["tabId"],"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":145
+    }));
+    assert_eq!(registered["success"], true, "{registered}");
+    let pending = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":145
+    }));
+    assert_eq!(pending["data"]["status"], "native_use_pending", "{pending}");
+    assert!(consumer
+        .state()
+        .pending_human_tabs
+        .contains_key(opened["browserSession"]["tabId"].as_str().unwrap()));
+    provider.borrow_mut().native_used_at_ms = Some(150);
     provider.borrow_mut().window_pid = Some(99);
     let denied = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
-        "handoffOperation":"confirm_human_use", "activityAtMs":146,
-        "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
-            "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+        "handoffOperation":"observe_native_use", "activityAtMs":146
     }));
     assert_eq!(
         denied["success"], false,
@@ -2590,9 +2699,7 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
     provider.borrow_mut().window_pid = Some(43);
     let used = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
-        "handoffOperation":"confirm_human_use", "activityAtMs":150,
-        "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
-            "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+        "handoffOperation":"observe_native_use", "activityAtMs":150
     }));
     assert_eq!(used["success"], true, "{used}");
     assert_eq!(used["data"]["status"], "human_use_confirmed", "{used}");
@@ -2607,9 +2714,7 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
     );
     let duplicate = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
-        "handoffOperation":"confirm_human_use", "activityAtMs":170,
-        "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
-            "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+        "handoffOperation":"observe_native_use", "activityAtMs":170
     }));
     assert_eq!(duplicate["success"], true, "{duplicate}");
     assert_eq!(
@@ -2691,11 +2796,15 @@ fn first_human_use_without_pending_hold_survives_reprepare_and_legacy_restart() 
         assert!(before["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null());
         let acknowledge = |consumer: &mut BrowserSessionHost<_, _>, at| {
             consumer.handle_command(&serde_json::json!({
-            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"confirm_human_use", "activityAtMs":at,
-            "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
-                "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"observe_native_use", "activityAtMs":at
         }))
         };
+        let registered = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+            "expectedTabId":opened["browserSession"]["tabId"],"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":149
+        }));
+        assert_eq!(registered["success"], true, "{registered}");
+        provider.borrow_mut().native_used_at_ms = Some(150);
         let first = acknowledge(&mut consumer, 150);
         assert_eq!(first["success"], true, "{first}");
         assert_eq!(
@@ -2723,6 +2832,21 @@ fn first_human_use_without_pending_hold_survives_reprepare_and_legacy_restart() 
             "pendingHumanRetentionMs":0, "activityAtMs":160
         }));
             assert_eq!(hold["success"], true, "{hold}");
+            let stale = acknowledge(&mut consumer, 161);
+            assert_eq!(
+                stale["success"], false,
+                "old native observation consumed a newly prepared hold: {stale}"
+            );
+            assert_eq!(
+                inspect(&mut consumer, 161)["data"]["pendingHuman"]["awaitingUse"],
+                true
+            );
+            let fresh = consumer.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+                "expectedTabId":opened["browserSession"]["tabId"],"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":162
+            }));
+            assert_eq!(fresh["success"], true, "{fresh}");
+            provider.borrow_mut().native_used_at_ms = Some(170);
             let repeated = acknowledge(&mut consumer, 170);
             assert_eq!(
                 repeated["data"]["status"], "human_use_confirmed",
@@ -4034,4 +4158,119 @@ fn pool_demand_regrows_after_exact_native_release_without_local_release_receipt(
         "remote_view_pool_acquisition_readback_required"
     );
     assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn native_use_owner_reconciles_registration_restart_generation_and_publication_conflict() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        window_pid: Some(43),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/native-use","profileId":"profile-a",
+        "activityAtMs":100,"humanHandoff":true,"pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+    let prepare = |host: &mut BrowserSessionHost<_, _>, at| {
+        host.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+        "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":at
+    }))
+    };
+    let observe = |host: &mut BrowserSessionHost<_, _>, at| {
+        host.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":at
+    }))
+    };
+    provider.borrow_mut().lose_native_registration_reply = true;
+    let lost = prepare(&mut consumer, 110);
+    assert_eq!(lost["success"], false, "{lost}");
+    let intent = consumer.state().remote_view_tab_handoffs[id]
+        .native_observation
+        .clone()
+        .unwrap();
+    assert!(intent.observation.is_none());
+    assert_eq!(provider.borrow().native_observations.len(), 1);
+    drop(consumer);
+    provider.borrow_mut().lose_native_registration_reply = false;
+    consumer = host(&fixture, provider.clone(), calls.clone());
+    let resumed = prepare(&mut consumer, 111);
+    assert_eq!(resumed["success"], true, "{resumed}");
+    assert_eq!(
+        consumer.state().remote_view_tab_handoffs[id]
+            .native_observation
+            .as_ref()
+            .unwrap()
+            .idempotency_key,
+        intent.idempotency_key
+    );
+    assert_eq!(
+        provider.borrow().native_observations.len(),
+        1,
+        "lost reply must replay the exact registration"
+    );
+    assert_eq!(
+        observe(&mut consumer, 112)["data"]["status"],
+        "native_use_pending"
+    );
+    assert!(consumer.state().pending_human_tabs.contains_key(tab));
+    provider.borrow_mut().native_observation_expired = true;
+    assert_eq!(
+        observe(&mut consumer, 113)["data"]["status"],
+        "native_use_expired"
+    );
+    assert!(consumer.state().pending_human_tabs.contains_key(tab));
+    let fresh = prepare(&mut consumer, 114);
+    assert_eq!(fresh["success"], true, "{fresh}");
+    assert_ne!(
+        fresh["data"]["correlationId"],
+        resumed["data"]["correlationId"]
+    );
+    provider.borrow_mut().native_observation_expired = false;
+    provider.borrow_mut().native_viewing_generation = Some(999);
+    let stale = observe(&mut consumer, 115);
+    assert_eq!(stale["success"], false, "{stale}");
+    assert!(consumer.state().pending_human_tabs.contains_key(tab));
+    let relocated = prepare(&mut consumer, 116);
+    assert_eq!(relocated["success"], true, "{relocated}");
+    assert_ne!(
+        relocated["data"]["correlationId"],
+        fresh["data"]["correlationId"]
+    );
+    assert!(consumer.state().remote_view_tab_handoffs[id]
+        .expires_at_ms
+        .is_none());
+    provider.borrow_mut().native_used_at_ms = Some(150);
+    provider.borrow_mut().native_competing_publication = true;
+    let conflict = observe(&mut consumer, 151);
+    assert_eq!(conflict["success"], false, "{conflict}");
+    let durable = fixture.store(false).load_session_state().unwrap();
+    assert!(durable.pending_human_tabs.contains_key(tab));
+    assert!(durable.tab_metadata[tab].first_human_use_at_ms.is_none());
+    drop(consumer);
+    consumer = host(&fixture, provider.clone(), calls.clone());
+    consumer.reap(160).unwrap();
+    assert!(!consumer.state().pending_human_tabs.contains_key(tab));
+    assert_eq!(
+        consumer.state().tab_metadata[tab].first_human_use_at_ms,
+        Some(150)
+    );
+    let duplicate = observe(&mut consumer, 170);
+    assert_eq!(
+        duplicate["data"]["status"], "human_use_already_confirmed",
+        "{duplicate}"
+    );
+    assert_eq!(
+        consumer.state().tab_metadata[tab].first_human_use_at_ms,
+        Some(150)
+    );
+    assert!(
+        provider.borrow().view_requests.is_empty(),
+        "ordinary native use must issue no viewer grant"
+    );
+    assert_eq!(calls.get(), 1);
 }

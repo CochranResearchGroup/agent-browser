@@ -67,15 +67,15 @@ fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {
         .map_err(|_| "remote_view_presentation_path_invalid".into())
 }
 
-/// Translate authenticated presentation navigation into an owner acknowledgement.
-/// Browser metadata is request context, not a substitute for authentication.
-pub(super) fn human_use_acknowledgement(
+/// Prepare a correlation for authenticated navigation. Navigation cannot
+/// acknowledge use; the private provider read supplies successful-use facts.
+pub(super) fn human_use_registration(
     id: &str,
     operator: Option<&str>,
     headers: &[(String, String)],
     ready: &serde_json::Value,
 ) -> Option<serde_json::Value> {
-    let operator = operator.filter(|name| !name.trim().is_empty())?;
+    operator.filter(|name| !name.trim().is_empty())?;
     let has = |name: &str, value: &str| {
         headers
             .iter()
@@ -103,10 +103,8 @@ pub(super) fn human_use_acknowledgement(
         .filter(|value| !value.is_empty())?;
     Some(
         serde_json::json!({"action":"service_remote_view_handoff_resolve", "handoffId":id,
-        "handoffOperation":"confirm_human_use", "humanUseEvidence":{
-            "source":"authenticated_presentation_navigation", "operator":operator,
-            "tabId":tab_id, "targetId":target_id,
-        }}),
+        "handoffOperation":"prepare_native_use",
+        "expectedTabId":tab_id, "expectedTargetId":target_id}),
     )
 }
 
@@ -169,24 +167,84 @@ pub(super) async fn resolve_location(
     let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&retained_id))
         .await
         .map_err(|_| "remote_view_presentation_join_failed")??;
-    let location = presentation_url(&origin, &route)?;
-    if let Some(acknowledgement) = human_use_acknowledgement(id, operator, headers, &response) {
-        let used = tokio::time::timeout(
+    let mut location = presentation_url(&origin, &route)?;
+    if let Some(registration) = human_use_registration(id, operator, headers, &response) {
+        let prepared = tokio::time::timeout(
             std::time::Duration::from_secs(90),
-            super::http::relay_command_to_daemon(&session, &acknowledgement.to_string()),
+            super::http::relay_command_to_daemon(&session, &registration.to_string()),
         )
         .await
-        .map_err(|_| "remote_view_human_use_timeout")??;
-        let used: serde_json::Value =
-            serde_json::from_str(&used).map_err(|_| "remote_view_human_use_response_invalid")?;
-        if used["success"] != true {
-            return Err(used["error"]
+        .map_err(|_| "remote_view_native_registration_timeout")??;
+        let prepared: serde_json::Value = serde_json::from_str(&prepared)
+            .map_err(|_| "remote_view_native_registration_response_invalid")?;
+        if prepared["success"] != true {
+            return Err(prepared["error"]
                 .as_str()
-                .unwrap_or("remote_view_human_use_failed")
+                .unwrap_or("remote_view_native_registration_failed")
                 .to_string());
         }
+        let correlation = prepared["data"]["correlationId"]
+            .as_str()
+            .filter(|value| value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit()))
+            .ok_or("remote_view_native_registration_response_invalid")?;
+        if prepared["data"]["tabId"] != response["data"]["tabId"]
+            || prepared["data"]["targetId"] != response["data"]["targetId"]
+        {
+            return Err("remote_view_human_use_target_changed".into());
+        }
+        let mut url =
+            url::Url::parse(&location).map_err(|_| "remote_view_presentation_path_invalid")?;
+        url.query_pairs_mut()
+            .append_pair("handoff-observation", correlation);
+        location = url.to_string();
+        poll_native_handoff_use(session, id.to_string(), correlation.to_string());
     }
     Ok(location)
+}
+
+/// Foreground continuation reads the private owner until use or expiry, with one
+/// task per exact correlation. Restart recovery also reads durable observations
+/// from the existing session reaper; no browser-supplied success is accepted.
+fn poll_native_handoff_use(session: String, id: String, correlation: String) {
+    static ACTIVE: std::sync::LazyLock<std::sync::Mutex<std::collections::HashSet<String>>> =
+        std::sync::LazyLock::new(|| std::sync::Mutex::new(std::collections::HashSet::new()));
+    let Ok(mut active) = ACTIVE.lock() else {
+        return;
+    };
+    if !active.insert(correlation.clone()) {
+        return;
+    }
+    drop(active);
+    tokio::spawn(async move {
+        struct PollGuard(String);
+        impl Drop for PollGuard {
+            fn drop(&mut self) {
+                if let Ok(mut active) = ACTIVE.lock() {
+                    active.remove(&self.0);
+                }
+            }
+        }
+        let _guard = PollGuard(correlation);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(300);
+        let command = serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use"}).to_string();
+        while tokio::time::Instant::now() < deadline {
+            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+            let Ok(Ok(reply)) = tokio::time::timeout(
+                std::time::Duration::from_secs(20),
+                super::http::relay_command_to_daemon(&session, &command),
+            )
+            .await
+            else {
+                break;
+            };
+            let Ok(reply) = serde_json::from_str::<serde_json::Value>(&reply) else {
+                break;
+            };
+            if reply["success"] != true || reply["data"]["status"] != "native_use_pending" {
+                break;
+            }
+        }
+    });
 }
 
 #[cfg(test)]
@@ -194,7 +252,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn authenticated_user_navigation_produces_exact_target_use_acknowledgement() {
+    fn authenticated_user_navigation_registers_exact_target_without_acknowledging_use() {
         let headers = vec![
             ("Sec-Fetch-User".into(), "?1".into()),
             ("Sec-Fetch-Mode".into(), "navigate".into()),
@@ -203,29 +261,25 @@ mod tests {
         let ready = serde_json::json!({"success":true,"data":{"handoffId":"handoff-a",
             "tabId":"tab-a","targetId":"target-a","operatorVisible":{"state":"ready"}}});
         let acknowledgement =
-            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &headers, &ready)
-                .expect("authenticated user navigation after readiness must acknowledge use");
-        assert_eq!(acknowledgement["handoffOperation"], "confirm_human_use");
+            human_use_registration("handoff-a", Some("synthetic-operator"), &headers, &ready)
+                .expect("authenticated user navigation after readiness must register correlation");
+        assert_eq!(acknowledgement["handoffOperation"], "prepare_native_use");
         assert_eq!(acknowledgement["handoffId"], "handoff-a");
-        assert_eq!(acknowledgement["humanUseEvidence"]["tabId"], "tab-a");
-        assert_eq!(acknowledgement["humanUseEvidence"]["targetId"], "target-a");
-        assert!(human_use_acknowledgement("handoff-a", None, &headers, &ready).is_none());
+        assert_eq!(acknowledgement["expectedTabId"], "tab-a");
+        assert_eq!(acknowledgement["expectedTargetId"], "target-a");
+        assert!(human_use_registration("handoff-a", None, &headers, &ready).is_none());
         assert!(
-            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &[], &ready)
-                .is_none()
+            human_use_registration("handoff-a", Some("synthetic-operator"), &[], &ready).is_none()
         );
         let mut prefetch = headers.clone();
         prefetch.push(("Sec-Purpose".into(), "prefetch".into()));
-        assert!(human_use_acknowledgement(
-            "handoff-a",
-            Some("synthetic-operator"),
-            &prefetch,
-            &ready
-        )
-        .is_none());
+        assert!(
+            human_use_registration("handoff-a", Some("synthetic-operator"), &prefetch, &ready)
+                .is_none()
+        );
         let mut pending = ready.clone();
         pending["data"]["operatorVisible"]["state"] = "pending".into();
-        assert!(human_use_acknowledgement(
+        assert!(human_use_registration(
             "handoff-a",
             Some("synthetic-operator"),
             &headers,
@@ -245,11 +299,14 @@ mod tests {
             "handoffId":"handoff-a","tabId":"tab-a","targetId":"target-a",
             "operatorVisible":{"state":"ready"}
         }});
-        assert!(
-            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &headers, &ready)
-                .is_none(),
+        let registration =
+            human_use_registration("handoff-a", Some("synthetic-operator"), &headers, &ready)
+                .unwrap();
+        assert_ne!(
+            registration["handoffOperation"], "confirm_human_use",
             "authenticated navigation and target readiness alone acknowledged native viewer use"
         );
+        assert!(registration.get("humanUseEvidence").is_none());
     }
 
     #[test]

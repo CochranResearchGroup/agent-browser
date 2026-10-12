@@ -59,6 +59,38 @@ pub struct RemoteViewTabHandoff {
     /// Automatic retirement permits recreation; explicit close remains distinct.
     #[serde(default)]
     pub target_expired: bool,
+    /// Private provider correlation, separate from link validity and access.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_observation: Option<RemoteViewTabNativeObservation>,
+}
+
+/// Intent precedes provider registration so an uncertain reply uses the same
+/// key after restart. The digest pins physical browser and exact tab identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabNativeObservation {
+    pub target_digest: String,
+    pub provider_target: crate::RemoteViewApplicationTarget,
+    pub idempotency_key: String,
+    pub observation: Option<crate::RemoteViewNativeHandoffObservation>,
+}
+
+/// Mutable activity timestamps and session bookkeeping do not change physical
+/// identity. Recreated tabs, browser processes or desktop generations do.
+pub fn remote_view_native_target_digest(
+    handoff_id: &str,
+    target: &RemoteViewTabHandoffTarget,
+) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let identity = serde_json::json!({
+        "handoffId":handoff_id,"sessionId":target.session.id,"tabId":target.tab.id,
+        "targetId":target.tab.target_id,"browserId":target.browser.id,
+        "profileId":target.browser.profile_id,"pid":target.browser.pid,
+        "cdpEndpoint":target.browser.cdp_endpoint,
+        "desktop":target.browser.desktop.as_ref().map(|desktop| (&desktop.desktop_id, desktop.generation)),
+    });
+    let bytes = serde_json::to_vec(&identity).map_err(|_| "remote_view_native_target_invalid")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -136,6 +168,7 @@ pub fn retain_remote_view_tab_handoff_at(
         resume: None,
         recreation: None,
         target_expired: false,
+        native_observation: None,
     };
     join(state, &proposed)?;
     if let Some(existing) = state.remote_view_tab_handoffs.get(handoff_id) {

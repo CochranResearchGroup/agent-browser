@@ -114,6 +114,20 @@ struct UseResponse {
     observation: RemoteViewNativeHandoffObservation,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RemoteViewNativeHandoffUseState {
+    Pending,
+    Expired,
+    Used,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RemoteViewNativeHandoffUseRead {
+    pub state: RemoteViewNativeHandoffUseState,
+    pub observation: RemoteViewNativeHandoffObservation,
+}
+
 impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
     /// Register exact continuation context against a currently live assignment.
     /// Lost replies are returned without automatic POST retry. Replaying the
@@ -173,6 +187,17 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         assignment: &RemoteViewAssignmentRecord,
         registered: &RemoteViewNativeHandoffObservation,
     ) -> Result<RemoteViewNativeHandoffObservation, RemoteViewApplicationAdapterError> {
+        self.observe_native_handoff_use_state(assignment, registered)
+            .map(|read| read.observation)
+    }
+
+    /// Keep the provider's boot-qualified pending/expired distinction. Local
+    /// wall time cannot renew or decide a remote observation's deadline.
+    pub fn observe_native_handoff_use_state(
+        &mut self,
+        assignment: &RemoteViewAssignmentRecord,
+        registered: &RemoteViewNativeHandoffObservation,
+    ) -> Result<RemoteViewNativeHandoffUseRead, RemoteViewApplicationAdapterError> {
         registered.validate()?;
         if registered.application != self.application {
             return Err(RemoteViewApplicationResponseError::InvalidTarget.into());
@@ -206,6 +231,11 @@ impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
         if self.observe_assignment(assignment)?.target != before.target {
             return Err(RemoteViewApplicationResponseError::StaleTarget.into());
         }
-        Ok(observation)
+        let state = match response.state.as_str() {
+            "used" => RemoteViewNativeHandoffUseState::Used,
+            "expired" => RemoteViewNativeHandoffUseState::Expired,
+            _ => RemoteViewNativeHandoffUseState::Pending,
+        };
+        Ok(RemoteViewNativeHandoffUseRead { state, observation })
     }
 }

@@ -51,6 +51,35 @@ pub trait BrowserIdleRetirementGuard {}
 impl BrowserIdleRetirementGuard for () {}
 
 pub trait BrowserSessionEffects {
+    /// Read the current exact provider epoch before retaining a registration
+    /// intent. This read confers no access and produces no use evidence.
+    fn native_handoff_assignment_target(
+        &mut self,
+        _target: &crate::RemoteViewTabHandoffTarget,
+    ) -> Result<crate::RemoteViewApplicationTarget, String> {
+        Err("remote_view_native_observation_unsupported".into())
+    }
+    /// Register continuity with the native provider owner without a viewer
+    /// grant or use assertion, after publication of the registration intent.
+    fn register_native_handoff_observation(
+        &mut self,
+        _target: &crate::RemoteViewTabHandoffTarget,
+        _provider_target: &crate::RemoteViewApplicationTarget,
+        _target_digest: &str,
+        _idempotency_key: &str,
+    ) -> Result<crate::RemoteViewNativeHandoffObservation, String> {
+        Err("remote_view_native_observation_unsupported".into())
+    }
+
+    /// Read private provider evidence joined to published launch custody.
+    /// Public command evidence must never substitute this owner read.
+    fn observe_native_handoff_use(
+        &mut self,
+        _target: &crate::RemoteViewTabHandoffTarget,
+        _registered: &crate::RemoteViewNativeHandoffObservation,
+    ) -> Result<crate::RemoteViewNativeHandoffUseRead, String> {
+        Err("remote_view_native_observation_unsupported".into())
+    }
     /// Reconcile a currently live exact-profile browser before placement or replacement.
     /// Return only verified attachment and task-target identities; do not launch or close peers.
     fn reconcile_profile_browser(

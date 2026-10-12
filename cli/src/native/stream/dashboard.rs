@@ -3962,7 +3962,13 @@ mod tests {
                     command["_agentBrowserAuthToken"].as_str() == Some(token.as_str()),
                     "daemon relay did not authenticate its owned connection"
                 );
-                let reply = if command["handoffOperation"] == "confirm_human_use" {
+                let reply = if command["handoffOperation"] == "prepare_native_use" {
+                    serde_json::json!({"success":true,"data":{"handoffId":command["handoffId"],
+                        "tabId":command["expectedTabId"],"targetId":command["expectedTargetId"],
+                        "correlationId":"a".repeat(64),"status":"native_use_pending"}})
+                } else if command["handoffOperation"] == "observe_native_use" {
+                    serde_json::json!({"success":true,"data":{"status":"native_use_pending"}})
+                } else if command["handoffOperation"] == "confirm_human_use" {
                     use_response.lock().unwrap().clone()
                 } else {
                     recovery_response.lock().unwrap().clone()
@@ -4104,6 +4110,8 @@ mod tests {
         assert!(
             String::from_utf8_lossy(&used).contains("Location: https://synthetic-view.example/1")
         );
+        assert!(String::from_utf8_lossy(&used)
+            .contains(&format!("handoff-observation={}", "a".repeat(64))));
         provider_thread.join().unwrap();
         let records = commands.lock().unwrap();
         let acknowledgements = records

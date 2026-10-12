@@ -184,6 +184,47 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn native_handoff_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        match self {
+            Self::Local(e) => e.native_handoff_assignment_target(target),
+            Self::Remote(e) => e.native_handoff_assignment_target(target),
+        }
+    }
+    fn register_native_handoff_observation(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        provider_target: &RemoteViewApplicationTarget,
+        target_digest: &str,
+        idempotency_key: &str,
+    ) -> Result<RemoteViewNativeHandoffObservation, String> {
+        match self {
+            Self::Local(e) => e.register_native_handoff_observation(
+                target,
+                provider_target,
+                target_digest,
+                idempotency_key,
+            ),
+            Self::Remote(e) => e.register_native_handoff_observation(
+                target,
+                provider_target,
+                target_digest,
+                idempotency_key,
+            ),
+        }
+    }
+    fn observe_native_handoff_use(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        registered: &RemoteViewNativeHandoffObservation,
+    ) -> Result<RemoteViewNativeHandoffUseRead, String> {
+        match self {
+            Self::Local(e) => e.observe_native_handoff_use(target, registered),
+            Self::Remote(e) => e.observe_native_handoff_use(target, registered),
+        }
+    }
     fn reconcile_profile_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,

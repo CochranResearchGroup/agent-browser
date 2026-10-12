@@ -749,14 +749,16 @@ pub(crate) fn normalize_service_request(
                 "params must be a JSON object",
             )
         })?;
-        // First human use is acknowledged only by authenticated presentation
-        // navigation. Public service callers cannot supply that internal proof.
-        if params.get("handoffOperation").and_then(Value::as_str) == Some("confirm_human_use")
-            || params.contains_key("humanUseEvidence")
+        // Native correlation and qualified-use reads belong to the private
+        // presentation/owner path. Public callers cannot assert or relay use.
+        if matches!(
+            params.get("handoffOperation").and_then(Value::as_str),
+            Some("confirm_human_use" | "prepare_native_use" | "observe_native_use")
+        ) || params.contains_key("humanUseEvidence")
         {
             return Err(ServiceRequestIssue::new(
                 ServiceRequestIssueKind::InvalidRequest,
-                "human-use acknowledgement requires authenticated presentation navigation",
+                "human-use acknowledgement requires qualified native provider evidence",
             ));
         }
         for (key, value) in params {
@@ -2605,6 +2607,19 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
+    }
+
+    #[test]
+    fn public_service_request_cannot_drive_private_native_use_operations() {
+        for operation in ["prepare_native_use", "observe_native_use"] {
+            let request = json!({"action":"service_remote_view_handoff_resolve","params":{
+                "handoffId":"synthetic-handoff","handoffOperation":operation
+            }});
+            let body = request.to_string();
+            assert!(normalize(request.clone()).is_err());
+            assert!(crate::native::stream::service_request_adapter_fixture(&body).is_err());
+            assert!(crate::mcp::service_request_adapter_fixture(&request).is_err());
+        }
     }
 
     #[test]

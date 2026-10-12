@@ -51,10 +51,11 @@ mod remote_view_native_handoff;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
-    remote_view_handoff_resume_intent, resolve_remote_view_tab_handoff,
-    retain_remote_view_tab_handoff, retain_remote_view_tab_handoff_at, BrowserRetentionPolicy,
-    RemoteViewTabHandoff, RemoteViewTabHandoffRecreation, RemoteViewTabHandoffResumeIntent,
-    RemoteViewTabHandoffTarget, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+    remote_view_handoff_resume_intent, remote_view_native_target_digest,
+    resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
+    retain_remote_view_tab_handoff_at, BrowserRetentionPolicy, RemoteViewTabHandoff,
+    RemoteViewTabHandoffRecreation, RemoteViewTabHandoffResumeIntent, RemoteViewTabHandoffTarget,
+    RemoteViewTabNativeObservation, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
 };
 mod request_provenance;
 mod runtime_owner_projection;
@@ -263,9 +264,9 @@ pub use remote_view_consumer::{
     REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
 };
 pub use remote_view_native_handoff::{
-    RemoteViewNativeHandoffObservation, RemoteViewNativeHandoffUse,
-    RemoteViewNativeObservationClock, RemoteViewNativeUseContext, RemoteViewNativeUseEvidence,
-    REMOTE_VIEW_NATIVE_HANDOFF_SOURCE_CHECKPOINT,
+    RemoteViewNativeHandoffObservation, RemoteViewNativeHandoffUse, RemoteViewNativeHandoffUseRead,
+    RemoteViewNativeHandoffUseState, RemoteViewNativeObservationClock, RemoteViewNativeUseContext,
+    RemoteViewNativeUseEvidence, REMOTE_VIEW_NATIVE_HANDOFF_SOURCE_CHECKPOINT,
 };
 pub use remote_view_retention::{
     detach_remote_view_presentation, project_remote_view_operator_handoff,
