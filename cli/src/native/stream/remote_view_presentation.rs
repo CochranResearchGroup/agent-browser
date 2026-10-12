@@ -67,8 +67,11 @@ fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {
         .map_err(|_| "remote_view_presentation_path_invalid".into())
 }
 
-/// Prepare a correlation for authenticated navigation. Navigation cannot
-/// acknowledge use; the private provider read supplies successful-use facts.
+/// Prepare a correlation for authenticated document navigation. A dashboard
+/// redirect loses transient Fetch-User activation; the native viewer's private
+/// connection and frame evidence remains the authority for successful use.
+/// Navigation cannot acknowledge use; the private provider read supplies
+/// successful-use facts.
 pub(super) fn human_use_registration(
     id: &str,
     operator: Option<&str>,
@@ -86,7 +89,6 @@ pub(super) fn human_use_registration(
             && value.to_ascii_lowercase().contains("prefetch")
     });
     if prefetch
-        || !has("sec-fetch-user", "?1")
         || !has("sec-fetch-mode", "navigate")
         || !has("sec-fetch-dest", "document")
         || ready["success"] != true
@@ -286,6 +288,33 @@ mod tests {
             &pending
         )
         .is_none());
+    }
+
+    #[test]
+    fn authenticated_dashboard_redirect_registers_without_transient_user_activation() {
+        // Captured from the real dashboard after a trusted opaque-link click:
+        // its React redirect remains a document navigation but loses Fetch-User.
+        let headers = vec![
+            ("Sec-Fetch-Site".into(), "same-origin".into()),
+            ("Sec-Fetch-Mode".into(), "navigate".into()),
+            ("Sec-Fetch-Dest".into(), "document".into()),
+        ];
+        let ready = serde_json::json!({"success":true,"data":{
+            "handoffId":"handoff-a","tabId":"tab-a","targetId":"target-a",
+            "operatorVisible":{"state":"ready"}
+        }});
+        let registration =
+            human_use_registration("handoff-a", Some("synthetic-operator"), &headers, &ready)
+                .expect("actual opaque-link navigation must register native viewer observation");
+        assert_eq!(registration["handoffOperation"], "prepare_native_use");
+        assert!(registration.get("humanUseEvidence").is_none());
+        assert!(human_use_registration("handoff-a", None, &headers, &ready).is_none());
+        let mut prefetch = headers;
+        prefetch.push(("Sec-Purpose".into(), "prefetch".into()));
+        assert!(
+            human_use_registration("handoff-a", Some("synthetic-operator"), &prefetch, &ready)
+                .is_none()
+        );
     }
 
     #[test]

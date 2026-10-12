@@ -23,8 +23,11 @@ impl Fixture {
         let root =
             std::env::temp_dir().join(format!("p220-session-consumer-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
+        Self::with_root(root, true)
+    }
+    fn with_root(root: PathBuf, initialize: bool) -> Self {
         let fixture = Self { root };
-        let store = fixture.store(true);
+        let store = fixture.store(initialize);
         let mut catalog = BrowserProfileCatalog::default();
         for id in ["profile-a", "profile-b"] {
             catalog.profiles.insert(
@@ -97,6 +100,24 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        // Production initialization seals its migration archive. This fixture
+        // owns the disposable directory and makes only its archive removable.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for entry in std::fs::read_dir(&self.root).unwrap() {
+                let entry = entry.unwrap();
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("migration-archive-")
+                    && entry.file_type().unwrap().is_dir()
+                {
+                    std::fs::set_permissions(entry.path(), std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
+            }
+        }
         std::fs::remove_dir_all(&self.root).unwrap();
     }
 }

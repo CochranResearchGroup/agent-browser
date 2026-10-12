@@ -4567,7 +4567,26 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
             .unwrap()
             .as_millis() as u64
     };
-    let fixture = Fixture::new();
+    // The public presentation handler opens the default SQLite database. Join
+    // that exact database here rather than copying the owner's state into a
+    // second store. This ignored fixture runs in its own synthetic child.
+    assert_ne!(
+        std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+            .ok()
+            .as_deref(),
+        Some("1")
+    );
+    let database_path = BrowserSessionSqliteStore::default_sqlite_path().unwrap();
+    assert!(
+        !database_path.exists(),
+        "composed child database already exists"
+    );
+    let root = database_path.parent().unwrap().to_path_buf();
+    std::fs::create_dir_all(&root).unwrap();
+    // Use the production initialization boundary, including its migration
+    // receipt, before adding the fixture's synthetic profiles and owner state.
+    drop(BrowserSessionSqliteStore::default_sqlite().unwrap());
+    let fixture = Fixture::with_root(root, false);
     let mut expected_environment = wire()["launchEnvironment"]["environment"].clone();
     expected_environment["REMOTE_VIEW_SLOT_GENERATION"] = descriptor["assignmentObservation"]
         ["target"]["viewingGeneration"]
@@ -4598,6 +4617,14 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
     })).unwrap().unwrap();
     let id = opened["browserSession"]["handoffId"].as_str().unwrap();
     let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+    assert_eq!(
+        BrowserSessionSqliteStore::default_sqlite()
+            .unwrap()
+            .load_session_state()
+            .unwrap(),
+        fixture.store(false).load_session_state().unwrap(),
+        "public presentation reader must observe the actual owner database"
+    );
     let registered = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
         "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":now()

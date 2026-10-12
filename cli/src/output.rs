@@ -6364,6 +6364,8 @@ Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Software inspect exposes original taskMetadata with supplied or unknown attribution.
 firstHumanUseAtMs records qualified first use separately from creation attribution.
+Authenticated document navigation registers native observation across dashboard
+redirects; navigation alone never acknowledges successful viewer use.
 Public service requests reject human-use evidence and the internal acknowledgement
 operation. Native provider evidence and the exact browser owner establish actual use.
 Managed commands accept serviceName, agentName, humanName, originKind, taskName,

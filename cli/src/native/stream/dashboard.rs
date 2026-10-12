@@ -4064,7 +4064,7 @@ mod tests {
         env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
         let provider_thread = std::thread::spawn(move || {
             use std::io::{Read, Write};
-            for _ in 0..3 {
+            for _ in 0..4 {
                 let (mut stream, _) = provider.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
@@ -4111,6 +4111,14 @@ mod tests {
             String::from_utf8_lossy(&used).contains("Location: https://synthetic-view.example/1")
         );
         assert!(String::from_utf8_lossy(&used)
+            .contains(&format!("handoff-observation={}", "a".repeat(64))));
+        // The actual dashboard's React redirect preserves document navigation
+        // but not the original click's transient Sec-Fetch-User header.
+        let redirected = exchange(navigation(
+            "Sec-Fetch-Site: same-origin\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n",
+        )).await;
+        assert_eq!(http_response_status(&redirected), Some(303));
+        assert!(String::from_utf8_lossy(&redirected)
             .contains(&format!("handoff-observation={}", "a".repeat(64))));
         provider_thread.join().unwrap();
         let records = commands.lock().unwrap();
