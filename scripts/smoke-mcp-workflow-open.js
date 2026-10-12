@@ -116,6 +116,33 @@ try {
     JSON.stringify(continuedPage).includes('Alice draft'),
     'continuation preserves page edits'
   );
+  await call('browser_command', {
+    taskId: task.taskId,
+    action: 'wait',
+    params: {
+      function: "document.querySelector('#draft').value === 'Alice draft'",
+      timeoutMs: 1000,
+    },
+  });
+  await assert.rejects(
+    call('browser_command', {
+      taskId: task.taskId,
+      action: 'wait',
+      params: {
+        selector: '#draft',
+        function: 'false',
+        timeoutMs: 100,
+      },
+    }),
+    /only one/,
+    'advanced invocation preserves typed operation validation'
+  );
+  const pause = await call('browser_command', {
+    taskId: task.taskId,
+    action: 'wait',
+    params: { timeoutMs: 2 },
+  });
+  assert.equal(pause.ms, 2, 'discovered timeoutMs is translated to the native timeout');
   const initialTabs = await call('browser_tab', { taskId: task.taskId, operation: 'list' });
   assert.equal(initialTabs.tabs.length, 1);
   assert.equal(initialTabs.tabs[0].tabId, task.tabId, 'task list excludes Bob');

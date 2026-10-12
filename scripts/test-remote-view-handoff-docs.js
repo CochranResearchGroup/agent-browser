@@ -21,7 +21,7 @@ for (const [name, contents] of Object.entries({
   assert.match(
     contents,
     /\/remote-view\/<handoff-id>/,
-    `${name} must name the durable opaque remote-view handoff path`,
+    `${name} must name the durable opaque remote-view handoff path`
   );
 }
 
@@ -34,24 +34,24 @@ for (const [name, contents] of Object.entries({
   assert.match(
     contents,
     /(?:Never|Do not|must not)[^\n]*(?:providerExternalUrl|raw Guacamole)/i,
-    `${name} must forbid ordinary operator handoff through a raw provider URL`,
+    `${name} must forbid ordinary operator handoff through a raw provider URL`
   );
 }
 
 assert.match(
   files.skill,
   /Require `operatorVisible\.state=ready`[\s\S]*Return, store, and reopen only `handoffUrl`/,
-  'the agent skill must put readiness before durable-link handoff',
+  'the agent skill must put readiness before durable-link handoff'
 );
 assert.match(
   files.guide,
   /requestServiceRemoteViewHandoff\([\s\S]*console\.log\(handoff\.handoffUrl\)/,
-  'the guide must include a software-client example that returns only the handoff link',
+  'the guide must include a software-client example that returns only the handoff link'
 );
 assert.match(
   files.guide,
   /Reconnect without opening another browser[\s\S]*Open the same `handoffUrl` again/,
-  'the guide must tell agents to reuse the durable handoff during provider churn',
+  'the guide must tell agents to reuse the durable handoff during provider churn'
 );
 for (const [name, contents] of Object.entries({
   readme: files.readme,
@@ -61,18 +61,18 @@ for (const [name, contents] of Object.entries({
   assert.match(
     contents,
     /presentation(?:Generation|Receipt| (?:generation|receipt))[\s\S]*(?:converging|retry)/i,
-    `${name} must document the authenticated presentation gate and retryable convergence`,
+    `${name} must document the authenticated presentation gate and retryable convergence`
   );
   assert.match(
     contents,
     /(?:does not|without)[^\n]*(?:navigate|navigation)[\s\S]*(?:replacement target|relaunch)/i,
-    `${name} must forbid navigation replay and replacement browser work during normal resolution`,
+    `${name} must forbid navigation replay and replacement browser work during normal resolution`
   );
 }
 assert.match(
   files.navigation,
   /RDP Remote View[\s\S]*href: "\/remote-view"/,
-  'the remote-view handoff guide must be reachable from docs navigation',
+  'the remote-view handoff guide must be reachable from docs navigation'
 );
 
 console.log('remote-view handoff documentation checks passed');

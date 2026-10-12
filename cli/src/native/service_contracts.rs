@@ -286,9 +286,18 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
 /// The public MCP workflow catalog. Legacy adapter names below retain CLI/API
 /// contract locators; their availability is explicit rather than inferred.
 pub const WORKFLOW_MCP_TOOL_NAMES: &[&str] = &[
-    "browser_open", "browser_navigate", "browser_snapshot", "browser_click",
-    "browser_fill", "browser_screenshot", "browser_tab", "browser_handoff",
-    "browser_continue", "browser_close", "browser_command", "browser_discover",
+    "browser_open",
+    "browser_navigate",
+    "browser_snapshot",
+    "browser_click",
+    "browser_fill",
+    "browser_screenshot",
+    "browser_tab",
+    "browser_handoff",
+    "browser_continue",
+    "browser_close",
+    "browser_command",
+    "browser_discover",
 ];
 
 pub fn service_contracts_metadata() -> Value {

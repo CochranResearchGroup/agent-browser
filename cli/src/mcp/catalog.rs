@@ -73,27 +73,9 @@ pub(super) fn tools() -> Vec<Value> {
 pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super::JsonRpcError> {
     let category = super::required_string_argument(arguments, "category")?;
     let operation = super::optional_string_argument(arguments, "operation")?;
-    let names: Vec<&str> = match category {
-        "browser" => super::BROWSER_COMMAND_ALLOWED_ACTIONS.to_vec(),
-        "diagnostics" => vec![
-            "service_status",
-            "service_resources",
-            "service_incidents",
-            "service_trace",
-        ],
-        "administration" => vec![
-            "service_job_cancel",
-            "service_browser_retry",
-            "service_remedies_apply",
-        ],
-        _ => {
-            return Err(super::JsonRpcError::invalid_params(
-                "Unknown discovery category",
-            ))
-        }
-    };
+    let names = operation_names(category)?;
     let payload = if let Some(operation) = operation {
-        if !names.contains(&operation) {
+        if !names.iter().any(|name| name == operation) {
             return Err(super::JsonRpcError::invalid_params(
                 "Operation is not available in this category",
             ));
@@ -115,12 +97,57 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
     ))
 }
 
+const DIAGNOSTIC_OPERATIONS: &[&str] = &[
+    "service_access_plan",
+    "service_status",
+    "service_resources",
+    "service_incidents",
+    "service_trace",
+    "service_browser_capability_preflight",
+    "service_remote_view_route_preflight",
+];
+
+fn operation_names(category: &str) -> Result<Vec<String>, super::JsonRpcError> {
+    let mut names: Vec<String> = match category {
+        "browser" => super::BROWSER_COMMAND_ALLOWED_ACTIONS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        "diagnostics" => DIAGNOSTIC_OPERATIONS
+            .iter()
+            .map(|name| (*name).to_string())
+            .collect(),
+        "administration" => super::service_mcp_tools()
+            .iter()
+            .filter_map(|tool| tool["name"].as_str())
+            .filter(|name| {
+                name.starts_with("service_")
+                    && *name != "service_request"
+                    && !DIAGNOSTIC_OPERATIONS.contains(name)
+            })
+            .map(str::to_string)
+            .collect(),
+        _ => {
+            return Err(super::JsonRpcError::invalid_params(
+                "Unknown discovery category",
+            ))
+        }
+    };
+    names.sort();
+    names.dedup();
+    Ok(names)
+}
+
 pub(super) fn browser_argument_schema(action: &str) -> Result<Value, super::JsonRpcError> {
     operation_schema("browser", action)
 }
 
-fn operation_schema(category: &str, operation: &str) -> Result<Value, super::JsonRpcError> {
-    let tool_name = match operation {
+pub(super) fn browser_adapter_name(action: &str) -> String {
+    operation_tool_name("browser", action)
+}
+
+fn operation_tool_name(category: &str, operation: &str) -> String {
+    match operation {
         "gettext" => "browser_get_text".to_string(),
         "inputvalue" => "browser_get_value".to_string(),
         "url" => "browser_get_url".to_string(),
@@ -140,7 +167,11 @@ fn operation_schema(category: &str, operation: &str) -> Result<Value, super::Jso
         "scrollintoview" => "browser_scroll_into_view".to_string(),
         name if category == "browser" => format!("browser_{name}"),
         name => name.to_string(),
-    };
+    }
+}
+
+fn operation_schema(category: &str, operation: &str) -> Result<Value, super::JsonRpcError> {
+    let tool_name = operation_tool_name(category, operation);
     let mut schema = super::service_mcp_tools()
         .into_iter()
         .find(|tool| tool["name"] == tool_name)
@@ -236,7 +267,28 @@ fn service_execution(operation: &str) -> Value {
             "POST",
             "/api/service/remedies/apply",
         ),
-        _ => unreachable!("discovery categories are closed"),
+        _ => {
+            let metadata = crate::native::service_contracts::service_contracts_metadata();
+            let contract = metadata["contracts"]
+                .as_object()
+                .unwrap()
+                .values()
+                .find(|contract| {
+                    contract["mcp"].as_object().is_some_and(|mcp| {
+                        mcp.values().any(|value| {
+                            value.as_str() == Some(operation)
+                                || value.as_array().is_some_and(|names| {
+                                    names.iter().any(|name| name.as_str() == Some(operation))
+                                })
+                        })
+                    })
+                });
+            return json!({"cli":"agent-browser service --help",
+                "api":contract.map(|contract| contract["http"].clone()),
+                "client":contract.map(|contract| contract["client"].clone()),
+                "contractsResource":"agent-browser://contracts", "metadataOnly":true,
+                "guidance":"Use the supported CLI/API for this operation. This metadata is not a callable MCP tool."});
+        }
     };
     json!({"cli":cli,"api":{"method":method,"route":route},
         "guidance":"Supply the selected arguments through the documented CLI/API. Discovery performs no effects."})

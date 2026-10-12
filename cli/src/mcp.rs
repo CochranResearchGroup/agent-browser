@@ -5414,6 +5414,17 @@ fn call_service_mcp_tool(
     };
     let session = task_session.as_deref().unwrap_or(session);
 
+    dispatch_mcp_adapter(name, arguments, session, configured_service_state)
+}
+
+/// Internal typed adapters preserve page argument translation. Only the public
+/// workflow dispatcher and its closed browser action mapping reach this seam.
+fn dispatch_mcp_adapter(
+    name: &str,
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
     match name {
         SERVICE_ACCESS_PLAN_MCP_TOOL_NAME => {
             call_service_access_plan(arguments, session, configured_service_state)
@@ -5476,7 +5487,7 @@ fn call_service_mcp_tool(
         DESKTOP_INTERACT_MCP_TOOL_NAME => {
             call_desktop_interact(arguments, session, configured_service_state)
         }
-        "browser_command" => call_browser_command(arguments, session),
+        "browser_command" => call_browser_command(arguments, session, configured_service_state),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
         "browser_request_detail" => call_browser_request_detail(arguments, session),
@@ -6193,9 +6204,43 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
     Ok(action)
 }
 
-fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+fn call_browser_command(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
     let action = validate_browser_command_action(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
+    if action != "evaluate" {
+        let page_arguments = Value::Object(params.cloned().unwrap_or_default());
+        let mut result = dispatch_mcp_adapter(
+            &catalog::browser_adapter_name(action),
+            &page_arguments,
+            session,
+            configured_service_state,
+        )
+        .map_err(|mut error| {
+            if let Some(data) = error.data.as_mut().and_then(Value::as_object_mut) {
+                data.insert("tool".into(), json!("browser_command"));
+                data.insert("operation".into(), json!(action));
+            }
+            error
+        })?;
+        let text = result["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Advanced page result is not JSON"))?;
+        let mut payload: Value = serde_json::from_str(text)
+            .map_err(|_| JsonRpcError::invalid_params("Advanced page result is not JSON"))?;
+        payload["tool"] = json!("browser_command");
+        payload["operation"] = json!(action);
+        result["content"][0]["text"] =
+            json!(
+                serde_json::to_string(&payload).map_err(|_| JsonRpcError::invalid_params(
+                    "Advanced page result serialization failed"
+                ))?
+            );
+        return Ok(result);
+    }
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
     let command = browser_command_command(BrowserCommandArgs {

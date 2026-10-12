@@ -93,31 +93,73 @@ try {
     /reserved/,
     'page params cannot retarget another task'
   );
-  assert(Buffer.byteLength(JSON.stringify(initialized)) <= 1500, 'initialize guidance stays bounded');
-  const guide = await client.send('resources/read', {uri: 'agent-browser://operating-guide'});
+  assert(
+    Buffer.byteLength(JSON.stringify(initialized)) <= 1500,
+    'initialize guidance stays bounded'
+  );
+  const guide = await client.send('resources/read', { uri: 'agent-browser://operating-guide' });
   assert(Buffer.byteLength(JSON.stringify(guide)) <= 4000, 'workflow guide stays bounded');
-  await assert.rejects(client.send('tools/call', {name: 'browser_command',
-    arguments: {taskId: 'absent-task', action: 'press', params: {key: 'Enter', executablePath: '/foreign'}}}),
-    /not a page argument/, 'advanced params cannot select a different browser executable');
-  for (const name of ['service_request', 'service_access_plan', 'service_status',
-    'service_profile_lease_rejoin', 'service_profile_lease_release', 'service_profile_lease_reconcile',
-    'service_profile_acquire', 'service_profile_recovery_plan', 'service_profile_recovery_apply',
-    'service_profile_repair_plan', 'service_profile_repair_apply', 'service_profile_reset_plan',
-    'service_profile_reset_apply', 'browser_tabs', 'browser_tab_new', 'browser_tab_switch', 'browser_tab_close']) {
-    await assert.rejects(client.send('tools/call', {name, arguments: {}}), /Unknown MCP tool/,
-      `${name} cannot bypass the workflow catalog`);
+  await assert.rejects(
+    client.send('tools/call', {
+      name: 'browser_command',
+      arguments: {
+        taskId: 'absent-task',
+        action: 'press',
+        params: { key: 'Enter', executablePath: '/foreign' },
+      },
+    }),
+    /not a page argument/,
+    'advanced params cannot select a different browser executable'
+  );
+  for (const name of [
+    'service_request',
+    'service_access_plan',
+    'service_status',
+    'service_profile_lease_rejoin',
+    'service_profile_lease_release',
+    'service_profile_lease_reconcile',
+    'service_profile_acquire',
+    'service_profile_recovery_plan',
+    'service_profile_recovery_apply',
+    'service_profile_repair_plan',
+    'service_profile_repair_apply',
+    'service_profile_reset_plan',
+    'service_profile_reset_apply',
+    'browser_tabs',
+    'browser_tab_new',
+    'browser_tab_switch',
+    'browser_tab_close',
+  ]) {
+    await assert.rejects(
+      client.send('tools/call', { name, arguments: {} }),
+      /Unknown MCP tool/,
+      `${name} cannot bypass the workflow catalog`
+    );
   }
-  const contracts = await client.send('resources/read', {uri: 'agent-browser://contracts'});
+  const contracts = await client.send('resources/read', { uri: 'agent-browser://contracts' });
   const metadata = JSON.parse(contracts.contents[0].text);
-  assert.equal(metadata.contracts.serviceRequest.mcp.available, false,
-    'contract metadata does not advertise an unavailable generic MCP request');
-  assert.deepEqual([...metadata.mcpCatalog.tools].sort(), tools.map(tool => tool.name).sort());
+  assert.equal(
+    metadata.contracts.serviceRequest.mcp.available,
+    false,
+    'contract metadata does not advertise an unavailable generic MCP request'
+  );
+  assert.deepEqual([...metadata.mcpCatalog.tools].sort(), tools.map((tool) => tool.name).sort());
   for (const category of ['browser', 'diagnostics', 'administration']) {
     const listed = await client.send('tools/call', {
       name: 'browser_discover',
       arguments: { category },
     });
     const metadata = JSON.parse(listed.content.find((block) => block.type === 'text').text).data;
+    if (category === 'administration')
+      assert(
+        metadata.operations.includes('service_monitor_upsert'),
+        'explicit discovery preserves supported administrative metadata'
+      );
+    if (category === 'diagnostics')
+      assert(
+        metadata.operations.includes('service_access_plan'),
+        'explicit discovery preserves supported diagnostic metadata'
+      );
     for (const operation of metadata.operations) {
       const selected = await client
         .send('tools/call', { name: 'browser_discover', arguments: { category, operation } })
@@ -134,9 +176,13 @@ try {
       );
     }
   }
-  console.log(JSON.stringify({helpBytes: Buffer.byteLength(help.stdout),
-    initializeBytes: Buffer.byteLength(JSON.stringify(initialized)),
-    guideBytes: Buffer.byteLength(JSON.stringify(guide))}));
+  console.log(
+    JSON.stringify({
+      helpBytes: Buffer.byteLength(help.stdout),
+      initializeBytes: Buffer.byteLength(JSON.stringify(initialized)),
+      guideBytes: Buffer.byteLength(JSON.stringify(guide)),
+    })
+  );
   console.log('Default workflow MCP catalog and retired dispatch passed');
 } finally {
   client.close();
