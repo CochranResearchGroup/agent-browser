@@ -6363,6 +6363,14 @@ The same URL and link expiry are preserved; unrelated current tabs are not subst
 Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
 Closing the last live tab closes its owned browser and retains handoff records.
+Software prepare_human with pendingHumanRetentionMs records a separate unused-tab hold.
+Positive values set its maximum duration; 0 sets no automatic deadline.
+Owner confirm_human_use requires an exact-target acknowledgement; agent readiness
+resolution preserves the pending hold. Authenticated user document navigation after
+readiness acknowledges use; prefetch/background requests retain the hold.
+Native remote_view_open prepares the human hold automatically. Configure its maximum
+with pendingHumanRetentionMs or AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS (default 0).
+Invalid or overflowing pending deadlines are rejected before browser effects.
 A positive value selects tab inactivity retention; 0 selects perpetual retention.
 inspect reports tabLifetime separately from link expiry. Configuration does not
 navigate or open a viewer; expiration preserves peer tabs and the handoff link.

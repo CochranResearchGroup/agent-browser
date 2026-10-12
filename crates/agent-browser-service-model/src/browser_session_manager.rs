@@ -495,6 +495,16 @@ pub struct ManagedBrowserTabRequest {
     pub response: Option<serde_json::Value>,
 }
 
+/// A human handoff protects its actual tab until use or its configured deadline.
+/// This hold is independent of the issuing link's lifetime and deletion.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PendingHumanTabRetention {
+    pub handoff_id: String,
+    pub requested_at_ms: u64,
+    pub expires_at_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct BrowserSessionState {
@@ -527,6 +537,8 @@ pub struct BrowserSessionState {
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     #[serde(default)]
     pub tab_lifetimes: BTreeMap<String, BrowserTabLifetime>,
+    #[serde(default)]
+    pub pending_human_tabs: BTreeMap<String, PendingHumanTabRetention>,
     pub tab_history: Vec<TerminalBrowserTab>,
     pub navigation_history: Vec<BrowserNavigationRecord>,
     pub navigation_daily_summaries: Vec<BrowserNavigationDailySummary>,
@@ -554,6 +566,7 @@ impl Default for BrowserSessionState {
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
             tab_lifetimes: BTreeMap::new(),
+            pending_human_tabs: BTreeMap::new(),
             tab_history: Vec::new(),
             navigation_history: Vec::new(),
             navigation_daily_summaries: Vec::new(),
@@ -1412,6 +1425,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.state.leave_open_session_ids.remove(session_id);
         for tab in tabs {
             self.state.tab_lifetimes.remove(&tab.id);
+            self.state.pending_human_tabs.remove(&tab.id);
             self.state.tabs.remove(&tab.id);
             self.state.tab_history.push(TerminalBrowserTab {
                 id: tab.id,
@@ -1695,6 +1709,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.effects.close_tab(&browser, &tab)?;
         self.state.tabs.remove(&tab.id);
         self.state.tab_lifetimes.remove(&tab.id);
+        self.state.pending_human_tabs.remove(&tab.id);
         for link in self
             .state
             .remote_view_tab_handoffs
@@ -1891,7 +1906,17 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.reap_with_protected_sessions(now_ms, &BTreeSet::new())
     }
 
+    fn tab_awaits_human_use(&self, tab_id: &str, now_ms: u64) -> bool {
+        self.state
+            .pending_human_tabs
+            .get(tab_id)
+            .is_some_and(|hold| hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline))
+    }
+
     fn tab_lifetime_expired(&self, tab: &ManagedBrowserTab, now_ms: u64) -> bool {
+        if self.tab_awaits_human_use(&tab.id, now_ms) {
+            return false;
+        }
         self.state
             .tab_lifetimes
             .get(&tab.id)
@@ -1902,8 +1927,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
     fn session_has_retained_tab_lifetime(&self, session_id: &str, now_ms: u64) -> bool {
         self.state.tabs.values().any(|tab| {
             tab.session_id == session_id
-                && self.state.tab_lifetimes.contains_key(&tab.id)
-                && !self.tab_lifetime_expired(tab, now_ms)
+                && (self.tab_awaits_human_use(&tab.id, now_ms)
+                    || (self.state.tab_lifetimes.contains_key(&tab.id)
+                        && !self.tab_lifetime_expired(tab, now_ms)))
         })
     }
 
@@ -2316,6 +2342,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .collect::<Vec<_>>();
                 for tab in tabs {
                     self.state.tab_lifetimes.remove(&tab.id);
+                    self.state.pending_human_tabs.remove(&tab.id);
                     self.state.tabs.remove(&tab.id);
                     self.state.tab_history.push(TerminalBrowserTab {
                         id: tab.id,

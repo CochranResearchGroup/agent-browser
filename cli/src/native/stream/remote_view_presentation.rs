@@ -67,9 +67,56 @@ fn presentation_url(origin: &url::Url, route: &str) -> Result<String, String> {
         .map_err(|_| "remote_view_presentation_path_invalid".into())
 }
 
+/// Translate authenticated presentation navigation into an owner acknowledgement.
+/// Browser metadata is request context, not a substitute for authentication.
+pub(super) fn human_use_acknowledgement(
+    id: &str,
+    operator: Option<&str>,
+    headers: &[(String, String)],
+    ready: &serde_json::Value,
+) -> Option<serde_json::Value> {
+    let operator = operator.filter(|name| !name.trim().is_empty())?;
+    let has = |name: &str, value: &str| {
+        headers
+            .iter()
+            .any(|(key, observed)| key.eq_ignore_ascii_case(name) && observed.trim() == value)
+    };
+    let prefetch = headers.iter().any(|(key, value)| {
+        (key.eq_ignore_ascii_case("purpose") || key.eq_ignore_ascii_case("sec-purpose"))
+            && value.to_ascii_lowercase().contains("prefetch")
+    });
+    if prefetch
+        || !has("sec-fetch-user", "?1")
+        || !has("sec-fetch-mode", "navigate")
+        || !has("sec-fetch-dest", "document")
+        || ready["success"] != true
+        || ready["data"]["operatorVisible"]["state"] != "ready"
+        || ready["data"]["handoffId"] != id
+    {
+        return None;
+    }
+    let tab_id = ready["data"]["tabId"]
+        .as_str()
+        .filter(|value| !value.is_empty())?;
+    let target_id = ready["data"]["targetId"]
+        .as_str()
+        .filter(|value| !value.is_empty())?;
+    Some(
+        serde_json::json!({"action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"confirm_human_use", "humanUseEvidence":{
+            "source":"authenticated_presentation_navigation", "operator":operator,
+            "tabId":tab_id, "targetId":target_id,
+        }}),
+    )
+}
+
 /// Restore the retained browser through its owner before redirecting to the native desktop.
 /// Existing dashboard authentication applies; no temporary viewer grant is issued.
-pub(super) async fn resolve_location(id: &str, _operator: &str) -> Result<String, String> {
+pub(super) async fn resolve_location(
+    id: &str,
+    operator: Option<&str>,
+    headers: &[(String, String)],
+) -> Result<String, String> {
     let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
@@ -118,16 +165,74 @@ pub(super) async fn resolve_location(id: &str, _operator: &str) -> Result<String
             .unwrap_or("remote_view_browser_recovery_pending")
             .to_string());
     }
-    let id = id.to_string();
-    let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&id))
+    let retained_id = id.to_string();
+    let route = tokio::task::spawn_blocking(move || resolve_handoff_desktop_route(&retained_id))
         .await
         .map_err(|_| "remote_view_presentation_join_failed")??;
-    presentation_url(&origin, &route)
+    let location = presentation_url(&origin, &route)?;
+    if let Some(acknowledgement) = human_use_acknowledgement(id, operator, headers, &response) {
+        let used = tokio::time::timeout(
+            std::time::Duration::from_secs(90),
+            super::http::relay_command_to_daemon(&session, &acknowledgement.to_string()),
+        )
+        .await
+        .map_err(|_| "remote_view_human_use_timeout")??;
+        let used: serde_json::Value =
+            serde_json::from_str(&used).map_err(|_| "remote_view_human_use_response_invalid")?;
+        if used["success"] != true {
+            return Err(used["error"]
+                .as_str()
+                .unwrap_or("remote_view_human_use_failed")
+                .to_string());
+        }
+    }
+    Ok(location)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn authenticated_user_navigation_produces_exact_target_use_acknowledgement() {
+        let headers = vec![
+            ("Sec-Fetch-User".into(), "?1".into()),
+            ("Sec-Fetch-Mode".into(), "navigate".into()),
+            ("Sec-Fetch-Dest".into(), "document".into()),
+        ];
+        let ready = serde_json::json!({"success":true,"data":{"handoffId":"handoff-a",
+            "tabId":"tab-a","targetId":"target-a","operatorVisible":{"state":"ready"}}});
+        let acknowledgement =
+            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &headers, &ready)
+                .expect("authenticated user navigation after readiness must acknowledge use");
+        assert_eq!(acknowledgement["handoffOperation"], "confirm_human_use");
+        assert_eq!(acknowledgement["handoffId"], "handoff-a");
+        assert_eq!(acknowledgement["humanUseEvidence"]["tabId"], "tab-a");
+        assert_eq!(acknowledgement["humanUseEvidence"]["targetId"], "target-a");
+        assert!(human_use_acknowledgement("handoff-a", None, &headers, &ready).is_none());
+        assert!(
+            human_use_acknowledgement("handoff-a", Some("synthetic-operator"), &[], &ready)
+                .is_none()
+        );
+        let mut prefetch = headers.clone();
+        prefetch.push(("Sec-Purpose".into(), "prefetch".into()));
+        assert!(human_use_acknowledgement(
+            "handoff-a",
+            Some("synthetic-operator"),
+            &prefetch,
+            &ready
+        )
+        .is_none());
+        let mut pending = ready.clone();
+        pending["data"]["operatorVisible"]["state"] = "pending".into();
+        assert!(human_use_acknowledgement(
+            "handoff-a",
+            Some("synthetic-operator"),
+            &headers,
+            &pending
+        )
+        .is_none());
+    }
 
     #[test]
     fn terminal_handoff_failures_are_actionable_and_never_echo_private_reasons() {

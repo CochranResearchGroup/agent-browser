@@ -31,6 +31,33 @@ pub(crate) type DefaultBrowserSessionHost = BrowserSessionHost<
 pub(crate) type SharedBrowserSessionHost =
     std::sync::Arc<std::sync::Mutex<Option<DefaultBrowserSessionHost>>>;
 
+/// Validate pending-human configuration before any owner or browser effect.
+/// Zero selects no automatic deadline; ordinary agent work has no human hold.
+fn pending_human_retention(command: &serde_json::Value) -> Result<Option<u64>, String> {
+    let human_handoff = match command.get("humanHandoff") {
+        None => false,
+        Some(value) => value.as_bool().ok_or("remote_view_human_handoff_invalid")?,
+    };
+    if !human_handoff {
+        return Ok(None);
+    }
+    let ttl = match command.get("pendingHumanRetentionMs") {
+        Some(value) => value
+            .as_u64()
+            .ok_or("remote_view_pending_human_retention_invalid")?,
+        None => configured_u64("AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS", 0)?,
+    };
+    if ttl != 0 {
+        command
+            .get("activityAtMs")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or_else(current_unix_ms)
+            .checked_add(ttl)
+            .ok_or("remote_view_pending_human_retention_invalid")?;
+    }
+    Ok(Some(ttl))
+}
+
 /// One route definition shared by sockets, scheduler admission and execution.
 pub(crate) fn ordinary_managed_action(action: &str) -> bool {
     !super::actions::action_skips_browser_launch(action)
@@ -120,8 +147,10 @@ fn shared_browser_executable(pid: u32) -> Result<Option<PathBuf>, String> {
 pub(crate) async fn execute_shared_remote_view_open(
     shared: SharedBrowserSessionHost,
     name: String,
-    command: serde_json::Value,
+    mut command: serde_json::Value,
 ) -> Result<Option<serde_json::Value>, String> {
+    command["humanHandoff"] = serde_json::json!(true);
+    pending_human_retention(&command)?;
     tokio::task::spawn_blocking(move || {
         require_managed_runtime_admission("launch", &command)?;
         let mut shared = shared
@@ -935,10 +964,79 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
                         "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
                         "tabId":link.tab_id,"tabLifetime":tab_lifetime,
+                        "pendingHuman":self.state.pending_human_tabs.get(&link.tab_id).map(|hold| serde_json::json!({
+                            "awaitingUse":true,"requestedAtMs":hold.requested_at_ms,"expiresAtMs":hold.expires_at_ms,
+                            "retained":hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline),
+                        })),
                         "expired":link.check_link_at(now_ms).is_err(),
                         "status":if link.check_link_at(now_ms).is_err() {"expired"} else {"active"}}));
                 }
                 link.check_link_at(now_ms)?;
+                if command["handoffOperation"] == "prepare_human" {
+                    let ttl = command["pendingHumanRetentionMs"]
+                        .as_u64()
+                        .ok_or("remote_view_pending_human_retention_invalid")?;
+                    let expires_at_ms = if ttl == 0 {
+                        None
+                    } else {
+                        Some(
+                            now_ms
+                                .checked_add(ttl)
+                                .ok_or("remote_view_pending_human_retention_invalid")?,
+                        )
+                    };
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        handoff_id,
+                    )?;
+                    let hold = agent_browser_service_model::PendingHumanTabRetention {
+                        handoff_id: handoff_id.to_string(),
+                        requested_at_ms: now_ms,
+                        expires_at_ms,
+                    };
+                    self.state
+                        .pending_human_tabs
+                        .insert(target.tab.id.clone(), hold.clone());
+                    self.commit_state()?;
+                    return Ok(
+                        serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
+                        "status":"pending_human","pendingHuman":hold}),
+                    );
+                }
+                if command["handoffOperation"] == "confirm_human_use" {
+                    // The authenticated presentation adapter supplies this
+                    // acknowledgement; ordinary agent readiness never does.
+                    let evidence = &command["humanUseEvidence"];
+                    if evidence["source"] != "authenticated_presentation_navigation"
+                        || evidence["operator"]
+                            .as_str()
+                            .is_none_or(|name| name.trim().is_empty())
+                    {
+                        return Err("remote_view_human_use_evidence_invalid".into());
+                    }
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        handoff_id,
+                    )?;
+                    if evidence["tabId"] != target.tab.id
+                        || evidence["targetId"] != target.tab.target_id
+                    {
+                        return Err("remote_view_human_use_target_changed".into());
+                    }
+                    if !self.state.pending_human_tabs.contains_key(&target.tab.id) {
+                        return Ok(
+                            serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
+                            "status":"human_use_already_confirmed"}),
+                        );
+                    }
+                    self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
+                    self.state.pending_human_tabs.remove(&target.tab.id);
+                    self.commit_state()?;
+                    return Ok(
+                        serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
+                        "status":"human_use_confirmed","usedAtMs":now_ms}),
+                    );
+                }
                 if command["handoffOperation"] == "set_tab_lifetime" {
                     let ttl = command["tabInactivityMs"]
                         .as_u64()
@@ -1018,7 +1116,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         "createdAtMs":self.state.remote_view_tab_handoffs[handoff_id].created_at_ms,
                         "expiresAtMs":self.state.remote_view_tab_handoffs[handoff_id].expires_at_ms,
                         "browserId":target.browser.id, "sessionName":target.session.name,
-                        "targetId":target.tab.target_id,
+                        "tabId":target.tab.id, "targetId":target.tab.target_id,
                         "operatorVisible":{"state":"ready","proofScope":"owned_browser_window"},
                     }));
                 }
@@ -1414,11 +1512,14 @@ where
     /// route to an existing managed session. Only unconfigured, unowned lanes
     /// return None for legacy routing. Retained idle browsers recover through
     /// the existing fenced owner before refreshing or executing a tab command.
+    /// Explicit humanHandoff commands prepare a configured pending tab hold;
+    /// AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS supplies the default maximum.
     pub(crate) fn execute_managed_command(
         &mut self,
         session_name: &str,
         command: &serde_json::Value,
     ) -> Result<Option<serde_json::Value>, String> {
+        let pending_human_ttl = pending_human_retention(command)?;
         if command
             .get("leaveOpen")
             .is_some_and(|value| !value.is_boolean())
@@ -1600,6 +1701,19 @@ where
         {
             if let Some(url) = optional_string(command, "url") {
                 self.record_navigation(&session.id, url, now_ms)?;
+            }
+        }
+        if response["success"] == true {
+            if let Some(ttl) = pending_human_ttl {
+                let id = &handoff
+                    .as_ref()
+                    .ok_or("remote_view_tab_handoff_missing")?
+                    .id;
+                self.handle_command_result(&serde_json::json!({
+                    "action":"service_remote_view_handoff_resolve", "handoffId":id,
+                    "handoffOperation":"prepare_human", "pendingHumanRetentionMs":ttl,
+                    "activityAtMs":now_ms,
+                }))?;
             }
         }
         if let Some(object) = response.as_object_mut() {

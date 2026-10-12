@@ -14,7 +14,7 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Handoff target recreation**: Opening a still-valid link recreates its expired target tab from retained target metadata in an eligible browser, or wakes a browser as needed. This restores target access rather than promising recovery of lost in-memory page state.
 
-**Pending-human retention**: Configured protection for a handed-off tab before confirmed human use. Its duration and pressure policy are independent of link validity; four hours is an example configuration value rather than a fixed timeout.
+**Pending-human retention**: Configured protection for a handed-off tab before confirmed human use. Its duration and pressure policy are independent of link validity; four hours is an example configuration value rather than a fixed timeout. Explicit human handoff production prepares this protection; ordinary agent work and readiness resolution do not consume it. Human-use acknowledgement addresses the exact tab after native readiness, and tab inactivity resumes from that use.
 
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 

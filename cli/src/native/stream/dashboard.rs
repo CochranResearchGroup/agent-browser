@@ -390,9 +390,8 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         };
         match super::remote_view_presentation::resolve_location(
             id,
-            authenticated_dashboard_user
-                .as_deref()
-                .unwrap_or("operator"),
+            authenticated_dashboard_user.as_deref(),
+            &headers,
         )
         .await
         {
