@@ -23,7 +23,7 @@ this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
-through advanced dispatch. There is no legacy catalog mode.
+through advanced dispatch. There is no legacy catalog mode. Contract metadata reports `mcpCatalog` and each named adapter's `mcp.available`; retained CLI/API contract names do not imply callable MCP tools.
 
 
 Service mode turns agent-browser from a single CLI session helper into a persistent browser control plane. It keeps service-owned state for profiles, sessions, browsers, tabs, jobs, incidents, events, site policies, providers, and challenges so multiple agents and software clients can share browser automation without racing each other.
@@ -1730,229 +1730,46 @@ Named browser-control routes accept the same action fields as the underlying com
 
 ## MCP shape
 
-`agent-browser mcp serve` exposes read-only service resources and service/browser tools over stdio. Important resources include:
+Run `agent-browser mcp serve` for the workflow catalog. `tools/list` advertises
+12 tools: open, five common page actions, task-scoped tabs, handoff, continuation,
+close, advanced browser commands and explicit discovery. All page actions use the
+`taskId` returned by `browser_open`; agents do not acquire leases or select routes.
 
-```text
-agent-browser://profiles
-agent-browser://contracts
-agent-browser://access-plan
-agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}
-agent-browser://profiles/{profile_id}/readiness
-agent-browser://profiles/{profile_id}/allocation
-agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}
-agent-browser://sessions
-agent-browser://browsers
-agent-browser://display-allocations
-agent-browser://remote-view-routes
-agent-browser://route-pool
-agent-browser://viewer-leases
-agent-browser://profile-leases
-agent-browser://tabs
-agent-browser://monitors
-agent-browser://site-policies
-agent-browser://providers
-agent-browser://challenges
-agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}
-agent-browser://jobs
-agent-browser://events
-agent-browser://incidents
-agent-browser://incidents/{incident_id}/activity
+```json
+{"name":"browser_open","arguments":{"profile":"editorial","profileMode":"persistent","taskKey":"edit","url":"https://example.com"}}
 ```
 
-The guarded service read surface has MCP resource parity, so agents can read
-the same durable state that software clients read over HTTP. Prefer the
-access-plan resource for agent-facing profile selection because it combines
-profile selection, readiness, site policy, providers, retained challenges,
-monitor findings, seeding handoff, and a copyable queued service request before
-the caller asks for browser control.
-Use <code>agent-browser service profiles lookup</code> or the narrow lookup
-route when the operator starts with a profile name, site, hostname, login,
-account, alias, auth state, freshness state, tag, or free-text description.
-Results are ranked with match evidence and a concrete launch, add-tab, view,
-seed, wait, or holder-inspection action. Identity searches do not fall back to
-an unrelated generic browser-build profile.
-Retained job records also expose requested remote-headed <code>displayIsolation</code>,
-so operators can inspect queued, running, and completed jobs without parsing raw
-request payloads to learn whether the work asked for a private virtual display,
-shared display, or ambient daemon display.
+Call `browser_snapshot` and common page actions with that task ID. For another
+page operation, request its schema first:
 
-<table>
-  <thead>
-    <tr>
-      <th>Need</th>
-      <th>HTTP route</th>
-      <th>MCP resource</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td>Preferred agent selector</td>
-      <td><code>GET /api/service/access-plan</code></td>
-      <td><code>agent-browser://access-plan&#123;?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation&#125;</code></td>
-    </tr>
-    <tr>
-      <td>Narrow profile lookup</td>
-      <td><code>GET /api/service/profiles/lookup</code></td>
-      <td><code>agent-browser://profiles/lookup&#123;?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild&#125;</code></td>
-    </tr>
-    <tr>
-      <td>One profile readiness or allocation</td>
-      <td><code>GET /api/service/profiles/&lt;id&gt;/readiness</code> or <code>GET /api/service/profiles/&lt;id&gt;/allocation</code></td>
-      <td><code>agent-browser://profiles/&#123;profile_id&#125;/readiness</code> or <code>agent-browser://profiles/&#123;profile_id&#125;/allocation</code></td>
-    </tr>
-    <tr>
-      <td>Manual seeding handoff</td>
-      <td><code>GET /api/service/profiles/&lt;id&gt;/seeding-handoff</code></td>
-      <td><code>agent-browser://profiles/&#123;profile_id&#125;/seeding-handoff&#123;?targetServiceId,siteId,loginId&#125;</code></td>
-    </tr>
-    <tr>
-      <td>Remote view allocations</td>
-      <td><code>GET /api/service/display-allocations</code>, <code>GET /api/service/remote-view-routes</code>, <code>GET /api/service/route-pool</code>, or <code>GET /api/service/viewer-leases</code></td>
-      <td><code>agent-browser://display-allocations</code>, <code>agent-browser://remote-view-routes</code>, <code>agent-browser://route-pool</code>, or <code>agent-browser://viewer-leases</code></td>
-    </tr>
-    <tr>
-      <td>Profile lease authority and recourse</td>
-      <td><code>GET /api/service/profile-leases</code></td>
-      <td><code>agent-browser://profile-leases</code></td>
-    </tr>
-    <tr>
-      <td>Service collections and activity</td>
-      <td><code>GET /api/service/profiles</code>, <code>jobs</code>, <code>events</code>, <code>incidents</code>, and related collection routes</td>
-      <td><code>agent-browser://profiles</code>, <code>jobs</code>, <code>events</code>, <code>incidents</code>, and related collection resources</td>
-    </tr>
-  </tbody>
-</table>
+```json
+{"name":"browser_discover","arguments":{"category":"browser","operation":"press"}}
+```
 
-Use <code>agent-browser service leases</code>, HTTP
-<code>GET /api/service/profile-leases</code>, MCP
-<code>agent-browser://profile-leases</code>, or
-<code>getServiceProfileLeases()</code> to inspect first-class profile lease
-authority without launching a browser. Records expose the authenticated
-principal, exact owner generation, subordinate session and tab work, blocking
-identity axes, authorized actions, typed continuity recourse, and doctor
-findings. A current canonical profile claim is the sole operational projection
-for that profile. It reports <code>state=active</code> with
-<code>recourse=continue_with_active_claim</code>; retained session and owner
-rows remain context but cannot add doctor blockers. The logical claim does not
-prove that a browser process exists. Legacy retained evidence remains
-observation-only and cannot acquire authority from caller labels. Exact lease detail, explanation, and doctor reads
-are available through CLI, HTTP, MCP resources, and generated client helpers.
-Canonical release authenticates the profile capability and exact current claim inside one serialized mutation. It advances the resource fence, removes only that claim, and returns an idempotent <code>canonicalTerminalReceipt</code>. Unrelated authority mutations do not create a false release conflict, and replay returns the original terminal result without treating retained history as a current lease.
+Then execute the page arguments in `params`:
 
-A strict claim may advertise <code>recover_plan</code>, but the legacy CLI, HTTP, MCP, generated-client, and dashboard recovery plan/apply adapters currently fail closed with <code>lease_authority_protected_recovery_surface_required</code>. A recovery bearer cannot be retained in Service State. These public operations become executable only after principal registration, resource registration, claim acquisition, planning, and apply all route through the protected authority service.
+```json
+{"name":"browser_command","arguments":{"taskId":"<returned-task-id>","action":"press","params":{"key":"Enter"}}}
+```
 
-Executable effect authorization uses a separate private lease-authority signing
-root outside Service State. A v5 Ed25519 launch envelope is valid only for its sealed
-<code>browser_launch</code> action class, exact daemon-session audience,
-operation ID, capability revision, claim revision, fence, signing-key epoch, and two-minute time
-window. Launch clients copy the envelope's
-<code>operationIdempotencyKey</code> to
-<code>leaseEffectOperationId</code>. Another session, operation, signing key,
-or altered envelope is rejected before browser launch.
+Use `browser_tab` with `operation` set to `list`, `new`, `select` or `close`.
+Creation requires a stable `tabKey`; repeating it returns the retained tab.
+Selection and closure accept only this task's tabs. `browser_close` ends this
+task while preserving peer work and persistent profile data.
 
-Trust material is stored in immutable generations below
-<code>~/.agent-browser/service/lease-authority-trust/generations/</code>. The
-private <code>lease-authority-signing-key.v3.json</code>, public
-<code>lease-authority-verification-keyring.v2.json</code>, and digest manifest
-become current together through <code>selected-generation.v1.json</code> only
-after the generation is durable. Executors load only the selected public
-verifier keyring, so verification cannot mint authority or accept an unknown
-or future signing epoch. Verification rejects mixed generations, changed
-digests, symlinks, non-files, foreign owners, or group-accessible trust files.
-A pre-generation key file requires explicit migration rather than silent
-parallel bootstrap. If the selected public verifier survives private-key
-loss, issuance returns
-<code>lease_authority_signing_key_recovery_required</code> rather than silently
-replacing the signer behind the existing trust root. File permissions alone are
-not the final production custody boundary. Plan 0144 still requires an
-independently supervised signer identity before installation.
+Use `browser_handoff` to obtain a ready, complete native Remote View URL. The
+person opens that URL using the native viewer's existing authentication. After
+human input, `browser_continue` retains the task and current page.
 
-Reconciliation also seals a single <code>rejoin_owned_browser</code> transition when the current lease explicitly authorizes <code>rejoin</code>. It reuses the direct rejoin checks for one exact uncontested ready owner and binds only that session and its same-browser active tabs, through the plan expiry. Apply rechecks current capability, lease revision, owner, process, routes, boot epoch and custody before mutation. A missing owner binding therefore has a supported plan/apply repair when rejoin is already permitted; ambiguous or foreign work remains blocked. Lease doctor findings concern profile-owner authority, while ordinary tab permission is evaluated separately. Profiles already represented by a canonical claim or registered-capability lease do not also produce a legacy owner row; a genuine missing-binding finding remains on the capability lease.
+`browser_discover` also supplies diagnostic and administrative CLI/API metadata
+on demand. It does not execute maintenance. Old service tools, raw tab tools and
+retired lease/recovery/repair/reset MCP operations are unavailable. The advanced
+browser command cannot dispatch service authority actions or override task,
+profile, tab or route selectors. There is no legacy catalog mode.
 
-Observation-only legacy and unbound identity rows advertise
-<code>profile_acquire</code> when the capability-bound acquisition coordinator
-is their executable recourse. The dashboard exposes that route as Acquire
-profile. Its Reconcile plan action maps only to the backend
-<code>reconcile_plan</code> action, so observation-only evidence is never
-mistaken for lease mutation authority.
-Registering a principal before or after first launch writes its new capability
-only to an operator-selected absolute private file. When a pre-registered
-capability later has one exact uncontested ready owner session, authenticated
-rejoin can establish the missing owner binding and bind only that session and
-its same-browser active tabs. Owner rejoin, renew, and release operations
-require the exact current lease revision plus that capability. HTTP accepts it only in an
-<code>Authorization: Bearer</code> header and MCP accepts it only as an
-ephemeral <code>profileCapability</code> argument. The raw value is never
-retained in Service State or lifecycle events. When an owner-generation
-mismatch is the only blocker and no subordinate session work remains, an
-authenticated reconcile plan can contain one
-<code>refresh_principal_owner_binding</code> transition. Apply advances only
-the same capability's binding after rechecking the exact ready profile,
-browser, process, session route, lease revision, and boot epoch.
-
-Profile acquisition recovery is separately capability-bound. Plan generation
-is zero-effect. The first effect-capable action supersedes only an exact
-terminal owner whose cleanup, process exit, profile lock release, and lease
-absence are all proven. Apply derives its daemon route from the sealed plan,
-rechecks the Service State revision and identity joins, retries acquisition
-once, and persists a receipt. CLI, HTTP, MCP, and generated client plan,
-apply, and status surfaces share this authority.
-
-Profiles without an explicit access policy migrate deterministically. Ordinary
-and ambiguous legacy profiles become <code>shared-local</code>; ambiguity stays
-visible as a nonblocking access advisory and cannot degrade runtime or
-workstation convergence. Proven strict legacy ownership retains an exclusive
-compatibility policy. When an ordinary self-declared client has no selected
-profile and site policy does not require one, the acquisition owner returns an
-executable request using a deterministic disposable
-<code>managed-ephemeral-*</code> profile. Later requests with the same labels or
-subject can continue a consistent shared-local session without strict
-runtime-owner proof. Human-facing changes use the administrator, participant,
-or observer preset with revision fencing. Narrowing first drains incompatible
-occupancy, and exact tab eviction requires a persisted authorization.
-Successfully closed tabs remain as history and no longer block drain completion.
-Disconnected or otherwise nonterminal tabs still count as occupancy.
-
-Authenticated access-plan execution carries an internal route authorization
-receipt from the broker to the daemon. The daemon revalidates the capability ID
-and revision, exact profile and planned session, current owner generation when
-present, and absence of competing live authority before admitting a prelaunch
-session. The receipt contains no raw capability material and cannot be supplied
-through the public service-request schema.
-
-<code>GET /api/service/status</code>, CLI JSON status, typed MCP status, and the
-generated client expose replayable recovery progress in the redacted
-<code>crashRegenerationTransactions</code> array. Each row contains stable
-principal, profile, browser, route, connection, route-user, and durable
-handoff identity together with phase progress, visibility readiness, and safe
-recourse. Host PIDs, socket identities, display numbers, viewer-session IDs,
-and provider generations remain private transaction evidence and are removed
-from the public <code>service_state</code> projection.
-
-The Service dashboard projects the same lease record into each profile
-allocation. It shows principal provenance, owner generation, revision,
-identity blockers, doctor findings, recourse, and current authorized actions.
-Rejoin, renew, release, and reconciliation controls accept the private
-capability only in an ephemeral password field that is cleared on close or
-successful mutation. Observation-only leases cannot mutate. Reconciliation
-planning is read-only, and apply remains disabled unless the sealed plan
-reports <code>effectCapable: true</code>. Plans bind the current host boot epoch,
-and apply fails closed after an epoch change or when the host cannot establish
-one.
-
-Service tools include `service_request`, `desktop_capture`, `desktop_evidence_observe`, `service_job_cancel`, `service_browser_retry`, `service_incidents`, `service_remedies_apply`, `service_trace`, `service_profile_upsert`, `service_profile_freshness_update`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_monitor_upsert`, `service_monitor_delete`, `service_monitors_run_due`, `service_monitor_pause`, `service_monitor_resume`, `service_monitor_reset_failures`, `service_monitor_triage`, `service_provider_upsert`, `service_provider_delete`, `service_browser_capability_registry_upsert`, and `service_browser_capability_preflight`. Use `service_browser_capability_preflight` to evaluate a requested browser build without launching Chrome. Use `service_request` to queue one intent-based browser action with caller context and site/login hints. Use `desktop_capture` for the low-level route-bound diagnostic and `desktop_evidence_observe` for the task-shaped browser-external scene observation. Pass `summary: true` to `service_incidents` for the same escalation, severity, and state remedy groups as HTTP `summary=true`; add `remediesOnly: true` for the compact active `browser_degraded`, `monitor_attention`, and `os_degraded_possible` operator ladder. Use `service_remedies_apply` with `escalation: "monitor_attention"` to apply active monitor remedies, `escalation: "browser_degraded"` after operator review to batch degraded-browser retry enablement, or `escalation: "os_degraded_possible"` after host inspection to batch faulted-browser retry remedies through the service worker.
-
-Browser Runtime backup operations use the same serialized `service_request` queue. `service_runtime_backup_status` verifies the current SQLite backup without changing it. `service_runtime_backup_create` creates one verified online backup and rotates at most one previous copy. Neither action restores data or includes the separate Service State store.
-
-Service status also exposes additive <code>browserRuntime</code> read-only
-health. It reports redacted SQLite integrity and database size, migration
-archive state, verified-backup state, and current browser-launch admission.
-Unavailable storage returns only a stable failure code plus launch admission;
-the database path is never public. <code>agent-browser install doctor</code>
-prints the same health fields without migrating the database or creating a
-backup.
-
-Typed browser tools cover navigation, tabs, snapshots, screenshots, clicks, fills, waits, keyboard actions, element reads, cookies, storage, headers, offline mode, viewport, geolocation, permissions, timezone, locale, media, dialogs, uploads, downloads, HAR capture, request routing, console, errors, PDFs, response bodies, and clipboard operations. Use `browser_command` only for browser actions that do not yet have a typed tool.
+The compact operating guide is available at `agent-browser://operating-guide`.
+Read-only service resources remain explicit diagnostic reads; they are not
+prerequisites for opening or continuing a browser task.
 
 ## Dashboard operations
 

@@ -286,6 +286,6 @@ lanes:
     work_items: [CochranResearchGroup/agent-browser#255, CochranResearchGroup/agent-browser#262, CochranResearchGroup/agent-browser#263, CochranResearchGroup/agent-browser#264, CochranResearchGroup/agent-browser#265, CochranResearchGroup/agent-browser#266]
     dependencies: []
     overlaps: [P237]
-    reconciled_overlaps: ["P238 owns MCP/profile-planning/skills and narrow read-only public handoff locator/HTTP dispatch; P237 owns dashboard UI and native link/tab lifecycle/models; consume existing handoff seam and preserve foreign fixtures"]
-    validation_status: Isolated installed263 and264 acceptance qualified; small catalog265 next; whole255 incomplete
+    reconciled_overlaps: ["P238 owns MCP/profile-planning/skills, read-only public handoff locator and bounded native headless-tab dispatch/replay repair; P237 owns dashboard UI and remaining native lifecycle/models; preserve foreign checkout and fixtures"]
+    validation_status: Isolated installed263 and264 qualified;265 public debug workflow/catalog accepted, final gates and installation pending;266 and whole255 incomplete
     updated_at: 2026-10-11

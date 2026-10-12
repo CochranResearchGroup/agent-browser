@@ -283,8 +283,16 @@ pub const SERVICE_REQUEST_ACTIONS: &[&str] = &[
     "service_repair_retained",
 ];
 
+/// The public MCP workflow catalog. Legacy adapter names below retain CLI/API
+/// contract locators; their availability is explicit rather than inferred.
+pub const WORKFLOW_MCP_TOOL_NAMES: &[&str] = &[
+    "browser_open", "browser_navigate", "browser_snapshot", "browser_click",
+    "browser_fill", "browser_screenshot", "browser_tab", "browser_handoff",
+    "browser_continue", "browser_close", "browser_command", "browser_discover",
+];
+
 pub fn service_contracts_metadata() -> Value {
-    json!({
+    let mut metadata = json!({
         "schemaVersion": SERVICE_REQUEST_CONTRACT_VERSION,
         "contracts": {
             "serviceRequest": {
@@ -1117,7 +1125,19 @@ pub fn service_contracts_metadata() -> Value {
             "serviceMonitorResetFailuresTool": SERVICE_MONITOR_RESET_FAILURES_MCP_TOOL_NAME,
             "serviceMonitorTriageTool": SERVICE_MONITOR_TRIAGE_MCP_TOOL_NAME,
         },
-    })
+    });
+    metadata["mcpCatalog"] = json!({"version":"workflow.v1", "tools":WORKFLOW_MCP_TOOL_NAMES,
+        "discoveryTool":"browser_discover", "legacyToolsAvailable":false});
+    metadata["mcp"]["legacyToolsAvailable"] = json!(false);
+    for contract in metadata["contracts"].as_object_mut().unwrap().values_mut() {
+        if let Some(mcp) = contract.get_mut("mcp").and_then(Value::as_object_mut) {
+            if let Some(tool) = mcp.get("tool").and_then(Value::as_str) {
+                let available = WORKFLOW_MCP_TOOL_NAMES.contains(&tool);
+                mcp.insert("available".into(), json!(available));
+            }
+        }
+    }
+    metadata
 }
 
 #[cfg(test)]

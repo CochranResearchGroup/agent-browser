@@ -7,6 +7,7 @@ const files = {
   agents: readFileSync('AGENTS.md', 'utf8'),
   readme: readFileSync('README.md', 'utf8'),
   skill: readFileSync('skills/agent-browser/SKILL.md', 'utf8'),
+  advancedSkill: readFileSync('skills/agent-browser/references/cli-and-service.md', 'utf8'),
   guide: readFileSync('docs/src/app/remote-view/page.mdx', 'utf8'),
   navigation: readFileSync('docs/src/lib/docs-navigation.ts', 'utf8'),
 };
@@ -54,7 +55,7 @@ assert.match(
 );
 for (const [name, contents] of Object.entries({
   readme: files.readme,
-  skill: files.skill,
+  skill: files.advancedSkill,
   guide: files.guide,
 })) {
   assert.match(

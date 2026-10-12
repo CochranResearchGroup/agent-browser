@@ -22,8 +22,8 @@ use crate::native::service_contracts::{
     SERVICE_PROFILE_LEASES_MCP_RESOURCE, SERVICE_PROFILE_LEASE_DETAIL_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_LEASE_DOCTOR_MCP_RESOURCE, SERVICE_PROFILE_LEASE_EXPLAIN_MCP_RESOURCE_TEMPLATE,
     SERVICE_PROFILE_SEEDING_HANDOFF_UPDATE_MCP_TOOL_NAME, SERVICE_REMOTE_VIEW_ROUTES_MCP_RESOURCE,
-    SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_ROUTE_POOL_MCP_RESOURCE,
-    SERVICE_VIEWER_LEASES_MCP_RESOURCE,
+    SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME, SERVICE_REQUEST_ACTIONS,
+    SERVICE_ROUTE_POOL_MCP_RESOURCE, SERVICE_VIEWER_LEASES_MCP_RESOURCE,
 };
 use crate::native::service_incidents::{
     service_incident_summary, service_incidents_response, ServiceIncidentFilters,
@@ -1012,7 +1012,7 @@ fn service_mcp_tools() -> Vec<Value> {
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": BROWSER_COMMAND_ALLOWED_ACTIONS,
+                        "enum": SERVICE_REQUEST_ACTIONS,
                         "description": "Underlying browser-control action to queue."
                     },
                     "params": {
@@ -6148,6 +6148,8 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
         )));
     }
     if let Some(params) = optional_object_argument(arguments, "params")? {
+        let schema = catalog::browser_argument_schema(action)?;
+        let page_arguments = schema["properties"].as_object().unwrap();
         for key in params.keys() {
             if matches!(
                 key.as_str(),
@@ -6179,6 +6181,11 @@ fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcErr
             ) {
                 return Err(JsonRpcError::invalid_params(&format!(
                     "browser_command params.{key} is reserved"
+                )));
+            }
+            if !page_arguments.contains_key(key) {
+                return Err(JsonRpcError::invalid_params(&format!(
+                    "browser_command params.{key} is not a page argument"
                 )));
             }
         }
@@ -11716,32 +11723,22 @@ mod tests {
     }
 
     #[test]
-    fn service_incidents_rejects_invalid_severity_before_store_read() {
-        let response = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"service_incidents","arguments":{"severity":"panic","escalation":"os_degraded_possible"}}}"#,
+    fn internal_service_incidents_rejects_invalid_severity_before_store_read() {
+        let error = call_service_incidents(
+            &json!({"severity":"panic","escalation":"os_degraded_possible"}),
             "default",
         )
-        .unwrap();
-
-        assert_eq!(response["id"], 42);
-        assert_eq!(response["error"]["code"], -32602);
-        assert!(response["error"]["data"]["message"]
+        .unwrap_err();
+        assert!(error.data.unwrap()["message"]
             .as_str()
             .unwrap()
             .contains("severity must be one of"));
     }
 
     #[test]
-    fn service_incidents_rejects_invalid_summary_before_store_read() {
-        let response = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"service_incidents","arguments":{"summary":"yes"}}}"#,
-            "default",
-        )
-        .unwrap();
-
-        assert_eq!(response["id"], 43);
-        assert_eq!(response["error"]["code"], -32602);
-        assert!(response["error"]["data"]["message"]
+    fn internal_service_incidents_rejects_invalid_summary_before_store_read() {
+        let error = call_service_incidents(&json!({"summary":"yes"}), "default").unwrap_err();
+        assert!(error.data.unwrap()["message"]
             .as_str()
             .unwrap()
             .contains("summary must be a boolean"));
@@ -12947,7 +12944,7 @@ mod tests {
     }
 
     #[test]
-    fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
+    fn internal_service_request_schema_matches_all_canonical_types_and_constraints() {
         let canonical: Value = serde_json::from_str(include_str!(
             "../../docs/dev/contracts/service-request.v1.schema.json"
         ))
@@ -14971,7 +14968,7 @@ mod tests {
     }
 
     #[test]
-    fn service_access_plan_tool_returns_service_owned_recommendation() {
+    fn internal_access_plan_adapter_retains_service_owned_recommendation() {
         use std::collections::BTreeMap;
 
         use crate::native::service_model::{
@@ -15000,13 +14997,8 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let response = handle_jsonrpc_line_with_config(
-            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","sessionName":"bill-soylei","loginId":"canva","browserBuild":"stealthcdp_chromium","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}}}"#,
-            "default",
-            &state,
-        )
-        .unwrap();
-        let text = response["result"]["content"][0]["text"].as_str().unwrap();
+        let response = call_service_access_plan(&serde_json::json!({"serviceName": "CanvaCLI", "agentName": "codex", "taskName": "openCanvaWorkspace", "sessionName": "bill-soylei", "loginId": "canva", "browserBuild": "stealthcdp_chromium", "browserHost": "remote_headed", "viewStreamProvider": "rdp_gateway", "controlInputProvider": "manual_attached_desktop", "displayIsolation": "private_virtual_display"}), "default", &state).unwrap();
+        let text = response["content"][0]["text"].as_str().unwrap();
         let payload: Value = serde_json::from_str(text).unwrap();
 
         assert_eq!(payload["tool"], SERVICE_ACCESS_PLAN_MCP_TOOL_NAME);

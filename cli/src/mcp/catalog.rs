@@ -98,72 +98,11 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
                 "Operation is not available in this category",
             ));
         }
-        let tool_name = match operation {
-            "gettext" => "browser_get_text".to_string(),
-            "inputvalue" => "browser_get_value".to_string(),
-            "url" => "browser_get_url".to_string(),
-            "title" => "browser_get_title".to_string(),
-            "emulatemedia" => "browser_media".to_string(),
-            "setcontent" => "browser_set_content".to_string(),
-            "waitfordownload" => "browser_wait_for_download".to_string(),
-            "responsebody" => "browser_response_body".to_string(),
-            "isvisible" => "browser_is_visible".to_string(),
-            "isenabled" => "browser_is_enabled".to_string(),
-            "ischecked" => "browser_is_checked".to_string(),
-            "getattribute" => "browser_get_attribute".to_string(),
-            "innerhtml" => "browser_get_html".to_string(),
-            "styles" => "browser_get_styles".to_string(),
-            "count" => "browser_get_count".to_string(),
-            "boundingbox" => "browser_get_bounding_box".to_string(),
-            "scrollintoview" => "browser_scroll_into_view".to_string(),
-            name if category == "browser" => format!("browser_{name}"),
-            name => name.to_string(),
-        };
-        let mut schema = super::service_mcp_tools()
-            .into_iter()
-            .find(|tool| tool["name"] == tool_name)
-            .map(|tool| tool["inputSchema"].clone())
-            .ok_or_else(|| {
-                super::JsonRpcError::invalid_params(
-                    "Argument metadata is unavailable for this operation; use agent-browser --help",
-                )
-            })?;
-        if category == "browser" {
-            if let Some(properties) = schema["properties"].as_object_mut() {
-                properties.retain(|name, _| {
-                    !matches!(
-                        name.as_str(),
-                        "serviceName"
-                            | "agentName"
-                            | "taskName"
-                            | "jobTimeoutMs"
-                            | "taskId"
-                            | "profileCapability"
-                            | "serviceTabHandle"
-                            | "profileId"
-                            | "runtimeProfile"
-                            | "profile"
-                            | "browserId"
-                            | "sessionId"
-                            | "sessionName"
-                            | "routeId"
-                            | "profileLeaseId"
-                            | "profileLeaseGeneration"
-                            | "tabHandle"
-                    )
-                });
-            }
-            if let Some(required) = schema["required"].as_array_mut() {
-                required.retain(|name| {
-                    schema_property_is_page_argument(name.as_str().unwrap_or_default())
-                });
-            }
-        }
+        let schema = operation_schema(category, operation)?;
         json!({"category":category,"operation":operation,"inputSchema":schema,
             "execution":if category == "browser" {json!({"tool":"browser_command","action":operation,
                 "arguments":"Place these page arguments in params and supply taskId."})}
-                else {json!({"cli":"agent-browser service --help","api":"/api/service/request",
-                    "guidance":"Use the documented CLI/API operation; diagnostic discovery does not execute effects."})}})
+                else {service_execution(operation)}})
     } else {
         json!({"category":category,"operations":names,"next":"Request one operation for its argument schema."})
     };
@@ -174,6 +113,60 @@ pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super:
         payload,
         false,
     ))
+}
+
+pub(super) fn browser_argument_schema(action: &str) -> Result<Value, super::JsonRpcError> {
+    operation_schema("browser", action)
+}
+
+fn operation_schema(category: &str, operation: &str) -> Result<Value, super::JsonRpcError> {
+    let tool_name = match operation {
+        "gettext" => "browser_get_text".to_string(),
+        "inputvalue" => "browser_get_value".to_string(),
+        "url" => "browser_get_url".to_string(),
+        "title" => "browser_get_title".to_string(),
+        "emulatemedia" => "browser_media".to_string(),
+        "setcontent" => "browser_set_content".to_string(),
+        "waitfordownload" => "browser_wait_for_download".to_string(),
+        "responsebody" => "browser_response_body".to_string(),
+        "isvisible" => "browser_is_visible".to_string(),
+        "isenabled" => "browser_is_enabled".to_string(),
+        "ischecked" => "browser_is_checked".to_string(),
+        "getattribute" => "browser_get_attribute".to_string(),
+        "innerhtml" => "browser_get_html".to_string(),
+        "styles" => "browser_get_styles".to_string(),
+        "count" => "browser_count".to_string(),
+        "boundingbox" => "browser_get_box".to_string(),
+        "scrollintoview" => "browser_scroll_into_view".to_string(),
+        name if category == "browser" => format!("browser_{name}"),
+        name => name.to_string(),
+    };
+    let mut schema = super::service_mcp_tools()
+        .into_iter()
+        .find(|tool| tool["name"] == tool_name)
+        .map(|tool| tool["inputSchema"].clone())
+        .or_else(|| match operation {
+            "back" | "forward" | "reload" | "service_resources" => Some(json!({"type":"object",
+                "additionalProperties":false,"properties":{},"required":[]})),
+            "evaluate" => Some(json!({"type":"object","additionalProperties":false,
+                "properties":{"script":{"type":"string"}},"required":["script"]})),
+            _ => None,
+        })
+        .ok_or_else(|| {
+            super::JsonRpcError::invalid_params(
+                "Argument metadata is unavailable for this operation; use agent-browser --help",
+            )
+        })?;
+    if category == "browser" {
+        if let Some(properties) = schema["properties"].as_object_mut() {
+            properties.retain(|name, _| schema_property_is_page_argument(name));
+        }
+        if let Some(required) = schema["required"].as_array_mut() {
+            required
+                .retain(|name| schema_property_is_page_argument(name.as_str().unwrap_or_default()));
+        }
+    }
+    Ok(schema)
 }
 
 fn schema_property_is_page_argument(name: &str) -> bool {
@@ -196,5 +189,55 @@ fn schema_property_is_page_argument(name: &str) -> bool {
             | "profileLeaseId"
             | "profileLeaseGeneration"
             | "tabHandle"
+            | "targetServiceId"
+            | "targetServiceIds"
+            | "siteId"
+            | "siteIds"
+            | "loginId"
+            | "loginIds"
+            | "accountId"
+            | "accountIds"
+            | "readinessProfileId"
+            | "sitePolicyId"
+            | "browserBuild"
+            | "browserHost"
+            | "viewStreamProvider"
+            | "controlInputProvider"
+            | "displayIsolation"
     )
+}
+
+fn service_execution(operation: &str) -> Value {
+    let (cli, method, route) = match operation {
+        "service_status" => ("agent-browser service status", "GET", "/api/service/status"),
+        "service_resources" => (
+            "agent-browser service resources",
+            "GET",
+            "/api/service/resources",
+        ),
+        "service_incidents" => (
+            "agent-browser service incidents",
+            "GET",
+            "/api/service/incidents",
+        ),
+        "service_trace" => ("agent-browser service trace", "GET", "/api/service/trace"),
+        "service_job_cancel" => (
+            "agent-browser service cancel <job-id>",
+            "POST",
+            "/api/service/jobs/<job-id>/cancel",
+        ),
+        "service_browser_retry" => (
+            "agent-browser service retry <browser-id>",
+            "POST",
+            "/api/service/browsers/<browser-id>/retry",
+        ),
+        "service_remedies_apply" => (
+            "agent-browser service remedies apply",
+            "POST",
+            "/api/service/remedies/apply",
+        ),
+        _ => unreachable!("discovery categories are closed"),
+    };
+    json!({"cli":cli,"api":{"method":method,"route":route},
+        "guidance":"Supply the selected arguments through the documented CLI/API. Discovery performs no effects."})
 }

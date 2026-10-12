@@ -44,7 +44,7 @@ this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
-through advanced dispatch. There is no legacy catalog mode.
+through advanced dispatch. There is no legacy catalog mode. Contract metadata reports `mcpCatalog` and each named adapter's `mcp.available`; retained CLI/API contract names do not imply callable MCP tools.
 
 
 Use the workflow tools directly. Agent Browser owns profile/session coordination;
