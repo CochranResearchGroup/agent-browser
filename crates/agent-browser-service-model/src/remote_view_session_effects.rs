@@ -501,8 +501,13 @@ impl<
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         self.require_operation()?;
+        // Provider idleness cannot override current controller or operation
+        // protection supplied by the browser runtime authority.
+        if !self.effects.permits_idle_browser_close(browser)? {
+            return Ok(false);
+        }
         if self.pool.is_none() {
-            return self.effects.permits_idle_browser_close(browser);
+            return Ok(true);
         }
         let assignment = self
             .store

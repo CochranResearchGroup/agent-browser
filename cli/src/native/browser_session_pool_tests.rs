@@ -2285,7 +2285,7 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
             "Alice",
             &serde_json::json!({
                 "action":"navigate", "url":"https://synthetic.example/expired-task",
-                "activityAtMs":100
+                "activityAtMs":100, "purpose":"Original synthetic task", "agentName":"fixture-origin"
             }),
         )
         .unwrap()
@@ -2302,6 +2302,15 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
         consumer.reap(130).unwrap().expired_session_ids,
         vec![session_id]
     );
+    let expired = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "handoffOperation":"inspect", "activityAtMs":130
+    }));
+    assert_eq!(expired["success"], true, "{expired}");
+    assert_eq!(
+        expired["data"]["taskMetadata"]["purpose"], "Original synthetic task",
+        "{expired}"
+    );
     // The external provider observes the second synthetic process launch.
     // A valid handoff still requires an owned, active native window.
     provider.borrow_mut().window_pid = Some(44);
@@ -2314,6 +2323,16 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     assert_eq!(reopened["success"], true, "{reopened}");
     assert_eq!(reopened["data"]["handoffId"], handoff_id);
     assert_eq!(reopened["data"]["operatorVisible"]["state"], "ready");
+    let restored = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
+        "handoffOperation":"inspect", "activityAtMs":132
+    }));
+    assert_eq!(restored["success"], true, "{restored}");
+    assert_eq!(
+        restored["data"]["taskMetadata"], expired["data"]["taskMetadata"],
+        "original metadata survives recreation"
+    );
+    assert_eq!(restored["data"]["taskMetadata"]["createdAtMs"], 100);
 }
 
 #[test]
@@ -2760,6 +2779,278 @@ fn deleting_handoff_revokes_only_link_and_preserves_target_across_restart() {
         );
         assert_eq!(calls.get(), 1);
     }
+}
+
+#[test]
+fn handoff_properties_preserve_supplied_origin_and_purpose_across_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/review", "activityAtMs":100,
+        "serviceName":"Synthetic Review", "agentName":"fixture-agent", "taskName":"Review synthetic document",
+        "purpose":"Human review of the synthetic document", "requestId":"fixture-request"
+    })).unwrap().unwrap();
+    let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let properties = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":110
+    }));
+    assert_eq!(properties["success"], true, "{properties}");
+    let metadata = &properties["data"]["taskMetadata"];
+    assert_eq!(metadata["attribution"], "supplied", "{properties}");
+    assert_eq!(metadata["agentName"], "fixture-agent", "{properties}");
+    assert_eq!(metadata["serviceName"], "Synthetic Review", "{properties}");
+    assert_eq!(
+        metadata["purpose"], "Human review of the synthetic document",
+        "{properties}"
+    );
+    assert_eq!(metadata["requestId"], "fixture-request", "{properties}");
+    assert_eq!(metadata["createdAtMs"], 100, "{properties}");
+    assert_eq!(calls.get(), 1);
+    consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/next", "activityAtMs":120,
+                "agentName":"later-client", "purpose":"Replacement context"
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let later = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":130
+    }));
+    assert_eq!(later["success"], true, "{later}");
+    assert_eq!(
+        later["data"]["taskMetadata"], *metadata,
+        "original context must not be overwritten"
+    );
+    let bob = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/unknown", "activityAtMs":140
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let unknown = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":bob["browserSession"]["handoffId"],
+        "handoffOperation":"inspect", "activityAtMs":150
+    }));
+    assert_eq!(unknown["success"], true, "{unknown}");
+    assert_eq!(
+        unknown["data"]["taskMetadata"]["attribution"], "unknown",
+        "{unknown}"
+    );
+    for field in [
+        "agentName",
+        "humanName",
+        "originKind",
+        "purpose",
+        "requestId",
+        "jobId",
+    ] {
+        assert!(
+            unknown["data"]["taskMetadata"][field].is_null(),
+            "{unknown}"
+        );
+    }
+    assert_eq!(
+        unknown["data"]["taskMetadata"]["createdAtMs"], 140,
+        "{unknown}"
+    );
+}
+
+#[test]
+fn pressure_configuration_is_opt_in_and_invalid_edits_preserve_state() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/alice", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+    let tab_id = alice["browserSession"]["tabId"].as_str().unwrap();
+    assert!(consumer
+        .state()
+        .tab_lifetimes
+        .get(tab_id)
+        .is_none_or(|policy| policy.pressure_inactivity_ms.is_none()));
+    for invalid in [
+        serde_json::json!(-1),
+        serde_json::json!("30"),
+        serde_json::json!(u64::MAX),
+    ] {
+        let before = consumer.state().clone();
+        let edit = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"set_tab_lifetime", "tabInactivityMs":0,
+            "pressureInactivityMs":invalid, "activityAtMs":100
+        }));
+        assert_eq!(edit["success"], false, "{edit}");
+        assert_eq!(
+            edit["error"], "browser_tab_pressure_lifetime_invalid",
+            "{edit}"
+        );
+        assert_eq!(consumer.state(), &before);
+        assert_eq!(calls.get(), 1);
+    }
+    let edit = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":0,
+        "pressureInactivityMs":30, "activityAtMs":100
+    }));
+    assert_eq!(edit["success"], true, "{edit}");
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let edit = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":60, "activityAtMs":110
+    }));
+    assert_eq!(edit["success"], true, "{edit}");
+    assert_eq!(
+        consumer.state().tab_lifetimes[tab_id].pressure_inactivity_ms,
+        Some(30)
+    );
+    let edit = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":60,
+        "pressureInactivityMs":0, "activityAtMs":110
+    }));
+    assert_eq!(edit["success"], true, "{edit}");
+    assert_eq!(
+        consumer.state().tab_lifetimes[tab_id].pressure_inactivity_ms,
+        None
+    );
+    assert_eq!(
+        consumer.state().tab_lifetimes[tab_id].inactivity_ms,
+        Some(60)
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn configured_pressure_retires_inactive_tab_without_revoking_its_link() {
+    let fixture = Fixture::new();
+    let store = fixture.store(false);
+    let mut catalog = store.load_profile_catalog().unwrap().catalog;
+    catalog.disposable_policies.insert(
+        "default".into(),
+        BrowserDisposableProfilePolicy {
+            id: "default".into(),
+            user_data_root: fixture
+                .root
+                .join("disposable")
+                .to_string_lossy()
+                .into_owned(),
+            cleanup_delay_ms: 300_000,
+            maximum_retained_profiles: 1,
+            maximum_total_bytes: 1024 * 1024,
+        },
+    );
+    store.save_profile_catalog(&catalog).unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/alice", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+    let configured = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":0,
+        "pressureInactivityMs":30, "activityAtMs":100
+    }));
+    assert_eq!(configured["success"], true, "{configured}");
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let attempt = |consumer: &mut BrowserSessionHost<_, _>, at| {
+        consumer.execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/bob", "activityAtMs":at
+            }),
+        )
+    };
+    assert_eq!(
+        attempt(&mut consumer, 129).unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    let hold = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"prepare_human", "pendingHumanRetentionMs":50, "activityAtMs":100
+    }));
+    assert_eq!(hold["success"], true, "{hold}");
+    assert_eq!(
+        attempt(&mut consumer, 130).unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    let desktop = provider.borrow().assignments[0].desktop_id.clone();
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .insert(desktop.clone());
+    assert_eq!(
+        attempt(&mut consumer, 150).unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    assert!(consumer
+        .state()
+        .tabs
+        .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+    assert_eq!(calls.get(), 1);
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .remove(&desktop);
+    let next = consumer.execute_managed_command(
+        "Bob",
+        &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/bob", "activityAtMs":151
+        }),
+    );
+    assert!(
+        next.is_ok(),
+        "eligible inactive task must free configured quota: {next:?}"
+    );
+    let bob = next.unwrap().unwrap();
+    assert_ne!(
+        bob["browserSession"]["browserId"],
+        alice["browserSession"]["browserId"]
+    );
+    assert!(!consumer
+        .state()
+        .tabs
+        .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let link = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":152
+    }));
+    assert_eq!(link["success"], true, "{link}");
+    assert_eq!(link["data"]["expired"], false, "{link}");
+    assert!(link["data"]["expiresAtMs"].is_null());
+    assert_eq!(calls.get(), 2);
 }
 
 #[test]

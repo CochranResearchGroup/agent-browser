@@ -14,7 +14,7 @@ lanes:
     dependencies: []
     overlaps: [P232, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
     reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
-    validation_status: Provider-free lifecycle source checkpoint passes 71 consumer, 329 model, 39 output, 5 host and 3 presentation tests plus quality and docs gates; layout review and real HTTP/native workflow acceptance pending
+    validation_status: Provider-free pressure and supplied-context source checkpoint passes 74 consumer, 331 model, 32 resource, 1 authority, 39 output, 5 host and 3 presentation tests plus quality, client and docs gates; race-complete retirement, layout review and real HTTP/native workflow acceptance pending
     updated_at: 2026-10-11
   - id: P222
     product_lane: PL-PLATFORM

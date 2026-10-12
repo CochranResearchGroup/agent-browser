@@ -16,6 +16,9 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 **Pending-human retention**: Configured protection for a handed-off tab before confirmed human use. Its duration and pressure policy are independent of link validity; four hours is an example configuration value rather than a fixed timeout. Explicit human handoff production prepares this protection; ordinary agent work and readiness resolution do not consume it. Human-use acknowledgement addresses the exact tab after native readiness, and tab inactivity resumes from that use.
 
+**Pressure inactivity**: An opt-in threshold on each live tab, independent of ordinary tab lifetime and link validity. Disposable count and byte quotas can retire a browser only when every live target is eligible and current activity authority permits it. Link deletion does not make peer work eligible. Broader host resource governance remains a separate program.
+
+
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 
 **Leave-open close**: Preserves the managed task and its live browser for continuation, including across host restart and idle cleanup. It retains occupied profile custody. Explicit `--leave-open false close` ends the task; a full-shutdown operation overrides the preference.
@@ -241,3 +244,5 @@ A new browser's need for a free Remote View desktop. Pool preparation keeps the 
 _Avoid_: Session count, eager maximum reservation, presentation slot
 
 **Graceful host restart**: The exiting host removes authentication metadata only while it owns the endpoint and matching token. Ordinary commands on an existing managed task check and attach its recorded live browser before using its tab, including headless named sessions. Physical recovery stays with the existing fenced owner.
+
+**Supplied tab task metadata**: Original creation context belongs to the actual tab and its recoverable target capsule. Descriptive service, agent, human, origin, task, purpose and request/job labels are explicitly supplied, never identity proof. Unknown attribution stays unknown. Inspecting or changing link lifetime does not replace creation context. The P237 native Properties UI and complete provenance workflow remain unfinished.

@@ -6362,6 +6362,11 @@ A valid link recreates an automatically expired task tab from retained intent.
 The same URL and link expiry are preserved; unrelated current tabs are not substituted.
 Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
+Software inspect exposes original taskMetadata with supplied or unknown attribution.
+Managed commands accept serviceName, agentName, humanName, originKind, taskName,
+purpose, requestId and jobId as descriptive context, never authenticated identity.
+Optional pressureInactivityMs opts into measured disposable quota retirement;
+0 disables it. Controller/operation protection and runtime acceptance are pending.
 Software set_link_lifetime with ttlMs replaces a valid link lifetime; 0 is perpetual.
 Positive durations set expiry from the edit time without recreating expired targets.
 Invalid deadlines leave the link unchanged; expired links reject lifetime edits.

@@ -61,6 +61,13 @@ pub(crate) trait BrowserRuntimeDriver {
         None
     }
     fn acknowledge_launch_publication(&mut self) {}
+    /// Query current authority before automatic expiry or measured quota retirement.
+    fn permits_idle_browser_close(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        Ok(true)
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -230,6 +237,12 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         self.runtime.launch_browser(profile, desktop)
     }
 
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        self.runtime.permits_idle_browser_close(browser)
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
     }
@@ -641,6 +654,18 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        let state = super::service_store::load_default_service_state_snapshot()?;
+        super::service_resources::permits_managed_browser_idle_retirement(
+            &state,
+            browser,
+            &chrono::Utc::now().to_rfc3339(),
+        )
+    }
+
     fn begin_operation(
         &mut self,
         expected: &agent_browser_service_model::BrowserSessionState,
@@ -1677,6 +1702,118 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn native_idle_retirement_queries_current_controller_and_operation_authority() {
+        use super::super::service_store::{
+            default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+        };
+        use agent_browser_service_model::{
+            JobState, JobTarget, ServiceJob, ServiceState, ViewerLease,
+        };
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        let path = default_service_state_path().unwrap();
+        struct RestoreSnapshot {
+            path: std::path::PathBuf,
+            prior: Option<Vec<u8>>,
+        }
+        impl Drop for RestoreSnapshot {
+            fn drop(&mut self) {
+                if let Some(prior) = &self.prior {
+                    let _ = fs::write(&self.path, prior);
+                } else {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+        let _restore = RestoreSnapshot {
+            prior: fs::read(&path).ok(),
+            path: path.clone(),
+        };
+        let store = JsonServiceStateStore::new(&path);
+        let browser = ManagedBrowserInstance {
+            id: "pressure-runtime-browser".into(),
+            profile_id: "pressure-profile".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let mut effects = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let mut state = ServiceState::default();
+        state.viewer_leases.insert(
+            "controller".into(),
+            ViewerLease {
+                id: "controller".into(),
+                browser_id: Some(browser.id.clone()),
+                viewer_role: "controller".into(),
+                state: "active".into(),
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "current controller protects exact browser"
+        );
+        state.viewer_leases.get_mut("controller").unwrap().state = "released".into();
+        state.jobs.insert(
+            "operation".into(),
+            ServiceJob {
+                id: "operation".into(),
+                target: JobTarget::Browser(browser.id.clone()),
+                state: JobState::Running,
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "current operation protects exact browser"
+        );
+        state.jobs.get_mut("operation").unwrap().state = JobState::Succeeded;
+        store.save(&state).unwrap();
+        assert!(
+            effects.permits_idle_browser_close(&browser).unwrap(),
+            "released work allows otherwise eligible retirement"
+        );
+        state.jobs.get_mut("operation").unwrap().target =
+            JobTarget::Profile(browser.profile_id.clone());
+        state.jobs.get_mut("operation").unwrap().state = JobState::Running;
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "profile operation protects its browser"
+        );
+        state.jobs.get_mut("operation").unwrap().state = JobState::Succeeded;
+        state.browsers.insert(
+            browser.id.clone(),
+            agent_browser_service_model::BrowserProcess {
+                id: browser.id.clone(),
+                pid: Some(99),
+                profile_id: Some(browser.profile_id.clone()),
+                cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert_eq!(
+            effects.permits_idle_browser_close(&browser).unwrap_err(),
+            "browser_session_idle_activity_identity_conflict"
+        );
+        fs::write(&path, b"invalid synthetic state").unwrap();
+        assert!(
+            effects.permits_idle_browser_close(&browser).is_err(),
+            "unreadable current authority fails closed"
+        );
     }
 
     #[test]

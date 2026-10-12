@@ -1006,6 +1006,37 @@ fn retained_profile_is_named_or_persistent_for_browser(
     profile_id.is_some_and(|profile_id| retained_profile_is_named_or_persistent(state, profile_id))
 }
 
+/// Join the manager's operation-fenced identity to current Service State activity.
+/// This projection grants no process custody and publishes no inventory.
+pub(crate) fn permits_managed_browser_idle_retirement(
+    state: &ServiceState,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+    now: &str,
+) -> Result<bool, String> {
+    let mut observed = state.clone();
+    if let Some(existing) = observed.browsers.get(&browser.id) {
+        if existing.pid != Some(browser.pid)
+            || existing.cdp_endpoint.as_deref() != Some(browser.cdp_endpoint.as_str())
+            || existing.profile_id.as_deref() != Some(browser.profile_id.as_str())
+        {
+            return Err("browser_session_idle_activity_identity_conflict".into());
+        }
+    } else {
+        observed.browsers.insert(
+            browser.id.clone(),
+            super::service_model::BrowserProcess {
+                id: browser.id.clone(),
+                pid: Some(browser.pid),
+                cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+                profile_id: Some(browser.profile_id.clone()),
+                active_session_ids: browser.active_session_ids.clone(),
+                ..Default::default()
+            },
+        );
+    }
+    Ok(!resource_lane_activity_at(&observed, &browser.id, now).active)
+}
+
 fn resource_lane_activity_at(
     state: &ServiceState,
     browser_id: &str,
@@ -1192,6 +1223,9 @@ fn resource_lane_activity_at(
     for job in state.jobs.values() {
         let targets_lane = match &job.target {
             super::service_model::JobTarget::Browser(id) => id == browser_id,
+            super::service_model::JobTarget::Profile(id) => {
+                browser.profile_id.as_deref() == Some(id.as_str())
+            }
             super::service_model::JobTarget::Tab(tab_id) => state
                 .tabs
                 .get(tab_id)

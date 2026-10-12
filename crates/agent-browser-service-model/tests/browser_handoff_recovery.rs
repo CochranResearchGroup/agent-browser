@@ -7,6 +7,7 @@ struct Evidence {
     pending: Option<BrowserLaunchCustodyRecord>,
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
+    retirement_blocked: bool,
 }
 struct Store(Rc<RefCell<Evidence>>);
 impl BrowserLaunchCustodyStore for Store {
@@ -133,6 +134,21 @@ impl RemoteViewApplicationTransport for Transport {
             RemoteViewApplicationRequest::LaunchEnvironment { .. } => {
                 self.fixture["launchEnvironment"].clone()
             }
+            RemoteViewApplicationRequest::ObserveIdle { .. } => {
+                self.evidence
+                    .borrow_mut()
+                    .effects
+                    .push("provider_idle_check".into());
+                let mut observation = self.fixture["assignmentObservation"].clone();
+                observation["viewerActive"] = false.into();
+                observation["idle"] = true.into();
+                let assignment = self.evidence.borrow().prior.clone().unwrap();
+                observation["retirement"] = serde_json::json!({
+                    "schemaVersion":1,"desktopId":assignment.desktop_id,
+                    "generation":assignment.generation,"routes":[],"sessions":[]
+                });
+                observation
+            }
             _ => panic!("unexpected provider effect"),
         })
     }
@@ -187,6 +203,13 @@ impl RemoteViewBrowserProcessEffects for Runtime {
     }
 }
 impl BrowserSessionEffects for Runtime {
+    fn permits_idle_browser_close(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
+        self.evidence
+            .borrow_mut()
+            .effects
+            .push("runtime_retirement_check".into());
+        Ok(!self.evidence.borrow().retirement_blocked)
+    }
     fn browser_is_live(&mut self, _: &ManagedBrowserInstance) -> Result<bool, String> {
         Ok(false)
     }
@@ -409,4 +432,76 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             );
         }
     }
+}
+
+#[test]
+fn pooled_idle_retirement_preserves_runtime_controller_and_operation_veto() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+    ))
+    .unwrap();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let evidence = Rc::new(RefCell::new(Evidence {
+        prior: Some(assignment.clone()),
+        retirement_blocked: true,
+        ..Default::default()
+    }));
+    let browser = ManagedBrowserInstance {
+        id: "browser-a".into(),
+        profile_id: "profile-a".into(),
+        pid: 42,
+        cdp_endpoint: "http://127.0.0.1:9222".into(),
+        desktop: Some(RemoteViewFixedDesktop {
+            desktop_id: assignment.desktop_id.clone(),
+            generation: assignment.generation,
+            friendly_route_label: "synthetic".into(),
+        }),
+        active_session_ids: vec![],
+    };
+    let state = BrowserSessionState {
+        browsers: BTreeMap::from([(browser.id.clone(), browser.clone())]),
+        ..Default::default()
+    };
+    let mut effects = RemoteViewSessionEffects::new(
+        Runtime {
+            evidence: evidence.clone(),
+            absent: false,
+            fail_restoration: false,
+            next_target: 0,
+        },
+        RemoteViewApplicationAdapter::new(
+            "agent-browser".into(),
+            Transport {
+                evidence: evidence.clone(),
+                fixture,
+            },
+        )
+        .unwrap(),
+        Store(evidence.clone()),
+        vec![],
+        || "33333333-3333-3333-3333-333333333333".into(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "synthetic".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    effects.begin_operation(&state).unwrap();
+    assert!(
+        !effects.permits_idle_browser_close(&browser).unwrap(),
+        "provider idle observation must not bypass a runtime controller/operation veto"
+    );
+    assert_eq!(evidence.borrow().effects, vec!["runtime_retirement_check"]);
+    evidence.borrow_mut().retirement_blocked = false;
+    assert!(effects.permits_idle_browser_close(&browser).unwrap());
+    assert_eq!(
+        evidence.borrow().effects,
+        vec![
+            "runtime_retirement_check",
+            "runtime_retirement_check",
+            "provider_idle_check"
+        ]
+    );
 }

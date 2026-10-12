@@ -2040,3 +2040,64 @@ fn profile_executables_survive_restart_and_recovery_after_another_profile_select
         ]
     );
 }
+
+#[test]
+fn pressure_policy_preserves_active_peer_after_link_deletion() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "pressure-alice-tab".into(),
+            target_id: "pressure-alice-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let alice = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 100))
+        .unwrap();
+    let alice_tab = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&alice.session_id, 100)
+        .unwrap();
+    agent_browser_service_model::retain_remote_view_tab_handoff(
+        &mut state,
+        "alice-link",
+        &alice.session_id,
+        &alice_tab.tab_id,
+    )
+    .unwrap();
+    state.tab_lifetimes.insert(
+        alice_tab.tab_id,
+        agent_browser_service_model::BrowserTabLifetime {
+            inactivity_ms: None,
+            pressure_inactivity_ms: Some(30),
+        },
+    );
+    effects.new_tab = Some(BrowserTabAcquisition {
+        tab_id: "pressure-peer-tab".into(),
+        target_id: "pressure-peer-target".into(),
+        source: BrowserTabSource::ExplicitNew,
+    });
+    let peer = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .new_tab(&alice.session_id, 125)
+        .unwrap();
+    state.remote_view_tab_handoffs.remove("alice-link");
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::disposable("bob", "default", 130));
+    assert_eq!(
+        result.unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    assert!(state.sessions.contains_key(&alice.session_id));
+    assert!(state.tabs.contains_key(&peer.tab_id));
+    assert!(effects.closes.is_empty());
+    assert!(effects.disposable_deletions.is_empty());
+}

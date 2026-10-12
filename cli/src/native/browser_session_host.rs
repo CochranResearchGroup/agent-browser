@@ -970,10 +970,15 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                             .as_ref()
                             .and_then(|intent| intent.tab_lifetime.as_ref())
                     });
+                    let task_metadata = self.state.tab_metadata.get(&link.tab_id).or_else(|| {
+                        link.resume
+                            .as_ref()
+                            .and_then(|intent| intent.task_metadata.as_ref())
+                    });
                     return Ok(serde_json::json!({"handoffId":handoff_id,
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
                         "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
-                        "tabId":link.tab_id,"tabLifetime":tab_lifetime,
+                        "tabId":link.tab_id,"tabLifetime":tab_lifetime,"taskMetadata":task_metadata,
                         "pendingHuman":self.state.pending_human_tabs.get(&link.tab_id).map(|hold| serde_json::json!({
                             "awaitingUse":true,"requestedAtMs":hold.requested_at_ms,"expiresAtMs":hold.expires_at_ms,
                             "retained":hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline),
@@ -1060,8 +1065,27 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         .last_activity_at_ms
                         .checked_add(ttl)
                         .ok_or("browser_tab_lifetime_invalid")?;
+                    let pressure_inactivity_ms = match command.get("pressureInactivityMs") {
+                        Some(value) => {
+                            let duration = value
+                                .as_u64()
+                                .ok_or("browser_tab_pressure_lifetime_invalid")?;
+                            target
+                                .tab
+                                .last_activity_at_ms
+                                .checked_add(duration)
+                                .ok_or("browser_tab_pressure_lifetime_invalid")?;
+                            (duration != 0).then_some(duration)
+                        }
+                        None => self
+                            .state
+                            .tab_lifetimes
+                            .get(&target.tab.id)
+                            .and_then(|lifetime| lifetime.pressure_inactivity_ms),
+                    };
                     let lifetime = agent_browser_service_model::BrowserTabLifetime {
                         inactivity_ms: (ttl != 0).then_some(ttl),
+                        pressure_inactivity_ms,
                     };
                     let mut intent =
                         agent_browser_service_model::remote_view_handoff_resume_intent(
@@ -1648,6 +1672,13 @@ where
             .get(&tab.tab_id)
             .cloned()
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?;
+        // Capture original context once; later polling and navigation do not
+        // replace provenance with the inspecting client's descriptive labels.
+        if !self.state.tab_metadata.contains_key(&tab.id) {
+            let metadata = capture_browser_task_metadata(command, &tab);
+            self.state.tab_metadata.insert(tab.id.clone(), metadata);
+            self.commit_state()?;
+        }
         // Retain the logical target before returning an identity to a client.
         // Provider route issuance and the operator URL are separate joins.
         let handoff = if automatic && command.get("resumeHandoffId").is_none() {
@@ -1689,6 +1720,7 @@ where
             record.resume = Some(
                 agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
                     tab_lifetime: self.state.tab_lifetimes.get(&tab.id).cloned(),
+                    task_metadata: self.state.tab_metadata.get(&tab.id).cloned(),
                     session_name: session.name.clone(),
                     profile_id: session.profile_id.clone(),
                     disposable_policy_id: self
@@ -1945,6 +1977,10 @@ where
                     .ok_or("remote_view_handoff_recreation_identity_missing")?
                     .to_owned();
                 let target = agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
+                    task_metadata: link
+                        .resume
+                        .as_ref()
+                        .and_then(|intent| intent.task_metadata.clone()),
                     tab_lifetime: link
                         .resume
                         .as_ref()
@@ -1964,6 +2000,11 @@ where
                     self.state
                         .tab_lifetimes
                         .insert(link.tab_id.clone(), lifetime.clone());
+                }
+                if let Some(metadata) = &target.task_metadata {
+                    self.state
+                        .tab_metadata
+                        .insert(link.tab_id.clone(), metadata.clone());
                 }
                 link.resume = Some(target);
                 link.recreation = None;
@@ -2059,6 +2100,47 @@ fn session_close_disposition_name(
 
 fn required_string<'a>(command: &'a serde_json::Value, field: &str) -> Result<&'a str, String> {
     optional_string(command, field).ok_or_else(|| format!("browser_session_field_missing:{field}"))
+}
+
+/// Keep supplied context explicitly descriptive; absent identity is unknown.
+fn capture_browser_task_metadata(
+    command: &serde_json::Value,
+    tab: &agent_browser_service_model::ManagedBrowserTab,
+) -> agent_browser_service_model::BrowserTaskMetadata {
+    let value = |field| {
+        optional_string(command, field)
+            .map(str::trim)
+            .filter(|text| !text.is_empty())
+            .map(str::to_owned)
+    };
+    let mut metadata = agent_browser_service_model::BrowserTaskMetadata {
+        created_at_ms: Some(tab.created_at_ms),
+        service_name: value("serviceName"),
+        agent_name: value("agentName"),
+        human_name: value("humanName"),
+        origin_kind: value("originKind"),
+        task_name: value("taskName"),
+        purpose: value("purpose"),
+        request_id: value("requestId"),
+        job_id: value("serviceJobId").or_else(|| value("jobId")),
+        ..Default::default()
+    };
+    if [
+        &metadata.service_name,
+        &metadata.agent_name,
+        &metadata.human_name,
+        &metadata.origin_kind,
+        &metadata.task_name,
+        &metadata.purpose,
+        &metadata.request_id,
+        &metadata.job_id,
+    ]
+    .iter()
+    .any(|field| field.is_some())
+    {
+        metadata.attribution = "supplied".into();
+    }
+    metadata
 }
 
 fn optional_string<'a>(command: &'a serde_json::Value, field: &str) -> Option<&'a str> {

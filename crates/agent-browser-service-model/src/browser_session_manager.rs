@@ -396,6 +396,9 @@ pub struct ManagedBrowserTab {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserTabLifetime {
     pub inactivity_ms: Option<u64>,
+    /// Optional inactivity threshold for measured quota pressure, never a link TTL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pressure_inactivity_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -484,6 +487,40 @@ pub struct TerminalBrowserSession {
     pub reason: SessionEndReason,
 }
 
+/// Descriptive task context supplied at tab creation, never authenticated identity.
+/// Missing attribution remains unknown rather than inferred from session labels.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserTaskMetadata {
+    pub attribution: String,
+    pub created_at_ms: Option<u64>,
+    pub service_name: Option<String>,
+    pub agent_name: Option<String>,
+    pub human_name: Option<String>,
+    pub origin_kind: Option<String>,
+    pub task_name: Option<String>,
+    pub purpose: Option<String>,
+    pub request_id: Option<String>,
+    pub job_id: Option<String>,
+}
+
+impl Default for BrowserTaskMetadata {
+    fn default() -> Self {
+        Self {
+            attribution: "unknown".into(),
+            created_at_ms: None,
+            service_name: None,
+            agent_name: None,
+            human_name: None,
+            origin_kind: None,
+            task_name: None,
+            purpose: None,
+            request_id: None,
+            job_id: None,
+        }
+    }
+}
+
 /// A normal tab request is retained before its first browser effect. A missing
 /// result requires reconciliation; it never permits another creation attempt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -537,6 +574,9 @@ pub struct BrowserSessionState {
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
     #[serde(default)]
     pub tab_lifetimes: BTreeMap<String, BrowserTabLifetime>,
+    /// Original supplied context belongs to the tab, independently of its links.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub tab_metadata: BTreeMap<String, BrowserTaskMetadata>,
     #[serde(default)]
     pub pending_human_tabs: BTreeMap<String, PendingHumanTabRetention>,
     pub tab_history: Vec<TerminalBrowserTab>,
@@ -566,6 +606,7 @@ impl Default for BrowserSessionState {
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
             tab_lifetimes: BTreeMap::new(),
+            tab_metadata: BTreeMap::new(),
             pending_human_tabs: BTreeMap::new(),
             tab_history: Vec::new(),
             navigation_history: Vec::new(),
@@ -1427,6 +1468,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.state.leave_open_session_ids.remove(session_id);
         for tab in tabs {
             self.state.tab_lifetimes.remove(&tab.id);
+            self.state.tab_metadata.remove(&tab.id);
             self.state.pending_human_tabs.remove(&tab.id);
             self.state.tabs.remove(&tab.id);
             self.state.tab_history.push(TerminalBrowserTab {
@@ -1711,6 +1753,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.effects.close_tab(&browser, &tab)?;
         self.state.tabs.remove(&tab.id);
         self.state.tab_lifetimes.remove(&tab.id);
+        self.state.tab_metadata.remove(&tab.id);
         self.state.pending_human_tabs.remove(&tab.id);
         for link in self
             .state
@@ -2190,6 +2233,36 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         Ok(result)
     }
 
+    /// A pressure policy never overrides pending human use or peer eligibility.
+    fn session_pressure_retirement_eligible(&self, session_id: &str, now_ms: u64) -> bool {
+        let tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.session_id == session_id)
+            .collect::<Vec<_>>();
+        !tabs.is_empty()
+            && tabs.iter().all(|tab| {
+                let held = self
+                    .state
+                    .pending_human_tabs
+                    .get(&tab.id)
+                    .is_some_and(|hold| {
+                        hold.expires_at_ms.is_none_or(|deadline| now_ms < deadline)
+                    });
+                !held
+                    && self
+                        .state
+                        .tab_lifetimes
+                        .get(&tab.id)
+                        .and_then(|lifetime| lifetime.pressure_inactivity_ms)
+                        .is_some_and(|duration| {
+                            duration > 0
+                                && now_ms.saturating_sub(tab.last_activity_at_ms) >= duration
+                        })
+            })
+    }
+
     /// Converge one disposable policy before admission or scheduled reaping.
     /// Candidate selection proves unprotected profiles can satisfy both limits
     /// before any browser or filesystem effect occurs.
@@ -2230,9 +2303,24 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .filter(|session| session.profile_id == allocation.profile.id)
                 .cloned()
                 .collect::<Vec<_>>();
-            let protected_session = sessions
+            let pressure_eligible = !sessions.is_empty()
+                && sessions
+                    .iter()
+                    .all(|session| self.session_pressure_retirement_eligible(&session.id, now_ms));
+            let externally_protected = sessions
                 .iter()
-                .any(|session| protected_session_ids.contains(&session.id));
+                .any(|session| self.externally_protected_session_ids.contains(&session.id));
+            let has_live_tabs = self
+                .state
+                .tabs
+                .values()
+                .any(|tab| sessions.iter().any(|session| session.id == tab.session_id));
+            let protected_session = externally_protected
+                || (has_live_tabs && !pressure_eligible)
+                || (!pressure_eligible
+                    && sessions
+                        .iter()
+                        .any(|session| protected_session_ids.contains(&session.id)));
             let browser_without_session = sessions.is_empty()
                 && self
                     .state
@@ -2277,6 +2365,27 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 break;
             }
             if protected {
+                continue;
+            }
+            // Qualify current viewers/custody only when measured configured
+            // pressure needs this candidate. Shared browsers are never retired.
+            let browsers = self
+                .state
+                .browsers
+                .values()
+                .filter(|browser| browser.profile_id == profile_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            let mut permitted = true;
+            for browser in browsers {
+                if self.state.shared_browser_ids.contains(&browser.id)
+                    || !self.effects.permits_idle_browser_close(&browser)?
+                {
+                    permitted = false;
+                    break;
+                }
+            }
+            if !permitted {
                 continue;
             }
             projected_count = projected_count.saturating_sub(1);
@@ -2383,6 +2492,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .collect::<Vec<_>>();
                 for tab in tabs {
                     self.state.tab_lifetimes.remove(&tab.id);
+                    self.state.tab_metadata.remove(&tab.id);
                     self.state.pending_human_tabs.remove(&tab.id);
                     self.state.tabs.remove(&tab.id);
                     self.state.tab_history.push(TerminalBrowserTab {
