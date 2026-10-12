@@ -1038,7 +1038,13 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     {
                         return Err("remote_view_human_use_target_changed".into());
                     }
-                    if !self.state.pending_human_tabs.contains_key(&target.tab.id) {
+                    if !self.state.pending_human_tabs.contains_key(&target.tab.id)
+                        && self
+                            .state
+                            .tab_metadata
+                            .get(&target.tab.id)
+                            .is_some_and(|metadata| metadata.first_human_use_at_ms.is_some())
+                    {
                         return Ok(
                             serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,
                             "status":"human_use_already_confirmed"}),
@@ -1046,6 +1052,36 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     }
                     self.focus_browser(&target.browser.id, Some(&target.tab.target_id), now_ms)?;
                     self.state.pending_human_tabs.remove(&target.tab.id);
+                    // Record use only after qualified exact-target focus, without
+                    // treating the acknowledging operator as creation attribution.
+                    self.state
+                        .tab_metadata
+                        .entry(target.tab.id.clone())
+                        .or_default()
+                        .first_human_use_at_ms
+                        .get_or_insert(now_ms);
+                    let metadata = self.state.tab_metadata.get(&target.tab.id).cloned();
+                    let resume = agent_browser_service_model::remote_view_handoff_resume_intent(
+                        &self.state,
+                        handoff_id,
+                        now_ms,
+                    )?;
+                    // All links to this actual tab retain the same use history
+                    // after its automatic retirement removes live tab metadata.
+                    for link in self
+                        .state
+                        .remote_view_tab_handoffs
+                        .values_mut()
+                        .filter(|link| {
+                            link.tab_id == target.tab.id && link.session_id == target.session.id
+                        })
+                    {
+                        // Legacy links gain only currently qualified recovery
+                        // context, preserving unknown historical attribution.
+                        link.resume
+                            .get_or_insert_with(|| resume.clone())
+                            .task_metadata = metadata.clone();
+                    }
                     self.commit_state()?;
                     return Ok(
                         serde_json::json!({"handoffId":handoff_id,"tabId":target.tab.id,

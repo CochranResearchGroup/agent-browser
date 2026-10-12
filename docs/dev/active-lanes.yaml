@@ -12,9 +12,10 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#261, CochranResearchGroup/agent-browser#260]
     dependencies: []
-    overlaps: [P232, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
+    overlaps: [P232, P238, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
     reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
-    validation_status: Provider-free pressure and supplied-context source checkpoint passes 74 consumer, 331 model, 32 resource, 1 authority, 39 output, 5 host and 3 presentation tests plus quality, client and docs gates; race-complete retirement, layout review and real HTTP/native workflow acceptance pending
+    shared_source_coordination: "P238 foreign head575c2634 owns public read-only locator and MCP workflow; P237 owns target recovery and first-use acknowledgement. Reconcile public locator, presentation/auth adapter and shared documentation before integration; no foreign source adoption."
+    validation_status: Provider-free pressure, supplied-context and durable first-use checkpoints pass 75 consumer, 331 model, 32 resource, 1 authority, 39 output, 5 host and 3 presentation tests plus quality, client and docs gates; P238 public locator reconciliation, race-complete retirement, layout review and real HTTP/native workflow acceptance pending
     updated_at: 2026-10-11
   - id: P222
     product_lane: PL-PLATFORM

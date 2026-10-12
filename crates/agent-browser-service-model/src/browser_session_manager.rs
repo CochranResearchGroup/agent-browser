@@ -494,6 +494,8 @@ pub struct TerminalBrowserSession {
 pub struct BrowserTaskMetadata {
     pub attribution: String,
     pub created_at_ms: Option<u64>,
+    /// First exact-target human-use acknowledgement; never agent preparation.
+    pub first_human_use_at_ms: Option<u64>,
     pub service_name: Option<String>,
     pub agent_name: Option<String>,
     pub human_name: Option<String>,
@@ -509,6 +511,7 @@ impl Default for BrowserTaskMetadata {
         Self {
             attribution: "unknown".into(),
             created_at_ms: None,
+            first_human_use_at_ms: None,
             service_name: None,
             agent_name: None,
             human_name: None,

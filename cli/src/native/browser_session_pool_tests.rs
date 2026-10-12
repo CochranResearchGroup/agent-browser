@@ -2459,7 +2459,7 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
         ..Provider::default()
     }));
     let calls = Rc::new(Cell::new(0));
-    let mut consumer = host(&fixture, provider, calls);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
     let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
         "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100
     })).unwrap().unwrap();
@@ -2487,6 +2487,10 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
         "handoffOperation":"inspect", "activityAtMs":140
     }));
     assert_eq!(inspected["data"]["pendingHuman"]["awaitingUse"], true);
+    assert!(
+        inspected["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null(),
+        "agent readiness must not record first use"
+    );
     for (source, operator, target) in [
         (
             "authenticated_presentation_navigation",
@@ -2519,7 +2523,29 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
             retained["data"]["pendingHuman"]["awaitingUse"], true,
             "{retained}"
         );
+        assert!(
+            retained["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null(),
+            "rejected acknowledgement must not record use"
+        );
     }
+    provider.borrow_mut().window_pid = Some(99);
+    let denied = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"confirm_human_use", "activityAtMs":146,
+        "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
+            "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+    }));
+    assert_eq!(
+        denied["success"], false,
+        "foreign native window must deny acknowledgement: {denied}"
+    );
+    let retained = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":147
+    }));
+    assert_eq!(retained["data"]["pendingHuman"]["awaitingUse"], true);
+    assert!(retained["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null());
+    provider.borrow_mut().window_pid = Some(43);
     let used = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
         "handoffOperation":"confirm_human_use", "activityAtMs":150,
@@ -2528,6 +2554,15 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
     }));
     assert_eq!(used["success"], true, "{used}");
     assert_eq!(used["data"]["status"], "human_use_confirmed", "{used}");
+    let first_use = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":151
+    }));
+    assert_eq!(first_use["success"], true, "{first_use}");
+    assert_eq!(
+        first_use["data"]["taskMetadata"]["firstHumanUseAtMs"], 150,
+        "first human use must remain attributable in Properties: {first_use}"
+    );
     let duplicate = consumer.handle_command(&serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":id,
         "handoffOperation":"confirm_human_use", "activityAtMs":170,
@@ -2553,6 +2588,126 @@ fn human_use_releases_pending_hold_but_agent_preparation_does_not() {
         "handoffOperation":"inspect", "activityAtMs":180
     }));
     assert_eq!(inspected["data"]["expired"], false);
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls);
+    let restarted = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":181
+    }));
+    assert_eq!(restarted["success"], true, "{restarted}");
+    assert_eq!(
+        restarted["data"]["taskMetadata"]["firstHumanUseAtMs"], 150,
+        "{restarted}"
+    );
+    assert_eq!(
+        restarted["data"]["taskMetadata"]["attribution"], "unknown",
+        "human use does not invent originating identity"
+    );
+    assert_eq!(
+        inspected["data"]["taskMetadata"]["firstHumanUseAtMs"], 150,
+        "duplicate use and target expiry must preserve first use: {inspected}"
+    );
+}
+
+#[test]
+fn first_human_use_without_pending_hold_survives_reprepare_and_legacy_restart() {
+    for (legacy, reprepare) in [(false, false), (false, true), (true, false), (true, true)] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider {
+            window_pid: Some(43),
+            ..Provider::default()
+        }));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/first-use", "profileId":"profile-a", "activityAtMs":100
+        })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let configured = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"set_tab_lifetime",
+            "tabInactivityMs":100, "activityAtMs":100
+        }));
+        assert_eq!(configured["success"], true, "{configured}");
+        if legacy {
+            drop(consumer);
+            let mut store = fixture.store(false);
+            let before = store.load_session_state().unwrap();
+            let mut old = before.clone();
+            old.tab_metadata.clear();
+            old.remote_view_tab_handoffs.get_mut(id).unwrap().resume = None;
+            store.compare_and_save_session_state(&before, &old).unwrap();
+            consumer = host(&fixture, provider.clone(), calls.clone());
+        }
+        let inspect = |consumer: &mut BrowserSessionHost<_, _>, at| {
+            consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"inspect", "activityAtMs":at
+        }))
+        };
+        let before = inspect(&mut consumer, 110);
+        assert_eq!(before["success"], true, "{before}");
+        assert!(before["data"]["pendingHuman"].is_null());
+        assert!(before["data"]["taskMetadata"]["firstHumanUseAtMs"].is_null());
+        let acknowledge = |consumer: &mut BrowserSessionHost<_, _>, at| {
+            consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"confirm_human_use", "activityAtMs":at,
+            "humanUseEvidence":{"source":"authenticated_presentation_navigation", "operator":"synthetic-operator",
+                "tabId":opened["browserSession"]["tabId"], "targetId":opened["browserSession"]["targetId"]}
+        }))
+        };
+        let first = acknowledge(&mut consumer, 150);
+        assert_eq!(first["success"], true, "{first}");
+        assert_eq!(
+            first["data"]["status"], "human_use_confirmed",
+            "unheld handoff still has a first use: {first}"
+        );
+        let properties = inspect(&mut consumer, 151);
+        assert_eq!(
+            properties["data"]["taskMetadata"]["firstHumanUseAtMs"], 150,
+            "{properties}"
+        );
+        assert_eq!(
+            properties["data"]["taskMetadata"]["attribution"], "unknown",
+            "{properties}"
+        );
+        if legacy {
+            assert!(
+                properties["data"]["taskMetadata"]["createdAtMs"].is_null(),
+                "first use must not invent missing creation history: {properties}"
+            );
+        }
+        if reprepare {
+            let hold = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id, "handoffOperation":"prepare_human",
+            "pendingHumanRetentionMs":0, "activityAtMs":160
+        }));
+            assert_eq!(hold["success"], true, "{hold}");
+            let repeated = acknowledge(&mut consumer, 170);
+            assert_eq!(
+                repeated["data"]["status"], "human_use_confirmed",
+                "{repeated}"
+            );
+            assert!(inspect(&mut consumer, 171)["data"]["pendingHuman"].is_null());
+        }
+        let expiry = if reprepare { 270 } else { 250 };
+        consumer.reap(expiry).unwrap();
+        assert!(!consumer
+            .state()
+            .tabs
+            .contains_key(opened["browserSession"]["tabId"].as_str().unwrap()));
+        drop(consumer);
+        let mut consumer = host(&fixture, provider, calls.clone());
+        let retained = inspect(&mut consumer, expiry + 1);
+        assert_eq!(retained["success"], true, "{retained}");
+        assert_eq!(
+            retained["data"]["taskMetadata"]["firstHumanUseAtMs"], 150,
+            "legacy={legacy}, reprepare={reprepare}: {retained}"
+        );
+        assert_eq!(
+            retained["data"]["taskMetadata"]["attribution"], "unknown",
+            "{retained}"
+        );
+        assert_eq!(calls.get(), 1);
+    }
 }
 
 #[test]
