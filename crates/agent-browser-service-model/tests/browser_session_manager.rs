@@ -75,6 +75,7 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 #[derive(Default)]
 struct FixtureEffects {
     idle_retirement_permitted: Option<bool>,
+    retirement_guard_denied_browser: Option<String>,
     retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
     executable: String,
@@ -200,7 +201,9 @@ impl BrowserSessionEffects for FixtureEffects {
     ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
     {
         for browser in browsers {
-            if !self.permits_idle_browser_close(browser)? {
+            if self.retirement_guard_denied_browser.as_deref() == Some(browser.id.as_str())
+                || !self.permits_idle_browser_close(browser)?
+            {
                 return Ok(None);
             }
         }
@@ -2210,5 +2213,55 @@ fn idle_retirement_guard_covers_quota_profile_cleanup_and_releases() {
     .open(OpenBrowserSession::disposable("bob", "default", 2_000))
     .unwrap();
     assert_eq!(effects.disposable_deletions, [first.profile_id]);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn quota_qualifies_all_candidates_before_first_retirement_effect() {
+    let mut catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    effects.retirement_guard_active = Some(active.clone());
+    let config = BrowserSessionManagerConfig::default();
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    let second = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+        .unwrap();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    effects.retirement_guard_denied_browser = Some(second.browser_id.clone());
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .enforce_disposable_quota("default", &Default::default(), 1, 0, 3_000);
+    assert_eq!(
+        result.unwrap_err(),
+        "browser_disposable_profile_activity_changed"
+    );
+    assert!(
+        effects.closes.is_empty(),
+        "later candidate protection must precede every close"
+    );
+    assert!(effects.disposable_deletions.is_empty());
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert!(state.sessions.contains_key(&second.session_id));
+    assert_eq!(state.disposable_profiles.len(), 2);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+    effects.retirement_guard_denied_browser = None;
+    let admitted = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .enforce_disposable_quota("default", &Default::default(), 1, 0, 3_001)
+        .unwrap();
+    assert_eq!(admitted.quota_evicted_session_ids.len(), 2);
+    assert_eq!(effects.closes.len(), 2);
+    assert_eq!(effects.disposable_deletions.len(), 2);
+    assert!(state.sessions.is_empty());
+    assert!(state.disposable_profiles.is_empty());
     assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
 }

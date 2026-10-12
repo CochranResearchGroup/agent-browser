@@ -2472,19 +2472,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             return Err("browser_disposable_profile_bytes_quota_protected".to_string());
         }
 
+        // Qualify the complete pressure effect group before retiring any candidate.
+        // One guard also avoids re-entering an adapter's retained authority lock.
+        let browsers = self
+            .state
+            .browsers
+            .values()
+            .filter(|browser| selected.contains(&browser.profile_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let retirement_guard = self
+            .effects
+            .acquire_idle_retirement_guard(&browsers)?
+            .ok_or("browser_disposable_profile_activity_changed")?;
         let mut result = ReapBrowserSessionsResult::default();
         for profile_id in selected {
-            let browsers = self
-                .state
-                .browsers
-                .values()
-                .filter(|browser| browser.profile_id == profile_id)
-                .cloned()
-                .collect::<Vec<_>>();
-            let retirement_guard = self
-                .effects
-                .acquire_idle_retirement_guard(&browsers)?
-                .ok_or("browser_disposable_profile_activity_changed")?;
             let session_ids = self
                 .state
                 .sessions
@@ -2522,8 +2524,8 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.effects.delete_disposable_profile(&allocation)?;
             self.state.disposable_profiles.remove(&profile_id);
             result.deleted_disposable_profile_ids.push(profile_id);
-            drop(retirement_guard);
         }
+        drop(retirement_guard);
         Ok(result)
     }
 
