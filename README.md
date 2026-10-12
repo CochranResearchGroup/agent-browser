@@ -35,17 +35,21 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
 
-For shared, authenticated, profile-sensitive, or operator-visible work, read
-`agent-browser://operating-guide` and call `service_access_plan` before
-`service_request`. Agent Browser owns profile selection, retained-browser
-reuse, lease serialization, route selection, durable handoffs, reconciliation,
-and garbage collection.
+The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+`browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
+task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
+this scope. Use `browser_discover` for one advanced operation's argument schema,
+then `browser_command` with `taskId`, `action` and page arguments in `params`.
+Diagnostic and administrative discovery points to supported CLI/API operations.
+Retired lease, recovery, repair and reset MCP tools are unavailable, including
+through advanced dispatch. There is no legacy catalog mode.
 
-Keep browser acquisition, Guacamole/RDP presentation, and runtime maintenance
-as separate readiness axes. A checked-out route pool blocks only a required
-operator view, and a global doctor advisory blocks work only when the requested
-action or scoped readiness evidence says it does. Use the packaged
-`agent-browser-service` skill for the complete agent workflow.
+
+Use the workflow tools directly. Agent Browser owns profile/session coordination;
+Remote View owns the native desktop and viewer. Request advanced metadata only
+when needed, and use the supported CLI/API for service diagnostics or maintenance.
 
 ## Installation
 

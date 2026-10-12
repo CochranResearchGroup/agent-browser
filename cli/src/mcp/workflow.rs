@@ -352,3 +352,70 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
         false,
     ))
 }
+
+/// Resolve tab ownership from the native durable state before any selection or
+/// close. Replay of new tabs uses the native owner's existing request journal.
+pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
+    let task_id = required_string_argument(arguments, "taskId")?;
+    let operation = required_string_argument(arguments, "operation")?;
+    let session_name = task_session(task_id)?;
+    let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
+    let state = store.load_session_state().map_err(issue)?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .ok_or_else(|| issue("browser_task_not_found"))?;
+    let payload = match operation {
+        "list" => json!({"taskId":task_id,"currentTabId":task.current_tab_id,
+            "tabs":state.tabs.values().filter(|tab| tab.session_id == task_id)
+                .map(|tab| json!({"tabId":tab.id})).collect::<Vec<_>>()}),
+        "new" => {
+            let key = required_string_argument(arguments, "tabKey")?;
+            let request_id = format!("mcp-tab-{:x}", Sha256::digest(format!("{task_id}\0{key}")));
+            let mut command = json!({"id":uuid::Uuid::new_v4().to_string(),
+                "action":"tab_new","sessionName":session_name,"tabRequestId":request_id});
+            if let Some(url) = optional_string_argument(arguments, "url")? {
+                command["url"] = json!(url);
+            }
+            let result = execute(command, transport_session)?;
+            json!({"taskId":task_id,"tabId":result["tabId"],"url":result["url"]})
+        }
+        "select" | "close" => {
+            let tab_id = optional_string_argument(arguments, "tabId")?
+                .or(task.current_tab_id.as_deref())
+                .ok_or_else(|| issue("browser_task_current_tab_missing"))?;
+            let tab = state
+                .tabs
+                .get(tab_id)
+                .filter(|tab| tab.session_id == task_id)
+                .ok_or_else(|| issue("browser_tab_not_owned"))?;
+            execute(
+                json!({"id":uuid::Uuid::new_v4().to_string(),
+                "action":"browser_session_focus","sessionName":session_name,
+                "browserId":task.browser_id,"targetId":tab.target_id}),
+                transport_session,
+            )?;
+            if operation == "close" {
+                let result = execute(
+                    json!({"id":uuid::Uuid::new_v4().to_string(),
+                    "action":"browser_session_tab_close","sessionName":session_name,
+                    "sessionId":task_id}),
+                    transport_session,
+                )?;
+                json!({"taskId":task_id,"closedTabId":result["closedTabId"],
+                    "currentTabId":result["currentTabId"]})
+            } else {
+                json!({"taskId":task_id,"tabId":tab_id})
+            }
+        }
+        _ => return Err(issue("browser_tab_operation_invalid")),
+    };
+    Ok(super::tool_response_from_payload(
+        "browser_tab",
+        transport_session,
+        json!({}),
+        payload,
+        false,
+    ))
+}

@@ -90,6 +90,20 @@ try {
   assert.equal(continued.url, request.url);
   const continuedPage = await call('browser_snapshot', { taskId: task.taskId });
   assert(JSON.stringify(continuedPage).includes('Alice draft'), 'continuation preserves page edits');
+  const initialTabs = await call('browser_tab', {taskId: task.taskId, operation: 'list'});
+  assert.equal(initialTabs.tabs.length, 1);
+  assert.equal(initialTabs.tabs[0].tabId, task.tabId, 'task list excludes Bob');
+  await assert.rejects(call('browser_tab', {taskId: task.taskId, operation: 'select', tabId: bob.tabId}),
+    /browser_tab_not_owned/, 'Alice cannot select Bob tab');
+  const extra = await call('browser_tab', {taskId: task.taskId, operation: 'new', tabKey: 'notes', url: request.url});
+  const extraReplay = await call('browser_tab', {taskId: task.taskId, operation: 'new', tabKey: 'notes', url: request.url});
+  assert.equal(extraReplay.tabId, extra.tabId, 'replayed tab key does not create another tab');
+  const aliceTabs = await call('browser_tab', {taskId: task.taskId, operation: 'list'});
+  assert.equal(aliceTabs.tabs.length, 2);
+  await call('browser_tab', {taskId: task.taskId, operation: 'select', tabId: task.tabId});
+  assert(JSON.stringify(await call('browser_snapshot', {taskId: task.taskId})).includes('Alice draft'));
+  await call('browser_tab', {taskId: task.taskId, operation: 'close', tabId: extra.tabId});
+  assert.equal((await call('browser_tab', {taskId: task.taskId, operation: 'list'})).tabs.length, 1);
   await call('browser_close', { taskId: task.taskId });
   tasks.splice(tasks.indexOf(task), 1);
   const survivingPage = await call('browser_snapshot', { taskId: bob.taskId });

@@ -1302,7 +1302,14 @@ where
         require_managed_runtime_admission(command["action"].as_str().unwrap_or_default(), command)?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
-        if automatic && command["action"] == "tab_new" {
+        // Existing managed tasks need the same owned, replayable tab operation
+        // even when this host has no ordinary presentation provider configured.
+        let existing_task = self
+            .state
+            .sessions
+            .values()
+            .any(|task| task.name == session_name);
+        if (automatic || existing_task) && command["action"] == "tab_new" {
             return self
                 .execute_managed_tab_new(session_name, command)
                 .map(Some);

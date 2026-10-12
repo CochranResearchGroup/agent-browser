@@ -18,6 +18,18 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
+The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
+`browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
+`browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
+Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
+task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
+this scope. Use `browser_discover` for one advanced operation's argument schema,
+then `browser_command` with `taskId`, `action` and page arguments in `params`.
+Diagnostic and administrative discovery points to supported CLI/API operations.
+Retired lease, recovery, repair and reset MCP tools are unavailable, including
+through advanced dispatch. There is no legacy catalog mode.
+
+
 ## Sharing a profile between tasks
 
 Use one named session and tab per task. When tasks deliberately need the same login and stored browser data, select the same durable profile so they reuse one browser. Give each task its own session name; address commands through that session rather than a global active tab.
