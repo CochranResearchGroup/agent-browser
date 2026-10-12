@@ -949,6 +949,16 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 if self.persistence.load_session_state()? != self.persisted_state {
                     return Err("browser_session_publication_conflict".into());
                 }
+                if command["handoffOperation"] == "delete" {
+                    // Revoke only the durable link. Tab lifetime and pending-human
+                    // retention belong to the target, independent of this record.
+                    self.state
+                        .remote_view_tab_handoffs
+                        .remove(handoff_id)
+                        .ok_or("remote_view_tab_handoff_missing")?;
+                    self.commit_state()?;
+                    return Ok(serde_json::json!({"handoffId":handoff_id,"status":"deleted"}));
+                }
                 let link = self
                     .state
                     .remote_view_tab_handoffs

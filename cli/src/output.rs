@@ -6362,6 +6362,8 @@ A valid link recreates an automatically expired task tab from retained intent.
 The same URL and link expiry are preserved; unrelated current tabs are not substituted.
 Unknown creation outcomes require readback rather than blind retries.
 Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
+Software callers use handoffOperation=delete to revoke only the durable link.
+Deletion preserves the tab, browser, session and pending-human hold across restart.
 Closing the last live tab closes its owned browser and retains handoff records.
 Software prepare_human with pendingHumanRetentionMs records a separate unused-tab hold.
 Positive values set its maximum duration; 0 sets no automatic deadline.
