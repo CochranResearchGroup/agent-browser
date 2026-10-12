@@ -172,6 +172,32 @@ pub trait BrowserSessionEffects {
         Ok(Some(Box::new(())))
     }
 
+    /// Admit every selected allocation and browser before any quota effect.
+    /// Concurrent adapters must override this provider-free composition to check
+    /// the complete group under one authority lock rather than nest locks.
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        struct GroupGuard {
+            _guards: Vec<Box<dyn BrowserIdleRetirementGuard>>,
+        }
+        impl BrowserIdleRetirementGuard for GroupGuard {}
+        let mut guards = Vec::new();
+        for allocation in allocations {
+            let Some(guard) = self.acquire_profile_cleanup_guard(allocation)? else {
+                return Ok(None);
+            };
+            guards.push(guard);
+        }
+        let Some(guard) = self.acquire_idle_retirement_guard(browsers)? else {
+            return Ok(None);
+        };
+        guards.push(guard);
+        Ok(Some(Box::new(GroupGuard { _guards: guards })))
+    }
+
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
 
     fn acquire_initial_tab(
@@ -2495,9 +2521,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .filter(|browser| selected.contains(&browser.profile_id))
             .cloned()
             .collect::<Vec<_>>();
+        let allocations = selected
+            .iter()
+            .map(|profile_id| {
+                self.state
+                    .disposable_profiles
+                    .get(profile_id)
+                    .cloned()
+                    .ok_or("browser_disposable_profile_missing_during_quota")
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let retirement_guard = self
             .effects
-            .acquire_idle_retirement_guard(&browsers)?
+            .acquire_disposable_retirement_guard(&allocations, &browsers)?
             .ok_or("browser_disposable_profile_activity_changed")?;
         let mut result = ReapBrowserSessionsResult::default();
         for profile_id in selected {

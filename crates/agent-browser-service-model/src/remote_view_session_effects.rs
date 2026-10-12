@@ -86,6 +86,44 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
         }
         Ok(())
     }
+    fn qualify_idle_viewers(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+        guard: Box<dyn BrowserIdleRetirementGuard>,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        if self.pool.is_some() {
+            for browser in browsers {
+                // Earlier closes in this action change session membership before
+                // its durable publication. Custody still qualifies the published
+                // operation baseline, with physical identity checked separately.
+                let baseline = self
+                    .expected
+                    .as_ref()
+                    .and_then(|state| state.browsers.get(&browser.id))
+                    .ok_or("browser_session_idle_custody_unavailable")?;
+                if baseline.pid != browser.pid
+                    || baseline.cdp_endpoint != browser.cdp_endpoint
+                    || baseline.profile_id != browser.profile_id
+                    || baseline.desktop != browser.desktop
+                {
+                    return Err("browser_session_idle_custody_identity_changed".into());
+                }
+                let assignment = self
+                    .store
+                    .published_launch_assignment(baseline)
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
+                let observation = self
+                    .adapter
+                    .observe_idle(&assignment)
+                    .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
+                if observation.viewer_active {
+                    return Ok(None);
+                }
+            }
+        }
+        Ok(Some(guard))
+    }
+
     fn require_operation(&self) -> Result<(), String> {
         if self.pending.is_some() {
             return Err("remote_view_session_launch_readback_required".into());
@@ -534,37 +572,21 @@ impl<
         let Some(guard) = self.effects.acquire_idle_retirement_guard(browsers)? else {
             return Ok(None);
         };
-        if self.pool.is_some() {
-            for browser in browsers {
-                // Earlier closes in this action change session membership before
-                // its durable publication. Custody still qualifies the published
-                // operation baseline, with physical identity checked separately.
-                let baseline = self
-                    .expected
-                    .as_ref()
-                    .and_then(|state| state.browsers.get(&browser.id))
-                    .ok_or("browser_session_idle_custody_unavailable")?;
-                if baseline.pid != browser.pid
-                    || baseline.cdp_endpoint != browser.cdp_endpoint
-                    || baseline.profile_id != browser.profile_id
-                    || baseline.desktop != browser.desktop
-                {
-                    return Err("browser_session_idle_custody_identity_changed".into());
-                }
-                let assignment = self
-                    .store
-                    .published_launch_assignment(baseline)
-                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
-                let observation = self
-                    .adapter
-                    .observe_idle(&assignment)
-                    .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
-                if observation.viewer_active {
-                    return Ok(None);
-                }
-            }
-        }
-        Ok(Some(guard))
+        self.qualify_idle_viewers(browsers, guard)
+    }
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[crate::ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        let Some(guard) = self
+            .effects
+            .acquire_disposable_retirement_guard(allocations, browsers)?
+        else {
+            return Ok(None);
+        };
+        self.qualify_idle_viewers(browsers, guard)
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;

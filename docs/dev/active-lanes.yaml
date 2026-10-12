@@ -15,8 +15,8 @@ lanes:
     overlaps: [P232, P238, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
     reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
     shared_source_coordination: "P238 foreign head575c2634 owns public read-only locator and MCP workflow; P237 owns target recovery and first-use acknowledgement. Reconcile public locator, presentation/auth adapter and shared documentation before integration; no foreign source adoption."
-    validation_status: Provider-free pressure, supplied-context and durable first-use checkpoints pass 75 consumer, 331 model, 32 resource, 1 authority, 39 output, 5 host and 3 presentation tests plus quality, client and docs gates; P238 public locator reconciliation, race-complete retirement, layout review and real HTTP/native workflow acceptance pending
-    updated_at: 2026-10-11
+    validation_status: Quota profile/browser group RED then GREEN; 337 model, 75 consumer, 11 disposable-native, 37 resource, 39 output and 5 host tests plus Clippy/fmt/docs pass; native profile claims, public/native/auth acceptance, layout review and P238 reconciliation remain open
+    updated_at: 2026-10-12
   - id: P222
     product_lane: PL-PLATFORM
     objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup

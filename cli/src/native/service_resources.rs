@@ -1020,6 +1020,49 @@ pub(crate) fn permits_disposable_profile_cleanup(
     permits_disposable_profile_cleanup_from_samples(state, allocation, now, &processes, &[])
 }
 
+pub(crate) fn permits_disposable_retirement_group(
+    state: &ServiceState,
+    allocations: &[agent_browser_service_model::ManagedDisposableProfile],
+    browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    now: &str,
+) -> Result<bool, String> {
+    let processes = profile_cleanup_process_census()?;
+    permits_disposable_retirement_group_from_samples(state, allocations, browsers, now, &processes)
+}
+
+fn permits_disposable_retirement_group_from_samples(
+    state: &ServiceState,
+    allocations: &[agent_browser_service_model::ManagedDisposableProfile],
+    browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    now: &str,
+    processes: &[ProcessSample],
+) -> Result<bool, String> {
+    for browser in browsers {
+        if !allocations
+            .iter()
+            .any(|allocation| allocation.profile.id == browser.profile_id)
+        {
+            return Err("browser_disposable_group_profile_missing".into());
+        }
+        if !permits_managed_browser_idle_retirement(state, browser, now)? {
+            return Ok(false);
+        }
+    }
+    for allocation in allocations {
+        if !permits_disposable_profile_retirement_from_samples(
+            state,
+            allocation,
+            now,
+            processes,
+            &[],
+            browsers,
+        )? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 /// Read failures are not process absence. A raced exit is accepted only after
 /// the process directory itself is confirmed absent; other observations fail.
 fn profile_cleanup_process_command(path: &std::path::Path) -> Result<Option<Vec<String>>, String> {
@@ -1079,6 +1122,26 @@ fn permits_disposable_profile_cleanup_from_samples(
     processes: &[ProcessSample],
     warnings: &[String],
 ) -> Result<bool, String> {
+    permits_disposable_profile_retirement_from_samples(
+        state,
+        allocation,
+        now,
+        processes,
+        warnings,
+        &[],
+    )
+}
+
+/// Selected browsers have exact current activity admission and will close under
+/// the same retained authority guard. Every other process remains a blocker.
+fn permits_disposable_profile_retirement_from_samples(
+    state: &ServiceState,
+    allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    now: &str,
+    processes: &[ProcessSample],
+    warnings: &[String],
+    retiring: &[agent_browser_service_model::ManagedBrowserInstance],
+) -> Result<bool, String> {
     let profile = &allocation.profile;
     let path = std::path::Path::new(&profile.user_data_dir);
     let root = std::path::Path::new(&allocation.user_data_root);
@@ -1117,15 +1180,28 @@ fn permits_disposable_profile_cleanup_from_samples(
         .values()
         .filter(|browser| browser.profile_id.as_deref() == Some(profile.id.as_str()))
     {
-        if browser
-            .pid
-            .is_some_and(|pid| processes.iter().any(|process| process.pid == pid))
+        let selected = retiring.iter().any(|candidate| {
+            candidate.id == browser.id
+                && browser.pid == Some(candidate.pid)
+                && candidate.profile_id == profile.id
+                && browser.cdp_endpoint.as_deref() == Some(candidate.cdp_endpoint.as_str())
+        });
+        if (!selected
+            && browser
+                .pid
+                .is_some_and(|pid| processes.iter().any(|process| process.pid == pid)))
             || resource_lane_activity_at(state, &browser.id, now).active
         {
             return Ok(false);
         }
     }
     if processes.iter().any(|process| {
+        if retiring
+            .iter()
+            .any(|browser| browser.profile_id == profile.id && browser.pid == process.pid)
+        {
+            return false;
+        }
         command_arg_value(&process.command, "--user-data-dir").is_some_and(|observed| {
             observed == profile.user_data_dir
                 || std::fs::canonicalize(observed)
@@ -4982,6 +5058,104 @@ mod profile_cleanup_guard_tests {
     use agent_browser_service_model::{
         BrowserProfileCatalogEntry, BrowserProfileKind, ManagedDisposableProfile,
     };
+    #[test]
+    fn disposable_quota_group_allows_exact_retiring_browser_and_blocks_foreign_profile_use() {
+        let allocation = ManagedDisposableProfile {
+            profile: BrowserProfileCatalogEntry {
+                id: "profile".into(),
+                name: "synthetic".into(),
+                user_data_dir: "/owned/root/profile".into(),
+                kind: BrowserProfileKind::Disposable,
+            },
+            policy_id: "default".into(),
+            session_name: "alice".into(),
+            user_data_root: "/owned/root".into(),
+            created_at_ms: 1,
+            cleanup_delay_ms: 0,
+            cleanup_eligible_at_ms: Some(2),
+        };
+        let browser = agent_browser_service_model::ManagedBrowserInstance {
+            id: "browser".into(),
+            profile_id: "profile".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let mut state = ServiceState::default();
+        state.browsers.insert(
+            browser.id.clone(),
+            super::super::service_model::BrowserProcess {
+                id: browser.id.clone(),
+                pid: Some(browser.pid),
+                profile_id: Some(browser.profile_id.clone()),
+                cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+                ..Default::default()
+            },
+        );
+        let mut processes = vec![ProcessSample {
+            pid: 42,
+            command: vec![
+                "chrome".into(),
+                "--user-data-dir=/owned/root/profile".into(),
+            ],
+            ..Default::default()
+        }];
+        let allocations = [allocation];
+        let browsers = [browser];
+        let now = "2026-10-12T15:00:00Z";
+        assert!(permits_disposable_retirement_group_from_samples(
+            &state,
+            &allocations,
+            &browsers,
+            now,
+            &processes
+        )
+        .unwrap());
+        processes.push(ProcessSample {
+            pid: 99,
+            command: processes[0].command.clone(),
+            ..Default::default()
+        });
+        assert!(!permits_disposable_retirement_group_from_samples(
+            &state,
+            &allocations,
+            &browsers,
+            now,
+            &processes
+        )
+        .unwrap());
+        processes.pop();
+        state.viewer_leases.insert(
+            "viewer".into(),
+            super::super::service_model::ViewerLease {
+                id: "viewer".into(),
+                browser_id: Some("browser".into()),
+                viewer_role: "controller".into(),
+                state: "active".into(),
+                ..Default::default()
+            },
+        );
+        assert!(!permits_disposable_retirement_group_from_samples(
+            &state,
+            &allocations,
+            &browsers,
+            now,
+            &processes
+        )
+        .unwrap());
+        state.viewer_leases.clear();
+        state.browsers.get_mut("browser").unwrap().pid = Some(99);
+        assert!(permits_disposable_retirement_group_from_samples(
+            &state,
+            &allocations,
+            &browsers,
+            now,
+            &processes
+        )
+        .is_err());
+    }
+
     #[test]
     fn profile_cleanup_command_distinguishes_missing_observation_from_exited_process() {
         let root =

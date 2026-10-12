@@ -87,6 +87,15 @@ pub(crate) trait BrowserRuntimeDriver {
         }
         Ok(Some(Box::new(())))
     }
+    /// Concurrent runtime drivers must qualify the whole quota group under one lock.
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        _allocations: &[ManagedDisposableProfile],
+        _browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        Err("browser_disposable_group_admission_unsupported".into())
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -275,6 +284,15 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
     {
         self.runtime.acquire_idle_retirement_guard(browsers)
+    }
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime
+            .acquire_disposable_retirement_guard(allocations, browsers)
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
@@ -742,6 +760,25 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             )? {
                 return Ok(None);
             }
+        }
+        Ok(Some(Box::new(guarded)))
+    }
+
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::service_resources::permits_disposable_retirement_group(
+            &guarded.state,
+            allocations,
+            browsers,
+            &chrono::Utc::now().to_rfc3339(),
+        )? {
+            return Ok(None);
         }
         Ok(Some(Box::new(guarded)))
     }
@@ -1894,6 +1931,118 @@ mod tests {
             effects.permits_idle_browser_close(&browser).is_err(),
             "unreadable current authority fails closed"
         );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_disposable_group_guard_checks_profile_jobs_and_releases_exclusion() {
+        use super::super::service_store::{
+            default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+        };
+        use agent_browser_service_model::{JobState, JobTarget, ServiceJob, ServiceState};
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        let path = default_service_state_path().unwrap();
+        struct Restore {
+            path: PathBuf,
+            prior: Option<Vec<u8>>,
+        }
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                if let Some(prior) = &self.prior {
+                    let _ = fs::write(&self.path, prior);
+                } else {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+        let _restore = Restore {
+            prior: fs::read(&path).ok(),
+            path: path.clone(),
+        };
+        let root = TempDirectory::new();
+        fs::create_dir_all(root.0.join("orphan")).unwrap();
+        let allocation = ManagedDisposableProfile {
+            profile: BrowserProfileCatalogEntry {
+                id: "group-orphan".into(),
+                name: "synthetic".into(),
+                user_data_dir: root.0.join("orphan").to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Disposable,
+            },
+            policy_id: "default".into(),
+            session_name: "alice".into(),
+            user_data_root: root.0.to_string_lossy().into_owned(),
+            created_at_ms: 1,
+            cleanup_delay_ms: 0,
+            cleanup_eligible_at_ms: Some(2),
+        };
+        let store = JsonServiceStateStore::new(&path);
+        let mut state = ServiceState::default();
+        state.jobs.insert(
+            "profile-work".into(),
+            ServiceJob {
+                id: "profile-work".into(),
+                target: JobTarget::Profile(allocation.profile.id.clone()),
+                state: JobState::Running,
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        let mut effects = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let allocations = [allocation];
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .is_none());
+        assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
+        state.jobs.clear();
+        store.save(&state).unwrap();
+        let guard = effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .unwrap();
+        let child = |blocked: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "native::service_store::tests::idle_retirement_publication_helper",
+                    "--test-threads=1",
+                ])
+                .env("AGENT_BROWSER_TEST_RETIREMENT_PUBLICATION_PATH", &path)
+                .env_remove("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED");
+            if blocked {
+                command.env("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED", "1");
+            }
+            let result = command.output().unwrap();
+            assert!(
+                result.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+        };
+        child(true);
+        effects.delete_disposable_profile(&allocations[0]).unwrap();
+        assert!(!Path::new(&allocations[0].profile.user_data_dir).exists());
+        drop(guard);
+        child(false);
+        fs::write(&path, b"invalid synthetic authority").unwrap();
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .is_err());
+        // Failed admission releases the repository lock, permitting restoration.
+        store.save(&state).unwrap();
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .is_some());
     }
 
     #[test]
