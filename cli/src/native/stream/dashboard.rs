@@ -3875,6 +3875,10 @@ mod tests {
             "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
             "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
             "AGENT_BROWSER_SOCKET_DIR",
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            "AGENT_BROWSER_REMOTE_VIEW_POOL",
+            "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
+            "AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT",
         ]);
         env.set(
             "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
@@ -3938,6 +3942,12 @@ mod tests {
         )
         .unwrap();
         let commands = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let recovery_reply = Arc::new(std::sync::Mutex::new(json!({
+            "success":false,"error":"remote_view_browser_recovery_pending"
+        })));
+        let use_reply = Arc::new(std::sync::Mutex::new(json!({"success":true})));
+        let recovery_response = recovery_reply.clone();
+        let use_response = use_reply.clone();
         let recorded = commands.clone();
         let _daemon = AbortTask(tokio::spawn(async move {
             loop {
@@ -3952,12 +3962,15 @@ mod tests {
                     command["_agentBrowserAuthToken"].as_str() == Some(token.as_str()),
                     "daemon relay did not authenticate its owned connection"
                 );
+                let reply = if command["handoffOperation"] == "confirm_human_use" {
+                    use_response.lock().unwrap().clone()
+                } else {
+                    recovery_response.lock().unwrap().clone()
+                };
                 recorded.lock().unwrap().push(command);
                 stream
                     .get_mut()
-                    .write_all(
-                        b"{\"success\":false,\"error\":\"remote_view_browser_recovery_pending\"}\n",
-                    )
+                    .write_all(format!("{reply}\n").as_bytes())
                     .await
                     .unwrap();
             }
@@ -3987,6 +4000,137 @@ mod tests {
         assert!(recorded[0]["handoffOperation"].is_null());
         drop(recorded);
         assert!(store.load_session_state().unwrap().remote_view_tab_handoffs[&id].target_expired);
+        // Publish synthetic owner recovery and qualify its exact desktop through
+        // the real local HTTP inventory transport. No installed provider is used.
+        let current = store.load_session_state().unwrap();
+        let mut recovered = current.clone();
+        let desktop_id = "22222222-2222-4222-8222-222222222222";
+        recovered.sessions.insert(
+            "expired-session".into(),
+            serde_json::from_value(json!({
+                "id":"expired-session","name":session,"profileId":"synthetic-profile",
+                "browserId":"synthetic-browser","createdAtMs":100,"lastActivityAtMs":100,
+                "expiresAtMs":u64::MAX,"currentTabId":"expired-tab"
+            }))
+            .unwrap(),
+        );
+        recovered.tabs.insert(
+            "expired-tab".into(),
+            serde_json::from_value(json!({
+                "id":"expired-tab","targetId":"recovered-target","browserId":"synthetic-browser",
+                "sessionId":"expired-session","createdAtMs":100,"lastActivityAtMs":100
+            }))
+            .unwrap(),
+        );
+        recovered.browsers.insert("synthetic-browser".into(), serde_json::from_value(json!({
+            "id":"synthetic-browser","profileId":"synthetic-profile","pid":43,
+            "cdpEndpoint":"ws://synthetic.example/cdp","activeSessionIds":["expired-session"],
+            "desktop":{"desktop_id":desktop_id,"friendly_route_label":"synthetic","generation":7}
+        })).unwrap());
+        recovered
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .target_expired = false;
+        store
+            .compare_and_save_session_state(&current, &recovered)
+            .unwrap();
+        *recovery_reply.lock().unwrap() = json!({"success":true,"data":{
+            "handoffId":id,"tabId":"expired-tab","targetId":"recovered-target",
+            "operatorVisible":{"state":"ready"}
+        }});
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let mut inventory = fixture["inventory"].clone();
+        inventory["desktops"][0]["viewing"] = json!({
+            "lifecycleGeneration":7,"desktopId":"33333333-3333-4333-8333-333333333333",
+            "generation":4,"publicRoute":"/1"
+        });
+        let provider = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        env.set(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            &format!("http://{}", provider.local_addr().unwrap()),
+        );
+        env.set("AGENT_BROWSER_REMOTE_VIEW_POOL", "main");
+        env.remove("AGENT_BROWSER_REMOTE_VIEW_APPLICATION");
+        env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
+        let provider_thread = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for _ in 0..4 {
+                let (mut stream, _) = provider.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut header = Vec::new();
+                while !header.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    header.push(byte[0]);
+                    assert!(header.len() < 8192);
+                }
+                let header = String::from_utf8(header).unwrap();
+                assert!(header.starts_with("POST /v1/consumer "));
+                let length: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|value| value.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                let mut body = vec![0; length];
+                stream.read_exact(&mut body).unwrap();
+                let request: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(request["request"]["operation"], "inventory");
+                let body = inventory.to_string();
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).unwrap();
+            }
+        });
+        let navigation = |extra: &str| {
+            format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\n{extra}Connection: close\r\n\r\n")
+        };
+        for headers in ["", "Sec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nSec-Purpose: prefetch\r\n"] {
+            let response = exchange(navigation(headers)).await;
+            assert_eq!(http_response_status(&response), Some(303));
+            assert_eq!(commands.lock().unwrap().iter().filter(|c| c["handoffOperation"] == "confirm_human_use").count(), 0,
+                "agent or prefetch navigation acknowledged first use");
+        }
+        let headers =
+            "Sec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n";
+        *use_reply.lock().unwrap() = json!({"success":false,"error":"synthetic_focus_denied"});
+        let denied_use = exchange(navigation(headers)).await;
+        assert_eq!(http_response_status(&denied_use), Some(503));
+        assert!(!String::from_utf8_lossy(&denied_use).contains("Location:"));
+        *use_reply.lock().unwrap() = json!({"success":true});
+        let used = exchange(navigation(headers)).await;
+        assert_eq!(http_response_status(&used), Some(303));
+        assert!(
+            String::from_utf8_lossy(&used).contains("Location: https://synthetic-view.example/1")
+        );
+        provider_thread.join().unwrap();
+        let records = commands.lock().unwrap();
+        let acknowledgements = records
+            .iter()
+            .filter(|c| c["handoffOperation"] == "confirm_human_use")
+            .collect::<Vec<_>>();
+        assert!(
+            acknowledgements.is_empty(),
+            "handoff navigation acknowledged human use before any authenticated native viewer connection: {} acknowledgements",
+            acknowledgements.len()
+        );
+        for acknowledgement in acknowledgements {
+            assert_eq!(acknowledgement["handoffId"], id);
+            assert_eq!(acknowledgement["humanUseEvidence"]["operator"], "admin");
+            assert_eq!(acknowledgement["humanUseEvidence"]["tabId"], "expired-tab");
+            assert_eq!(
+                acknowledgement["humanUseEvidence"]["targetId"],
+                "recovered-target"
+            );
+        }
+        let relay_count = records.len();
+        drop(records);
         let current = store.load_session_state().unwrap();
         let mut expired = current.clone();
         expired
@@ -4004,7 +4148,7 @@ mod tests {
         assert_eq!(http_response_status(&expired_response), Some(410));
         assert_eq!(
             commands.lock().unwrap().len(),
-            1,
+            relay_count,
             "expired link reached recovery"
         );
         let current = store.load_session_state().unwrap();
@@ -4017,7 +4161,7 @@ mod tests {
         assert_eq!(http_response_status(&deleted_response), Some(404));
         assert_eq!(
             commands.lock().unwrap().len(),
-            1,
+            relay_count,
             "deleted link reached recovery"
         );
     }
