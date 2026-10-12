@@ -2150,6 +2150,28 @@ fn main() {
 
     if has_help {
         if let Some(cmd) = clean.first() {
+            // Reuse read-only command parsing for unsupported subcommands.
+            // Explicit stdin modes must never consume input merely for help.
+            if clean.len() > 1
+                && !clean
+                    .iter()
+                    .any(|arg| arg == "--stdin" || arg == "--password-stdin")
+            {
+                if let Err(error @ ParseError::UnknownSubcommand { .. }) =
+                    parse_command(&clean, &flags)
+                {
+                    let message = format!(
+                        "{}\nUse agent-browser {cmd} --help for supported subcommands.",
+                        error.format()
+                    );
+                    if flags.json {
+                        print_json_error_with_type(message, "unknown_subcommand");
+                    } else {
+                        eprintln!("{}", color::red(&message));
+                    }
+                    exit(1);
+                }
+            }
             // Help is read-only. Reject unsupported paths before falling back
             // to a broad command listing, and focus profile creation help.
             if cmd == "runtime" {
