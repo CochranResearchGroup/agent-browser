@@ -209,9 +209,17 @@ impl RemoteViewBrowserProcessEffects for Process {
         let environment = environment
             .into_environment(observation, &intent.assignment)
             .unwrap();
+        let expected_environment =
+            match std::fs::read(self.root.join("native-composition-launch-environment.json")) {
+                Ok(bytes) => serde_json::from_slice::<Value>(&bytes).unwrap(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    wire()["launchEnvironment"]["environment"].clone()
+                }
+                Err(error) => panic!("synthetic launch environment unavailable: {error}"),
+            };
         assert_eq!(
             serde_json::to_value(environment).unwrap(),
-            wire()["launchEnvironment"]["environment"]
+            expected_environment
         );
         let mut peer = open_store(&self.root, false);
         let records = peer.unpublished_launch_records().unwrap();

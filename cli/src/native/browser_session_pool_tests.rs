@@ -35,6 +35,12 @@ struct Provider {
     lose_native_registration_reply: bool,
     native_viewing_generation: Option<u64>,
     native_competing_publication: bool,
+    native_bridge: Option<NativeOwnerBridge>,
+}
+struct NativeOwnerBridge {
+    owner_url: String,
+    inventory: Value,
+    assignment_observation: Value,
 }
 struct PoolTransport {
     provider: Rc<RefCell<Provider>>,
@@ -47,7 +53,50 @@ impl RemoteViewApplicationTransport for PoolTransport {
     ) -> Result<Value, RemoteViewApplicationTransportError> {
         let mut provider = self.provider.borrow_mut();
         assert_eq!(envelope.application, "agent-browser");
-        let fixture = wire();
+        let mut fixture = wire();
+        if let Some(bridge) = &provider.native_bridge {
+            if matches!(
+                envelope.request,
+                RemoteViewApplicationRequest::RegisterNativeHandoffObservation { .. }
+                    | RemoteViewApplicationRequest::ObserveNativeHandoffUse { .. }
+            ) {
+                let runtime = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
+                return runtime.block_on(async {
+                    let response = reqwest::Client::builder()
+                        .no_proxy()
+                        .timeout(std::time::Duration::from_secs(5))
+                        .build()
+                        .unwrap()
+                        .post(&bridge.owner_url)
+                        .json(envelope)
+                        .send()
+                        .await
+                        .map_err(|_| RemoteViewApplicationTransportError::Unavailable)?;
+                    if !response.status().is_success() {
+                        return Err(RemoteViewApplicationTransportError::Unavailable);
+                    }
+                    response
+                        .json()
+                        .await
+                        .map_err(|_| RemoteViewApplicationTransportError::Unavailable)
+                });
+            }
+            fixture["inventory"] = bridge.inventory.clone();
+            fixture["assignmentObservation"] = bridge.assignment_observation.clone();
+            fixture["launchEnvironment"]["target"] =
+                bridge.assignment_observation["target"].clone();
+            fixture["launchEnvironment"]["environment"]["REMOTE_VIEW_SLOT_GENERATION"] = bridge
+                .assignment_observation["target"]["viewingGeneration"]
+                .to_string()
+                .into();
+            fixture["windows"]["generation"] =
+                bridge.assignment_observation["target"]["lifecycleGeneration"].clone();
+            fixture["windows"]["viewingGeneration"] =
+                bridge.assignment_observation["target"]["viewingGeneration"].clone();
+        }
         match &envelope.request {
             RemoteViewApplicationRequest::RegisterNativeHandoffObservation {
                 assignment_id,
@@ -4500,4 +4549,116 @@ fn native_use_processing_delay_does_not_replace_actual_use_with_poll_time() {
             assert_eq!(consumer.state().tabs[&peer].last_activity_at_ms, 190);
         }
     }
+}
+
+/// Opt-in cross-repository fixture. The native viewer and private producer run
+/// in Remote View's isolated test process; physical browser custody is synthetic.
+#[test]
+#[ignore = "requires the task-owned Remote View native viewer fixture"]
+fn native_viewer_use_composes_with_actual_provider_owner() {
+    let descriptor_path = std::env::var("P237_NATIVE_PRODUCER_DESCRIPTOR")
+        .expect("synthetic producer descriptor required");
+    let descriptor: Value =
+        serde_json::from_slice(&std::fs::read(descriptor_path).unwrap()).unwrap();
+    let status_path = std::path::PathBuf::from(descriptor["statusPath"].as_str().unwrap());
+    let now = || {
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64
+    };
+    let fixture = Fixture::new();
+    let mut expected_environment = wire()["launchEnvironment"]["environment"].clone();
+    expected_environment["REMOTE_VIEW_SLOT_GENERATION"] = descriptor["assignmentObservation"]
+        ["target"]["viewingGeneration"]
+        .to_string()
+        .into();
+    std::fs::write(
+        fixture
+            .root
+            .join("native-composition-launch-environment.json"),
+        serde_json::to_vec(&expected_environment).unwrap(),
+    )
+    .unwrap();
+    let provider = Rc::new(RefCell::new(Provider {
+        assignments: vec![serde_json::from_value(descriptor["assignment"].clone()).unwrap()],
+        window_pid: Some(43),
+        native_bridge: Some(NativeOwnerBridge {
+            owner_url: descriptor["ownerUrl"].as_str().unwrap().into(),
+            inventory: descriptor["inventory"].clone(),
+            assignment_observation: descriptor["assignmentObservation"].clone(),
+        }),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/composed-native-use","profileId":"profile-a",
+        "activityAtMs":now(),"humanHandoff":true,"pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let tab = opened["browserSession"]["tabId"].as_str().unwrap();
+    let registered = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"prepare_native_use",
+        "expectedTabId":tab,"expectedTargetId":opened["browserSession"]["targetId"],"activityAtMs":now()
+    }));
+    assert_eq!(registered["success"], true, "{registered}");
+    let correlation = registered["data"]["correlationId"].as_str().unwrap();
+    let pending = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":now()
+    }));
+    assert_eq!(pending["data"]["status"], "native_use_pending", "{pending}");
+    assert!(fixture
+        .store(false)
+        .load_session_state()
+        .unwrap()
+        .pending_human_tabs
+        .contains_key(tab));
+    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"pending","correlationId":correlation,"handoffId":id,"pendingHuman":true})).unwrap()).unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        let result = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":now()
+        }));
+        assert_eq!(result["success"], true, "{result}");
+        if result["data"]["status"] == "human_use_confirmed" {
+            break;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "actual viewer evidence never reached browser owner: {result}"
+        );
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
+    let durable = fixture.store(false).load_session_state().unwrap();
+    assert!(!durable.pending_human_tabs.contains_key(tab));
+    let first = durable.tab_metadata[tab].first_human_use_at_ms.unwrap();
+    let observation = durable.remote_view_tab_handoffs[id]
+        .native_observation
+        .as_ref()
+        .unwrap()
+        .observation
+        .as_ref()
+        .unwrap();
+    assert_eq!(observation.correlation_id, correlation);
+    assert_eq!(observation.used.as_ref().unwrap().recorded_at_ms, first);
+    let replay = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"observe_native_use","activityAtMs":now()
+    }));
+    assert_eq!(
+        replay["data"]["status"], "human_use_already_confirmed",
+        "{replay}"
+    );
+    assert_eq!(
+        fixture
+            .store(false)
+            .load_session_state()
+            .unwrap()
+            .tab_metadata[tab]
+            .first_human_use_at_ms,
+        Some(first)
+    );
+    assert_eq!(calls.get(), 1);
+    assert!(provider.borrow().view_requests.is_empty());
+    std::fs::write(status_path,serde_json::to_vec(&serde_json::json!({"stage":"confirmed","correlationId":correlation,"handoffId":id,"pendingHuman":false,"firstHumanUseAtMs":first,"providerUseAtMs":observation.used.as_ref().unwrap().recorded_at_ms,"replayStatus":replay["data"]["status"]})).unwrap()).unwrap();
 }
