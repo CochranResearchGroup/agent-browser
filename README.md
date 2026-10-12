@@ -5953,6 +5953,11 @@ Opening a durable handoff restores an idle-cleaned retained browser before redir
 
 A still-valid handoff for an automatically expired task recreates its addressed tab from retained task intent. It reuses an eligible recorded profile and browser, or wakes a browser through the existing owner. A cleaned disposable allocation can be recreated through its recorded policy. The original handoff URL and link expiry remain unchanged; the resolver does not select an unrelated current tab. Page memory is not restored. If a tab-creation outcome is unknown, obtain readback instead of blindly retrying. Explicitly closed tasks and expired links follow their separate terminal behavior.
 
+Software callers configure an addressed tab through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_tab_lifetime"` and `params.tabInactivityMs`. A positive value expires the tab after that many milliseconds without tab activity; 0 makes its retention perpetual. The policy is persisted separately from link lifetime. `inspect` reports `tabLifetime` alongside link expiry. Configuration does not navigate, open a viewer or renew link validity. Reaping an expired tab preserves its peer tabs and link; active external custody and viewer protection still apply.
+
+Closing the last live tab in an Agent Browser-owned browser also ends its empty sessions and closes that browser. Its handoff records retain their separate link lifetime. Closing one tab preserves other live tabs; borrowed browsers remain under their external owner.
+
+
 
 Normal client `remote-view open` and `remote-view resolve` use the native Remote View desktop readiness path when the Remote View application provider is configured. They preserve the logical handoff and profile without issuing an extra Agent Browser viewer grant. Remote View retains its existing operator authentication. During a runtime-host restart, client commands briefly wait for the existing endpoint to finish publishing before reporting it unavailable.
 

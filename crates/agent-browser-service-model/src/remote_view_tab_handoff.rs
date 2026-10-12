@@ -68,6 +68,8 @@ pub struct RemoteViewTabHandoffResumeIntent {
     pub profile_id: String,
     pub disposable_policy_id: Option<String>,
     pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_lifetime: Option<crate::BrowserTabLifetime>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -191,6 +193,7 @@ pub fn remote_view_handoff_resume_intent(
     let live = resolve_remote_view_tab_handoff(state, handoff_id);
     if let Ok(target) = live.as_ref() {
         return Ok(RemoteViewTabHandoffResumeIntent {
+            tab_lifetime: state.tab_lifetimes.get(&link.tab_id).cloned(),
             session_name: target.session.name.clone(),
             profile_id: target.session.profile_id.clone(),
             disposable_policy_id: state
@@ -234,6 +237,7 @@ pub fn remote_view_handoff_resume_intent(
     }
     let ended = ended.ok_or("remote_view_handoff_resume_intent_missing")?;
     Ok(RemoteViewTabHandoffResumeIntent {
+        tab_lifetime: state.tab_lifetimes.get(&link.tab_id).cloned(),
         session_name: ended.name.clone(),
         profile_id: ended.profile_id.clone(),
         disposable_policy_id: state

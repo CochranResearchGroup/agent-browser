@@ -926,13 +926,58 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                     .get(handoff_id)
                     .ok_or("remote_view_tab_handoff_missing")?;
                 if command["handoffOperation"] == "inspect" {
+                    let tab_lifetime = self.state.tab_lifetimes.get(&link.tab_id).or_else(|| {
+                        link.resume
+                            .as_ref()
+                            .and_then(|intent| intent.tab_lifetime.as_ref())
+                    });
                     return Ok(serde_json::json!({"handoffId":handoff_id,
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
                         "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
+                        "tabId":link.tab_id,"tabLifetime":tab_lifetime,
                         "expired":link.check_link_at(now_ms).is_err(),
                         "status":if link.check_link_at(now_ms).is_err() {"expired"} else {"active"}}));
                 }
                 link.check_link_at(now_ms)?;
+                if command["handoffOperation"] == "set_tab_lifetime" {
+                    let ttl = command["tabInactivityMs"]
+                        .as_u64()
+                        .ok_or("browser_tab_lifetime_invalid")?;
+                    let target = agent_browser_service_model::resolve_remote_view_tab_handoff(
+                        &self.state,
+                        handoff_id,
+                    )?;
+                    target
+                        .tab
+                        .last_activity_at_ms
+                        .checked_add(ttl)
+                        .ok_or("browser_tab_lifetime_invalid")?;
+                    let lifetime = agent_browser_service_model::BrowserTabLifetime {
+                        inactivity_ms: (ttl != 0).then_some(ttl),
+                    };
+                    let mut intent =
+                        agent_browser_service_model::remote_view_handoff_resume_intent(
+                            &self.state,
+                            handoff_id,
+                            now_ms,
+                        )?;
+                    intent.tab_lifetime = Some(lifetime.clone());
+                    self.state
+                        .tab_lifetimes
+                        .insert(target.tab.id.clone(), lifetime.clone());
+                    for link in self
+                        .state
+                        .remote_view_tab_handoffs
+                        .values_mut()
+                        .filter(|link| link.tab_id == target.tab.id)
+                    {
+                        link.resume = Some(intent.clone());
+                    }
+                    self.commit_state()?;
+                    return Ok(serde_json::json!({"handoffId":handoff_id,
+                        "tabId":target.tab.id,"status":"tab_lifetime_updated",
+                        "tabLifetime":lifetime}));
+                }
                 if command["handoffOperation"] == "extend" {
                     // Link lifetime management does not require a live target
                     // and must not recreate one as a side effect.
@@ -1100,6 +1145,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 let reaped = self.reap(now_ms)?;
                 Ok(serde_json::json!({
                     "expiredSessionIds": reaped.expired_session_ids,
+                    "expiredTabIds": reaped.expired_tab_ids,
                     "quotaEvictedSessionIds": reaped.quota_evicted_session_ids,
                     "closedBrowserIds": reaped.closed_browser_ids,
                     "deletedDisposableProfileIds": reaped.deleted_disposable_profile_ids,
@@ -1524,6 +1570,7 @@ where
             record.initialize_profile_retention(now_ms, ttl)?;
             record.resume = Some(
                 agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
+                    tab_lifetime: self.state.tab_lifetimes.get(&tab.id).cloned(),
                     session_name: session.name.clone(),
                     profile_id: session.profile_id.clone(),
                     disposable_policy_id: self
@@ -1767,6 +1814,10 @@ where
                     .ok_or("remote_view_handoff_recreation_identity_missing")?
                     .to_owned();
                 let target = agent_browser_service_model::RemoteViewTabHandoffResumeIntent {
+                    tab_lifetime: link
+                        .resume
+                        .as_ref()
+                        .and_then(|intent| intent.tab_lifetime.clone()),
                     session_name: session_name.to_owned(),
                     profile_id: response["browserSession"]["profileId"]
                         .as_str()
@@ -1778,6 +1829,11 @@ where
                         .and_then(|intent| intent.disposable_policy_id.clone()),
                     url: optional_string(command, "url").map(str::to_owned),
                 };
+                if let Some(lifetime) = &target.tab_lifetime {
+                    self.state
+                        .tab_lifetimes
+                        .insert(link.tab_id.clone(), lifetime.clone());
+                }
                 link.resume = Some(target);
                 link.recreation = None;
                 link.target_expired = false;
@@ -2430,10 +2486,10 @@ mod tests {
             "profileId": "work",
             "activityAtMs": 3_000
         }));
-        assert_eq!(response["success"], true);
-        assert_eq!(response["data"]["sessionId"], first.session_id);
-        assert_eq!(response["data"]["disposition"], "browser_closed");
+        assert_eq!(response["success"], false);
+        assert_eq!(response["error"], "browser_session_not_found_by_name:alice");
         assert!(restarted.state().sessions.is_empty());
+        assert!(restarted.state().browsers.is_empty());
 
         // A different persistence owner advances state after this host loaded it.
         // Refuse the next manager operation before it can launch a browser.

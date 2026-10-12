@@ -2359,6 +2359,102 @@ fn valid_handoff_can_extend_after_target_expiry_without_recreation() {
 }
 
 #[test]
+fn closing_last_live_tab_closes_browser_without_deleting_handoff() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let closed = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_tab_close", "sessionName":"Alice", "profileId":"profile-a", "activityAtMs":110
+    }));
+    assert_eq!(closed["success"], true, "{closed}");
+    let status = consumer.handle_command(&serde_json::json!({"action":"browser_session_status"}));
+    assert_eq!(
+        status["data"]["browsers"],
+        serde_json::json!({}),
+        "{status}"
+    );
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls);
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":opened["browserSession"]["handoffId"],
+        "handoffOperation":"inspect", "activityAtMs":111
+    }));
+    assert_eq!(inspected["success"], true, "{inspected}");
+    assert_eq!(inspected["data"]["expired"], false);
+    assert!(inspected["data"]["expiresAtMs"].is_null());
+}
+
+#[test]
+fn configured_tab_lifetime_expires_only_its_target_and_keeps_the_link() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let bob = consumer.execute_managed_command("Bob", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/bob", "profileId":"profile-a", "activityAtMs":120
+    })).unwrap().unwrap();
+    let id = alice["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let configured = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":120
+    }));
+    assert_eq!(configured["success"], true, "{configured}");
+    assert_eq!(
+        configured["data"]["status"], "tab_lifetime_updated",
+        "{configured}"
+    );
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let before = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_reap", "activityAtMs":129
+    }));
+    assert_eq!(before["data"]["expiredTabIds"], serde_json::json!([]));
+    let expired = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_reap", "activityAtMs":130
+    }));
+    assert_eq!(expired["success"], true, "{expired}");
+    assert_eq!(
+        expired["data"]["expiredTabIds"],
+        serde_json::json!([alice["browserSession"]["tabId"]])
+    );
+    assert_eq!(expired["data"]["closedBrowserIds"], serde_json::json!([]));
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":130
+    }));
+    assert_eq!(inspected["data"]["expired"], false);
+    assert!(inspected["data"]["expiresAtMs"].is_null());
+    let continued = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"get_url", "profileId":"profile-a", "activityAtMs":131
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        continued["browserSession"]["tabId"],
+        bob["browserSession"]["tabId"]
+    );
+    assert_eq!(
+        continued["browserSession"]["targetId"],
+        bob["browserSession"]["targetId"]
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
 fn disposable_inactivity_expires_work_and_reaps_only_unreferenced_profile_data() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

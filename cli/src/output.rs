@@ -6361,6 +6361,11 @@ Resolve addresses an existing logical handoff and refuses explicitly closed task
 A valid link recreates an automatically expired task tab from retained intent.
 The same URL and link expiry are preserved; unrelated current tabs are not substituted.
 Unknown creation outcomes require readback rather than blind retries.
+Software callers set handoffOperation=set_tab_lifetime with tabInactivityMs.
+Closing the last live tab closes its owned browser and retains handoff records.
+A positive value selects tab inactivity retention; 0 selects perpetual retention.
+inspect reports tabLifetime separately from link expiry. Configuration does not
+navigate or open a viewer; expiration preserves peer tabs and the handoff link.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Native desktop links do not require a viewer grant.
 Retained handoffs preserve logical tabs, not indefinite browser processes.

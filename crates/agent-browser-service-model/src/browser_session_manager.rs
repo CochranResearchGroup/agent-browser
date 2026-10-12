@@ -326,6 +326,7 @@ pub struct CloseBrowserSessionResult {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ReapBrowserSessionsResult {
+    pub expired_tab_ids: Vec<String>,
     pub expired_session_ids: Vec<String>,
     pub quota_evicted_session_ids: Vec<String>,
     pub closed_browser_ids: Vec<String>,
@@ -390,10 +391,18 @@ pub struct ManagedBrowserTab {
     pub last_activity_at_ms: u64,
 }
 
+/// Explicit tab retention, independent of any link record. None is perpetual.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserTabLifetime {
+    pub inactivity_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BrowserTabEndReason {
     ExplicitClose,
+    InactivityExpired,
     SessionEnded,
     BrowserEnded,
 }
@@ -516,6 +525,8 @@ pub struct BrowserSessionState {
     pub leave_open_session_ids: BTreeSet<String>,
     pub disposable_profiles: BTreeMap<String, ManagedDisposableProfile>,
     pub tabs: BTreeMap<String, ManagedBrowserTab>,
+    #[serde(default)]
+    pub tab_lifetimes: BTreeMap<String, BrowserTabLifetime>,
     pub tab_history: Vec<TerminalBrowserTab>,
     pub navigation_history: Vec<BrowserNavigationRecord>,
     pub navigation_daily_summaries: Vec<BrowserNavigationDailySummary>,
@@ -542,6 +553,7 @@ impl Default for BrowserSessionState {
             leave_open_session_ids: BTreeSet::new(),
             disposable_profiles: BTreeMap::new(),
             tabs: BTreeMap::new(),
+            tab_lifetimes: BTreeMap::new(),
             tab_history: Vec::new(),
             navigation_history: Vec::new(),
             navigation_daily_summaries: Vec::new(),
@@ -1399,6 +1411,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.state.sessions.remove(session_id);
         self.state.leave_open_session_ids.remove(session_id);
         for tab in tabs {
+            self.state.tab_lifetimes.remove(&tab.id);
             self.state.tabs.remove(&tab.id);
             self.state.tab_history.push(TerminalBrowserTab {
                 id: tab.id,
@@ -1595,9 +1608,60 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         Ok(acquisition)
     }
 
+    /// Close the addressed current tab, preserving peers and handoff records.
+    /// An owned browser with no live tabs ends its empty sessions and closes.
     pub fn close_current_tab(
         &mut self,
         session_id: &str,
+        activity_at_ms: u64,
+    ) -> Result<CloseBrowserTabResult, String> {
+        let tab_id = self
+            .state
+            .sessions
+            .get(session_id)
+            .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?
+            .current_tab_id
+            .clone()
+            .ok_or_else(|| "browser_session_current_tab_absent".to_string())?;
+        let browser_id = self
+            .state
+            .tabs
+            .get(&tab_id)
+            .ok_or_else(|| "browser_session_current_tab_missing".to_string())?
+            .browser_id
+            .clone();
+        let closed = self.close_named_tab(
+            session_id,
+            &tab_id,
+            BrowserTabEndReason::ExplicitClose,
+            activity_at_ms,
+        )?;
+        if !self
+            .state
+            .tabs
+            .values()
+            .any(|tab| tab.browser_id == browser_id)
+            && !self.state.shared_browser_ids.contains(&browser_id)
+        {
+            let empty_sessions = self
+                .state
+                .browsers
+                .get(&browser_id)
+                .ok_or_else(|| "browser_session_browser_missing".to_string())?
+                .active_session_ids
+                .clone();
+            for id in empty_sessions {
+                self.close_session(&id, SessionEndReason::ExplicitClose, activity_at_ms)?;
+            }
+        }
+        Ok(closed)
+    }
+
+    fn close_named_tab(
+        &mut self,
+        session_id: &str,
+        tab_id: &str,
+        reason: BrowserTabEndReason,
         activity_at_ms: u64,
     ) -> Result<CloseBrowserTabResult, String> {
         let session = self
@@ -1606,10 +1670,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(session_id)
             .cloned()
             .ok_or_else(|| format!("browser_session_not_found:{session_id}"))?;
-        let tab_id = session
-            .current_tab_id
-            .as_deref()
-            .ok_or_else(|| "browser_session_current_tab_absent".to_string())?;
         let tab = self
             .state
             .tabs
@@ -1625,11 +1685,24 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .get(&session.browser_id)
             .cloned()
             .ok_or_else(|| "browser_session_browser_missing".to_string())?;
-        let expires_at_ms = activity_at_ms
-            .checked_add(self.config.session_idle_timeout_ms)
-            .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?;
+        let expires_at_ms = if reason == BrowserTabEndReason::ExplicitClose {
+            activity_at_ms
+                .checked_add(self.config.session_idle_timeout_ms)
+                .ok_or_else(|| "browser_session_expiry_exhausted".to_string())?
+        } else {
+            session.expires_at_ms
+        };
         self.effects.close_tab(&browser, &tab)?;
         self.state.tabs.remove(&tab.id);
+        self.state.tab_lifetimes.remove(&tab.id);
+        for link in self
+            .state
+            .remote_view_tab_handoffs
+            .values_mut()
+            .filter(|link| link.tab_id == tab.id)
+        {
+            link.target_expired = reason == BrowserTabEndReason::InactivityExpired;
+        }
         self.state.tab_history.push(TerminalBrowserTab {
             id: tab.id.clone(),
             target_id: tab.target_id.clone(),
@@ -1639,10 +1712,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             created_at_ms: tab.created_at_ms,
             last_activity_at_ms: tab.last_activity_at_ms,
             closed_at_ms: activity_at_ms,
-            reason: BrowserTabEndReason::ExplicitClose,
+            reason,
             session_end_reason: None,
         });
-        let current_tab_id = self
+        let remaining_tab_id = self
             .state
             .tabs
             .values()
@@ -1655,14 +1728,21 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )
             })
             .map(|candidate| candidate.id.clone());
+        let current_tab_id = session
+            .current_tab_id
+            .clone()
+            .filter(|id| self.state.tabs.contains_key(id))
+            .or(remaining_tab_id);
         let stored_session = self
             .state
             .sessions
             .get_mut(session_id)
             .ok_or_else(|| "browser_session_missing_during_tab_close".to_string())?;
         stored_session.current_tab_id = current_tab_id.clone();
-        stored_session.last_activity_at_ms = activity_at_ms;
-        stored_session.expires_at_ms = expires_at_ms;
+        if reason == BrowserTabEndReason::ExplicitClose {
+            stored_session.last_activity_at_ms = activity_at_ms;
+            stored_session.expires_at_ms = expires_at_ms;
+        }
         Ok(CloseBrowserTabResult {
             closed_tab_id: tab.id,
             current_tab_id,
@@ -1811,6 +1891,22 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         self.reap_with_protected_sessions(now_ms, &BTreeSet::new())
     }
 
+    fn tab_lifetime_expired(&self, tab: &ManagedBrowserTab, now_ms: u64) -> bool {
+        self.state
+            .tab_lifetimes
+            .get(&tab.id)
+            .and_then(|lifetime| lifetime.inactivity_ms)
+            .is_some_and(|ttl| now_ms.saturating_sub(tab.last_activity_at_ms) >= ttl)
+    }
+
+    fn session_has_retained_tab_lifetime(&self, session_id: &str, now_ms: u64) -> bool {
+        self.state.tabs.values().any(|tab| {
+            tab.session_id == session_id
+                && self.state.tab_lifetimes.contains_key(&tab.id)
+                && !self.tab_lifetime_expired(tab, now_ms)
+        })
+    }
+
     pub fn reap_with_protected_sessions(
         &mut self,
         now_ms: u64,
@@ -1834,16 +1930,23 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .values()
             .filter(|browser| {
                 !self.state.idle_closed_browsers.contains_key(&browser.id)
-                    && !self.state.shared_browser_ids.contains(&browser.id)
                     && browser.active_session_ids.iter().any(|id| {
                         self.state.sessions.get(id).is_some_and(|session| {
-                            session.expires_at_ms <= now_ms
-                                || (self
-                                    .state
-                                    .disposable_profiles
-                                    .contains_key(&session.profile_id)
-                                    && now_ms.saturating_sub(session.last_activity_at_ms)
-                                        >= self.state.retention_policy.disposable_inactivity_ms)
+                            (!self.state.shared_browser_ids.contains(&browser.id)
+                                && (session.expires_at_ms <= now_ms
+                                    || (self
+                                        .state
+                                        .disposable_profiles
+                                        .contains_key(&session.profile_id)
+                                        && now_ms.saturating_sub(session.last_activity_at_ms)
+                                            >= self
+                                                .state
+                                                .retention_policy
+                                                .disposable_inactivity_ms)))
+                                || self.state.tabs.values().any(|tab| {
+                                    tab.session_id == session.id
+                                        && self.tab_lifetime_expired(tab, now_ms)
+                                })
                         })
                     })
             })
@@ -1856,6 +1959,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             }
         }
         for session in self.state.sessions.values() {
+            if self.session_has_retained_tab_lifetime(&session.id, now_ms) {
+                protected_session_ids.insert(session.id.clone());
+                continue;
+            }
             if self
                 .state
                 .disposable_profiles
@@ -1867,6 +1974,45 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     protected_session_ids.remove(&session.id);
                 }
             }
+        }
+        let expired_tabs = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| {
+                self.tab_lifetime_expired(tab, now_ms)
+                    && !externally_protected_session_ids.contains(&tab.session_id)
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut result = ReapBrowserSessionsResult::default();
+        for tab in expired_tabs {
+            let last_session_tab = self
+                .state
+                .tabs
+                .values()
+                .filter(|candidate| candidate.session_id == tab.session_id)
+                .count()
+                == 1;
+            if last_session_tab {
+                let closed = self.close_session(
+                    &tab.session_id,
+                    SessionEndReason::HeartbeatExpired,
+                    now_ms,
+                )?;
+                result.expired_session_ids.push(tab.session_id.clone());
+                if closed.disposition == SessionCloseDisposition::BrowserClosed {
+                    result.closed_browser_ids.push(closed.browser_id);
+                }
+            } else {
+                self.close_named_tab(
+                    &tab.session_id,
+                    &tab.id,
+                    BrowserTabEndReason::InactivityExpired,
+                    now_ms,
+                )?;
+            }
+            result.expired_tab_ids.push(tab.id);
         }
         let expired_session_ids = self
             .state
@@ -1887,7 +2033,6 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
-        let mut result = ReapBrowserSessionsResult::default();
         for session_id in expired_session_ids {
             let closed =
                 self.close_session(&session_id, SessionEndReason::HeartbeatExpired, now_ms)?;
@@ -1913,6 +2058,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                             .sessions
                             .get(id)
                             .is_some_and(|session| session.expires_at_ms <= now_ms)
+                            && !self.session_has_retained_tab_lifetime(id, now_ms)
                             && !externally_protected_session_ids.contains(id)
                     })
             })
@@ -2169,6 +2315,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                     .cloned()
                     .collect::<Vec<_>>();
                 for tab in tabs {
+                    self.state.tab_lifetimes.remove(&tab.id);
                     self.state.tabs.remove(&tab.id);
                     self.state.tab_history.push(TerminalBrowserTab {
                         id: tab.id,
