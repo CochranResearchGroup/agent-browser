@@ -2,6 +2,9 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
+mod catalog;
+mod workflow;
+
 use crate::connection::{send_command, Response};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
@@ -66,7 +69,73 @@ const PROFILE_DIAGNOSIS_TEMPLATE: &str = SERVICE_PROFILE_DIAGNOSIS_MCP_RESOURCE_
 const PROFILE_SEEDING_HANDOFF_TEMPLATE: &str =
     "agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}";
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
-const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = SERVICE_REQUEST_ACTIONS;
+// Advanced MCP commands stay inside the addressed task's page. Owner and
+// authority operations remain outside this browser command seam.
+const BROWSER_COMMAND_ALLOWED_ACTIONS: &[&str] = &[
+    "navigate",
+    "evaluate",
+    "back",
+    "forward",
+    "reload",
+    "url",
+    "title",
+    "viewport",
+    "user_agent",
+    "emulatemedia",
+    "timezone",
+    "locale",
+    "geolocation",
+    "permissions",
+    "cookies_get",
+    "cookies_set",
+    "cookies_clear",
+    "storage_get",
+    "storage_set",
+    "storage_clear",
+    "console",
+    "errors",
+    "setcontent",
+    "headers",
+    "offline",
+    "dialog",
+    "clipboard",
+    "upload",
+    "download",
+    "waitfordownload",
+    "pdf",
+    "responsebody",
+    "har_start",
+    "har_stop",
+    "route",
+    "unroute",
+    "requests",
+    "request_detail",
+    "snapshot",
+    "screenshot",
+    "click",
+    "fill",
+    "wait",
+    "type",
+    "press",
+    "hover",
+    "select",
+    "gettext",
+    "inputvalue",
+    "isvisible",
+    "getattribute",
+    "innerhtml",
+    "styles",
+    "count",
+    "boundingbox",
+    "isenabled",
+    "ischecked",
+    "check",
+    "uncheck",
+    "scroll",
+    "scrollintoview",
+    "focus",
+    "clear",
+];
 
 /// Run the local MCP command surface.
 ///
@@ -356,79 +425,19 @@ fn service_mcp_resource_templates() -> Vec<Value> {
 /// before combining profile, route, doctor, or cleanup evidence.
 fn service_operating_guide() -> Value {
     json!({
-        "schemaVersion": "agent-browser.operating-guide.v1",
-        "summary": "Declare intent, read the access plan, request browser work through the service control plane, and acquire operator presentation only when required.",
-        "workflow": [
-            {
-                "step": "declare_intent",
-                "fields": ["serviceName", "agentName", "taskName", "targetServiceId", "siteId", "loginId", "accountId", "url"]
-            },
-            {
-                "step": "read_access_plan",
-                "tool": SERVICE_ACCESS_PLAN_MCP_TOOL_NAME,
-                "resource": SERVICE_ACCESS_PLAN_MCP_RESOURCE
-            },
-            {
-                "step": "request_browser_work",
-                "tool": "service_request",
-                "rule": "Copy selected profile, browser reuse, session, lease, and posture hints from the access plan."
-            },
-            {
-                "step": "acquire_presentation_if_required",
-                "preflightTool": SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME,
-                "rule": "Guacamole or RDP capacity is a presentation concern unless the requested browser posture requires that route."
-            }
+        "schemaVersion":"agent-browser.operating-guide.v2",
+        "summary":"Open a task, work on its page, hand its desktop to a person, and continue the same task.",
+        "workflow":[
+            {"tool":"browser_open","rule":"Supply profile, profileMode, taskKey and URL. Reuse taskKey when retrying."},
+            {"tool":"browser_snapshot","rule":"Use the returned taskId for page actions and task-scoped tabs."},
+            {"tool":"browser_handoff","rule":"Share the returned ready HTTPS handoffUrl. Remote View owns the native viewer."},
+            {"tool":"browser_continue","rule":"Continue with the same taskId after human input."},
+            {"tool":"browser_close","rule":"Close only this task; peer tasks remain open."}
         ],
-        "readinessAxes": {
-            "browserAcquisition": {
-                "evidence": ["accessPlan.decision", "accessPlan.decision.profileReuse", "service request result", "profile allocation"],
-                "owner": "agent-browser",
-                "callerRule": "Do not create a duplicate profile or browser lane to escape another workload."
-            },
-            "operatorPresentation": {
-                "evidence": ["route preflight", "remote_view_open result", "operatorVisible", "requestedScope"],
-                "owner": "agent-browser",
-                "callerRule": "A checked-out route does not by itself prove that browser acquisition is blocked. Wait or request an explicit route switch only when presentation is required."
-            },
-            "runtimeMaintenance": {
-                "evidence": ["runtimeMultiplicity", "serviceResources", "runtimeLifecycle.blockingIncident", "install doctor issues"],
-                "owner": "agent-browser",
-                "callerRule": "A global doctor advisory blocks a request only when scoped readiness or the request result says it does."
-            }
-        },
-        "ownership": {
-            "caller": [
-                "declare target and account intent",
-                "state whether a person needs presentation",
-                "follow returned reuse and readiness actions",
-                "report the exact blocked axis"
-            ],
-            "agentBrowser": [
-                "select profiles",
-                "serialize profile leases",
-                "reuse retained browsers",
-                "select or park routes",
-                "issue durable handoffs",
-                "close owned browsers",
-                "reconcile runtime state",
-                "classify and apply garbage collection"
-            ]
-        },
-        "prohibitions": [
-            "Do not close another workload to free a route.",
-            "Do not release another viewer or take over a controller without explicit authority.",
-            "Do not run GC, delete a profile, or kill a process from a consumer task.",
-            "Do not share raw Guacamole or provider URLs; share only a ready durable handoff URL.",
-            "Do not describe the whole runtime as unhealthy when only one readiness axis is blocked."
-        ],
-        "blockedReportFields": [
-            "browserAcquisition",
-            "operatorPresentation",
-            "runtimeMaintenance",
-            "typedCodeOrField",
-            "safeNextAction",
-            "effectsNotTaken"
-        ]
+        "advanced":{"tool":"browser_discover","rule":"Request browser, diagnostics or administration metadata only when needed."},
+        "ownership":{"agentBrowser":"Browser launch, profile and task continuity", "remoteView":"Native desktop and human viewer"},
+        "profileModes":["persistent","existing","disposable"],
+        "profileRule":"Use the requested persistent or existing profile; do not substitute a disposable profile to bypass a problem."
     })
 }
 
@@ -832,7 +841,7 @@ fn handle_jsonrpc_request(
             read_service_mcp_resource_contents_with_config(uri, configured_service_state)
                 .map_err(|err| resource_read_error(uri, err))
         }
-        "tools/list" => Ok(json!({ "tools": service_mcp_tools() })),
+        "tools/list" => Ok(json!({ "tools": catalog::tools() })),
         "tools/call" => call_service_mcp_tool(params, session, configured_service_state),
         "prompts/list" => Ok(json!({ "prompts": [] })),
         _ => Err(JsonRpcError::method_not_found(method)),
@@ -860,180 +869,7 @@ fn initialize_result(params: Option<&Value>) -> Value {
             "title": "Agent Browser",
             "version": env!("CARGO_PKG_VERSION"),
         },
-        "instructions": "For shared, authenticated, profile-sensitive, or operator-visible work, read agent-browser://operating-guide and call service_access_plan before service_request. Keep browser acquisition, operator presentation, and runtime maintenance separate. Include serviceName, agentName, and taskName on tools/call whenever possible.",
-    })
-}
-
-fn service_profile_lease_mutation_tool_schema(operation: &str, title: &str) -> Value {
-    let mut required = vec!["leaseId", "leaseRevision", "profileCapability"];
-    if operation == "renew" {
-        required.push("expiresAt");
-    }
-    json!({
-        "name": format!("service_profile_lease_{operation}"),
-        "title": title,
-        "description": format!("{title} through exact lease revision compare-and-swap. profileCapability is authenticated ephemerally and is never persisted or returned."),
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "leaseId": {
-                    "type": "string",
-                    "description": "Exact profile lease id from agent-browser://profile-leases."
-                },
-                "leaseRevision": {
-                    "type": "string",
-                    "description": "Exact current leaseRevision from the inspected lease."
-                },
-                "profileCapability": {
-                    "type": "string",
-                    "writeOnly": true,
-                    "description": "Secret profile capability issued by service leases register. Do not log or persist it."
-                },
-                "expiresAt": {
-                    "type": "string",
-                    "description": "Required RFC 3339 subordinate-work expiry for renew."
-                },
-                "serviceName": { "type": "string" },
-                "agentName": { "type": "string" },
-                "taskName": { "type": "string" }
-            },
-            "required": required
-        }
-    })
-}
-
-fn service_profile_lease_reconcile_tool_schema(operation: &str, title: &str) -> Value {
-    let is_plan = operation == "plan";
-    json!({
-        "name": format!("service_profile_lease_reconcile_{operation}"),
-        "title": title,
-        "description": format!("{title}. The profile capability is ephemeral and never persisted or returned."),
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "leaseId": { "type": "string" },
-                "leaseRevision": { "type": "string" },
-                "profileCapability": { "type": "string", "writeOnly": true },
-                "expiresAt": { "type": "string" },
-                "idempotencyKey": { "type": "string" },
-                "plan": { "type": "object" },
-                "serviceName": { "type": "string" },
-                "agentName": { "type": "string" },
-                "taskName": { "type": "string" }
-            },
-            "required": if is_plan {
-                vec!["leaseId", "leaseRevision", "profileCapability", "expiresAt"]
-            } else {
-                vec!["leaseId", "profileCapability", "plan"]
-            }
-        }
-    })
-}
-
-fn service_profile_lease_recovery_tool_schema(operation: &str, title: &str) -> Value {
-    let is_plan = operation == "plan";
-    json!({
-        "name": format!("service_profile_lease_recover_{operation}"),
-        "title": title,
-        "description": format!("{title}. The named strict recovery controller capability is ephemeral and never persisted or returned."),
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "leaseId": { "type": "string" },
-                "leaseRevision": { "type": "string" },
-                "profileCapability": { "type": "string", "writeOnly": true },
-                "idempotencyKey": { "type": "string" },
-                "plan": { "type": "object" },
-                "serviceName": { "type": "string" },
-                "agentName": { "type": "string" },
-                "taskName": { "type": "string" }
-            },
-            "required": if is_plan {
-                vec!["leaseId", "leaseRevision", "profileCapability"]
-            } else {
-                vec!["leaseId", "profileCapability", "plan"]
-            }
-        }
-    })
-}
-
-fn service_profile_recovery_tool_schema(operation: &str, title: &str) -> Value {
-    let required = match operation {
-        "acquire" => vec!["profileId", "profileCapability"],
-        "plan" => vec!["profileId", "profileCapability", "expiresAt"],
-        "apply" => vec!["profileCapability", "plan"],
-        "status" => vec!["recoveryId", "profileCapability"],
-        _ => Vec::new(),
-    };
-    json!({
-        "name": if operation == "acquire" {
-            "service_profile_acquire".to_string()
-        } else {
-            format!("service_profile_recovery_{operation}")
-        },
-        "title": title,
-        "description": format!("{title}. The profile capability is ephemeral and never persisted or returned. Only the exact terminal-owner recovery class is effect-capable in this first vertical."),
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "profileId": { "type": "string" },
-                "profileCapability": { "type": "string", "writeOnly": true },
-                "expiresAt": { "type": "string" },
-                "idempotencyKey": { "type": "string" },
-                "targetServiceIds": { "type": "array", "items": { "type": "string" } },
-                "plan": { "type": "object" },
-                "recoveryId": { "type": "string" },
-                "serviceName": { "type": "string" },
-                "agentName": { "type": "string" },
-                "taskName": { "type": "string" }
-                ,"automaticRecovery": { "type": "boolean" }
-            },
-            "required": required
-        }
-    })
-}
-
-fn service_profile_repair_tool_schema(operation: &str, title: &str) -> Value {
-    let mut schema = service_profile_recovery_tool_schema(operation, title);
-    schema["name"] = json!(format!("service_profile_repair_{operation}"));
-    schema["description"] = json!(format!(
-        "{title}. The sealed operation preserves the profile directory, cookies, credentials, extensions, and authenticated site state. The profile capability is ephemeral and never persisted or returned."
-    ));
-    schema["inputSchema"]["required"] = json!(if operation == "plan" {
-        vec!["profileId", "profileCapability"]
-    } else {
-        vec!["profileCapability", "plan"]
-    });
-    schema
-}
-
-fn service_profile_reset_tool_schema(operation: &str, title: &str) -> Value {
-    json!({
-        "name": format!("service_profile_reset_{operation}"),
-        "title": title,
-        "description": format!("{title}. Runtime and authentication scopes preserve the profile directory, cookies, credentials, and extensions. Profile-data reset is unavailable until restore support is installed. The profile capability is ephemeral and never persisted or returned."),
-        "inputSchema": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-                "profileId": { "type": "string" },
-                "profileCapability": { "type": "string", "writeOnly": true },
-                "scope": { "enum": ["runtime", "authentication", "profile-data"] },
-                "targetServiceId": { "type": "string" },
-                "expiresAt": { "type": "string" },
-                "idempotencyKey": { "type": "string" },
-                "plan": { "type": "object" }
-            },
-            "required": if operation == "plan" {
-                vec!["profileId", "profileCapability", "scope"]
-            } else {
-                vec!["profileCapability", "plan"]
-            }
-        }
+        "instructions": "Use browser_open with profile, profileMode, taskKey and URL. Address subsequent page actions with the returned taskId. Use browser_handoff for a ready native viewer link, browser_continue after human input, and browser_close for task-scoped cleanup. Use browser_discover only when advanced metadata is needed.",
     })
 }
 
@@ -1176,7 +1012,7 @@ fn service_mcp_tools() -> Vec<Value> {
                 "properties": {
                     "action": {
                         "type": "string",
-                        "enum": BROWSER_COMMAND_ALLOWED_ACTIONS,
+                        "enum": SERVICE_REQUEST_ACTIONS,
                         "description": "Underlying browser-control action to queue."
                     },
                     "params": {
@@ -3478,42 +3314,6 @@ fn service_mcp_tools() -> Vec<Value> {
         browser_tab_close_tool_schema(),
         browser_set_content_tool_schema(),
         browser_command_tool_schema(),
-        service_profile_lease_mutation_tool_schema(
-            "rejoin",
-            "Rejoin an owned profile lease",
-        ),
-        service_profile_lease_mutation_tool_schema(
-            "renew",
-            "Renew an owned profile lease",
-        ),
-        service_profile_lease_mutation_tool_schema(
-            "release",
-            "Release an owned profile lease",
-        ),
-        service_profile_lease_reconcile_tool_schema(
-            "plan",
-            "Plan profile lease reconciliation",
-        ),
-        service_profile_lease_reconcile_tool_schema(
-            "apply",
-            "Apply an exact sealed profile lease reconciliation plan",
-        ),
-        service_profile_lease_recovery_tool_schema(
-            "plan",
-            "Plan strict profile lease recovery",
-        ),
-        service_profile_lease_recovery_tool_schema(
-            "apply",
-            "Apply an exact strict profile lease recovery plan",
-        ),
-        service_profile_recovery_tool_schema("acquire", "Acquire an authenticated service profile"),
-        service_profile_recovery_tool_schema("plan", "Plan profile acquisition recovery"),
-        service_profile_recovery_tool_schema("apply", "Apply profile acquisition recovery"),
-        service_profile_recovery_tool_schema("status", "Read profile recovery status"),
-        service_profile_repair_tool_schema("plan", "Plan preserving profile repair"),
-        service_profile_repair_tool_schema("apply", "Apply preserving profile repair"),
-        service_profile_reset_tool_schema("plan", "Plan a scoped profile reset"),
-        service_profile_reset_tool_schema("apply", "Apply a scoped profile reset"),
         json!({
             "name": "service_trace",
             "title": "Read service trace",
@@ -3562,11 +3362,18 @@ fn service_mcp_tools() -> Vec<Value> {
     ];
     tools
         .into_iter()
+        .chain(workflow::tools())
         .map(with_browser_target_profile_hint_properties)
         .collect()
 }
 
 fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
+    if matches!(
+        tool["name"].as_str(),
+        Some("browser_open" | "browser_close")
+    ) {
+        return tool;
+    }
     let is_browser_tool = tool
         .get("name")
         .and_then(Value::as_str)
@@ -3584,6 +3391,10 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
     if !properties.contains_key("serviceName") {
         return tool;
     }
+
+    properties.insert("taskId".to_string(), json!({
+        "type":"string", "description":"Task ID returned by browser_open. Targets this task's current tab without session or route discovery."
+    }));
 
     properties.insert(
         "profileLeasePolicy".to_string(),
@@ -5553,6 +5364,67 @@ fn call_service_mcp_tool(
         .and_then(|value| value.get("arguments"))
         .unwrap_or(&Value::Null);
 
+    // The public dispatcher has the same surface as tools/list. The legacy
+    // typed builders below supply on-demand metadata, not a compatibility mode.
+    let public_tools = catalog::tools();
+    let tool = public_tools
+        .iter()
+        .find(|tool| tool["name"] == name)
+        .ok_or_else(|| JsonRpcError::invalid_params(&format!("Unknown MCP tool: {name}")))?;
+    if let Some(properties) = arguments.as_object() {
+        let schema = tool["inputSchema"]["properties"].as_object().unwrap();
+        for key in properties.keys() {
+            if !schema.contains_key(key) {
+                return Err(JsonRpcError::invalid_params(&format!(
+                    "Unknown argument for {name}: {key}"
+                )));
+            }
+        }
+    }
+    if name.starts_with("browser_") && !matches!(name, "browser_open" | "browser_discover") {
+        required_string_argument(arguments, "taskId")?;
+    }
+    if name == "browser_tab" {
+        return workflow::tab(arguments, session);
+    }
+    if name == "browser_discover" {
+        return catalog::discover(arguments, session);
+    }
+    if name == "browser_open" {
+        return workflow::open(arguments, session, configured_service_state);
+    }
+    if name == "browser_close" {
+        return workflow::close(arguments, session);
+    }
+    if name == "browser_handoff" {
+        return workflow::handoff(arguments, session);
+    }
+    if name == "browser_continue" {
+        return workflow::continue_task(arguments, session);
+    }
+    if name == "browser_command" {
+        validate_browser_command_action(arguments)?;
+    }
+    let task_session = if name.starts_with("browser_") {
+        optional_string_argument(arguments, "taskId")?
+            .map(workflow::task_session)
+            .transpose()?
+    } else {
+        None
+    };
+    let session = task_session.as_deref().unwrap_or(session);
+
+    dispatch_mcp_adapter(name, arguments, session, configured_service_state)
+}
+
+/// Internal typed adapters preserve page argument translation. Only the public
+/// workflow dispatcher and its closed browser action mapping reach this seam.
+fn dispatch_mcp_adapter(
+    name: &str,
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
     match name {
         SERVICE_ACCESS_PLAN_MCP_TOOL_NAME => {
             call_service_access_plan(arguments, session, configured_service_state)
@@ -5571,28 +5443,6 @@ fn call_service_mcp_tool(
             call_service_profile_seeding_handoff_update(arguments, session)
         }
         "service_profile_delete" => call_service_profile_delete(arguments, session),
-        "service_profile_lease_rejoin"
-        | "service_profile_lease_renew"
-        | "service_profile_lease_release" => {
-            call_service_profile_lease_mutation(name, arguments, session)
-        }
-        "service_profile_lease_reconcile_plan" | "service_profile_lease_reconcile_apply" => {
-            call_service_profile_lease_reconcile(name, arguments, session)
-        }
-        "service_profile_lease_recover_plan" | "service_profile_lease_recover_apply" => {
-            call_service_profile_lease_recover(name, arguments, session)
-        }
-        "service_profile_acquire"
-        | "service_profile_repair_plan"
-        | "service_profile_repair_apply"
-        | "service_profile_recovery_plan"
-        | "service_profile_recovery_apply"
-        | "service_profile_recovery_status" => {
-            call_service_profile_recovery(name, arguments, session)
-        }
-        "service_profile_reset_plan" | "service_profile_reset_apply" => {
-            call_service_profile_reset(name, arguments, session)
-        }
         "service_session_upsert" => call_service_session_upsert(arguments, session),
         "service_session_delete" => call_service_session_delete(arguments, session),
         "service_site_policy_upsert" => call_service_site_policy_upsert(arguments, session),
@@ -5637,7 +5487,7 @@ fn call_service_mcp_tool(
         DESKTOP_INTERACT_MCP_TOOL_NAME => {
             call_desktop_interact(arguments, session, configured_service_state)
         }
-        "browser_command" => call_browser_command(arguments, session),
+        "browser_command" => call_browser_command(arguments, session, configured_service_state),
         "browser_navigate" => call_browser_navigate(arguments, session),
         "browser_requests" => call_browser_requests(arguments, session),
         "browser_request_detail" => call_browser_request_detail(arguments, session),
@@ -6121,276 +5971,6 @@ fn call_service_profile_delete(arguments: &Value, session: &str) -> Result<Value
     send_queued_tool_command("service_profile_delete", session, trace, command)
 }
 
-fn call_service_profile_lease_mutation(
-    action: &str,
-    arguments: &Value,
-    session: &str,
-) -> Result<Value, JsonRpcError> {
-    let lease_id = required_string_argument(arguments, "leaseId")?;
-    let lease_revision = required_string_argument(arguments, "leaseRevision")?;
-    let profile_capability = required_string_argument(arguments, "profileCapability")?;
-    let expires_at = optional_string_argument(arguments, "expiresAt")?;
-    if action == "service_profile_lease_renew" && expires_at.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_lease_renew requires expiresAt",
-        ));
-    }
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let command = service_profile_lease_mutation_command(
-        action,
-        lease_id,
-        lease_revision,
-        profile_capability,
-        expires_at,
-        service_name,
-        agent_name,
-        task_name,
-    );
-    send_queued_tool_command(action, session, trace, command)
-}
-
-fn call_service_profile_lease_reconcile(
-    action: &str,
-    arguments: &Value,
-    session: &str,
-) -> Result<Value, JsonRpcError> {
-    let lease_id = required_string_argument(arguments, "leaseId")?;
-    let profile_capability = required_string_argument(arguments, "profileCapability")?;
-    let lease_revision = optional_string_argument(arguments, "leaseRevision")?;
-    let expires_at = optional_string_argument(arguments, "expiresAt")?;
-    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
-    let plan = arguments
-        .get("plan")
-        .filter(|value| value.is_object())
-        .cloned();
-    if action.ends_with("_plan") && (lease_revision.is_none() || expires_at.is_none()) {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_lease_reconcile_plan requires leaseRevision and expiresAt",
-        ));
-    }
-    if action.ends_with("_apply") && plan.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_lease_reconcile_apply requires plan",
-        ));
-    }
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let mut command = json!({
-        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
-        "action": action,
-        "leaseId": lease_id,
-        "profileCapability": profile_capability,
-    });
-    for (field, value) in [
-        ("leaseRevision", lease_revision),
-        ("expiresAt", expires_at),
-        ("idempotencyKey", idempotency_key),
-    ] {
-        if let Some(value) = value {
-            command[field] = json!(value);
-        }
-    }
-    if let Some(plan) = plan {
-        command["plan"] = plan;
-    }
-    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
-    send_queued_tool_command(action, session, trace, command)
-}
-
-fn call_service_profile_lease_recover(
-    action: &str,
-    arguments: &Value,
-    session: &str,
-) -> Result<Value, JsonRpcError> {
-    let lease_id = required_string_argument(arguments, "leaseId")?;
-    let profile_capability = required_string_argument(arguments, "profileCapability")?;
-    let lease_revision = optional_string_argument(arguments, "leaseRevision")?;
-    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
-    let plan = arguments
-        .get("plan")
-        .filter(|value| value.is_object())
-        .cloned();
-    if action.ends_with("_plan") && lease_revision.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_lease_recover_plan requires leaseRevision",
-        ));
-    }
-    if action.ends_with("_apply") && plan.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_lease_recover_apply requires plan",
-        ));
-    }
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let mut command = json!({
-        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
-        "action": action,
-        "leaseId": lease_id,
-        "profileCapability": profile_capability,
-    });
-    for (field, value) in [
-        ("leaseRevision", lease_revision),
-        ("idempotencyKey", idempotency_key),
-    ] {
-        if let Some(value) = value {
-            command[field] = json!(value);
-        }
-    }
-    if let Some(plan) = plan {
-        command["plan"] = plan;
-    }
-    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
-    send_queued_tool_command(action, session, trace, command)
-}
-
-fn call_service_profile_recovery(
-    action: &str,
-    arguments: &Value,
-    session: &str,
-) -> Result<Value, JsonRpcError> {
-    let profile_capability = required_string_argument(arguments, "profileCapability")?;
-    let profile_id = optional_string_argument(arguments, "profileId")?;
-    let expires_at = optional_string_argument(arguments, "expiresAt")?;
-    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
-    let recovery_id = optional_string_argument(arguments, "recoveryId")?;
-    let plan = arguments
-        .get("plan")
-        .filter(|value| value.is_object())
-        .cloned();
-    if action == "service_profile_acquire" && profile_id.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_acquire requires profileId",
-        ));
-    }
-    if action == "service_profile_recovery_plan" && (profile_id.is_none() || expires_at.is_none()) {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_recovery_plan requires profileId and expiresAt",
-        ));
-    }
-    if action == "service_profile_repair_plan" && profile_id.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_repair_plan requires profileId",
-        ));
-    }
-    if action.ends_with("_apply") && plan.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_recovery_apply requires plan",
-        ));
-    }
-    if action.ends_with("_status") && recovery_id.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_recovery_status requires recoveryId",
-        ));
-    }
-    let service_name = optional_string_argument(arguments, "serviceName")?;
-    let agent_name = optional_string_argument(arguments, "agentName")?;
-    let task_name = optional_string_argument(arguments, "taskName")?;
-    let trace = service_tool_trace(service_name, agent_name, task_name);
-    let mut command = json!({
-        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
-        "action": action,
-        "profileCapability": profile_capability,
-    });
-    for (field, value) in [
-        ("profileId", profile_id),
-        ("expiresAt", expires_at),
-        ("idempotencyKey", idempotency_key),
-        ("recoveryId", recovery_id),
-    ] {
-        if let Some(value) = value {
-            command[field] = json!(value);
-        }
-    }
-    if let Some(target_service_ids) = arguments.get("targetServiceIds") {
-        command["targetServiceIds"] = target_service_ids.clone();
-    }
-    if let Some(automatic_recovery) = arguments.get("automaticRecovery") {
-        command["automaticRecovery"] = automatic_recovery.clone();
-    }
-    if let Some(plan) = plan {
-        command["plan"] = plan;
-    }
-    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
-    let plan_route = command
-        .get("plan")
-        .and_then(|plan| plan.get("identities"))
-        .and_then(|identities| identities.get("daemonSessionRoute"))
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|route| !route.is_empty())
-        .map(str::to_string);
-    if action.ends_with("_apply") && plan_route.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_recovery_apply plan requires identities.daemonSessionRoute",
-        ));
-    }
-    send_queued_tool_command(
-        action,
-        plan_route.as_deref().unwrap_or(session),
-        trace,
-        command,
-    )
-}
-
-fn call_service_profile_reset(
-    action: &str,
-    arguments: &Value,
-    session: &str,
-) -> Result<Value, JsonRpcError> {
-    let profile_capability = required_string_argument(arguments, "profileCapability")?;
-    let profile_id = optional_string_argument(arguments, "profileId")?;
-    let scope = optional_string_argument(arguments, "scope")?;
-    let target_service_id = optional_string_argument(arguments, "targetServiceId")?;
-    let expires_at = optional_string_argument(arguments, "expiresAt")?;
-    let idempotency_key = optional_string_argument(arguments, "idempotencyKey")?;
-    let plan = arguments
-        .get("plan")
-        .filter(|value| value.is_object())
-        .cloned();
-    if action == "service_profile_reset_plan" && (profile_id.is_none() || scope.is_none()) {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_reset_plan requires profileId and scope",
-        ));
-    }
-    if action == "service_profile_reset_apply" && plan.is_none() {
-        return Err(JsonRpcError::invalid_params(
-            "service_profile_reset_apply requires plan",
-        ));
-    }
-    let mut command = json!({
-        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
-        "action": action,
-        "profileCapability": profile_capability,
-    });
-    for (field, value) in [
-        ("profileId", profile_id),
-        ("scope", scope),
-        ("targetServiceId", target_service_id),
-        ("expiresAt", expires_at),
-        ("idempotencyKey", idempotency_key),
-    ] {
-        if let Some(value) = value {
-            command[field] = json!(value);
-        }
-    }
-    if let Some(plan) = plan {
-        command["plan"] = plan;
-    }
-    send_queued_tool_command(
-        action,
-        session,
-        service_tool_trace(None, None, None),
-        command,
-    )
-}
-
 fn call_service_session_upsert(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
     let id = required_string_argument(arguments, "id")?;
     let service_session = required_object_argument(arguments, "session")?;
@@ -6570,7 +6150,7 @@ fn call_service_job_cancel(arguments: &Value, session: &str) -> Result<Value, Js
     ))
 }
 
-fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+fn validate_browser_command_action(arguments: &Value) -> Result<&str, JsonRpcError> {
     let action = required_string_argument(arguments, "action")?;
     if !BROWSER_COMMAND_ALLOWED_ACTIONS.contains(&action) {
         return Err(JsonRpcError::invalid_params(&format!(
@@ -6578,7 +6158,89 @@ fn call_browser_command(arguments: &Value, session: &str) -> Result<Value, JsonR
             action
         )));
     }
+    if let Some(params) = optional_object_argument(arguments, "params")? {
+        let schema = catalog::browser_argument_schema(action)?;
+        let page_arguments = schema["properties"].as_object().unwrap();
+        for key in params.keys() {
+            if matches!(
+                key.as_str(),
+                "id" | "action"
+                    | "sessionName"
+                    | "sessionId"
+                    | "taskId"
+                    | "tabId"
+                    | "targetId"
+                    | "browserId"
+                    | "profile"
+                    | "profileId"
+                    | "runtimeProfile"
+                    | "profileCapability"
+                    | "serviceName"
+                    | "agentName"
+                    | "taskName"
+                    | "routeId"
+                    | "provider"
+                    | "tabHandle"
+                    | "serviceTabHandle"
+                    | "profileLeaseId"
+                    | "profileLeaseGeneration"
+                    | "connectionInstanceId"
+                    | "callerId"
+                    | "jobId"
+                    | "serviceJobId"
+                    | "requestPrincipalSource"
+            ) {
+                return Err(JsonRpcError::invalid_params(&format!(
+                    "browser_command params.{key} is reserved"
+                )));
+            }
+            if !page_arguments.contains_key(key) {
+                return Err(JsonRpcError::invalid_params(&format!(
+                    "browser_command params.{key} is not a page argument"
+                )));
+            }
+        }
+    }
+    Ok(action)
+}
+
+fn call_browser_command(
+    arguments: &Value,
+    session: &str,
+    configured_service_state: &ServiceState,
+) -> Result<Value, JsonRpcError> {
+    let action = validate_browser_command_action(arguments)?;
     let params = optional_object_argument(arguments, "params")?;
+    if action != "evaluate" {
+        let page_arguments = Value::Object(params.cloned().unwrap_or_default());
+        let mut result = dispatch_mcp_adapter(
+            &catalog::browser_adapter_name(action),
+            &page_arguments,
+            session,
+            configured_service_state,
+        )
+        .map_err(|mut error| {
+            if let Some(data) = error.data.as_mut().and_then(Value::as_object_mut) {
+                data.insert("tool".into(), json!("browser_command"));
+                data.insert("operation".into(), json!(action));
+            }
+            error
+        })?;
+        let text = result["content"][0]["text"]
+            .as_str()
+            .ok_or_else(|| JsonRpcError::invalid_params("Advanced page result is not JSON"))?;
+        let mut payload: Value = serde_json::from_str(text)
+            .map_err(|_| JsonRpcError::invalid_params("Advanced page result is not JSON"))?;
+        payload["tool"] = json!("browser_command");
+        payload["operation"] = json!(action);
+        result["content"][0]["text"] =
+            json!(
+                serde_json::to_string(&payload).map_err(|_| JsonRpcError::invalid_params(
+                    "Advanced page result serialization failed"
+                ))?
+            );
+        return Ok(result);
+    }
     let context = ServiceToolContext::from_arguments(arguments)?;
     let trace = context.trace();
     let command = browser_command_command(BrowserCommandArgs {
@@ -8585,31 +8247,6 @@ fn service_profile_delete_command(
         "action": "service_profile_delete",
         "profileId": profile_id,
     });
-    apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
-    command
-}
-
-#[allow(clippy::too_many_arguments)]
-fn service_profile_lease_mutation_command(
-    action: &str,
-    lease_id: &str,
-    lease_revision: &str,
-    profile_capability: &str,
-    expires_at: Option<&str>,
-    service_name: Option<&str>,
-    agent_name: Option<&str>,
-    task_name: Option<&str>,
-) -> Value {
-    let mut command = json!({
-        "id": format!("mcp-{action}-{}", uuid::Uuid::new_v4()),
-        "action": action,
-        "leaseId": lease_id,
-        "leaseRevision": lease_revision,
-        "profileCapability": profile_capability,
-    });
-    if let Some(expires_at) = expires_at {
-        command["expiresAt"] = json!(expires_at);
-    }
     apply_service_trace_fields(&mut command, service_name, agent_name, task_name);
     command
 }
@@ -11874,8 +11511,9 @@ mod tests {
         assert!(response["result"]["capabilities"]["resources"].is_object());
         assert!(response["result"]["capabilities"]["tools"].is_object());
         let instructions = response["result"]["instructions"].as_str().unwrap();
-        assert!(instructions.contains(OPERATING_GUIDE_RESOURCE));
-        assert!(instructions.contains("browser acquisition, operator presentation"));
+        assert!(instructions.contains("browser_open"));
+        assert!(instructions.contains("browser_continue"));
+        assert!(!instructions.contains("service_access_plan"));
     }
 
     #[test]
@@ -11959,29 +11597,24 @@ mod tests {
     }
 
     #[test]
-    fn read_operating_guide_separates_agent_readiness_axes_and_ownership() {
+    fn read_operating_guide_uses_task_workflow_and_native_viewer() {
         let resource = read_service_mcp_resource_from_state(
             OPERATING_GUIDE_RESOURCE,
             &ServiceState::default(),
         )
         .unwrap();
-
-        assert_eq!(resource["uri"], OPERATING_GUIDE_RESOURCE);
         assert_eq!(
             resource["contents"]["schemaVersion"],
-            "agent-browser.operating-guide.v1"
+            "agent-browser.operating-guide.v2"
         );
-        assert!(resource["contents"]["readinessAxes"]["browserAcquisition"].is_object());
-        assert!(resource["contents"]["readinessAxes"]["operatorPresentation"].is_object());
-        assert!(resource["contents"]["readinessAxes"]["runtimeMaintenance"].is_object());
+        assert_eq!(resource["contents"]["workflow"][0]["tool"], "browser_open");
         assert_eq!(
-            resource["contents"]["workflow"][1]["tool"],
-            SERVICE_ACCESS_PLAN_MCP_TOOL_NAME
+            resource["contents"]["workflow"][2]["tool"],
+            "browser_handoff"
         );
         let serialized = serde_json::to_string(&resource).unwrap();
-        assert!(serialized.contains("checked-out route does not by itself prove"));
-        assert!(serialized.contains("Do not close another workload"));
-        assert!(serialized.contains("Do not run GC"));
+        assert!(!serialized.contains("service_access_plan"));
+        assert!(serialized.contains("Remote View"));
     }
 
     #[test]
@@ -12038,952 +11671,47 @@ mod tests {
     }
 
     #[test]
-    fn tools_list_returns_service_job_cancel() {
-        let mut response = handle_jsonrpc_line(
+    fn tools_list_returns_only_bounded_workflow_catalog() {
+        let response = handle_jsonrpc_line(
             r#"{"jsonrpc":"2.0","id":"tools","method":"tools/list"}"#,
             "default",
         )
         .unwrap();
-
-        assert_eq!(response["id"], "tools");
         let tools = response["result"]["tools"].as_array().unwrap();
-        let service_access_plan = tools
+        let mut names = tools
             .iter()
-            .find(|tool| tool["name"] == SERVICE_ACCESS_PLAN_MCP_TOOL_NAME)
-            .expect("service_access_plan schema should be listed");
-        assert!(service_access_plan["inputSchema"]["properties"]["loginId"].is_object());
-        assert!(service_access_plan["inputSchema"]["properties"]["sessionName"].is_object());
-        assert!(service_access_plan["inputSchema"]["properties"]["browserBuild"].is_object());
-        assert!(service_access_plan["inputSchema"]["properties"]["browserHost"].is_object());
-        assert!(service_access_plan["inputSchema"]["properties"]["viewStreamProvider"].is_object());
-        assert!(
-            service_access_plan["inputSchema"]["properties"]["controlInputProvider"].is_object()
-        );
-        assert!(service_access_plan["inputSchema"]["properties"]["displayIsolation"].is_object());
-        assert!(service_access_plan["inputSchema"]["properties"]["profileCapability"].is_object());
-        assert!(service_access_plan["description"]
-            .as_str()
-            .unwrap()
-            .contains("Route occupancy and global doctor advisories are separate evidence"));
-        let service_request = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_request")
-            .expect("service_request schema should be listed");
-        assert!(service_request["inputSchema"]["properties"]["profileCapability"].is_object());
-        assert!(service_request["description"]
-            .as_str()
-            .unwrap()
-            .contains("Do not create a duplicate profile"));
-        let profile_repair_plan = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_profile_repair_plan")
-            .expect("service_profile_repair_plan schema should be listed");
+            .map(|tool| tool["name"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        names.sort_unstable();
         assert_eq!(
-            profile_repair_plan["inputSchema"]["required"],
-            json!(["profileId", "profileCapability"])
+            names,
+            vec![
+                "browser_click",
+                "browser_close",
+                "browser_command",
+                "browser_continue",
+                "browser_discover",
+                "browser_fill",
+                "browser_handoff",
+                "browser_navigate",
+                "browser_open",
+                "browser_screenshot",
+                "browser_snapshot",
+                "browser_tab"
+            ]
         );
-        assert!(profile_repair_plan["description"]
-            .as_str()
-            .unwrap()
-            .contains("preserves the profile directory"));
-        let profile_repair_apply = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_profile_repair_apply")
-            .expect("service_profile_repair_apply schema should be listed");
-        assert_eq!(
-            profile_repair_apply["inputSchema"]["required"],
-            json!(["profileCapability", "plan"])
-        );
-        let profile_reset_plan = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_profile_reset_plan")
-            .expect("service_profile_reset_plan schema should be listed");
-        assert_eq!(
-            profile_reset_plan["inputSchema"]["required"],
-            json!(["profileId", "profileCapability", "scope"])
-        );
-        assert_eq!(
-            profile_reset_plan["inputSchema"]["properties"]["scope"]["enum"],
-            json!(["runtime", "authentication", "profile-data"])
-        );
-        let profile_reset_apply = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_profile_reset_apply")
-            .expect("service_profile_reset_apply schema should be listed");
-        assert_eq!(
-            profile_reset_apply["inputSchema"]["required"],
-            json!(["profileCapability", "plan"])
-        );
-        let service_job_cancel = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_job_cancel")
-            .expect("service_job_cancel schema should be listed");
-        assert_eq!(service_job_cancel["inputSchema"]["required"][0], "jobId");
-        assert!(service_job_cancel["inputSchema"]["properties"]["serviceName"].is_object());
-        assert!(service_job_cancel["inputSchema"]["properties"]["agentName"].is_object());
-        assert!(service_job_cancel["inputSchema"]["properties"]["taskName"].is_object());
-        let service_browser_retry = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_browser_retry")
-            .expect("service_browser_retry schema should be listed");
-        assert!(service_browser_retry["inputSchema"]["required"][0] == "browserId");
-        assert!(service_browser_retry["inputSchema"]["properties"]["serviceName"].is_object());
-        let service_status = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_status")
-            .expect("service_status schema should be listed");
-        assert_eq!(
-            service_status["inputSchema"]["properties"]["fullTabHistory"]["type"],
-            "boolean"
-        );
-        assert!(service_status["description"]
-            .as_str()
-            .unwrap()
-            .contains("global warning blocks browser acquisition or presentation only"));
-        let route_preflight = tools
-            .iter()
-            .find(|tool| tool["name"] == SERVICE_REMOTE_VIEW_ROUTE_PREFLIGHT_MCP_TOOL_NAME)
-            .expect("route preflight schema should be listed");
-        assert!(route_preflight["description"]
-            .as_str()
-            .unwrap()
-            .contains("blocks presentation for that request"));
-        let service_incidents = tools
-            .iter()
-            .find(|tool| tool["name"] == "service_incidents")
-            .expect("service_incidents schema should be listed");
-        assert!(
-            service_incidents["inputSchema"]["properties"]["severity"]["enum"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("critical"))
-        );
-        assert!(
-            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("browser_degraded"))
-        );
-        assert!(
-            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("monitor_attention"))
-        );
-        assert!(
-            service_incidents["inputSchema"]["properties"]["escalation"]["enum"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("os_degraded_possible"))
-        );
-        assert!(service_incidents["inputSchema"]["properties"]["summary"].is_object());
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_remedies_apply"
-                && tool["inputSchema"]["properties"]["escalation"]["enum"]
+        assert!(serde_json::to_vec(tools).unwrap().len() <= 15000);
+        for tool in tools {
+            if !matches!(
+                tool["name"].as_str(),
+                Some("browser_open" | "browser_discover")
+            ) {
+                assert!(tool["inputSchema"]["required"]
                     .as_array()
                     .unwrap()
-                    .contains(&json!("browser_degraded"))
-                && tool["inputSchema"]["properties"]["escalation"]["enum"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("monitor_attention"))
-                && tool["inputSchema"]["properties"]["escalation"]["enum"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("os_degraded_possible"))));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_profile_upsert"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_profile_freshness_update"
-                && tool["inputSchema"]["properties"]["readinessState"]["enum"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("stale"))));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(
-                |tool| tool["name"] == "service_profile_seeding_handoff_update"
-                    && tool["inputSchema"]["required"]
-                        .as_array()
-                        .unwrap()
-                        .contains(&json!("targetServiceId"))
-                    && tool["inputSchema"]["properties"]["state"]["enum"]
-                        .as_array()
-                        .unwrap()
-                        .contains(&json!("seeding_closed_unverified"))
-            ));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_session_upsert"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_site_policy_upsert"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitor_upsert"
-                && tool["inputSchema"]["properties"]["monitor"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitors_run_due"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitor_pause"
-                && tool["inputSchema"]["required"]
-                    .as_array()
-                    .unwrap()
-                    .contains(&json!("id"))));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitor_resume"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitor_reset_failures"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_monitor_triage"
-                && tool["inputSchema"]["properties"]["note"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "service_provider_upsert"));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(
-                |tool| tool["name"] == "service_browser_capability_registry_upsert"
-                    && tool["inputSchema"]["required"]
-                        .as_array()
-                        .unwrap()
-                        .contains(&json!("collection"))
-                    && tool["inputSchema"]["properties"]["collection"]["enum"]
-                        .as_array()
-                        .unwrap()
-                        .contains(&json!("browserHosts"))
-            ));
-        let browser_and_trace_tools: Vec<Value> = response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .filter(|tool| {
-                let name = tool["name"].as_str().unwrap_or_default();
-                name == "service_job_cancel"
-                    || name.starts_with("browser_")
-                    || name == "service_trace"
-            })
-            .cloned()
-            .collect();
-        response["result"]["tools"] = Value::Array(browser_and_trace_tools);
-        assert_eq!(response["result"]["tools"][1]["name"], "browser_snapshot");
-        assert!(
-            response["result"]["tools"][1]["inputSchema"]["properties"]["interactive"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][1]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][2]["name"], "browser_get_url");
-        assert!(
-            response["result"]["tools"][2]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][2]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][3]["name"], "browser_get_title");
-        assert!(
-            response["result"]["tools"][3]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][3]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][4]["name"], "browser_tabs");
-        assert!(response["result"]["tools"][4]["inputSchema"]["properties"]["verbose"].is_object());
-        assert!(
-            response["result"]["tools"][4]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][4]["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][5]["name"], "browser_screenshot");
-        assert!(
-            response["result"]["tools"][5]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(response["result"]["tools"][5]["inputSchema"]["properties"]["format"].is_object());
-        assert!(
-            response["result"]["tools"][5]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][6]["name"], "browser_click");
-        assert_eq!(
-            response["result"]["tools"][6]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(response["result"]["tools"][6]["inputSchema"]["properties"]["newTab"].is_object());
-        assert!(response["result"]["tools"][6]["inputSchema"]["properties"]
-            ["captureClipboardWrite"]
-            .is_object());
-        assert!(
-            response["result"]["tools"][6]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][7]["name"], "browser_fill");
-        assert_eq!(
-            response["result"]["tools"][7]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert_eq!(
-            response["result"]["tools"][7]["inputSchema"]["required"][1],
-            "value"
-        );
-        assert!(response["result"]["tools"][7]["inputSchema"]["properties"]["value"].is_object());
-        assert!(
-            response["result"]["tools"][7]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][8]["name"], "browser_wait");
-        assert!(
-            response["result"]["tools"][8]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(response["result"]["tools"][8]["inputSchema"]["properties"]["text"].is_object());
-        assert!(
-            response["result"]["tools"][8]["inputSchema"]["properties"]["loadState"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][8]["inputSchema"]["properties"]["timeoutMs"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][8]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][9]["name"], "browser_type");
-        assert_eq!(
-            response["result"]["tools"][9]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert_eq!(
-            response["result"]["tools"][9]["inputSchema"]["required"][1],
-            "text"
-        );
-        assert!(response["result"]["tools"][9]["inputSchema"]["properties"]["clear"].is_object());
-        assert!(response["result"]["tools"][9]["inputSchema"]["properties"]["delayMs"].is_object());
-        assert!(
-            response["result"]["tools"][9]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][10]["name"], "browser_press");
-        assert_eq!(
-            response["result"]["tools"][10]["inputSchema"]["required"][0],
-            "key"
-        );
-        assert!(response["result"]["tools"][10]["inputSchema"]["properties"]["key"].is_object());
-        assert!(
-            response["result"]["tools"][10]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][10]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][11]["name"], "browser_hover");
-        assert_eq!(
-            response["result"]["tools"][11]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][11]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][11]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][11]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][12]["name"], "browser_select");
-        assert_eq!(
-            response["result"]["tools"][12]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert_eq!(
-            response["result"]["tools"][12]["inputSchema"]["required"][1],
-            "values"
-        );
-        assert!(response["result"]["tools"][12]["inputSchema"]["properties"]["values"].is_object());
-        assert!(
-            response["result"]["tools"][12]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][13]["name"], "browser_get_text");
-        assert_eq!(
-            response["result"]["tools"][13]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][13]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][13]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][13]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][14]["name"], "browser_get_value");
-        assert_eq!(
-            response["result"]["tools"][14]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][14]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][14]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][14]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][15]["name"],
-            "browser_get_attribute"
-        );
-        assert_eq!(
-            response["result"]["tools"][15]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert_eq!(
-            response["result"]["tools"][15]["inputSchema"]["required"][1],
-            "attribute"
-        );
-        assert!(
-            response["result"]["tools"][15]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][15]["inputSchema"]["properties"]["attribute"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][15]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert_eq!(response["result"]["tools"][16]["name"], "browser_get_html");
-        assert_eq!(
-            response["result"]["tools"][16]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][16]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][16]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][17]["name"],
-            "browser_get_styles"
-        );
-        assert_eq!(
-            response["result"]["tools"][17]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][17]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][17]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][17]["inputSchema"]["properties"]["properties"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][18]["name"], "browser_count");
-        assert_eq!(
-            response["result"]["tools"][18]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][18]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][18]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert_eq!(response["result"]["tools"][19]["name"], "browser_get_box");
-        assert_eq!(
-            response["result"]["tools"][19]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][19]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][19]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][20]["name"],
-            "browser_is_visible"
-        );
-        assert_eq!(
-            response["result"]["tools"][20]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][20]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][20]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][20]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][21]["name"],
-            "browser_is_enabled"
-        );
-        assert_eq!(
-            response["result"]["tools"][21]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][21]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][21]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][21]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][22]["name"], "browser_check");
-        assert_eq!(
-            response["result"]["tools"][22]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][22]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][22]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][23]["name"],
-            "browser_is_checked"
-        );
-        assert_eq!(
-            response["result"]["tools"][23]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][23]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][23]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][23]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][24]["name"], "browser_uncheck");
-        assert_eq!(
-            response["result"]["tools"][24]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][24]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][24]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][25]["name"], "browser_scroll");
-        assert!(
-            response["result"]["tools"][25]["inputSchema"]["properties"]["direction"].is_object()
-        );
-        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["amount"].is_object());
-        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["deltaX"].is_object());
-        assert!(response["result"]["tools"][25]["inputSchema"]["properties"]["deltaY"].is_object());
-        assert!(
-            response["result"]["tools"][25]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][25]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(
-            response["result"]["tools"][26]["name"],
-            "browser_scroll_into_view"
-        );
-        assert_eq!(
-            response["result"]["tools"][26]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][26]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][26]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][26]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][27]["name"], "browser_focus");
-        assert_eq!(
-            response["result"]["tools"][27]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][27]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][27]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][27]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert_eq!(response["result"]["tools"][28]["name"], "browser_clear");
-        assert_eq!(
-            response["result"]["tools"][28]["inputSchema"]["required"][0],
-            "selector"
-        );
-        assert!(
-            response["result"]["tools"][28]["inputSchema"]["properties"]["selector"].is_object()
-        );
-        assert!(
-            response["result"]["tools"][28]["inputSchema"]["properties"]["jobTimeoutMs"]
-                .is_object()
-        );
-        assert!(
-            response["result"]["tools"][28]["inputSchema"]["properties"]["serviceName"].is_object()
-        );
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_navigate"
-                && tool["inputSchema"]["required"][0] == "url"
-                && tool["inputSchema"]["properties"]["waitUntil"].is_object()
-                && tool["inputSchema"]["properties"]["headers"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_requests"
-                && tool["inputSchema"]["properties"]["filter"].is_object()
-                && tool["inputSchema"]["properties"]["method"].is_object()
-                && tool["inputSchema"]["properties"]["status"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_request_detail"
-                && tool["inputSchema"]["required"][0] == "requestId"
-                && tool["inputSchema"]["properties"]["requestId"].is_object()
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_headers"
-                && tool["inputSchema"]["required"][0] == "headers"
-                && tool["inputSchema"]["properties"]["headers"].is_object()
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_offline"
-                && tool["inputSchema"]["properties"]["offline"].is_object()
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_cookies_get"
-                && tool["inputSchema"]["properties"]["urls"].is_object()
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_cookies_set"
-                && tool["inputSchema"]["properties"]["cookies"].is_object()
-                && tool["inputSchema"]["properties"]["name"].is_object()
-                && tool["inputSchema"]["properties"]["value"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_cookies_clear"
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_storage_get"
-                && tool["inputSchema"]["properties"]["type"].is_object()
-                && tool["inputSchema"]["properties"]["key"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_storage_set"
-                && tool["inputSchema"]["required"][0] == "key"
-                && tool["inputSchema"]["required"][1] == "value"
-                && tool["inputSchema"]["properties"]["type"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_storage_clear"
-                && tool["inputSchema"]["properties"]["type"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_user_agent"
-                && tool["inputSchema"]["required"][0] == "userAgent"
-                && tool["inputSchema"]["properties"]["userAgent"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_viewport"
-                && tool["inputSchema"]["required"][0] == "width"
-                && tool["inputSchema"]["required"][1] == "height"
-                && tool["inputSchema"]["properties"]["deviceScaleFactor"].is_object()
-                && tool["inputSchema"]["properties"]["mobile"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_geolocation"
-                && tool["inputSchema"]["required"][0] == "latitude"
-                && tool["inputSchema"]["required"][1] == "longitude"
-                && tool["inputSchema"]["properties"]["accuracy"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_permissions"
-                && tool["inputSchema"]["required"][0] == "permissions"
-                && tool["inputSchema"]["properties"]["permissions"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_timezone"
-                && tool["inputSchema"]["required"][0] == "timezoneId"
-                && tool["inputSchema"]["properties"]["timezoneId"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_locale"
-                && tool["inputSchema"]["required"][0] == "locale"
-                && tool["inputSchema"]["properties"]["locale"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_media"
-                && tool["inputSchema"]["properties"]["media"].is_object()
-                && tool["inputSchema"]["properties"]["colorScheme"].is_object()
-                && tool["inputSchema"]["properties"]["reducedMotion"].is_object()
-                && tool["inputSchema"]["properties"]["features"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_dialog"
-                && tool["inputSchema"]["required"][0] == "response"
-                && tool["inputSchema"]["properties"]["promptText"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_upload"
-                && tool["inputSchema"]["required"][0] == "selector"
-                && tool["inputSchema"]["required"][1] == "files"
-                && tool["inputSchema"]["properties"]["files"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_download"
-                && tool["inputSchema"]["required"][0] == "selector"
-                && tool["inputSchema"]["required"][1] == "path"
-                && tool["inputSchema"]["properties"]["path"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_wait_for_download"
-                && tool["inputSchema"]["properties"]["path"].is_object()
-                && tool["inputSchema"]["properties"]["timeoutMs"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_har_start"
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_har_stop"
-                && tool["inputSchema"]["properties"]["path"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_route"
-                && tool["inputSchema"]["required"][0] == "url"
-                && tool["inputSchema"]["properties"]["response"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_unroute"
-                && tool["inputSchema"]["properties"]["url"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_console"
-                && tool["inputSchema"]["properties"]["clear"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_errors"
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_pdf"
-                && tool["inputSchema"]["properties"]["path"].is_object()
-                && tool["inputSchema"]["properties"]["printBackground"].is_object()
-                && tool["inputSchema"]["properties"]["landscape"].is_object()
-                && tool["inputSchema"]["properties"]["preferCSSPageSize"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_response_body"
-                && tool["inputSchema"]["required"][0] == "url"
-                && tool["inputSchema"]["properties"]["timeoutMs"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_clipboard"
-                && tool["inputSchema"]["properties"]["operation"].is_object()
-                && tool["inputSchema"]["properties"]["text"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_back"
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_reload"
-                && tool["inputSchema"]["properties"]["jobTimeoutMs"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_tab_new"
-                && tool["inputSchema"]["properties"]["url"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_tab_switch"
-                && tool["inputSchema"]["required"][0] == "index"
-                && tool["inputSchema"]["properties"]["index"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_tab_close"
-                && tool["inputSchema"]["properties"]["index"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_set_content"
-                && tool["inputSchema"]["required"][0] == "html"
-                && tool["inputSchema"]["properties"]["html"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        assert!(response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|tool| tool["name"] == "browser_command"
-                && tool["inputSchema"]["properties"]["action"].is_object()
-                && tool["inputSchema"]["properties"]["params"].is_object()
-                && tool["inputSchema"]["properties"]["serviceName"].is_object()));
-        let trace_tool = response["result"]["tools"]
-            .as_array()
-            .unwrap()
-            .last()
-            .unwrap();
-        assert_eq!(trace_tool["name"], "service_trace");
-        assert!(trace_tool["inputSchema"]["properties"]["limit"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["browserId"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["profileId"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["sessionId"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["serviceName"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["agentName"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["taskName"].is_object());
-        assert!(trace_tool["inputSchema"]["properties"]["since"].is_object());
+                    .contains(&json!("taskId")));
+            }
+        }
     }
 
     #[test]
@@ -13040,32 +11768,22 @@ mod tests {
     }
 
     #[test]
-    fn service_incidents_rejects_invalid_severity_before_store_read() {
-        let response = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"service_incidents","arguments":{"severity":"panic","escalation":"os_degraded_possible"}}}"#,
+    fn internal_service_incidents_rejects_invalid_severity_before_store_read() {
+        let error = call_service_incidents(
+            &json!({"severity":"panic","escalation":"os_degraded_possible"}),
             "default",
         )
-        .unwrap();
-
-        assert_eq!(response["id"], 42);
-        assert_eq!(response["error"]["code"], -32602);
-        assert!(response["error"]["data"]["message"]
+        .unwrap_err();
+        assert!(error.data.unwrap()["message"]
             .as_str()
             .unwrap()
             .contains("severity must be one of"));
     }
 
     #[test]
-    fn service_incidents_rejects_invalid_summary_before_store_read() {
-        let response = handle_jsonrpc_line(
-            r#"{"jsonrpc":"2.0","id":43,"method":"tools/call","params":{"name":"service_incidents","arguments":{"summary":"yes"}}}"#,
-            "default",
-        )
-        .unwrap();
-
-        assert_eq!(response["id"], 43);
-        assert_eq!(response["error"]["code"], -32602);
-        assert!(response["error"]["data"]["message"]
+    fn internal_service_incidents_rejects_invalid_summary_before_store_read() {
+        let error = call_service_incidents(&json!({"summary":"yes"}), "default").unwrap_err();
+        assert!(error.data.unwrap()["message"]
             .as_str()
             .unwrap()
             .contains("summary must be a boolean"));
@@ -14271,7 +12989,7 @@ mod tests {
     }
 
     #[test]
-    fn service_request_mcp_schema_matches_all_canonical_types_and_constraints() {
+    fn internal_service_request_schema_matches_all_canonical_types_and_constraints() {
         let canonical: Value = serde_json::from_str(include_str!(
             "../../docs/dev/contracts/service-request.v1.schema.json"
         ))
@@ -16295,7 +15013,7 @@ mod tests {
     }
 
     #[test]
-    fn service_access_plan_tool_returns_service_owned_recommendation() {
+    fn internal_access_plan_adapter_retains_service_owned_recommendation() {
         use std::collections::BTreeMap;
 
         use crate::native::service_model::{
@@ -16324,13 +15042,8 @@ mod tests {
             ..ServiceState::default()
         };
 
-        let response = handle_jsonrpc_line_with_config(
-            r#"{"jsonrpc":"2.0","id":"access-plan","method":"tools/call","params":{"name":"service_access_plan","arguments":{"serviceName":"CanvaCLI","agentName":"codex","taskName":"openCanvaWorkspace","sessionName":"bill-soylei","loginId":"canva","browserBuild":"stealthcdp_chromium","browserHost":"remote_headed","viewStreamProvider":"rdp_gateway","controlInputProvider":"manual_attached_desktop","displayIsolation":"private_virtual_display"}}}"#,
-            "default",
-            &state,
-        )
-        .unwrap();
-        let text = response["result"]["content"][0]["text"].as_str().unwrap();
+        let response = call_service_access_plan(&serde_json::json!({"serviceName": "CanvaCLI", "agentName": "codex", "taskName": "openCanvaWorkspace", "sessionName": "bill-soylei", "loginId": "canva", "browserBuild": "stealthcdp_chromium", "browserHost": "remote_headed", "viewStreamProvider": "rdp_gateway", "controlInputProvider": "manual_attached_desktop", "displayIsolation": "private_virtual_display"}), "default", &state).unwrap();
+        let text = response["content"][0]["text"].as_str().unwrap();
         let payload: Value = serde_json::from_str(text).unwrap();
 
         assert_eq!(payload["tool"], SERVICE_ACCESS_PLAN_MCP_TOOL_NAME);

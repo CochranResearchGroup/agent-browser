@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated: 2026-10-06
+Updated: 2026-10-12
 
 ## Current direction
 
@@ -13,6 +13,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 ## Current work and boundaries
 
 [P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) owns the simple native desktop dashboard replacement and independent configurable handoff link/tab lifetimes for #261 and #260. Review a synthetic layout prototype before replacing the operator UI; qualify lifecycle behavior and native tab selection with concrete browser workflows.
+
+[P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) delivers the small workflow MCP, task-appropriate profiles, native handoff/continuation and supported Codex client guidance at the isolated installed seam. RUNBOOK and PR267 bind current qualification; production promotion remains separate.
 
 [P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) owns the bounded incremental installer observation repair for #181, including its reviewed candidate entry point. Source qualification remains separate from production-shaped installation.
 

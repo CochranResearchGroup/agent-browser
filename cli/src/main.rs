@@ -932,6 +932,13 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                 .configured_runtime_profiles
                 .get(&runtime_name)
                 .and_then(|value| value.clone())
+                .or_else(|| {
+                    flags
+                        .service_state
+                        .profiles
+                        .get(&runtime_name)
+                        .and_then(|profile| profile.user_data_dir.clone())
+                })
                 .unwrap_or_else(|| {
                     runtime_profile::runtime_profile_user_data_dir(&runtime_name)
                         .unwrap_or_else(|_| std::path::PathBuf::from("."))
@@ -976,6 +983,19 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
                     print_json_error(msg);
                 } else {
                     eprintln!("{} {}", color::error_indicator(), msg);
+                }
+                exit(1);
+            }
+
+            // Runtime creation and service planning share the same exact profile.
+            // Repeated creation preserves an existing profile's policy and state.
+            if let Err(err) =
+                native::service_config::register_runtime_profile(&runtime_name, &user_data_dir)
+            {
+                if flags.json {
+                    print_json_error(err);
+                } else {
+                    eprintln!("{} {}", color::error_indicator(), err);
                 }
                 exit(1);
             }
@@ -2130,9 +2150,62 @@ fn main() {
 
     if has_help {
         if let Some(cmd) = clean.first() {
+            // Reuse read-only command parsing for unsupported subcommands.
+            // Explicit stdin modes must never consume input merely for help.
+            if clean.len() > 1
+                && !clean
+                    .iter()
+                    .any(|arg| arg == "--stdin" || arg == "--password-stdin")
+            {
+                if let Err(error @ ParseError::UnknownSubcommand { .. }) =
+                    parse_command(&clean, &flags)
+                {
+                    let message = format!(
+                        "{}\nUse agent-browser {cmd} --help for supported subcommands.",
+                        error.format()
+                    );
+                    if flags.json {
+                        print_json_error_with_type(message, "unknown_subcommand");
+                    } else {
+                        eprintln!("{}", color::red(&message));
+                    }
+                    exit(1);
+                }
+            }
+            // Help is read-only. Reject unsupported paths before falling back
+            // to a broad command listing, and focus profile creation help.
+            if cmd == "runtime" {
+                if let Some(subcommand) = clean.get(1) {
+                    if subcommand == "create" {
+                        print_command_help("runtime create");
+                        return;
+                    }
+                    if !["list", "status", "login", "attach"].contains(&subcommand.as_str()) {
+                        let message = format!("Unknown runtime subcommand: {subcommand}\nUse agent-browser runtime create --help to create a profile, or agent-browser runtime --help for supported commands.");
+                        if flags.json {
+                            print_json_error_with_type(message, "unknown_subcommand");
+                        } else {
+                            eprintln!("{}", color::red(&message));
+                        }
+                        exit(1);
+                    }
+                }
+            }
             if print_command_help(cmd) {
                 return;
             }
+            let guidance = if cmd == "runtime-profile" {
+                "Use agent-browser runtime create --help to create a named profile."
+            } else {
+                "Use agent-browser --help to list supported commands."
+            };
+            let message = format!("Unknown command: {cmd}\n{guidance}");
+            if flags.json {
+                print_json_error_with_type(message, "unknown_command");
+            } else {
+                eprintln!("{}", color::red(&message));
+            }
+            exit(1);
         }
         print_help();
         return;
@@ -2751,56 +2824,20 @@ fn main() {
         .map(|status| status.runtime_profile.as_str())
         .or(selected_runtime_profile.as_deref());
     let daemon_opts = DaemonOptions {
-        headed: flags.headed,
-        debug: flags.debug,
-        leave_open: flags.leave_open,
-        executable_path: flags.executable_path.as_deref(),
-        executable_path_source: flags.executable_path_source.as_deref(),
-        extensions: &flags.extensions,
-        args: flags.args.as_deref(),
-        user_agent: flags.user_agent.as_deref(),
         runtime_profile: daemon_runtime_profile,
         proxy: proxy_server.as_deref(),
-        proxy_bypass: flags.proxy_bypass.as_deref(),
         proxy_username: proxy_username.as_deref(),
         proxy_password: proxy_password.as_deref(),
-        ignore_https_errors: flags.ignore_https_errors,
-        allow_file_access: flags.allow_file_access,
         profile: daemon_profile_for_launch(flags.profile.as_deref(), live_runtime_status.as_ref()),
-        state: flags.state.as_deref(),
-        provider: flags.provider.as_deref(),
-        device: flags.device.as_deref(),
-        session_name: flags.session_name.as_deref(),
-        download_path: flags.download_path.as_deref(),
-        allowed_domains: flags.allowed_domains.as_deref(),
-        action_policy: flags.action_policy.as_deref(),
-        confirm_actions: flags.confirm_actions.as_deref(),
-        engine: flags.engine.as_deref(),
         use_real_keychain,
         keychain_password: keychain_password.as_deref(),
-        auto_connect: flags.auto_connect,
-        idle_timeout: flags.idle_timeout.as_deref(),
-        service_reconcile_interval_ms: flags.service_reconcile_interval_ms,
-        service_job_timeout_ms: flags.service_job_timeout_ms,
-        service_monitor_interval_ms: flags.service_monitor_interval_ms,
-        service_recovery_retry_budget: flags.service_recovery_retry_budget,
-        service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
-        service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
-        service_recovery_retry_budget_source: flags.service_recovery_retry_budget_source.as_str(),
-        service_recovery_base_backoff_ms_source: flags
-            .service_recovery_base_backoff_ms_source
-            .as_str(),
-        service_recovery_max_backoff_ms_source: flags
-            .service_recovery_max_backoff_ms_source
-            .as_str(),
-        default_timeout: flags.default_timeout,
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
-        no_auto_dialog: flags.no_auto_dialog,
         allow_stale_daemon_handoff: cmd
             .get("action")
             .and_then(|value| value.as_str())
             .is_some_and(action_allows_stale_daemon_handoff),
+        ..DaemonOptions::from_flags(&flags)
     };
 
     let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {

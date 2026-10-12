@@ -291,3 +291,17 @@ lanes:
     checkpoint: aefeb390be9e30224f618d15901e54d47165c14f
     remote_ref: refs/heads/fix/upgrade-progress-stream-181
     integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/256
+  - id: P238
+    product_lane: PL-PLATFORM
+    objective: Resolve dedicated-profile handoff and ship workflow-focused MCP per spec262
+    plan: docs/dev/plans/0238-2026-10-11-workflow-mcp.md
+    branch: platform/workflow-mcp-255
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#255, CochranResearchGroup/agent-browser#262, CochranResearchGroup/agent-browser#263, CochranResearchGroup/agent-browser#264, CochranResearchGroup/agent-browser#265, CochranResearchGroup/agent-browser#266]
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P238 owns MCP/profile-planning/skills, read-only public handoff locator and bounded native headless-tab dispatch/replay repair; P237 owns dashboard UI and remaining native lifecycle/models; preserve foreign checkout and fixtures"]
+    validation_status: Isolated installed 263-266 qualified; PR267 owns integration; 12 tools and 21 resources exposed in Codex; native viewer/input and zero fixture census; production unchanged; worktree and sealed P232 candidate retained
+    updated_at: 2026-10-12

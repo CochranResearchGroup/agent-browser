@@ -94,12 +94,38 @@ const files = {
   mcp: `${read('cli/src/mcp.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   http: `${read('cli/src/native/stream/http.rs')}\n${read('cli/src/native/service_contracts.rs')}`,
   readme: read('README.md'),
-  skill: read('skills/agent-browser/SKILL.md'),
+  skill: `${read('skills/agent-browser/SKILL.md')}\n${read('skills/agent-browser/references/cli-and-service.md')}`,
   docs: read('docs/src/app/commands/page.mdx'),
-  serviceModeDocs: read('docs/src/app/service-mode/page.mdx'),
+  serviceModeDocs: `${read('docs/src/app/service-mode/page.mdx')}\n${read('docs/src/app/commands/page.mdx')}`,
 };
 
 const failures = [];
+// Distributed workflow guidance stays small; detailed CLI/API parity belongs
+// in its explicitly linked reference rather than the default MCP recipe.
+const workflowSkill = read('skills/agent-browser/SKILL.md');
+expectIncludes(
+  workflowSkill,
+  'references/cli-and-service.md',
+  'workflow skill links CLI/API details'
+);
+if (Buffer.byteLength(workflowSkill) > 10000) failures.push('workflow skill exceeds 10 KB');
+const workflowTools = extractRustStringArray(
+  files.serviceContracts,
+  'pub const WORKFLOW_MCP_TOOL_NAMES'
+);
+for (const tool of workflowTools) {
+  for (const [label, source] of [
+    ['workflow skill', workflowSkill],
+    ['README.md', files.readme],
+    ['service-mode docs', read('docs/src/app/service-mode/page.mdx')],
+  ])
+    expectIncludes(source, tool, `${label} documents public ${tool}`);
+}
+expectIncludes(
+  files.serviceContracts,
+  'metadata["mcp"]["legacyToolsAvailable"] = json!(false)',
+  'contracts mark legacy MCP tools unavailable'
+);
 const nativeServiceActions = extractNativeServiceActions(files.actions);
 const noLaunchServiceActions = extractNoLaunchServiceActions(files.actions);
 const rustServiceRequestActions = extractRustStringArray(
@@ -661,7 +687,7 @@ const serviceResourceSurface = [
 const serviceHttpOnlySurface = [];
 
 for (const entry of browserSurface) {
-  expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
+  expectIncludes(files.mcp, entry.tool, `Typed adapter source maps ${entry.tool}`);
   expectIncludes(
     files.http,
     `("${entry.method}", "${entry.route}")`,
@@ -670,7 +696,7 @@ for (const entry of browserSurface) {
 
   for (const [label, source] of [
     ['README.md', files.readme],
-    ['skills/agent-browser/SKILL.md', files.skill],
+    ['skills/agent-browser (main and CLI/API reference)', files.skill],
     ['docs/src/app/commands/page.mdx', files.docs],
   ]) {
     expectIncludes(source, entry.tool, `${label} mentions ${entry.tool}`);
@@ -679,16 +705,16 @@ for (const entry of browserSurface) {
 }
 
 for (const entry of serviceSurface) {
-  expectIncludes(files.mcp, entry.tool, `MCP source exposes ${entry.tool}`);
+  expectIncludes(files.mcp, entry.tool, `Typed adapter source maps ${entry.tool}`);
   for (const needle of entry.httpNeedles) {
     expectIncludes(files.http, needle, `HTTP source exposes ${entry.method} ${entry.route}`);
   }
 
   for (const [label, source] of [
     ['README.md', files.readme],
-    ['skills/agent-browser/SKILL.md', files.skill],
+    ['skills/agent-browser (main and CLI/API reference)', files.skill],
     ['docs/src/app/commands/page.mdx', files.docs],
-    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
+    ['service-mode and commands docs', files.serviceModeDocs],
   ]) {
     expectIncludes(source, entry.tool, `${label} mentions ${entry.tool}`);
     expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
@@ -706,9 +732,9 @@ for (const entry of serviceResourceSurface) {
 
   for (const [label, source] of [
     ['README.md', files.readme],
-    ['skills/agent-browser/SKILL.md', files.skill],
+    ['skills/agent-browser (main and CLI/API reference)', files.skill],
     ['docs/src/app/commands/page.mdx', files.docs],
-    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
+    ['service-mode and commands docs', files.serviceModeDocs],
   ]) {
     expectIncludes(source, entry.resource, `${label} mentions ${entry.resource}`);
     expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
@@ -734,9 +760,9 @@ for (const entry of serviceHttpOnlySurface) {
 
   for (const [label, source] of [
     ['README.md', files.readme],
-    ['skills/agent-browser/SKILL.md', files.skill],
+    ['skills/agent-browser (main and CLI/API reference)', files.skill],
     ['docs/src/app/commands/page.mdx', files.docs],
-    ['docs/src/app/service-mode/page.mdx', files.serviceModeDocs],
+    ['service-mode and commands docs', files.serviceModeDocs],
   ]) {
     expectAnyIncludes(source, entry.docsNeedles ?? [entry.route], `${label} mentions ${entry.route}`);
   }
@@ -751,7 +777,7 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service tools, ${serviceResourceSurface.length} service resources, ${serviceHttpOnlySurface.length} HTTP-only service routes, ${nativeServiceActions.length} native service actions, and ${rustServiceRequestActions.length} service-request actions`,
+  `Service API/MCP parity check passed for ${browserSurface.length} browser controls, ${serviceSurface.length} service CLI/API adapters, ${serviceResourceSurface.length} service resources, ${serviceHttpOnlySurface.length} HTTP-only service routes, ${nativeServiceActions.length} native service actions, and ${rustServiceRequestActions.length} service-request actions`,
 );
 
 function read(relativePath) {

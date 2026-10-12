@@ -506,6 +506,64 @@ pub struct DaemonOptions<'a> {
     pub allow_stale_daemon_handoff: bool,
 }
 
+impl<'a> DaemonOptions<'a> {
+    /// Shared CLI/MCP configuration projection. Callers supply observed attachment
+    /// and parsed credentials separately so transport setup does not invent them.
+    pub(crate) fn from_flags(flags: &'a crate::flags::Flags) -> Self {
+        Self {
+            headed: flags.headed,
+            debug: flags.debug,
+            leave_open: flags.leave_open,
+            executable_path: flags.executable_path.as_deref(),
+            executable_path_source: flags.executable_path_source.as_deref(),
+            extensions: &flags.extensions,
+            args: flags.args.as_deref(),
+            user_agent: flags.user_agent.as_deref(),
+            runtime_profile: flags.runtime_profile.as_deref(),
+            proxy: flags.proxy.as_deref(),
+            proxy_bypass: flags.proxy_bypass.as_deref(),
+            proxy_username: None,
+            proxy_password: None,
+            ignore_https_errors: flags.ignore_https_errors,
+            allow_file_access: flags.allow_file_access,
+            profile: flags.profile.as_deref(),
+            state: flags.state.as_deref(),
+            provider: flags.provider.as_deref(),
+            device: flags.device.as_deref(),
+            session_name: flags.session_name.as_deref(),
+            download_path: flags.download_path.as_deref(),
+            allowed_domains: flags.allowed_domains.as_deref(),
+            action_policy: flags.action_policy.as_deref(),
+            confirm_actions: flags.confirm_actions.as_deref(),
+            engine: flags.engine.as_deref(),
+            use_real_keychain: false,
+            keychain_password: None,
+            auto_connect: flags.auto_connect,
+            idle_timeout: flags.idle_timeout.as_deref(),
+            service_reconcile_interval_ms: flags.service_reconcile_interval_ms,
+            service_job_timeout_ms: flags.service_job_timeout_ms,
+            service_monitor_interval_ms: flags.service_monitor_interval_ms,
+            service_recovery_retry_budget: flags.service_recovery_retry_budget,
+            service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
+            service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
+            service_recovery_retry_budget_source: flags
+                .service_recovery_retry_budget_source
+                .as_str(),
+            service_recovery_base_backoff_ms_source: flags
+                .service_recovery_base_backoff_ms_source
+                .as_str(),
+            service_recovery_max_backoff_ms_source: flags
+                .service_recovery_max_backoff_ms_source
+                .as_str(),
+            default_timeout: flags.default_timeout,
+            cdp: flags.cdp.as_deref(),
+            runtime_attach_managed: false,
+            no_auto_dialog: flags.no_auto_dialog,
+            allow_stale_daemon_handoff: false,
+        }
+    }
+}
+
 fn runtime_lane_configs() -> &'static Mutex<BTreeMap<String, crate::runtime_host::RuntimeLaneConfig>>
 {
     static CONFIGS: OnceLock<Mutex<BTreeMap<String, crate::runtime_host::RuntimeLaneConfig>>> =

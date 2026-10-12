@@ -107,9 +107,6 @@ pub(crate) async fn shared_managed_request_selected(
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
         if let Some(host) = host.as_ref() {
-            if command["action"] == "tab_new" && !host.effects.admits_ordinary_sessions() {
-                return Ok(false);
-            }
             return Ok(host.effects.admits_ordinary_sessions()
                 || matching_ordinary_session(host.state(), &name, &command));
         }
@@ -325,9 +322,6 @@ pub(crate) async fn execute_shared_managed_command(
             *host = Some(load_default_browser_session_host()?);
         }
         let host = host.as_mut().ok_or("browser_session_host_missing")?;
-        if command["action"] == "tab_new" && !host.effects.admits_ordinary_sessions() {
-            return Ok(None);
-        }
         host.execute_managed_command(&name, &command)
     })
     .await
@@ -1832,7 +1826,14 @@ where
         require_managed_runtime_admission(command["action"].as_str().unwrap_or_default(), command)?;
         self.register_explicit_profile(command)?;
         let automatic = self.effects.admits_ordinary_sessions();
-        if automatic && command["action"] == "tab_new" {
+        // Existing managed tasks need the same owned, replayable tab operation
+        // even when this host has no ordinary presentation provider configured.
+        let existing_task = self
+            .state
+            .sessions
+            .values()
+            .any(|task| task.name == session_name);
+        if (automatic || existing_task) && command["action"] == "tab_new" {
             return self
                 .execute_managed_tab_new(session_name, command)
                 .map(Some);
@@ -2085,22 +2086,50 @@ where
                 .response
                 .clone()
                 .ok_or("browser_session_tab_creation_readback_required")?;
-            let handoff = response
+            if let Some(handoff) = response
                 .pointer("/browserSession/handoffId")
                 .and_then(serde_json::Value::as_str)
-                .ok_or("browser_session_tab_request_invalid")?;
-            self.state
-                .remote_view_tab_handoffs
-                .get(handoff)
-                .ok_or("remote_view_tab_handoff_missing")?
-                .check_link_at(
-                    command
-                        .get("activityAtMs")
-                        .and_then(serde_json::Value::as_u64)
-                        .unwrap_or_else(current_unix_ms),
-                )?;
-            agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff)
-                .map_err(|_| "browser_session_tab_request_target_closed")?;
+            {
+                self.state
+                    .remote_view_tab_handoffs
+                    .get(handoff)
+                    .ok_or("remote_view_tab_handoff_missing")?
+                    .check_link_at(
+                        command
+                            .get("activityAtMs")
+                            .and_then(serde_json::Value::as_u64)
+                            .unwrap_or_else(current_unix_ms),
+                    )?;
+                agent_browser_service_model::resolve_remote_view_tab_handoff(&self.state, handoff)
+                    .map_err(|_| "browser_session_tab_request_target_closed")?;
+            } else {
+                // A headless task has no viewer handoff. Its retained native
+                // session/tab identity still fences replay after scoped close.
+                if self.effects.admits_ordinary_sessions() {
+                    return Err("browser_session_tab_request_invalid".into());
+                }
+                let session_id = response
+                    .pointer("/browserSession/sessionId")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or("browser_session_tab_request_invalid")?;
+                let tab_id = response
+                    .pointer("/browserSession/tabId")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or("browser_session_tab_request_invalid")?;
+                let session = self
+                    .state
+                    .sessions
+                    .get(session_id)
+                    .filter(|session| session.name == session_name)
+                    .ok_or("browser_session_tab_request_target_closed")?;
+                self.state
+                    .tabs
+                    .get(tab_id)
+                    .filter(|tab| {
+                        tab.session_id == session.id && tab.browser_id == session.browser_id
+                    })
+                    .ok_or("browser_session_tab_request_target_closed")?;
+            }
             let mut response = response;
             response["id"] = serde_json::json!(response_id);
             return Ok(response);
@@ -2810,6 +2839,60 @@ mod tests {
         assert_eq!(result["data"]["tabId"], tab_id);
         assert_eq!(restarted.state().browsers.len(), 1);
         assert_eq!(restarted.state().tabs.len(), 1);
+    }
+
+    #[test]
+    fn headless_managed_tab_retry_replays_without_presentation_and_rejects_closed_target() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles":{"work":{
+            "id":"work","name":"Work","userDataDir":directory.0.join("work"),
+            "profileClass":"durable_named"}}})
+            .to_string(),
+        )
+        .unwrap();
+        let config = BrowserSessionHostConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: Vec::new(),
+            default_disposable_policy: None,
+            exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+        };
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            config,
+        )
+        .unwrap();
+        let task = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let command = serde_json::json!({"id":"first","action":"tab_new",
+            "tabRequestId":"stable-key","activityAtMs":1_100});
+        let first = host
+            .execute_managed_command("alice", &command)
+            .unwrap()
+            .unwrap();
+        assert!(first["browserSession"]["handoffId"].is_null());
+        let mut retry = command.clone();
+        retry["id"] = "retry".into();
+        let replay = host
+            .execute_managed_command("alice", &retry)
+            .unwrap()
+            .unwrap();
+        assert_eq!(first["data"]["tabId"], replay["data"]["tabId"]);
+        assert_eq!(host.state.tabs.len(), 1);
+        host.close_current_tab(&task.session_id, 1_200).unwrap();
+        assert_eq!(
+            host.execute_managed_command("alice", &retry).unwrap_err(),
+            "browser_session_tab_request_target_closed"
+        );
+        assert!(host.state.tabs.is_empty());
     }
 
     #[test]
