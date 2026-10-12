@@ -68,6 +68,13 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<bool, String> {
         Ok(true)
     }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        _allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        Ok(Some(Box::new(())))
+    }
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],
@@ -236,6 +243,13 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     }
     fn acknowledge_launch_publication(&mut self) {
         self.runtime.acknowledge_launch_publication();
+    }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime.acquire_profile_cleanup_guard(allocation)
     }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         self.runtime.browser_is_live(browser)
@@ -696,6 +710,22 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         Ok(permitted)
     }
 
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::service_resources::permits_disposable_profile_cleanup(
+            &guarded.state,
+            allocation,
+            &chrono::Utc::now().to_rfc3339(),
+        )? {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(guarded)))
+    }
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],

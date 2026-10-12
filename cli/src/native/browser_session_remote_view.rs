@@ -296,6 +296,16 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.permits_idle_browser_close(browser),
         }
     }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        match self {
+            Self::Local(effects) => effects.acquire_profile_cleanup_guard(allocation),
+            Self::Remote(effects) => effects.acquire_profile_cleanup_guard(allocation),
+        }
+    }
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],

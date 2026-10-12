@@ -1008,6 +1008,137 @@ fn retained_profile_is_named_or_persistent_for_browser(
 
 /// Join the manager's operation-fenced identity to current Service State activity.
 /// This projection grants no process custody and publishes no inventory.
+/// Qualify an orphan disposable allocation against profile authority and a
+/// current process census. The caller retains Service State exclusion through
+/// deletion; this does not exclude independent provider or foreign OS launches.
+pub(crate) fn permits_disposable_profile_cleanup(
+    state: &ServiceState,
+    allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    now: &str,
+) -> Result<bool, String> {
+    let processes = profile_cleanup_process_census()?;
+    permits_disposable_profile_cleanup_from_samples(state, allocation, now, &processes, &[])
+}
+
+/// Read failures are not process absence. A raced exit is accepted only after
+/// the process directory itself is confirmed absent; other observations fail.
+fn profile_cleanup_process_command(path: &std::path::Path) -> Result<Option<Vec<String>>, String> {
+    match fs::read(path.join("cmdline")) {
+        Ok(bytes) => Ok(Some(
+            bytes
+                .split(|byte| *byte == 0)
+                .filter(|part| !part.is_empty())
+                .map(|part| String::from_utf8_lossy(part).into_owned())
+                .collect(),
+        )),
+        Err(error) => match fs::metadata(path) {
+            Err(absence) if absence.kind() == std::io::ErrorKind::NotFound => Ok(None),
+            _ => Err(format!(
+                "browser_disposable_cleanup_process_observation_failed:{error}"
+            )),
+        },
+    }
+}
+
+fn profile_cleanup_process_census() -> Result<Vec<ProcessSample>, String> {
+    #[cfg(target_os = "linux")]
+    {
+        let mut samples = Vec::new();
+        let entries = fs::read_dir("/proc")
+            .map_err(|error| format!("browser_disposable_cleanup_process_census_failed:{error}"))?;
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                format!("browser_disposable_cleanup_process_census_failed:{error}")
+            })?;
+            let Ok(pid) = entry.file_name().to_string_lossy().parse::<u32>() else {
+                continue;
+            };
+            if let Some(command) = profile_cleanup_process_command(&entry.path())? {
+                samples.push(ProcessSample {
+                    pid,
+                    command,
+                    ..Default::default()
+                });
+            }
+        }
+        if samples.is_empty() {
+            return Err("browser_disposable_cleanup_process_census_empty".into());
+        }
+        Ok(samples)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        Err("browser_disposable_cleanup_process_census_unavailable".into())
+    }
+}
+
+fn permits_disposable_profile_cleanup_from_samples(
+    state: &ServiceState,
+    allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    now: &str,
+    processes: &[ProcessSample],
+    warnings: &[String],
+) -> Result<bool, String> {
+    let profile = &allocation.profile;
+    let path = std::path::Path::new(&profile.user_data_dir);
+    let root = std::path::Path::new(&allocation.user_data_root);
+    if profile.kind != agent_browser_service_model::BrowserProfileKind::Disposable
+        || !root.is_absolute()
+        || path.parent() != Some(root)
+        || path == root
+    {
+        return Err("browser_disposable_cleanup_identity_invalid".into());
+    }
+    if !warnings.is_empty() {
+        return Err("browser_disposable_cleanup_process_census_unavailable".into());
+    }
+    if let Some(record) = state.profiles.get(&profile.id) {
+        if record.user_data_dir.as_deref() != Some(profile.user_data_dir.as_str()) {
+            return Err("browser_disposable_cleanup_profile_identity_conflict".into());
+        }
+    }
+    let resource = agent_browser_lease_authority::LeaseResourceKey::profile(&profile.id);
+    if state.current_lease_claim(&resource, now).is_some() {
+        return Ok(false);
+    }
+    if state.jobs.values().any(|job| {
+        matches!(&job.target, super::service_model::JobTarget::Profile(id) if id == &profile.id)
+            && matches!(
+                job.state,
+                super::service_model::JobState::Queued
+                    | super::service_model::JobState::WaitingProfileLease
+                    | super::service_model::JobState::Running
+            )
+    }) {
+        return Ok(false);
+    }
+    for browser in state
+        .browsers
+        .values()
+        .filter(|browser| browser.profile_id.as_deref() == Some(profile.id.as_str()))
+    {
+        if browser
+            .pid
+            .is_some_and(|pid| processes.iter().any(|process| process.pid == pid))
+            || resource_lane_activity_at(state, &browser.id, now).active
+        {
+            return Ok(false);
+        }
+    }
+    if processes.iter().any(|process| {
+        command_arg_value(&process.command, "--user-data-dir").is_some_and(|observed| {
+            observed == profile.user_data_dir
+                || std::fs::canonicalize(observed)
+                    .ok()
+                    .zip(std::fs::canonicalize(path).ok())
+                    .is_some_and(|(left, right)| left == right)
+        })
+    }) {
+        return Ok(false);
+    }
+    Ok(true)
+}
+
 pub(crate) fn permits_managed_browser_idle_retirement(
     state: &ServiceState,
     browser: &agent_browser_service_model::ManagedBrowserInstance,
@@ -4844,3 +4975,120 @@ pub(crate) mod service_commands {
     }
 }
 pub(crate) use service_commands::*;
+
+#[cfg(test)]
+mod profile_cleanup_guard_tests {
+    use super::*;
+    use agent_browser_service_model::{
+        BrowserProfileCatalogEntry, BrowserProfileKind, ManagedDisposableProfile,
+    };
+    #[test]
+    fn profile_cleanup_command_distinguishes_missing_observation_from_exited_process() {
+        let root =
+            std::env::temp_dir().join(format!("p237-process-observation-{}", uuid::Uuid::new_v4()));
+        fs::create_dir(&root).unwrap();
+        assert!(profile_cleanup_process_command(&root).is_err());
+        fs::write(
+            root.join("cmdline"),
+            b"chrome\0--user-data-dir=/owned/profile\0",
+        )
+        .unwrap();
+        assert_eq!(
+            profile_cleanup_process_command(&root).unwrap().unwrap(),
+            ["chrome", "--user-data-dir=/owned/profile"]
+        );
+        fs::write(root.join("cmdline"), b"").unwrap();
+        assert!(profile_cleanup_process_command(&root)
+            .unwrap()
+            .unwrap()
+            .is_empty());
+        fs::remove_file(root.join("cmdline")).unwrap();
+        fs::remove_dir(&root).unwrap();
+        assert!(profile_cleanup_process_command(&root).unwrap().is_none());
+    }
+    #[test]
+    fn profile_cleanup_qualifies_identity_activity_and_process_absence() {
+        let allocation = ManagedDisposableProfile {
+            profile: BrowserProfileCatalogEntry {
+                id: "orphan".into(),
+                name: "orphan".into(),
+                user_data_dir: "/owned/root/profile".into(),
+                kind: BrowserProfileKind::Disposable,
+            },
+            policy_id: "default".into(),
+            session_name: "alice".into(),
+            user_data_root: "/owned/root".into(),
+            created_at_ms: 1,
+            cleanup_delay_ms: 0,
+            cleanup_eligible_at_ms: Some(2),
+        };
+        let now = "2026-10-12T05:00:00Z";
+        let mut state = ServiceState::default();
+        assert!(permits_disposable_profile_cleanup_from_samples(
+            &state,
+            &allocation,
+            now,
+            &[],
+            &[]
+        )
+        .unwrap());
+        state.jobs.insert(
+            "profile-work".into(),
+            super::super::service_model::ServiceJob {
+                id: "profile-work".into(),
+                target: super::super::service_model::JobTarget::Profile("orphan".into()),
+                state: super::super::service_model::JobState::Running,
+                ..Default::default()
+            },
+        );
+        assert!(!permits_disposable_profile_cleanup_from_samples(
+            &state,
+            &allocation,
+            now,
+            &[],
+            &[]
+        )
+        .unwrap());
+        state.jobs.clear();
+        let processes = [ProcessSample {
+            pid: 42,
+            command: vec![
+                "chrome".into(),
+                "--user-data-dir=/owned/root/profile".into(),
+            ],
+            ..Default::default()
+        }];
+        assert!(!permits_disposable_profile_cleanup_from_samples(
+            &state,
+            &allocation,
+            now,
+            &processes,
+            &[]
+        )
+        .unwrap());
+        assert!(permits_disposable_profile_cleanup_from_samples(
+            &state,
+            &allocation,
+            now,
+            &[],
+            &["unavailable".into()]
+        )
+        .is_err());
+        state.profiles.insert(
+            "orphan".into(),
+            super::super::service_model::BrowserProfile {
+                id: "orphan".into(),
+                user_data_dir: Some("/foreign/profile".into()),
+                ..Default::default()
+            },
+        );
+        assert!(permits_disposable_profile_cleanup_from_samples(
+            &state,
+            &allocation,
+            now,
+            &[],
+            &[]
+        )
+        .is_err());
+    }
+}

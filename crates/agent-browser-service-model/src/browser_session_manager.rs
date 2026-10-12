@@ -162,6 +162,16 @@ pub trait BrowserSessionEffects {
         Ok(Some(Box::new(())))
     }
 
+    /// Qualify this exact orphan allocation and retain activity admission through
+    /// cleanup. Provider-free adapters have no external concurrent authority.
+    /// Production adapters must check profile claims, jobs and physical custody.
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        _allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        Ok(Some(Box::new(())))
+    }
+
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
 
     fn acquire_initial_tab(
@@ -2282,6 +2292,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .get(&profile_id)
                 .cloned()
                 .ok_or_else(|| "browser_disposable_profile_missing_during_reap".to_string())?;
+            let Some(_cleanup_guard) = self.effects.acquire_profile_cleanup_guard(&allocation)?
+            else {
+                continue;
+            };
             self.effects.delete_disposable_profile(&allocation)?;
             self.state.disposable_profiles.remove(&profile_id);
             result.deleted_disposable_profile_ids.push(profile_id);

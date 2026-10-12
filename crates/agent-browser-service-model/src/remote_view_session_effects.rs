@@ -519,6 +519,13 @@ impl<
             .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
         Ok(!observation.viewer_active)
     }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &crate::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        self.effects.acquire_profile_cleanup_guard(allocation)
+    }
     fn acquire_idle_retirement_guard(
         &mut self,
         browsers: &[ManagedBrowserInstance],

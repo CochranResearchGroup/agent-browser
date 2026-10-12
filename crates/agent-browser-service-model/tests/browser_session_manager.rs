@@ -76,6 +76,7 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 struct FixtureEffects {
     idle_retirement_permitted: Option<bool>,
     retirement_guard_denied_browser: Option<String>,
+    profile_cleanup_permitted: Option<bool>,
     retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
     executable: String,
@@ -220,6 +221,16 @@ impl BrowserSessionEffects for FixtureEffects {
         } else {
             Ok(Some(Box::new(())))
         }
+    }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        _allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        if !self.profile_cleanup_permitted.unwrap_or(true) {
+            return Ok(None);
+        }
+        self.acquire_idle_retirement_guard(&[])
     }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.executable = path;
@@ -2263,5 +2274,45 @@ fn quota_qualifies_all_candidates_before_first_retirement_effect() {
     assert_eq!(effects.disposable_deletions.len(), 2);
     assert!(state.sessions.is_empty());
     assert!(state.disposable_profiles.is_empty());
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn scheduled_profile_cleanup_retains_activity_exclusion_through_deletion() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        retirement_guard_active: Some(active.clone()),
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 2_000)
+        .unwrap();
+    assert!(state.browsers.is_empty());
+    assert!(state.sessions.is_empty());
+    let due = state
+        .disposable_profiles
+        .get(&opened.profile_id)
+        .unwrap()
+        .cleanup_eligible_at_ms
+        .unwrap();
+    effects.profile_cleanup_permitted = Some(false);
+    let deferred = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .reap(due)
+        .unwrap();
+    assert!(deferred.deleted_disposable_profile_ids.is_empty());
+    assert!(effects.disposable_deletions.is_empty());
+    assert!(state.disposable_profiles.contains_key(&opened.profile_id));
+    effects.profile_cleanup_permitted = Some(true);
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(due)
+        .unwrap();
+    assert_eq!(effects.disposable_deletions, [opened.profile_id]);
     assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
 }
