@@ -1,6 +1,6 @@
 # Roadmap
 
-Updated: 2026-10-06
+Updated: 2026-10-12
 
 ## Current direction
 
@@ -11,6 +11,8 @@ Use an existing client profile, a managed persistent profile, or a disposable pr
 Prioritize less plumbing, useful continuity, seamless human assistance, predictable operation and clear results. Each substantial change names its concrete workflow improvement and validates it. Current implementation gaps belong in RUNBOOK rather than becoming permanent product rituals.
 
 ## Current work and boundaries
+
+[P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) delivers the small workflow MCP, task-appropriate profiles, native handoff/continuation and supported Codex client guidance at the isolated installed seam. RUNBOOK and PR267 bind current qualification; production promotion remains separate.
 
 [P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) owns the bounded incremental installer observation repair for #181, including its reviewed candidate entry point. Source qualification remains separate from production-shaped installation.
 

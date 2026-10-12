@@ -27,4 +27,4 @@
 
 - [P236: incremental upgrade progress](0236-2026-10-11-incremental-upgrade-progress.md), issue #181; bounded public progress source repair complete; wider installed acceptance remains open.
 
-- [P238: workflow-focused MCP](0238-2026-10-11-workflow-mcp.md), #255 and spec #262; implementation with isolated installed workflow qualification.
+- [P238: workflow-focused MCP](0238-2026-10-11-workflow-mcp.md), #255 and spec #262; completed isolated installed workflow and Codex qualification, integration through PR267.
