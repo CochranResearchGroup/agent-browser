@@ -2354,6 +2354,30 @@ fn valid_handoff_can_extend_after_target_expiry_without_recreation() {
         "handoffOperation":"inspect", "activityAtMs":132
     }));
     assert_eq!(inspected["data"]["expiresAtMs"], 2_131);
+    let state_before_edit = consumer.state().clone();
+    let shortened = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":10, "activityAtMs":132
+    }));
+    assert_eq!(shortened["success"], true, "{shortened}");
+    assert_eq!(shortened["data"]["expiresAtMs"], 142, "{shortened}");
+    let perpetual = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":0, "activityAtMs":133
+    }));
+    assert_eq!(perpetual["success"], true, "{perpetual}");
+    assert!(perpetual["data"]["expiresAtMs"].is_null());
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":5000
+    }));
+    assert_eq!(inspected["data"]["expired"], false, "{inspected}");
+    assert!(inspected["data"]["expiresAtMs"].is_null());
+    assert_eq!(consumer.state().tabs, state_before_edit.tabs);
+    assert_eq!(consumer.state().browsers, state_before_edit.browsers);
+    assert_eq!(consumer.state().sessions, state_before_edit.sessions);
     assert_eq!(calls.get(), 1, "link management must not launch a browser");
     assert!(provider.borrow().view_requests.is_empty());
 }
@@ -2606,6 +2630,89 @@ fn finite_pending_human_deadline_expires_exact_target_after_restart() {
 }
 
 #[test]
+fn existing_link_lifetime_switches_finite_and_perpetual_without_target_effects() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100,
+        "humanHandoff":true, "pendingHumanRetentionMs":0
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let before = consumer.state().clone();
+    let operations = provider.borrow().operations.clone();
+    let finite = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":20, "activityAtMs":100
+    }));
+    assert_eq!(finite["success"], true, "{finite}");
+    assert_eq!(
+        finite["data"]["status"], "link_lifetime_updated",
+        "{finite}"
+    );
+    assert_eq!(finite["data"]["expiresAtMs"], 120);
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let invalid = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":u64::MAX, "activityAtMs":110
+    }));
+    assert_eq!(invalid["success"], false, "{invalid}");
+    let unchanged = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":110
+    }));
+    assert_eq!(unchanged["data"]["expiresAtMs"], 120, "{unchanged}");
+    let perpetual = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":0, "activityAtMs":110
+    }));
+    assert_eq!(perpetual["success"], true, "{perpetual}");
+    assert_eq!(
+        perpetual["data"]["status"], "link_lifetime_updated",
+        "{perpetual}"
+    );
+    assert!(perpetual["data"]["expiresAtMs"].is_null());
+    drop(consumer);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let inspected = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":200
+    }));
+    assert_eq!(inspected["success"], true, "{inspected}");
+    assert_eq!(inspected["data"]["expired"], false, "{inspected}");
+    assert!(inspected["data"]["expiresAtMs"].is_null());
+    let finite_again = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":10, "activityAtMs":200
+    }));
+    assert_eq!(finite_again["success"], true, "{finite_again}");
+    assert_eq!(finite_again["data"]["expiresAtMs"], 210);
+    let elapsed = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":0, "activityAtMs":210
+    }));
+    assert_eq!(elapsed["success"], false, "{elapsed}");
+    let expired = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":210
+    }));
+    assert_eq!(expired["data"]["expired"], true, "{expired}");
+    assert_eq!(expired["data"]["expiresAtMs"], 210);
+    assert_eq!(consumer.state().tabs, before.tabs);
+    assert_eq!(consumer.state().browsers, before.browsers);
+    assert_eq!(consumer.state().sessions, before.sessions);
+    assert_eq!(
+        consumer.state().pending_human_tabs,
+        before.pending_human_tabs
+    );
+    assert_eq!(consumer.state().tab_lifetimes, before.tab_lifetimes);
+    assert_eq!(provider.borrow().operations, operations);
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
 fn deleting_handoff_revokes_only_link_and_preserves_target_across_restart() {
     for link_ttl in [None, Some(5)] {
         let fixture = Fixture::new();
@@ -2653,6 +2760,85 @@ fn deleting_handoff_revokes_only_link_and_preserves_target_across_restart() {
         );
         assert_eq!(calls.get(), 1);
     }
+}
+
+#[test]
+fn automatic_last_tab_expiry_closes_owned_browser_with_empty_peer_session() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100
+    })).unwrap().unwrap();
+    let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+    let configured = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":100
+    }));
+    assert_eq!(configured["success"], true, "{configured}");
+    let peer = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-a", 110))
+        .unwrap();
+    assert!(consumer.state().sessions[&peer.session_id]
+        .current_tab_id
+        .is_none());
+    assert!(!consumer
+        .state()
+        .tabs
+        .values()
+        .any(|tab| tab.session_id == peer.session_id));
+    let desktop = provider.borrow().assignments[0].desktop_id.clone();
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .insert(desktop.clone());
+    let protected = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_reap", "activityAtMs":130
+    }));
+    assert_eq!(protected["success"], true, "{protected}");
+    assert_eq!(
+        protected["data"]["expiredTabIds"],
+        serde_json::json!([]),
+        "{protected}"
+    );
+    assert_eq!(
+        protected["data"]["closedBrowserIds"],
+        serde_json::json!([]),
+        "{protected}"
+    );
+    assert!(consumer.state().sessions[&peer.session_id]
+        .current_tab_id
+        .is_none());
+    provider
+        .borrow_mut()
+        .viewer_active_desktops
+        .remove(&desktop);
+    let reaped = consumer.handle_command(&serde_json::json!({
+        "action":"browser_session_reap", "activityAtMs":131
+    }));
+    assert_eq!(reaped["success"], true, "{reaped}");
+    assert_eq!(
+        reaped["data"]["expiredTabIds"],
+        serde_json::json!([alice["browserSession"]["tabId"]]),
+        "{reaped}"
+    );
+    assert_eq!(
+        reaped["data"]["closedBrowserIds"],
+        serde_json::json!([alice["browserSession"]["browserId"]]),
+        "{reaped}"
+    );
+    assert!(consumer.state().sessions.is_empty());
+    assert!(consumer.state().browsers.is_empty());
+    drop(consumer);
+    let mut consumer = host(&fixture, provider, calls.clone());
+    let link = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"inspect", "activityAtMs":132
+    }));
+    assert_eq!(link["success"], true, "{link}");
+    assert_eq!(link["data"]["expired"], false, "{link}");
+    assert_eq!(calls.get(), 1);
 }
 
 #[test]

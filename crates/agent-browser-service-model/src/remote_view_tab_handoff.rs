@@ -335,6 +335,21 @@ impl RemoteViewTabHandoff {
         self.expires_at_ms = Some(self.expires_at_ms.unwrap_or(expiry).max(expiry));
         Ok(())
     }
+
+    /// Set this valid link's remaining lifetime without changing its target.
+    /// Zero selects perpetual validity; positive durations replace the expiry.
+    /// Invalid deadlines reject before changing creation or expiry metadata.
+    pub fn set_link_lifetime(&mut self, now_ms: u64, ttl_ms: u64) -> Result<(), String> {
+        self.check_link_at(now_ms)?;
+        let expiry = if ttl_ms == 0 {
+            None
+        } else {
+            Some(link_expiry(now_ms, ttl_ms)?)
+        };
+        self.created_at_ms.get_or_insert(now_ms);
+        self.expires_at_ms = expiry;
+        Ok(())
+    }
 }
 
 fn link_expiry(now_ms: u64, ttl_ms: u64) -> Result<u64, String> {

@@ -1086,22 +1086,29 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                         "tabId":target.tab.id,"status":"tab_lifetime_updated",
                         "tabLifetime":lifetime}));
                 }
-                if command["handoffOperation"] == "extend" {
+                if command["handoffOperation"] == "extend"
+                    || command["handoffOperation"] == "set_link_lifetime"
+                {
                     // Link lifetime management does not require a live target
                     // and must not recreate one as a side effect.
                     let ttl = command["ttlMs"]
                         .as_u64()
-                        .filter(|ttl| *ttl > 0)
                         .ok_or("remote_view_handoff_ttl_invalid")?;
                     let link = self
                         .state
                         .remote_view_tab_handoffs
                         .get_mut(handoff_id)
                         .ok_or("remote_view_tab_handoff_missing")?;
-                    link.extend_link_retention(now_ms, ttl)?;
+                    let status = if command["handoffOperation"] == "extend" {
+                        link.extend_link_retention(now_ms, ttl)?;
+                        "link_extended"
+                    } else {
+                        link.set_link_lifetime(now_ms, ttl)?;
+                        "link_lifetime_updated"
+                    };
                     let response = serde_json::json!({"handoffId":handoff_id,
                         "handoffUrl":format!("/remote-view/{handoff_id}"),
-                        "status":"link_extended","createdAtMs":link.created_at_ms,
+                        "status":status,"createdAtMs":link.created_at_ms,
                         "expiresAtMs":link.expires_at_ms});
                     self.commit_state()?;
                     return Ok(response);

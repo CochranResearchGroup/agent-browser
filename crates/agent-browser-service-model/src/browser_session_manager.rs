@@ -1366,7 +1366,9 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 .tabs
                 .values()
                 .any(|tab| tab.session_id == remaining_session_id);
-            if !remaining_has_tab {
+            // Automatic retirement must not manufacture replacement work for
+            // an empty peer. Explicit session transfer retains its bootstrap.
+            if !remaining_has_tab && reason == SessionEndReason::ExplicitClose {
                 let attributed_target_ids = self
                     .state
                     .tabs
@@ -2011,6 +2013,10 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             })
             .cloned()
             .collect::<Vec<_>>();
+        let expired_tab_browser_ids = expired_tabs
+            .iter()
+            .map(|tab| tab.browser_id.clone())
+            .collect::<BTreeSet<_>>();
         let mut result = ReapBrowserSessionsResult::default();
         for tab in expired_tabs {
             let last_session_tab = self
@@ -2039,6 +2045,41 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 )?;
             }
             result.expired_tab_ids.push(tab.id);
+        }
+        // A browser whose last tab expired has no remaining work merely
+        // because an empty peer session has a later heartbeat deadline.
+        let empty_peer_session_ids = self
+            .state
+            .sessions
+            .values()
+            .filter(|session| {
+                expired_tab_browser_ids.contains(&session.browser_id)
+                    && !self.state.shared_browser_ids.contains(&session.browser_id)
+                    && !self
+                        .state
+                        .tabs
+                        .values()
+                        .any(|tab| tab.browser_id == session.browser_id)
+                    && self
+                        .state
+                        .browsers
+                        .get(&session.browser_id)
+                        .is_some_and(|browser| {
+                            browser
+                                .active_session_ids
+                                .iter()
+                                .all(|id| !externally_protected_session_ids.contains(id))
+                        })
+            })
+            .map(|session| session.id.clone())
+            .collect::<Vec<_>>();
+        for session_id in empty_peer_session_ids {
+            let closed =
+                self.close_session(&session_id, SessionEndReason::HeartbeatExpired, now_ms)?;
+            result.expired_session_ids.push(session_id);
+            if closed.disposition == SessionCloseDisposition::BrowserClosed {
+                result.closed_browser_ids.push(closed.browser_id);
+            }
         }
         let expired_session_ids = self
             .state
