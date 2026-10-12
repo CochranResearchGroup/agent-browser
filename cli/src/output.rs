@@ -6367,7 +6367,9 @@ firstHumanUseAtMs records qualified first use separately from creation attributi
 Managed commands accept serviceName, agentName, humanName, originKind, taskName,
 purpose, requestId and jobId as descriptive context, never authenticated identity.
 Optional pressureInactivityMs opts into measured disposable quota retirement;
-0 disables it. Controller/operation protection and runtime acceptance are pending.
+0 disables it. Automatic retirement rechecks service activity under a close-effect
+admission guard; newly admitted work defers close. Explicit close remains separate.
+Provider viewer admission and complete runtime acceptance are pending.
 Software set_link_lifetime with ttlMs replaces a valid link lifetime; 0 is perpetual.
 Positive durations set expiry from the edit time without recreating expired targets.
 Invalid deadlines leave the link unchanged; expired links reject lifetime edits.

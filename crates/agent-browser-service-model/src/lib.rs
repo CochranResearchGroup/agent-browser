@@ -105,11 +105,11 @@ pub use browser_retirement::{
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use browser_session_manager::{
-    BrowserHistoryCompactionEvent, BrowserLaunch, BrowserNavigationDailySummary,
-    BrowserNavigationRecord, BrowserProfileIntent, BrowserRecovery, BrowserSessionEffects,
-    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition,
-    BrowserTabEndReason, BrowserTabLifetime, BrowserTabSource, BrowserTaskMetadata,
-    CloseBrowserSessionResult, CloseBrowserTabResult, FocusBrowserResult,
+    BrowserHistoryCompactionEvent, BrowserIdleRetirementGuard, BrowserLaunch,
+    BrowserNavigationDailySummary, BrowserNavigationRecord, BrowserProfileIntent, BrowserRecovery,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabLifetime, BrowserTabSource,
+    BrowserTaskMetadata, CloseBrowserSessionResult, CloseBrowserTabResult, FocusBrowserResult,
     ManagedBrowserCommandEffects, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
     ManagedBrowserTabRequest, ManagedDisposableProfile, OpenBrowserSession,
     OpenBrowserSessionResult, PendingHumanTabRetention, ReapBrowserSessionsResult,

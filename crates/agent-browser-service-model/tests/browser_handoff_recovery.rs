@@ -8,6 +8,7 @@ struct Evidence {
     effects: Vec<String>,
     prior: Option<RemoteViewAssignmentRecord>,
     retirement_blocked: bool,
+    published_browser_requests: Vec<ManagedBrowserInstance>,
 }
 struct Store(Rc<RefCell<Evidence>>);
 impl BrowserLaunchCustodyStore for Store {
@@ -18,9 +19,11 @@ impl BrowserLaunchCustodyStore for Store {
     }
     fn published_launch_assignment(
         &mut self,
-        _: &ManagedBrowserInstance,
+        browser: &ManagedBrowserInstance,
     ) -> Result<RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
-        Ok(self.0.borrow().prior.clone().unwrap())
+        let mut evidence = self.0.borrow_mut();
+        evidence.published_browser_requests.push(browser.clone());
+        Ok(evidence.prior.clone().unwrap())
     }
     fn admit_recovery_launch_intent(
         &mut self,
@@ -503,5 +506,38 @@ fn pooled_idle_retirement_preserves_runtime_controller_and_operation_veto() {
             "runtime_retirement_check",
             "provider_idle_check"
         ]
+    );
+    let mut in_progress = browser.clone();
+    in_progress.active_session_ids.push("remaining-peer".into());
+    let guard = effects
+        .acquire_idle_retirement_guard(&[in_progress])
+        .unwrap();
+    assert!(
+        guard.is_some(),
+        "session bookkeeping must not invalidate stable physical custody"
+    );
+    assert_eq!(
+        evidence.borrow().published_browser_requests.last(),
+        Some(&browser)
+    );
+    drop(guard);
+    let reads_before = evidence.borrow().published_browser_requests.len();
+    for mutation in 0..4 {
+        let mut changed = browser.clone();
+        match mutation {
+            0 => changed.pid += 1,
+            1 => changed.cdp_endpoint.push_str("/changed"),
+            2 => changed.profile_id.push_str("-changed"),
+            _ => changed.desktop.as_mut().unwrap().generation += 1,
+        }
+        match effects.acquire_idle_retirement_guard(&[changed]) {
+            Err(error) => assert_eq!(error, "browser_session_idle_custody_identity_changed"),
+            Ok(_) => panic!("changed physical custody must not acquire retirement authority"),
+        }
+    }
+    assert_eq!(
+        evidence.borrow().published_browser_requests.len(),
+        reads_before,
+        "changed physical custody must fail before assignment lookup"
     );
 }

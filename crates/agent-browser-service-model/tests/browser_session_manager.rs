@@ -74,6 +74,8 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 
 #[derive(Default)]
 struct FixtureEffects {
+    idle_retirement_permitted: Option<bool>,
+    retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
     executable: String,
     launch_executables: Vec<(String, String)>,
@@ -186,6 +188,36 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
 }
 
 impl BrowserSessionEffects for FixtureEffects {
+    fn permits_idle_browser_close(
+        &mut self,
+        _browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        Ok(self.idle_retirement_permitted.unwrap_or(true))
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        for browser in browsers {
+            if !self.permits_idle_browser_close(browser)? {
+                return Ok(None);
+            }
+        }
+        struct Guard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl agent_browser_service_model::BrowserIdleRetirementGuard for Guard {}
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        if let Some(active) = &self.retirement_guard_active {
+            active.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(Box::new(Guard(active.clone()))))
+        } else {
+            Ok(Some(Box::new(())))
+        }
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.executable = path;
         Ok(())
@@ -328,6 +360,12 @@ impl BrowserSessionEffects for FixtureEffects {
         &mut self,
         allocation: &agent_browser_service_model::ManagedDisposableProfile,
     ) -> Result<(), String> {
+        if let Some(active) = &self.retirement_guard_active {
+            assert!(
+                active.load(std::sync::atomic::Ordering::SeqCst),
+                "profile deletion must retain retirement admission exclusion"
+            );
+        }
         self.disposable_deletions
             .push(allocation.profile.id.clone());
         Ok(())
@@ -2100,4 +2138,77 @@ fn pressure_policy_preserves_active_peer_after_link_deletion() {
     assert!(state.tabs.contains_key(&peer.tab_id));
     assert!(effects.closes.is_empty());
     assert!(effects.disposable_deletions.is_empty());
+}
+
+#[test]
+fn idle_retirement_guard_preserves_expired_matching_session_before_replacement() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: vec![],
+    };
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    effects.idle_retirement_permitted = Some(false);
+    let replacement =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone()).open(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 2_000),
+        );
+    assert!(
+        effects.closes.is_empty(),
+        "active authority must prevent expired-epoch replacement close"
+    );
+    assert!(replacement.is_err());
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert_eq!(effects.launches.len(), 1);
+    // Explicit user close remains authorized even while idle retirement is denied.
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .close_session(&first.session_id, SessionEndReason::ExplicitClose, 2_001)
+        .unwrap();
+    assert_eq!(effects.closes, [first.browser_id]);
+}
+
+#[test]
+fn idle_retirement_guard_covers_quota_profile_cleanup_and_releases() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        retirement_guard_active: Some(active.clone()),
+        ..Default::default()
+    };
+    let first = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+    .unwrap();
+    BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+    .unwrap();
+    assert_eq!(effects.disposable_deletions, [first.profile_id]);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
 }

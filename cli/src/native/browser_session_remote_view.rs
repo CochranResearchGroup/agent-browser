@@ -296,6 +296,15 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.permits_idle_browser_close(browser),
         }
     }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        match self {
+            Self::Local(effects) => effects.acquire_idle_retirement_guard(browsers),
+            Self::Remote(effects) => effects.acquire_idle_retirement_guard(browsers),
+        }
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         match self {
             Self::Local(effects) => effects.close_browser(browser),

@@ -519,6 +519,46 @@ impl<
             .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
         Ok(!observation.viewer_active)
     }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        let Some(guard) = self.effects.acquire_idle_retirement_guard(browsers)? else {
+            return Ok(None);
+        };
+        if self.pool.is_some() {
+            for browser in browsers {
+                // Earlier closes in this action change session membership before
+                // its durable publication. Custody still qualifies the published
+                // operation baseline, with physical identity checked separately.
+                let baseline = self
+                    .expected
+                    .as_ref()
+                    .and_then(|state| state.browsers.get(&browser.id))
+                    .ok_or("browser_session_idle_custody_unavailable")?;
+                if baseline.pid != browser.pid
+                    || baseline.cdp_endpoint != browser.cdp_endpoint
+                    || baseline.profile_id != browser.profile_id
+                    || baseline.desktop != browser.desktop
+                {
+                    return Err("browser_session_idle_custody_identity_changed".into());
+                }
+                let assignment = self
+                    .store
+                    .published_launch_assignment(baseline)
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
+                let observation = self
+                    .adapter
+                    .observe_idle(&assignment)
+                    .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
+                if observation.viewer_active {
+                    return Ok(None);
+                }
+            }
+        }
+        Ok(Some(guard))
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
         self.effects.close_browser(browser)

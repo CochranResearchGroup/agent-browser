@@ -45,6 +45,11 @@ pub trait ManagedBrowserCommandEffects {
     ) -> Result<serde_json::Value, String>;
 }
 
+/// Adapter-owned protection held through one automatic retirement effect group.
+/// Dropping the guard releases admission exclusion, including on an error.
+pub trait BrowserIdleRetirementGuard {}
+impl BrowserIdleRetirementGuard for () {}
+
 pub trait BrowserSessionEffects {
     /// Reconcile a currently live exact-profile browser before placement or replacement.
     /// Return only verified attachment and task-target identities; do not launch or close peers.
@@ -139,6 +144,22 @@ pub trait BrowserSessionEffects {
         _browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         Ok(true)
+    }
+
+    /// Revalidate current activity and retain adapter admission exclusion until
+    /// the caller finishes automatic close effects. None defers without effects.
+    /// Provider-free adapters have no concurrent authority and use the fallback;
+    /// production adapters must supply the guard for their authority boundary.
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        for browser in browsers {
+            if !self.permits_idle_browser_close(browser)? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(())))
     }
 
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String>;
@@ -869,6 +890,17 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         for session_id in expired_matching_sessions {
+            let browser = self
+                .state
+                .sessions
+                .get(&session_id)
+                .and_then(|session| self.state.browsers.get(&session.browser_id))
+                .cloned()
+                .ok_or("browser_session_browser_missing")?;
+            let _retirement_guard = self
+                .effects
+                .acquire_idle_retirement_guard(&[browser])?
+                .ok_or("browser_session_expired_epoch_activity_protected")?;
             self.close_session(
                 &session_id,
                 SessionEndReason::HeartbeatExpired,
@@ -2065,6 +2097,16 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .collect::<BTreeSet<_>>();
         let mut result = ReapBrowserSessionsResult::default();
         for tab in expired_tabs {
+            let browser = self
+                .state
+                .browsers
+                .get(&tab.browser_id)
+                .cloned()
+                .ok_or("browser_session_browser_missing")?;
+            let Some(_retirement_guard) = self.effects.acquire_idle_retirement_guard(&[browser])?
+            else {
+                continue;
+            };
             let last_session_tab = self
                 .state
                 .tabs
@@ -2120,6 +2162,17 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         for session_id in empty_peer_session_ids {
+            let browser = self
+                .state
+                .sessions
+                .get(&session_id)
+                .and_then(|session| self.state.browsers.get(&session.browser_id))
+                .cloned()
+                .ok_or("browser_session_browser_missing")?;
+            let Some(_retirement_guard) = self.effects.acquire_idle_retirement_guard(&[browser])?
+            else {
+                continue;
+            };
             let closed =
                 self.close_session(&session_id, SessionEndReason::HeartbeatExpired, now_ms)?;
             result.expired_session_ids.push(session_id);
@@ -2147,6 +2200,17 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .map(|session| session.id.clone())
             .collect::<Vec<_>>();
         for session_id in expired_session_ids {
+            let browser = self
+                .state
+                .sessions
+                .get(&session_id)
+                .and_then(|session| self.state.browsers.get(&session.browser_id))
+                .cloned()
+                .ok_or("browser_session_browser_missing")?;
+            let Some(_retirement_guard) = self.effects.acquire_idle_retirement_guard(&[browser])?
+            else {
+                continue;
+            };
             let closed =
                 self.close_session(&session_id, SessionEndReason::HeartbeatExpired, now_ms)?;
             result.expired_session_ids.push(session_id);
@@ -2178,6 +2242,12 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .cloned()
             .collect::<Vec<_>>();
         for browser in idle_browsers {
+            let Some(_retirement_guard) = self
+                .effects
+                .acquire_idle_retirement_guard(std::slice::from_ref(&browser))?
+            else {
+                continue;
+            };
             self.effects.close_browser(&browser)?;
             self.state
                 .idle_closed_browsers
@@ -2404,6 +2474,17 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
 
         let mut result = ReapBrowserSessionsResult::default();
         for profile_id in selected {
+            let browsers = self
+                .state
+                .browsers
+                .values()
+                .filter(|browser| browser.profile_id == profile_id)
+                .cloned()
+                .collect::<Vec<_>>();
+            let retirement_guard = self
+                .effects
+                .acquire_idle_retirement_guard(&browsers)?
+                .ok_or("browser_disposable_profile_activity_changed")?;
             let session_ids = self
                 .state
                 .sessions
@@ -2441,6 +2522,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             self.effects.delete_disposable_profile(&allocation)?;
             self.state.disposable_profiles.remove(&profile_id);
             result.deleted_disposable_profile_ids.push(profile_id);
+            drop(retirement_guard);
         }
         Ok(result)
     }

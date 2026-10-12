@@ -68,6 +68,18 @@ pub(crate) trait BrowserRuntimeDriver {
     ) -> Result<bool, String> {
         Ok(true)
     }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        for browser in browsers {
+            if !self.permits_idle_browser_close(browser)? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(())))
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -242,6 +254,13 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         self.runtime.permits_idle_browser_close(browser)
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime.acquire_idle_retirement_guard(browsers)
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
@@ -476,6 +495,8 @@ enum BrowserRuntimeCommand {
 pub(crate) struct BrowserManagerRuntime {
     commands: mpsc::Sender<BrowserRuntimeCommand>,
     worker: Option<thread::JoinHandle<()>>,
+    #[cfg(test)]
+    idle_retirement_after_check: Option<fn(&ManagedBrowserInstance) -> Result<(), String>>,
 }
 
 impl BrowserManagerRuntime {
@@ -498,6 +519,8 @@ impl BrowserManagerRuntime {
             Ok(Ok(())) => Ok(Self {
                 commands,
                 worker: Some(worker),
+                #[cfg(test)]
+                idle_retirement_after_check: None,
             }),
             Ok(Err(error)) => {
                 let _ = worker.join();
@@ -659,11 +682,38 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         let state = super::service_store::load_default_service_state_snapshot()?;
-        super::service_resources::permits_managed_browser_idle_retirement(
+        let permitted = super::service_resources::permits_managed_browser_idle_retirement(
             &state,
             browser,
             &chrono::Utc::now().to_rfc3339(),
-        )
+        )?;
+        #[cfg(test)]
+        if permitted {
+            if let Some(after_check) = self.idle_retirement_after_check {
+                after_check(browser)?;
+            }
+        }
+        Ok(permitted)
+    }
+
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        for browser in browsers {
+            if !super::service_resources::permits_managed_browser_idle_retirement(
+                &guarded.state,
+                browser,
+                &now,
+            )? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(guarded)))
     }
 
     fn begin_operation(
@@ -2333,211 +2383,297 @@ mod tests {
         use super::super::browser_session_host::{BrowserSessionHost, BrowserSessionHostConfig};
         use super::super::browser_session_store::BrowserSessionSqliteStore;
         use agent_browser_service_model::BrowserProfileCatalog;
-        let directory = TempDirectory::new();
-        fs::create_dir_all(&directory.0).unwrap();
-        let profile = BrowserProfileCatalogEntry {
-            id: "p237-real-lifetime".into(),
-            name: "Synthetic P237".into(),
-            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
-            kind: BrowserProfileKind::Named,
-        };
-        let service = directory.0.join("service");
-        let legacy = directory.0.join("unused-state.json");
-        let (store, _) = BrowserSessionSqliteStore::open_or_migrate(&service, &legacy).unwrap();
-        store
-            .save_profile_catalog(&BrowserProfileCatalog {
-                profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile.clone())]),
-                ..Default::default()
-            })
-            .unwrap();
-        let config = BrowserManagerRuntimeConfig {
-            headless: true,
-            ..Default::default()
-        };
-        struct Cleanup {
-            browser: Option<ManagedBrowserInstance>,
-            config: BrowserManagerRuntimeConfig,
+        fn acquire_late_controller(browser: &ManagedBrowserInstance) -> Result<(), String> {
+            use super::super::service_store::{
+                default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+            };
+            let store = JsonServiceStateStore::new(default_service_state_path()?);
+            let mut state = store.load()?;
+            state.viewer_leases.insert(
+                "p237-late-controller".into(),
+                agent_browser_service_model::ViewerLease {
+                    id: "p237-late-controller".into(),
+                    browser_id: Some(browser.id.clone()),
+                    viewer_role: "controller".into(),
+                    state: "active".into(),
+                    ..Default::default()
+                },
+            );
+            store.save(&state)?;
+            let persisted = store.load()?;
+            assert!(
+                !super::super::service_resources::permits_managed_browser_idle_retirement(
+                    &persisted,
+                    browser,
+                    &chrono::Utc::now().to_rfc3339(),
+                )?,
+                "fresh authority must recognize the newly acquired controller"
+            );
+            Ok(())
         }
-        impl Drop for Cleanup {
-            fn drop(&mut self) {
-                if let Some(browser) = &self.browser {
-                    if Path::new(&format!("/proc/{}", browser.pid)).exists() {
-                        if let Ok(mut runtime) = BrowserManagerRuntime::start(self.config.clone()) {
-                            let _ = runtime.close_browser(browser);
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        for late_controller in [false, true] {
+            struct RestoreSnapshot {
+                path: PathBuf,
+                prior: Option<Vec<u8>>,
+            }
+            impl Drop for RestoreSnapshot {
+                fn drop(&mut self) {
+                    if let Some(prior) = &self.prior {
+                        let _ = fs::write(&self.path, prior);
+                    } else {
+                        let _ = fs::remove_file(&self.path);
+                    }
+                }
+            }
+            use super::super::service_store::{
+                default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+            };
+            let service_path = default_service_state_path().unwrap();
+            let _restore = RestoreSnapshot {
+                prior: fs::read(&service_path).ok(),
+                path: service_path.clone(),
+            };
+            JsonServiceStateStore::new(&service_path)
+                .save(&agent_browser_service_model::ServiceState::default())
+                .unwrap();
+            let directory = TempDirectory::new();
+            fs::create_dir_all(&directory.0).unwrap();
+            let profile = BrowserProfileCatalogEntry {
+                id: "p237-real-lifetime".into(),
+                name: "Synthetic P237".into(),
+                user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Named,
+            };
+            let service = directory.0.join("service");
+            let legacy = directory.0.join("unused-state.json");
+            let (store, _) = BrowserSessionSqliteStore::open_or_migrate(&service, &legacy).unwrap();
+            store
+                .save_profile_catalog(&BrowserProfileCatalog {
+                    profiles: std::collections::BTreeMap::from([(
+                        profile.id.clone(),
+                        profile.clone(),
+                    )]),
+                    ..Default::default()
+                })
+                .unwrap();
+            let config = BrowserManagerRuntimeConfig {
+                headless: true,
+                ..Default::default()
+            };
+            struct Cleanup {
+                browser: Option<ManagedBrowserInstance>,
+                config: BrowserManagerRuntimeConfig,
+            }
+            impl Drop for Cleanup {
+                fn drop(&mut self) {
+                    if let Some(browser) = &self.browser {
+                        if Path::new(&format!("/proc/{}", browser.pid)).exists() {
+                            if let Ok(mut runtime) =
+                                BrowserManagerRuntime::start(self.config.clone())
+                            {
+                                let _ = runtime.close_browser(browser);
+                            }
                         }
                     }
                 }
             }
-        }
-        let mut cleanup = Cleanup {
-            browser: None,
-            config: config.clone(),
-        };
-        let mut host = BrowserSessionHost::load(
-            store,
-            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap()),
-            &legacy,
-            BrowserSessionHostConfig {
-                session_idle_timeout_ms: 300_000,
-                remote_view_desktops: vec![],
-                default_disposable_policy: None,
-                exact_url_history_maximum_bytes: 4096,
-            },
-        )
-        .unwrap();
-        let opened = host
-            .open(
-                agent_browser_service_model::OpenBrowserSession::exact_profile(
+            let mut cleanup = Cleanup {
+                browser: None,
+                config: config.clone(),
+            };
+            let mut host = BrowserSessionHost::load(
+                store,
+                BrowserSessionEffectAdapter::new(
+                    BrowserManagerRuntime::start(config.clone()).unwrap(),
+                ),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 4096,
+                },
+            )
+            .unwrap();
+            let opened = host
+                .open(
+                    agent_browser_service_model::OpenBrowserSession::exact_profile(
+                        "Alice",
+                        &profile.id,
+                        100,
+                    ),
+                )
+                .unwrap();
+            cleanup.browser = Some(host.state().browsers[&opened.browser_id].clone());
+            let alice = host
+                .execute_managed_command(
                     "Alice",
+                    &serde_json::json!({
+                        "action":"navigate","url":"data:text/html,<title>Alice work</title>",
+                        "profileId":profile.id,"activityAtMs":100
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(alice["success"], true);
+            let browser_id = alice["browserSession"]["browserId"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let original = host.state().browsers[&browser_id].clone();
+            cleanup.browser = Some(original.clone());
+            host.open(
+                agent_browser_service_model::OpenBrowserSession::exact_profile(
+                    "Bob",
                     &profile.id,
-                    100,
+                    110,
                 ),
             )
             .unwrap();
-        cleanup.browser = Some(host.state().browsers[&opened.browser_id].clone());
-        let alice = host
-            .execute_managed_command(
-                "Alice",
-                &serde_json::json!({
-                    "action":"navigate","url":"data:text/html,<title>Alice work</title>",
-                    "profileId":profile.id,"activityAtMs":100
-                }),
+            let bob = host
+                .execute_managed_command(
+                    "Bob",
+                    &serde_json::json!({
+                        "action":"navigate","url":"data:text/html,<title>Bob work</title>",
+                        "profileId":profile.id,"activityAtMs":110
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(bob["success"], true);
+            assert_eq!(bob["browserSession"]["browserId"], browser_id);
+            // The bare local adapter does not publish Remote View links. Establish
+            // only that logical fixture; all browser and tab effects remain real.
+            let handoff_id = uuid::Uuid::new_v4().to_string();
+            let current = host.state().clone();
+            let mut retained = current.clone();
+            agent_browser_service_model::retain_remote_view_tab_handoff_at(
+                &mut retained,
+                &handoff_id,
+                &opened.session_id,
+                alice["browserSession"]["tabId"].as_str().unwrap(),
+                110,
             )
-            .unwrap()
             .unwrap();
-        assert_eq!(alice["success"], true);
-        let browser_id = alice["browserSession"]["browserId"]
-            .as_str()
-            .unwrap()
-            .to_string();
-        let original = host.state().browsers[&browser_id].clone();
-        cleanup.browser = Some(original.clone());
-        host.open(
-            agent_browser_service_model::OpenBrowserSession::exact_profile("Bob", &profile.id, 110),
-        )
-        .unwrap();
-        let bob = host
-            .execute_managed_command(
-                "Bob",
-                &serde_json::json!({
-                    "action":"navigate","url":"data:text/html,<title>Bob work</title>",
-                    "profileId":profile.id,"activityAtMs":110
-                }),
-            )
-            .unwrap()
-            .unwrap();
-        assert_eq!(bob["success"], true);
-        assert_eq!(bob["browserSession"]["browserId"], browser_id);
-        // The bare local adapter does not publish Remote View links. Establish
-        // only that logical fixture; all browser and tab effects remain real.
-        let handoff_id = uuid::Uuid::new_v4().to_string();
-        let current = host.state().clone();
-        let mut retained = current.clone();
-        agent_browser_service_model::retain_remote_view_tab_handoff_at(
-            &mut retained,
-            &handoff_id,
-            &opened.session_id,
-            alice["browserSession"]["tabId"].as_str().unwrap(),
-            110,
-        )
-        .unwrap();
-        let mut persistence = BrowserSessionSqliteStore::open(&service).unwrap();
-        persistence
-            .compare_and_save_session_state(&current, &retained)
-            .unwrap();
-        drop(host);
-        let mut host = BrowserSessionHost::load(
-            persistence,
-            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap()),
-            &legacy,
-            BrowserSessionHostConfig {
-                session_idle_timeout_ms: 300_000,
-                remote_view_desktops: vec![],
-                default_disposable_policy: None,
-                exact_url_history_maximum_bytes: 4096,
-            },
-        )
-        .unwrap();
-        let configured = host.handle_command(&serde_json::json!({
-            "action":"service_remote_view_handoff_resolve","handoffId":handoff_id,
-            "handoffOperation":"set_tab_lifetime","tabInactivityMs":30,"activityAtMs":110
-        }));
-        assert_eq!(configured["success"], true, "{configured}");
-        host.reap(129).unwrap();
-        assert!(host
-            .state()
-            .tabs
-            .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
-        host.reap(130).unwrap();
-        assert!(!host
-            .state()
-            .tabs
-            .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
-        assert!(host.state().remote_view_tab_handoffs[&handoff_id].target_expired);
-        assert!(host.state().remote_view_tab_handoffs[&handoff_id]
-            .expires_at_ms
-            .is_none());
-        assert!(Path::new(&format!("/proc/{}", original.pid)).exists());
-        let title = host
-            .execute_managed_command(
-                "Bob",
-                &serde_json::json!({
-                    "action":"title","profileId":profile.id,"activityAtMs":131
-                }),
-            )
-            .unwrap()
-            .unwrap();
-        assert_eq!(title["data"]["title"], "Bob work");
-        assert_eq!(host.state().browsers[&browser_id].pid, original.pid);
-        assert_eq!(
-            host.state().browsers[&browser_id].cdp_endpoint,
-            original.cdp_endpoint
-        );
-        let closed = host.handle_command(&serde_json::json!({
-            "action":"browser_session_tab_close","sessionId":bob["browserSession"]["sessionId"],
-            "activityAtMs":140
-        }));
-        assert_eq!(closed["success"], true, "{closed}");
-        assert!(host.state().browsers.is_empty());
-        for _ in 0..50 {
-            if !process_exists(original.pid) {
-                break;
+            let mut persistence = BrowserSessionSqliteStore::open(&service).unwrap();
+            persistence
+                .compare_and_save_session_state(&current, &retained)
+                .unwrap();
+            drop(host);
+            let mut restarted_runtime = BrowserManagerRuntime::start(config.clone()).unwrap();
+            if late_controller {
+                restarted_runtime.idle_retirement_after_check = Some(acquire_late_controller);
             }
-            thread::sleep(std::time::Duration::from_millis(100));
-        }
-        assert!(
-            !process_exists(original.pid),
-            "owned Chrome remained live after last-tab close"
-        );
-        // Reloading the worker inside this same OS process drops the original
-        // Child handle. Reap only this fixture's exited direct child, which a
-        // real owner-process exit would instead reparent to the OS reaper.
-        let deadline = Instant::now() + Duration::from_secs(5);
-        loop {
-            let mut status = 0;
-            let reaped = unsafe { libc::waitpid(original.pid as i32, &mut status, libc::WNOHANG) };
-            let error = (reaped == -1).then(|| std::io::Error::last_os_error().raw_os_error());
-            if reaped == original.pid as i32 || error == Some(Some(libc::ECHILD)) {
-                break;
+            let mut host = BrowserSessionHost::load(
+                persistence,
+                BrowserSessionEffectAdapter::new(restarted_runtime),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 4096,
+                },
+            )
+            .unwrap();
+            let configured = host.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve","handoffId":handoff_id,
+                "handoffOperation":"set_tab_lifetime","tabInactivityMs":30,"activityAtMs":110
+            }));
+            assert_eq!(configured["success"], true, "{configured}");
+            host.reap(129).unwrap();
+            assert!(host
+                .state()
+                .tabs
+                .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+            host.reap(130).unwrap();
+            if late_controller {
+                assert!(
+                    host.state()
+                        .tabs
+                        .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()),
+                    "controller acquired after eligibility must preserve its live tab"
+                );
+                assert!(host.state().browsers.contains_key(&browser_id));
+                continue;
+            }
+            assert!(!host
+                .state()
+                .tabs
+                .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+            assert!(host.state().remote_view_tab_handoffs[&handoff_id].target_expired);
+            assert!(host.state().remote_view_tab_handoffs[&handoff_id]
+                .expires_at_ms
+                .is_none());
+            assert!(Path::new(&format!("/proc/{}", original.pid)).exists());
+            let title = host
+                .execute_managed_command(
+                    "Bob",
+                    &serde_json::json!({
+                        "action":"title","profileId":profile.id,"activityAtMs":131
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(title["data"]["title"], "Bob work");
+            assert_eq!(host.state().browsers[&browser_id].pid, original.pid);
+            assert_eq!(
+                host.state().browsers[&browser_id].cdp_endpoint,
+                original.cdp_endpoint
+            );
+            let closed = host.handle_command(&serde_json::json!({
+                "action":"browser_session_tab_close","sessionId":bob["browserSession"]["sessionId"],
+                "activityAtMs":140
+            }));
+            assert_eq!(closed["success"], true, "{closed}");
+            assert!(host.state().browsers.is_empty());
+            for _ in 0..50 {
+                if !process_exists(original.pid) {
+                    break;
+                }
+                thread::sleep(std::time::Duration::from_millis(100));
             }
             assert!(
-                reaped == 0 || error == Some(Some(libc::EINTR)),
-                "fixture child reaping failed: {error:?}"
+                !process_exists(original.pid),
+                "owned Chrome remained live after last-tab close"
             );
+            // Reloading the worker inside this same OS process drops the original
+            // Child handle. Reap only this fixture's exited direct child, which a
+            // real owner-process exit would instead reparent to the OS reaper.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let mut status = 0;
+                let reaped =
+                    unsafe { libc::waitpid(original.pid as i32, &mut status, libc::WNOHANG) };
+                let error = (reaped == -1).then(|| std::io::Error::last_os_error().raw_os_error());
+                if reaped == original.pid as i32 || error == Some(Some(libc::ECHILD)) {
+                    break;
+                }
+                assert!(
+                    reaped == 0 || error == Some(Some(libc::EINTR)),
+                    "fixture child reaping failed: {error:?}"
+                );
+                assert!(
+                    Instant::now() < deadline,
+                    "fixture child reaping exceeded deadline"
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
             assert!(
-                Instant::now() < deadline,
-                "fixture child reaping exceeded deadline"
+                !Path::new(&format!("/proc/{}", original.pid)).exists(),
+                "fixture child remained after reaping"
             );
-            thread::sleep(Duration::from_millis(20));
+            assert!(host
+                .state()
+                .remote_view_tab_handoffs
+                .contains_key(&handoff_id));
         }
-        assert!(
-            !Path::new(&format!("/proc/{}", original.pid)).exists(),
-            "fixture child remained after reaping"
-        );
-        assert!(host
-            .state()
-            .remote_view_tab_handoffs
-            .contains_key(&handoff_id));
     }
 
     #[test]
