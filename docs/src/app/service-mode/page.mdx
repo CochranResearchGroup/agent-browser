@@ -1,5 +1,13 @@
 # Service Mode
 
+## MCP browser tasks
+
+Call `browser_open` with a named `profile`, `profileMode: "persistent"`, a stable `taskKey`, and `url`. The operation creates or reuses that profile and opens one independent task tab. Its MCP text result contains `success`, `data`, and `error`; `data.taskId` targets subsequent page actions and `browser_close`.
+
+Replay the same task key to return its current page and preserve edits without navigating again. Different task keys share a healthy same-profile browser through separate tabs. Closing one task preserves its peers and persistent profile data. Existing borrowed browsers remain open after the final task ends.
+
+Select `profileMode: "existing"` to require an already registered profile. For temporary work, select `profileMode: "disposable"` and omit `profile`.
+
 Service mode turns agent-browser from a single CLI session helper into a persistent browser control plane. It keeps service-owned state for profiles, sessions, browsers, tabs, jobs, incidents, events, site policies, providers, and challenges so multiple agents and software clients can share browser automation without racing each other.
 
 Profile ACL admission denials preserve `profile_access_denied` on the

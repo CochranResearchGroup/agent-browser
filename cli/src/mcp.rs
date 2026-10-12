@@ -2,6 +2,8 @@ use std::io::{self, BufRead, Write};
 
 use serde_json::{json, Map, Value};
 
+mod workflow;
+
 use crate::connection::{send_command, Response};
 use crate::native::service_access::{
     parse_service_access_plan_query, service_access_plan_for_state,
@@ -3562,11 +3564,18 @@ fn service_mcp_tools() -> Vec<Value> {
     ];
     tools
         .into_iter()
+        .chain(workflow::tools())
         .map(with_browser_target_profile_hint_properties)
         .collect()
 }
 
 fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
+    if matches!(
+        tool["name"].as_str(),
+        Some("browser_open" | "browser_close")
+    ) {
+        return tool;
+    }
     let is_browser_tool = tool
         .get("name")
         .and_then(Value::as_str)
@@ -3584,6 +3593,10 @@ fn with_browser_target_profile_hint_properties(mut tool: Value) -> Value {
     if !properties.contains_key("serviceName") {
         return tool;
     }
+
+    properties.insert("taskId".to_string(), json!({
+        "type":"string", "description":"Task ID returned by browser_open. Targets this task's current tab without session or route discovery."
+    }));
 
     properties.insert(
         "profileLeasePolicy".to_string(),
@@ -5552,6 +5565,21 @@ fn call_service_mcp_tool(
     let arguments = params
         .and_then(|value| value.get("arguments"))
         .unwrap_or(&Value::Null);
+
+    if name == "browser_open" {
+        return workflow::open(arguments, session, configured_service_state);
+    }
+    if name == "browser_close" {
+        return workflow::close(arguments, session);
+    }
+    let task_session = if name.starts_with("browser_") {
+        optional_string_argument(arguments, "taskId")?
+            .map(workflow::task_session)
+            .transpose()?
+    } else {
+        None
+    };
+    let session = task_session.as_deref().unwrap_or(session);
 
     match name {
         SERVICE_ACCESS_PLAN_MCP_TOOL_NAME => {
@@ -12973,7 +13001,8 @@ mod tests {
         let trace_tool = response["result"]["tools"]
             .as_array()
             .unwrap()
-            .last()
+            .iter()
+            .find(|tool| tool["name"] == "service_trace")
             .unwrap();
         assert_eq!(trace_tool["name"], "service_trace");
         assert!(trace_tool["inputSchema"]["properties"]["limit"].is_object());

@@ -7067,6 +7067,12 @@ Commands:
   resources             List read-only service resources exposed for MCP adapters
   read                  Read a service resource URI as JSON
 
+Browser task workflow:
+  browser_open          Resolve a profile and open a task tab using profile, taskKey, and url
+  browser_close         End only the task returned by browser_open
+  Page actions accept taskId. Reuse taskKey to replay the same task without another tab.
+  profileMode selects persistent, existing, or disposable profile behavior.
+
 Notes:
   - For shared, authenticated, profile-sensitive, or operator-visible work, read agent-browser://operating-guide and call service_access_plan before service_request. Keep browser acquisition, operator presentation, and runtime maintenance separate.
   - Agent Browser owns profile leases, retained-browser reuse, route selection and parking, durable handoffs, browser close, reconciliation, and GC. A checked-out route or global doctor advisory blocks a request only when the requested action or scoped readiness says it does.

@@ -2771,56 +2771,20 @@ fn main() {
         .map(|status| status.runtime_profile.as_str())
         .or(selected_runtime_profile.as_deref());
     let daemon_opts = DaemonOptions {
-        headed: flags.headed,
-        debug: flags.debug,
-        leave_open: flags.leave_open,
-        executable_path: flags.executable_path.as_deref(),
-        executable_path_source: flags.executable_path_source.as_deref(),
-        extensions: &flags.extensions,
-        args: flags.args.as_deref(),
-        user_agent: flags.user_agent.as_deref(),
         runtime_profile: daemon_runtime_profile,
         proxy: proxy_server.as_deref(),
-        proxy_bypass: flags.proxy_bypass.as_deref(),
         proxy_username: proxy_username.as_deref(),
         proxy_password: proxy_password.as_deref(),
-        ignore_https_errors: flags.ignore_https_errors,
-        allow_file_access: flags.allow_file_access,
         profile: daemon_profile_for_launch(flags.profile.as_deref(), live_runtime_status.as_ref()),
-        state: flags.state.as_deref(),
-        provider: flags.provider.as_deref(),
-        device: flags.device.as_deref(),
-        session_name: flags.session_name.as_deref(),
-        download_path: flags.download_path.as_deref(),
-        allowed_domains: flags.allowed_domains.as_deref(),
-        action_policy: flags.action_policy.as_deref(),
-        confirm_actions: flags.confirm_actions.as_deref(),
-        engine: flags.engine.as_deref(),
         use_real_keychain,
         keychain_password: keychain_password.as_deref(),
-        auto_connect: flags.auto_connect,
-        idle_timeout: flags.idle_timeout.as_deref(),
-        service_reconcile_interval_ms: flags.service_reconcile_interval_ms,
-        service_job_timeout_ms: flags.service_job_timeout_ms,
-        service_monitor_interval_ms: flags.service_monitor_interval_ms,
-        service_recovery_retry_budget: flags.service_recovery_retry_budget,
-        service_recovery_base_backoff_ms: flags.service_recovery_base_backoff_ms,
-        service_recovery_max_backoff_ms: flags.service_recovery_max_backoff_ms,
-        service_recovery_retry_budget_source: flags.service_recovery_retry_budget_source.as_str(),
-        service_recovery_base_backoff_ms_source: flags
-            .service_recovery_base_backoff_ms_source
-            .as_str(),
-        service_recovery_max_backoff_ms_source: flags
-            .service_recovery_max_backoff_ms_source
-            .as_str(),
-        default_timeout: flags.default_timeout,
         cdp: flags.cdp.as_deref().or(live_runtime_cdp.as_deref()),
         runtime_attach_managed: live_runtime_status.is_some(),
-        no_auto_dialog: flags.no_auto_dialog,
         allow_stale_daemon_handoff: cmd
             .get("action")
             .and_then(|value| value.as_str())
             .is_some_and(action_allows_stale_daemon_handoff),
+        ..DaemonOptions::from_flags(&flags)
     };
 
     let daemon_result = match ensure_daemon(&flags.session, &daemon_opts) {

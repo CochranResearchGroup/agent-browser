@@ -287,5 +287,5 @@ lanes:
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P238 owns MCP/profile-planning/skills; P237 owns dashboard and native link/tab lifecycle; consume existing handoff seam and preserve foreign fixtures"]
-    validation_status: Installed profile-selection and help failures reproduced during triage; implementation regression qualification begins
+    validation_status: CLI profile planning qualified; debug MCP sharing/replay/scoped-close fixtures pass; legacy configured-profile repair and installed qualification pending
     updated_at: 2026-10-11

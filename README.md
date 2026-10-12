@@ -23,6 +23,12 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 ## Service integration reference
 
+### MCP browser tasks
+
+Call `browser_open` with `profile`, `profileMode: "persistent"`, `taskKey`, and `url` to create or reuse a named profile and open one independent task tab. Replay the same task key to return its current page and preserve edits without navigating again. Use the returned `data.taskId` on page actions such as `browser_snapshot`, `browser_click`, and `browser_fill`, then call `browser_close` with that task ID. Closing a task preserves peers, borrowed browsers, and persistent profile data.
+
+Choose `profileMode: "existing"` to require an already registered profile. Choose `profileMode: "disposable"` and omit `profile` for temporary work. Distinct task keys on the same profile receive distinct tabs in one healthy browser. Workflow results use the MCP text payload's `success`, `data`, and `error` envelope.
+
 For shared, authenticated, profile-sensitive, or operator-visible work, read
 `agent-browser://operating-guide` and call `service_access_plan` before
 `service_request`. Agent Browser owns profile selection, retained-browser
