@@ -2326,6 +2326,220 @@ mod tests {
         result.expect("unrelated profile metadata must not veto a free profile");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn handoff_tab_expiry_preserves_peer_and_last_close_exits_real_browser() {
+        use super::super::browser_session_host::{BrowserSessionHost, BrowserSessionHostConfig};
+        use super::super::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::BrowserProfileCatalog;
+        let directory = TempDirectory::new();
+        fs::create_dir_all(&directory.0).unwrap();
+        let profile = BrowserProfileCatalogEntry {
+            id: "p237-real-lifetime".into(),
+            name: "Synthetic P237".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let service = directory.0.join("service");
+        let legacy = directory.0.join("unused-state.json");
+        let (store, _) = BrowserSessionSqliteStore::open_or_migrate(&service, &legacy).unwrap();
+        store
+            .save_profile_catalog(&BrowserProfileCatalog {
+                profiles: std::collections::BTreeMap::from([(profile.id.clone(), profile.clone())]),
+                ..Default::default()
+            })
+            .unwrap();
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        struct Cleanup {
+            browser: Option<ManagedBrowserInstance>,
+            config: BrowserManagerRuntimeConfig,
+        }
+        impl Drop for Cleanup {
+            fn drop(&mut self) {
+                if let Some(browser) = &self.browser {
+                    if Path::new(&format!("/proc/{}", browser.pid)).exists() {
+                        if let Ok(mut runtime) = BrowserManagerRuntime::start(self.config.clone()) {
+                            let _ = runtime.close_browser(browser);
+                        }
+                    }
+                }
+            }
+        }
+        let mut cleanup = Cleanup {
+            browser: None,
+            config: config.clone(),
+        };
+        let mut host = BrowserSessionHost::load(
+            store,
+            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap()),
+            &legacy,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 4096,
+            },
+        )
+        .unwrap();
+        let opened = host
+            .open(
+                agent_browser_service_model::OpenBrowserSession::exact_profile(
+                    "Alice",
+                    &profile.id,
+                    100,
+                ),
+            )
+            .unwrap();
+        cleanup.browser = Some(host.state().browsers[&opened.browser_id].clone());
+        let alice = host
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action":"navigate","url":"data:text/html,<title>Alice work</title>",
+                    "profileId":profile.id,"activityAtMs":100
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(alice["success"], true);
+        let browser_id = alice["browserSession"]["browserId"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let original = host.state().browsers[&browser_id].clone();
+        cleanup.browser = Some(original.clone());
+        host.open(
+            agent_browser_service_model::OpenBrowserSession::exact_profile("Bob", &profile.id, 110),
+        )
+        .unwrap();
+        let bob = host
+            .execute_managed_command(
+                "Bob",
+                &serde_json::json!({
+                    "action":"navigate","url":"data:text/html,<title>Bob work</title>",
+                    "profileId":profile.id,"activityAtMs":110
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(bob["success"], true);
+        assert_eq!(bob["browserSession"]["browserId"], browser_id);
+        // The bare local adapter does not publish Remote View links. Establish
+        // only that logical fixture; all browser and tab effects remain real.
+        let handoff_id = uuid::Uuid::new_v4().to_string();
+        let current = host.state().clone();
+        let mut retained = current.clone();
+        agent_browser_service_model::retain_remote_view_tab_handoff_at(
+            &mut retained,
+            &handoff_id,
+            &opened.session_id,
+            alice["browserSession"]["tabId"].as_str().unwrap(),
+            110,
+        )
+        .unwrap();
+        let mut persistence = BrowserSessionSqliteStore::open(&service).unwrap();
+        persistence
+            .compare_and_save_session_state(&current, &retained)
+            .unwrap();
+        drop(host);
+        let mut host = BrowserSessionHost::load(
+            persistence,
+            BrowserSessionEffectAdapter::new(BrowserManagerRuntime::start(config.clone()).unwrap()),
+            &legacy,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: vec![],
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 4096,
+            },
+        )
+        .unwrap();
+        let configured = host.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":handoff_id,
+            "handoffOperation":"set_tab_lifetime","tabInactivityMs":30,"activityAtMs":110
+        }));
+        assert_eq!(configured["success"], true, "{configured}");
+        host.reap(129).unwrap();
+        assert!(host
+            .state()
+            .tabs
+            .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+        host.reap(130).unwrap();
+        assert!(!host
+            .state()
+            .tabs
+            .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+        assert!(host.state().remote_view_tab_handoffs[&handoff_id].target_expired);
+        assert!(host.state().remote_view_tab_handoffs[&handoff_id]
+            .expires_at_ms
+            .is_none());
+        assert!(Path::new(&format!("/proc/{}", original.pid)).exists());
+        let title = host
+            .execute_managed_command(
+                "Bob",
+                &serde_json::json!({
+                    "action":"title","profileId":profile.id,"activityAtMs":131
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(title["data"]["title"], "Bob work");
+        assert_eq!(host.state().browsers[&browser_id].pid, original.pid);
+        assert_eq!(
+            host.state().browsers[&browser_id].cdp_endpoint,
+            original.cdp_endpoint
+        );
+        let closed = host.handle_command(&serde_json::json!({
+            "action":"browser_session_tab_close","sessionId":bob["browserSession"]["sessionId"],
+            "activityAtMs":140
+        }));
+        assert_eq!(closed["success"], true, "{closed}");
+        assert!(host.state().browsers.is_empty());
+        for _ in 0..50 {
+            if !process_exists(original.pid) {
+                break;
+            }
+            thread::sleep(std::time::Duration::from_millis(100));
+        }
+        assert!(
+            !process_exists(original.pid),
+            "owned Chrome remained live after last-tab close"
+        );
+        // Reloading the worker inside this same OS process drops the original
+        // Child handle. Reap only this fixture's exited direct child, which a
+        // real owner-process exit would instead reparent to the OS reaper.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let mut status = 0;
+            let reaped = unsafe { libc::waitpid(original.pid as i32, &mut status, libc::WNOHANG) };
+            let error = (reaped == -1).then(|| std::io::Error::last_os_error().raw_os_error());
+            if reaped == original.pid as i32 || error == Some(Some(libc::ECHILD)) {
+                break;
+            }
+            assert!(
+                reaped == 0 || error == Some(Some(libc::EINTR)),
+                "fixture child reaping failed: {error:?}"
+            );
+            assert!(
+                Instant::now() < deadline,
+                "fixture child reaping exceeded deadline"
+            );
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            !Path::new(&format!("/proc/{}", original.pid)).exists(),
+            "fixture child remained after reaping"
+        );
+        assert!(host
+            .state()
+            .remote_view_tab_handoffs
+            .contains_key(&handoff_id));
+    }
+
     #[test]
     #[ignore = "launches a disposable local Chrome process"]
     fn ordinary_open_reconciles_stale_inventory_and_preserves_alice_bob() {
