@@ -26,7 +26,10 @@ try {
   const profile = 'persistent-login';
   const created = run(['runtime', 'create', profile, '--browser-family', 'chromium']);
   assert.equal(created.created, true);
-  const result = run(['--runtime-profile', profile, '--session', 'alice', '--session-name', 'alice',
+  const repeated = run(['runtime', 'create', profile, '--browser-family', 'chromium']);
+  assert.equal(repeated.userDataDir, created.userDataDir,
+    'repeated creation preserves the durable profile directory');
+  const result = run(['--runtime-profile', profile,
     'service', 'access-plan', '--service-name', 'fixture', '--agent-name', 'codex',
     '--task-name', 'login', '--url', 'https://example.test/login']);
   assert.equal(result.success, true);
@@ -35,8 +38,12 @@ try {
     'supported runtime creation must be immediately selected by access planning');
   assert.equal(plan.selectedProfile.userDataDir, created.userDataDir);
   assert.notEqual(plan.decision.recommendedAction, 'register_managed_profile_or_request_throwaway_browser');
+  assert.equal(plan.decision.serviceRequest.available, true,
+    'a newly created profile must produce an executable acquisition request');
   assert.equal(plan.decision.serviceRequest.request.runtimeProfile, profile);
-  assert.equal(plan.decision.serviceRequest.request.sessionName, 'alice');
+  assert.equal(typeof plan.decision.serviceRequest.request.sessionName, 'string');
+  assert(plan.decision.serviceRequest.request.sessionName.length > 0,
+    'the planner supplies the internal session route for a new task');
   const missing = run(['service', 'access-plan', '--runtime-profile', 'nonexistent-profile',
     '--service-name', 'fixture', '--agent-name', 'codex', '--task-name', 'login']);
   assert.equal(missing.data.selectedProfile, null, 'unknown names must not select another profile');
