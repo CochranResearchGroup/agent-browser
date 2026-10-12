@@ -3814,6 +3814,214 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn authenticated_pending_handoff_relays_recovery_without_acknowledging_use() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use tokio::io::AsyncBufReadExt;
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        struct RestoreState(agent_browser_service_model::BrowserSessionState);
+        impl Drop for RestoreState {
+            fn drop(&mut self) {
+                let result = (|| {
+                    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+                    let current = store.load_session_state()?;
+                    store.compare_and_save_session_state(&current, &self.0)
+                })();
+                if !std::thread::panicking() {
+                    assert!(result.is_ok(), "isolated browser state restoration failed");
+                }
+            }
+        }
+        struct AbortTask(tokio::task::JoinHandle<()>);
+        impl Drop for AbortTask {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        async fn exchange(request: String) -> Vec<u8> {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                handle_dashboard_connection(stream).await;
+            });
+            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+            client.write_all(request.as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(3), client.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            server.await.unwrap();
+            response
+        }
+        let scratch =
+            Scratch(std::env::temp_dir().join(format!("p237-{}", uuid::Uuid::new_v4().simple())));
+        std::fs::create_dir_all(&scratch.0).unwrap();
+        let env = EnvGuard::new(&[
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+            "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+            "AGENT_BROWSER_SOCKET_DIR",
+        ]);
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            scratch.0.join("auth").to_str().unwrap(),
+        );
+        env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        env.set(
+            "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+            "https://synthetic-view.example",
+        );
+        env.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            scratch.0.join("sockets").to_str().unwrap(),
+        );
+        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
+        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .expect("synthetic bootstrap credential missing");
+        let login_body = json!({"username":"admin","password":password}).to_string();
+        let login = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", login_body.len(), login_body)).await;
+        assert_eq!(
+            http_response_status(&login),
+            Some(200),
+            "synthetic HTTP login failed"
+        );
+        let login_text = String::from_utf8(login).unwrap();
+        let cookie = login_text
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Set-Cookie: ")
+                    .and_then(|value| value.split(';').next())
+            })
+            .expect("synthetic signed session cookie missing");
+        let session = format!("p237-{}", uuid::Uuid::new_v4().simple());
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let original = store.load_session_state().unwrap();
+        let _restore = RestoreState(original.clone());
+        let mut state = original.clone();
+        state.remote_view_tab_handoffs.insert(id.clone(), serde_json::from_value(json!({
+            "id":id,"sessionId":"expired-session","tabId":"expired-tab","createdAtMs":100,
+            "targetExpired":true,"resume":{"sessionName":session,"profileId":"synthetic-profile",
+                "disposablePolicyId":null,"url":"https://synthetic.example/task"}
+        })).unwrap());
+        store
+            .compare_and_save_session_state(&original, &state)
+            .unwrap();
+        let token = uuid::Uuid::new_v4().to_string();
+        crate::connection::write_daemon_auth_token(&session, &token).unwrap();
+        let listener =
+            tokio::net::UnixListener::bind(crate::connection::get_socket_path(&session)).unwrap();
+        let readiness = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        std::fs::write(
+            crate::connection::get_socket_dir().join(format!("{session}.stream")),
+            readiness.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        let commands = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let recorded = commands.clone();
+        let _daemon = AbortTask(tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let mut stream = tokio::io::BufReader::new(socket);
+                let mut line = String::new();
+                if stream.read_line(&mut line).await.unwrap() == 0 {
+                    continue;
+                }
+                let command: serde_json::Value = serde_json::from_str(&line).unwrap();
+                assert!(
+                    command["_agentBrowserAuthToken"].as_str() == Some(token.as_str()),
+                    "daemon relay did not authenticate its owned connection"
+                );
+                recorded.lock().unwrap().push(command);
+                stream
+                    .get_mut()
+                    .write_all(
+                        b"{\"success\":false,\"error\":\"remote_view_browser_recovery_pending\"}\n",
+                    )
+                    .await
+                    .unwrap();
+            }
+        }));
+        let path = format!("/api/remote-view/{id}/presentation");
+        let denied = exchange(format!(
+            "GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nConnection: close\r\n\r\n"
+        ))
+        .await;
+        assert_eq!(http_response_status(&denied), Some(401));
+        assert!(
+            commands.lock().unwrap().is_empty(),
+            "unauthenticated request reached recovery"
+        );
+        let pending = exchange(format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nSec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n")).await;
+        assert_eq!(http_response_status(&pending), Some(503));
+        assert!(!String::from_utf8_lossy(&pending).contains("Location:"));
+        let recorded = commands.lock().unwrap();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "pending recovery must not acknowledge first use"
+        );
+        assert_eq!(recorded[0]["action"], "service_remote_view_handoff_resolve");
+        assert_eq!(recorded[0]["handoffId"], id);
+        assert_eq!(recorded[0]["nativeDesktop"], true);
+        assert!(recorded[0]["handoffOperation"].is_null());
+        drop(recorded);
+        assert!(store.load_session_state().unwrap().remote_view_tab_handoffs[&id].target_expired);
+        let current = store.load_session_state().unwrap();
+        let mut expired = current.clone();
+        expired
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .expires_at_ms = Some(1);
+        store
+            .compare_and_save_session_state(&current, &expired)
+            .unwrap();
+        let request = || {
+            format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nSec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n")
+        };
+        let expired_response = exchange(request()).await;
+        assert_eq!(http_response_status(&expired_response), Some(410));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            1,
+            "expired link reached recovery"
+        );
+        let current = store.load_session_state().unwrap();
+        let mut deleted = current.clone();
+        deleted.remote_view_tab_handoffs.remove(&id);
+        store
+            .compare_and_save_session_state(&current, &deleted)
+            .unwrap();
+        let deleted_response = exchange(request()).await;
+        assert_eq!(http_response_status(&deleted_response), Some(404));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            1,
+            "deleted link reached recovery"
+        );
+    }
+
     #[tokio::test]
     async fn tab_presentation_endpoint_authenticates_before_provider_resolution() {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
