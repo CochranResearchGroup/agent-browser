@@ -1,5 +1,42 @@
 # Service Mode
 
+## Resource budgets and durable completed history
+
+New browser process admission reserves 5% of total RAM, with a 1 GiB minimum.
+Under memory pressure, new task acquisition runs the existing owner reaper for
+eligible idle work, then waits up to five seconds. Existing task/profile
+continuation stays protected. The supervisor uses a soft threshold of 25% RAM
+and has no default hard cap that terminates ongoing work.
+
+<table>
+  <thead><tr><th>Setting</th><th>Default</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><code>AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES</code></td><td>Adaptive</td><td>Nonnegative reserve; zero disables the floor</td></tr>
+    <tr><td><code>AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS</code></td><td>5000</td><td>Wait from 0 through 60000 milliseconds</td></tr>
+    <tr><td><code>AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES</code></td><td>25% RAM</td><td>Positive byte override for the supervisor soft threshold</td></tr>
+    <tr><td><code>AGENT_BROWSER_TERMINAL_HISTORY_LIMIT</code></td><td>1000</td><td>Recent unreferenced records per kind; zero archives all</td></tr>
+  </tbody>
+</table>
+
+Set overrides before workstation installation or host startup. Installation
+captures explicit settings into the host unit. Shell changes do not alter a
+running host. Service Status reports the reserve/source and archive counts under
+<code>browserRuntime.storage.terminalHistory</code>.
+
+Older completed session/tab evidence moves atomically into the existing SQLite
+archive. It has no automatic expiry. Handoff references retain target evidence
+beyond the recent-record budget. Live records and link/tab lifetimes are unchanged.
+
+```bash
+agent-browser runtime history sessions 100 --json
+agent-browser runtime history tabs 100 --json
+agent-browser runtime history sessions 100 42 --json
+```
+
+The last argument is <code>data.nextCursor</code> from the preceding page. Pages
+are newest-first, with a maximum of 1000 records. This command reads an existing
+database without migration, state creation or launch.
+
 ## MCP browser tasks
 
 If `browser_open` is absent from the client's callable tools, configure its MCP

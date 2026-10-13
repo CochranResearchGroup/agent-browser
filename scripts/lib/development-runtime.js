@@ -198,7 +198,25 @@ function validateNamespacedRuntimeIsolation(descriptor, env, userHome) {
   }
 }
 
-export function renderDevelopmentUnits(descriptor, generationBinary) {
+export function renderDevelopmentUnits(descriptor, generationBinary, environment = process.env) {
+  const resourceValue = (name, maximum = 18446744073709551615n) => {
+    const raw = environment[name];
+    if (raw === undefined) return null;
+    if (!/^\+?\d+$/u.test(raw) || BigInt(raw) > maximum) {
+      throw new Error(`runtime_resource_config_invalid:${name}`);
+    }
+    return BigInt(raw).toString();
+  };
+  const memoryHigh = resourceValue('AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES');
+  if (memoryHigh === '0') throw new Error('runtime_memory_high_invalid');
+  const resourceEnvironment = [
+    ['AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES'],
+    ['AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS', 60000n],
+    ['AGENT_BROWSER_TERMINAL_HISTORY_LIMIT'],
+  ].map(([name, maximum]) => {
+    const value = resourceValue(name, maximum);
+    return value === null ? '' : `Environment=${name}=${value}`;
+  }).filter(Boolean).join('\n');
   const common = [
     `Environment=HOME=${descriptor.pseudoHome}`,
     `Environment=AGENT_BROWSER_RUNTIME_ENVIRONMENT=development`,
@@ -236,6 +254,9 @@ ExecStart=${generationBinary} session supervisor run-host
 Restart=on-failure
 RestartSec=2
 KillMode=process
+MemoryHigh=${memoryHigh ?? '25%'}
+MemoryMax=infinity
+${resourceEnvironment}
 NoNewPrivileges=true
 PrivateTmp=false
 StateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp

@@ -24,6 +24,9 @@ use sha2::{Digest, Sha256};
 
 use super::service_store::default_service_state_path;
 
+#[path = "browser_terminal_history.rs"]
+mod terminal_history;
+
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
@@ -194,6 +197,7 @@ impl BrowserSessionSqliteStore {
                     "databaseBytes": regular_file_bytes(&path)?,
                     "backupState": backup.state,
                     "backupSha256": backup.sha256,
+                    "terminalHistory": terminal_history::status(&store.connection)?,
                 },
                 "migration": {
                     "importedSourceCount": migration.imported_source_count,
@@ -345,6 +349,16 @@ impl BrowserSessionSqliteStore {
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )
+    }
+
+    /// Read archived terminal evidence without loading all history into the host.
+    pub(crate) fn archived_terminal_history(
+        &self,
+        kind: &str,
+        limit: usize,
+        before: Option<i64>,
+    ) -> Result<serde_json::Value, String> {
+        terminal_history::page(&self.connection, kind, limit, before)
     }
 
     #[cfg(test)]
@@ -871,6 +885,11 @@ pub(super) fn save_document(
 ) -> Result<(), String> {
     let json = serde_json::to_string(value)
         .map_err(|error| format!("browser_runtime_document_serialize_failed:{error}"))?;
+    let json = if kind == SESSION_STATE_DOCUMENT {
+        terminal_history::prepare_json(connection, &json)?
+    } else {
+        json
+    };
     connection
         .execute(
             "INSERT INTO state_documents(kind, schema_version, json) VALUES (?1, ?2, ?3)
@@ -898,6 +917,11 @@ fn load_document<T: DeserializeOwned>(
             "browser_runtime_document_schema_unsupported:{kind}:{schema}"
         ));
     }
+    let json = if kind == SESSION_STATE_DOCUMENT {
+        terminal_history::project_json(&json)?
+    } else {
+        json
+    };
     serde_json::from_str(&json)
         .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
 }
@@ -923,6 +947,11 @@ pub(super) fn load_optional_document<T: DeserializeOwned + Default>(
             "browser_runtime_document_schema_unsupported:{kind}:{schema}"
         ));
     }
+    let json = if kind == SESSION_STATE_DOCUMENT {
+        terminal_history::project_json(&json)?
+    } else {
+        json
+    };
     serde_json::from_str(&json)
         .map_err(|error| format!("browser_runtime_document_invalid:{kind}:{error}"))
 }
@@ -1246,6 +1275,166 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn terminal_history_projection_is_bounded_after_publication_and_restart() {
+        let directory = TempDirectory::new("terminal-history");
+        let database_path = directory.0.join("runtime.sqlite3");
+        let connection = Connection::open(&database_path).unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let initial = BrowserSessionState::default();
+        store.save_session_state(&initial).unwrap();
+        let mut proposed = initial.clone();
+        proposed.last_remote_view_desktop_id = Some("preserved-live-desktop".into());
+        for index in 0..1001 {
+            proposed
+                .session_history
+                .push(agent_browser_service_model::TerminalBrowserSession {
+                    id: format!("ended-{index}"),
+                    name: format!("task-{index}"),
+                    profile_id: "profile".into(),
+                    browser_id: "browser".into(),
+                    created_at_ms: index,
+                    last_activity_at_ms: index,
+                    ended_at_ms: index,
+                    reason: agent_browser_service_model::SessionEndReason::ExplicitClose,
+                });
+            proposed
+                .tab_history
+                .push(agent_browser_service_model::TerminalBrowserTab {
+                    id: format!("tab-ended-{index}"),
+                    target_id: format!("target-{index}"),
+                    browser_id: "browser".into(),
+                    session_id: format!("ended-{index}"),
+                    profile_id: "profile".into(),
+                    created_at_ms: index,
+                    last_activity_at_ms: index,
+                    closed_at_ms: index,
+                    reason: agent_browser_service_model::BrowserTabEndReason::ExplicitClose,
+                    session_end_reason: None,
+                });
+        }
+        store
+            .compare_and_save_session_state(&initial, &proposed)
+            .unwrap();
+        drop(store);
+        let restarted = BrowserSessionSqliteStore {
+            connection: Connection::open(&database_path).unwrap(),
+        };
+        let active = restarted.load_session_state().unwrap();
+        assert_eq!(active.session_history.len(), 1000);
+        assert_eq!(active.session_history.first().unwrap().id, "ended-1");
+        assert_eq!(active.session_history.last().unwrap().id, "ended-1000");
+        assert_eq!(
+            active.last_remote_view_desktop_id.as_deref(),
+            Some("preserved-live-desktop")
+        );
+        let archived = restarted
+            .archived_terminal_history("sessions", 10, None)
+            .unwrap();
+        assert_eq!(archived["records"].as_array().unwrap().len(), 1);
+        assert_eq!(archived["records"][0]["record"]["id"], "ended-0");
+        assert_eq!(archived["nextCursor"], serde_json::Value::Null);
+        assert_eq!(active.tab_history.len(), 1000);
+        assert_eq!(
+            restarted
+                .archived_terminal_history("tabs", 1, None)
+                .unwrap()["records"][0]["record"]["id"],
+            "tab-ended-0"
+        );
+        let mut restarted = restarted;
+        let mut newer = active.clone();
+        newer.next_session_sequence = 77;
+        restarted
+            .compare_and_save_session_state(&active, &newer)
+            .unwrap();
+        assert!(restarted
+            .compare_and_save_session_state(&active, &proposed)
+            .is_err());
+        assert_eq!(restarted.load_session_state().unwrap(), newer);
+        assert_eq!(
+            restarted
+                .archived_terminal_history("sessions", 10, None)
+                .unwrap(),
+            archived
+        );
+    }
+
+    #[test]
+    fn archive_failure_aborts_publication_and_preserves_handoff_references() {
+        let connection = Connection::open_in_memory().unwrap();
+        initialize_runtime_schema(&connection).unwrap();
+        let mut store = BrowserSessionSqliteStore { connection };
+        let initial = BrowserSessionState::default();
+        store.save_session_state(&initial).unwrap();
+        let mut proposed = initial.clone();
+        for index in 0..1002 {
+            proposed
+                .session_history
+                .push(agent_browser_service_model::TerminalBrowserSession {
+                    id: format!("ended-{index}"),
+                    name: format!("task-{index}"),
+                    profile_id: "profile".into(),
+                    browser_id: "browser".into(),
+                    created_at_ms: index,
+                    last_activity_at_ms: index,
+                    ended_at_ms: index,
+                    reason: agent_browser_service_model::SessionEndReason::HeartbeatExpired,
+                });
+        }
+        proposed.remote_view_tab_handoffs.insert(
+            "retained-link".into(),
+            agent_browser_service_model::RemoteViewTabHandoff {
+                id: "retained-link".into(),
+                session_id: "ended-0".into(),
+                tab_id: "retained-target".into(),
+                created_at_ms: None,
+                expires_at_ms: None,
+                view: None,
+            },
+        );
+        store.connection.execute_batch("CREATE TRIGGER fail_archive BEFORE INSERT ON terminal_history_archive BEGIN SELECT RAISE(ABORT,'fixture'); END;").unwrap();
+        assert!(store
+            .compare_and_save_session_state(&initial, &proposed)
+            .is_err());
+        assert_eq!(store.load_session_state().unwrap(), initial);
+        assert!(store
+            .archived_terminal_history("sessions", 10, None)
+            .unwrap()["records"]
+            .as_array()
+            .unwrap()
+            .is_empty());
+        store
+            .connection
+            .execute_batch("DROP TRIGGER fail_archive")
+            .unwrap();
+        store
+            .compare_and_save_session_state(&initial, &proposed)
+            .unwrap();
+        let active = store.load_session_state().unwrap();
+        assert_eq!(
+            active.session_history.len(),
+            1001,
+            "Recent budget plus exact handoff evidence"
+        );
+        assert_eq!(active.session_history.first().unwrap().id, "ended-0");
+        assert_eq!(
+            active.remote_view_tab_handoffs,
+            proposed.remote_view_tab_handoffs
+        );
+        let first = store
+            .archived_terminal_history("sessions", 1, None)
+            .unwrap();
+        assert_eq!(first["records"][0]["record"]["id"], "ended-1");
+        let cursor = first["nextCursor"].as_i64().unwrap();
+        assert!(store
+            .archived_terminal_history("sessions", 1, Some(cursor))
+            .unwrap()["records"]
+            .as_array()
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

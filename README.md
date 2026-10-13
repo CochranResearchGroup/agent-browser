@@ -2379,6 +2379,41 @@ agent-browser open twitter.com
 
 ## Inspect Runtime State
 
+### Resource budgets and completed history
+
+New browser processes keep a host reserve of 5% of total RAM, with a 1 GiB minimum.
+Under memory pressure, new task acquisition runs the existing owner reaper for
+already eligible idle work, then waits up to five seconds for capacity. Existing
+task/profile continuation is protected. The runtime supervisor uses a soft
+`MemoryHigh` threshold of 25% RAM and has no default hard cap.
+
+| Setting | Default | Behavior |
+| --- | --- | --- |
+| `AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES` | Adaptive | Nonnegative available-memory reserve; 0 disables this floor |
+| `AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS` | `5000` | Memory-pressure wait, from 0 through 60000 milliseconds |
+| `AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES` | 25% RAM | Positive byte override for the supervisor soft threshold |
+| `AGENT_BROWSER_TERMINAL_HISTORY_LIMIT` | `1000` | Recent unreferenced completed records per kind in active memory; 0 archives all unreferenced records |
+
+Set overrides before workstation installation or runtime-host startup.
+Installation captures explicit settings into the host unit. Shell changes do not
+alter a running host. Service Status reports the effective launch reserve/source
+and archive counts under `browserRuntime.storage.terminalHistory`.
+
+Older completed session/tab evidence moves atomically into an append-only archive
+in the existing SQLite runtime database, with no automatic expiry. Handoff
+references retain their evidence beyond the recent-record budget. Live tasks,
+tabs and handoff lifetimes are unchanged.
+
+```bash
+agent-browser runtime history sessions 100 --json
+agent-browser runtime history tabs 100 --json
+# Use data.nextCursor from the previous page:
+agent-browser runtime history sessions 100 42 --json
+```
+
+Archive pages are newest-first and capped at 1000 records. The command reads an
+existing database without creating state, migrating it or launching a browser.
+
 Inspect the live browser process or tab-level CDP identifiers:
 
 ```bash

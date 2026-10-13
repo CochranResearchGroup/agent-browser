@@ -296,7 +296,7 @@ lanes:
     branch: fix/failed-upgrade-shutdown-183
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#183]
     dependencies: [P233, P234]
     overlaps: [P237, P238]
@@ -304,3 +304,17 @@ lanes:
     validation_status: Exact browser PID and CDP preserved under active drain; negative control catches browser loss; zero final fixture-owned residue
     limitations: ["One graceful host exit only", "Workstation-wide shutdown, failed transaction reconciliation and multigeneration retry remain unqualified", "No production runtime effects"]
     updated_at: 2026-10-12
+  - id: P240
+    product_lane: PL-PLATFORM
+    objective: Preserve active work under pressure and bound terminal-history memory without losing durable history
+    plan: docs/dev/plans/0240-2026-10-13-resource-bounds.md
+    branch: platform/resource-bounds-105
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#105]
+    dependencies: []
+    overlaps: [P237, P239]
+    reconciled_overlaps: ["P240 primary writer for admission, SQLite archive and host publication adapter; P237 retains native selection and all handoff/expiry policy, consuming canonical publication changes; reused clean enrollment checkout preserves prior candidate bytes and branches"]
+    validation_status: Triage verified small healthy host, fixed launch floor and unbounded terminal vectors; operator accepted pressure and archival direction; implementation pending
+    updated_at: 2026-10-13

@@ -4,6 +4,14 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**Host memory reserve**: Available memory kept for other work and recovery when
+admitting a new browser process. Reusing an existing browser does not allocate a
+second process. Pressure handling preserves current work.
+
+**Terminal history projection**: The recent completed session and tab records
+kept with active browser state. Bounding this projection does not delete older
+durable history or change live tasks and valid handoffs.
+
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.

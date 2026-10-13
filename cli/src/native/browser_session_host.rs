@@ -619,6 +619,32 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
         &mut self,
         request: OpenBrowserSession,
     ) -> Result<OpenBrowserSessionResult, String> {
+        let existing_task = self
+            .state
+            .sessions
+            .values()
+            .any(|session| session.name == request.session_name);
+        let existing_profile = match &request.profile_intent {
+            agent_browser_service_model::BrowserProfileIntent::Exact { profile_id } => self
+                .state
+                .browsers
+                .values()
+                .any(|browser| browser.profile_id == *profile_id),
+            _ => false,
+        };
+        if !existing_task
+            && !existing_profile
+            && super::browser_launch_admission::observe_browser_launch_admission(
+                Path::new("."),
+                None,
+            )
+            .reasons
+            .contains(&"available_memory_below_floor")
+        {
+            // Reuse only the owner reaper's established idle/expiry eligibility.
+            // Existing task/profile continuation is never reclaimed here.
+            self.reap(request.activity_at_ms)?;
+        }
         let result = self.manager()?.open(request)?;
         self.commit_state()?;
         Ok(result)
@@ -1135,6 +1161,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             &self.state,
             intent.as_ref(),
         )?;
+        // Publication may move completed history into the same durable archive.
+        // Adopt its exact active projection so the next CAS sees the same state.
+        self.state = self.persistence.load_session_state()?;
         self.persisted_state = self.state.clone();
         self.effects.acknowledge_launch_publication();
         if intent.is_some() {
