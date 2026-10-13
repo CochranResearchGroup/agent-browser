@@ -9,11 +9,12 @@ from urllib.parse import urlsplit, urlencode
 import secrets
 import subprocess
 import socket
+import signal
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False, cross_client_focus=False, managed_operator=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False, cross_client_focus=False, managed_operator=False, managed_restart=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -94,9 +95,46 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     assert manifest['pid'] == daemon_pid, 'runtime-host publication belongs to a different process'
     assert manifest['executableGeneration'] == hashlib.sha256(Path(cli).read_bytes()).hexdigest(), 'runtime-host executable generation differs from the reviewed pin'
     (artifacts / 'runtime-host-observation.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    def restart_owned_host():
+        old = json.loads(manifest_path.read_text())
+        assert daemon.poll() is None and old['pid'] == daemon.pid
+        process = Path('/proc')/str(daemon.pid)
+        raw = (process/'stat').read_text()
+        fields = raw[raw.rfind(')')+2:].split()
+        environment = (process/'environ').read_bytes().split(b'\0')
+        assert os.readlink(process/'exe') == cli and int(fields[1]) == os.getpid() and int(fields[3]) == daemon.pid
+        assert f'HOME={root / "home"}'.encode() in environment and f'AGENT_BROWSER_SOCKET_DIR={sockets}'.encode() in environment
+        ownership = {'pid':daemon.pid,'parentPid':int(fields[1]),'session':int(fields[3]),
+                     'start':fields[19],'executable':cli,'privateHome':str(root/'home'),
+                     'socketDir':str(sockets)}
+        os.kill(daemon.pid,signal.SIGTERM)
+        deadline = time.monotonic()+15
+        while daemon.poll() is None:
+            assert time.monotonic() < deadline, 'exact source host is still live; do not start a replacement'
+            time.sleep(0.025)
+        env['AGENT_BROWSER_RUNTIME_HOST_PROCESS'] = '1'
+        env['AGENT_BROWSER_DAEMON_AUTH_TOKEN'] = token
+        try:
+            replacement = spawn([cli],stdout=workflow_log,stderr=workflow_log)
+        finally:
+            env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS',None)
+            env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN',None)
+        deadline = time.monotonic()+45
+        while True:
+            current = json.loads(manifest_path.read_text()) if manifest_path.exists() else None
+            if current and current['pid'] == replacement.pid:
+                break
+            assert replacement.poll() is None and time.monotonic() < deadline, 'replacement source host did not publish its own identity'
+            time.sleep(0.025)
+        assert current['executableGeneration'] == old['executableGeneration'] and current['socketIdentity'] != old['socketIdentity']
+        manifest.clear()
+        manifest.update(current)
+        receipt = {'oldOwner':ownership,'oldReturncode':daemon.returncode,'oldManifest':old,'newManifest':current}
+        (artifacts/'managed-source-host-restart.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        return receipt
     if managed_session:
         from lib.p237_managed_session_fixture import run_managed_session_fixture
-        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator)
+        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator, restart_owned_host if managed_restart else None)
         return
 
     def command(session, *arguments):

@@ -38,6 +38,7 @@ def main():
     parser.add_argument('--runtime-bootstrap', action='store_true', help='Let the public source CLI create its private host')
     parser.add_argument('--runtime-public-background', action='store_true', help='Create and observe an authorized target through public HTTP')
     parser.add_argument('--runtime-managed-session', action='store_true', help='Exercise managed session admission through the native protocol')
+    parser.add_argument('--runtime-managed-restart', action='store_true', help='Check managed task Properties after an exact source host restart')
     parser.add_argument('--runtime-managed-operator', action='store_true', help='Reject an invalid operator focus proof on a managed browser')
     parser.add_argument('--runtime-managed-replay', action='store_true', help='Observe a managed tab creation replay after last task closure')
     parser.add_argument('--runtime-cross-client-focus', nargs='?', const='ordering', choices=['ordering','authority','effect-authority','timeout','cancel'], help='Select one desktop through actual HTTP clients during renderer work')
@@ -63,6 +64,7 @@ def main():
     assert not args.runtime_managed_session or (args.runtime_cli and not (args.runtime_eof or args.runtime_controller_fence or args.runtime_ui_bundle or args.runtime_peer_read or args.runtime_bootstrap or args.runtime_public_background)), 'Managed session has separate source runtime setup'
     assert not args.runtime_managed_replay or args.runtime_managed_session, 'Managed replay requires managed session setup'
     assert not args.runtime_managed_operator or args.runtime_managed_session, 'Managed operator proof requires managed session setup'
+    assert not args.runtime_managed_restart or args.runtime_managed_session, 'Managed restart requires managed session setup'
     assert not args.runtime_cross_client_focus or (args.runtime_cli and not (args.runtime_eof or args.runtime_controller_fence or args.runtime_ui_bundle or args.runtime_peer_read or args.runtime_bootstrap or args.runtime_public_background or args.runtime_managed_session)), 'Cross-client focus has separate source runtime setup'
     if args.runtime_ui_bundle:
         assert args.runtime_cli and Path(args.runtime_ui_bundle).is_absolute() and Path(args.runtime_ui_bundle).is_file()
@@ -117,6 +119,8 @@ def main():
             command.append('--runtime-managed-replay')
         if args.runtime_managed_operator:
             command.append('--runtime-managed-operator')
+        if args.runtime_managed_restart:
+            command.append('--runtime-managed-restart')
         if args.runtime_cross_client_focus:
             command.extend(['--runtime-cross-client-focus',args.runtime_cross_client_focus])
         if args.ui_runner:
@@ -238,7 +242,7 @@ def main():
                     runtime_started = time.monotonic()
                     run_runtime_host_fixture(spawn, env, root, artifacts,
                                              args.runtime_cli, args.chrome, workflow_log,
-                                             args.runtime_ui_bundle, args.runtime_controller_fence, args.runtime_eof, args.runtime_peer_read, args.runtime_bootstrap, args.runtime_public_background, args.runtime_managed_session, args.runtime_managed_replay, args.runtime_cross_client_focus, args.runtime_managed_operator)
+                                             args.runtime_ui_bundle, args.runtime_controller_fence, args.runtime_eof, args.runtime_peer_read, args.runtime_bootstrap, args.runtime_public_background, args.runtime_managed_session, args.runtime_managed_replay, args.runtime_cross_client_focus, args.runtime_managed_operator, args.runtime_managed_restart)
                     result = 0
                     (artifacts / 'test-result.json').write_text(json.dumps({
                         'mode':'source-runtime-host','returncode':0,

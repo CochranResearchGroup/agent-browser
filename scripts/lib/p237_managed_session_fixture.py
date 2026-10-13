@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False, operator_proof=False):
+def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False, operator_proof=False, restart_host=None):
     endpoint = next(path for path in sockets.iterdir() if path.is_socket()
                     and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
     profile = root/'managed-profile'
@@ -132,6 +132,31 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
         assert not denied.get('success') and 'operator_focus' in denied.get('error',''), 'managed native focus accepted an invalid operator proof'
         assert denied.get('id') == expected_id, 'managed operator denial lost its request identity'
         assert after == before and targets() == preserved, 'rejected managed operator focus changed the desktop or targets'
+    if restart_host:
+        request('p237-managed-bob','browser_session_focus',browserId=browser_id,
+                targetId=bob_page['browserSession']['targetId'])
+        restart_scene = foreground()
+        assert 'P237 managed Bob' in restart_scene['title']
+        restart = restart_host()
+        assert Path(f'/proc/{pid}').exists(), 'host restart ended its retained managed browser'
+        restarted_birth = Path(f'/proc/{pid}/stat').read_text()
+        assert restarted_birth[restarted_birth.rfind(')')+2:].split()[19] == birth, 'managed browser process was replaced during host restart'
+        # First continuation is the public native getter, without explicit open.
+        continued = request('p237-managed-alice','title',serviceName='P237RestartInspector',
+                            agentName='Restart Inspector',taskName='Inspect after restart',
+                            purpose='Read original properties')
+        assert continued['data']['title'] == 'P237 managed Alice'
+        continued_scene = foreground()
+        restarted = request('p237-managed-alice','browser_session_status')['data']
+        metadata = restarted['tabMetadata'][alice_tab_id]
+        receipt = {'restart':restart,'original':original_metadata,'after':metadata,
+                   'browserId':browser_id,'pid':pid,'start':birth,'targets':targets(),
+                   'sessionIds':sorted(restarted['sessions']),'tabIds':sorted(restarted['tabs']),
+                   'beforeRestart':restart_scene,'afterContinuation':continued_scene}
+        (artifacts/'managed-restarted-task-properties.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        assert metadata == original_metadata, 'actual host restart changed original task property context'
+        assert continued_scene == restart_scene, 'first metadata continuation after restart replaced the visible peer'
+        assert targets() == preserved and browser_id in restarted['browsers'], 'restart lost a peer target or browser identity'
     selections = []
     for lane,page,title in [('p237-managed-bob',bob_page,'P237 managed Bob'),
                             ('p237-managed-alice',alice_page,'P237 managed Alice')]:

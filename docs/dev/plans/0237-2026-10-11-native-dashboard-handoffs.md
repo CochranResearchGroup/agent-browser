@@ -530,3 +530,8 @@ Fresh foreign inventory identifies platform/resource-bounds-105 at canonical mai
 
 
 The original managed operator admission oracle is GREEN against c8f9e5d7 source pin, with the caller's request ID preserved. Ordinary native focus and the combined metadata/peer/replay/scoped/last-close workflow pass in 21.90 seconds with fresh zero residue. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) retains both admission and missing-response-ID REDs, final gates and review. This closes the unbound native admission gap; positive public managed proof issuance, managed effect fencing/ordering and the full P237 outcome remain unqualified.
+
+
+### Original task Properties across actual source-host restart
+
+The exact task-owned host exits gracefully and a new source instance continues both managed tasks in the same Chrome process. First Alice title retrieval requires no explicit reopen and preserves physically selected Bob. Original metadata is unchanged despite different inspector labels. The final combined native workflow passes in 28.88 seconds on unchanged c8f9e5d7 source pin with fresh zero residue. No product repair or installed/provider effect was needed. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) preserves all identities and scope. Public handoff Properties and metadata across expired-target recreation remain separate gates; the full P237 outcome remains IN_PROGRESS.
