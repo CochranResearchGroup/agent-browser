@@ -282,10 +282,25 @@ lanes:
     branch: platform/workflow-mcp-255
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#255, CochranResearchGroup/agent-browser#262, CochranResearchGroup/agent-browser#263, CochranResearchGroup/agent-browser#264, CochranResearchGroup/agent-browser#265, CochranResearchGroup/agent-browser#266]
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P238 owns MCP/profile-planning/skills, read-only public handoff locator and bounded native headless-tab dispatch/replay repair; P237 owns dashboard UI and remaining native lifecycle/models; preserve foreign checkout and fixtures"]
-    validation_status: Isolated installed 263-266 qualified; PR267 owns integration; 12 tools and 21 resources exposed in Codex; native viewer/input and zero fixture census; production unchanged; worktree and sealed P232 candidate retained
+    validation_status: Isolated installed 263-266 qualified; PR267 owns integration; 12 tools and 21 resources exposed in Codex; native viewer/input and zero fixture census; prior branch and sealed P232 candidate retained; checkout reused by P239
+    updated_at: 2026-10-12
+  - id: P239
+    product_lane: PL-BUGFIX
+    objective: Verify exact browser preservation through graceful host exit under failed-upgrade admission drain
+    plan: docs/dev/plans/0239-2026-10-12-failed-upgrade-preservation.md
+    branch: fix/failed-upgrade-shutdown-183
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#183]
+    dependencies: [P233, P234]
+    overlaps: [P237, P238]
+    reconciled_overlaps: ["P239 owns new synthetic fixture and evidence only; no Rust lifecycle or dashboard writes; P237 retains 260/261; clean enrollment checkout reused with P238 branch and P232 sealed bytes preserved"]
+    validation_status: Exact browser PID and CDP preserved under active drain; negative control catches browser loss; zero final fixture-owned residue
+    limitations: ["One graceful host exit only", "Workstation-wide shutdown, failed transaction reconciliation and multigeneration retry remain unqualified", "No production runtime effects"]
     updated_at: 2026-10-12

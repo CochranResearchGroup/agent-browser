@@ -257,6 +257,7 @@
     "test:service-incident-parity-live": "node scripts/smoke-service-incident-parity.js",
     "test:service-shutdown-health-live": "node scripts/smoke-service-shutdown-health.js",
     "test:service-shutdown-faulted-live": "node scripts/smoke-service-shutdown-faulted.js",
+    "test:failed-upgrade-browser-preservation": "node scripts/smoke-failed-upgrade-browser-preservation.js",
     "test:service-health-live": "node scripts/smoke-service-health.js",
     "setup:rdp-guac-route-pool": "bash scripts/setup-rdp-guac-route-pool.sh",
     "ensure:rdp-guac-postgres": "bash scripts/ensure-rdp-guac-postgres.sh",
