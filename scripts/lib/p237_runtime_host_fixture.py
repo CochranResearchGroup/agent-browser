@@ -9,9 +9,10 @@ from urllib.parse import urlsplit
 import secrets
 import subprocess
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -126,8 +127,8 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         fcntl.flock(lock, fcntl.LOCK_UN)
     port = int((sockets / 'default.stream').read_text())
 
-    def source_http(path, body=None, cookie='', method='POST'):
-        connection = http.client.HTTPConnection('127.0.0.1', port, timeout=15)
+    def source_http(path, body=None, cookie='', method='POST', timeout=15):
+        connection = http.client.HTTPConnection('127.0.0.1', port, timeout=timeout)
         try:
             connection.request(method, path, json.dumps(body) if body is not None else None,
                                {'Content-Type': 'application/json', 'Cookie': cookie})
@@ -208,6 +209,72 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         assert f'_NET_WM_PID(CARDINAL) = {births["session:p237-beta"]["pid"]}' in properties.splitlines()
         assert '_NET_WM_STATE_MAXIMIZED_HORZ' in properties and '_NET_WM_STATE_MAXIMIZED_VERT' in properties
         assert all(inventory(browser) == inventories[browser_id] for browser_id,browser in state['browsers'].items()), 'UI selection changed source documents or targets'
+    if controller_fence:
+        route_id = 'fixture-route:p237-alpha'
+        before = json.loads(state_path.read_text())
+        before_route = before['remoteViewRoutes'][route_id]
+        before_profiles = before['profiles']
+        active_before = subprocess.check_output(['xdotool', 'getactivewindow'], env=env, text=True).strip()
+        identity = '\0'.join([env.get('AGENT_BROWSER_RUNTIME_ENVIRONMENT', 'production'), route_id, 'fixture-display'])
+        fence_path = state_path.parent / 'desktop-input' / 'fences' / (hashlib.sha256(identity.encode()).hexdigest() + '.lock')
+        # This is the existing product route fence, scoped to the disposable home.
+        # No controller epoch is manufactured and no product callback is replaced.
+        with fence_path.open('r+') as fence, ThreadPoolExecutor(max_workers=1) as executor:
+            fcntl.flock(fence, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            try:
+                takeover_request = {
+                    'action': 'service_controller_lease_takeover',
+                    'browserId': 'session:p237-alpha', 'serviceName': 'P237Fixture',
+                    'agentName': 'admin', 'taskName': 'synthetic-controller-fence',
+                    'jobTimeoutMs': 10000,
+                    'params': {'routeId': route_id, 'sessionName': 'p237-alpha',
+                               'viewerLeaseId': 'fixture-controller:replacement'}}
+                pending = executor.submit(source_http, '/api/service/request', takeover_request, cookie, timeout=35)
+                deadline = time.monotonic() + 3
+                while True:
+                    current = json.loads(state_path.read_text())
+                    jobs = [job for job in current['jobs'].values()
+                            if job.get('action') == 'service_controller_lease_takeover'
+                            and job.get('state') == 'running']
+                    if jobs:
+                        break
+                    assert not pending.done(), 'public takeover completed before observed fence contention'
+                    assert time.monotonic() < deadline, 'public takeover did not reach running admission'
+                    time.sleep(0.025)
+                contention_started = time.monotonic()
+                contention_status, _, contention = pending.result(timeout=35)
+                contention_elapsed = time.monotonic() - contention_started
+                (artifacts / 'source-controller-contention-response.json').write_text(json.dumps({
+                    'status': contention_status, 'reply': contention,
+                    'observationSeconds': contention_elapsed}, indent=2) + '\n')
+                blocked = json.loads(state_path.read_text())
+                assert not contention.get('success'), 'public takeover ignored the held external fence'
+                assert 'desktop_input_route_fence_contended' in json.dumps(contention), f'public takeover failed outside the actual fence: {contention_status}, {contention}'
+                assert blocked['remoteViewRoutes'][route_id]['controllerEpoch'] == before_route['controllerEpoch']
+                assert blocked['remoteViewRoutes'][route_id]['controllerLeaseId'] == before_route['controllerLeaseId']
+                assert blocked['profiles'] == before_profiles
+                assert subprocess.check_output(['xdotool', 'getactivewindow'], env=env, text=True).strip() == active_before
+                assert all(inventory(browser) == inventories[browser_id] for browser_id, browser in state['browsers'].items())
+            finally:
+                fcntl.flock(fence, fcntl.LOCK_UN)
+            # The failure says inspect_before_retry. Inspection above proves
+            # unchanged authority, policy and native targets; release removes
+            # the exact contention cause before this new explicit operation.
+            takeover_status, _, takeover = source_http('/api/service/request', takeover_request, cookie)
+        assert takeover_status == 200 and takeover['success'], f'public takeover rejected after release: {takeover_status}, {takeover}'
+        after = json.loads(state_path.read_text())
+        after_route = after['remoteViewRoutes'][route_id]
+        assert after_route['controllerEpoch'] == before_route['controllerEpoch'] + 1
+        assert after_route['controllerLeaseId'] == 'fixture-controller:replacement'
+        assert after['profiles'] == before_profiles, 'controller takeover changed profile policy or identity'
+        assert subprocess.check_output(['xdotool', 'getactivewindow'], env=env, text=True).strip() == active_before
+        assert all(inventory(browser) == inventories[browser_id] for browser_id, browser in state['browsers'].items())
+        (artifacts / 'source-controller-fence.json').write_text(json.dumps({
+            'runningJobIds': [job['id'] for job in jobs],
+            'contentionStatus': contention_status, 'contentionReply': contention,
+            'blockedEpoch': blocked['remoteViewRoutes'][route_id]['controllerEpoch'],
+            'releasedEpoch': after_route['controllerEpoch'], 'reply': takeover,
+            'scope': 'real public takeover blocked by task-held external fence; no concurrent native effect'}, indent=2) + '\n')
     for session in ['p237-alpha', 'p237-beta']:
         command(session, '--profile', str(root / f'{session}-profile'), 'close')
         birth = births[f'session:{session}']

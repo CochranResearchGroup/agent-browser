@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--tests')
     parser.add_argument('--runtime-cli', help='Absolute source executable for the task-owned runtime-host probe')
     parser.add_argument('--runtime-ui-bundle', help='Absolute prepared viewport bundle for shared-desktop selection')
+    parser.add_argument('--runtime-controller-fence', action='store_true', help='Exercise public controller takeover against the actual external route fence')
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')
@@ -45,6 +46,7 @@ def main():
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
     assert bool(args.tests) != bool(args.runtime_cli), 'Choose a test executable or runtime CLI'
+    assert not args.runtime_controller_fence or args.runtime_cli, 'Controller fence requires source runtime mode'
     if args.runtime_ui_bundle:
         assert args.runtime_cli and Path(args.runtime_ui_bundle).is_absolute() and Path(args.runtime_ui_bundle).is_file()
     if args.runtime_cli:
@@ -82,6 +84,8 @@ def main():
             command.append('--multi-window')
         if args.runtime_ui_bundle:
             command.extend(['--runtime-ui-bundle', args.runtime_ui_bundle])
+        if args.runtime_controller_fence:
+            command.append('--runtime-controller-fence')
         if args.ui_runner:
             command.extend(['--ui-runner', args.ui_runner, '--ui-bundle', args.ui_bundle])
         read_fd, write_fd = os.pipe()
@@ -193,7 +197,7 @@ def main():
                     runtime_started = time.monotonic()
                     run_runtime_host_fixture(spawn, env, root, artifacts,
                                              args.runtime_cli, args.chrome, workflow_log,
-                                             args.runtime_ui_bundle)
+                                             args.runtime_ui_bundle, args.runtime_controller_fence)
                     result = 0
                     (artifacts / 'test-result.json').write_text(json.dumps({
                         'mode':'source-runtime-host','returncode':0,
