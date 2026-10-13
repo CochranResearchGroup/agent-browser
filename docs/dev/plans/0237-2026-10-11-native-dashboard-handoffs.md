@@ -540,3 +540,8 @@ The exact task-owned host exits gracefully and a new source instance continues b
 ### Draft source review
 
 [Draft PR270](https://github.com/CochranResearchGroup/agent-browser/pull/270) links issues261/260 and the current lifecycle/selection source. It is a draft and remains unmerged. The description preserves the full combined outcome, exact source-validation limits, layout choice, remaining native/provider/public/UI and integration gates, and the legacy navigator failure. Prototype code remains excluded. This does not qualify acceptance or authorize installed effects; P237 remains IN_PROGRESS.
+
+
+### Independent native desktop progress
+
+Actual public source CLI private_virtual_display creation assigns two different native displays and authoritative allocation IDs. A read-only real Alpha route-fence witness precedes Beta admission while Alpha's actual renderer-bound request is executing. Beta succeeds in 0.17 seconds without changing Alpha; Alpha completes in 7.27 seconds. Final source workflow passes in 48.75 seconds on unchanged c8f9e5d7 with normal browser/private-Xvfb close and fresh zero residue. The original shared-desktop oracle still passes. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) retains the wrong minimization barrier and exact scope. This qualifies retained-source desktop independence; remaining managed/public/provider/UI/reload/integration gates are unchanged. P237 remains IN_PROGRESS.

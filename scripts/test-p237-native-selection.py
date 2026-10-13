@@ -41,7 +41,7 @@ def main():
     parser.add_argument('--runtime-managed-restart', action='store_true', help='Check managed task Properties after an exact source host restart')
     parser.add_argument('--runtime-managed-operator', action='store_true', help='Reject an invalid operator focus proof on a managed browser')
     parser.add_argument('--runtime-managed-replay', action='store_true', help='Observe a managed tab creation replay after last task closure')
-    parser.add_argument('--runtime-cross-client-focus', nargs='?', const='ordering', choices=['ordering','authority','effect-authority','timeout','cancel'], help='Select one desktop through actual HTTP clients during renderer work')
+    parser.add_argument('--runtime-cross-client-focus', nargs='?', const='ordering', choices=['ordering','authority','effect-authority','timeout','cancel','independent'], help='Select one desktop through actual HTTP clients during renderer work')
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')

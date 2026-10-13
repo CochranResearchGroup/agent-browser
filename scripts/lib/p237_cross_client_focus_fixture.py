@@ -1,5 +1,7 @@
 """Two actual HTTP clients selecting one desktop while a real renderer is busy."""
 import http.client
+import fcntl
+import hashlib
 import json
 import subprocess
 import time
@@ -9,11 +11,14 @@ from urllib.parse import urlsplit
 
 
 def run_cross_client_focus_fixture(spawn, env, artifacts, state, source_http, cookie, state_path, mode='ordering', native_control=None):
-    def scene():
-        active = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+    def scene(session='p237-alpha'):
+        scene_env = dict(env)
+        if mode == 'independent':
+            scene_env['DISPLAY'] = state['browsers'][f'session:{session}']['displayName']
+        active = subprocess.check_output(['xdotool','getactivewindow'],env=scene_env,text=True).strip()
         return {'activeWindow':active,
-                'inputWindow':subprocess.check_output(['xdotool','getwindowfocus'],env=env,text=True).strip(),
-                'title':subprocess.check_output(['xdotool','getwindowname',active],env=env,text=True).strip()}
+                'inputWindow':subprocess.check_output(['xdotool','getwindowfocus'],env=scene_env,text=True).strip(),
+                'title':subprocess.check_output(['xdotool','getwindowname',active],env=scene_env,text=True).strip()}
     def focus(session, require_success=True, timeout_ms=10000):
         tab = next(tab for tab in state['tabs'].values() if tab.get('title') == session)
         started = time.monotonic()
@@ -32,7 +37,7 @@ def run_cross_client_focus_fixture(spawn, env, artifacts, state, source_http, co
             assert status == 200 and reply['success'], f'cross-client focus failed: {result}'
         return result
     focus('p237-beta')
-    before = scene()
+    before = scene('p237-beta')
     assert 'p237-beta' in before['title']
     browser = state['browsers']['session:p237-alpha']
     endpoint = urlsplit(browser['cdpEndpoint'])
@@ -54,6 +59,23 @@ def run_cross_client_focus_fixture(spawn, env, artifacts, state, source_http, co
     with ThreadPoolExecutor(max_workers=2) as clients:
         older = clients.submit(focus,'p237-alpha',False)
         deadline = time.monotonic()+4
+        alpha_fence_held = None
+        if mode == 'independent':
+            identity = '\0'.join([env.get('AGENT_BROWSER_RUNTIME_ENVIRONMENT','production'),
+                                  'fixture-route:p237-alpha',browser['displayAllocationId']])
+            fence_path = state_path.parent/'desktop-input'/'fences'/(hashlib.sha256(identity.encode()).hexdigest()+'.lock')
+            while True:
+                if fence_path.exists():
+                    with fence_path.open('r+') as fence:
+                        try:
+                            fcntl.flock(fence,fcntl.LOCK_EX|fcntl.LOCK_NB)
+                            fcntl.flock(fence,fcntl.LOCK_UN)
+                        except BlockingIOError:
+                            alpha_fence_held = {'path':str(fence_path),'observedAt':time.monotonic(),
+                                                'displayAllocationId':browser['displayAllocationId']}
+                            break
+                assert not older.done() and busy.poll() is None and time.monotonic() < deadline, 'older native focus did not hold its real route effect fence'
+                time.sleep(0.01)
         while True:
             during = scene()
             if 'p237-alpha' in during['title']:
@@ -100,21 +122,28 @@ def run_cross_client_focus_fixture(spawn, env, artifacts, state, source_http, co
                 if mode == 'authority':
                     assert not older.done() and not newer.done(), 'controller mutation occurred after native focus completed'
         new_reply = newer.result(timeout=15)
-        newer_scene = scene()
+        newer_scene = scene('p237-beta')
+        alpha_after_newer = scene() if mode == 'independent' else None
         old_was_running = not older.done()
         old_reply = older.result(timeout=15)
     stdout,stderr = busy.communicate(timeout=5)
     assert busy.returncode == 0, f'real renderer workload failed: {stderr.decode()}'
-    final = scene()
+    final = scene('p237-beta') if mode == 'independent' else scene()
     receipt = {'mode':mode,'before':before,'olderEffectWhileRendererBusy':during,
                'newerReply':new_reply,'sceneAfterNewerReply':newer_scene,
                'olderWasRunningAfterNewerReply':old_was_running,
                'olderReply':old_reply,'rendererReply':json.loads(stdout),
-               'final':final,'authorityMutation':mutation}
+               'final':final,'authorityMutation':mutation,'alphaFenceHeld':alpha_fence_held,
+               'alphaSceneAfterIndependentReply':alpha_after_newer,
+               'desktopAssignments':{key:{field:browser.get(field) for field in ['pid','displayName','displayAllocationId']}
+                                     for key,browser in state['browsers'].items()} if mode == 'independent' else None}
     (artifacts/'source-cross-client-focus.json').write_text(json.dumps(receipt,indent=2)+'\n')
     assert new_reply['startedAt'] > old_reply['startedAt'], 'newer client was not submitted later'
-    if mode in ['ordering','effect-authority']:
+    if mode in ['ordering','effect-authority','independent']:
         assert old_reply['status'] == 200 and old_reply['reply'].get('success') and new_reply['status'] == 200 and new_reply['reply'].get('success'), 'cross-client selection did not complete both requests'
+        if mode == 'independent':
+            assert old_was_running and new_reply['finishedAt'] < old_reply['finishedAt'], 'independent native desktop waited for the busy peer selection'
+            assert alpha_after_newer == during, 'independent Beta focus changed the busy Alpha desktop'
         if mode == 'effect-authority':
             assert not mutation['rendererStillExecuting'], 'controller authority changed during native renderer-bound focus effects'
             assert old_reply['status'] == 200 and old_reply['reply'].get('success'), 'focus lost authority after its physical effect had begun'

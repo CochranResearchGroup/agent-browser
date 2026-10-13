@@ -157,8 +157,9 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
 
     for session in ['p237-alpha', 'p237-beta']:
         profile = root / f'{session}-profile'
+        launch_surface = ('--browser-host','remote_headed','--display-isolation','private_virtual_display') if cross_client_focus == 'independent' else ()
         command(session, '--headed', '--executable-path', chrome, '--profile', str(profile),
-                'open', f'data:text/html,<title>{session}</title><p>{session}</p>')
+                *launch_surface, 'open', f'data:text/html,<title>{session}</title><p>{session}</p>')
         assert json.loads(manifest_path.read_text())['pid'] == daemon_pid
         title = command(session, '--profile', str(profile), 'get', 'title')
         assert title['success'] and title['data']['title'] == session, 'exact session lost its synthetic document'
@@ -169,6 +170,22 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     status = command('p237-alpha', 'service', 'status')
     (artifacts / 'source-service-status.json').write_text(json.dumps(status, indent=2) + '\n')
     state = status['data']['service_state']
+    source_display = env['DISPLAY']
+    if cross_client_focus == 'independent':
+        displays = [state['browsers'][f'session:{session}']['displayName']
+                    for session in ['p237-alpha','p237-beta']]
+        assert all(displays) and len(set(displays)) == 2 and source_display not in displays, 'source launches did not own independent native displays'
+        for display in displays:
+            env['DISPLAY'] = display
+            wm = spawn(['openbox','--sm-disable'],stdout=workflow_log,stderr=workflow_log)
+            deadline = time.monotonic()+15
+            while True:
+                ready = subprocess.run(['xprop','-root','_NET_SUPPORTING_WM_CHECK'],env=env,capture_output=True,text=True)
+                if ready.returncode == 0 and 'window id #' in ready.stdout:
+                    break
+                assert wm.poll() is None and time.monotonic() < deadline, 'owned private display window manager was not ready'
+                time.sleep(0.025)
+        env['DISPLAY'] = source_display
     def inventory(browser):
         endpoint = urlsplit(browser['cdpEndpoint'])
         connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
@@ -205,10 +222,11 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
             browser_id = f'session:{session}'
             route_id = f'fixture-route:{session}'
             lease_id = f'fixture-controller:{session}'
-            persisted['browsers'][browser_id]['displayAllocationId'] = 'fixture-display'
+            if cross_client_focus != 'independent':
+                persisted['browsers'][browser_id]['displayAllocationId'] = 'fixture-display'
             persisted['remoteViewRoutes'][route_id] = {
                 'id': route_id, 'browserId': browser_id, 'sessionId': session,
-                'displayAllocationId': 'fixture-display', 'state': 'ready',
+                'displayAllocationId': persisted['browsers'][browser_id]['displayAllocationId'], 'state': 'ready',
                 'readOnly': False, 'controllerLeaseId': lease_id,
                 'controllerEpoch': 1, 'viewerLeaseIds': [lease_id]}
             persisted['viewerLeases'][lease_id] = {
@@ -243,6 +261,8 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     observations = []
     for session in ['p237-alpha', 'p237-beta', 'p237-alpha']:
         browser = state['browsers'][f'session:{session}']
+        if cross_client_focus == 'independent':
+            env['DISPLAY'] = browser['displayName']
         tab = next(tab for tab in state['tabs'].values()
                    if tab['browserId'] == browser['id'] and tab['title'] == session)
         focus_status, _, focus = source_http('/api/service/request', {
@@ -272,6 +292,7 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         peer = 'p237-beta' if session == 'p237-alpha' else 'p237-alpha'
         assert inventory(state['browsers'][f'session:{peer}']) == inventories[f'session:{peer}'], 'native selection changed the peer targets or documents'
         assert json.loads(manifest_path.read_text()) == manifest, 'source host identity changed during selection'
+    env['DISPLAY'] = source_display
     if cross_client_focus:
         # Warm the source debug binary's immutable failure identity outside the
         # timed workload with a harmless nonexistent-route rejection.
