@@ -4,6 +4,18 @@ Updated: 2026-10-12
 
 ## Current execution
 
+### 2026-10-13 P240 resource budgets and terminal archives
+
+[P240](docs/dev/plans/0240-2026-10-13-resource-bounds.md) implements configurable
+reserve and bounded new-process waiting, a soft supervisor budget without a
+default hard cap, and atomic durable terminal session/tab archives with a bounded
+working projection. Handoff evidence and existing-browser reuse are protected.
+The [receipt](docs/dev/notes/0240-2026-10-13-resource-bounds.md) records red/green,
+Rust/client/docs gates, two-axis review and installed p240 workflow acceptance.
+Its own units are stopped and disabled. Production/default development are
+unchanged. Full install readiness, longer soak and wider #105 convergence remain
+unqualified. #183 is deferred by the operator until after the next reboot.
+
 ### 2026-10-12 P239 failed-upgrade drain preservation
 
 [P239](docs/dev/plans/0239-2026-10-12-failed-upgrade-preservation.md) adds an isolated

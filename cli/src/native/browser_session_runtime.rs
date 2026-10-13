@@ -948,11 +948,10 @@ fn run_browser_worker(
                 } else if path.exists() && !path.is_dir() {
                     Err("browser_session_profile_path_not_directory".to_string())
                 } else {
-                    super::browser_launch_admission::observe_browser_launch_admission(
+                    super::browser_launch_admission::wait_for_browser_launch_admission(
                         path,
                         config.maximum_browser_processes,
                     )
-                    .require_admitted()
                 };
                 let _ = reply.send(result);
             }
@@ -1006,11 +1005,10 @@ fn run_browser_worker(
                             })
                             .transpose()?
                     };
-                    super::browser_launch_admission::observe_browser_launch_admission(
+                    super::browser_launch_admission::wait_for_browser_launch_admission(
                         Path::new(&profile.user_data_dir),
                         config.maximum_browser_processes,
-                    )
-                    .require_admitted()?;
+                    )?;
                     let display = remote_display.or_else(|| config.display.clone());
                     let mut manager = BrowserManager::launch(
                         LaunchOptions {

@@ -7302,6 +7302,18 @@ Example:
 "##
         }
 
+        "runtime history" => {
+            r##"
+agent-browser runtime history - Read archived completed task evidence
+
+Usage: agent-browser runtime history [sessions|tabs] [limit] [before-sequence] --json
+
+Reads an existing SQLite archive without launching, migrating or mutating runtime state.
+Limit defaults to 100 and must be 1 through 1000. Use data.nextCursor as the
+next before-sequence. Recent completed records remain in the active projection.
+Archive history has no automatic expiry. Live tasks and handoff targets are preserved.
+"##
+        }
         "runtime" => {
             r##"
 agent-browser runtime - Manage persistent runtime profiles
@@ -7312,6 +7324,7 @@ Usage:
   agent-browser runtime status [name]
   agent-browser runtime login [url] [--attachable]
   agent-browser runtime attach [name]
+  agent-browser runtime history [sessions|tabs] [limit] [before-sequence] --json
 
 Commands:
   create [name]         Create a named persistent profile for runtime and service planning
@@ -7319,6 +7332,7 @@ Commands:
   status [name]         Show PID, profile path, DevTools reachability, and targets
   login [url]           Launch a detached headed browser for manual sign-in
   attach [name]         Bind the current automation session to a runtime profile
+  history               Read a bounded page of archived completed session or tab records
 
 Locked profiles:
   If the default runtime profile is locked by a live browser PID and the task
@@ -7857,6 +7871,10 @@ Environment:
   AGENT_BROWSER_ENCRYPTION_KEY   64-char hex key for AES-256-GCM state encryption
   AGENT_BROWSER_STATE_EXPIRE_DAYS Auto-delete states older than N days (default: 30)
   AGENT_BROWSER_EXECUTABLE_PATH  Custom browser executable path
+  AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES Override adaptive launch reserve (default: max 1 GiB or 5% RAM)
+  AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS Memory-pressure wait budget, 0 through 60000 (default: 5000)
+  AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES Supervisor soft memory threshold (default: 25% RAM; no hard cap)
+  AGENT_BROWSER_TERMINAL_HISTORY_LIMIT Recent unreferenced records per kind in active memory (default: 1000)
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.
