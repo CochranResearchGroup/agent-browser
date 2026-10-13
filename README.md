@@ -4255,6 +4255,13 @@ Managed tasks sharing one browser preserve the currently visible tab when
 another task reads its title or URL; an explicit focus operation selects it.
 After a managed task closes, replaying its retained tab-creation request returns
 `browser_session_tab_request_target_closed` and does not launch a replacement.
+On retained session browser routes, authenticated operator focus requests sharing
+a declared desktop queue in
+admission order across clients and runtime lanes within one host. The queue
+holds through native selection, and the operator proof is checked again after
+waiting. Different desktop allocations remain independent. Waiting uses the
+request timeout, or ten seconds when none is supplied; inspect pending focus
+work before submitting another explicit selection after a wait expires.
 
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a

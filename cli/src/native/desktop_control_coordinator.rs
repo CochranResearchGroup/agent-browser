@@ -11,7 +11,9 @@ pub(crate) use agent_browser_desktop_services::{
 
 use super::desktop_input_provider::{RouteEffectFence, RouteEffectFenceIdentity};
 use super::service_model::ServiceState;
-use super::service_store::default_service_state_path;
+use super::service_store::{
+    default_service_state_path, LockedServiceStateRepository, ServiceStateRepository,
+};
 
 const CONTROLLER_MUTATION_FENCE_DEADLINE: Duration = Duration::from_secs(5);
 
@@ -21,6 +23,46 @@ pub(crate) struct DesktopControllerMutationGuard {
 }
 
 static DESKTOP_CONTROL_COORDINATOR: OnceLock<DesktopControlCoordinator> = OnceLock::new();
+static DESKTOP_SELECTION_COORDINATOR: OnceLock<
+    agent_browser_desktop_services::DesktopSelectionCoordinator,
+> = OnceLock::new();
+
+/// Queue authenticated operator selections by service-owned desktop identity
+/// before CDP preparation. Waiting does not grant or preserve input authority.
+pub(crate) async fn begin_service_operator_selection(
+    command: &serde_json::Value,
+) -> Result<agent_browser_desktop_services::DesktopSelectionGuard, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    super::stream::verify_operator_focus(&snapshot, command)?;
+    let route_id = command["routeId"]
+        .as_str()
+        .ok_or("operator_focus_binding_required: missing routeId")?;
+    let (root, identity) = service_route_fence_scope(&snapshot, route_id)?;
+    let scope = serde_json::to_string(&(
+        root,
+        identity.environment_id,
+        identity.display_allocation_id,
+    ))
+    .map_err(|_| "desktop_selection_scope_invalid")?;
+    let reservation = DESKTOP_SELECTION_COORDINATOR
+        .get_or_init(agent_browser_desktop_services::DesktopSelectionCoordinator::new)
+        .request(&scope)?;
+    let timeout = command
+        .get("serviceJobTimeoutMs")
+        .or_else(|| command.get("jobTimeoutMs"))
+        .and_then(serde_json::Value::as_u64)
+        .filter(|value| *value > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_secs(10));
+    let guard = tokio::task::spawn_blocking(move || reservation.wait(timeout))
+        .await
+        .map_err(|_| "desktop_selection_wait_failed")??;
+    // Another route operation may have changed this proof while it waited.
+    // Reject it before binding or activating any browser target.
+    super::stream::verify_operator_focus(&repository.load_snapshot()?, command)?;
+    Ok(guard)
+}
 
 pub(crate) fn global_desktop_control_coordinator() -> &'static DesktopControlCoordinator {
     DESKTOP_CONTROL_COORDINATOR.get_or_init(DesktopControlCoordinator::new)

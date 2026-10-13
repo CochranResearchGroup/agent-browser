@@ -6,6 +6,7 @@
 mod candidate_event_plan;
 mod candidate_intent;
 mod coordinator;
+mod selection;
 mod transaction;
 
 pub use candidate_event_plan::*;
@@ -14,4 +15,5 @@ pub use coordinator::{
     DesktopControlCoordinator, DesktopControlEventGuard, DesktopControllerMutationGuard,
     DesktopInteractionClaim,
 };
+pub use selection::{DesktopSelectionCoordinator, DesktopSelectionGuard, DesktopSelectionRequest};
 pub use transaction::*;

@@ -78,6 +78,12 @@ title and URL reads. Use explicit focus to select the task's tab for a person.
 Retained tab-creation replay after managed task closure returns
 `browser_session_tab_request_target_closed`. Treat this as a closed task; the
 replay does not authorize a replacement browser.
+On retained session browser routes, authenticated operator focus shares a native
+selection queue for each declared desktop within one host, including requests
+from separate clients or runtime lanes. The host rechecks the operator proof after waiting. Different desktop
+allocations remain independent. Waits use the request timeout, with a ten-second
+default; inspect pending focus work before a new explicit selection if waiting
+expires.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's

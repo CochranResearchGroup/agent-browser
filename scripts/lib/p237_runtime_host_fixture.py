@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False, cross_client_focus=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -234,6 +234,26 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         peer = 'p237-beta' if session == 'p237-alpha' else 'p237-alpha'
         assert inventory(state['browsers'][f'session:{peer}']) == inventories[f'session:{peer}'], 'native selection changed the peer targets or documents'
         assert json.loads(manifest_path.read_text()) == manifest, 'source host identity changed during selection'
+    if cross_client_focus:
+        # Warm the source debug binary's immutable failure identity outside the
+        # timed workload with a harmless nonexistent-route rejection.
+        endpoint = next(path for path in sockets.iterdir() if path.is_socket()
+                        and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
+        def native_control(action, lane, **params):
+            command = {'id':'p237-cross-client-native-control','action':action,
+                       '_agentBrowserAuthToken':token,'_agentBrowserRuntimeLane':lane,**params}
+            with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as connection:
+                connection.settimeout(35)
+                connection.connect(str(endpoint))
+                connection.sendall((json.dumps(command)+'\n').encode())
+                with connection.makefile('rb') as reader:
+                    return json.loads(reader.readline())
+        warmed = native_control('service_controller_lease_takeover','default',
+                                routeId='p237-nonexistent-warm-route',viewerLeaseId='p237-nonexistent-viewer')
+        (artifacts/'source-cross-client-failure-warmup.json').write_text(json.dumps(warmed,indent=2)+'\n')
+        assert not warmed.get('success'), 'nonexistent warmup route was accepted'
+        from lib.p237_cross_client_focus_fixture import run_cross_client_focus_fixture
+        run_cross_client_focus_fixture(spawn,env,artifacts,state,source_http,cookie,state_path,cross_client_focus,native_control)
     if ui_bundle:
         identities = []
         for session in ['p237-alpha', 'p237-beta']:
