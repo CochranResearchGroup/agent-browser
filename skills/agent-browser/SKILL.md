@@ -84,6 +84,9 @@ from separate clients or runtime lanes. The host rechecks the operator proof aft
 allocations remain independent. Waits use the request timeout, with a ten-second
 default; inspect pending focus work before a new explicit selection if waiting
 expires.
+Managed view_focus marked as an operator request also requires current authenticated
+operator authority. An unbound request is rejected before selecting its target;
+ordinary explicit managed focus keeps its existing behavior.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's

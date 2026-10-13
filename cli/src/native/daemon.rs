@@ -726,12 +726,29 @@ impl RuntimeHostRouter {
                 if browser_session_focus_command(&command, &state).is_none() {
                     return Ok(None);
                 }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             } else if host
                 .as_ref()
                 .is_none_or(|host| browser_session_focus_command(&command, host.state()).is_none())
             {
                 return Ok(None);
+            }
+            // Keep the original view_focus action while checking its signed
+            // operator binding. Rewriting it first would bypass that admission.
+            if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+                use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+                let admission = LockedServiceStateRepository::default_json()
+                    .and_then(|repository| repository.load_snapshot())
+                    .and_then(|snapshot| super::stream::verify_operator_focus(&snapshot, &command));
+                if let Err(error) = admission {
+                    return Ok(Some(serde_json::json!({
+                        "id": command["id"].as_str().unwrap_or(""),
+                        "success": false,
+                        "error": error,
+                    })));
+                }
+            }
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             }
             let command = browser_session_focus_command(
                 &command,

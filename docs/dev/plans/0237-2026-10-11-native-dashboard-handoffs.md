@@ -520,3 +520,13 @@ The original two-client ordering oracle passes with provider-neutral desktop res
 Native queued cancellation and successor selection pass on the same source pin with zero residue. The wrong service_request cancellation probe remains a setup failure; public job-cancel endpoint routing is not qualified by the native Unix cancellation proof.
 
 Spec review limits the new operator sequencing guidance to qualified retained session browser routes. Authenticated managed operator-focus composition remains an independent acceptance boundary.
+
+
+### Managed operator admission RED and source coordination
+
+The actual authenticated native managed view_focus probe is RED against b4476c30 source: an operator-marked request with no current managed route/controller binding and a deliberately invalid proof returns success and changes physical Alice to Bob. /tmp/p237-managed-operator-proof-red-artifacts-20261013 retains the native reply, both scenes, exact target inventory and empty cleanup. This establishes missing operator admission, not a positive managed proof issuance workflow. P237 is the primary writer only for operator-marked managed focus admission in the daemon adapter and its synthetic native fixture. Reuse the existing signed operator verifier before conversion to browser_session_focus; leave ordinary manager focus, P238 routing/admission/replay and P240 resource/lifecycle mechanics unchanged. Positive public managed proof issuance, cross-client ordering and effect-time managed fencing remain unqualified.
+
+Fresh foreign inventory identifies platform/resource-bounds-105 at canonical main 65368991 with P240 dirty resource/lifecycle and guidance work. Preserve it. P237 owns only its operator-focus guidance paragraphs and plan/catalog entry; P240 owns resource-bound/terminal-history surfaces. These parallel guidance changes are an explicit overlap dependency requiring source reconciliation before canonical integration. Do not import or edit foreign work.
+
+
+The original managed operator admission oracle is GREEN against c8f9e5d7 source pin, with the caller's request ID preserved. Ordinary native focus and the combined metadata/peer/replay/scoped/last-close workflow pass in 21.90 seconds with fresh zero residue. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) retains both admission and missing-response-ID REDs, final gates and review. This closes the unbound native admission gap; positive public managed proof issuance, managed effect fencing/ordering and the full P237 outcome remain unqualified.

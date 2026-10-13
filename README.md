@@ -4262,6 +4262,9 @@ holds through native selection, and the operator proof is checked again after
 waiting. Different desktop allocations remain independent. Waiting uses the
 request timeout, or ten seconds when none is supplied; inspect pending focus
 work before submitting another explicit selection after a wait expires.
+Managed view_focus marked as an operator request also requires current authenticated
+operator authority. An unbound request is rejected before selecting its target;
+ordinary explicit managed focus keeps its existing behavior.
 
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a

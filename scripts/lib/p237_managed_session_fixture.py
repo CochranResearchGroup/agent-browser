@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False):
+def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False, operator_proof=False):
     endpoint = next(path for path in sockets.iterdir() if path.is_socket()
                     and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
     profile = root/'managed-profile'
@@ -119,6 +119,19 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
             assert observed['data'][action] == expected, 'managed lane read a peer target'
             assert after == before, 'managed read changed physical foreground'
             assert targets() == preserved, 'managed read changed peer targets'
+    if operator_proof:
+        expected_id = f'p237-managed-{len(replies)}'
+        denied = request('p237-managed-bob','view_focus',require_success=False,
+                         browserId=browser_id,targetId=bob_page['browserSession']['targetId'],
+                         operatorFocus=True,operatorFocusProofToken='synthetic-invalid-p237-proof',
+                         routeId='synthetic-missing-managed-route',
+                         controllerLeaseId='synthetic-missing-managed-controller')
+        after = foreground()
+        (artifacts/'managed-invalid-operator-focus.json').write_text(json.dumps({
+            'reply':denied,'before':before,'after':after,'targets':targets()},indent=2)+'\n')
+        assert not denied.get('success') and 'operator_focus' in denied.get('error',''), 'managed native focus accepted an invalid operator proof'
+        assert denied.get('id') == expected_id, 'managed operator denial lost its request identity'
+        assert after == before and targets() == preserved, 'rejected managed operator focus changed the desktop or targets'
     selections = []
     for lane,page,title in [('p237-managed-bob',bob_page,'P237 managed Bob'),
                             ('p237-managed-alice',alice_page,'P237 managed Alice')]:
