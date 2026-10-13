@@ -1842,7 +1842,15 @@ where
             .sessions
             .values()
             .any(|task| task.name == session_name);
-        if (automatic || existing_task) && command["action"] == "tab_new" {
+        // Last-task closure must not turn a retained creation replay into a
+        // fresh fallback launch. The existing validator owns identity conflicts,
+        // uncertain outcomes and closed-target rejection.
+        let retained_tab_request = command
+            .get("tabRequestId")
+            .or_else(|| command.get("id"))
+            .and_then(serde_json::Value::as_str)
+            .is_some_and(|id| self.state.managed_tab_requests.contains_key(id));
+        if (automatic || existing_task || retained_tab_request) && command["action"] == "tab_new" {
             return self
                 .execute_managed_tab_new(session_name, command)
                 .map(Some);

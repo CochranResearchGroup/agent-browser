@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False, managed_replay=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -96,7 +96,7 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     (artifacts / 'runtime-host-observation.json').write_text(json.dumps(manifest, indent=2) + '\n')
     if managed_session:
         from lib.p237_managed_session_fixture import run_managed_session_fixture
-        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log)
+        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay)
         return
 
     def command(session, *arguments):

@@ -4253,6 +4253,8 @@ still activate the addressed target. This lets background metadata reads
 preserve the person's foreground desktop.
 Managed tasks sharing one browser preserve the currently visible tab when
 another task reads its title or URL; an explicit focus operation selects it.
+After a managed task closes, replaying its retained tab-creation request returns
+`browser_session_tab_request_target_closed` and does not launch a replacement.
 
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a

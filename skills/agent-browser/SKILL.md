@@ -75,6 +75,9 @@ when the person should see that target. Child ownership and permissions still
 apply to background reads.
 Managed tasks sharing one browser also preserve the visible peer tab during
 title and URL reads. Use explicit focus to select the task's tab for a person.
+Retained tab-creation replay after managed task closure returns
+`browser_session_tab_request_target_closed`. Treat this as a closed task; the
+replay does not authorize a replacement browser.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's

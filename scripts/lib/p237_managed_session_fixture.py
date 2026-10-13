@@ -8,14 +8,14 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log):
+def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False):
     endpoint = next(path for path in sockets.iterdir() if path.is_socket()
                     and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
     profile = root/'managed-profile'
     profile.mkdir(mode=0o700)
     replies = []
 
-    def request(lane, action, **params):
+    def request(lane, action, require_success=True, **params):
         command = {'id':f'p237-managed-{len(replies)}', 'action':action,
                    '_agentBrowserAuthToken':token, '_agentBrowserRuntimeLane':lane,
                    'sessionName':lane, 'runtimeProfile':'p237-managed-profile',
@@ -28,14 +28,18 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
                 reply = json.loads(reader.readline())
         replies.append({'lane':lane,'action':action,'reply':reply})
         (artifacts/'managed-native-replies.json').write_text(json.dumps(replies,indent=2)+'\n')
-        assert reply.get('success'), f'managed native {action} failed: {reply}'
+        if require_success:
+            assert reply.get('success'), f'managed native {action} failed: {reply}'
         return reply
 
     alice = request('p237-managed-alice','browser_session_open',profileId='p237-managed-profile')
     alice_page = request('p237-managed-alice','navigate',url='data:text/html,<title>P237 managed Alice</title><p>Alice</p>')
     bob = request('p237-managed-bob','browser_session_open',profileId='p237-managed-profile')
     assert alice['data']['browserId'] == bob['data']['browserId'], 'managed peers created duplicate browsers'
-    bob_page = request('p237-managed-bob','navigate',url='data:text/html,<title>P237 managed Bob</title><p>Bob</p>')
+    bob_command = {'url':'data:text/html,<title>P237 managed Bob</title><p>Bob</p>'}
+    if replay_after_close:
+        bob_command['tabRequestId'] = 'p237-managed-stable-request'
+    bob_page = request('p237-managed-bob','tab_new' if replay_after_close else 'navigate',**bob_command)
     state = request('p237-managed-alice','browser_session_status')['data']
     browser_id = alice['data']['browserId']
     browser = state['browsers'][browser_id]
@@ -60,6 +64,12 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
                         bob_page['browserSession']['targetId']:'P237 managed Bob'}
     assert all(any(tab['id'] == target_id and tab['title'] == title for tab in preserved)
                for target_id,title in expected_targets.items()), 'managed documents missing from Chrome'
+    if replay_after_close:
+        live_replay = request('p237-managed-bob','tab_new',**bob_command)
+        assert live_replay['browserSession'] == bob_page['browserSession'] and targets() == preserved, 'live replay changed target identity or created a duplicate'
+        conflicting = request('p237-managed-alice','tab_new',require_success=False,**bob_command)
+        assert not conflicting.get('success') and conflicting.get('error') == 'browser_session_tab_request_conflict', 'peer lane adopted a retained request'
+        assert targets() == preserved, 'conflicting replay changed peer targets'
     request('p237-managed-alice','browser_session_focus',browserId=browser_id,
             targetId=alice_page['browserSession']['targetId'])
     def foreground():
@@ -105,5 +115,25 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
         time.sleep(0.025)
     final = request('p237-managed-alice','browser_session_status')['data']
     assert not final['browsers'] and not final['tabs'] and not final['sessions'], 'managed close left live logical resources'
+    if replay_after_close:
+        replay = request('p237-managed-bob','tab_new',require_success=False,**bob_command)
+        (artifacts/'managed-after-close-replay.json').write_text(json.dumps(replay,indent=2)+'\n')
+        assert not replay.get('success') and replay.get('error') == 'browser_session_tab_request_target_closed', 'closed managed request replay was not rejected at its owning boundary'
+        after_replay = request('p237-managed-bob','browser_session_status')['data']
+        profile_processes = []
+        for process in Path('/proc').iterdir():
+            if not process.name.isdecimal():
+                continue
+            try:
+                if f'--user-data-dir={profile}'.encode() in (process/'cmdline').read_bytes().split(b'\0'):
+                    profile_processes.append(int(process.name))
+            except OSError:
+                continue
+        (artifacts/'managed-replay-no-effect.json').write_text(json.dumps({
+            'browserIds':sorted(after_replay['browsers']),
+            'tabIds':sorted(after_replay['tabs']),
+            'sessionIds':sorted(after_replay['sessions']),
+            'profileProcessIds':profile_processes},indent=2)+'\n')
+        assert not after_replay['browsers'] and not after_replay['tabs'] and not after_replay['sessions'] and not profile_processes, 'closed replay created a new logical or physical browser'
     workflow_log.write('runtime-host-workflow: passed\n')
     workflow_log.flush()
