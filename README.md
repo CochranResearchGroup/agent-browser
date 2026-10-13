@@ -4241,6 +4241,12 @@ the `profile_access` axis, `child_admission` phase, and
 lease `viewerId` with the interaction `agentName` before any new attempt. Never
 change identity labels to borrow controller authority.
 
+Controller takeover rejected with `desktop_input_route_fence_contended` reports
+the exact code, `file_lock_wait`, and `no_effect` before authority changes.
+Inspect Service status and trace to resolve contention before a new attempt;
+`inspect_before_retry` does not authorize automatic replay. The same error from
+other actions remains conservative because earlier effects may have occurred.
+
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
 successful retryable convergence response. Inspect the profile recovery plan

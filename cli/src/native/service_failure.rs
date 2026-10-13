@@ -36,8 +36,38 @@ pub fn attach_service_failure_recourse(response: &mut Value) {
     }
 }
 
+/// Qualify pre-effect controller-takeover fence rejection using the action
+/// boundary. The same fence error from a compound input action stays uncertain.
 pub fn attach_service_failure_recourse_for_action(response: &mut Value, action: &str) {
     attach_service_failure_recourse(response);
+    if action == "service_controller_lease_takeover"
+        && response.get("success").and_then(Value::as_bool) == Some(false)
+        && response.get("error").and_then(Value::as_str)
+            == Some("desktop_input_route_fence_contended")
+    {
+        if let Some(failure) = response.get_mut("failure") {
+            if let Ok(mut recourse) =
+                serde_json::from_value::<ServiceFailureRecourse>(failure.clone())
+            {
+                recourse.code = "desktop_input_route_fence_contended".to_string();
+                recourse.axis = ServiceFailureAxis::ServiceState;
+                recourse.phase = ServiceFailurePhase::FileLockWait;
+                recourse.effect_state = ServiceEffectState::NoEffect;
+                recourse.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+                recourse.recommended_action = "inspect_desktop_controller_contention".to_string();
+                recourse.reuse_allowed = false;
+                recourse.safe_next_actions = vec![
+                    "inspect_service_status".to_string(),
+                    "inspect_service_trace".to_string(),
+                ];
+                recourse.hard_stops = vec!["blind_retry".to_string()];
+                if let Ok(value) = serde_json::to_value(recourse) {
+                    *failure = value;
+                }
+            }
+        }
+        return;
+    }
     if !matches!(
         action,
         "service_profiles" | "service_sessions" | "service_browsers"
@@ -85,6 +115,48 @@ pub fn attach_service_failure_recourse_for_action(response: &mut Value, action: 
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn controller_takeover_fence_recourse_is_action_and_error_bound() {
+        for action in [
+            "service_controller_lease_takeover",
+            "desktop_input",
+            "view_focus",
+        ] {
+            for error in [
+                "desktop_input_route_fence_contended",
+                "wrapper: desktop_input_route_fence_contended",
+                "desktop_input_effect_uncertain",
+            ] {
+                let mut response = json!({"success":false,"id":"fence-job","error":error});
+                attach_service_failure_recourse_for_action(&mut response, action);
+                let qualified = action == "service_controller_lease_takeover"
+                    && error == "desktop_input_route_fence_contended";
+                assert_eq!(
+                    response["failure"]["effectState"],
+                    if qualified {
+                        "no_effect"
+                    } else {
+                        "effect_uncertain"
+                    }
+                );
+                assert_eq!(
+                    response["failure"]["retryDisposition"],
+                    "inspect_before_retry"
+                );
+                assert_eq!(response["failure"]["reuseAllowed"], false);
+                assert_eq!(response["failure"]["jobId"], "fence-job");
+                if qualified {
+                    assert_eq!(response["failure"]["code"], error);
+                    assert_eq!(response["failure"]["phase"], "file_lock_wait");
+                    assert_eq!(
+                        response["failure"]["recommendedAction"],
+                        "inspect_desktop_controller_contention"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn read_only_inventory_failure_reports_no_effect() {

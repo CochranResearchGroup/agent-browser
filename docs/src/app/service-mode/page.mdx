@@ -1318,6 +1318,13 @@ controller lease <code>viewerId</code> with the interaction
 <code>agentName</code> before any new attempt. Never change identity labels to
 borrow controller authority.
 
+Controller takeover rejected with <code>desktop_input_route_fence_contended</code>
+preserves that code and reports <code>file_lock_wait</code> and
+<code>no_effect</code> before authority mutation. Inspect Service status and
+trace and resolve the exact contention before a new attempt.
+<code>inspect_before_retry</code> does not authorize automatic replay. Other
+actions retain conservative recourse because earlier effects may have occurred.
+
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
 Compare the explicit session selector with the original handle, or use the

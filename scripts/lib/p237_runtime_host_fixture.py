@@ -255,6 +255,16 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
                 assert blocked['profiles'] == before_profiles
                 assert subprocess.check_output(['xdotool', 'getactivewindow'], env=env, text=True).strip() == active_before
                 assert all(inventory(browser) == inventories[browser_id] for browser_id, browser in state['browsers'].items())
+                assert contention['failure']['code'] == 'desktop_input_route_fence_contended', 'public contention lost its actionable failure code'
+                assert contention['failure']['effectState'] == 'no_effect', 'pre-authority contention incorrectly advertises uncertain effects'
+                assert contention['failure']['phase'] == 'file_lock_wait'
+                assert contention['failure']['retryDisposition'] == 'inspect_before_retry'
+                assert contention['terminalOutcome']['effectState'] == 'no_effect'
+                terminal_job = blocked['jobs'][contention['id']]
+                assert terminal_job['failure'] == contention['failure']
+                assert terminal_job['terminalOutcome'] == contention['terminalOutcome']
+                assert any(event.get('terminalOutcome') == contention['terminalOutcome']
+                           for event in blocked['events']), 'public contention outcome absent from durable Service events'
             finally:
                 fcntl.flock(fence, fcntl.LOCK_UN)
             # The failure says inspect_before_retry. Inspection above proves

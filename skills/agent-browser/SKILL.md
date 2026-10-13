@@ -63,6 +63,12 @@ the installed CLI to continue the task while integration is corrected; server
 
 Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
 
+For controller takeover, `desktop_input_route_fence_contended` reports
+`file_lock_wait` and `no_effect` before authority mutation. Inspect Service
+status and trace, then resolve the exact contention before any new attempt.
+`inspect_before_retry` does not authorize automatic replay. Other actions may
+have earlier effects and retain conservative failure recourse.
+
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's
 profile and named session explicitly; preserve peers and stored authentication.
