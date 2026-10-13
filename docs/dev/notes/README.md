@@ -94,6 +94,7 @@ reuse after those contracts are frozen.
 ## PL-PLATFORM | Architecture and Infrastructure
 
 - [Public handoff native-use context repair](0237-2026-10-12-public-native-use-context.md)
+- [Retained native handoff URL recovery diagnosis](0237-2026-10-12-retained-url-recovery-diagnosis.md)
 
 - [Production upgrade qualification](2026-10-06-production-upgrade-decision.md): compatibility repairs and exact-pair development acceptance pass; production awaits the interactive helper contract refresh tracked by issue 218.
 

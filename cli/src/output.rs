@@ -7916,7 +7916,7 @@ Environment:
                                  Managed tab_new retains one request; params.tabRequestId is a stable service retry key.
                                  Unknown creation remains pending across restart and requires exact readback.
                                  Select an exact catalog profile with --runtime-profile; omitted selectors use a disposable profile, including remote-view open.
-                                 Closed or expired links return HTTP 410 with guidance; a closed task needs a new handoff.
+                                 Expired links return HTTP 410; a valid link can recreate an expired target through native authenticated recovery.
                                  Managed JSON responses include browserSession identity; successful navigation records durable URL history.
                                  Remote View retains browserSession.handoffId and a durable dashboard-relative handoffUrl for the exact tab.
                                  Resolving that ID retains provider view issuance; status stays converging until tab visibility is proved.
@@ -7924,6 +7924,9 @@ Environment:
   AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN Reviewed external HTTPS origin for click-driven top-level viewing.
                                  The authenticated handoff page opens an already-published grant; browser lifecycle needs no public origin.
                                  Managed open readiness joins addressed-tab owned-window proof with current installed Remote View transport and matching public HTTPS origin. Viewer pixels/input require live acceptance.
+  AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE Dedicated private bearer file for Remote View's loopback native-resume callback.
+                                 Match REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE in the gateway; configure its numeric-loopback REMOTE_VIEW_AGENT_BROWSER_HANDOFF_ENDPOINT.
+                                 The public locator stays read-only. Native authentication precedes recovery; browser cookies cannot authorize the callback.
   AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY
                                  Host browser discovery: enabled (default) or disabled. Invalid explicit values disable discovery. Development runtime pins disabled.
   AGENT_BROWSER_DEV_NAMESPACE    Optional isolated development-script namespace (1-8 lowercase letters/digits, starting with a letter). Requires seven explicit development port bindings; see configuration docs.

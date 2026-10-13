@@ -4640,6 +4640,16 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         fixture.store(false).load_session_state().unwrap(),
         "public presentation reader must observe the actual owner database"
     );
+    // Keep one peer so recovery does not also exercise last-browser closure
+    // and pool reassignment, which the composed bridge snapshot cannot model.
+    let recovery_peer = descriptor["publicRecovery"].as_bool().unwrap_or(false).then(|| {
+        let peer = consumer.execute_managed_command("Bob", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/recovery-peer", "profileId":"profile-a",
+            "activityAtMs":now()
+        })).unwrap().unwrap();
+        assert_eq!(peer["browserSession"]["browserId"], opened["browserSession"]["browserId"]);
+        peer
+    });
     let public_http = descriptor["publicHttp"].as_bool().unwrap_or(false);
     let public_locator = descriptor["publicLocator"].as_bool().unwrap_or(false);
     let public_html = descriptor["publicHtml"].as_bool().unwrap_or(false);
@@ -4789,7 +4799,91 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
     );
     assert_eq!(calls.get(), 1);
     assert!(provider.borrow().view_requests.is_empty());
-    std::fs::write(status_path,serde_json::to_vec(&serde_json::json!({"stage":"confirmed","correlationId":correlation,"handoffId":id,"pendingHuman":false,"firstHumanUseAtMs":first,"providerUseAtMs":observation.used.as_ref().unwrap().recorded_at_ms,"replayStatus":replay["data"]["status"]})).unwrap()).unwrap();
+    std::fs::write(&status_path,serde_json::to_vec(&serde_json::json!({"stage":"confirmed","correlationId":correlation,"handoffId":id,"pendingHuman":false,"firstHumanUseAtMs":first,"providerUseAtMs":observation.used.as_ref().unwrap().recorded_at_ms,"replayStatus":replay["data"]["status"]})).unwrap()).unwrap();
+    if descriptor["publicRecovery"].as_bool().unwrap_or(false) {
+        assert!(public_html);
+        let configured = consumer.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"set_tab_lifetime", "tabInactivityMs":1,"activityAtMs":now()
+        }));
+        assert_eq!(configured["success"], true, "{configured}");
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        let expired = consumer.reap(now()).unwrap();
+        assert!(expired.expired_tab_ids.contains(&tab.to_owned()));
+        let state = fixture.store(false).load_session_state().unwrap();
+        assert!(!state.tabs.contains_key(tab));
+        let peer = recovery_peer.as_ref().unwrap();
+        let peer_tab = peer["browserSession"]["tabId"].as_str().unwrap();
+        assert!(state.tabs.contains_key(peer_tab));
+        assert_eq!(
+            state.tabs[peer_tab].target_id,
+            peer["browserSession"]["targetId"].as_str().unwrap()
+        );
+        state.remote_view_tab_handoffs[id]
+            .check_link_at(now())
+            .unwrap();
+        let current_tab = &consumer.state().remote_view_tab_handoffs[id].tab_id;
+        std::fs::write(
+            &status_path,
+            serde_json::to_vec(&serde_json::json!({
+                "stage":"expired", "handoffId":id, "linkValid":true,
+                "tabPresentAtExpiry":false, "firstHumanUseAtMs":first,
+
+                "peerTabPresent":true,
+                "currentTabPresent":consumer.state().tabs.contains_key(current_tab)
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        // Keep the real public HTTP reader and owner alive for the next opaque
+        // navigation. No test-side resolve or context preparation repairs it.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(35);
+        while std::time::Instant::now() < deadline {
+            if status_path.with_extension("done").exists() {
+                let recovered = fixture.store(false).load_session_state().unwrap();
+                let current_tab = &recovered.remote_view_tab_handoffs[id].tab_id;
+                assert!(recovered.tabs.contains_key(current_tab));
+                assert_eq!(
+                    recovered.tab_metadata[current_tab].first_human_use_at_ms,
+                    Some(first)
+                );
+                assert_eq!(
+                    recovered.tabs[peer_tab].target_id,
+                    peer["browserSession"]["targetId"].as_str().unwrap()
+                );
+                assert_eq!(
+                    calls.get(),
+                    1,
+                    "peer-preserving recovery launched another browser"
+                );
+                if !recovered.pending_human_tabs.contains_key(current_tab) {
+                    std::fs::write(
+                        &status_path,
+                        serde_json::to_vec(&serde_json::json!({
+                            "stage":"confirmed","correlationId":correlation,"handoffId":id,
+                            "pendingHuman":false,"firstHumanUseAtMs":first,
+                            "providerUseAtMs":observation.used.as_ref().unwrap().recorded_at_ms,
+                            "replayStatus":replay["data"]["status"],
+                            "recoveredTargetPresent":true
+                        }))
+                        .unwrap(),
+                    )
+                    .unwrap();
+                    return;
+                }
+            }
+            if let Ok(NativePublicEvent::Command(command, reply)) = public
+                .as_ref()
+                .unwrap()
+                .events
+                .recv_timeout(std::time::Duration::from_millis(100))
+            {
+                let result = consumer.handle_command(&command);
+                reply.send(result).unwrap();
+            }
+        }
+        panic!("retained opaque URL never recovered its expired target");
+    }
 }
 
 #[cfg(unix)]
@@ -4951,6 +5045,53 @@ impl NativePublicHarness {
                 listener,
             ));
             if server_only {
+                if std::env::var_os("AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE").is_some() {
+                    let before = BrowserSessionSqliteStore::default_sqlite()
+                        .unwrap()
+                        .load_session_state()
+                        .unwrap();
+                    let token = std::fs::read_to_string(
+                        std::env::var_os("AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE").unwrap(),
+                    )
+                    .unwrap();
+                    let client = reqwest::Client::builder()
+                        .no_proxy()
+                        .redirect(reqwest::redirect::Policy::none())
+                        .build()
+                        .unwrap();
+                    for case in 0..3 {
+                        let mut request = client
+                            .post(format!("{origin}/api/native-remote-view/{handoff}/resume"))
+                            .header("content-length", "0")
+                            .bearer_auth(if case == 0 {
+                                "incorrect-synthetic-capability-1234567890"
+                            } else {
+                                token.trim_end()
+                            });
+                        if case != 2 {
+                            request = request.header("x-remote-view-operator", "operator-example");
+                        }
+                        if case == 1 {
+                            request = request.header("cookie", "fixture_session=operator");
+                        }
+                        assert_eq!(
+                            request.send().await.unwrap().status().as_u16(),
+                            403,
+                            "invalid private callback reached recovery"
+                        );
+                        assert_eq!(
+                            BrowserSessionSqliteStore::default_sqlite()
+                                .unwrap()
+                                .load_session_state()
+                                .unwrap(),
+                            before
+                        );
+                        assert!(
+                            events.try_recv().is_err(),
+                            "denied callback reached the daemon"
+                        );
+                    }
+                }
                 return origin;
             }
             let server_origin = origin.clone();

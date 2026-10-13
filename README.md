@@ -53,7 +53,7 @@ Choose `profileMode: "existing"` to require an already registered profile. Choos
 
 Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
 
-The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability.
 
 After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
 
@@ -5962,6 +5962,26 @@ checks the desktop's current Agent Browser assignment and lifecycle generation,
 and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
+
+When a still-valid link has lost its retained target, the read-only public locator
+redirects to Remote View's native authenticated recovery continuation. The native
+gateway rejects prefetch and non-document requests, authenticates the operator,
+and requests recovery from the browser owner before redirecting to the current
+native viewer. Keep the same opaque link. Recovery restores the retained task URL;
+it does not restore lost in-memory page state or record successful human use.
+
+For this optional private integration, configure
+`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE` on the Agent Browser dashboard process
+and `REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE` on the Remote View gateway to
+reference the same dedicated private bearer file. Use an absolute regular file
+owned by the service user with no group or other permissions. Configure
+`REMOTE_VIEW_AGENT_BROWSER_HANDOFF_ENDPOINT` with the dashboard's explicit numeric
+loopback HTTP origin and port. Never expose the capability or callback as an
+operator link. The callback accepts only the fixed native-resume request from the
+authenticated gateway; browser cookies do not authenticate it. Missing or invalid
+configuration fails closed. Source qualification does not activate installed
+configuration or ingress.
+
 Remote View owns viewer authentication, input and viewer lifetime. Existing
 consumer-grant records are not access requirements for this desktop link.
 Keep the durable Agent Browser handoff as the bookmark so current placement

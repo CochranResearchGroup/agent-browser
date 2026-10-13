@@ -399,6 +399,71 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         return;
     }
 
+    // Capability-gated private native continuation. Browser cookies never
+    // authenticate this route and the public opaque GET remains read-only.
+    if path.starts_with("/api/native-remote-view/") {
+        let Some(id) = super::remote_view_presentation::native_resume_id(path) else {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_handoff_path_invalid",
+            )
+            .await;
+            return;
+        };
+        if method != "POST"
+            || query.is_some()
+            || header_str
+                .split_once("\r\n\r\n")
+                .is_none_or(|(_, body)| !body.is_empty())
+        {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_native_callback_invalid",
+            )
+            .await;
+            return;
+        }
+        let operator = match stream
+            .peer_addr()
+            .map(|peer| peer.ip())
+            .map_err(|_| "remote_view_native_callback_denied".to_owned())
+            .and_then(|peer| {
+                super::remote_view_presentation::native_resume_operator(peer, &headers)
+            }) {
+            Ok(operator) => operator,
+            Err(_) => {
+                write_json_error(
+                    &mut stream,
+                    "403 Forbidden",
+                    "remote_view_native_callback_denied",
+                )
+                .await;
+                return;
+            }
+        };
+        let navigation = vec![
+            ("Sec-Fetch-Mode".into(), "navigate".into()),
+            ("Sec-Fetch-Dest".into(), "document".into()),
+        ];
+        let response = match super::remote_view_presentation::resolve_location(
+            id,
+            Some(&operator),
+            &navigation,
+        )
+        .await
+        {
+            Ok(location) => {
+                let body = json!({"schemaVersion":1,"location":location}).to_string();
+                format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+            }
+            Err(reason) => super::remote_view_presentation::failure_response(&reason, false),
+        };
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+
     let authenticated_dashboard_user = if path.starts_with("/api/") {
         match dashboard_auth::authenticate_headers(&headers) {
             Ok(Some(identity)) => Some(identity.username),

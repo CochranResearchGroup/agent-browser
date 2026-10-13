@@ -661,6 +661,26 @@ checks the desktop's current Agent Browser assignment and lifecycle generation,
 and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
+
+When a still-valid link has lost its retained target, the read-only public locator
+redirects to Remote View's native authenticated recovery continuation. The native
+gateway rejects prefetch and non-document requests, authenticates the operator,
+and requests recovery from the browser owner before redirecting to the current
+native viewer. Keep the same opaque link. Recovery restores the retained task URL;
+it does not restore lost in-memory page state or record successful human use.
+
+For this optional private integration, configure
+`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE` on the Agent Browser dashboard process
+and `REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE` on the Remote View gateway to
+reference the same dedicated private bearer file. Use an absolute regular file
+owned by the service user with no group or other permissions. Configure
+`REMOTE_VIEW_AGENT_BROWSER_HANDOFF_ENDPOINT` with the dashboard's explicit numeric
+loopback HTTP origin and port. Never expose the capability or callback as an
+operator link. The callback accepts only the fixed native-resume request from the
+authenticated gateway; browser cookies do not authenticate it. Missing or invalid
+configuration fails closed. Source qualification does not activate installed
+configuration or ingress.
+
 Remote View owns viewer authentication, input and viewer lifetime. Existing
 consumer-grant records are not access requirements for this desktop link.
 Keep the durable Agent Browser handoff as the bookmark so current placement

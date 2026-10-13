@@ -63,6 +63,103 @@ pub(super) fn public_handoff_id(path: &str) -> Option<&str> {
     .then_some(id)
 }
 
+/// Private gateway callback, never a browser authentication alternative.
+pub(super) fn native_resume_id(path: &str) -> Option<&str> {
+    let id = path
+        .strip_prefix("/api/native-remote-view/")?
+        .strip_suffix("/resume")?;
+    (!id.is_empty()
+        && id.len() <= 128
+        && id
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_')))
+    .then_some(id)
+}
+
+/// Authenticate only the narrowly configured native gateway capability. Native
+/// authentication happens at Remote View; no cookie or caller-selected target
+/// reaches browser recovery through this callback.
+pub(super) fn native_resume_operator(
+    peer: std::net::IpAddr,
+    headers: &[(String, String)],
+) -> Result<String, String> {
+    if !peer.is_loopback()
+        || headers.iter().any(|(name, _)| {
+            name.eq_ignore_ascii_case("cookie") || name.eq_ignore_ascii_case("transfer-encoding")
+        })
+    {
+        return Err("remote_view_native_callback_denied".into());
+    }
+    let one = |name: &str| -> Result<&str, String> {
+        let mut values = headers
+            .iter()
+            .filter(|(key, _)| key.eq_ignore_ascii_case(name));
+        let value = values
+            .next()
+            .map(|(_, value)| value.trim())
+            .ok_or("remote_view_native_callback_denied")?;
+        if values.next().is_some() {
+            return Err("remote_view_native_callback_denied".into());
+        }
+        Ok(value)
+    };
+    if one("content-length")? != "0" {
+        return Err("remote_view_native_callback_denied".into());
+    }
+    let supplied = one("authorization")?
+        .strip_prefix("Bearer ")
+        .ok_or("remote_view_native_callback_denied")?;
+    let path = std::env::var_os("AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE")
+        .map(std::path::PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .ok_or("remote_view_native_callback_unconfigured")?;
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options
+        .open(&path)
+        .map_err(|_| "remote_view_native_callback_unconfigured")?;
+    let metadata = file
+        .metadata()
+        .map_err(|_| "remote_view_native_callback_unconfigured")?;
+    if !metadata.is_file() || metadata.len() > 257 {
+        return Err("remote_view_native_callback_unconfigured".into());
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o077 != 0 {
+            return Err("remote_view_native_callback_unconfigured".into());
+        }
+    }
+    use std::io::Read;
+    let mut token = String::new();
+    file.take(258)
+        .read_to_string(&mut token)
+        .map_err(|_| "remote_view_native_callback_unconfigured")?;
+    let token = token.strip_suffix('\n').unwrap_or(&token);
+    if !(32..=256).contains(&token.len()) || !token.bytes().all(|b| b.is_ascii_graphic()) {
+        return Err("remote_view_native_callback_unconfigured".into());
+    }
+    let different = token
+        .as_bytes()
+        .iter()
+        .zip(supplied.as_bytes())
+        .fold(0u8, |different, (a, b)| different | (a ^ b));
+    if token.len() != supplied.len() || different != 0 {
+        return Err("remote_view_native_callback_denied".into());
+    }
+    let operator = one("x-remote-view-operator")?;
+    if operator.is_empty() || operator.len() > 128 || operator.chars().any(char::is_control) {
+        return Err("remote_view_native_callback_denied".into());
+    }
+    Ok(operator.to_owned())
+}
+
 /// Read the current owned route without launching, recovering or focusing a browser.
 /// The destination's native Remote View authentication protects desktop access.
 pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> {
@@ -70,11 +167,39 @@ pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> 
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
     let id = id.to_string();
-    let (route, correlation) = tokio::task::spawn_blocking(move || {
-        crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(&id)
+    let handoff = id.clone();
+    let presentation = tokio::task::spawn_blocking(move || {
+        crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(&handoff)
     })
     .await
-    .map_err(|_| "remote_view_presentation_join_failed")??;
+    .map_err(|_| "remote_view_presentation_join_failed")?;
+    let (route, correlation) = match presentation {
+        Ok(presentation) => presentation,
+        Err(reason)
+            if matches!(
+                reason.as_str(),
+                "remote_view_tab_handoff_session_unavailable"
+                    | "remote_view_tab_handoff_tab_unavailable"
+                    | "remote_view_tab_handoff_browser_unavailable"
+            ) =>
+        {
+            // Validate retained intent afresh without starting its owner. Native
+            // authentication must precede the later recovery effect.
+            let state =
+                crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
+                    .load_session_state()?;
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "remote_view_clock_invalid")?
+                .as_millis() as u64;
+            agent_browser_service_model::remote_view_handoff_resume_intent(&state, &id, now_ms)?;
+            return origin
+                .join(&format!("/handoff/agent-browser/{id}"))
+                .map(|url| url.to_string())
+                .map_err(|_| "remote_view_presentation_path_invalid".into());
+        }
+        Err(reason) => return Err(reason),
+    };
     let mut location = url::Url::parse(&presentation_url(&origin, &route)?)
         .map_err(|_| "remote_view_presentation_path_invalid")?;
     if let Some(correlation) = correlation {
