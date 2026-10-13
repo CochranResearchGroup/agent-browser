@@ -57,9 +57,13 @@ fixture corrections, cleanup and executable provenance.
 
 #183 remains open. No workstation-wide plan/apply command with independent
 preserve/close/ambiguous dispositions has been qualified. Failed transaction
-ledger reconciliation, multiple generations, service/timer/container/listener
+ledger reconciliation, multiple generations, owned service/timer/listener
 shutdown, exact escalation, dead-lease reconciliation and partial retry remain
 unproven. An admission-drain fixture is not a failed installer transaction.
 The next delivery must define and exercise that terminal operation using current
 native ownership contracts, without extending P237's shared lifecycle work or
 introducing another authority ceremony.
+
+The issue's current review supersedes its historical helper/container checklist.
+Native Remote View and foreign lanes are preserved. Legacy privileged helper,
+Guacamole-container and global route shutdown are not acceptance requirements.
