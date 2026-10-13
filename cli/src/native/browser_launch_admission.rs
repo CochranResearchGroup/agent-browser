@@ -28,6 +28,9 @@ pub(crate) struct BrowserLaunchAdmission {
 }
 
 impl BrowserLaunchAdmission {
+    pub(crate) fn is_memory_pressure_only(&self) -> bool {
+        self.state != "admitted" && self.reasons.as_slice() == ["available_memory_below_floor"]
+    }
     pub(crate) fn require_admitted(&self) -> Result<(), String> {
         if self.state == "admitted" {
             Ok(())
@@ -175,11 +178,7 @@ fn wait_for_admission_with(
         if observation.state == "admitted" {
             return Ok(());
         }
-        if observation
-            .reasons
-            .iter()
-            .any(|reason| *reason != "available_memory_below_floor")
-        {
+        if !observation.is_memory_pressure_only() {
             return observation.require_admitted();
         }
         let spent = elapsed();

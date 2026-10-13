@@ -638,8 +638,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 Path::new("."),
                 None,
             )
-            .reasons
-            .contains(&"available_memory_below_floor")
+            .is_memory_pressure_only()
         {
             // Reuse only the owner reaper's established idle/expiry eligibility.
             // Existing task/profile continuation is never reclaimed here.
