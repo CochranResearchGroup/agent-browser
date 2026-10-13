@@ -497,3 +497,8 @@ The closed-lifecycle routing join is GREEN against the original native replay or
 ### Public same-window metadata qualification
 
 The exact-profile HTTP creator's granted background target can now be read while either Alpha's browser or Beta's original tab is physically selected. Independent raw CDP window IDs prove the same-window Beta case. All four title/URL requests preserve selected scenes and all peer documents; final source workflow passes in 29.14 seconds with ordinary close and fresh zero-residue evidence. The [native-selection note](../notes/0237-2026-10-12-native-selection-proof.md) records exact command, unchanged ec84c89d pin, raw identities and limits. No product change is required. Remaining provider/authority/UI/integration and navigator gates retain full P237 IN_PROGRESS.
+
+
+### Native tab property context qualification
+
+Actual managed tab_new preserves all eight supplied descriptive property fields before later navigation/inspection, which cannot replace the original context. Unknown human/origin/purpose fields stay unknown; labels are not identity proof. The stronger combined physical/replay fixture passes in 16.88 seconds against ec84c89d, with fresh zero residue and no product change. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) preserves the wrong-seam failures: browser_session_open has no allocated task tab yet. Native Properties UI and public/restart/recreation property composition remain open; full P237 remains IN_PROGRESS.

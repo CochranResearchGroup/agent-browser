@@ -32,8 +32,24 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
             assert reply.get('success'), f'managed native {action} failed: {reply}'
         return reply
 
+    supplied_metadata = {'serviceName':'P237SyntheticService','agentName':'P237SyntheticAgent',
+                         'humanName':'Synthetic Operator','originKind':'synthetic-fixture',
+                         'taskName':'Original Alice task','purpose':'Preserve original property context',
+                         'requestId':'synthetic-original-request','jobId':'synthetic-original-job'}
     alice = request('p237-managed-alice','browser_session_open',profileId='p237-managed-profile')
-    alice_page = request('p237-managed-alice','navigate',url='data:text/html,<title>P237 managed Alice</title><p>Alice</p>')
+    alice_created = request('p237-managed-alice','tab_new',
+                            url='data:text/html,<title>P237 managed Alice</title><p>Alice</p>',
+                            **supplied_metadata)
+    opened_state = request('p237-managed-alice','browser_session_status')['data']
+    opened_tab_id = alice_created['browserSession']['tabId']
+    created_metadata = opened_state.get('tabMetadata',{}).get(opened_tab_id)
+    (artifacts/'managed-created-task-metadata.json').write_text(json.dumps({
+        'tabId':opened_tab_id,'metadata':created_metadata},indent=2)+'\n')
+    assert created_metadata is not None and all(created_metadata[field] == value for field,value in supplied_metadata.items()), 'managed creation did not retain original task properties'
+    alice_page = request('p237-managed-alice','navigate',
+                         url='data:text/html,<title>P237 managed Alice</title><p>Alice</p>',
+                         serviceName='P237SyntheticInspector',agentName='Inspector',
+                         taskName='Navigate existing Alice',purpose='Continue without replacing origin')
     bob = request('p237-managed-bob','browser_session_open',profileId='p237-managed-profile')
     assert alice['data']['browserId'] == bob['data']['browserId'], 'managed peers created duplicate browsers'
     bob_command = {'url':'data:text/html,<title>P237 managed Bob</title><p>Bob</p>'}
@@ -41,6 +57,19 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
         bob_command['tabRequestId'] = 'p237-managed-stable-request'
     bob_page = request('p237-managed-bob','tab_new' if replay_after_close else 'navigate',**bob_command)
     state = request('p237-managed-alice','browser_session_status')['data']
+    alice_tab_id = alice_page['browserSession']['tabId']
+    original_metadata = state['tabMetadata'][alice_tab_id]
+    (artifacts/'managed-original-task-metadata.json').write_text(json.dumps(original_metadata,indent=2)+'\n')
+    assert all(original_metadata[field] == value for field,value in supplied_metadata.items()), 'native creation lost supplied task context'
+    assert original_metadata['attribution'] == 'supplied' and original_metadata['createdAtMs'] == state['tabs'][alice_tab_id]['createdAtMs']
+    assert original_metadata['firstHumanUseAtMs'] is None, 'agent creation fabricated human use'
+    request('p237-managed-alice','title',serviceName='P237SyntheticInspector',agentName='Inspector',
+            taskName='Inspect Alice',purpose='Read properties without replacing origin')
+    inspected = request('p237-managed-alice','browser_session_status')['data']['tabMetadata'][alice_tab_id]
+    (artifacts/'managed-inspected-task-metadata.json').write_text(json.dumps(inspected,indent=2)+'\n')
+    assert inspected == original_metadata, 'later inspection replaced original task context'
+    bob_metadata = state['tabMetadata'][bob_page['browserSession']['tabId']]
+    assert all(bob_metadata[field] is None for field in ['humanName','originKind','purpose']), 'missing descriptive metadata was inferred'
     browser_id = alice['data']['browserId']
     browser = state['browsers'][browser_id]
     pid = browser['pid']
