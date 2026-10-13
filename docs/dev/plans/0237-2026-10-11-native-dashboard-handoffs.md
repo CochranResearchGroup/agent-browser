@@ -492,3 +492,8 @@ Ranked hypotheses are retained identity lost at managed routing, validator incor
 
 
 The closed-lifecycle routing join is GREEN against the original native replay oracle and the unchanged provider-free assertion. The final real managed workflow passes in 16.47 seconds, including live replay identity preservation, peer-lane conflict denial, metadata foreground preservation, explicit focus, scoped/last close and closed replay rejection with no replacement process. The [source receipt](../notes/0237-2026-10-12-native-selection-proof.md) preserves source pin ec84c89d, REDs, first GREEN, final stronger qualification and fresh zero-residue evidence. All 121 focused browser_session and 39 output tests, Rust quality and docs/guidance checks pass. The historical replay failure is repaired rather than skipped. Remaining provider/authority/UI/integration and legacy navigator gates keep full P237 IN_PROGRESS.
+
+
+### Public same-window metadata qualification
+
+The exact-profile HTTP creator's granted background target can now be read while either Alpha's browser or Beta's original tab is physically selected. Independent raw CDP window IDs prove the same-window Beta case. All four title/URL requests preserve selected scenes and all peer documents; final source workflow passes in 29.14 seconds with ordinary close and fresh zero-residue evidence. The [native-selection note](../notes/0237-2026-10-12-native-selection-proof.md) records exact command, unchanged ec84c89d pin, raw identities and limits. No product change is required. Remaining provider/authority/UI/integration and navigator gates retain full P237 IN_PROGRESS.

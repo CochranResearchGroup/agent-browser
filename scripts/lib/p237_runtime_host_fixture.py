@@ -294,38 +294,66 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         target = next(tab for tab in current['tabs'].values() if tab.get('url') == target_url)
         (artifacts/'source-public-background-target.json').write_text(json.dumps(target,indent=2)+'\n')
         assert target.get('profileAccess') is not None, 'public creator did not establish child access'
-        # Restore Alpha through the same authenticated operator path before
-        # observing the exact newly authorized Beta target.
-        alpha = next(tab for tab in state['tabs'].values() if tab.get('title') == 'p237-alpha')
-        status, _, selected = source_http('/api/service/request', {
-            'action':'view_focus','browserId':'session:p237-alpha',
-            'serviceName':'P237Fixture','agentName':'admin','taskName':'synthetic-native-focus',
-            'params':{'sessionName':'p237-alpha','targetId':alpha['targetId'],
-                      'operatorFocus':True,'maximize':True,
-                      'routeId':'fixture-route:p237-alpha',
-                      'controllerLeaseId':'fixture-controller:p237-alpha'}},cookie)
-        assert status == 200 and selected['success'], 'public Alpha selection failed'
+        def select_public_anchor(session):
+            anchor = next(tab for tab in state['tabs'].values() if tab.get('title') == session)
+            status, _, selected = source_http('/api/service/request', {
+                'action':'view_focus','browserId':f'session:{session}',
+                'serviceName':'P237Fixture','agentName':'admin','taskName':'synthetic-native-focus',
+                'params':{'sessionName':session,'targetId':anchor['targetId'],
+                          'operatorFocus':True,'maximize':True,
+                          'routeId':f'fixture-route:{session}',
+                          'controllerLeaseId':f'fixture-controller:{session}'}},cookie)
+            assert status == 200 and selected['success'], 'public anchor selection failed'
+            return anchor
         def public_foreground():
             active = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
             return {'activeWindow':active,
                     'inputWindow':subprocess.check_output(['xdotool','getwindowfocus'],env=env,text=True).strip(),
                     'title':subprocess.check_output(['xdotool','getwindowname',active],env=env,text=True).strip(),
                     'properties':subprocess.check_output(['xprop','-id',active,'_NET_WM_PID','_NET_WM_STATE'],env=env,text=True)}
-        before = public_foreground()
-        assert 'p237-alpha' in before['title'] and before['activeWindow'] == before['inputWindow']
-        assert f'_NET_WM_PID(CARDINAL) = {births["session:p237-alpha"]["pid"]}' in before['properties'].splitlines()
         preserved = {browser_id:inventory(browser) for browser_id,browser in state['browsers'].items()}
-        (artifacts/'source-public-background-before.json').write_text(json.dumps({'foreground':before,'inventories':preserved},indent=2)+'\n')
+        endpoint = urlsplit(state['browsers']['session:p237-beta']['cdpEndpoint'])
+        connection = http.client.HTTPConnection(endpoint.hostname,endpoint.port,timeout=5)
+        try:
+            connection.request('GET','/json/version')
+            version = connection.getresponse()
+            assert version.status == 200
+            browser_socket = json.loads(version.read())['webSocketDebuggerUrl']
+        finally:
+            connection.close()
+        window_observations = []
+        def window_identity(target_id):
+            helper = Path(__file__).resolve().parent/'p237_cdp_command.cjs'
+            process = spawn(['node',str(helper),browser_socket,'Browser.getWindowForTarget',
+                             json.dumps({'targetId':target_id})],stdout=-1,stderr=-1)
+            stdout,stderr = process.communicate(timeout=8)
+            assert process.returncode == 0, f'independent window observation failed: {stderr.decode()}'
+            reply = json.loads(stdout)
+            window_observations.append({'targetId':target_id,'reply':reply})
+            (artifacts/'source-public-window-identities.json').write_text(json.dumps(window_observations,indent=2)+'\n')
+            return reply['result']['windowId']
+        target_window = window_identity(target['targetId'])
         reads = []
-        for action,field,expected in [('title','title','p237-public-background'),('url','url',target_url)]:
-            result = public_target_request(action, {'targetId':target['targetId']})
-            foreground = public_foreground()
-            reads.append({'action':action, **result, 'foreground':foreground})
-            (artifacts/'source-public-background-reads.json').write_text(json.dumps(reads,indent=2)+'\n')
-            assert result['status'] == 200 and result['reply']['success'], 'authorized public target read failed'
-            assert result['reply']['data'][field] == expected, 'public observation returned a different target'
-            assert foreground == before, 'public background observation changed physical foreground'
-            assert all(inventory(browser) == preserved[browser_id] for browser_id,browser in state['browsers'].items()), 'public observation changed documents or targets'
+        anchors = []
+        for session in ['p237-alpha','p237-beta']:
+            anchor = select_public_anchor(session)
+            if session == 'p237-beta':
+                assert window_identity(anchor['targetId']) == target_window, 'public same-window observation used different native windows'
+            before = public_foreground()
+            assert session in before['title'] and before['activeWindow'] == before['inputWindow']
+            assert f'_NET_WM_PID(CARDINAL) = {births[f"session:{session}"]["pid"]}' in before['properties'].splitlines()
+            anchors.append({'session':session,'foreground':before,'targetWindowId':target_window,
+                            'inventories':preserved})
+            (artifacts/'source-public-background-before.json').write_text(json.dumps(anchors,indent=2)+'\n')
+            for action,field,expected in [('title','title','p237-public-background'),('url','url',target_url)]:
+                result = public_target_request(action, {'targetId':target['targetId']})
+                foreground = public_foreground()
+                reads.append({'anchorSession':session,'action':action, **result, 'foreground':foreground})
+                (artifacts/'source-public-background-reads.json').write_text(json.dumps(reads,indent=2)+'\n')
+                assert result['status'] == 200 and result['reply']['success'], 'authorized public target read failed'
+                assert result['reply']['data'][field] == expected, 'public observation returned a different target'
+                assert foreground == before, 'public background observation changed physical foreground'
+                assert all(inventory(browser) == preserved[browser_id] for browser_id,browser in state['browsers'].items()), 'public observation changed documents or targets'
         assert inventory(state['browsers']['session:p237-alpha']) == inventories['session:p237-alpha'], 'public observation changed peer documents'
     if peer_read_only:
         before_window = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
