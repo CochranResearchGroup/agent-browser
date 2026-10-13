@@ -310,11 +310,12 @@ lanes:
     plan: docs/dev/plans/0240-2026-10-13-resource-bounds.md
     branch: platform/resource-bounds-105
     target: main
-    plan_state: IN_PROGRESS
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#105]
     dependencies: []
     overlaps: [P237, P239]
     reconciled_overlaps: ["P240 primary writer for admission, SQLite archive and host publication adapter; P237 retains native selection and all handoff/expiry policy, consuming canonical publication changes; reused clean enrollment checkout preserves prior candidate bytes and branches"]
-    validation_status: Triage verified small healthy host, fixed launch floor and unbounded terminal vectors; operator accepted pressure and archival direction; implementation pending
+    validation_status: Source and isolated installed archive/pressure/peer-continuation checks pass; Rust and client gates pass; p240 soft budget observed; own units stopped and disabled; wider 105 remains open
+    limitations: ["CI-profile candidate is not production-promotable", "Local web ingress unpublished and standalone doctor checked after intentional unit stop", "Longer workload soak, revision-churn convergence and other record categories unqualified"]
     updated_at: 2026-10-13

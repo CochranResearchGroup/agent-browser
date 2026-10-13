@@ -1,5 +1,9 @@
 # Active plan index
 
+[P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
+#105; completed bounded source and isolated browser-workflow qualification.
+Wider resource/cleanup acceptance remains open.
+
 [P239: failed-upgrade drain preservation](0239-2026-10-12-failed-upgrade-preservation.md),
 #183; bounded isolated preservation fixture complete. Workstation-wide shutdown
 and failed-transaction reconciliation remain open under #183.

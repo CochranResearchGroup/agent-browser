@@ -3,7 +3,7 @@
 Product lane: PL-PLATFORM
 Work item: #105
 Branch: platform/resource-bounds-105
-State: IN_PROGRESS
+State: COMPLETED
 Version: 1
 Lane: P240
 
@@ -47,3 +47,11 @@ current evidence and are not inferred from these source changes.
 
 Production publication, restart, cleanup, provider effects, private account work
 and reboot are excluded. #183 remains deferred until after the next reboot.
+
+## Qualified outcome
+
+The [source and isolated runtime receipt](../notes/0240-2026-10-13-resource-bounds.md)
+binds the implemented defaults, atomic archive, handoff exceptions, two-axis
+review, matched validation and installed candidate. Source/behavior acceptance
+passes; full installation readiness and wider #105 soak/convergence are not
+claimed. Own p240 units are stopped and disabled, with candidate bytes retained.
