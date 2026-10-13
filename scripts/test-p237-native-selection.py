@@ -33,9 +33,12 @@ def main():
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')
+    parser.add_argument('--http-selection', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.http_selection:
+        args.service_selection = True
     for value in [args.tests, args.chrome]:
         assert Path(value).is_absolute() and Path(value).is_file()
     if not args.namespace_worker:
@@ -45,6 +48,8 @@ def main():
                    '--artifact-dir', args.artifact_dir, '--namespace-worker']
         if args.service_selection:
             command.append('--service-selection')
+        if args.http_selection:
+            command.append('--http-selection')
         read_fd, write_fd = os.pipe()
         proof = {'parentPid': os.getpid(), 'namespaces': {
             namespace: os.readlink(f'/proc/self/ns/{namespace}')
@@ -138,6 +143,8 @@ def main():
                 if args.service_selection:
                     env['P237_NATIVE_SELECTION_PEER_DISPLAY'] = start_desktop()
                 env['DISPLAY'] = primary_display
+                if args.http_selection:
+                    env['P237_NATIVE_SELECTION_HTTP'] = '1'
                 test = spawn([args.tests,
                               ('native::stream::http::tests::physical_service_selection_preserves_distinct_desktops'
                                if args.service_selection else

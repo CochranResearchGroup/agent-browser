@@ -5781,6 +5781,7 @@ mod tests {
     }
 
     include!("p237_physical_selection.rs");
+    include!("p237_http_selection.rs");
 
     #[test]
     fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {

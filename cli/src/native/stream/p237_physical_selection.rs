@@ -38,14 +38,12 @@ async fn physical_service_selection_preserves_distinct_desktops() {
     assert_ne!(displays[0], displays[1]);
     let executable = std::env::var("P237_NATIVE_SELECTION_CHROME").unwrap();
     let auth = root.join("operator-auth.json");
-    std::fs::write(&auth, serde_json::to_vec(&json!({
-        "version":1,"createdAt":"fixture","sessionSecret":"ERERERERERERERERERERERERERERERERERERERERERE",
-        "users":[{"username":"operator","displayName":"Operator","role":"superuser",
-        "passwordHash":"","createdAt":"fixture","bootstrap":false}]
-    })).unwrap()).unwrap();
-    // This opt-in test is a dedicated OS process with a private home.
+    // Dedicated process and private home: exercise real synthetic login.
     std::env::set_var("AGENT_BROWSER_DASHBOARD_AUTH_FILE", &auth);
     std::env::set_var("AGENT_BROWSER_DASHBOARD_AUTH_DIR", &root);
+    let credentials = dashboard_auth::ensure_dashboard_auth_config()
+        .unwrap()
+        .bootstrap_credential_file;
     let mut daemons = Vec::new();
     let mut targets = Vec::new();
     let mut service = ServiceState::default();
@@ -104,7 +102,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         })).unwrap());
         service.viewer_leases.insert(format!("controller-{index}"),serde_json::from_value(json!({
             "id":format!("controller-{index}"),"routeId":format!("route-{index}"),"browserId":format!("browser-{index}"),
-            "viewerId":"dashboard:operator","viewerRole":"controller","state":"controlling","expiresAt":"2099-01-01T00:00:00Z"
+            "viewerId":"dashboard:admin","viewerRole":"controller","state":"controlling","expiresAt":"2099-01-01T00:00:00Z"
         })).unwrap());
         let mut daemon =
             DaemonState::new_for_session_with_stream(&format!("session-{index}"), None, None);
@@ -122,18 +120,28 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             Ok(())
         })
         .unwrap();
+    let daemons = Arc::new(tokio::sync::Mutex::new(daemons));
+    let http = if std::env::var_os("P237_NATIVE_SELECTION_HTTP").is_some() {
+        Some(P237SelectionHttp::start(daemons.clone(), &credentials).await)
+    } else {
+        None
+    };
     let run = async {
         for (index, tab_index) in [(0,0),(1,0),(0,1),(1,1),(0,0)] {
             let peer = 1-index;
             let before_peer = native_observation(&displays[peer])?;
             let (target,title) = &targets[index][tab_index];
-            let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"operator","taskName":"select",
+            let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"select",
                 "browserId":format!("browser-{index}"),"sessionName":format!("session-{index}"),
                 "params":{"operatorFocus":true,"targetId":target,"routeId":format!("route-{index}"),
                 "controllerLeaseId":format!("controller-{index}"),"maximize":true}}).to_string();
-            let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"operator",&format!("session-{index}"),None).map_err(|e|format!("{e:?}"))?;
-            let reply = crate::native::browser_lifecycle::handle_view_focus(&command,&mut daemons[index]).await?;
-            let expected_pid = daemons[index].browser.as_ref().unwrap().browser_pid().unwrap();
+            let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"admin",&format!("session-{index}"),None).map_err(|e|format!("{e:?}"))?;
+            let reply = if let Some(http) = http.as_ref() {
+                http.focus(&body).await?
+            } else {
+                crate::native::browser_lifecycle::handle_view_focus(&command,&mut daemons.lock().await[index]).await?
+            };
+            let expected_pid = daemons.lock().await[index].browser.as_ref().unwrap().browser_pid().unwrap();
             let deadline = std::time::Instant::now()+Duration::from_secs(3);
             let observation = loop {
                 let observed = native_observation(&displays[index])?;
@@ -156,17 +164,29 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         // An already-issued proof must fail at daemon execution after a
         // controller-generation change, without switching either desktop.
         let target = &targets[0][1].0;
-        let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"operator","taskName":"stale-select",
+        let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"stale-select",
             "browserId":"browser-0","sessionName":"session-0","params":{"operatorFocus":true,"targetId":target,
             "routeId":"route-0","controllerLeaseId":"controller-0","maximize":true}}).to_string();
-        let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"operator","session-0",None).map_err(|e|format!("{e:?}"))?;
+        let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"admin","session-0",None).map_err(|e|format!("{e:?}"))?;
         let before = [native_observation(&displays[0])?,native_observation(&displays[1])?];
-        repository.mutate(|state| {state.remote_view_routes.get_mut("route-0").unwrap().controller_epoch += 1; Ok(())})?;
-        let rejected = crate::native::browser_lifecycle::handle_view_focus(&command,&mut daemons[0]).await;
-        if rejected.is_ok() { return Err("stale controller generation performed physical focus".into()); }
+        let rejected = if let Some(http) = http.as_ref() {
+            http.advance_controller_before_execution.store(true, std::sync::atomic::Ordering::SeqCst);
+            let result = http.focus(&body).await;
+            if http.advance_controller_before_execution.load(std::sync::atomic::Ordering::SeqCst)
+                || repository.load_snapshot()?.remote_view_routes["route-0"].controller_epoch != 2 {
+                return Err("HTTP stale-generation probe did not reach its native execution boundary".into());
+            }
+            result
+        } else {
+            repository.mutate(|state| {state.remote_view_routes.get_mut("route-0").unwrap().controller_epoch += 1; Ok(())})?;
+            crate::native::browser_lifecycle::handle_view_focus(&command,&mut daemons.lock().await[0]).await
+        };
+        if !rejected.as_ref().err().is_some_and(|error|error.contains("operator_focus_authority_unproven")) {
+            return Err(format!("stale controller generation did not return the expected authority rejection: {rejected:?}"));
+        }
         let after = [native_observation(&displays[0])?,native_observation(&displays[1])?];
         if before != after { return Err(format!("rejected stale focus changed native desktops: before={before:?}, after={after:?}")); }
-        for (index,daemon) in daemons.iter().enumerate() {
+        for (index,daemon) in daemons.lock().await.iter().enumerate() {
             let inventory = daemon.browser.as_ref().unwrap().client.send_command("Target.getTargets",None,None).await?;
             if !targets[index].iter().all(|(target,_)|inventory["targetInfos"].as_array().unwrap().iter().any(|entry| entry["targetId"].as_str()==Some(target.as_str()))) {
                 return Err(format!("physical service selection removed a peer target on desktop {index}"));
@@ -182,7 +202,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         )
         .unwrap();
     }
-    for daemon in &mut daemons {
+    for daemon in daemons.lock().await.iter_mut() {
         daemon.browser.as_mut().unwrap().close().await.unwrap();
     }
     run.unwrap();
