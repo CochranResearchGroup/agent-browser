@@ -46,6 +46,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         .bootstrap_credential_file;
     let retained = std::env::var_os("P237_NATIVE_SELECTION_RETAINED").is_some();
     let native_dispatch = std::env::var_os("P237_NATIVE_SELECTION_DISPATCH").is_some();
+    let multi_window = std::env::var_os("P237_NATIVE_SELECTION_MULTI_WINDOW").is_some();
     assert!(
         !(retained && native_dispatch),
         "retained and native-dispatch modes qualify separate boundaries"
@@ -75,8 +76,12 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         .unwrap();
         let pid = manager.browser_pid().unwrap();
         let mut browser_targets = Vec::new();
-        for tab_index in 0..2 {
-            if tab_index != 0 {
+        for tab_index in 0..if multi_window { 3 } else { 2 } {
+            if tab_index == 2 {
+                let created = manager.client.send_command("Target.createTarget", Some(json!({"url":"about:blank","newWindow":true})), None).await.unwrap();
+                manager.reconnect_client().await.unwrap();
+                manager.tab_switch_target_id(created["targetId"].as_str().unwrap()).await.unwrap();
+            } else if tab_index != 0 {
                 manager.tab_new(None).await.unwrap();
             }
             let target = manager.active_target_id().unwrap().to_owned();
@@ -93,6 +98,12 @@ async fn physical_service_selection_preserves_distinct_desktops() {
                 "id":format!("target:{target}"),"browserId":format!("browser-{index}"),"targetId":target,
                 "sessionId":format!("session-{index}"),"ownerSessionId":format!("session-{index}"),"lifecycle":"ready"
             })).unwrap());
+        }
+        if multi_window {
+            let first = manager.client.send_command("Browser.getWindowForTarget", Some(json!({"targetId":browser_targets[0].0})), None).await.unwrap();
+            let second = manager.client.send_command("Browser.getWindowForTarget", Some(json!({"targetId":browser_targets[2].0})), None).await.unwrap();
+            assert_ne!(first["windowId"], second["windowId"], "fixture must own two distinct native Chrome windows");
+            println!("physical-multi-window-setup: {}", json!({"browserPid":pid,"first":first,"second":second,"display":display}));
         }
         if retained {
             // Provider normally prepares window bounds before native-only
@@ -204,7 +215,10 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         None
     };
     let run = async {
-        for (index, tab_index) in [(0,0),(1,0),(0,1),(1,1),(0,0)] {
+        let selections = if multi_window {
+            vec![(0,0),(1,0),(0,2),(1,2),(0,1),(1,1),(0,2),(1,2),(0,0)]
+        } else { vec![(0,0),(1,0),(0,1),(1,1),(0,0)] };
+        for (index, tab_index) in selections {
             let peer = 1-index;
             let before_peer = native_observation(&displays[peer])?;
             let (target,title) = &targets[index][tab_index];

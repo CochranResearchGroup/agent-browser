@@ -36,11 +36,15 @@ def main():
     parser.add_argument('--http-selection', action='store_true')
     parser.add_argument('--retained-selection', action='store_true')
     parser.add_argument('--native-dispatch', action='store_true')
+    parser.add_argument('--multi-window', action='store_true', help='Select targets across two windows in each owned browser')
     parser.add_argument('--ui-runner', help='Absolute task-owned Node runner for UI selection ordering')
     parser.add_argument('--ui-bundle', help='Absolute prepared viewport fixture bundle')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    if args.multi_window:
+        assert not args.retained_selection and not args.ui_runner, 'Multi-window native dispatch is a separate fixture mode'
+        args.native_dispatch = True
     assert bool(args.ui_runner) == bool(args.ui_bundle), 'UI runner and bundle are required together'
     if args.ui_runner:
         assert not args.retained_selection, 'UI fixture uses prepared native dispatch, not retained mode'
@@ -66,6 +70,8 @@ def main():
             command.append('--retained-selection')
         if args.native_dispatch:
             command.append('--native-dispatch')
+        if args.multi_window:
+            command.append('--multi-window')
         if args.ui_runner:
             command.extend(['--ui-runner', args.ui_runner, '--ui-bundle', args.ui_bundle])
         read_fd, write_fd = os.pipe()
@@ -120,6 +126,8 @@ def main():
         env.update({'P237_NATIVE_SELECTION_ROOT': str(root),
                     'P237_NATIVE_SELECTION_CHROME': args.chrome,
                     'RUST_MIN_STACK': '16777216'})
+        if args.multi_window:
+            env['P237_NATIVE_SELECTION_MULTI_WINDOW'] = '1'
         if args.ui_runner:
             env['P237_NATIVE_SELECTION_UI_RUNNER'] = args.ui_runner
             env['P237_NATIVE_SELECTION_UI_BUNDLE'] = args.ui_bundle
