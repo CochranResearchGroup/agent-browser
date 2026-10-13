@@ -545,3 +545,8 @@ The exact task-owned host exits gracefully and a new source instance continues b
 ### Independent native desktop progress
 
 Actual public source CLI private_virtual_display creation assigns two different native displays and authoritative allocation IDs. A read-only real Alpha route-fence witness precedes Beta admission while Alpha's actual renderer-bound request is executing. Beta succeeds in 0.17 seconds without changing Alpha; Alpha completes in 7.27 seconds. Final source workflow passes in 48.75 seconds on unchanged c8f9e5d7 with normal browser/private-Xvfb close and fresh zero residue. The original shared-desktop oracle still passes. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) retains the wrong minimization barrier and exact scope. This qualifies retained-source desktop independence; remaining managed/public/provider/UI/reload/integration gates are unchanged. P237 remains IN_PROGRESS.
+
+
+### Resource closeout source re-anchor
+
+Fresh main is cb765a7be2719383a54fb849eac9691ce0197b06, integrating P240 through PR269. The retained resource worktree is clean at efb23fc9ce09061cd735fea88bba411dd7e4fb3a on platform/resource-bounds-105. P237 remains on its own source branch and draft PR270; no main adoption or integration occurred. Earlier P240 dirty-work observations remain historical evidence. Reconcile the now-integrated resource/lifecycle/guidance changes and P238 against this fresh main before canonical integration. Layout choice remains pending. The renewed resource allocation is stopping at a checkpoint before its two-million-token/six-active-hour ceilings; this is not completion or a requested pause.
