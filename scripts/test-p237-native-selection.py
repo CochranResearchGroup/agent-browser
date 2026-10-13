@@ -35,6 +35,7 @@ def main():
     parser.add_argument('--runtime-controller-fence', action='store_true', help='Exercise public controller takeover against the actual external route fence')
     parser.add_argument('--runtime-eof', action='store_true', help='Exercise actual native Unix EOF while browser work is running')
     parser.add_argument('--runtime-peer-read', action='store_true', help='Exercise peer title read without native focus changes')
+    parser.add_argument('--runtime-bootstrap', action='store_true', help='Let the public source CLI create its private host')
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')
@@ -52,6 +53,7 @@ def main():
     assert not args.runtime_eof or args.runtime_cli, 'Native EOF requires source runtime mode'
     assert not args.runtime_eof or not (args.runtime_controller_fence or args.runtime_ui_bundle), 'Native EOF has separate presentation setup'
     assert not args.runtime_peer_read or (args.runtime_cli and not (args.runtime_eof or args.runtime_controller_fence or args.runtime_ui_bundle)), 'Peer read has separate source runtime setup'
+    assert not args.runtime_bootstrap or (args.runtime_cli and not (args.runtime_eof or args.runtime_controller_fence or args.runtime_ui_bundle or args.runtime_peer_read)), 'CLI bootstrap has separate source runtime setup'
     if args.runtime_ui_bundle:
         assert args.runtime_cli and Path(args.runtime_ui_bundle).is_absolute() and Path(args.runtime_ui_bundle).is_file()
     if args.runtime_cli:
@@ -95,6 +97,8 @@ def main():
             command.append('--runtime-eof')
         if args.runtime_peer_read:
             command.append('--runtime-peer-read')
+        if args.runtime_bootstrap:
+            command.append('--runtime-bootstrap')
         if args.ui_runner:
             command.extend(['--ui-runner', args.ui_runner, '--ui-bundle', args.ui_bundle])
         read_fd, write_fd = os.pipe()
@@ -214,7 +218,7 @@ def main():
                     runtime_started = time.monotonic()
                     run_runtime_host_fixture(spawn, env, root, artifacts,
                                              args.runtime_cli, args.chrome, workflow_log,
-                                             args.runtime_ui_bundle, args.runtime_controller_fence, args.runtime_eof, args.runtime_peer_read)
+                                             args.runtime_ui_bundle, args.runtime_controller_fence, args.runtime_eof, args.runtime_peer_read, args.runtime_bootstrap)
                     result = 0
                     (artifacts / 'test-result.json').write_text(json.dumps({
                         'mode':'source-runtime-host','returncode':0,
@@ -251,6 +255,23 @@ def main():
                 if evidence.exists():
                     shutil.copy2(evidence, artifacts / name)
             sessions = {child.pid for child in children}
+            host_owner = root / 'source-host-owned-session.json'
+            if host_owner.exists():
+                owner = json.loads(host_owner.read_text())
+                current = Path(f"/proc/{owner['pid']}")
+                try:
+                    raw = (current/'stat').read_text(); fields = raw[raw.rfind(')')+2:].split()
+                    environment = (current/'environ').read_bytes().split(b'\0')
+                    verified = (fields[19] == owner['start'] and int(fields[3]) == owner['session']
+                                and os.readlink(current/'exe') == args.runtime_cli
+                                and f'HOME={root / "home"}'.encode() in environment
+                                and f'AGENT_BROWSER_SOCKET_DIR={root / "runtime-sockets"}'.encode() in environment
+                                and b'AGENT_BROWSER_RUNTIME_HOST_PROCESS=1' in environment)
+                except FileNotFoundError:
+                    verified = True
+                assert verified, 'source-created host identity changed; cleanup authority unproven'
+                sessions.add(owner['session'])
+                shutil.copy2(host_owner,artifacts/host_owner.name)
             # The UI launcher creates its own Chrome session inside this task's
             # private temporary profile root. Retain its exact birth receipt so
             # a runner deadline can reclaim that session after its parent exits.

@@ -13,13 +13,14 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
     auth = sockets / 'runtime-host.token'
-    auth.write_text(token)
-    auth.chmod(0o600)
+    if not cli_bootstrap:
+        auth.write_text(token)
+        auth.chmod(0o600)
     env.update({'AGENT_BROWSER_RUNTIME_HOST': '1',
                 'AGENT_BROWSER_SOCKET_DIR': str(sockets),
                 'AGENT_BROWSER_RUNTIME_HOST_PROCESS': '1',
@@ -31,17 +32,64 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
                 'AGENT_BROWSER_EXECUTABLE_PATH': chrome,
                 'AGENT_BROWSER_ARGS': '--no-sandbox,--no-proxy-server,--disable-background-networking',
                 'AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY': 'disabled'})
-    daemon = spawn([cli], stdout=workflow_log, stderr=workflow_log)
-    env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS')
-    env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN')
+    if cli_bootstrap:
+        env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS')
+        env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN')
+        bootstraps = [spawn([cli,'--json','--session','default','stream','status'],stdout=-1,stderr=-1)
+                      for _ in range(2)]
+        deadline = time.monotonic() + 60
+        owner = None
+        while owner is None:
+            candidates = []
+            for bootstrap in bootstraps:
+                children_path = Path(f'/proc/{bootstrap.pid}/task/{bootstrap.pid}/children')
+                if children_path.exists():
+                    candidates.extend((bootstrap.pid,child) for child in children_path.read_text().split())
+            assert candidates or any(bootstrap.poll() is None for bootstrap in bootstraps), 'bootstrap CLIs ended before host ownership capture'
+            for parent_pid,child in candidates:
+                process = Path('/proc')/child
+                try:
+                    raw = (process/'stat').read_text();fields = raw[raw.rfind(')')+2:].split()
+                    environment = (process/'environ').read_bytes().split(b'\0')
+                    if (os.readlink(process/'exe') == cli
+                        and f'HOME={root / "home"}'.encode() in environment
+                        and f'AGENT_BROWSER_SOCKET_DIR={sockets}'.encode() in environment
+                        and b'AGENT_BROWSER_RUNTIME_HOST_PROCESS=1' in environment
+                        and int(fields[1]) == parent_pid and int(fields[3]) == int(child)):
+                        owner = {'pid':int(child),'parentPid':parent_pid,'start':fields[19],
+                                 'session':int(fields[3]),'executable':cli,'home':str(root/'home'),
+                                 'socketDir':str(sockets)}
+                        (root/'source-host-owned-session.json').write_text(json.dumps(owner,indent=2)+'\n')
+                        break
+                except FileNotFoundError:
+                    continue
+            assert owner or time.monotonic() < deadline, 'source host ownership capture timed out'
+            if owner is None:
+                time.sleep(0.025)
+        bootstrap_replies = []
+        for bootstrap in bootstraps:
+            stdout,stderr = bootstrap.communicate(timeout=60)
+            reply = json.loads(stdout)
+            bootstrap_replies.append({'returncode':bootstrap.returncode,'reply':reply,'stderr':stderr.decode()})
+            (artifacts/'source-cli-bootstrap.json').write_text(json.dumps({
+                'clients':bootstrap_replies,'owner':owner},indent=2)+'\n')
+            assert bootstrap.returncode == 0 and reply['success'], 'public source CLI bootstrap failed'
+        assert bootstrap_replies[0]['reply']['data']['port'] == bootstrap_replies[1]['reply']['data']['port'], 'concurrent bootstrap returned different default lanes'
+        assert len(list(sockets.glob('*.pid'))) == 1 and len(list(sockets.glob('*.sock'))) == 1, 'concurrent bootstrap published duplicate host endpoints'
+        daemon_pid = owner['pid']
+    else:
+        daemon = spawn([cli], stdout=workflow_log, stderr=workflow_log)
+        daemon_pid = daemon.pid
+    env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS',None)
+    env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN',None)
     manifest_path = sockets / 'runtime-host.json'
     deadline = time.monotonic() + 45
     while not manifest_path.exists():
-        assert daemon.poll() is None, 'source runtime-host exited before publication'
+        assert Path(f'/proc/{daemon_pid}').exists(), 'source runtime-host exited before publication'
         assert time.monotonic() < deadline, 'source runtime-host publication deadline'
         time.sleep(0.025)
     manifest = json.loads(manifest_path.read_text())
-    assert manifest['pid'] == daemon.pid, 'runtime-host publication belongs to a different process'
+    assert manifest['pid'] == daemon_pid, 'runtime-host publication belongs to a different process'
     assert manifest['executableGeneration'] == hashlib.sha256(Path(cli).read_bytes()).hexdigest(), 'runtime-host executable generation differs from the reviewed pin'
     (artifacts / 'runtime-host-observation.json').write_text(json.dumps(manifest, indent=2) + '\n')
 
@@ -67,7 +115,7 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         profile = root / f'{session}-profile'
         command(session, '--headed', '--executable-path', chrome, '--profile', str(profile),
                 'open', f'data:text/html,<title>{session}</title><p>{session}</p>')
-        assert json.loads(manifest_path.read_text())['pid'] == daemon.pid
+        assert json.loads(manifest_path.read_text())['pid'] == daemon_pid
         title = command(session, '--profile', str(profile), 'get', 'title')
         assert title['success'] and title['data']['title'] == session, 'exact session lost its synthetic document'
         command(session, '--profile', str(profile), 'tab', 'list', '--verbose')
