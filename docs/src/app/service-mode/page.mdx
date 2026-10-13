@@ -1325,6 +1325,11 @@ trace and resolve the exact contention before a new attempt.
 <code>inspect_before_retry</code> does not authorize automatic replay. Other
 actions retain conservative recourse because earlier effects may have occurred.
 
+Authorized native Service lane title and URL reads bind their exact target without activating its
+native tab or raising the browser. Explicit workspace focus and tab selection
+still activate the addressed target. Child ownership and permissions continue
+to apply, so background metadata reads preserve the person's foreground desktop.
+
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
 Compare the explicit session selector with the original handle, or use the

@@ -4247,6 +4247,11 @@ Inspect Service status and trace to resolve contention before a new attempt;
 `inspect_before_retry` does not authorize automatic replay. The same error from
 other actions remains conservative because earlier effects may have occurred.
 
+Authorized native Service lane title and URL reads bind their exact target without activating its
+native tab or raising the browser. Explicit workspace focus and tab selection
+still activate the addressed target. This lets background metadata reads
+preserve the person's foreground desktop.
+
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
 successful retryable convergence response. Inspect the profile recovery plan

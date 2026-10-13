@@ -1883,6 +1883,18 @@ impl BrowserManager {
         Ok(result)
     }
 
+    /// Bind an already attached target for observation without activating its
+    /// native tab or raising the browser. Authority is checked by the caller.
+    pub(crate) async fn bind_observation_target(&mut self, target_id: &str) -> Result<(), String> {
+        let index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
+            format!("Target ID {target_id} was not found in the attached tab list")
+        })?;
+        let session_id = self.pages[index].session_id.clone();
+        self.enable_domains(&session_id).await?;
+        self.active_page_index = index;
+        Ok(())
+    }
+
     /// Remove only an owned initial blank-page marker. Compare in the live
     /// document and retain history state so concurrent operator work survives.
     pub(crate) async fn clear_initial_task_marker(
@@ -3237,6 +3249,32 @@ mod tests {
                     tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 };
                 println!("physical-selection: {evidence}");
+            }
+            let foreground = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let foreground = String::from_utf8_lossy(&foreground.stdout).trim().to_owned();
+            manager.bind_observation_target(&bob).await?;
+            let observed_title = manager.get_title().await?;
+            let observed_url = manager.get_url().await?;
+            if observed_title != "P237 Bob physical" || observed_url != "about:blank" {
+                return Err(format!("background target metadata differed: title={observed_title}, url={observed_url}"));
+            }
+            let after = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let after = String::from_utf8_lossy(&after.stdout).trim().to_owned();
+            let input = std::process::Command::new("xdotool").args(["getwindowfocus"]).output().map_err(|e|e.to_string())?;
+            let input = String::from_utf8_lossy(&input.stdout).trim().to_owned();
+            if after != foreground || input != foreground {
+                return Err(format!("background observation changed physical selection: before={foreground}, after={after}, input={input}"));
+            }
+            println!("physical-background-observation: {}",json!({"targetId":bob,"title":observed_title,"url":observed_url,"beforeWindow":foreground,"afterWindow":after,"inputWindow":input}));
+            // Logical observation binding must not suppress explicit native
+            // activation of that now-already-bound target.
+            manager.tab_switch_target_id(&bob).await?;
+            manager.focus_for_view(true).await?;
+            let active = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let active = String::from_utf8_lossy(&active.stdout).trim().to_owned();
+            let name = std::process::Command::new("xdotool").args(["getwindowname",&active]).output().map_err(|e|e.to_string())?;
+            if !String::from_utf8_lossy(&name.stdout).contains("P237 Bob physical") {
+                return Err("explicit selection did not activate the background-bound target".into());
             }
             let targets = manager.client.send_command("Target.getTargets",None,None).await?;
             if ![&alice,&bob].iter().all(|id| targets["targetInfos"].as_array().unwrap().iter().any(|t|t["targetId"].as_str()==Some(id.as_str()))) {

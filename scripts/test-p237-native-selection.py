@@ -33,6 +33,8 @@ def main():
     parser.add_argument('--runtime-cli', help='Absolute source executable for the task-owned runtime-host probe')
     parser.add_argument('--runtime-ui-bundle', help='Absolute prepared viewport bundle for shared-desktop selection')
     parser.add_argument('--runtime-controller-fence', action='store_true', help='Exercise public controller takeover against the actual external route fence')
+    parser.add_argument('--runtime-eof', action='store_true', help='Exercise actual native Unix EOF while browser work is running')
+    parser.add_argument('--runtime-peer-read', action='store_true', help='Exercise peer title read without native focus changes')
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')
@@ -47,6 +49,9 @@ def main():
     args = parser.parse_args()
     assert bool(args.tests) != bool(args.runtime_cli), 'Choose a test executable or runtime CLI'
     assert not args.runtime_controller_fence or args.runtime_cli, 'Controller fence requires source runtime mode'
+    assert not args.runtime_eof or args.runtime_cli, 'Native EOF requires source runtime mode'
+    assert not args.runtime_eof or not (args.runtime_controller_fence or args.runtime_ui_bundle), 'Native EOF has separate presentation setup'
+    assert not args.runtime_peer_read or (args.runtime_cli and not (args.runtime_eof or args.runtime_controller_fence or args.runtime_ui_bundle)), 'Peer read has separate source runtime setup'
     if args.runtime_ui_bundle:
         assert args.runtime_cli and Path(args.runtime_ui_bundle).is_absolute() and Path(args.runtime_ui_bundle).is_file()
     if args.runtime_cli:
@@ -86,6 +91,10 @@ def main():
             command.extend(['--runtime-ui-bundle', args.runtime_ui_bundle])
         if args.runtime_controller_fence:
             command.append('--runtime-controller-fence')
+        if args.runtime_eof:
+            command.append('--runtime-eof')
+        if args.runtime_peer_read:
+            command.append('--runtime-peer-read')
         if args.ui_runner:
             command.extend(['--ui-runner', args.ui_runner, '--ui-bundle', args.ui_bundle])
         read_fd, write_fd = os.pipe()
@@ -162,8 +171,16 @@ def main():
                                      pass_fds=(write_fd,), stdout=desktop_log, stderr=desktop_log)
                         os.close(write_fd)
                         write_fd = None
-                        assert select.select([read_fd], [], [], 15)[0], 'Xvfb readiness timed out'
-                        display_number = os.read(read_fd, 64).decode().strip()
+                        announcement = b''
+                        announcement_deadline = time.monotonic() + 15
+                        while b'\n' not in announcement:
+                            remaining_seconds = announcement_deadline - time.monotonic()
+                            assert remaining_seconds > 0 and select.select([read_fd], [], [], remaining_seconds)[0], 'Xvfb readiness timed out'
+                            chunk = os.read(read_fd, 64)
+                            assert chunk, 'Xvfb readiness ended before its complete line'
+                            announcement += chunk
+                            assert len(announcement) <= 64, 'Xvfb readiness announcement exceeded its bound'
+                        display_number = announcement.decode().strip()
                         assert display_number.isdecimal() and xvfb.poll() is None
                         desktop_display = ':' + display_number
                     finally:
@@ -197,7 +214,7 @@ def main():
                     runtime_started = time.monotonic()
                     run_runtime_host_fixture(spawn, env, root, artifacts,
                                              args.runtime_cli, args.chrome, workflow_log,
-                                             args.runtime_ui_bundle, args.runtime_controller_fence)
+                                             args.runtime_ui_bundle, args.runtime_controller_fence, args.runtime_eof, args.runtime_peer_read)
                     result = 0
                     (artifacts / 'test-result.json').write_text(json.dumps({
                         'mode':'source-runtime-host','returncode':0,

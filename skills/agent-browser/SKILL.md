@@ -69,6 +69,11 @@ status and trace, then resolve the exact contention before any new attempt.
 `inspect_before_retry` does not authorize automatic replay. Other actions may
 have earlier effects and retain conservative failure recourse.
 
+Authorized native Service lane title and URL reads observe the exact target without activating its
+native tab or raising the browser. Use explicit workspace focus or tab selection
+when the person should see that target. Child ownership and permissions still
+apply to background reads.
+
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's
 profile and named session explicitly; preserve peers and stored authentication.

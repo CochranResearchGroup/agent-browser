@@ -871,7 +871,13 @@ async fn execute_command_after_navigation_admission(
             // A pending JavaScript dialog can block the renderer-backed reads in
             // tab_switch_target_id. The exact already-active target needs no
             // refresh before Page.handleJavaScriptDialog is dispatched.
-            if action != "dialog" || !exact_target_is_active {
+            if matches!(action, "title" | "url") {
+                // Observe the exact authorized target without disrupting the
+                // person on this desktop. Explicit selection still activates.
+                if let Err(error) = manager.bind_observation_target(target_id).await {
+                    return error_response(&id, &error);
+                }
+            } else if action != "dialog" || !exact_target_is_active {
                 if let Err(error) = manager.tab_switch_target_id(target_id).await {
                     return error_response(&id, &error);
                 }

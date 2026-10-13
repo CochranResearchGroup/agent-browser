@@ -8,11 +8,12 @@ from pathlib import Path
 from urllib.parse import urlsplit
 import secrets
 import subprocess
+import socket
 import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -70,6 +71,9 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         title = command(session, '--profile', str(profile), 'get', 'title')
         assert title['success'] and title['data']['title'] == session, 'exact session lost its synthetic document'
         command(session, '--profile', str(profile), 'tab', 'list', '--verbose')
+        if peer_read_only and session == 'p237-beta':
+            command(session,'--profile',str(profile),'tab','new',
+                    'data:text/html,<title>p237-beta-background</title><p>background</p>')
     status = command('p237-alpha', 'service', 'status')
     (artifacts / 'source-service-status.json').write_text(json.dumps(status, indent=2) + '\n')
     state = status['data']['service_state']
@@ -147,7 +151,8 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     observations = []
     for session in ['p237-alpha', 'p237-beta', 'p237-alpha']:
         browser = state['browsers'][f'session:{session}']
-        tab = next(tab for tab in state['tabs'].values() if tab['browserId'] == browser['id'])
+        tab = next(tab for tab in state['tabs'].values()
+                   if tab['browserId'] == browser['id'] and tab['title'] == session)
         focus_status, _, focus = source_http('/api/service/request', {
                             'action': 'view_focus', 'browserId': browser['id'],
                             'serviceName': 'P237Fixture', 'agentName': 'admin',
@@ -209,6 +214,150 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         assert f'_NET_WM_PID(CARDINAL) = {births["session:p237-beta"]["pid"]}' in properties.splitlines()
         assert '_NET_WM_STATE_MAXIMIZED_HORZ' in properties and '_NET_WM_STATE_MAXIMIZED_VERT' in properties
         assert all(inventory(browser) == inventories[browser_id] for browser_id,browser in state['browsers'].items()), 'UI selection changed source documents or targets'
+    if peer_read_only:
+        before_window = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+        before_title = subprocess.check_output(['xdotool','getwindowname',before_window],env=env,text=True).strip()
+        reply = command('p237-beta','--profile',str(root/'p237-beta-profile'),'get','title')
+        after_window = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+        after_title = subprocess.check_output(['xdotool','getwindowname',after_window],env=env,text=True).strip()
+        (artifacts/'source-peer-read.json').write_text(json.dumps({
+            'beforeWindow':before_window,'beforeTitle':before_title,
+            'afterWindow':after_window,'afterTitle':after_title,'reply':reply},indent=2)+'\n')
+        assert reply['success'] and reply['data']['title'] == 'p237-beta'
+        assert before_window == after_window and before_title == after_title, 'read-only peer title changed native focus'
+        background = next(tab for tab in state['tabs'].values() if 'p237-beta-background' in (tab.get('url') or ''))
+        assert background['profileAccess'] is None, 'background admission diagnostic requires the observed missing child grant'
+        socket_path = next(path for path in sockets.iterdir() if path.is_socket()
+                           and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
+        targeted_reads = []
+        with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as transport:
+            transport.settimeout(35)
+            transport.connect(str(socket_path))
+            with transport.makefile('rb') as reader:
+                for action,field in [('title','title'),('url','url')]:
+                    request = {'id':f'p237-peer-{action}','action':action,
+                        'targetId':background['targetId'],'_agentBrowserAuthToken':token,
+                        '_agentBrowserRuntimeLane':'p237-beta','profile':str(root/'p237-beta-profile')}
+                    transport.sendall((json.dumps(request)+'\n').encode())
+                    reply = json.loads(reader.readline())
+                    active = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+                    targeted_reads.append({'action':action,'targetId':background['targetId'],
+                                           'reply':reply,'activeWindow':active})
+                    (artifacts/'source-peer-targeted-reads.json').write_text(json.dumps(targeted_reads,indent=2)+'\n')
+                    assert not reply['success'] and 'current child access record is missing' in reply['error'], 'ungranted background target bypassed child admission'
+                    assert active == before_window, 'background target read changed native foreground'
+        assert all(inventory(browser) == inventories[browser_id] for browser_id,browser in state['browsers'].items())
+    if native_eof:
+        def eof_foreground():
+            active = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+            return {'activeWindow':active,
+                    'inputWindow':subprocess.check_output(['xdotool','getwindowfocus'],env=env,text=True).strip(),
+                    'title':subprocess.check_output(['xdotool','getwindowname',active],env=env,text=True).strip(),
+                    'properties':subprocess.check_output(['xprop','-id',active,'_NET_WM_PID','_NET_WM_STATE'],env=env,text=True)}
+        foreground_boundaries = {'before':eof_foreground()}
+        def eof_boundary(name):
+            foreground_boundaries[name] = eof_foreground()
+            (artifacts/'source-eof-foreground.json').write_text(json.dumps(foreground_boundaries,indent=2)+'\n')
+        foreground_before_eof = {
+            name:subprocess.check_output(['xdotool',command],env=env,text=True).strip()
+            for name,command in [('activeWindow','getactivewindow'),('inputWindow','getwindowfocus')]}
+        socket_path = next(path for path in sockets.iterdir() if path.is_socket()
+                           and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as transport:
+            transport.settimeout(10)
+            transport.connect(str(socket_path))
+            def native_send(request):
+                transport.sendall((json.dumps({**request, '_agentBrowserAuthToken':token,
+                    '_agentBrowserRuntimeLane':'p237-alpha',
+                    'profile':str(root / 'p237-alpha-profile')}) + '\n').encode())
+            native_send({'id':'p237-eof-title','action':'title'})
+            received = b''
+            while b'\n' not in received:
+                chunk = transport.recv(65536)
+                assert chunk, 'source native title transport ended without a reply'
+                received += chunk
+            title_reply = json.loads(received.split(b'\n',1)[0])
+            (artifacts/'source-eof-title.json').write_text(json.dumps(title_reply,indent=2)+'\n')
+            assert title_reply['success'] and title_reply['data']['title'] == 'p237-alpha'
+            connection_id = title_reply['terminalOutcome']['provenance']['connectionInstanceId']
+            active_state = json.loads(state_path.read_text())
+            owned_tabs = [tab for tab in active_state['tabs'].values()
+                          if tab.get('profileAccess',{}).get('connectionInstanceId') == connection_id]
+            assert owned_tabs and all(tab['profileAccess']['connectionState'] == 'active' for tab in owned_tabs)
+            browser = state['browsers']['session:p237-alpha']
+            endpoint = urlsplit(browser['cdpEndpoint'])
+            connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+            try:
+                connection.request('GET','/json/list')
+                response = connection.getresponse()
+                assert response.status == 200
+                page_socket = next(tab['webSocketDebuggerUrl'] for tab in json.loads(response.read())
+                                   if tab['id'] == owned_tabs[0]['targetId'])
+            finally:
+                connection.close()
+            native_send({'id':'p237-eof-wait','action':'wait','timeout':7000,'jobTimeoutMs':9000,
+                'function':'(() => { window.__p237EOFStarted ??= Date.now(); return Date.now() - window.__p237EOFStarted >= 4000; })()'})
+            deadline = time.monotonic() + 3
+            while True:
+                reader = spawn(['node',str(Path(__file__).parent/'p237_cdp_value.cjs'),page_socket,
+                                '({startedAtMs:window.__p237EOFStarted, observedAtMs:Date.now(), stillWaiting:Boolean(window.__p237EOFStarted) && Date.now()-window.__p237EOFStarted<4000})'],stdout=-1,stderr=-1)
+                marker, errors = reader.communicate(timeout=6)
+                assert reader.returncode == 0, errors.decode()
+                running_state = json.loads(state_path.read_text())
+                wait_job = running_state['jobs'].get('p237-eof-wait')
+                predicate_readback = json.loads(marker)
+                if predicate_readback['stillWaiting'] and wait_job and wait_job['state'] == 'running':
+                    break
+                assert time.monotonic() < deadline, 'native wait did not enter its real Chrome predicate'
+                time.sleep(0.025)
+            eof_boundary('predicateObserved')
+            transport.shutdown(socket.SHUT_RDWR)
+        deadline = time.monotonic() + 35
+        disconnected_while_running = False
+        peer_while_running = None
+        while True:
+            after_eof = json.loads(state_path.read_text())
+            grants = [after_eof['tabs'][tab['id']]['profileAccess'] for tab in owned_tabs]
+            disconnected = all(grant['connectionInstanceId'] == connection_id
+                               and grant['connectionState'] == 'disconnected' for grant in grants)
+            wait_job = after_eof['jobs']['p237-eof-wait']
+            (artifacts/'source-eof-progress.json').write_text(json.dumps({
+                'grants':grants,'job':wait_job,
+                'disconnectedWhileRunning':disconnected_while_running},indent=2)+'\n')
+            if disconnected and wait_job['state'] == 'running':
+                disconnected_while_running = True
+                if peer_while_running is None:
+                    eof_boundary('disconnectedBeforePeer')
+                    peer_while_running = command('p237-beta','--profile',str(root/'p237-beta-profile'),'get','title')
+                    eof_boundary('afterPeerTitle')
+                    assert peer_while_running['data']['title'] == 'p237-beta'
+                    assert json.loads(state_path.read_text())['jobs']['p237-eof-wait']['state'] == 'running', 'peer command only completed after Alpha work ended'
+            if wait_job['state'] in ['succeeded', 'failed', 'cancelled', 'timed_out']:
+                break
+            assert time.monotonic() < deadline, 'native EOF did not release ownership and complete the submitted wait'
+            time.sleep(0.025)
+        assert disconnected_while_running, 'disconnect was only observed after running work finished'
+        assert peer_while_running is not None, 'peer lane was not exercised during Alpha work'
+        assert disconnected and wait_job['state'] == 'succeeded', 'native EOF did not preserve disconnection and successful harmless wait'
+        assert wait_job['terminalOutcome']['provenance']['connectionInstanceId'] == connection_id
+        assert any(event.get('terminalOutcome') == wait_job['terminalOutcome']
+                   for event in after_eof['events']), 'EOF job terminal outcome absent from durable Service events'
+        assert all(inventory(browser) == inventories[browser_id] for browser_id,browser in state['browsers'].items())
+        assert json.loads(manifest_path.read_text()) == manifest
+        foreground_after_eof = {
+            name:subprocess.check_output(['xdotool',command],env=env,text=True).strip()
+            for name,command in [('activeWindow','getactivewindow'),('inputWindow','getwindowfocus')]}
+        eof_boundary('terminal')
+        assert foreground_after_eof == foreground_before_eof, 'EOF or peer read changed physical focus'
+        resumed = command('p237-alpha', '--profile', str(root/'p237-alpha-profile'), 'get', 'title')
+        assert resumed['data']['title'] == 'p237-alpha'
+        (artifacts/'source-eof-observation.json').write_text(json.dumps({
+            'connectionInstanceId':connection_id,'tabIds':[tab['id'] for tab in owned_tabs],
+            'predicateObservedInChrome':True,
+            'predicateReadback':predicate_readback, 'peerReplyWhileRunning':peer_while_running,
+            'foregroundBefore':foreground_before_eof,'foregroundAfter':foreground_after_eof,
+            'disconnectedWhileRunning':disconnected_while_running,'terminalJob':wait_job,
+            'sameHostContinued':True},indent=2)+'\n')
     if controller_fence:
         route_id = 'fixture-route:p237-alpha'
         before = json.loads(state_path.read_text())
