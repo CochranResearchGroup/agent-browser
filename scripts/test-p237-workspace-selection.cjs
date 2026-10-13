@@ -12,6 +12,7 @@ const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
     let requests = [];
     let replies = [];
     let errors = [];
+    let controls = [];
     try {
         process.env.TMPDIR = config.root + '/ui-temporary';
         fs.mkdirSync(process.env.TMPDIR, { recursive: true });
@@ -48,8 +49,11 @@ const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
                 }
                 return forward(route).catch(async (error) => { errors.push(error.message); await route.fulfill({ status: 500, json: { success: false, error: error.message } }); });
             }
-            if (body?.action === 'service_controller_lease_takeover')
-                return route.fulfill({ json: { success: true, data: { viewerLease: { id: config.controllerLeaseId, state: 'controlling', viewerRole: 'controller' } } } });
+            if (body?.action === 'service_controller_lease_takeover') {
+                controls.push(body);
+                const identity = config.peer?.routeId === body.params?.routeId ? config.peer : config;
+                return route.fulfill({ json: { success: true, data: { viewerLease: { id: identity.controllerLeaseId, state: 'controlling', viewerRole: 'controller' } } } });
+            }
             return route.fulfill({ json: { success: true, data: {} } });
         });
         await page.goto(origin + `/?view=workspace:control&browser=${config.browserId}&tab=alice`);
@@ -60,7 +64,14 @@ const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
             await new Promise(r => setTimeout(r, 25));
         assert.ok(held, JSON.stringify({ stage: 'first UI request', requests, errors, text: await page.locator('body').innerText() }));
         await page.evaluate(() => window.select('bob'));
-        for (let i = 0; i < 10 && requests.length < 2; i++)
+        if (config.peer) {
+            await page.getByText(config.tabs[1][1], { exact: true }).first().waitFor();
+            await page.getByRole('button', { name: 'Advanced connection controls', exact: true }).click();
+            const takeControl = page.getByRole('menuitem', { name: 'Take control', exact: true });
+            if (await takeControl.isEnabled()) await takeControl.click();
+            else await page.keyboard.press('Escape');
+        }
+        for (let i = 0; i < (config.peer ? 80 : 10) && requests.length < 2; i++)
             await new Promise(r => setTimeout(r, 25));
         const transportOverlap = requests.length === 2;
         if (transportOverlap) {
@@ -75,7 +86,7 @@ const config = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
         await page.waitForTimeout(100);
         assert.deepEqual(requests.map(r => r.params.targetId), [config.tabs[0][0], config.tabs[1][0]]);
         assert.deepEqual(errors, []);
-        const report = { transportOverlap, requests: requests.map(r => ({ browserId: r.browserId, params: r.params })), replies: replies.map(r => ({ success: r.success })), text: await page.locator('body').innerText() };
+        const report = { transportOverlap, controls, requests: requests.map(r => ({ browserId: r.browserId, params: r.params })), replies: replies.map(r => ({ success: r.success })), text: await page.locator('body').innerText() };
         fs.writeFileSync(config.root + '/ui-selection-observation.json', JSON.stringify(report, null, 2));
         console.log(JSON.stringify(report));
     }

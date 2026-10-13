@@ -29,7 +29,9 @@ def session_members(session_ids):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--tests', required=True)
+    parser.add_argument('--tests')
+    parser.add_argument('--runtime-cli', help='Absolute source executable for the task-owned runtime-host probe')
+    parser.add_argument('--runtime-ui-bundle', help='Absolute prepared viewport bundle for shared-desktop selection')
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
     parser.add_argument('--service-selection', action='store_true')
@@ -42,6 +44,12 @@ def main():
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
+    assert bool(args.tests) != bool(args.runtime_cli), 'Choose a test executable or runtime CLI'
+    if args.runtime_ui_bundle:
+        assert args.runtime_cli and Path(args.runtime_ui_bundle).is_absolute() and Path(args.runtime_ui_bundle).is_file()
+    if args.runtime_cli:
+        assert not any([args.service_selection, args.http_selection, args.retained_selection,
+                        args.native_dispatch, args.multi_window, args.ui_runner]), 'Runtime startup is a separate fixture mode'
     if args.multi_window:
         assert not args.retained_selection and not args.ui_runner, 'Multi-window native dispatch is a separate fixture mode'
         args.native_dispatch = True
@@ -55,12 +63,12 @@ def main():
         args.http_selection = True
     if args.http_selection:
         args.service_selection = True
-    for value in [args.tests, args.chrome]:
+    for value in [args.tests or args.runtime_cli, args.chrome]:
         assert Path(value).is_absolute() and Path(value).is_file()
     if not args.namespace_worker:
         command = ['unshare', '--user', '--map-current-user', '--keep-caps', '--mount', '--net',
                    '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
-                   '--tests', args.tests, '--chrome', args.chrome,
+                   '--tests' if args.tests else '--runtime-cli', args.tests or args.runtime_cli, '--chrome', args.chrome,
                    '--artifact-dir', args.artifact_dir, '--namespace-worker']
         if args.service_selection:
             command.append('--service-selection')
@@ -72,6 +80,8 @@ def main():
             command.append('--native-dispatch')
         if args.multi_window:
             command.append('--multi-window')
+        if args.runtime_ui_bundle:
+            command.extend(['--runtime-ui-bundle', args.runtime_ui_bundle])
         if args.ui_runner:
             command.extend(['--ui-runner', args.ui_runner, '--ui-bundle', args.ui_bundle])
         read_fd, write_fd = os.pipe()
@@ -178,14 +188,25 @@ def main():
                     env['P237_NATIVE_SELECTION_RETAINED'] = '1'
                 if args.native_dispatch:
                     env['P237_NATIVE_SELECTION_DISPATCH'] = '1'
-                test = spawn([args.tests,
+                if args.runtime_cli:
+                    from lib.p237_runtime_host_fixture import run_runtime_host_fixture
+                    runtime_started = time.monotonic()
+                    run_runtime_host_fixture(spawn, env, root, artifacts,
+                                             args.runtime_cli, args.chrome, workflow_log,
+                                             args.runtime_ui_bundle)
+                    result = 0
+                    (artifacts / 'test-result.json').write_text(json.dumps({
+                        'mode':'source-runtime-host','returncode':0,
+                        'elapsedSeconds':time.monotonic()-runtime_started},indent=2)+'\n')
+                else:
+                    test = spawn([args.tests,
                               ('native::stream::http::tests::physical_service_selection_preserves_distinct_desktops'
                                if args.service_selection else
                                'native::browser::tests::physical_selection_activates_exact_target_window_and_maximizes'),
                               '--exact', '--ignored', '--nocapture', '--test-threads=1'],
                              stdout=workflow_log, stderr=subprocess.STDOUT)
-                result = test.wait(timeout=90)
-                (artifacts / 'test-result.json').write_text(json.dumps({'returncode':result,'testPid':test.pid},indent=2) + '\n')
+                    result = test.wait(timeout=90)
+                    (artifacts / 'test-result.json').write_text(json.dumps({'returncode':result,'testPid':test.pid},indent=2) + '\n')
                 identity = root / 'browser-identity.json'
                 if identity.exists():
                     (artifacts / 'browser-identity.json').write_text(identity.read_text())
@@ -201,6 +222,13 @@ def main():
                 for log in logs.glob('*.stderr.log'):
                     shutil.copy2(log, artifacts / log.name)
         finally:
+            # Preserve UI diagnostics even when the physical oracle rejects.
+            # The private config and synthetic cookie are deliberately excluded.
+            for name in ['ui-selection-observation.json', 'ui-selection-progress.json',
+                         'ui-selection-cleanup.json']:
+                evidence = root / name
+                if evidence.exists():
+                    shutil.copy2(evidence, artifacts / name)
             sessions = {child.pid for child in children}
             # The UI launcher creates its own Chrome session inside this task's
             # private temporary profile root. Retain its exact birth receipt so
@@ -240,14 +268,28 @@ def main():
             for child in children:
                 child.wait(timeout=5)
             remaining = session_members(sessions)
+            root_processes = []
+            for process in Path('/proc').iterdir():
+                if not process.name.isdecimal():
+                    continue
+                try:
+                    if str(root).encode() in (process / 'cmdline').read_bytes():
+                        root_processes.append(int(process.name))
+                except OSError:
+                    continue
             (artifacts / 'cleanup.json').write_text(json.dumps({
                 'taskCreatedSessions': sorted(sessions), 'remaining': remaining,
+                'privateRootProcesses': root_processes, 'privateRoot': str(root),
                 'unprovenUiOwners': unproven_ui_owners,
                 'scope': 'exact task-created OS sessions, including verified UI ownership'}, indent=2) + '\n')
             assert not remaining, 'task-owned native fixture processes remain'
+            assert not root_processes, 'a process still references the private task root; no broad cleanup is authorized'
             assert not unproven_ui_owners, 'UI process identity changed; cleanup authority unproven'
     output = (artifacts / 'workflow.log').read_text()
     print(output)
+    if args.runtime_cli:
+        assert result == 0 and 'runtime-host-workflow: passed' in output
+        return
     assert 'running 1 test' in output, 'physical test selection did not run the intended test'
     assert result == 0 and 'test result: ok. 1 passed; 0 failed;' in output, 'physical native selection workflow failed'
     assert (artifacts / 'browser-identity.json').is_file(), 'browser ownership identity missing'

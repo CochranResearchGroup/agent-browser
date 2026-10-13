@@ -2061,8 +2061,11 @@ export function WorkspaceRemoteViewport({
       }
     }
 
+    const displayAllocationId = stream.displayAllocationId || browserForFocus.displayAllocationId;
     void queueWorkspaceFocusRequest(
-      JSON.stringify([serviceBase(activePort), browserForFocus.id]),
+      JSON.stringify(displayAllocationId
+        ? ["display", displayAllocationId]
+        : ["browser", serviceBase(activePort), browserForFocus.id]),
       queueFocus,
     );
   }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
