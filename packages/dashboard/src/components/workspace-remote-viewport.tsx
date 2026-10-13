@@ -61,6 +61,7 @@ import {
   type WorkspaceViewportPreflightState,
   type WorkspaceViewportTarget,
 } from "@/lib/workspace-viewport-controller";
+import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1379,6 +1380,13 @@ export function WorkspaceRemoteViewport({
   const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
 
+  useEffect(() => () => {
+    // Discard requests that have not started when this viewport leaves.
+    // A request already at the native browser continues independently.
+    focusedKeyRef.current = "";
+    focusGenerationRef.current += 1;
+  }, []);
+
   const clearFullscreenFallbackOffset = useCallback(() => {
     const root = viewportRef.current;
     if (!root) return;
@@ -2009,6 +2017,7 @@ export function WorkspaceRemoteViewport({
     // A completed request may belong to a selection that has since changed.
     // Its native effect is independent; only the current selection owns feedback.
     async function queueFocus() {
+      if (focusGenerationRef.current !== focusGeneration) return;
       const sessionName = daemonSessionNameForBrowser(browserForFocus, selectionForFocus);
       const params = targetId
         ? { targetId, ...(tabIndex !== null ? { index: tabIndex } : {}), maximize: true, ...(sessionName ? { sessionName } : {}) }
@@ -2052,7 +2061,10 @@ export function WorkspaceRemoteViewport({
       }
     }
 
-    void queueFocus();
+    void queueWorkspaceFocusRequest(
+      JSON.stringify([serviceBase(activePort), browserForFocus.id]),
+      queueFocus,
+    );
   }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {

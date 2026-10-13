@@ -256,6 +256,46 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             if after_peer != before_peer { return Err(format!("service focus changed peer desktop: before={before_peer}, after={after_peer}")); }
             println!("physical-service-selection: {}",json!({"observation":observation,"reply":reply,"peer":after_peer}));
         }
+        if let Some(runner) = std::env::var_os("P237_NATIVE_SELECTION_UI_RUNNER") {
+            if !native_dispatch { return Err("UI selection fixture requires actual native dispatch".into()); }
+            let http = http.as_ref().ok_or("UI selection fixture requires HTTP")?;
+            let config = root.join("ui-selection-config.json");
+            std::fs::write(&config, json!({
+                "origin":format!("http://{}",http.address),"cookie":http.cookie,
+                "chrome":executable,"root":root,
+                "bundle":std::env::var("P237_NATIVE_SELECTION_UI_BUNDLE").map_err(|e|e.to_string())?,
+                "browserId":"browser-0","sessionName":"session-0",
+                "routeId":"route-0","controllerLeaseId":"controller-0",
+                "displayAllocationId":service.browsers["browser-0"].display_allocation_id,
+                "tabs":targets[0],
+            }).to_string()).map_err(|e|e.to_string())?;
+            let before_peer = native_observation(&displays[1])?;
+            let output = tokio::time::timeout(Duration::from_secs(25),
+                tokio::process::Command::new("node").kill_on_drop(true).arg(runner).arg(&config).output())
+                .await.map_err(|_|"UI selection runner exceeded its fixture deadline")?
+                .map_err(|e|e.to_string())?;
+            println!("physical-ui-selection-driver: {}",String::from_utf8_lossy(&output.stdout));
+            if !output.status.success() {
+                return Err(format!("UI selection setup/transport failed: {}",String::from_utf8_lossy(&output.stderr)));
+            }
+            let observation = native_observation(&displays[0])?;
+            let expected_title = &targets[0][1].1;
+            let after_peer = native_observation(&displays[1])?;
+            if after_peer != before_peer { return Err(format!("UI selection changed peer desktop: before={before_peer}, after={after_peer}")); }
+            println!("physical-ui-selection-final: {}",json!({"expectedTitle":expected_title,"observation":observation,"peer":after_peer}));
+            if !observation["title"].as_str().unwrap().contains(expected_title) {
+                return Err(format!("latest UI selection lost: expected={expected_title}, observed={observation}"));
+            }
+            let properties = observation["properties"].as_str().unwrap();
+            let expected_pid = service.browsers["browser-0"].pid.unwrap();
+            let owned = properties.lines().any(|line|line == format!("_NET_WM_PID(CARDINAL) = {expected_pid}"));
+            let topmost = observation["activeWindow"].as_str().unwrap().parse::<u64>().ok().is_some_and(|id|
+                observation["stacking"].as_str().unwrap().split(',').next_back().is_some_and(|last|last.trim().ends_with(&format!("0x{id:x}"))));
+            if !owned || !topmost || observation["activeWindow"] != observation["inputWindow"]
+                || !properties.contains("_NET_WM_STATE_MAXIMIZED_HORZ") || !properties.contains("_NET_WM_STATE_MAXIMIZED_VERT") {
+                return Err(format!("latest UI selection lacks exact physical focus: {observation}"));
+            }
+        }
         // An already-issued proof must fail at daemon execution after a
         // controller-generation change, without switching either desktop.
         let target = &targets[0][1].0;

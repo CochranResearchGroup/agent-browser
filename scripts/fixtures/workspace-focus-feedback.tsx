@@ -24,28 +24,28 @@ const authority = {
   },
 };
 
-(window as any).select = (id: string) => {
-  history.replaceState(null, "", `/?view=workspace:control&browser=browser-a&tab=${id}`);
+(window as any).select = (id: string, browserId = "browser-a") => {
+  history.replaceState(null, "", `/?view=workspace:control&browser=${browserId}&tab=${id}`);
   window.dispatchEvent(new Event("popstate"));
   const selection = {
-    workspaceId: null, browserId: "browser-a", sessionId: null,
+    workspaceId: null, browserId, sessionId: null,
     tabId: id, profileId: null, jobId: null,
   };
   const projection = projectWorkspaceViews({
     sources: {
       serviceBrowsers: [{
-        id: "browser-a", health: "ready", activeSessionIds: ["session-a"],
+        id: browserId, health: "ready", activeSessionIds: ["session-a"],
         viewStreams: [stream],
       }],
       daemonSessions: [{ session: "session-a", port: 9223, engine: "chrome" }],
       serviceTabs: [
-        { id: "alice", browserId: "browser-a", targetId: "target-alice",
+        { id: "alice", browserId, targetId: "target-alice",
           lifecycle: "active", title: "Alice", url: "https://example.test/alice" },
-        { id: "bob", browserId: "browser-a", targetId: "target-bob",
+        { id: "bob", browserId, targetId: "target-bob",
           lifecycle: "active", title: "Bob", url: "https://example.test/bob" },
       ],
     },
-    authorityLedger: { "browser:browser-a": authority },
+    authorityLedger: { [`browser:${browserId}`]: { ...authority, browserId, subjectKey: `browser:${browserId}`, workspaceId: `browser:${browserId}` } },
     intent: { selection, mode: "control", dashboardHref: location.href },
   } as any);
   root.render(
@@ -57,4 +57,5 @@ const authority = {
     />,
   );
 };
+(window as any).dispose = () => root.unmount();
 (window as any).select("alice");
