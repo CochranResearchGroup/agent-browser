@@ -45,6 +45,10 @@ fn current_binding(
         target_id: field("targetId")?,
         browser_pid: browser.pid.ok_or("operator_focus_process_missing")?,
         route_id,
+        display_allocation_id: route
+            .display_allocation_id
+            .clone()
+            .ok_or("operator_focus_display_missing")?,
         controller_lease_id: field("controllerLeaseId")?,
         controller_epoch: route.controller_epoch,
         policy_revision: profile
@@ -92,6 +96,8 @@ pub(crate) struct OperatorFocusBinding {
     pub target_id: String,
     pub browser_pid: u32,
     pub route_id: String,
+    /// Native desktop assignment at issuance; reassignment invalidates proof.
+    pub display_allocation_id: String,
     pub controller_lease_id: String,
     pub controller_epoch: u64,
     pub policy_revision: u64,
@@ -109,6 +115,7 @@ impl OperatorFocusBinding {
                 &self.profile_id,
                 &self.target_id,
                 &self.route_id,
+                &self.display_allocation_id,
                 &self.controller_lease_id,
             ]
             .iter()
@@ -184,6 +191,7 @@ fn authorize_current(
     });
     if route.browser_id.as_ref() != Some(&binding.browser_id)
         || route.session_id.as_ref() != Some(&binding.session_name)
+        || route.display_allocation_id.as_deref() != Some(binding.display_allocation_id.as_str())
         || route.display_allocation_id != browser.display_allocation_id
         || route.display_allocation_id.is_none()
         || route.read_only
@@ -298,6 +306,7 @@ mod tests {
             target_id: "target-a".into(),
             browser_pid: 100,
             route_id: "route-a".into(),
+            display_allocation_id: "display-a".into(),
             controller_lease_id: "controller-a".into(),
             controller_epoch: 1,
             policy_revision: 1,
@@ -405,6 +414,7 @@ mod tests {
             target_id: "target-a".into(),
             browser_pid: 100,
             route_id: "route-a".into(),
+            display_allocation_id: "display-a".into(),
             controller_lease_id: "controller-a".into(),
             controller_epoch: 1,
             policy_revision: 1,
@@ -419,6 +429,7 @@ mod tests {
             "targetId",
             "browserPid",
             "routeId",
+            "displayAllocationId",
             "controllerLeaseId",
             "controllerEpoch",
             "policyRevision",

@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--tests', required=True)
     parser.add_argument('--chrome', required=True)
     parser.add_argument('--artifact-dir', required=True)
+    parser.add_argument('--service-selection', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
@@ -42,6 +43,8 @@ def main():
                    '--propagation', 'private', 'python3', str(Path(__file__).resolve()),
                    '--tests', args.tests, '--chrome', args.chrome,
                    '--artifact-dir', args.artifact_dir, '--namespace-worker']
+        if args.service_selection:
+            command.append('--service-selection')
         read_fd, write_fd = os.pipe()
         proof = {'parentPid': os.getpid(), 'namespaces': {
             namespace: os.readlink(f'/proc/self/ns/{namespace}')
@@ -103,33 +106,42 @@ def main():
         try:
             with (artifacts / 'desktop.log').open('w') as desktop_log, \
                     (artifacts / 'workflow.log').open('w') as workflow_log:
-                read_fd, write_fd = os.pipe()
-                try:
-                    xvfb = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0',
-                                  '1280x800x24', '-nolisten', 'tcp'],
-                                 pass_fds=(write_fd,), stdout=desktop_log, stderr=desktop_log)
-                    os.close(write_fd)
-                    write_fd = None
-                    assert select.select([read_fd], [], [], 15)[0], 'Xvfb readiness timed out'
-                    display_number = os.read(read_fd, 64).decode().strip()
-                    assert display_number.isdecimal() and xvfb.poll() is None
-                    env['DISPLAY'] = ':' + display_number
-                finally:
-                    os.close(read_fd)
-                    if write_fd is not None:
+                def start_desktop():
+                    read_fd, write_fd = os.pipe()
+                    try:
+                        xvfb = spawn(['Xvfb', '-displayfd', str(write_fd), '-screen', '0',
+                                      '1280x800x24', '-nolisten', 'tcp'],
+                                     pass_fds=(write_fd,), stdout=desktop_log, stderr=desktop_log)
                         os.close(write_fd)
-                wm = spawn(['openbox', '--sm-disable'], stdout=desktop_log, stderr=desktop_log)
-                deadline = time.monotonic() + 15
-                while True:
-                    ready = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
-                                           env=env, capture_output=True, text=True)
-                    if ready.returncode == 0 and 'window id #' in ready.stdout:
-                        break
-                    assert xvfb.poll() is None and wm.poll() is None
-                    assert time.monotonic() < deadline, 'task-owned window manager readiness timed out'
-                    time.sleep(0.025)
+                        write_fd = None
+                        assert select.select([read_fd], [], [], 15)[0], 'Xvfb readiness timed out'
+                        display_number = os.read(read_fd, 64).decode().strip()
+                        assert display_number.isdecimal() and xvfb.poll() is None
+                        desktop_display = ':' + display_number
+                    finally:
+                        os.close(read_fd)
+                        if write_fd is not None:
+                            os.close(write_fd)
+                    env['DISPLAY'] = desktop_display
+                    wm = spawn(['openbox', '--sm-disable'], stdout=desktop_log, stderr=desktop_log)
+                    deadline = time.monotonic() + 15
+                    while True:
+                        ready = subprocess.run(['xprop', '-root', '_NET_SUPPORTING_WM_CHECK'],
+                                               env=env, capture_output=True, text=True)
+                        if ready.returncode == 0 and 'window id #' in ready.stdout:
+                            break
+                        assert xvfb.poll() is None and wm.poll() is None
+                        assert time.monotonic() < deadline, 'task-owned window manager readiness timed out'
+                        time.sleep(0.025)
+                    return desktop_display
+                primary_display = start_desktop()
+                if args.service_selection:
+                    env['P237_NATIVE_SELECTION_PEER_DISPLAY'] = start_desktop()
+                env['DISPLAY'] = primary_display
                 test = spawn([args.tests,
-                              'native::browser::tests::physical_selection_activates_exact_target_window_and_maximizes',
+                              ('native::stream::http::tests::physical_service_selection_preserves_distinct_desktops'
+                               if args.service_selection else
+                               'native::browser::tests::physical_selection_activates_exact_target_window_and_maximizes'),
                               '--exact', '--ignored', '--nocapture', '--test-threads=1'],
                              stdout=workflow_log, stderr=subprocess.STDOUT)
                 result = test.wait(timeout=90)

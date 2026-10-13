@@ -1811,10 +1811,9 @@ fn try_launch_chrome(
         temp_user_data_dir,
         user_data_dir,
         runtime_profile,
-        display_name: options
-            .remote_headed
-            .then(|| launched_display.clone())
-            .flatten(),
+        // Preserve the exact display passed to every headed process, including
+        // an explicit local display. Native focus must not use daemon DISPLAY.
+        display_name: launched_display,
         stderr_log_path,
         stderr_drainer: Some(stderr_drainer),
         aux_processes,

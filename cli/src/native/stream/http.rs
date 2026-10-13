@@ -5780,6 +5780,8 @@ mod tests {
         assert!(error.contains("requires serviceName, agentName, and taskName"));
     }
 
+    include!("p237_physical_selection.rs");
+
     #[test]
     fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {
         const CHILD: &str = "P160_OPERATOR_FOCUS_TEST_CHILD";
@@ -5876,6 +5878,23 @@ mod tests {
             .unwrap()
             .controller_epoch += 1;
         assert!(dashboard_auth::verify_operator_focus(&changed, &command).is_err());
+        // Reassignment can preserve the process and controller epoch. A proof
+        // issued for the old native desktop must not authorize the new one.
+        let mut reassigned = state.clone();
+        reassigned
+            .browsers
+            .get_mut("browser-a")
+            .unwrap()
+            .display_allocation_id = Some("display-b".into());
+        reassigned
+            .remote_view_routes
+            .get_mut("route-a")
+            .unwrap()
+            .display_allocation_id = Some("display-b".into());
+        assert!(
+            dashboard_auth::verify_operator_focus(&reassigned, &command).is_err(),
+            "old desktop focus proof authorized a replacement desktop"
+        );
     }
 
     #[test]

@@ -2258,14 +2258,23 @@ impl BrowserManager {
 
     fn focus_native_window_for_view(&self) -> Option<Value> {
         let pid = self.browser_pid()?;
-        let display = env::var("DISPLAY")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| {
-                env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY")
-                    .ok()
-                    .filter(|value| !value.trim().is_empty())
-            })?;
+        // A service process can own browsers on distinct desktops. The
+        // launched process retains its assignment; ambient DISPLAY describes
+        // this daemon process and must not override that browser identity.
+        let display = match self.browser_process.as_ref() {
+            Some(BrowserProcess::Chrome(process)) => process.display_name().map(str::to_owned),
+            _ => None,
+        }
+        .or_else(|| {
+            env::var("DISPLAY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .or_else(|| {
+            env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })?;
 
         #[cfg(target_os = "linux")]
         {
