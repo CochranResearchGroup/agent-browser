@@ -4,6 +4,18 @@ Updated: 2026-10-12
 
 ## Current execution
 
+### 2026-10-12 P239 failed-upgrade drain preservation
+
+[P239](docs/dev/plans/0239-2026-10-12-failed-upgrade-preservation.md) adds an isolated
+public MCP acceptance fixture for #183. An active admission drain rejects new
+work, exact graceful host exit preserves the browser PID/CDP/profile lock, and
+the same task continues afterward. The negative control catches browser loss;
+final fixture census is zero. No production shutdown or provider effect.
+The [receipt](docs/dev/notes/0239-2026-10-12-failed-upgrade-preservation.md) separates
+two corrected fixture assertions from product evidence. #183 still requires
+the workstation-wide terminal shutdown operation and failed-ledger, generation,
+escalation and retry qualification. P237 retains #260/#261 ownership.
+
 ### 2026-10-12 P238 workflow MCP
 
 [P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) qualifies spec #262 and
