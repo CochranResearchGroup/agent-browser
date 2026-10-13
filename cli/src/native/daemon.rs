@@ -1937,3 +1937,6 @@ mod tests {
         assert!(browser_session_focus_command(&foreign, &state).is_none());
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+include!("p237_dispatch_fixture.rs");

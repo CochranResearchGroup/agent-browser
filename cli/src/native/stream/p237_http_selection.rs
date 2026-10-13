@@ -5,6 +5,7 @@
 struct P237SelectionHttp {
     address: SocketAddr,
     cookie: String,
+    dispatchers: Vec<(crate::native::daemon::P237NativeDispatch, String)>,
     tasks: Vec<tokio::task::JoinHandle<()>>,
     advance_controller_before_execution: Arc<std::sync::atomic::AtomicBool>,
 }
@@ -44,6 +45,7 @@ impl P237SelectionHttp {
 
     async fn start(daemons: Arc<tokio::sync::Mutex<Vec<DaemonState>>>, credentials: &Path) -> Self {
         let mut tasks = Vec::new();
+        let mut dispatchers = Vec::new();
         let advance_controller_before_execution =
             Arc::new(std::sync::atomic::AtomicBool::new(false));
         std::env::set_var("AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY", "disabled");
@@ -61,6 +63,17 @@ impl P237SelectionHttp {
             .unwrap();
             let token = crate::connection::generate_daemon_auth_token().unwrap();
             crate::connection::write_daemon_auth_token(&session, &token).unwrap();
+            let dispatcher = if std::env::var_os("P237_NATIVE_SELECTION_DISPATCH").is_some() {
+                let state = std::mem::replace(
+                    &mut daemons.lock().await[index],
+                    DaemonState::new_for_session_with_stream(&session, None, None),
+                );
+                let dispatcher = crate::native::daemon::P237NativeDispatch::new(state).await;
+                dispatchers.push((dispatcher.clone(), token.clone()));
+                Some(dispatcher)
+            } else {
+                None
+            };
             let shared = daemons.clone();
             let advance_controller = advance_controller_before_execution.clone();
             tasks.push(tokio::spawn(async move {
@@ -98,14 +111,18 @@ impl P237SelectionHttp {
                             })
                             .unwrap();
                     }
-                    let result = crate::native::browser_lifecycle::handle_view_focus(
-                        &command,
-                        &mut shared.lock().await[index],
-                    )
-                    .await;
-                    let response = match result {
-                        Ok(data) => json!({"success":true,"data":data}),
-                        Err(error) => json!({"success":false,"error":error}),
+                    let response = if let Some(dispatcher) = dispatcher.as_ref() {
+                        dispatcher.dispatch(&line, &token).await
+                    } else {
+                        match crate::native::browser_lifecycle::handle_view_focus(
+                            &command,
+                            &mut shared.lock().await[index],
+                        )
+                        .await
+                        {
+                            Ok(data) => json!({"success":true,"data":data}),
+                            Err(error) => json!({"success":false,"error":error}),
+                        }
                     };
                     writer
                         .write_all(format!("{response}\n").as_bytes())
@@ -170,8 +187,15 @@ impl P237SelectionHttp {
         Self {
             address,
             cookie,
+            dispatchers,
             tasks,
             advance_controller_before_execution,
+        }
+    }
+
+    async fn close_dispatchers(&self) {
+        for (dispatcher, token) in &self.dispatchers {
+            dispatcher.close(token).await;
         }
     }
 

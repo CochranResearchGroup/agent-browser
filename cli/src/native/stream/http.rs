@@ -5841,6 +5841,66 @@ mod tests {
         assert_ne!(command["operatorFocusProofToken"], "caller-forged");
         dashboard_auth::verify_operator_focus(&state, &command).unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
+        // The controller proof admits human focus without borrowing the
+        // service caller's child access. Exercise the earlier native binder,
+        // which runs before daemon handle validation in the real dispatcher.
+        use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|snapshot| {
+                *snapshot = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let durable_before = serde_json::to_value(repository.load_snapshot().unwrap()).unwrap();
+        let mut daemon =
+            crate::native::action_runtime::runtime::DaemonState::new_for_session_with_stream(
+                "session-a",
+                None,
+                None,
+            );
+        daemon.runtime_owner_binding = Some(
+            crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                crate::runtime_owner_transfer::OwnerAuthorityClaim {
+                    owner_id: "fixture-owner".into(),
+                    profile_identity_digest: "0".repeat(64),
+                    owner_generation: 1,
+                    logical_browser_id: "browser-a".into(),
+                    daemon_session_route: "session-a".into(),
+                    process_instance_digest: "1".repeat(64),
+                },
+            ),
+        );
+        let mut wire_command = command.clone();
+        wire_command["connectionInstanceId"] = json!("fixture-native-connection");
+        let bound = crate::native::action_runtime::runtime::bind_native_service_tab_command(&wire_command, &daemon)
+            .expect("authenticated controller focus must reach native handle validation without a service child grant");
+        crate::native::action_runtime::runtime::validate_service_tab_handle_for_daemon(
+            bound["serviceTabHandle"].as_object().unwrap(),
+            &bound,
+            &daemon,
+        )
+        .unwrap();
+        let mut forged = wire_command.clone();
+        forged["operatorFocusProofToken"] = json!("forged");
+        assert!(
+            crate::native::action_runtime::runtime::bind_native_service_tab_command(
+                &forged, &daemon
+            )
+            .is_err()
+        );
+        let mut ordinary = wire_command.clone();
+        ordinary["operatorFocus"] = json!(false);
+        assert!(
+            crate::native::action_runtime::runtime::bind_native_service_tab_command(
+                &ordinary, &daemon
+            )
+            .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(repository.load_snapshot().unwrap()).unwrap(),
+            durable_before
+        );
         let provenance =
             crate::native::service_request_provenance::capture_service_request_provenance(
                 &command,

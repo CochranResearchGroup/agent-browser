@@ -45,6 +45,11 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         .unwrap()
         .bootstrap_credential_file;
     let retained = std::env::var_os("P237_NATIVE_SELECTION_RETAINED").is_some();
+    let native_dispatch = std::env::var_os("P237_NATIVE_SELECTION_DISPATCH").is_some();
+    assert!(
+        !(retained && native_dispatch),
+        "retained and native-dispatch modes qualify separate boundaries"
+    );
     let mut launch_owners = Vec::new();
     let mut daemons = Vec::new();
     let mut targets = Vec::new();
@@ -134,10 +139,18 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             Ok(())
         })
         .unwrap();
-    if retained {
+    if retained || native_dispatch {
         use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
         use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
-        for (index, manager) in launch_owners.iter().enumerate() {
+        let managers: Vec<&BrowserManager> = if retained {
+            launch_owners.iter().collect()
+        } else {
+            daemons
+                .iter()
+                .map(|state| state.browser.as_ref().unwrap())
+                .collect()
+        };
+        for (index, manager) in managers.iter().enumerate() {
             let profile = manager.browser_user_data_dir().unwrap();
             let process = crate::process_identity::capture_process_identity(
                 manager.browser_pid().unwrap(),
@@ -174,6 +187,16 @@ async fn physical_service_selection_preserves_distinct_desktops() {
                 .unwrap();
         }
     }
+    if native_dispatch {
+        for daemon in &mut daemons {
+            daemon.runtime_owner_binding =
+                crate::runtime_owner_transfer::owner_binding_for_session(
+                    &repository,
+                    &daemon.session_id,
+                )
+                .unwrap();
+        }
+    }
     let daemons = Arc::new(tokio::sync::Mutex::new(daemons));
     let http = if std::env::var_os("P237_NATIVE_SELECTION_HTTP").is_some() {
         Some(P237SelectionHttp::start(daemons.clone(), &credentials).await)
@@ -203,7 +226,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
                 let minimized = std::process::Command::new("xdotool").args(["windowminimize", "--sync", &window]).env("DISPLAY", &displays[index]).status().map_err(|e|e.to_string())?;
                 if !minimized.success() { return Err("retained native probe could not minimize its exact PID window".into()); }
             }
-            let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"select",
+            let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"select","jobTimeoutMs":5000,
                 "browserId":format!("browser-{index}"),"sessionName":format!("session-{index}"),
                 "params":{"operatorFocus":true,"targetId":target,"routeId":format!("route-{index}"),
                 "controllerLeaseId":format!("controller-{index}"),"maximize":true,"nativeFocusOnly":retained}}).to_string();
@@ -236,7 +259,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         // An already-issued proof must fail at daemon execution after a
         // controller-generation change, without switching either desktop.
         let target = &targets[0][1].0;
-        let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"stale-select",
+        let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"stale-select","jobTimeoutMs":5000,
             "browserId":"browser-0","sessionName":"session-0","params":{"operatorFocus":true,"targetId":target,
             "routeId":"route-0","controllerLeaseId":"controller-0","maximize":true}}).to_string();
         let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"admin","session-0",None).map_err(|e|format!("{e:?}"))?;
@@ -259,7 +282,12 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         let after = [native_observation(&displays[0])?,native_observation(&displays[1])?];
         if before != after { return Err(format!("rejected stale focus changed native desktops: before={before:?}, after={after:?}")); }
         for (index,daemon) in daemons.lock().await.iter().enumerate() {
-            let inventory = daemon.browser.as_ref().unwrap().client.send_command("Target.getTargets",None,None).await?;
+            let observer;
+            let client = if native_dispatch {
+                observer = agent_browser_cdp::client::CdpClient::connect(service.browsers[&format!("browser-{index}")].cdp_endpoint.as_deref().unwrap()).await?;
+                &observer
+            } else { daemon.browser.as_ref().unwrap().client.as_ref() };
+            let inventory = client.send_command("Target.getTargets",None,None).await?;
             if !targets[index].iter().all(|(target,_)|inventory["targetInfos"].as_array().unwrap().iter().any(|entry| entry["targetId"].as_str()==Some(target.as_str()))) {
                 return Err(format!("physical service selection removed a peer target on desktop {index}"));
             }
@@ -273,6 +301,9 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             json!({"error":error}).to_string(),
         )
         .unwrap();
+    }
+    if native_dispatch {
+        http.as_ref().unwrap().close_dispatchers().await;
     }
     for daemon in daemons.lock().await.iter_mut() {
         if let Some(manager) = daemon.browser.as_mut() {

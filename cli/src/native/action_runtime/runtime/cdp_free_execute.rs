@@ -488,7 +488,15 @@ pub(crate) fn bind_native_service_tab_command(
         .get(&tab_id)
         .filter(|tab| tab.browser_id == browser_id)
         .ok_or("service_tab_target_unproven: no current target in the routed browser")?;
-    if tab.profile_access.is_none() {
+    // Human focus is authorized by the ingress-signed controller proof,
+    // independently of service child custody. Preserve ordinary child access
+    // admission and verify this authority before constructing its handle.
+    let authenticated_operator_focus = action == "view_focus"
+        && command.get("operatorFocus").and_then(Value::as_bool) == Some(true);
+    if authenticated_operator_focus {
+        crate::native::stream::verify_operator_focus(&snapshot, command)?;
+    }
+    if tab.profile_access.is_none() && !authenticated_operator_focus {
         return Err("service_tab_target_unproven: current child access record is missing; acquire an owned service tab".into());
     }
     let handle = snapshot

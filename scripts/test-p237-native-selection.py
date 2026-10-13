@@ -35,10 +35,11 @@ def main():
     parser.add_argument('--service-selection', action='store_true')
     parser.add_argument('--http-selection', action='store_true')
     parser.add_argument('--retained-selection', action='store_true')
+    parser.add_argument('--native-dispatch', action='store_true')
     parser.add_argument('--namespace-worker', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--namespace-parent-proof-fd', type=int, help=argparse.SUPPRESS)
     args = parser.parse_args()
-    if args.retained_selection:
+    if args.retained_selection or args.native_dispatch:
         args.http_selection = True
     if args.http_selection:
         args.service_selection = True
@@ -55,6 +56,8 @@ def main():
             command.append('--http-selection')
         if args.retained_selection:
             command.append('--retained-selection')
+        if args.native_dispatch:
+            command.append('--native-dispatch')
         read_fd, write_fd = os.pipe()
         proof = {'parentPid': os.getpid(), 'namespaces': {
             namespace: os.readlink(f'/proc/self/ns/{namespace}')
@@ -152,6 +155,8 @@ def main():
                     env['P237_NATIVE_SELECTION_HTTP'] = '1'
                 if args.retained_selection:
                     env['P237_NATIVE_SELECTION_RETAINED'] = '1'
+                if args.native_dispatch:
+                    env['P237_NATIVE_SELECTION_DISPATCH'] = '1'
                 test = spawn([args.tests,
                               ('native::stream::http::tests::physical_service_selection_preserves_distinct_desktops'
                                if args.service_selection else
