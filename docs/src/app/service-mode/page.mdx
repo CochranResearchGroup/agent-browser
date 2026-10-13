@@ -1329,6 +1329,8 @@ Authorized native Service lane title and URL reads bind their exact target witho
 native tab or raising the browser. Explicit workspace focus and tab selection
 still activate the addressed target. Child ownership and permissions continue
 to apply, so background metadata reads preserve the person's foreground desktop.
+Managed tasks sharing one browser preserve the currently visible tab when
+another task reads its title or URL; an explicit focus operation selects it.
 
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.

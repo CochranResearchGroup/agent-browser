@@ -4251,6 +4251,8 @@ Authorized native Service lane title and URL reads bind their exact target witho
 native tab or raising the browser. Explicit workspace focus and tab selection
 still activate the addressed target. This lets background metadata reads
 preserve the person's foreground desktop.
+Managed tasks sharing one browser preserve the currently visible tab when
+another task reads its title or URL; an explicit focus operation selects it.
 
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a

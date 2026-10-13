@@ -73,6 +73,8 @@ Authorized native Service lane title and URL reads observe the exact target with
 native tab or raising the browser. Use explicit workspace focus or tab selection
 when the person should see that target. Child ownership and permissions still
 apply to background reads.
+Managed tasks sharing one browser also preserve the visible peer tab during
+title and URL reads. Use explicit focus to select the task's tab for a person.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's

@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False, managed_session=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -32,6 +32,8 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
                 'AGENT_BROWSER_EXECUTABLE_PATH': chrome,
                 'AGENT_BROWSER_ARGS': '--no-sandbox,--no-proxy-server,--disable-background-networking',
                 'AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY': 'disabled'})
+    if managed_session:
+        env['AGENT_BROWSER_SESSION_DISPLAY'] = env['DISPLAY']
     if cli_bootstrap:
         env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS')
         env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN')
@@ -92,6 +94,10 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     assert manifest['pid'] == daemon_pid, 'runtime-host publication belongs to a different process'
     assert manifest['executableGeneration'] == hashlib.sha256(Path(cli).read_bytes()).hexdigest(), 'runtime-host executable generation differs from the reviewed pin'
     (artifacts / 'runtime-host-observation.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    if managed_session:
+        from lib.p237_managed_session_fixture import run_managed_session_fixture
+        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log)
+        return
 
     def command(session, *arguments):
         process = spawn([cli, '--json', '--session', session, *arguments],

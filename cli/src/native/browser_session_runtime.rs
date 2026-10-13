@@ -1402,7 +1402,14 @@ fn run_browser_worker(
                                 .clear_initial_task_marker(&tab.target_id, &marker)
                                 .await;
                         }
-                        manager.tab_switch_target_id(&tab.target_id).await?;
+                        // Read the addressed managed task without replacing the
+                        // person's physical selection. Other actions retain
+                        // their existing exact-target activation semantics.
+                        if matches!(command["action"].as_str(), Some("title" | "url")) {
+                            manager.bind_observation_target(&tab.target_id).await?;
+                        } else {
+                            manager.tab_switch_target_id(&tab.target_id).await?;
+                        }
                         state.session_id = session_id;
                         state.session_name = Some(session_name);
                         Ok(super::actions::execute_managed_target_command(
