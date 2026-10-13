@@ -94,6 +94,7 @@
     "test:dashboard-auth-status": "node --no-warnings --experimental-strip-types scripts/test-dashboard-auth-status.ts",
     "test:dashboard-durable-remote-view-handoff": "node scripts/test-dashboard-durable-remote-view-handoff.js",
     "test:remote-view-handoff-docs": "node scripts/test-remote-view-handoff-docs.js",
+    "test:workspace-focus-feedback": "node scripts/test-workspace-focus-feedback.cjs",
     "test:workspace-viewport-controller": "node --no-warnings --experimental-strip-types scripts/test-workspace-viewport-controller.js",
     "test:dashboard-incident-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-incident-summary.js",
     "test:dashboard-runtime-health-summary": "node --no-warnings --experimental-strip-types scripts/test-dashboard-runtime-health-summary.ts",
