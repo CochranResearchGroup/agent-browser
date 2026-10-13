@@ -5,7 +5,7 @@ import fcntl
 import http.client
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlencode
 import secrets
 import subprocess
 import socket
@@ -13,7 +13,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 
-def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False):
+def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_log, ui_bundle=None, controller_fence=False, native_eof=False, peer_read_only=False, cli_bootstrap=False, public_background=False):
     sockets = root / 'runtime-sockets'
     sockets.mkdir(mode=0o700)
     token = secrets.token_hex(32)
@@ -262,6 +262,65 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         assert f'_NET_WM_PID(CARDINAL) = {births["session:p237-beta"]["pid"]}' in properties.splitlines()
         assert '_NET_WM_STATE_MAXIMIZED_HORZ' in properties and '_NET_WM_STATE_MAXIMIZED_VERT' in properties
         assert all(inventory(browser) == inventories[browser_id] for browser_id,browser in state['browsers'].items()), 'UI selection changed source documents or targets'
+    if public_background:
+        target_url = 'data:text/html,<title>p237-public-background</title><p>public target</p>'
+        profile_id = state['browsers']['session:p237-beta']['profileId']
+        plan_status, _, plan = source_http('/api/service/access-plan?' + urlencode({
+            'runtimeProfile':profile_id, 'sessionName':'p237-beta',
+            'serviceName':'agent-browser-cli', 'agentName':'p237-beta',
+            'url':target_url}), cookie=cookie, method='GET')
+        (artifacts/'source-public-background-plan.json').write_text(json.dumps({'status':plan_status,'reply':plan},indent=2)+'\n')
+        assert plan_status == 200 and plan['success'], 'public access plan failed'
+        planned = plan['data']['decision']['serviceRequest']
+        assert planned['available'] and planned['request']['browserId'] == 'session:p237-beta'
+        assert planned['request']['sessionName'] == 'p237-beta' and planned['request']['runtimeProfile'] == profile_id
+        def public_target_request(action, params):
+            status, _, reply = source_http('/api/service/request', {
+                'action':action, 'browserId':'session:p237-beta',
+                'serviceName':'agent-browser-cli', 'agentName':'p237-beta',
+                'taskName':'synthetic-public-background', 'jobTimeoutMs':10000,
+                'params':{'sessionName':'p237-beta', 'runtimeProfile':profile_id, **params}}, cookie, timeout=20)
+            return {'status':status, 'reply':reply}
+        created = public_target_request('tab_new', {'url':target_url})
+        (artifacts/'source-public-background-create.json').write_text(json.dumps(created,indent=2)+'\n')
+        assert created['status'] == 200 and created['reply']['success'], 'public target creation failed'
+        current = command('p237-beta','service','status')['data']['service_state']
+        target = next(tab for tab in current['tabs'].values() if tab.get('url') == target_url)
+        (artifacts/'source-public-background-target.json').write_text(json.dumps(target,indent=2)+'\n')
+        assert target.get('profileAccess') is not None, 'public creator did not establish child access'
+        # Restore Alpha through the same authenticated operator path before
+        # observing the exact newly authorized Beta target.
+        alpha = next(tab for tab in state['tabs'].values() if tab.get('title') == 'p237-alpha')
+        status, _, selected = source_http('/api/service/request', {
+            'action':'view_focus','browserId':'session:p237-alpha',
+            'serviceName':'P237Fixture','agentName':'admin','taskName':'synthetic-native-focus',
+            'params':{'sessionName':'p237-alpha','targetId':alpha['targetId'],
+                      'operatorFocus':True,'maximize':True,
+                      'routeId':'fixture-route:p237-alpha',
+                      'controllerLeaseId':'fixture-controller:p237-alpha'}},cookie)
+        assert status == 200 and selected['success'], 'public Alpha selection failed'
+        def public_foreground():
+            active = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
+            return {'activeWindow':active,
+                    'inputWindow':subprocess.check_output(['xdotool','getwindowfocus'],env=env,text=True).strip(),
+                    'title':subprocess.check_output(['xdotool','getwindowname',active],env=env,text=True).strip(),
+                    'properties':subprocess.check_output(['xprop','-id',active,'_NET_WM_PID','_NET_WM_STATE'],env=env,text=True)}
+        before = public_foreground()
+        assert 'p237-alpha' in before['title'] and before['activeWindow'] == before['inputWindow']
+        assert f'_NET_WM_PID(CARDINAL) = {births["session:p237-alpha"]["pid"]}' in before['properties'].splitlines()
+        preserved = {browser_id:inventory(browser) for browser_id,browser in state['browsers'].items()}
+        (artifacts/'source-public-background-before.json').write_text(json.dumps({'foreground':before,'inventories':preserved},indent=2)+'\n')
+        reads = []
+        for action,field,expected in [('title','title','p237-public-background'),('url','url',target_url)]:
+            result = public_target_request(action, {'targetId':target['targetId']})
+            foreground = public_foreground()
+            reads.append({'action':action, **result, 'foreground':foreground})
+            (artifacts/'source-public-background-reads.json').write_text(json.dumps(reads,indent=2)+'\n')
+            assert result['status'] == 200 and result['reply']['success'], 'authorized public target read failed'
+            assert result['reply']['data'][field] == expected, 'public observation returned a different target'
+            assert foreground == before, 'public background observation changed physical foreground'
+            assert all(inventory(browser) == preserved[browser_id] for browser_id,browser in state['browsers'].items()), 'public observation changed documents or targets'
+        assert inventory(state['browsers']['session:p237-alpha']) == inventories['session:p237-alpha'], 'public observation changed peer documents'
     if peer_read_only:
         before_window = subprocess.check_output(['xdotool','getactivewindow'],env=env,text=True).strip()
         before_title = subprocess.check_output(['xdotool','getwindowname',before_window],env=env,text=True).strip()
