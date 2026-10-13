@@ -3,7 +3,7 @@
 Product lane: PL-PLATFORM
 Owning plan: [P237](../plans/0237-2026-10-11-native-dashboard-handoffs.md)
 Work item: [261](https://github.com/CochranResearchGroup/agent-browser/issues/261)
-State: peer-preserving synthetic repair qualified; wider recovery open
+State: peer-preserving and last-browser synthetic recovery qualified; physical and wider acceptance open
 
 ## Observed workflow and control
 
@@ -60,3 +60,28 @@ The final fixture also waits for the actual foreground owner observation to clea
 Both ordinary same-URL workflows pass: WebSocket in 26.47 seconds and HTTP fallback in 26.57 seconds. Logs are `/tmp/p237-native-resume-owner-state-ws.log` and `/tmp/p237-native-resume-owner-state-http.log`. Their sibling artifact directories retain the two opaque 303 responses, zero Dashboard-login requests and exact task-process cleanup receipts with empty remaining lists. The owner readback reports `pendingHuman=false`, `recoveredTargetPresent=true` and `human_use_already_confirmed`. The private native provider separately proves the new correlation's frame 12; this does not infer a new first-use timestamp or require rewriting an already-confirmed observation.
 
 Final formatting check and strict workspace Clippy pass after the fixture change. Earlier consumer/handler/output gates retain their scope because no product executable behavior changed after those gates. Remote View source commit `7ed47c1c628096c0dd90fcd099d5b1b96da9a112` is pushed on `feat/native-handoff-use-proof`, verified by exact remote-ref readback. Source custody is separate from installed activation and canonical integration. The original last-browser case remains open.
+
+
+## Last-browser continuation replay
+
+An explicit `--last-browser` fixture mode implies recovery and removes the preserved peer. At expiry the actual owner state contains no tabs or browsers while the original link remains valid. With the native continuation repair, the opaque URL returns 303 and the authenticated continuation returns 503. This is a different boundary from the original pre-repair 410. Preserve `/tmp/p237-last-browser-mode-ws.log` and `/tmp/p237-last-browser-mode-ws-artifacts`; the workflow failed in 26.41 seconds and its cleanup receipt has no remaining task-process members.
+
+The frozen last-browser-mode Agent Browser pin has SHA256 `0d29b3e8a499bc9046abf3bc7f2886444a1729783315ccefdb57eb5e96edec39`, baseline `1ec8ccb6`; Remote View pin has SHA256 `989055a297d67da812267d7a239b0e2591150eacbc7fbc11d52c806ae3c8d475`, baseline `7ed47c1`. Both change fixture mode only; the provider snapshot and fixed window PID remain unchanged.
+
+Ranked hypotheses before the next probe: fixed window PID after a new browser launch, fixed provider assignment state after lifecycle change, then incorrect first-use/hold restoration despite successful recovery. The first probe makes the composed synthetic window follow the fake process launch's recorded PID and prints only the owner result's success/error for diagnosis. No product focus fence is weakened. This probe is not yet qualified, and its tagged instrumentation must be removed before final acceptance.
+
+The planning audit's successful return is structural hygiene only: P237 is excluded as unclassified and no plans are audited. It is not substantive acceptance of this plan or its remaining requirements.
+
+
+The PID probe passes the original last-browser workflow in 26.62 seconds. Existing native assignment state remains valid without forwarding additional owner operations or changing assignment policy. Both recovery commands report success; a new native correlation records frame 12 and the actual owner clears pending human use while preserving the original first-use timestamp. The task-process cleanup list is empty. Probe log `/tmp/p237-last-browser-pid-probe-ws.log` and pin `/tmp/p237-last-browser-pid-probe-agent-browser-tests`, SHA256 `db36be4e623774221fdaff1a14c1fdd18dffa3f0e1262e2330548c21686cb955`, retain the result. This attributes the repaired-path 503 to the fixture's fixed window PID. It does not qualify a lifecycle-generation or assignment replacement: this last-browser case reuses the retained native assignment.
+
+Tagged diagnostics are removed from current source. The final ordinary last-browser candidate must still pass both transports after removal before source qualification is updated. The original pre-repair last-browser 410 remains product RED evidence; physical focus and installed/private-authentication acceptance remain separate.
+
+
+## Final last-browser source qualification
+
+With diagnostic logging removed, ordinary last-browser opaque HTTPS recovery passes WebSocket in 26.68 seconds and HTTP fallback in 26.46 seconds. Both prove no live tabs or browsers at configured expiry, retain the original valid link, recreate its target through fresh native authentication, publish a distinct private native frame-12 observation, preserve the original first-use timestamp and clear the actual pending-human hold. Exactly two synthetic launches cover the original browser and its replacement. No Dashboard login is requested. The retained native assignment is reused; this does not prove assignment replacement, lifecycle-generation changes or physical focus.
+
+The final Agent Browser pin `/tmp/p237-last-browser-final-agent-browser-tests` has SHA256 `55c149cf018da799efc6b7e20ba45ab4fcdb775bb7133446360a971e4766581c`, against source baseline `1ec8ccb6` with fixture-only changes. Remote View's last-browser-mode pin remains `989055a2` as fully recorded above. Logs are `/tmp/p237-last-browser-final-ws.log` and `/tmp/p237-last-browser-final-http.log`; their sibling artifact directories retain exact task-process cleanup receipts with empty remaining lists. A fresh process-group readback independently checks those lists. Both repositories pass final strict Clippy, formatting check and patch hygiene. Earlier product consumer/handler/output and Remote View full-suite evidence retains its stated scope: this batch changes the opt-in fixture mode, the composed fake process/window PID join and qualification prose, with no product behavior change. The peer-preserving case continues to use PID43 and the existing code path; its strongest two-transport evidence remains applicable. No full-suite rerun or installed identity is claimed.
+
+The source-level same-URL requirement is qualified for peer-preserving and last-browser expiry on a retained assignment. Physical selection, provider/foreign and post-effect races, reviewed workspace/table/Properties/menus, old UI retirement and canonical integration remain open. Full P237 is not complete.

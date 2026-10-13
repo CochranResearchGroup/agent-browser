@@ -388,3 +388,8 @@ The native continuation source repair passes the ordinary peer-preserving opaque
 
 
 The stronger final peer-preserving fixture additionally proves persisted first-use continuity, cleared pending-human hold, unchanged peer identity and no extra browser launch through actual foreground owner observation. Both transports pass against the immutable pin recorded in the diagnosis receipt. This does not close the original last-browser workflow or wider P237 acceptance.
+
+
+### Last-browser retained URL source qualification
+
+The explicit last-browser fixture proves zero live tabs and browsers at configured expiry and then reopens the original valid opaque URL through native authentication. Both final transports pass, preserving first-use history, clearing the owner hold and recording a new private frame-use observation. The repaired-path 503 was a fixed synthetic window PID; deriving that PID from the fake launch repairs the fixture without weakening product focus fences. The [diagnosis receipt](../notes/0237-2026-10-12-retained-url-recovery-diagnosis.md) preserves failure, probe, final pins and exact scope. This qualifies recovery using the retained native assignment, not assignment replacement or physical focus. Remaining physical, reviewed UI, provider/foreign/post-effect and canonical integration gates keep P237 IN_PROGRESS.

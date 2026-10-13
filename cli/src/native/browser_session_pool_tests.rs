@@ -326,7 +326,12 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 if let Some(generation) = provider.native_viewing_generation {
                     windows["viewingGeneration"] = generation.into();
                 }
-                if let Some(pid) = provider.window_pid {
+                let composed_pid = provider.native_bridge.as_ref().and_then(|_| {
+                    std::fs::read_to_string(self.root.join("native-composition-browser-pid"))
+                        .ok()
+                        .map(|pid| pid.parse::<u32>().unwrap())
+                });
+                if let Some(pid) = composed_pid.or(provider.window_pid) {
                     windows["windows"][0]["pid"] = serde_json::json!(pid);
                 }
                 if provider.inactive_window {
@@ -4640,9 +4645,10 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         fixture.store(false).load_session_state().unwrap(),
         "public presentation reader must observe the actual owner database"
     );
-    // Keep one peer so recovery does not also exercise last-browser closure
-    // and pool reassignment, which the composed bridge snapshot cannot model.
-    let recovery_peer = descriptor["publicRecovery"].as_bool().unwrap_or(false).then(|| {
+    // The explicit last-browser mode requires complete target/browser expiry.
+    // The default recovery case keeps a peer and proves it survives unchanged.
+    let last_browser = descriptor["publicLastBrowser"].as_bool().unwrap_or(false);
+    let recovery_peer = (descriptor["publicRecovery"].as_bool().unwrap_or(false) && !last_browser).then(|| {
         let peer = consumer.execute_managed_command("Bob", &serde_json::json!({
             "action":"navigate", "url":"https://synthetic.example/recovery-peer", "profileId":"profile-a",
             "activityAtMs":now()
@@ -4812,13 +4818,23 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
         assert!(expired.expired_tab_ids.contains(&tab.to_owned()));
         let state = fixture.store(false).load_session_state().unwrap();
         assert!(!state.tabs.contains_key(tab));
-        let peer = recovery_peer.as_ref().unwrap();
-        let peer_tab = peer["browserSession"]["tabId"].as_str().unwrap();
-        assert!(state.tabs.contains_key(peer_tab));
-        assert_eq!(
-            state.tabs[peer_tab].target_id,
-            peer["browserSession"]["targetId"].as_str().unwrap()
-        );
+        if let Some(peer) = &recovery_peer {
+            let peer_tab = peer["browserSession"]["tabId"].as_str().unwrap();
+            assert!(state.tabs.contains_key(peer_tab));
+            assert_eq!(
+                state.tabs[peer_tab].target_id,
+                peer["browserSession"]["targetId"].as_str().unwrap()
+            );
+        } else {
+            assert!(
+                state.tabs.is_empty(),
+                "last-browser fixture retained a live tab"
+            );
+            assert!(
+                state.browsers.is_empty(),
+                "last-browser fixture retained a browser"
+            );
+        }
         state.remote_view_tab_handoffs[id]
             .check_link_at(now())
             .unwrap();
@@ -4829,7 +4845,8 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
                 "stage":"expired", "handoffId":id, "linkValid":true,
                 "tabPresentAtExpiry":false, "firstHumanUseAtMs":first,
 
-                "peerTabPresent":true,
+                "peerTabPresent":recovery_peer.is_some(),
+                "lastBrowser":last_browser,
                 "currentTabPresent":consumer.state().tabs.contains_key(current_tab)
             }))
             .unwrap(),
@@ -4847,14 +4864,17 @@ fn native_viewer_use_composes_with_actual_provider_owner() {
                     recovered.tab_metadata[current_tab].first_human_use_at_ms,
                     Some(first)
                 );
-                assert_eq!(
-                    recovered.tabs[peer_tab].target_id,
-                    peer["browserSession"]["targetId"].as_str().unwrap()
-                );
+                if let Some(peer) = &recovery_peer {
+                    let peer_tab = peer["browserSession"]["tabId"].as_str().unwrap();
+                    assert_eq!(
+                        recovered.tabs[peer_tab].target_id,
+                        peer["browserSession"]["targetId"].as_str().unwrap()
+                    );
+                }
                 assert_eq!(
                     calls.get(),
-                    1,
-                    "peer-preserving recovery launched another browser"
+                    if last_browser { 2 } else { 1 },
+                    "recovery browser launch count changed"
                 );
                 if !recovered.pending_human_tabs.contains_key(current_tab) {
                     std::fs::write(

@@ -253,6 +253,17 @@ impl RemoteViewBrowserProcessEffects for Process {
         );
         assert!(records.iter().any(|record| record.intent == *intent));
         self.calls.set(self.calls.get() + 1);
+        if self
+            .root
+            .join("native-composition-launch-environment.json")
+            .exists()
+        {
+            std::fs::write(
+                self.root.join("native-composition-browser-pid"),
+                (42 + self.calls.get()).to_string(),
+            )
+            .unwrap();
+        }
         if matches!(self.mode, Mode::UnknownProcess) {
             return Err(RemoteViewBrowserProcessError::OutcomeUnknown);
         }
