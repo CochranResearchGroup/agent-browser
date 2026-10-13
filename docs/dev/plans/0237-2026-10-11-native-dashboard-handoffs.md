@@ -535,3 +535,8 @@ The original managed operator admission oracle is GREEN against c8f9e5d7 source 
 ### Original task Properties across actual source-host restart
 
 The exact task-owned host exits gracefully and a new source instance continues both managed tasks in the same Chrome process. First Alice title retrieval requires no explicit reopen and preserves physically selected Bob. Original metadata is unchanged despite different inspector labels. The final combined native workflow passes in 28.88 seconds on unchanged c8f9e5d7 source pin with fresh zero residue. No product repair or installed/provider effect was needed. The [source note](../notes/0237-2026-10-12-native-selection-proof.md) preserves all identities and scope. Public handoff Properties and metadata across expired-target recreation remain separate gates; the full P237 outcome remains IN_PROGRESS.
+
+
+### Draft source review
+
+[Draft PR270](https://github.com/CochranResearchGroup/agent-browser/pull/270) links issues261/260 and the current lifecycle/selection source. It is a draft and remains unmerged. The description preserves the full combined outcome, exact source-validation limits, layout choice, remaining native/provider/public/UI and integration gates, and the legacy navigator failure. Prototype code remains excluded. This does not qualify acceptance or authorize installed effects; P237 remains IN_PROGRESS.
