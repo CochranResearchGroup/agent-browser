@@ -44,6 +44,8 @@ async fn physical_service_selection_preserves_distinct_desktops() {
     let credentials = dashboard_auth::ensure_dashboard_auth_config()
         .unwrap()
         .bootstrap_credential_file;
+    let retained = std::env::var_os("P237_NATIVE_SELECTION_RETAINED").is_some();
+    let mut launch_owners = Vec::new();
     let mut daemons = Vec::new();
     let mut targets = Vec::new();
     let mut service = ServiceState::default();
@@ -87,13 +89,21 @@ async fn physical_service_selection_preserves_distinct_desktops() {
                 "sessionId":format!("session-{index}"),"ownerSessionId":format!("session-{index}"),"lifecycle":"ready"
             })).unwrap());
         }
+        if retained {
+            // Provider normally prepares window bounds before native-only
+            // focus. Seed those bounds here without attributing them to the
+            // native-only command under test.
+            manager.focus_for_view(true).await.unwrap();
+        }
         service.profiles.insert(
             format!("profile-{index}"),
-            serde_json::from_value(json!({"id":format!("profile-{index}")})).unwrap(),
+            serde_json::from_value(json!({"id":format!("profile-{index}"),"userDataDir":profile}))
+                .unwrap(),
         );
         service.browsers.insert(format!("browser-{index}"),serde_json::from_value(json!({
             "id":format!("browser-{index}"),"profileId":format!("profile-{index}"),"health":"ready","pid":pid,
-            "activeSessionIds":[format!("session-{index}")],"displayAllocationId":format!("display-{index}")
+            "activeSessionIds":[format!("session-{index}")],"displayAllocationId":format!("display-{index}"),
+            "cdpEndpoint":manager.get_cdp_url()
         })).unwrap());
         service.remote_view_routes.insert(format!("route-{index}"),serde_json::from_value(json!({
             "id":format!("route-{index}"),"browserId":format!("browser-{index}"),"sessionId":format!("session-{index}"),
@@ -106,12 +116,16 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         })).unwrap());
         let mut daemon =
             DaemonState::new_for_session_with_stream(&format!("session-{index}"), None, None);
-        daemon.browser = Some(manager);
+        if retained {
+            launch_owners.push(manager);
+        } else {
+            daemon.browser = Some(manager);
+        }
         daemons.push(daemon);
         targets.push(browser_targets);
     }
     std::fs::write(root.join("browser-identity.json"),serde_json::to_vec(&json!({
-        "browsers":daemons.iter().enumerate().map(|(index,daemon)|json!({"pid":daemon.browser.as_ref().unwrap().browser_pid(),"display":displays[index]})).collect::<Vec<_>>()
+        "browsers":daemons.iter().enumerate().map(|(index,_daemon)|json!({"pid":service.browsers[&format!("browser-{index}")].pid,"display":displays[index]})).collect::<Vec<_>>()
     })).unwrap()).unwrap();
     let repository = LockedServiceStateRepository::default_json().unwrap();
     repository
@@ -120,6 +134,46 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             Ok(())
         })
         .unwrap();
+    if retained {
+        use crate::native::runtime_lifecycle::{digest_json, RuntimeLifecycleAuthority};
+        use crate::runtime_owner_transfer::{ProfileOwner, ProfileOwnerState};
+        for (index, manager) in launch_owners.iter().enumerate() {
+            let profile = manager.browser_user_data_dir().unwrap();
+            let process = crate::process_identity::capture_process_identity(
+                manager.browser_pid().unwrap(),
+                None,
+                None,
+            )
+            .unwrap();
+            RuntimeLifecycleAuthority::new(&repository)
+                .register_current_owner(ProfileOwner {
+                    owner_id: format!("fixture-owner-{index}"),
+                    profile_identity_digest:
+                        agent_browser_lease_authority::canonical_profile_identity_digest(profile)
+                            .unwrap(),
+                    state: ProfileOwnerState::Ready,
+                    owner_generation: 1,
+                    browser_id: format!("browser-{index}"),
+                    daemon_session_route: format!("session-{index}"),
+                    process_instance_digest: digest_json(&process).unwrap(),
+                    browser_family: "chrome".into(),
+                    cdp_endpoint_identity_digest: format!(
+                        "{:x}",
+                        Sha256::digest(manager.get_cdp_url().as_bytes())
+                    ),
+                    target_set_digest: digest_json(
+                        &targets[index]
+                            .iter()
+                            .map(|(target, _)| target)
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap(),
+                    pending_transfer: None,
+                    last_transition: None,
+                })
+                .unwrap();
+        }
+    }
     let daemons = Arc::new(tokio::sync::Mutex::new(daemons));
     let http = if std::env::var_os("P237_NATIVE_SELECTION_HTTP").is_some() {
         Some(P237SelectionHttp::start(daemons.clone(), &credentials).await)
@@ -131,17 +185,35 @@ async fn physical_service_selection_preserves_distinct_desktops() {
             let peer = 1-index;
             let before_peer = native_observation(&displays[peer])?;
             let (target,title) = &targets[index][tab_index];
+            if retained {
+                let mut guard = daemons.lock().await;
+                if let Some(manager) = guard[index].browser.as_mut() { manager.relinquish_browser_for_handoff(); }
+                crate::native::service_probe::reattach_verified_retained_target(
+                    &format!("browser-{index}"), &format!("profile-{index}"), target, &mut guard[index]
+                ).await?;
+            }
+            if retained {
+                // Durable handoff asks for native-only window operation. A
+                // minimized exact PID window makes missing native effects
+                // independently visible instead of checking reply shape alone.
+                let pid = service.browsers[&format!("browser-{index}")].pid.unwrap();
+                let windows = std::process::Command::new("xdotool").args(["search", "--pid", &pid.to_string(), "--class", "Chrome"]).env("DISPLAY", &displays[index]).output().map_err(|e|e.to_string())?;
+                if !windows.status.success() { return Err("retained native probe cannot locate its exact PID window".into()); }
+                let window = String::from_utf8(windows.stdout).map_err(|e|e.to_string())?.lines().next().ok_or("retained window missing")?.to_owned();
+                let minimized = std::process::Command::new("xdotool").args(["windowminimize", "--sync", &window]).env("DISPLAY", &displays[index]).status().map_err(|e|e.to_string())?;
+                if !minimized.success() { return Err("retained native probe could not minimize its exact PID window".into()); }
+            }
             let body = json!({"action":"view_focus","serviceName":"fixture","agentName":"admin","taskName":"select",
                 "browserId":format!("browser-{index}"),"sessionName":format!("session-{index}"),
                 "params":{"operatorFocus":true,"targetId":target,"routeId":format!("route-{index}"),
-                "controllerLeaseId":format!("controller-{index}"),"maximize":true}}).to_string();
+                "controllerLeaseId":format!("controller-{index}"),"maximize":true,"nativeFocusOnly":retained}}).to_string();
             let command = service_request_command_with_dashboard_generation(&body,Some(&repository.load_snapshot()?),"admin",&format!("session-{index}"),None).map_err(|e|format!("{e:?}"))?;
             let reply = if let Some(http) = http.as_ref() {
                 http.focus(&body).await?
             } else {
                 crate::native::browser_lifecycle::handle_view_focus(&command,&mut daemons.lock().await[index]).await?
             };
-            let expected_pid = daemons.lock().await[index].browser.as_ref().unwrap().browser_pid().unwrap();
+            let expected_pid = service.browsers[&format!("browser-{index}")].pid.unwrap();
             let deadline = std::time::Instant::now()+Duration::from_secs(3);
             let observation = loop {
                 let observed = native_observation(&displays[index])?;
@@ -154,7 +226,7 @@ async fn physical_service_selection_preserves_distinct_desktops() {
                 if std::time::Instant::now()>=deadline { return Err(format!("physical service selection failed: expected={title}, observed={observed}, reply={reply}")); }
                 tokio::time::sleep(Duration::from_millis(20)).await;
             };
-            if reply["nativeWindowFocus"]["focused"] != true || reply["nativeWindowFocus"]["display"] != displays[index] {
+            if !retained && (reply["nativeWindowFocus"]["focused"] != true || reply["nativeWindowFocus"]["display"] != displays[index]) {
                 return Err(format!("service native focus used wrong desktop: expected={}, reply={reply}, observed={observation}",displays[index]));
             }
             let after_peer = native_observation(&displays[peer])?;
@@ -203,7 +275,16 @@ async fn physical_service_selection_preserves_distinct_desktops() {
         .unwrap();
     }
     for daemon in daemons.lock().await.iter_mut() {
-        daemon.browser.as_mut().unwrap().close().await.unwrap();
+        if let Some(manager) = daemon.browser.as_mut() {
+            if retained {
+                manager.relinquish_browser_for_handoff();
+            } else {
+                manager.close().await.unwrap();
+            }
+        }
+    }
+    for manager in &mut launch_owners {
+        manager.close().await.unwrap();
     }
     run.unwrap();
 }

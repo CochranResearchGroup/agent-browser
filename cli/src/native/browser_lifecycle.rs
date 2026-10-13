@@ -1511,6 +1511,10 @@ pub(crate) mod action_commands {
         {
             let target_id = target_id.trim();
             if mgr.active_target_id().ok() == Some(target_id) {
+                // The attached CDP target is logical selection, not evidence
+                // that Chrome currently displays it. Retained connections
+                // must activate the exact requested target as well.
+                mgr.tab_switch_target_id(target_id).await?;
                 tab_switched = Some(json!({ "targetId" : target_id, "state" : "already_active", }));
             } else {
                 // Admission can precede target closure. An explicit target
