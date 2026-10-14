@@ -511,3 +511,16 @@ PR285 can now be marked ready for independent review against unchanged current
 main. Its two baseline check blockers are repaired. P237 remains foreign,
 active and unmerged; preserve both runtime intents when its branch later joins.
 No live workflow needs unfinished P237 source to qualify this PR.
+
+Baseline repair source commit b0a4c75075be410ee03c1b717a9202aa20f29778 is
+published and read back on PR285. The PR description now distinguishes repaired
+source checks from earlier installed website qualification and retained
+comprehensive failure. GitHub reports OPEN, isDraft=false and MERGEABLE against
+basecb765a7be. This is ready-for-review evidence, not a merged-source receipt.
+
+Baseline repair memory disposition: queued. Doctor now reports healthy MCP
+HTTP and storage. The qualified source-backed singleton was accepted once in
+agent_browser_main, job a51e5c66-0a30-4b66-a9fa-2c3a09376e7b, receipt
+/tmp/p242-baseline-memory-disposition.json. Queue acceptance is sufficient for
+this closeout; persistence and retrieval are not claimed. Prior queued and
+unavailable dispositions remain historical and are not retried.
