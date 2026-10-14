@@ -2,7 +2,7 @@
 
 Product lane: PL-BUGFIX
 Work items: #284, #286
-State: IN_PROGRESS
+State: COMPLETED
 Branch: fix/ordinary-browser-availability
 
 ## Outcome
@@ -57,3 +57,20 @@ fresh owned-process census is zero. Original failures remain in local logs.
 The docs build and changed-link check pass. The old baseline policy-wiring test
 fails on its retired policy alias; the incoming canonical P242 merge contains
 that independent repair. Integrate current canonical source before final checks.
+
+
+## Completed bounded outcome
+
+Integrated-source selected gates and all three public synthetic workflows pass.
+The final extended absence regression, six store tests, eleven runtime tests
+(six ignored), 39 output tests and all 330 Service Model tests pass. Format,
+strict workspace Clippy, docs, links, policy wiring and handoff guidance pass.
+The Service Model linker EAGAIN and successful four-job infrastructure retry
+remain recorded. Public download, concurrent same-process continuation with
+stale custody and Alice/Bob/borrowed-profile checks end with zero owned residue.
+
+[The curated receipt](../notes/0243-2026-10-14-ordinary-browser-availability.md)
+binds source, executable digest, red/green evidence and review limits. PR287
+owns canonical integration. Source qualification is complete; no production
+installation or real-account/native-provider acceptance is claimed. The
+original manual service-recovery build/presentation symptoms remain unverified.

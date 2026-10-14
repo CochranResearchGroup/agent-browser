@@ -1,7 +1,8 @@
 # Active plan index
 
 [P243: ordinary browser availability](0243-2026-10-14-ordinary-browser-availability.md),
-issues #284 and #286; repair in progress against Alice/Bob G05/G23/G42.
+issues #284 and #286; completed source and isolated public workflow qualification
+against Alice/Bob G05/G23/G42. Production publication remains separate.
 
 [P242: implement website automation](0242-2026-10-14-implement-siteguides.md),
 spec #271 and tickets #272–276; completed local integration and isolated owned
