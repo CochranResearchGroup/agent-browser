@@ -30,7 +30,7 @@ escalation and retry qualification. P237 retains #260/#261 ownership.
 
 ### 2026-10-11 P237 dashboard and handoff lifecycle
 
-[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS in `platform/native-dashboard-261`, with draft PR270. The [selection receipt](docs/dev/notes/0237-2026-10-12-native-selection-proof.md) preserves qualified source lifecycle, native selection and restart workflows with their limits. The required layout choice and replacement UI remain pending. Integrated P238/P240 are being reconciled in the owned branch; canonical integration and native provider/viewer acceptance remain open. Installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS in `platform/native-dashboard-261`, with draft PR270. The [selection receipt](docs/dev/notes/0237-2026-10-12-native-selection-proof.md) preserves qualified source lifecycle, native selection and restart workflows with their limits. The operator rejected all A/B/C layouts on 2026-10-14. Plan version 2 keeps the left rail, removes green, prioritizes density and shows handoffs only through an on-demand rail control. Revised prototype review and replacement UI remain pending. Integrated P238/P240 are being reconciled in the owned branch; canonical integration and native provider/viewer acceptance remain open. Installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
 
 ### 2026-10-12 P238 workflow MCP
 

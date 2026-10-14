@@ -4,13 +4,13 @@ Product lane: PL-PLATFORM
 Work items: #261, #260
 Branch: platform/native-dashboard-261
 State: IN_PROGRESS
-Version: 1
+Version: 2
 Lane: P237
 Baseline: 3e5a38679d28ac8a20439e29004ea1315475ef8e
 
 ## Problem and agreed outcome
 
-Replace the existing operator dashboard with a simple workspace modeled on Remote View's root desktop. A person expands a browser app to its tabs, selects a tab to select its native target and raise/maximize its owning browser on the correct desktop, shares a durable handoff, and finds handoffs in a prominent compact table. Properties explains attributable origin and purpose. Keep the native Remote View viewer, desktop operations and existing authentication authoritative.
+Replace the existing operator dashboard with a simple workspace modeled on Remote View's root desktop. A person expands a browser app to its tabs, selects a tab to select its native target and raise/maximize its owning browser on the correct desktop, shares a durable handoff, and opens a compact handoff table on demand from a small SVG control in the left rail. Properties explains attributable origin and purpose. Keep the native Remote View viewer, desktop operations and existing authentication authoritative.
 
 Link lifetime defaults perpetual but is configurable. Tab lifetime is independently configurable. Link deletion explicitly revokes a link without closing its tab/browser. Link expiry does not end a tab or delete a record. The browser closes when its last live tab ends. A still-valid link recreates its expired target tab in an eligible browser or wakes a browser as needed; this is settled behavior, not an interview question. Recovery does not promise restoration of lost in-memory state. Pending-human tab retention and pressure policy are configuration driven; four hours is an example.
 
@@ -24,10 +24,10 @@ The primary checkout is agent-browser-dashboard. Prototype custody uses a child 
 
 ## Delivery sequence and blocking edges
 
-1. Confirmed model and reviewable UI: persist domain vocabulary, inspect Remote View's actual root assets, present three structurally distinct layouts within the agreed left-rail/native-viewer contract. Synthetic interactions demonstrate tabs, menus, Properties and independent link/tab lifetime controls. Capture on a throwaway branch and publish one preview session. The operator chooses a layout before production UI replacement.
+1. Confirmed model and reviewable UI: the operator rejected all three initial layouts on 2026-10-14. Retain the left-rail direction, remove the green theme and minimize wasted space. Follow compact shared UX from AuraCall, grok-bots/codex-bots and Remote View: restrained neutral dark surfaces, small SVG controls, collapsible/resizable navigation and secondary content on demand. Handoffs are hidden initially and opened by a small left-rail SVG button in a modal or animated drawer. Revise the throwaway prototype and publish one review session before production UI replacement. Synthetic interactions demonstrate tabs, menus, Properties and independent link/tab lifetime controls.
 2. Independent lifecycle, blocked by step 1's model: deliver configurable link expiry, tab retention and explicit deletion through the existing service authority, public contracts and one real isolated workflow. Valid-link target recreation and last-tab browser closure must pass. Establish meaningful failing regressions at the public lifecycle seam before changes. Pressure admission protects active users/operations/peers and never silently changes link validity.
-3. Native workspace, blocked by the chosen layout: real browser/tab inventory and exact generation-bound selection, native tab activation and browser raise/maximize. Reuse Remote View's viewer; preserve peer state and selection under refresh. Include Share, Properties, Copy URL and allowed Close Tab with keyboard-accessible menus and shadcn dialogs.
-4. Handoff management and retirement, blocked by steps 2 and 3: compact real table, human metadata, independently labeled link/tab lifetime controls and explicit link deletion. Inventory/remove obsolete operator UI while preserving software APIs and existing handoff routes. No competing legacy dashboard remains as the default operator surface.
+3. Native workspace, blocked by review of the revised compact workspace: real browser/tab inventory and exact generation-bound selection, native tab activation and browser raise/maximize. Reuse Remote View's viewer; preserve peer state and selection under refresh. Include Share, Properties, Copy URL and allowed Close Tab with keyboard-accessible menus and shadcn dialogs.
+4. Handoff management and retirement, blocked by steps 2 and 3: on-demand compact real table, human metadata, independently labeled link/tab lifetime controls and explicit link deletion. Inventory/remove obsolete operator UI while preserving software APIs and existing handoff routes. No competing legacy dashboard remains as the default operator surface.
 
 These are proposed tracer-bullet delivery slices, not horizontal mock layers. Publish child tickets only after the operator reviews granularity and genuine blocking edges. Do not reinterpret a prototype or planning commit as feature acceptance.
 
@@ -41,7 +41,7 @@ Run relevant dashboard/client parity and contract gates, documentation/link/plan
 
 ## Current evidence and next action
 
-The confirmed model checkpoint is commit 6a1b454a. The throwaway prototype is separately preserved at 4ca606ac on `prototype/native-dashboard-261`; it must stay out of main. Type checking and rendered synthetic interactions pass, including independent per-record policy edits and link deletion preserving the tab. Layout feedback is pending. These checks qualify no native or lifecycle effects.
+The confirmed model checkpoint is commit 6a1b454a. The throwaway prototype is separately preserved at 4ca606ac on `prototype/native-dashboard-261`; it must stay out of main. Type checking and rendered synthetic interactions pass, including independent per-record policy edits and link deletion preserving the tab. The operator rejected these A/B/C arrangements on 2026-10-14. They remain historical evidence; version 2 above owns the revised compact/on-demand direction. These checks qualify no native or lifecycle effects.
 
 Baseline 3e5a3867 gives durable-profile links a perpetual default through `BrowserRetentionPolicy::durable_handoff_ttl_ms = None`, while disposable links have a finite default. Do not describe all baseline links as five-minute links or replace existing configuration blindly. The five-minute defaults in `browser_session_host.rs` are session idle and disposable cleanup settings, distinct from link validity.
 
@@ -565,3 +565,25 @@ history configured to zero; public archive/pressure/continuation also pass with
 fresh zero-residue readbacks. This is bounded blocker reduction, not complete
 P237 acceptance. Layout choice and the remaining UI/public managed/provider,
 recreation Properties, reload, foreign/post-effect and canonical gates remain.
+
+
+### Version 2 operator layout correction, 2026-10-14
+
+The initial A/B/C choices are rejected, not still awaiting a choice. Preserve
+the useful left rail; drop the green palette. No wasted space is a primary
+design goal. Handoffs do not stay on screen: a small SVG button in the rail
+opens their compact management surface as a modal or animated drawer. The
+prototype uses a drawer as one reviewable interpretation, not a new settled
+operator choice between those mechanisms. Keep the native viewer dominant,
+reduce framing/header padding and provide collapse/resize, focus restoration,
+keyboard access and reduced motion.
+
+Read-only references: AuraCall ux/operator/src/styles.css and App.jsx;
+grok-bots/codex-bots web/index.html and style.css in its plan1 checkout;
+Remote View web/home.html and home.css. They share restrained dark surfaces,
+compact SVG toolbars, collapsible/resizable rails and on-demand details. No
+reference runtime, provider, private data or source is modified.
+
+Prototype-only edits stay on prototype/native-dashboard-261, which must not
+merge. Implementation source and draft PR270 retain the complete remaining
+P237 outcome. The rejected layouts' evidence remains intact.

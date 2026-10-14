@@ -258,3 +258,11 @@ _Avoid_: Session count, eager maximum reservation, presentation slot
 **First human use**: A durable first-human-use timestamp follows provider-qualified native viewer use joined to the current exact handoff/tab/target and native focus, independently of originating attribution. Agent readiness or rejected context cannot establish it, and duplicate acknowledgement cannot advance it. Opening a prepared human handoff consumes its pending hold through the same qualified owner operation. Native/HTTP acceptance remains distinct from owner fixture qualification.
 
 **Native handoff observation**: Private continuation context joins one handoff/tab/target to the provider assignment and lifecycle/viewing generations without granting access. Registration intent survives owner restart. Pending and expired observations do not establish use; replay cannot advance the first-use timestamp. A new pending-human hold invalidates old observation bindings, and a changed provider epoch requires fresh registration through the same durable link.
+
+
+**Compact native workspace**: The native desktop is the main working surface.
+Use a restrained neutral palette without the former green theme, compact
+chrome and a collapsible/resizable browser-tab rail. Handoff management is
+on demand through a small SVG control in the rail, opening a modal or drawer;
+the handoff table does not permanently occupy the desktop. This supersedes
+the original A/B/C table-placement proposals.

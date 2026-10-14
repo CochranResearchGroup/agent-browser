@@ -8,7 +8,7 @@ Wider resource/cleanup acceptance remains open.
 #183; bounded isolated preservation fixture complete. Workstation-wide shutdown
 and failed-transaction reconciliation remain open under #183.
 
-[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS for issues #261 and #260. Confirmed domain rules are recorded; prototype review and actual lifecycle/native-workspace acceptance remain required.
+[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS for issues #261 and #260. Version 2 records rejection of the initial A/B/C layouts: retain the rail, remove green, prioritize density and open handoffs on demand. Revised prototype review and actual lifecycle/native-workspace acceptance remain required.
 
 [P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.
 
