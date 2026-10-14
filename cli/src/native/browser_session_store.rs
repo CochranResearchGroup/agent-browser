@@ -428,6 +428,13 @@ impl BrowserSessionSqliteStore {
         if current != *expected {
             return Err("browser_session_publication_conflict".into());
         }
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &current,
+            state,
+            &[],
+        )
+        .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
         super::browser_launch_custody_store::reject_fenced_browser_publication(&transaction, state)
             .map_err(|_| "browser_session_publication_release_fenced".to_string())?;
         save_document(
@@ -478,12 +485,21 @@ impl BrowserSessionSqliteStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("browser_session_mutation_begin_failed:{error}"))?;
-        let mut state = load_document(
+        let mut state: BrowserSessionState = load_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
+        let previous = state.clone();
         let result = mutate(&mut state)?;
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &previous,
+            &state,
+            &[],
+        )
+        .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,

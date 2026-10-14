@@ -26,6 +26,9 @@ fn digest(value: &str) -> bool {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserIdleRetirementScope {
     pub browser: ManagedBrowserInstance,
+    /// Immutable original launch evidence. Missing legacy custody stays missing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_identity: Option<RecordedProcessIdentity>,
     pub tabs: Vec<ManagedBrowserTab>,
 }
 
@@ -57,7 +60,11 @@ impl BrowserIdleRetirementIntent {
                 .filter(|tab| tab.browser_id == *id)
                 .cloned()
                 .collect();
-            scopes.push(BrowserIdleRetirementScope { browser, tabs });
+            scopes.push(BrowserIdleRetirementScope {
+                browser,
+                process_identity: None,
+                tabs,
+            });
         }
         scopes.sort_by(|a, b| a.browser.id.cmp(&b.browser.id));
         let intent = Self {
@@ -95,6 +102,14 @@ impl BrowserIdleRetirementIntent {
                 || !browsers.insert(&browser.id)
                 || desktop.desktop_id != self.provider.assignment.desktop_id
                 || desktop.generation != self.provider.assignment.generation
+                || scope.process_identity.as_ref().is_some_and(|identity| {
+                    identity.pid != browser.pid
+                        || identity.start_token.trim().is_empty()
+                        || identity
+                            .executable_path
+                            .as_ref()
+                            .is_none_or(|path| path.trim().is_empty())
+                })
             {
                 return Err(BrowserIdleRetirementStoreError::InvalidRecord);
             }
@@ -112,6 +127,13 @@ impl BrowserIdleRetirementIntent {
         Ok(())
     }
     pub fn matches_baseline(&self, state: &BrowserSessionState) -> Result<()> {
+        self.validate()?;
+        // Kernel custody is joined separately by the durable owner. The session
+        // projection does not contain it and cannot manufacture that evidence.
+        let mut projection = self.clone();
+        for scope in &mut projection.scopes {
+            scope.process_identity = None;
+        }
         if Self::new(
             &self.id,
             self.provider.clone(),
@@ -121,7 +143,7 @@ impl BrowserIdleRetirementIntent {
                 .iter()
                 .map(|scope| scope.browser.id.clone())
                 .collect::<Vec<_>>(),
-        )? != *self
+        )? != projection
         {
             return Err(BrowserIdleRetirementStoreError::Conflict);
         }
@@ -192,6 +214,22 @@ impl BrowserIdleRetirementRecord {
             completed: None,
         })
     }
+    /// Any admitted attempt, including an unknown one, prevents no-effect
+    /// reconciliation from completing native exclusion on its own.
+    pub fn has_effect_attempts(&self) -> bool {
+        !self.effects.is_empty()
+    }
+    pub fn preparation_started(&self) -> bool {
+        self.preparation_started
+    }
+
+    /// Recorded settlement is evidence, not physical close authority.
+    pub fn has_settled_browser_close(&self, browser_id: &str) -> bool {
+        self.effects.iter().any(|attempt| attempt.settled
+            && matches!(&attempt.effect, BrowserIdleRetirementEffect::CloseBrowser { browser_id: id }
+                if id == browser_id))
+    }
+
     pub fn is_terminal(&self) -> bool {
         self.deferred || self.completed.is_some()
     }
@@ -361,13 +399,44 @@ impl BrowserIdleRetirementRecord {
         {
             return Err(BrowserIdleRetirementStoreError::Conflict);
         }
+        for scope in &self.intent.scopes {
+            let browser_closed = self.has_settled_browser_close(&scope.browser.id);
+            match state.browsers.get(&scope.browser.id) {
+                Some(browser)
+                    if browser.id != scope.browser.id
+                        || browser.pid != scope.browser.pid
+                        || browser.cdp_endpoint != scope.browser.cdp_endpoint
+                        || browser.profile_id != scope.browser.profile_id
+                        || browser.desktop != scope.browser.desktop =>
+                {
+                    return Err(BrowserIdleRetirementStoreError::Conflict)
+                }
+                None if !browser_closed => return Err(BrowserIdleRetirementStoreError::Conflict),
+                _ => (),
+            }
+            for tab in &scope.tabs {
+                let tab_closed = browser_closed || self.effects.iter().any(|attempt| attempt.settled
+                    && matches!(&attempt.effect, BrowserIdleRetirementEffect::CloseTab { tab_id, .. }
+                        if *tab_id == tab.id));
+                match state.tabs.get(&tab.id) {
+                    Some(current) if current != tab => {
+                        return Err(BrowserIdleRetirementStoreError::Conflict)
+                    }
+                    None if !tab_closed => return Err(BrowserIdleRetirementStoreError::Conflict),
+                    _ => (),
+                }
+            }
+        }
         for attempt in &self.effects {
             if match &attempt.effect {
                 BrowserIdleRetirementEffect::CloseTab { tab_id, .. } => {
                     state.tabs.contains_key(tab_id)
                 }
                 BrowserIdleRetirementEffect::CloseBrowser { browser_id } => {
-                    state.browsers.contains_key(browser_id)
+                    state.browsers.get(browser_id).is_some_and(|browser| {
+                        !state.idle_closed_browsers.contains_key(browser_id)
+                            || browser.id != *browser_id
+                    })
                 }
             } {
                 return Err(BrowserIdleRetirementStoreError::Conflict);
@@ -463,6 +532,27 @@ pub trait BrowserIdleRetirementCustodyStore {
         previous: &BrowserIdleRetirementRecord,
         next: &BrowserIdleRetirementRecord,
     ) -> Result<()>;
+    /// Return the current record and whether this transaction admitted its
+    /// first native preparation attempt. False requires original readback.
+    fn admit_idle_retirement_preparation(
+        &mut self,
+        _intent: &BrowserIdleRetirementIntent,
+    ) -> Result<(BrowserIdleRetirementRecord, bool)> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
+    /// Admit a physical attempt from the current durable record in one writer
+    /// transaction. A replay returns PendingReadback or AlreadySettled; generic
+    /// record CAS acknowledgements never grant fresh effect admission.
+    fn admit_idle_retirement_effect(
+        &mut self,
+        _intent: &BrowserIdleRetirementIntent,
+        _effect: BrowserIdleRetirementEffect,
+    ) -> Result<(
+        BrowserIdleRetirementRecord,
+        BrowserIdleRetirementEffectAdmission,
+    )> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
     fn publish_idle_retirement_state(
         &mut self,
         expected: &BrowserSessionState,

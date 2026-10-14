@@ -84,6 +84,12 @@ launch or recovery for that profile while unrelated profiles continue through
 their own custody and assignment-generation checks. Native cold-launch path and
 capacity preflight precedes durable intent; failure there creates no process
 claim. Failure after intent admission still requires exact reconciliation.
+The launch observation optionally freezes the original kernel start identity.
+Capture is tied to the unreaped launched child or verified profile attachment;
+restart reads immutable custody instead of filling missing evidence from a live
+PID. Missing legacy evidence stays missing. Its first durable observation
+atomically promotes the database reader version. Retirement use of this evidence
+still requires separate effect and readback qualification.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
 
 **Native idle retirement fence**:
@@ -93,7 +99,8 @@ operation digest prevent stale requests from borrowing another operation.
 A typed observation or prepared receipt is not browser-close authority.
 Application custody must precede preparation and retain unknown effects;
 neither a timeout nor dropping a local guard settles the native fence.
-Typed contract qualification remains separate from automatic retirement adoption.
+The automatic-close candidate joins this fence to application custody; source
+sequencing tests remain separate from native workflow and installed acceptance.
 
 **Idle retirement custody**:
 The Browser Runtime's durable exact-baseline intent, native preparation, close
@@ -101,6 +108,30 @@ attempts and conclusive settlements. Duplicate attempts require original
 readback. Session publication and custody commit together before native fence
 completion. The first claim atomically promotes the private database to schema 2
 so a schema-1-only reader cannot ignore this obligation.
+Pending scopes fence conflicting SQLite publications and launch/recovery
+admission in the same writer transaction; unrelated profiles remain usable.
+Physical attempt admission reads the current durable record atomically; a
+matching generic CAS replay cannot authorize a duplicate close.
+Preparation admission also distinguishes one fresh attempt from original
+readback. Known preparation with no admitted effects can reconcile through
+unchanged-state publication; unknown preparation with no fence cannot.
+Browser command delegation checks current durable profile custody before tab
+acquisition, creation, navigation, focus and command execution. This check denies
+already-pending retirement; it does not yet establish atomic admission against a
+concurrent retirement start. Process-liveness observations remain available.
+Normal close confirmation distinguishes positive OS absence from observation
+failure. An unavailable census retains an unresolved outcome; original-process
+identity across PID reuse requires separate evidence.
+A new retirement scope copies immutable published launch kernel evidence. Claim
+admission verifies that join in its SQLite writer transaction and retains the
+frozen value across restart. Admitted runtime effects and target readback use the
+frozen scope. A new kernel start may prove the original ended, never authority
+over its replacement. Live-target readback attaches only to the verified original
+browser; failed observation or missing legacy identity supplies no close authority.
+New groups preflight original kernel evidence across every selected assignment
+before new claims, native preparation or attempts. Missing legacy evidence defers
+without creating obligations; existing unresolved operations retain exact readback.
+Native workflow and installed qualification remain separate.
 
 **Request provenance**:
 The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.

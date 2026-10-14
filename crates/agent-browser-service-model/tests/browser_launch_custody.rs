@@ -13,6 +13,7 @@ fn intent() -> BrowserLaunchIntent {
 }
 fn launch(intent: &BrowserLaunchIntent) -> BrowserLaunch {
     BrowserLaunch {
+        process_identity: None,
         browser_id: "browser-a".into(),
         pid: 42,
         cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -102,4 +103,60 @@ fn launch_custody_rejects_partial_observation_and_inexact_publication() {
         BrowserLaunchCustodyError::IdentityConflict
     );
     assert!(!record.published);
+}
+
+#[test]
+fn launch_custody_preserves_original_kernel_identity_after_restart() {
+    let intent = intent();
+    let mut launched = launch(&intent);
+    let original = RecordedProcessIdentity {
+        pid: launched.pid,
+        start_token: "linux:boot:original".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: None,
+    };
+    launched.process_identity = Some(original.clone());
+    let mut record = BrowserLaunchCustodyRecord::pending(intent).unwrap();
+    record.observe(&launched).unwrap();
+    let mut restarted: BrowserLaunchCustodyRecord =
+        serde_json::from_slice(&serde_json::to_vec(&record).unwrap()).unwrap();
+    assert_eq!(restarted.observed_process_identity, Some(original));
+    let original_record = restarted.clone();
+    let mut reused = launched.clone();
+    reused.process_identity.as_mut().unwrap().start_token = "linux:boot:replacement".into();
+    assert_eq!(
+        restarted.observe(&reused).unwrap_err(),
+        BrowserLaunchCustodyError::IdentityConflict
+    );
+    assert_eq!(restarted, original_record);
+    let mut missing = launched;
+    missing.process_identity = None;
+    assert_eq!(
+        restarted.observe(&missing).unwrap_err(),
+        BrowserLaunchCustodyError::IdentityConflict
+    );
+}
+
+#[test]
+fn launch_custody_does_not_backfill_a_legacy_process_identity() {
+    let intent = intent();
+    let mut launched = launch(&intent);
+    let mut original = BrowserLaunchCustodyRecord::pending(intent).unwrap();
+    original.observe(&launched).unwrap();
+    let bytes = serde_json::to_vec(&original).unwrap();
+    assert!(!String::from_utf8(bytes.clone())
+        .unwrap()
+        .contains("observedProcessIdentity"));
+    let mut legacy: BrowserLaunchCustodyRecord = serde_json::from_slice(&bytes).unwrap();
+    launched.process_identity = Some(RecordedProcessIdentity {
+        pid: launched.pid,
+        start_token: "linux:boot:current-process".into(),
+        executable_path: Some("/synthetic/chrome".into()),
+        browser_family: None,
+    });
+    assert_eq!(
+        legacy.observe(&launched).unwrap_err(),
+        BrowserLaunchCustodyError::IdentityConflict
+    );
+    assert_eq!(legacy, original);
 }

@@ -223,6 +223,42 @@ impl RemoteViewIdleRetirementRead {
 }
 
 impl<T: RemoteViewApplicationTransport> RemoteViewApplicationAdapter<T> {
+    /// Reconcile only the retained operation through native readback. Absence
+    /// does not settle an unknown prepare. A known prepared fence additionally
+    /// pins the installation, configuration and slot; no mutation is issued.
+    pub fn reconcile_idle_retirement(
+        &mut self,
+        intent: &RemoteViewIdleRetirementIntent,
+        prepared: Option<&RemoteViewIdleRetirementReceipt>,
+    ) -> Result<RemoteViewIdleRetirementReceipt, RemoteViewApplicationAdapterError> {
+        intent.validate()?;
+        if let Some(prepared) = prepared {
+            prepared.validate(intent, RemoteViewIdleRetirementReceiptState::Prepared)?;
+        }
+        let observed = self.read_idle_retirement(&intent.assignment)?;
+        let fence = observed
+            .retirement
+            .fence
+            .ok_or(RemoteViewApplicationAdapterError::MutationReadbackRequired)?;
+        let state = if observed.retirement.completed {
+            RemoteViewIdleRetirementReceiptState::Completed
+        } else {
+            RemoteViewIdleRetirementReceiptState::Prepared
+        };
+        let receipt = RemoteViewIdleRetirementReceipt {
+            schema_version: observed.schema_version,
+            target: observed.target,
+            readiness_scope: observed.readiness_scope,
+            state,
+            fence,
+        };
+        receipt.validate(intent, state)?;
+        if prepared.is_some_and(|prepared| prepared.fence != receipt.fence) {
+            return Err(RemoteViewApplicationResponseError::StaleTarget.into());
+        }
+        Ok(receipt)
+    }
+
     /// Acknowledge only the runtime owner's conclusive, durably recorded
     /// settlement of all application effects. This boolean is that owner's
     /// assertion, not provider proof of a browser close. Unsettled effects and

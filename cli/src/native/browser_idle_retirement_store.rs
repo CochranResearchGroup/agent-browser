@@ -77,6 +77,123 @@ fn current(connection: &Connection) -> Result<BrowserSessionState> {
     Ok(state)
 }
 
+/// Check under the caller's immediate transaction, before admitting a launch
+/// or release. Pending native completion still protects its original profile.
+pub(super) fn reject_retirement_admission(
+    connection: &Connection,
+    profile_id: &str,
+    assignment: &RemoteViewAssignmentRecord,
+) -> Result<()> {
+    if ledger(connection)?.records.values().any(|record| {
+        !record.is_terminal()
+            && (record.intent.provider.assignment.desktop_id == assignment.desktop_id
+                || record
+                    .intent
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.browser.profile_id == profile_id))
+    }) {
+        return Err(Error::Conflict);
+    }
+    Ok(())
+}
+
+/// Ordinary writers may advance unrelated work, but cannot replace the active
+/// physical projection of a pending operation. The exact atomic retirement
+/// publisher names the operations it settles; every other scope stays fenced.
+pub(super) fn reject_retirement_publication(
+    connection: &Connection,
+    before: &BrowserSessionState,
+    after: &BrowserSessionState,
+    admitted_ids: &[String],
+) -> Result<()> {
+    for record in ledger(connection)?
+        .records
+        .values()
+        .filter(|record| !record.is_terminal() && !admitted_ids.contains(&record.intent.id))
+    {
+        let profiles = record
+            .intent
+            .scopes
+            .iter()
+            .map(|scope| &scope.browser.profile_id)
+            .collect::<BTreeSet<_>>();
+        let mut browser_ids = record
+            .intent
+            .scopes
+            .iter()
+            .map(|scope| scope.browser.id.clone())
+            .collect::<BTreeSet<_>>();
+        for browser in before.browsers.values().chain(after.browsers.values()) {
+            if profiles.contains(&browser.profile_id)
+                || browser.desktop.as_ref().is_some_and(|desktop| {
+                    desktop.desktop_id == record.intent.provider.assignment.desktop_id
+                })
+            {
+                browser_ids.insert(browser.id.clone());
+            }
+        }
+        let tab_ids = record
+            .intent
+            .scopes
+            .iter()
+            .flat_map(|scope| &scope.tabs)
+            .map(|tab| &tab.id)
+            .collect::<BTreeSet<_>>();
+        let session_ids = record
+            .intent
+            .scopes
+            .iter()
+            .flat_map(|scope| &scope.tabs)
+            .map(|tab| &tab.session_id)
+            .collect::<BTreeSet<_>>();
+        let browsers = |state: &BrowserSessionState| {
+            state
+                .browsers
+                .iter()
+                .filter(|(id, _)| browser_ids.contains(*id))
+                .map(|(id, browser)| (id.clone(), browser.clone()))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let tabs = |state: &BrowserSessionState| {
+            state
+                .tabs
+                .iter()
+                .filter(|(id, tab)| tab_ids.contains(*id) || browser_ids.contains(&tab.browser_id))
+                .map(|(id, tab)| (id.clone(), tab.clone()))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let sessions = |state: &BrowserSessionState| {
+            state
+                .sessions
+                .iter()
+                .filter(|(id, session)| {
+                    session_ids.contains(*id)
+                        || profiles.contains(&session.profile_id)
+                        || browser_ids.contains(&session.browser_id)
+                })
+                .map(|(id, session)| (id.clone(), session.clone()))
+                .collect::<BTreeMap<_, _>>()
+        };
+        let closed = |state: &BrowserSessionState| {
+            state
+                .idle_closed_browsers
+                .iter()
+                .filter(|(id, _)| browser_ids.contains(*id))
+                .map(|(id, at)| (id.clone(), *at))
+                .collect::<BTreeMap<_, _>>()
+        };
+        if browsers(before) != browsers(after)
+            || tabs(before) != tabs(after)
+            || sessions(before) != sessions(after)
+            || closed(before) != closed(after)
+        {
+            return Err(Error::Conflict);
+        }
+    }
+    Ok(())
+}
+
 impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
     fn idle_retirement_records(&mut self) -> Result<Vec<BrowserIdleRetirementRecord>> {
         Ok(ledger(self.remote_view_mutation_connection())?
@@ -107,6 +224,11 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         intent.matches_baseline(expected)?;
+        super::browser_launch_custody_store::reject_pending_launch_for_retirement(
+            &transaction,
+            intent,
+        )
+        .map_err(|_| Error::Conflict)?;
         let identity = wire_identity(intent)?;
         for existing in records.records.values() {
             if wire_identity(&existing.intent)? == identity
@@ -122,6 +244,12 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             )
             .map_err(|_| Error::Conflict)?
                 != intent.provider.assignment
+                || super::browser_launch_custody_store::published_process_identity(
+                    &transaction,
+                    &scope.browser,
+                )
+                .map_err(|_| Error::Conflict)?
+                    != scope.process_identity
             {
                 return Err(Error::Conflict);
             }
@@ -164,11 +292,81 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
+    fn admit_idle_retirement_preparation(
+        &mut self,
+        intent: &BrowserIdleRetirementIntent,
+    ) -> Result<(BrowserIdleRetirementRecord, bool)> {
+        intent.validate()?;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        let record = records.records.get_mut(&intent.id).ok_or(Error::Conflict)?;
+        if record.intent != *intent
+            || record.is_terminal()
+            || record.published_state_digest.is_some()
+        {
+            return Err(Error::Conflict);
+        }
+        let admitted = !record.preparation_started();
+        if admitted {
+            record.begin_preparation()?;
+        }
+        let current = record.clone();
+        if admitted {
+            save_document(&transaction, DOCUMENT, SCHEMA, &records)
+                .map_err(|_| Error::Unavailable)?;
+        }
+        transaction.commit().map_err(|_| Error::Unavailable)?;
+        Ok((current, admitted))
+    }
+    fn admit_idle_retirement_effect(
+        &mut self,
+        intent: &BrowserIdleRetirementIntent,
+        effect: BrowserIdleRetirementEffect,
+    ) -> Result<(
+        BrowserIdleRetirementRecord,
+        BrowserIdleRetirementEffectAdmission,
+    )> {
+        intent.validate()?;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        let record = records.records.get_mut(&intent.id).ok_or(Error::Conflict)?;
+        if record.intent != *intent {
+            return Err(Error::Conflict);
+        }
+        let admission = record.begin_effect(effect)?;
+        let admitted = record.clone();
+        if admission == BrowserIdleRetirementEffectAdmission::New {
+            save_document(&transaction, DOCUMENT, SCHEMA, &records)
+                .map_err(|_| Error::Unavailable)?;
+        }
+        transaction.commit().map_err(|_| Error::Unavailable)?;
+        Ok((admitted, admission))
+    }
     fn publish_idle_retirement_state(
         &mut self,
         expected: &BrowserSessionState,
         state: &BrowserSessionState,
         ids: &[String],
+    ) -> Result<()> {
+        self.publish_session_retirements(expected, state, ids, None)
+    }
+}
+
+impl BrowserSessionSqliteStore {
+    /// Atomically publish launch, retirement custody and session state when
+    /// one command retires old work before starting an unrelated profile.
+    pub(super) fn publish_session_retirements(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        ids: &[String],
+        launch: Option<&BrowserLaunchIntent>,
     ) -> Result<()> {
         if ids.is_empty()
             || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
@@ -184,8 +382,32 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         let mut records = ledger(&transaction)?;
-        super::browser_launch_custody_store::reject_fenced_browser_publication(&transaction, state)
+        reject_retirement_publication(&transaction, expected, state, ids)?;
+        for id in ids {
+            let record = records.records.get(id).ok_or(Error::Conflict)?;
+            for scope in &record.intent.scopes {
+                if expected.idle_closed_browsers.get(&scope.browser.id)
+                    != state.idle_closed_browsers.get(&scope.browser.id)
+                    && !record.has_settled_browser_close(&scope.browser.id)
+                {
+                    return Err(Error::Conflict);
+                }
+            }
+        }
+        if let Some(intent) = launch {
+            super::browser_launch_custody_store::confirm_launch_publication(
+                &transaction,
+                intent,
+                state,
+            )
             .map_err(|_| Error::Conflict)?;
+        } else {
+            super::browser_launch_custody_store::reject_fenced_browser_publication(
+                &transaction,
+                state,
+            )
+            .map_err(|_| Error::Conflict)?;
+        }
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -244,6 +466,17 @@ mod tests {
         BrowserIdleRetirementIntent,
         RemoteViewIdleRetirementReceipt,
     ) {
+        setup_with_identity(store, None)
+    }
+
+    fn setup_with_identity(
+        store: &mut BrowserSessionSqliteStore,
+        process_identity: Option<RecordedProcessIdentity>,
+    ) -> (
+        BrowserSessionState,
+        BrowserIdleRetirementIntent,
+        RemoteViewIdleRetirementReceipt,
+    ) {
         let f: Value = serde_json::from_str(include_str!(
             "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
         ))
@@ -258,6 +491,7 @@ mod tests {
         };
         store.admit_launch_intent(&launch, &initial).unwrap();
         let process = BrowserLaunch {
+            process_identity: process_identity.clone(),
             browser_id: "browser-a".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -299,7 +533,7 @@ mod tests {
         let provider = serde_json::from_value(json!({"schemaVersion":1,"assignment":assignment,
             "target":f["assignmentObservation"]["target"],"idempotencyKey":"close-one","expectedRevision":0,
             "expectedRetirement":{"schemaVersion":1,"desktopId":assignment.desktop_id,"generation":assignment.generation,"routes":[],"sessions":[]}})).unwrap();
-        let intent = BrowserIdleRetirementIntent::new(
+        let mut intent = BrowserIdleRetirementIntent::new(
             "11111111-1111-4111-8111-111111111111",
             provider,
             &state,
@@ -309,7 +543,235 @@ mod tests {
         let prepared = serde_json::from_value(json!({"schemaVersion":1,"target":f["assignmentObservation"]["target"],
             "readinessScope":"native_admission","state":"prepared","fence":{"schema_version":1,"installation_id":"0123456789abcdef",
                 "config_hash":"a".repeat(64),"slot":2,"generation":19,"operation_id":"5deb7e63650d881f18b5d68f85ec45bcd7523255499618982a3c2995400637cc","revision":1}})).unwrap();
+        intent.scopes[0].process_identity = process_identity;
         (state, intent, prepared)
+    }
+
+    #[test]
+    fn retirement_claim_binds_original_kernel_identity_inside_its_transaction() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let original = RecordedProcessIdentity {
+            pid: 42,
+            start_token: "linux:boot:original".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: None,
+        };
+        let (state, intent, _) = setup_with_identity(&mut store, Some(original.clone()));
+        intent.matches_baseline(&state).unwrap();
+        let mut replacement = intent.clone();
+        replacement.scopes[0]
+            .process_identity
+            .as_mut()
+            .unwrap()
+            .start_token = "linux:boot:replacement".into();
+        assert_eq!(
+            store
+                .claim_idle_retirement(&replacement, &state)
+                .unwrap_err(),
+            BrowserIdleRetirementStoreError::Conflict
+        );
+        let mut missing = intent.clone();
+        missing.scopes[0].process_identity = None;
+        assert_eq!(
+            store.claim_idle_retirement(&missing, &state).unwrap_err(),
+            BrowserIdleRetirementStoreError::Conflict
+        );
+        assert!(store.idle_retirement_records().unwrap().is_empty());
+        store.claim_idle_retirement(&intent, &state).unwrap();
+        drop(store);
+        let mut restarted = fixture.open(false);
+        let retained = restarted.idle_retirement_records().unwrap();
+        assert_eq!(
+            retained[0].intent.scopes[0].process_identity,
+            Some(original)
+        );
+        assert_eq!(
+            restarted
+                .claim_idle_retirement(&replacement, &state)
+                .unwrap_err(),
+            BrowserIdleRetirementStoreError::Conflict
+        );
+        assert_eq!(restarted.idle_retirement_records().unwrap(), retained);
+    }
+
+    #[test]
+    fn sqlite_idle_retirement_blocks_conflicting_writers_but_allows_unrelated_progress() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (baseline, intent, _) = setup(&mut owner);
+        owner.claim_idle_retirement(&intent, &baseline).unwrap();
+        let mut peer = fixture.open(false);
+        let mut erased = baseline.clone();
+        erased.tabs.remove("tab-a");
+        assert!(
+            peer.compare_and_save_session_state(&baseline, &erased)
+                .is_err(),
+            "ordinary publication must not bypass an unresolved close operation"
+        );
+        assert_eq!(owner.load_session_state().unwrap(), baseline);
+        let recovery = BrowserLaunchIntent {
+            intent_id: "55555555-5555-4555-8555-555555555555".into(),
+            profile_id: "profile-a".into(),
+            assignment: intent.provider.assignment.clone(),
+        };
+        assert!(
+            peer.admit_recovery_launch_intent(
+                &recovery,
+                &baseline,
+                &baseline.browsers["browser-a"]
+            )
+            .is_err(),
+            "a competing recovery must not borrow a profile with unresolved retirement custody"
+        );
+        assert!(peer.unpublished_launch_records().unwrap().is_empty());
+        let mut unrelated = baseline.clone();
+        unrelated.next_session_sequence += 1;
+        peer.compare_and_save_session_state(&baseline, &unrelated)
+            .unwrap();
+        assert_eq!(owner.load_session_state().unwrap(), unrelated);
+        let mut other_assignment = intent.provider.assignment.clone();
+        other_assignment.assignment_id = "assignment-other".into();
+        other_assignment.desktop_id = "66666666-6666-4666-8666-666666666666".into();
+        let launch = BrowserLaunchIntent {
+            intent_id: "77777777-7777-4777-8777-777777777777".into(),
+            profile_id: "profile-b".into(),
+            assignment: other_assignment,
+        };
+        assert_eq!(
+            peer.admit_launch_intent(&launch, &unrelated).unwrap(),
+            LaunchCustodyAdmission::New
+        );
+        let process = BrowserLaunch {
+            process_identity: None,
+            browser_id: "browser-b".into(),
+            pid: 43,
+            cdp_endpoint: "http://127.0.0.1:9223".into(),
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: launch.assignment.desktop_id.clone(),
+                generation: launch.assignment.generation,
+                friendly_route_label: "other".into(),
+            }),
+        };
+        peer.observe_launch_intent(&launch, &process).unwrap();
+        let mut published = unrelated.clone();
+        published.browsers.insert(
+            "browser-b".into(),
+            ManagedBrowserInstance {
+                id: process.browser_id,
+                profile_id: "profile-b".into(),
+                pid: process.pid,
+                cdp_endpoint: process.cdp_endpoint,
+                desktop: process.desktop,
+                active_session_ids: vec![],
+            },
+        );
+        peer.publish_launch_intent(&launch, &unrelated, &published)
+            .unwrap();
+        assert_eq!(owner.load_session_state().unwrap(), published);
+        assert_eq!(owner.idle_retirement_records().unwrap()[0].intent, intent);
+    }
+
+    #[test]
+    fn sqlite_idle_retirement_and_recovery_admissions_exclude_each_other() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (baseline, intent, _) = setup(&mut owner);
+        let recovery = BrowserLaunchIntent {
+            intent_id: "55555555-5555-4555-8555-555555555555".into(),
+            profile_id: "profile-a".into(),
+            assignment: intent.provider.assignment.clone(),
+        };
+        let mut peer = fixture.open(false);
+        peer.admit_recovery_launch_intent(&recovery, &baseline, &baseline.browsers["browser-a"])
+            .unwrap();
+        assert_eq!(owner.claim_idle_retirement(&intent, &baseline).unwrap_err(),
+            BrowserIdleRetirementStoreError::Conflict,
+            "retirement must observe an already admitted competing launch under its own transaction");
+        assert!(owner.idle_retirement_records().unwrap().is_empty());
+        for _ in 0..8 {
+            let fixture = Fixture::new();
+            let mut owner = fixture.open(true);
+            let (baseline, intent, _) = setup(&mut owner);
+            let recovery = BrowserLaunchIntent {
+                assignment: intent.provider.assignment.clone(),
+                ..recovery.clone()
+            };
+            let barrier = std::sync::Arc::new(std::sync::Barrier::new(3));
+            let mut threads = Vec::new();
+            for retiring in [true, false] {
+                let path = fixture.0.join("runtime.sqlite3");
+                let baseline = baseline.clone();
+                let intent = intent.clone();
+                let recovery = recovery.clone();
+                let barrier = barrier.clone();
+                threads.push(std::thread::spawn(move || {
+                    let connection = Connection::open(path).unwrap();
+                    connection
+                        .busy_timeout(std::time::Duration::from_secs(5))
+                        .unwrap();
+                    let mut store =
+                        BrowserSessionSqliteStore::launch_custody_fixture(connection, false)
+                            .unwrap();
+                    barrier.wait();
+                    if retiring {
+                        match store.claim_idle_retirement(&intent, &baseline) {
+                            Ok(BrowserIdleRetirementAdmission::New) => true,
+                            Err(BrowserIdleRetirementStoreError::Conflict) => false,
+                            other => panic!("unexpected retirement admission: {other:?}"),
+                        }
+                    } else {
+                        match store.admit_recovery_launch_intent(
+                            &recovery,
+                            &baseline,
+                            &baseline.browsers["browser-a"],
+                        ) {
+                            Ok(LaunchCustodyAdmission::New) => true,
+                            Err(LaunchCustodyStoreError::Conflict) => false,
+                            other => panic!("unexpected recovery admission: {other:?}"),
+                        }
+                    }
+                }));
+            }
+            barrier.wait();
+            let admitted = threads
+                .into_iter()
+                .map(|thread| thread.join().unwrap())
+                .filter(|admitted| *admitted)
+                .count();
+            assert_eq!(
+                admitted, 1,
+                "one original profile cannot admit both operations"
+            );
+            assert_eq!(
+                owner.idle_retirement_records().unwrap().len()
+                    + owner.unpublished_launch_records().unwrap().len(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn sqlite_idle_retirement_publication_requires_evidence_for_idle_closed_marker() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (baseline, intent, prepared) = setup(&mut owner);
+        owner.claim_idle_retirement(&intent, &baseline).unwrap();
+        let admitted = owner.idle_retirement_records().unwrap().pop().unwrap();
+        let mut started = admitted.clone();
+        started.begin_preparation().unwrap();
+        owner.update_idle_retirement(&admitted, &started).unwrap();
+        let mut ready = started.clone();
+        ready.record_prepared(prepared).unwrap();
+        owner.update_idle_retirement(&started, &ready).unwrap();
+        let mut invented = baseline.clone();
+        invented
+            .idle_closed_browsers
+            .insert("browser-a".into(), 100);
+        assert!(owner.publish_idle_retirement_state(&baseline, &invented, std::slice::from_ref(&intent.id)).is_err(),
+            "a prepared fence cannot invent browser closure without an attempted and settled effect");
+        assert_eq!(owner.load_session_state().unwrap(), baseline);
+        assert_eq!(owner.idle_retirement_records().unwrap(), vec![ready]);
     }
 
     #[test]

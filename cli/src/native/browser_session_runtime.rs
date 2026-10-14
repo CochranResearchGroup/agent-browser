@@ -96,6 +96,20 @@ pub(crate) trait BrowserRuntimeDriver {
     {
         Err("browser_disposable_group_admission_unsupported".into())
     }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        _scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        Err("browser_session_idle_original_effect_unavailable".into())
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        _scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        Err("browser_session_idle_effect_readback_unavailable".into())
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -293,6 +307,20 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     {
         self.runtime
             .acquire_disposable_retirement_guard(allocations, browsers)
+    }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        self.runtime.apply_idle_retirement_effect(scope, tab)
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        self.runtime.observe_idle_retirement_effect(scope, tab)
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
@@ -520,6 +548,12 @@ enum BrowserRuntimeCommand {
         session_name: String,
         command: Value,
         reply: mpsc::Sender<Result<Value, String>>,
+    },
+    IdleRetirement {
+        scope: agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<ManagedBrowserTab>,
+        apply: bool,
+        reply: mpsc::Sender<Result<bool, String>>,
     },
     Shutdown,
 }
@@ -833,6 +867,41 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         )
     }
 
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        let settled = self.request(
+            receiver,
+            BrowserRuntimeCommand::IdleRetirement {
+                scope: scope.clone(),
+                tab: tab.cloned(),
+                apply: true,
+                reply,
+            },
+        )?;
+        settled
+            .then_some(())
+            .ok_or_else(|| "browser_session_idle_effect_readback_unavailable".into())
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::IdleRetirement {
+                scope: scope.clone(),
+                tab: tab.cloned(),
+                apply: false,
+                reply,
+            },
+        )
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -1169,12 +1238,24 @@ fn run_browser_worker(
                     let pid = manager
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
+                    // The unreaped child handle prevents PID reuse while this
+                    // launch observation is captured. Missing evidence is retained
+                    // as missing and must never be backfilled during retirement.
+                    let process_identity = if manager.poll_process_exit().is_none() {
+                        crate::process_identity::capture_process_identity(pid, None, None)
+                    } else {
+                        None
+                    };
+                    if manager.poll_process_exit().is_some() {
+                        return Err("browser_session_launch_process_exited".into());
+                    }
                     next_browser_sequence = sequence;
                     let browser_id = recovery_browser.as_ref().map_or_else(
                         || format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4()),
                         |browser| browser.id.clone(),
                     );
                     let launch = BrowserLaunch {
+                        process_identity,
                         browser_id: browser_id.clone(),
                         pid,
                         cdp_endpoint: manager.get_cdp_url().to_string(),
@@ -1222,11 +1303,10 @@ fn run_browser_worker(
                             close_reattached_browser(manager, browser.pid).await
                         }
                     }),
-                    None if !recorded_browser_process_exists(&browser) => Ok(()),
-                    None => runtime.block_on(async {
-                        let manager = attach_recorded_browser(&browser).await?;
-                        close_reattached_browser(&manager, browser.pid).await
-                    }),
+                    None => runtime.block_on(close_unattached_browser(
+                        &browser,
+                        crate::process_identity::observe_process(browser.pid),
+                    )),
                 };
                 let _ = reply.send(result);
             }
@@ -1312,7 +1392,9 @@ fn run_browser_worker(
             } => {
                 let result = runtime.block_on(async {
                     if !recorded_browser_is_live(&mut browsers, &browser).await? {
-                        return if !recorded_browser_process_exists(&browser) {
+                        return if !observed_process_presence(
+                            crate::process_identity::observe_process(browser.pid),
+                        )? {
                             Ok(())
                         } else {
                             Err("browser_session_reattach_unresponsive".into())
@@ -1430,6 +1512,41 @@ fn run_browser_worker(
                 };
                 let _ = reply.send(result);
             }
+            BrowserRuntimeCommand::IdleRetirement {
+                scope,
+                tab,
+                apply,
+                reply,
+            } => {
+                let mut release_original_cache = false;
+                let result = runtime.block_on(async {
+                    if apply
+                        && tab.is_none()
+                        && original_retirement_process(
+                            &scope,
+                            crate::process_identity::observe_process(scope.browser.pid),
+                        )?
+                        .is_some()
+                    {
+                        if let Some(manager) = browsers
+                            .get_mut(&scope.browser.id)
+                            .and_then(|state| state.browser.as_mut())
+                        {
+                            if manager.browser_pid() == Some(scope.browser.pid)
+                                && manager.get_cdp_url() == scope.browser.cdp_endpoint
+                            {
+                                manager.approve_lifecycle_close();
+                                release_original_cache = true;
+                            }
+                        }
+                    }
+                    original_retirement_effect(&scope, tab.as_ref(), apply).await
+                });
+                if release_original_cache && result.as_ref().is_ok_and(|settled| *settled) {
+                    browsers.remove(&scope.browser.id);
+                }
+                let _ = reply.send(result);
+            }
             BrowserRuntimeCommand::Shutdown => break,
         }
     }
@@ -1496,9 +1613,22 @@ async fn attach_current_profile_browser(
         .filter(|(port, path)| *port != 0 && path.starts_with("/devtools/browser/"))
         .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
     let endpoint = format!("ws://127.0.0.1:{port}{browser_path}");
+    let process_identity = before
+        .start_token
+        .clone()
+        .zip(before.executable_path.clone())
+        .map(|(start_token, executable_path)| {
+            agent_browser_service_model::RecordedProcessIdentity {
+                pid,
+                start_token,
+                executable_path: Some(executable_path),
+                browser_family: before.browser_family.clone(),
+            }
+        });
     let manager = attach_verified_browser_endpoint(&endpoint, pid, before).await?;
     Ok(Some((
         BrowserLaunch {
+            process_identity,
             browser_id: browser_id
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4())),
@@ -1606,6 +1736,205 @@ async fn attach_recorded_browser(
     Ok(manager)
 }
 
+fn original_retirement_process(
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<Option<crate::process_identity::ObservedProcessIdentity>, String> {
+    use crate::process_identity::ProcessObservation;
+    if scope.browser.pid == 0
+        || scope.browser.cdp_endpoint.is_empty()
+        || scope.process_identity.as_ref().is_some_and(|identity| {
+            identity.pid != scope.browser.pid
+                || identity.start_token.is_empty()
+                || identity
+                    .executable_path
+                    .as_ref()
+                    .is_none_or(|path| path.is_empty())
+        })
+    {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    let observed = match observation {
+        ProcessObservation::Missing => return Ok(None),
+        ProcessObservation::Failed { .. } => {
+            return Err("browser_session_idle_effect_readback_unavailable".into());
+        }
+        ProcessObservation::Observed(observed) => observed,
+    };
+    let original = scope
+        .process_identity
+        .as_ref()
+        .ok_or("browser_session_idle_original_identity_missing")?;
+    if original.pid != scope.browser.pid
+        || observed.pid != original.pid
+        || original.start_token.is_empty()
+        || original
+            .executable_path
+            .as_ref()
+            .is_none_or(|path| path.is_empty())
+    {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    let start = observed
+        .start_token
+        .as_ref()
+        .ok_or("browser_session_idle_effect_readback_unavailable")?;
+    if *start != original.start_token {
+        // Positive kernel-instance replacement proves the original ended. This
+        // observation never supplies authority over the current process.
+        return Ok(None);
+    }
+    if observed.executable_path != original.executable_path {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    Ok(Some(observed))
+}
+
+async fn original_retirement_targets(
+    manager: &BrowserManager,
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+) -> Result<Option<BTreeSet<String>>, String> {
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(None);
+    }
+    let result = manager
+        .client
+        .send_command_no_params("Target.getTargets", None)
+        .await
+        .map_err(|_| "browser_session_idle_effect_readback_unavailable")?;
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(None);
+    }
+    let targets = result
+        .get("targetInfos")
+        .and_then(Value::as_array)
+        .ok_or("browser_session_idle_effect_readback_unavailable")?;
+    let mut pages = BTreeSet::new();
+    for target in targets {
+        if matches!(target["type"].as_str(), Some("page" | "webview")) {
+            let id = target["targetId"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or("browser_session_idle_effect_readback_unavailable")?;
+            pages.insert(id.to_string());
+        }
+    }
+    Ok(Some(pages))
+}
+
+async fn original_retirement_effect(
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+    tab: Option<&ManagedBrowserTab>,
+    apply: bool,
+) -> Result<bool, String> {
+    if tab.is_some_and(|tab| {
+        !scope.tabs.iter().any(|original| {
+            original.id == tab.id
+                && original.target_id == tab.target_id
+                && original.browser_id == tab.browser_id
+                && tab.browser_id == scope.browser.id
+        })
+    }) {
+        return Err("browser_session_idle_original_target_conflict".into());
+    }
+    let Some(before) = original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    else {
+        return Ok(true);
+    };
+    if tab.is_none() && !apply {
+        return Ok(false);
+    }
+    let mut manager = match attach_verified_browser_endpoint(
+        &scope.browser.cdp_endpoint,
+        scope.browser.pid,
+        before,
+    )
+    .await
+    {
+        Ok(manager) => manager,
+        Err(_) => {
+            return match original_retirement_process(
+                scope,
+                crate::process_identity::observe_process(scope.browser.pid),
+            )? {
+                None => Ok(true),
+                Some(_) => Err("browser_session_idle_effect_readback_unavailable".into()),
+            };
+        }
+    };
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(true);
+    }
+    if let Some(tab) = tab {
+        let Some(targets) = original_retirement_targets(&manager, scope).await? else {
+            return Ok(true);
+        };
+        if !targets.contains(&tab.target_id) {
+            return Ok(true);
+        }
+        if !apply {
+            return Ok(false);
+        }
+        // The existing target-release owner proves disappearance and preserves
+        // every physical peer. Background attachment never activates a peer.
+        manager
+            .tab_close_target_id_for_release(&tab.target_id)
+            .await
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?;
+        return match original_retirement_targets(&manager, scope).await? {
+            None => Ok(true),
+            Some(targets) if !targets.contains(&tab.target_id) => Ok(true),
+            Some(_) => Err("browser_session_idle_effect_readback_unavailable".into()),
+        };
+    }
+    let _close_reply = manager
+        .client
+        .send_command_no_params("Browser.close", None)
+        .await;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_some()
+    {
+        if Instant::now() >= deadline {
+            return Err("browser_session_idle_effect_readback_unavailable".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(true)
+}
+
+async fn close_unattached_browser(
+    browser: &ManagedBrowserInstance,
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<(), String> {
+    if !observed_process_presence(observation)? {
+        return Ok(());
+    }
+    let manager = attach_recorded_browser(browser).await?;
+    close_reattached_browser(&manager, browser.pid).await
+}
+
 async fn close_reattached_browser(
     manager: &BrowserManager,
     recorded_pid: u32,
@@ -1615,8 +1944,19 @@ async fn close_reattached_browser(
         .send_command_no_params("Browser.close", None)
         .await
         .err();
+    wait_for_recorded_process_exit(
+        || crate::process_identity::observe_process(recorded_pid),
+        close_error,
+    )
+    .await
+}
+
+async fn wait_for_recorded_process_exit(
+    mut observe: impl FnMut() -> crate::process_identity::ProcessObservation,
+    close_error: Option<String>,
+) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(5);
-    while process_exists(recorded_pid) {
+    while observed_process_presence(observe())? {
         if Instant::now() >= deadline {
             return Err(match close_error {
                 Some(error) => {
@@ -1722,6 +2062,19 @@ fn prove_recovery_pid_absence(
     unrelated
         .then_some(())
         .ok_or_else(|| "browser_session_recovery_process_absence_unproven".into())
+}
+
+/// A failed census is neither positive liveness nor positive exit evidence.
+fn observed_process_presence(
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<bool, String> {
+    match observation {
+        crate::process_identity::ProcessObservation::Observed(_) => Ok(true),
+        crate::process_identity::ProcessObservation::Missing => Ok(false),
+        crate::process_identity::ProcessObservation::Failed { .. } => {
+            Err("browser_session_process_observation_unavailable".into())
+        }
+    }
 }
 
 fn recorded_browser_process_exists(browser: &ManagedBrowserInstance) -> bool {
@@ -2090,6 +2443,249 @@ mod tests {
             .acquire_disposable_retirement_guard(&allocations, &[])
             .unwrap()
             .is_some());
+    }
+
+    #[test]
+    fn runtime_original_retirement_does_not_adopt_a_reused_pid_or_missing_identity() {
+        let pid = std::process::id();
+        let current = crate::process_identity::capture_process_identity(pid, None, None).unwrap();
+        let mut scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser: ManagedBrowserInstance {
+                id: "synthetic-old-browser".into(),
+                profile_id: "synthetic-profile".into(),
+                pid,
+                cdp_endpoint: "ws://127.0.0.1:1/unreachable".into(),
+                desktop: None,
+                active_session_ids: vec![],
+            },
+            process_identity: Some(current.clone()),
+            tabs: vec![],
+        };
+        scope
+            .process_identity
+            .as_mut()
+            .unwrap()
+            .start_token
+            .push_str(":prior-instance");
+        let mut driver = BrowserManagerRuntime::start(Default::default()).unwrap();
+        assert!(driver.observe_idle_retirement_effect(&scope, None).unwrap());
+        driver.apply_idle_retirement_effect(&scope, None).unwrap();
+        assert_eq!(
+            crate::process_identity::capture_process_identity(pid, None, None),
+            Some(current.clone())
+        );
+        scope.process_identity = None;
+        assert_eq!(
+            driver
+                .apply_idle_retirement_effect(&scope, None)
+                .unwrap_err(),
+            "browser_session_idle_original_identity_missing"
+        );
+        assert_eq!(
+            driver
+                .observe_idle_retirement_effect(&scope, None)
+                .unwrap_err(),
+            "browser_session_idle_original_identity_missing"
+        );
+        scope.process_identity = Some(current);
+        assert!(original_retirement_process(
+            &scope,
+            crate::process_identity::ProcessObservation::Failed {
+                reason: "synthetic unavailable census".into(),
+            }
+        )
+        .is_err());
+        scope.browser.pid = u32::MAX;
+        assert!(original_retirement_process(
+            &scope,
+            crate::process_identity::ProcessObservation::Missing
+        )
+        .is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn runtime_original_retirement_reads_exact_targets_and_preserves_the_peer_after_restart() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "original-retirement-fixture".into(),
+            name: "Original retirement fixture".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
+        let launch = first.launch_browser(&profile, None).unwrap();
+        let identity = launch
+            .process_identity
+            .clone()
+            .expect("capture original live child identity");
+        struct CleanupOriginal(crate::process_identity::VerifiedProcessTermination);
+        impl Drop for CleanupOriginal {
+            fn drop(&mut self) {
+                use crate::process_identity::VerifiedProcessSignal;
+                if self.0.is_running().unwrap_or(false) {
+                    let _ = self.0.signal(VerifiedProcessSignal::Terminate);
+                    let until = Instant::now() + Duration::from_secs(2);
+                    while self.0.is_running().unwrap_or(false) && Instant::now() < until {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                    if self.0.is_running().unwrap_or(false) {
+                        let _ = self.0.signal(VerifiedProcessSignal::Kill);
+                    }
+                }
+            }
+        }
+        let _cleanup = CleanupOriginal(
+            crate::process_identity::VerifiedProcessTermination::open(&identity)
+                .unwrap()
+                .unwrap(),
+        );
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: profile.id,
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let original = first.acquire_initial_tab(&browser, &[]).unwrap();
+        let peer = first.create_tab(&browser).unwrap();
+        let tab = |item: BrowserTabAcquisition, session: &str| ManagedBrowserTab {
+            id: item.tab_id,
+            target_id: item.target_id,
+            browser_id: browser.id.clone(),
+            session_id: session.into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        let original = tab(original, "original");
+        let peer = tab(peer, "peer");
+        first
+            .navigate(
+                &browser,
+                &original,
+                "data:text/html,<title>original</title>",
+            )
+            .unwrap();
+        first
+            .navigate(&browser, &peer, "data:text/html,<title>peer</title>")
+            .unwrap();
+        let scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser,
+            process_identity: Some(identity),
+            tabs: vec![original.clone(), peer.clone()],
+        };
+        drop(first);
+        let mut restarted = BrowserManagerRuntime::start(config).unwrap();
+        assert!(!restarted
+            .observe_idle_retirement_effect(&scope, Some(&original))
+            .unwrap());
+        restarted
+            .apply_idle_retirement_effect(&scope, Some(&original))
+            .unwrap();
+        assert!(restarted
+            .observe_idle_retirement_effect(&scope, Some(&original))
+            .unwrap());
+        assert!(!restarted
+            .observe_idle_retirement_effect(&scope, Some(&peer))
+            .unwrap());
+        assert!(restarted.browser_is_live(&scope.browser).unwrap());
+        let title = restarted
+            .execute_command(
+                &scope.browser,
+                &peer,
+                &peer.session_id,
+                "peer",
+                &serde_json::json!({"id":"preserved-peer", "action":"title"}),
+            )
+            .unwrap();
+        assert_eq!(title["success"], true);
+        assert_eq!(title["data"]["title"], "peer");
+        restarted
+            .apply_idle_retirement_effect(&scope, None)
+            .unwrap();
+        assert!(restarted
+            .observe_idle_retirement_effect(&scope, None)
+            .unwrap());
+        assert!(!recorded_browser_process_exists(&scope.browser));
+    }
+
+    #[test]
+    fn unattached_browser_close_requires_positive_process_absence() {
+        use crate::process_identity::ProcessObservation;
+        let browser = ManagedBrowserInstance {
+            id: "browser:unknown-close".into(),
+            profile_id: "work".into(),
+            pid: u32::MAX,
+            cdp_endpoint: "ws://127.0.0.1:1/unreachable".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(close_unattached_browser(
+                    &browser,
+                    ProcessObservation::Failed {
+                        reason: "synthetic census unavailable".into()
+                    }
+                ))
+                .unwrap_err(),
+            "browser_session_process_observation_unavailable"
+        );
+        runtime
+            .block_on(close_unattached_browser(
+                &browser,
+                ProcessObservation::Missing,
+            ))
+            .unwrap();
+    }
+
+    #[test]
+    fn browser_close_wait_requires_positive_process_absence() {
+        use crate::process_identity::{ObservedProcessIdentity, ProcessObservation};
+        let observed = ProcessObservation::Observed(ObservedProcessIdentity {
+            pid: 42,
+            start_token: Some("original-process".into()),
+            executable_path: None,
+            browser_family: None,
+            command_line: None,
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut unavailable = [
+            observed.clone(),
+            ProcessObservation::Failed {
+                reason: "synthetic process census failure".into(),
+            },
+        ]
+        .into_iter();
+        assert_eq!(
+            runtime
+                .block_on(wait_for_recorded_process_exit(
+                    || unavailable.next().expect("stop after failed observation"),
+                    None,
+                ))
+                .unwrap_err(),
+            "browser_session_process_observation_unavailable"
+        );
+        let mut exited = [observed, ProcessObservation::Missing].into_iter();
+        runtime
+            .block_on(wait_for_recorded_process_exit(
+                || exited.next().expect("stop after positive absence"),
+                Some("lost close reply".into()),
+            ))
+            .unwrap();
     }
 
     #[test]
@@ -3109,6 +3705,12 @@ mod tests {
             let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
             first.launch_browser(&profile, None).unwrap()
         };
+        let original_process_identity = launch
+            .process_identity
+            .clone()
+            .expect("the original live child must supply kernel identity");
+        assert_eq!(original_process_identity.pid, launch.pid);
+        assert!(!original_process_identity.start_token.is_empty());
         let browser = ManagedBrowserInstance {
             id: launch.browser_id,
             profile_id: profile.id,
@@ -3118,6 +3720,10 @@ mod tests {
             active_session_ids: vec!["session:alice:restart-fixture:1".to_string()],
         };
         assert!(recorded_browser_process_exists(&browser));
+        assert_eq!(
+            crate::process_identity::capture_process_identity(browser.pid, None, None),
+            Some(original_process_identity)
+        );
 
         let mut restarted = BrowserManagerRuntime::start(config).unwrap();
         let live = restarted.browser_is_live(&browser).unwrap();

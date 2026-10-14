@@ -6376,6 +6376,37 @@ purpose, requestId and jobId as descriptive context, never authenticated identit
 Optional pressureInactivityMs opts into measured disposable quota retirement;
 0 disables it. Automatic retirement rechecks service activity under a close-effect
 admission guard; newly admitted work defers close. Explicit close remains separate.
+The automatic-close candidate persists intent and attempts before native exclusion
+and close effects, then publishes session state with custody before fence completion.
+Lost completion replies require original-fence readback; unresolved physical outcomes
+retain custody. Native workflow and installed acceptance remain pending.
+Pending scope changes are fenced inside SQLite publication and launch/recovery
+admission transactions; unrelated profiles remain usable. The error
+browser_session_publication_idle_retirement_fenced preserves the original operation
+and does not authorize a fresh close or replacement launch.
+A stale actor cannot repeat an unresolved close. Same-command reopening completes
+old retirement publication before launching its replacement.
+Preparation also requires fresh atomic admission. Restart reads the original fence;
+known preparation with no admitted close reconciles through unchanged task state.
+A missing fence after an unknown prepare remains unresolved.
+The candidate checks durable profile custody before tab acquisition, creation,
+navigation, focus and commands; pending custody returns
+browser_session_idle_readback_required. Process-liveness observation remains available.
+Atomic admission against concurrent command/retirement starts remains pending.
+Normal close confirmation requires positive OS process absence. Failed census
+returns browser_session_process_observation_unavailable and preserves unknown
+outcomes, including a lost close reply; PID-reuse identity proof remains separate.
+Launch custody retains optional original kernel identity across restart. Replayed
+observations cannot replace it under the same PID or drop it. Legacy missing
+evidence stays missing. The first recorded identity atomically promotes the
+private database reader version. New retirement scopes freeze the stored launch
+identity; SQLite checks the exact join during claim admission. Scope-bound effects
+and readback verify the original process and target. A changed kernel start proves
+the original ended without adopting its replacement. New groups missing legacy
+identity defer before any new claim, native preparation or attempt. Existing
+unresolved operations keep original readback obligations; a scoped runtime request
+without identity returns browser_session_idle_original_identity_missing. Native
+workflow and installed qualification remain pending.
 Scheduled profile cleanup separately qualifies profile activity under a deletion
 guard. Quota cleanup admits all selected profiles and browsers before any effect,
 including profiles whose browser has ended. Process-census completeness, provider

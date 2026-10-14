@@ -497,6 +497,20 @@ pub(crate) trait BrowserSessionPersistence {
         }
         self.compare_and_save_session_state(expected, state)
     }
+    /// Join retirement custody to session publication; legacy stores refuse
+    /// this operation instead of publishing a partially settled close.
+    fn publish_session_effects(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+        retirement_ids: &[String],
+    ) -> Result<(), String> {
+        if !retirement_ids.is_empty() {
+            return Err("browser_session_idle_publication_unsupported".into());
+        }
+        self.publish_session_state(expected, state, intent)
+    }
     fn load_session_state(&self) -> Result<BrowserSessionState, String>;
     fn compare_and_save_session_state(
         &mut self,
@@ -511,6 +525,20 @@ pub(crate) trait BrowserSessionPersistence {
 }
 
 impl BrowserSessionPersistence for BrowserSessionSqliteStore {
+    fn publish_session_effects(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+        retirement_ids: &[String],
+    ) -> Result<(), String> {
+        if retirement_ids.is_empty() {
+            self.publish_session_state(expected, state, intent)
+        } else {
+            self.publish_session_retirements(expected, state, retirement_ids, intent)
+                .map_err(|_| "browser_session_idle_publication_conflict".into())
+        }
+    }
     fn publish_session_state(
         &mut self,
         expected: &BrowserSessionState,
@@ -677,7 +705,39 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             // Existing task/profile continuation is never reclaimed here.
             self.reap(request.activity_at_ms)?;
         }
-        let result = self.manager()?.open(request)?;
+        let result = match self.manager()?.open(request.clone()) {
+            Err(error)
+                if error.starts_with("browser_session_retirement_publication_required:")
+                    && !self.effects.pending_idle_retirement_ids().is_empty() =>
+            {
+                let profile_id = error
+                    .strip_prefix("browser_session_retirement_publication_required:")
+                    .expect("matched publication boundary");
+                let continuation = match &request.profile_intent {
+                    agent_browser_service_model::BrowserProfileIntent::Disposable { .. }
+                        if self.state.disposable_profiles.contains_key(profile_id) =>
+                    {
+                        OpenBrowserSession::existing_disposable(
+                            &request.session_name,
+                            profile_id,
+                            request.activity_at_ms,
+                        )
+                    }
+                    agent_browser_service_model::BrowserProfileIntent::Exact {
+                        profile_id: requested,
+                    }
+                    | agent_browser_service_model::BrowserProfileIntent::ExistingDisposable {
+                        profile_id: requested,
+                    } if requested == profile_id => request,
+                    _ => return Err("browser_session_retirement_continuation_invalid".into()),
+                };
+                // This is a declared pre-launch phase boundary, not a retry of
+                // any unknown effect. Completion failure stops before replacement.
+                self.commit_state()?;
+                self.manager()?.open(continuation)?
+            }
+            result => result?,
+        };
         self.commit_state()?;
         Ok(result)
     }
@@ -1625,16 +1685,20 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
 
     fn commit_state(&mut self) -> Result<(), String> {
         let intent = self.effects.pending_launch_intent();
-        self.persistence.publish_session_state(
+        let retirement_ids = self.effects.pending_idle_retirement_ids();
+        self.persistence.publish_session_effects(
             &self.persisted_state,
             &self.state,
             intent.as_ref(),
+            &retirement_ids,
         )?;
         // Publication may move completed history into the same durable archive.
         // Adopt its exact active projection so the next CAS sees the same state.
         self.state = self.persistence.load_session_state()?;
         self.persisted_state = self.state.clone();
         self.effects.acknowledge_launch_publication();
+        self.effects
+            .finish_idle_retirement_publication(&retirement_ids)?;
         if intent.is_some() {
             super::browser_session_remote_view::request_pool_maintenance();
         }
@@ -2692,6 +2756,7 @@ mod tests {
         ) -> Result<BrowserLaunch, String> {
             self.launches += 1;
             Ok(BrowserLaunch {
+                process_identity: None,
                 browser_id: format!("browser:{}:{}", profile.id, self.launches),
                 pid: 4242,
                 cdp_endpoint: "ws://127.0.0.1:9422/devtools/browser/test".to_string(),
@@ -2826,6 +2891,7 @@ mod tests {
         );
         store.admit_launch_intent(&intent, &initial).unwrap();
         let launch = BrowserLaunch {
+            process_identity: None,
             browser_id: "host-browser".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),

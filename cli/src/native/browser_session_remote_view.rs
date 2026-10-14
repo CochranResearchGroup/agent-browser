@@ -300,6 +300,18 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn pending_idle_retirement_ids(&self) -> Vec<String> {
+        match self {
+            Self::Local(effects) => effects.pending_idle_retirement_ids(),
+            Self::Remote(effects) => effects.pending_idle_retirement_ids(),
+        }
+    }
+    fn finish_idle_retirement_publication(&mut self, ids: &[String]) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.finish_idle_retirement_publication(ids),
+            Self::Remote(effects) => effects.finish_idle_retirement_publication(ids),
+        }
+    }
     fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
         match self {
             Self::Local(effects) => effects.pending_launch_intent(),

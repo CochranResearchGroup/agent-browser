@@ -47,6 +47,8 @@ pub struct BrowserLaunchCustodyRecord {
     pub intent: BrowserLaunchIntent,
     pub observed_browser_id: Option<String>,
     pub observed_pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub observed_process_identity: Option<crate::RecordedProcessIdentity>,
     pub published: bool,
 }
 
@@ -58,6 +60,7 @@ impl BrowserLaunchCustodyRecord {
             intent,
             observed_browser_id: None,
             observed_pid: None,
+            observed_process_identity: None,
             published: false,
         })
     }
@@ -72,6 +75,17 @@ impl BrowserLaunchCustodyRecord {
                 .observed_browser_id
                 .as_ref()
                 .is_some_and(|id| id.trim().is_empty())
+            || self
+                .observed_process_identity
+                .as_ref()
+                .is_some_and(|identity| {
+                    self.observed_pid != Some(identity.pid)
+                        || identity.start_token.trim().is_empty()
+                        || identity
+                            .executable_path
+                            .as_ref()
+                            .is_none_or(|path| path.trim().is_empty())
+                })
             || (self.published && self.observed_browser_id.is_none())
         {
             return Err(BrowserLaunchCustodyError::InvalidRecord);
@@ -94,11 +108,22 @@ impl BrowserLaunchCustodyRecord {
                 .as_ref()
                 .is_some_and(|id| id != &launch.browser_id)
             || self.observed_pid.is_some_and(|pid| pid != launch.pid)
+            || (self.observed_browser_id.is_some()
+                && self.observed_process_identity != launch.process_identity)
+            || launch.process_identity.as_ref().is_some_and(|identity| {
+                identity.pid != launch.pid
+                    || identity.start_token.trim().is_empty()
+                    || identity
+                        .executable_path
+                        .as_ref()
+                        .is_none_or(|path| path.trim().is_empty())
+            })
         {
             return Err(BrowserLaunchCustodyError::IdentityConflict);
         }
         self.observed_browser_id = Some(launch.browser_id.clone());
         self.observed_pid = Some(launch.pid);
+        self.observed_process_identity = launch.process_identity.clone();
         Ok(())
     }
     /// Adapters must call this against the state published in the same durable
@@ -146,7 +171,7 @@ pub enum LaunchCustodyStoreError {
 #[derive(Debug, Eq, PartialEq)]
 pub enum LaunchCustodyAdmission {
     New,
-    Existing(BrowserLaunchCustodyRecord),
+    Existing(Box<BrowserLaunchCustodyRecord>),
 }
 
 /// Injectable durable launch boundary. Admission commits the exact pending
@@ -179,6 +204,15 @@ pub trait BrowserLaunchCustodyStore {
         &mut self,
         _browser: &crate::ManagedBrowserInstance,
     ) -> Result<crate::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
+        Err(LaunchCustodyStoreError::Unavailable)
+    }
+
+    /// Read only the immutable identity joined to the published launch. Missing
+    /// legacy evidence must not be replaced by a current process observation.
+    fn published_launch_process_identity(
+        &mut self,
+        _browser: &crate::ManagedBrowserInstance,
+    ) -> Result<Option<crate::RecordedProcessIdentity>, LaunchCustodyStoreError> {
         Err(LaunchCustodyStoreError::Unavailable)
     }
 

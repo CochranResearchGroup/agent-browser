@@ -254,6 +254,7 @@ impl BrowserSessionEffects for FixtureEffects {
         self.browser_live = true;
         Ok(agent_browser_service_model::BrowserRecovery {
             launch: BrowserLaunch {
+                process_identity: None,
                 browser_id: browser.id.clone(),
                 pid: 5252,
                 cdp_endpoint: "http://127.0.0.1:9522".into(),
@@ -283,6 +284,7 @@ impl BrowserSessionEffects for FixtureEffects {
             .push((profile.id.clone(), self.executable.clone()));
         let sequence = self.launches.len();
         Ok(BrowserLaunch {
+            process_identity: None,
             browser_id: if sequence == 1 {
                 format!("browser:{}", profile.id)
             } else {

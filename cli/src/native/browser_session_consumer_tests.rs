@@ -274,11 +274,22 @@ impl RemoteViewBrowserProcessEffects for Process {
         let live: Option<Value> = live_endpoint
             .exists()
             .then(|| serde_json::from_slice(&std::fs::read(live_endpoint).unwrap()).unwrap());
+        let pid = live.as_ref().map_or(42 + self.calls.get(), |value| {
+            value["pid"].as_u64().unwrap() as u32
+        });
         Ok(BrowserLaunch {
-            browser_id: format!("browser:{}", profile.id),
-            pid: live.as_ref().map_or(42 + self.calls.get(), |value| {
-                value["pid"].as_u64().unwrap() as u32
+            // Scripted current launch evidence, with an explicit legacy case.
+            process_identity: (!std::fs::read_to_string(self.root.join("legacy-launch-no-kernel"))
+                .ok()
+                .is_some_and(|legacy| legacy.trim() == profile.id))
+            .then(|| RecordedProcessIdentity {
+                pid,
+                start_token: format!("synthetic-original:{pid}"),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
             }),
+            browser_id: format!("browser:{}", profile.id),
+            pid,
             cdp_endpoint: live.as_ref().map_or_else(
                 || "http://127.0.0.1:9222".into(),
                 |value| value["endpoint"].as_str().unwrap().into(),
@@ -304,6 +315,7 @@ impl BrowserSessionEffects for Process {
         }
         Ok(Some(BrowserRecovery {
             launch: BrowserLaunch {
+                process_identity: None,
                 browser_id: browser
                     .map(|browser| browser.id.clone())
                     .unwrap_or_else(|| "shared-browser".into()),
@@ -333,9 +345,61 @@ impl BrowserSessionEffects for Process {
     ) -> Result<BrowserLaunch, String> {
         panic!("ordinary launch must use consumer custody")
     }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        if self.root.join("replacement-kernel-observed").exists() {
+            assert!(scope.process_identity.is_some());
+            return Ok(()); // Scripted positive proof that the original ended.
+        }
+        match tab {
+            Some(tab) => self.close_tab(&scope.browser, tab),
+            None => self.close_browser(&scope.browser),
+        }
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        _scope: &BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        Ok(self.root.join("idle-process-absent").exists())
+    }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.root.join("require-retirement-custody").exists() {
+            let count_path = self.root.join("retirement-close-count");
+            let count = std::fs::read_to_string(&count_path)
+                .map_or(0, |count| count.parse::<u32>().unwrap());
+            std::fs::write(count_path, (count + 1).to_string()).unwrap();
+            let mut store = open_store(&self.root, false);
+            let records = store.idle_retirement_records().unwrap();
+            let record = records
+                .iter()
+                .find(|record| {
+                    record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.id == _browser.id)
+                })
+                .unwrap();
+            let encoded = serde_json::to_value(record).unwrap();
+            assert_eq!(
+                encoded["effects"].as_array().unwrap().last().unwrap()["settled"],
+                false
+            );
+            assert!(
+                self.root.join("native-retirement-fence").exists(),
+                "close ran without native admission exclusion"
+            );
+        }
         if matches!(self.mode, Mode::IdleRecovery) {
             std::fs::write(self.root.join("idle-process-absent"), "absent").unwrap();
+        }
+        if self.root.join("lose-retirement-close-reply").exists() {
+            std::fs::remove_file(self.root.join("lose-retirement-close-reply")).unwrap();
+            return Err("synthetic_close_reply_lost".into());
         }
         Ok(())
     }

@@ -9,9 +9,81 @@ struct Evidence {
     prior: Option<RemoteViewAssignmentRecord>,
     retirement_blocked: bool,
     published_browser_requests: Vec<ManagedBrowserInstance>,
+    retirements: Vec<BrowserIdleRetirementRecord>,
 }
 struct Store(Rc<RefCell<Evidence>>);
+impl BrowserIdleRetirementCustodyStore for Store {
+    fn idle_retirement_records(
+        &mut self,
+    ) -> Result<Vec<BrowserIdleRetirementRecord>, BrowserIdleRetirementStoreError> {
+        Ok(self.0.borrow().retirements.clone())
+    }
+    fn claim_idle_retirement(
+        &mut self,
+        intent: &BrowserIdleRetirementIntent,
+        state: &BrowserSessionState,
+    ) -> Result<BrowserIdleRetirementAdmission, BrowserIdleRetirementStoreError> {
+        intent.matches_baseline(state)?;
+        self.0
+            .borrow_mut()
+            .retirements
+            .push(BrowserIdleRetirementRecord::new(intent.clone())?);
+        Ok(BrowserIdleRetirementAdmission::New)
+    }
+    fn admit_idle_retirement_preparation(
+        &mut self,
+        intent: &BrowserIdleRetirementIntent,
+    ) -> Result<(BrowserIdleRetirementRecord, bool), BrowserIdleRetirementStoreError> {
+        let mut evidence = self.0.borrow_mut();
+        let current = evidence
+            .retirements
+            .iter_mut()
+            .find(|record| record.intent == *intent)
+            .unwrap();
+        let admitted = !current.preparation_started();
+        if admitted {
+            current.begin_preparation()?;
+        }
+        Ok((current.clone(), admitted))
+    }
+    fn update_idle_retirement(
+        &mut self,
+        previous: &BrowserIdleRetirementRecord,
+        next: &BrowserIdleRetirementRecord,
+    ) -> Result<(), BrowserIdleRetirementStoreError> {
+        previous.validate_successor(next)?;
+        let mut evidence = self.0.borrow_mut();
+        let current = evidence
+            .retirements
+            .iter_mut()
+            .find(|r| r.intent.id == previous.intent.id)
+            .unwrap();
+        assert_eq!(current, previous);
+        *current = next.clone();
+        Ok(())
+    }
+    fn publish_idle_retirement_state(
+        &mut self,
+        _: &BrowserSessionState,
+        _: &BrowserSessionState,
+        _: &[String],
+    ) -> Result<(), BrowserIdleRetirementStoreError> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
+}
 impl BrowserLaunchCustodyStore for Store {
+    fn published_launch_process_identity(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<Option<RecordedProcessIdentity>, LaunchCustodyStoreError> {
+        Ok(Some(RecordedProcessIdentity {
+            pid: browser.pid,
+            start_token: "synthetic-original".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: None,
+        }))
+    }
+
     fn unpublished_launch_records(
         &mut self,
     ) -> Result<Vec<BrowserLaunchCustodyRecord>, LaunchCustodyStoreError> {
@@ -137,6 +209,36 @@ impl RemoteViewApplicationTransport for Transport {
             RemoteViewApplicationRequest::LaunchEnvironment { .. } => {
                 self.fixture["launchEnvironment"].clone()
             }
+            RemoteViewApplicationRequest::ReadIdleRetirement { .. } => serde_json::json!({
+                "schemaVersion":1,"target":self.fixture["assignmentObservation"]["target"],
+                "readinessScope":"native_admission","retirement":{"revision":0,"fence":null,"completed":true}
+            }),
+            RemoteViewApplicationRequest::PrepareIdleRetirement {
+                ref idempotency_key,
+                ref expected_retirement,
+                expected_revision,
+                ..
+            } => {
+                use sha2::{Digest, Sha256};
+                let target: RemoteViewApplicationTarget =
+                    serde_json::from_value(self.fixture["assignmentObservation"]["target"].clone())
+                        .unwrap();
+                let key = format!(
+                    "consumer-{:x}",
+                    Sha256::digest(
+                        format!("{}:{}", target.registration_id, idempotency_key).as_bytes()
+                    )
+                );
+                let operation = format!(
+                    "{:x}",
+                    Sha256::digest(
+                        serde_json::to_vec(&(key, &target, expected_retirement)).unwrap()
+                    )
+                );
+                serde_json::json!({"schemaVersion":1,"target":target,"readinessScope":"native_admission","state":"prepared",
+                    "fence":{"schema_version":1,"installation_id":"0123456789abcdef","config_hash":"a".repeat(64),
+                        "slot":2,"generation":target.viewing_generation,"operation_id":operation,"revision":expected_revision + 1}})
+            }
             RemoteViewApplicationRequest::ObserveIdle { .. } => {
                 self.evidence
                     .borrow_mut()
@@ -189,6 +291,7 @@ impl RemoteViewBrowserProcessEffects for Runtime {
             .unwrap();
         self.evidence.borrow_mut().effects.push("launch".into());
         Ok(BrowserLaunch {
+            process_identity: None,
             browser_id: browser.id.clone(),
             pid: 43,
             cdp_endpoint: "http://127.0.0.1:9322".into(),

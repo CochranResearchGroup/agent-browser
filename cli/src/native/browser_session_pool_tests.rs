@@ -36,6 +36,9 @@ struct Provider {
     native_viewing_generation: Option<u64>,
     native_competing_publication: bool,
     native_bridge: Option<NativeOwnerBridge>,
+    retirement_receipts: std::collections::BTreeMap<String, Value>,
+    lose_retirement_completion: bool,
+    lose_retirement_preparation: bool,
 }
 struct NativeOwnerBridge {
     owner_url: String,
@@ -127,6 +130,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 let mut target = fixture["assignmentObservation"]["target"].clone();
                 target["assignmentId"] = assignment.assignment_id.clone().into();
                 target["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    target["viewingDesktopId"] = assignment.desktop_id.clone().into();
+                }
                 if let Some(generation) = provider.native_viewing_generation {
                     target["viewingGeneration"] = generation.into();
                 }
@@ -183,6 +189,113 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     serde_json::json!({"schemaVersion":1,"state":if !record["used"].is_null() {"used"} else if expired {"expired"} else {"pending"},"observation":record}),
                 )
             }
+            RemoteViewApplicationRequest::ReadIdleRetirement { assignment_id, .. } => {
+                provider.operations.push("read_idle_retirement");
+                let assignment = provider
+                    .assignments
+                    .iter()
+                    .find(|a| &a.assignment_id == assignment_id)
+                    .unwrap();
+                let mut target = fixture["assignmentObservation"]["target"].clone();
+                target["assignmentId"] = assignment.assignment_id.clone().into();
+                target["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    target["viewingDesktopId"] = assignment.desktop_id.clone().into();
+                }
+                if let Some(generation) = provider.native_viewing_generation {
+                    target["viewingGeneration"] = generation.into();
+                }
+                let retirement = provider.retirement_receipts.get(assignment_id).map_or_else(
+                    || serde_json::json!({"revision":0,"fence":null,"completed":true}),
+                    |receipt| {
+                        serde_json::json!({"revision":receipt["fence"]["revision"],
+                        "fence":receipt["fence"],"completed":receipt["state"] == "completed"})
+                    },
+                );
+                Ok(
+                    serde_json::json!({"schemaVersion":1,"target":target,"readinessScope":"native_admission","retirement":retirement}),
+                )
+            }
+            RemoteViewApplicationRequest::PrepareIdleRetirement {
+                assignment_id,
+                idempotency_key,
+                expected_revision,
+                expected_retirement,
+                ..
+            } => {
+                use sha2::{Digest, Sha256};
+                provider.operations.push("prepare_idle_retirement");
+                let records = fixture_retirement_records(&self.root);
+                let record = records
+                    .iter()
+                    .find(|r| r.intent.provider.idempotency_key == *idempotency_key)
+                    .unwrap();
+                assert!(
+                    record.preparation_started(),
+                    "intent and attempt must precede provider prepare"
+                );
+                assert!(record.prepared.is_none());
+                let target = &record.intent.provider.target;
+                let key = format!(
+                    "consumer-{:x}",
+                    Sha256::digest(
+                        format!("{}:{}", target.registration_id, idempotency_key).as_bytes()
+                    )
+                );
+                let operation = format!(
+                    "{:x}",
+                    Sha256::digest(
+                        serde_json::to_vec(&(key, target, expected_retirement)).unwrap()
+                    )
+                );
+                let receipt = serde_json::json!({"schemaVersion":1,"target":target,"readinessScope":"native_admission",
+                    "state":"prepared","fence":{"schema_version":1,"installation_id":"0123456789abcdef",
+                        "config_hash":"a".repeat(64),"slot":2,"generation":target.viewing_generation,
+                        "operation_id":operation,"revision":expected_revision + 1}});
+                provider
+                    .retirement_receipts
+                    .insert(assignment_id.clone(), receipt.clone());
+                if self.root.join("require-retirement-custody").exists() {
+                    std::fs::write(self.root.join("native-retirement-fence"), "held").unwrap();
+                }
+                if provider.lose_retirement_preparation {
+                    provider.lose_retirement_preparation = false;
+                    return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                }
+                Ok(receipt)
+            }
+            RemoteViewApplicationRequest::CompleteIdleRetirement {
+                assignment_id,
+                idempotency_key,
+                fence,
+                effects_settled,
+                ..
+            } => {
+                provider.operations.push("complete_idle_retirement");
+                assert!(*effects_settled);
+                let records = fixture_retirement_records(&self.root);
+                let record = records
+                    .iter()
+                    .find(|r| r.intent.provider.idempotency_key == *idempotency_key)
+                    .unwrap();
+                assert!(
+                    record.published_state_digest.is_some(),
+                    "native completion preceded atomic publication"
+                );
+                assert_eq!(&record.prepared.as_ref().unwrap().fence, fence);
+                let receipt = provider.retirement_receipts.get_mut(assignment_id).unwrap();
+                assert_eq!(receipt["fence"], serde_json::to_value(fence).unwrap());
+                receipt["state"] = "completed".into();
+                if self.root.join("require-retirement-custody").exists() {
+                    std::fs::remove_file(self.root.join("native-retirement-fence")).unwrap();
+                }
+                let receipt = receipt.clone();
+                if provider.lose_retirement_completion {
+                    provider.lose_retirement_completion = false;
+                    return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
+                }
+                Ok(receipt)
+            }
             RemoteViewApplicationRequest::ObserveIdle { assignment_id, .. } => {
                 provider.operations.push("observe_idle");
                 let assignment = provider
@@ -193,6 +306,9 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 let mut observed = fixture["assignmentObservation"].clone();
                 observed["target"]["assignmentId"] = assignment.assignment_id.clone().into();
                 observed["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    observed["target"]["viewingDesktopId"] = assignment.desktop_id.clone().into();
+                }
                 let viewer = provider
                     .viewer_active_desktops
                     .contains(&assignment.desktop_id);
@@ -301,6 +417,10 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 let mut observation = fixture["assignmentObservation"].clone();
                 observation["target"]["assignmentId"] = assignment.assignment_id.clone().into();
                 observation["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    observation["target"]["viewingDesktopId"] =
+                        assignment.desktop_id.clone().into();
+                }
                 if let Some(generation) = provider.native_viewing_generation {
                     observation["target"]["viewingGeneration"] = generation.into();
                 }
@@ -355,6 +475,10 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 let mut environment = fixture["launchEnvironment"].clone();
                 environment["target"]["assignmentId"] = assignment.assignment_id.clone().into();
                 environment["target"]["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    environment["target"]["viewingDesktopId"] =
+                        assignment.desktop_id.clone().into();
+                }
                 Ok(environment)
             }
             RemoteViewApplicationRequest::IssueView {
@@ -429,6 +553,40 @@ impl RemoteViewApplicationTransport for PoolTransport {
             _ => panic!("unexpected provider mutation during capacity demand"),
         }
     }
+}
+fn claim_fixture_retirement(
+    fixture: &Fixture,
+    provider: Rc<RefCell<Provider>>,
+    baseline: &BrowserSessionState,
+    browser: &ManagedBrowserInstance,
+) -> BrowserIdleRetirementIntent {
+    let assignment = fixture
+        .store(false)
+        .published_launch_assignment(browser)
+        .unwrap();
+    let mut coordinator = adapter(fixture, provider);
+    let idle = coordinator.observe_idle(&assignment).unwrap();
+    let admission = coordinator.read_idle_retirement(&assignment).unwrap();
+    let id = uuid::Uuid::new_v4().to_string();
+    let native = RemoteViewIdleRetirementIntent::new(&assignment, &idle, &admission, &id).unwrap();
+    let mut intent =
+        BrowserIdleRetirementIntent::new(&id, native, baseline, std::slice::from_ref(&browser.id))
+            .unwrap();
+    for scope in &mut intent.scopes {
+        scope.process_identity = fixture
+            .store(false)
+            .published_launch_process_identity(&scope.browser)
+            .unwrap();
+    }
+    fixture
+        .store(false)
+        .claim_idle_retirement(&intent, baseline)
+        .unwrap();
+    intent
+}
+
+fn fixture_retirement_records(root: &Path) -> Vec<BrowserIdleRetirementRecord> {
+    open_store(root, false).idle_retirement_records().unwrap()
 }
 fn adapter(
     fixture: &Fixture,
@@ -5189,4 +5347,767 @@ impl NativePublicHarness {
             .recv_timeout(std::time::Duration::from_secs(30))
             .expect("public HTTP/owner continuation made no progress")
     }
+}
+
+#[test]
+fn automatic_retirement_publishes_custody_before_native_completion() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("require-retirement-custody"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/","profileId":"profile-a","activityAtMs":100
+    })).unwrap().unwrap();
+    let browser_id = opened["browserSession"]["browserId"].as_str().unwrap();
+    assert_eq!(
+        consumer.reap(300_100).unwrap().closed_browser_ids,
+        vec![browser_id]
+    );
+    let mut store = fixture.store(false);
+    let records = store.idle_retirement_records().unwrap();
+    assert_eq!(
+        records.len(),
+        1,
+        "physical retirement must have durable original-operation custody"
+    );
+    assert!(
+        records[0].completed.is_some(),
+        "native fence completes only after session publication"
+    );
+    assert!(records[0].published_state_digest.is_some());
+    assert!(store
+        .load_session_state()
+        .unwrap()
+        .idle_closed_browsers
+        .contains_key(browser_id));
+    let operations = &provider.borrow().operations;
+    assert_eq!(
+        operations
+            .iter()
+            .filter(|op| **op == "prepare_idle_retirement")
+            .count(),
+        1
+    );
+    assert_eq!(
+        operations
+            .iter()
+            .filter(|op| **op == "complete_idle_retirement")
+            .count(),
+        1
+    );
+    assert_eq!(calls.get(), 1, "retirement must not launch a browser");
+}
+
+#[test]
+fn automatic_retirement_lost_completion_reconciles_original_operation_after_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/","profileId":"profile-a","activityAtMs":100
+    })).unwrap().unwrap();
+    provider.borrow_mut().lose_retirement_completion = true;
+    assert_eq!(
+        consumer.reap(300_100).unwrap_err(),
+        "browser_session_idle_readback_required"
+    );
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].published_state_digest.is_some());
+    assert!(records[0].completed.is_none());
+    let id = records[0].intent.id.clone();
+    drop(consumer);
+    let mut restarted = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    restarted.reap(300_101).unwrap();
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].intent.id, id);
+    assert!(
+        records[0].completed.is_some(),
+        "readback must reconcile the already completed original fence"
+    );
+    assert_eq!(
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|op| **op == "complete_idle_retirement")
+            .count(),
+        1
+    );
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn automatic_retirement_lost_close_reads_original_effect_without_repeating_close() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("require-retirement-custody"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/","profileId":"profile-a","activityAtMs":100
+    })).unwrap().unwrap();
+    std::fs::write(fixture.root.join("lose-retirement-close-reply"), "lose").unwrap();
+    assert_eq!(
+        consumer.reap(300_100).unwrap_err(),
+        "synthetic_close_reply_lost"
+    );
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].prepared.is_some());
+    assert!(records[0].published_state_digest.is_none());
+    assert!(records[0].completed.is_none());
+    let id = records[0].intent.id.clone();
+    drop(consumer);
+    let mut restarted = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    assert_eq!(restarted.reap(300_101).unwrap().closed_browser_ids.len(), 1);
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].intent.id, id);
+    assert!(records[0].completed.is_some());
+    assert_eq!(
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|op| **op == "prepare_idle_retirement")
+            .count(),
+        1
+    );
+    assert_eq!(calls.get(), 1);
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-close-count")).unwrap(),
+        "1"
+    );
+}
+
+#[test]
+fn automatic_retirement_publication_precedes_same_command_logical_identity_reuse() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let first = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let old_pid = consumer.state().browsers[&first.browser_id].pid;
+    let second = consumer
+        .open(OpenBrowserSession::exact_profile(
+            "Alice",
+            "profile-a",
+            300_101,
+        ))
+        .unwrap();
+    assert_ne!(second.session_id, first.session_id);
+    assert_eq!(
+        second.browser_id, first.browser_id,
+        "the fixture deliberately reuses the logical browser ID"
+    );
+    assert_ne!(consumer.state().browsers[&second.browser_id].pid, old_pid);
+    assert_eq!(calls.get(), 2);
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(records[0].completed.is_some());
+    assert_eq!(records[0].intent.scopes[0].browser.pid, old_pid);
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *consumer.state()
+    );
+}
+
+#[test]
+fn automatic_retirement_stale_snapshot_cannot_repeat_an_unknown_close() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("require-retirement-custody"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    let make_effects = || {
+        RemoteViewSessionEffects::new(
+            Process {
+                mode: Mode::IdleRecovery,
+                root: fixture.root.clone(),
+                calls: calls.clone(),
+            },
+            adapter(&fixture, provider.clone()),
+            fixture.store(false),
+            vec![],
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap()
+    };
+    let mut first = make_effects();
+    let mut stale = make_effects();
+    first.begin_operation(&baseline).unwrap();
+    stale.begin_operation(&baseline).unwrap();
+    let first_guard = first
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    let stale_guard = stale
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    std::fs::write(fixture.root.join("lose-retirement-close-reply"), "lose").unwrap();
+    assert_eq!(
+        first.close_browser(&browser).unwrap_err(),
+        "synthetic_close_reply_lost"
+    );
+    drop(first_guard);
+    stale.close_browser(&browser).unwrap();
+    drop(stale_guard);
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("retirement-close-count")).unwrap(),
+        "1",
+        "a matching CAS replay is not fresh physical-effect admission"
+    );
+    assert_eq!(
+        fixture
+            .store(false)
+            .idle_retirement_records()
+            .unwrap()
+            .len(),
+        1
+    );
+}
+
+#[test]
+fn automatic_retirement_stale_preparation_snapshot_reads_back_without_mutation_replay() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    let intent = claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    let id = intent.id;
+    let make_effects = || {
+        RemoteViewSessionEffects::new(
+            Process {
+                mode: Mode::IdleRecovery,
+                root: fixture.root.clone(),
+                calls: calls.clone(),
+            },
+            adapter(&fixture, provider.clone()),
+            fixture.store(false),
+            vec![],
+            || uuid::Uuid::new_v4().to_string(),
+        )
+        .unwrap()
+        .with_pool(RemoteViewSessionPool {
+            name: "main".into(),
+            desired_desktops: 1,
+        })
+        .unwrap()
+    };
+    let mut first = make_effects();
+    let mut stale = make_effects();
+    first.begin_operation(&baseline).unwrap();
+    stale.begin_operation(&baseline).unwrap();
+    provider.borrow_mut().lose_retirement_preparation = true;
+    assert!(
+        matches!(first.acquire_idle_retirement_guard(std::slice::from_ref(&browser)),
+        Err(error) if error == "browser_session_idle_readback_required")
+    );
+    let guard = stale
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    drop(guard);
+    assert_eq!(
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|op| **op == "prepare_idle_retirement")
+            .count(),
+        1,
+        "a preparation CAS replay must require original-operation readback"
+    );
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].intent.id, id);
+    assert!(records[0].prepared.is_some());
+}
+
+#[test]
+fn automatic_retirement_prepared_without_effects_reconciles_after_restart() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("require-retirement-custody"), "check").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    let mut interrupted = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        adapter(&fixture, provider.clone()),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    interrupted.begin_operation(&baseline).unwrap();
+    let guard = interrupted
+        .acquire_idle_retirement_guard(std::slice::from_ref(&browser))
+        .unwrap()
+        .unwrap();
+    assert!(fixture.root.join("native-retirement-fence").exists());
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert!(restarted.reap(101).unwrap().closed_browser_ids.is_empty());
+    let records = fixture.store(false).idle_retirement_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert!(
+        records[0].completed.is_some(),
+        "no admitted effect remains to justify retaining native exclusion"
+    );
+    assert!(!fixture.root.join("native-retirement-fence").exists());
+    assert_eq!(
+        interrupted.close_browser(&browser).unwrap_err(),
+        "browser_session_idle_readback_required",
+        "a delayed actor cannot admit its old effect after no-effect publication"
+    );
+    drop(guard);
+    drop(interrupted);
+    assert!(!fixture.root.join("retirement-close-count").exists());
+    assert_eq!(restarted.state().browsers, baseline.browsers);
+    assert_eq!(restarted.state().tabs, baseline.tabs);
+    assert!(restarted
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({"action":"get_url","profileId":"profile-a","activityAtMs":102})
+        )
+        .unwrap()
+        .is_some());
+    assert_eq!(calls.get(), 1);
+}
+
+#[test]
+fn automatic_retirement_absent_fence_after_unknown_prepare_remains_unresolved() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    drop(consumer);
+    let mut interrupted = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        adapter(&fixture, provider.clone()),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    interrupted.begin_operation(&baseline).unwrap();
+    provider.borrow_mut().lose_retirement_preparation = true;
+    assert!(
+        matches!(interrupted.acquire_idle_retirement_guard(std::slice::from_ref(&browser)),
+        Err(error) if error == "browser_session_idle_readback_required")
+    );
+    drop(interrupted);
+    // This observation is compatible with a prepare that never arrived or is
+    // still delayed. It is deliberately not a cancellation acknowledgement.
+    provider.borrow_mut().retirement_receipts.clear();
+    let original = fixture.store(false).idle_retirement_records().unwrap();
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert!(restarted.reap(101).unwrap().closed_browser_ids.is_empty());
+    assert_eq!(
+        fixture.store(false).idle_retirement_records().unwrap(),
+        original
+    );
+    assert!(original[0].prepared.is_none());
+    assert!(original[0].published_state_digest.is_none());
+    assert!(original[0].completed.is_none());
+    assert_eq!(
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|op| **op == "prepare_idle_retirement")
+            .count(),
+        1
+    );
+    assert_eq!(
+        provider
+            .borrow()
+            .operations
+            .iter()
+            .filter(|op| **op == "complete_idle_retirement")
+            .count(),
+        0
+    );
+    assert_eq!(restarted.state().browsers, baseline.browsers);
+    assert_eq!(restarted.state().tabs, baseline.tabs);
+}
+
+#[test]
+fn automatic_retirement_pending_effect_denies_conflicting_browser_commands() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    consumer
+        .navigate(&opened.session_id, "https://synthetic.example/", 101)
+        .unwrap();
+    let peer = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 102))
+        .unwrap();
+    consumer
+        .navigate(&peer.session_id, "https://synthetic.example/peer", 103)
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let browser = baseline.browsers[&opened.browser_id].clone();
+    let tab = baseline
+        .tabs
+        .values()
+        .find(|tab| tab.browser_id == browser.id)
+        .unwrap()
+        .clone();
+    drop(consumer);
+    let intent = claim_fixture_retirement(&fixture, provider.clone(), &baseline, &browser);
+    fixture
+        .store(false)
+        .admit_idle_retirement_preparation(&intent)
+        .unwrap();
+    let prepared = adapter(&fixture, provider.clone())
+        .prepare_idle_retirement(&intent.provider)
+        .unwrap();
+    let mut record = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    let previous = record.clone();
+    record.record_prepared(prepared).unwrap();
+    fixture
+        .store(false)
+        .update_idle_retirement(&previous, &record)
+        .unwrap();
+    fixture
+        .store(false)
+        .admit_idle_retirement_effect(
+            &intent,
+            BrowserIdleRetirementEffect::CloseBrowser {
+                browser_id: browser.id.clone(),
+            },
+        )
+        .unwrap();
+    let pending = fixture.store(false).idle_retirement_records().unwrap();
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        adapter(&fixture, provider),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    assert_eq!(
+        effects
+            .navigate(&browser, &tab, "https://synthetic.example/")
+            .unwrap_err(),
+        "browser_session_idle_readback_required"
+    );
+    assert_eq!(
+        effects.create_tab(&browser).unwrap_err(),
+        "browser_session_idle_readback_required"
+    );
+    assert_eq!(
+        effects.focus_browser(&browser, Some(&tab)).unwrap_err(),
+        "browser_session_idle_readback_required"
+    );
+    assert_eq!(
+        effects
+            .execute_command(
+                &browser,
+                &tab,
+                &opened.session_id,
+                "Alice",
+                &serde_json::json!({"action":"navigate","url":"https://synthetic.example/"})
+            )
+            .unwrap_err(),
+        "browser_session_idle_readback_required"
+    );
+    assert!(effects.browser_is_live(&browser).unwrap());
+    let peer_browser = &baseline.browsers[&peer.browser_id];
+    let peer_tab = baseline
+        .tabs
+        .values()
+        .find(|tab| tab.browser_id == peer_browser.id)
+        .unwrap();
+    effects
+        .navigate(
+            peer_browser,
+            peer_tab,
+            "https://synthetic.example/continued",
+        )
+        .unwrap();
+
+    assert_eq!(
+        fixture.store(false).idle_retirement_records().unwrap(),
+        pending
+    );
+}
+
+#[test]
+fn automatic_retirement_freezes_the_published_launch_kernel_identity() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(&fixture, provider, calls, Mode::IdleRecovery);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let original = fixture
+        .store(false)
+        .published_launch_process_identity(&consumer.state().browsers[&opened.browser_id])
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        consumer.reap(300_100).unwrap().closed_browser_ids,
+        vec![opened.browser_id]
+    );
+    let record = fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .remove(0);
+    assert_eq!(record.intent.scopes[0].process_identity, Some(original));
+    assert!(record.completed.is_some());
+}
+
+#[test]
+fn automatic_retirement_reused_pid_never_reaches_the_ordinary_close_effect() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("require-retirement-custody"), "synthetic").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(&fixture, provider, calls, Mode::IdleRecovery);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    std::fs::write(
+        fixture.root.join("replacement-kernel-observed"),
+        "original ended",
+    )
+    .unwrap();
+    assert_eq!(
+        consumer.reap(300_100).unwrap().closed_browser_ids,
+        vec![opened.browser_id]
+    );
+    assert!(
+        !fixture.root.join("retirement-close-count").exists(),
+        "a reused PID must not reach the ordinary physical close delegate"
+    );
+    assert!(fixture.store(false).idle_retirement_records().unwrap()[0]
+        .completed
+        .is_some());
+}
+
+#[test]
+fn automatic_retirement_legacy_identity_defers_before_native_preparation() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("legacy-launch-no-kernel"), "profile-a").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let baseline = consumer.state().clone();
+    assert!(fixture
+        .store(false)
+        .published_launch_process_identity(&baseline.browsers[&alice.browser_id])
+        .unwrap()
+        .is_none());
+    drop(consumer);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    assert!(restarted
+        .reap(300_100)
+        .unwrap()
+        .closed_browser_ids
+        .is_empty());
+    assert_eq!(restarted.state().browsers, baseline.browsers);
+    assert_eq!(restarted.state().tabs, baseline.tabs);
+    assert!(fixture
+        .store(false)
+        .idle_retirement_records()
+        .unwrap()
+        .is_empty());
+    assert!(!fixture.root.join("native-retirement-fence").exists());
+    assert!(!provider
+        .borrow()
+        .operations
+        .contains(&"prepare_idle_retirement"));
+    let bob = restarted
+        .open(OpenBrowserSession::exact_profile(
+            "Bob",
+            "profile-b",
+            300_101,
+        ))
+        .unwrap();
+    assert_ne!(alice.browser_id, bob.browser_id);
+    assert_eq!(
+        restarted.state().browsers[&alice.browser_id],
+        baseline.browsers[&alice.browser_id]
+    );
+    assert!(fixture
+        .store(false)
+        .published_launch_process_identity(&restarted.state().browsers[&bob.browser_id])
+        .unwrap()
+        .is_some());
+    assert_eq!(calls.get(), 2);
+}
+
+#[test]
+fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.root.join("legacy-launch-no-kernel"), "profile-b").unwrap();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let alice = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    let occupied = consumer.state().browsers[&alice.browser_id]
+        .desktop
+        .as_ref()
+        .unwrap()
+        .desktop_id
+        .clone();
+    provider.borrow_mut().occupied_desktops.insert(occupied);
+    let bob = consumer
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 101))
+        .unwrap();
+    provider.borrow_mut().occupied_desktops.clear();
+    let baseline = consumer.state().clone();
+    let first = fixture
+        .store(false)
+        .published_launch_assignment(&baseline.browsers[&alice.browser_id])
+        .unwrap();
+    let second = fixture
+        .store(false)
+        .published_launch_assignment(&baseline.browsers[&bob.browser_id])
+        .unwrap();
+    assert!(
+        first.assignment_id < second.assignment_id,
+        "fixture must encounter the known group before the legacy group"
+    );
+    drop(consumer);
+    let mut effects = RemoteViewSessionEffects::new(
+        Process {
+            mode: Mode::Success,
+            root: fixture.root.clone(),
+            calls,
+        },
+        adapter(&fixture, provider.clone()),
+        fixture.store(false),
+        vec![],
+        || uuid::Uuid::new_v4().to_string(),
+    )
+    .unwrap()
+    .with_pool(RemoteViewSessionPool {
+        name: "main".into(),
+        desired_desktops: 1,
+    })
+    .unwrap();
+    effects.begin_operation(&baseline).unwrap();
+    let browsers = vec![
+        baseline.browsers[&alice.browser_id].clone(),
+        baseline.browsers[&bob.browser_id].clone(),
+    ];
+    assert!(effects
+        .acquire_idle_retirement_guard(&browsers)
+        .unwrap()
+        .is_none());
+    assert!(
+        fixture
+            .store(false)
+            .idle_retirement_records()
+            .unwrap()
+            .is_empty(),
+        "known local deferral must precede every claim and native preparation"
+    );
+    assert!(!provider
+        .borrow()
+        .operations
+        .contains(&"prepare_idle_retirement"));
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
 }

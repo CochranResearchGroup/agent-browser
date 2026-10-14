@@ -109,3 +109,82 @@ fn idle_retirement_custody_requires_ordered_settlement_and_never_readmits_an_unk
     }
     assert!(restarted.begin_effect(changed).is_err());
 }
+
+#[test]
+fn idle_retirement_publication_preserves_closed_retained_browser_identity() {
+    let (state, provider, prepared) = fixture();
+    let intent = BrowserIdleRetirementIntent::new(
+        "11111111-1111-4111-8111-111111111111",
+        provider,
+        &state,
+        &["browser-a".into()],
+    )
+    .unwrap();
+    let mut record = BrowserIdleRetirementRecord::new(intent).unwrap();
+    record.begin_preparation().unwrap();
+    record.record_prepared(prepared).unwrap();
+    let effect = BrowserIdleRetirementEffect::CloseBrowser {
+        browser_id: "browser-a".into(),
+    };
+    record.begin_effect(effect.clone()).unwrap();
+    record.settle_effect(&effect).unwrap();
+    assert!(record.clone().record_publication(&state).is_err());
+    let mut retained = state.clone();
+    retained
+        .idle_closed_browsers
+        .insert("browser-a".into(), 100);
+    record.clone().record_publication(&retained).unwrap();
+    retained
+        .browsers
+        .get_mut("browser-a")
+        .unwrap()
+        .active_session_ids
+        .clear();
+    record.clone().record_publication(&retained).unwrap();
+    retained.browsers.get_mut("browser-a").unwrap().pid = 43;
+    assert!(
+        record.record_publication(&retained).is_err(),
+        "a reused logical ID must not publish a replacement as the retired browser"
+    );
+}
+
+#[test]
+fn idle_retirement_publication_preserves_unattempted_peers() {
+    let (state, provider, prepared) = fixture();
+    let intent = BrowserIdleRetirementIntent::new(
+        "11111111-1111-4111-8111-111111111111",
+        provider,
+        &state,
+        &["browser-a".into()],
+    )
+    .unwrap();
+    let mut record = BrowserIdleRetirementRecord::new(intent).unwrap();
+    record.begin_preparation().unwrap();
+    record.record_prepared(prepared).unwrap();
+    let mut closed = state.clone();
+    closed.tabs.remove("tab-a");
+    assert!(
+        record.clone().record_publication(&closed).is_err(),
+        "a prepared fence does not prove an unattempted tab ended"
+    );
+    let effect = BrowserIdleRetirementEffect::CloseTab {
+        browser_id: "browser-a".into(),
+        tab_id: "tab-a".into(),
+        target_id: "target-tab-a".into(),
+    };
+    record.begin_effect(effect.clone()).unwrap();
+    record.settle_effect(&effect).unwrap();
+    record.clone().record_publication(&closed).unwrap();
+    closed.tabs.remove("tab-b");
+    assert!(
+        record.clone().record_publication(&closed).is_err(),
+        "settling one target must preserve its unattempted peer"
+    );
+    let mut rebound = state.clone();
+    rebound.tabs.remove("tab-a");
+    rebound.browsers.get_mut("browser-a").unwrap().pid = 43;
+    assert!(
+        record.record_publication(&rebound).is_err(),
+        "a target close does not authorize replacing its browser identity"
+    );
+}

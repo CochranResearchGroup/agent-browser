@@ -254,3 +254,81 @@ fn native_retirement_read_requires_exact_current_target_and_native_admission_sco
     );
     assert!(steps.borrow().is_empty(), "unknown outcomes must not retry");
 }
+
+#[test]
+fn native_retirement_reconciliation_reads_only_the_original_operation() {
+    let fixture: Value = serde_json::from_str(include_str!(
+        "../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+    ))
+    .unwrap();
+    let assignment: RemoteViewAssignmentRecord =
+        serde_json::from_value(fixture["assignment"].clone()).unwrap();
+    let target = fixture["assignmentObservation"]["target"].clone();
+    let intent: RemoteViewIdleRetirementIntent = serde_json::from_value(json!({
+        "schemaVersion":1,"assignment":assignment,"target":target,"idempotencyKey":"close-one",
+        "expectedRevision":0,"expectedRetirement":{"schemaVersion":1,"desktopId":assignment.desktop_id,
+            "generation":assignment.generation,"routes":[],"sessions":[]}
+    })).unwrap();
+    let fence = json!({"schema_version":1,"installation_id":"0123456789abcdef",
+        "config_hash":"a".repeat(64),"slot":2,"generation":19,
+        "operation_id":"5deb7e63650d881f18b5d68f85ec45bcd7523255499618982a3c2995400637cc","revision":1});
+    let prepared: RemoteViewIdleRetirementReceipt = serde_json::from_value(json!({
+        "schemaVersion":1,"target":target,"readinessScope":"native_admission","state":"prepared","fence":fence
+    })).unwrap();
+    for case in 0..6 {
+        let mut response = json!({"schemaVersion":1,"target":target,"readinessScope":"native_admission",
+            "retirement":{"revision":1,"completed":case != 0,"fence":fence}});
+        match case {
+            2 => response["retirement"] = json!({"revision":0,"completed":true,"fence":null}),
+            3 => response["retirement"]["fence"]["operation_id"] = json!("b".repeat(64)),
+            4 => response["retirement"]["fence"]["config_hash"] = json!("b".repeat(64)),
+            5 => response["retirement"]["fence"]["revision"] = json!(2),
+            _ => (),
+        }
+        if case == 5 {
+            response["retirement"]["revision"] = json!(2);
+        }
+        let steps = Rc::new(RefCell::new(VecDeque::from([
+            (
+                fixture["requests"][2].clone(),
+                Ok(fixture["assignmentObservation"].clone()),
+            ),
+            (
+                json!({"application":"agent-browser","request":{"operation":"read_idle_retirement",
+                "assignment_id":assignment.assignment_id,"expected_generation":assignment.generation,
+                "expected_viewing_generation":19}}),
+                Ok(response),
+            ),
+            (
+                fixture["requests"][2].clone(),
+                Ok(fixture["assignmentObservation"].clone()),
+            ),
+        ])));
+        let mut adapter =
+            RemoteViewApplicationAdapter::new("agent-browser".into(), Transport(steps.clone()))
+                .unwrap();
+        let result = adapter
+            .reconcile_idle_retirement(&intent, if case == 0 { None } else { Some(&prepared) });
+        if case < 2 {
+            let receipt = result.unwrap();
+            assert_eq!(receipt.fence, prepared.fence);
+            assert_eq!(
+                receipt.state,
+                if case == 0 {
+                    RemoteViewIdleRetirementReceiptState::Prepared
+                } else {
+                    RemoteViewIdleRetirementReceiptState::Completed
+                }
+            );
+        } else {
+            assert!(
+                result.is_err(),
+                "foreign or absent fence accepted in case {case}"
+            );
+        }
+        assert!(
+            steps.borrow().is_empty(),
+            "readback must never prepare or complete"
+        );
+    }
+}

@@ -20,6 +20,9 @@ pub struct BrowserSessionManagerConfig {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BrowserLaunch {
+    /// Kernel identity captured while the exact launched or verified attached
+    /// process is still held. Absence supplies no original-process evidence.
+    pub process_identity: Option<crate::RecordedProcessIdentity>,
     pub browser_id: String,
     pub pid: u32,
     pub cdp_endpoint: String,
@@ -46,7 +49,8 @@ pub trait ManagedBrowserCommandEffects {
 }
 
 /// Adapter-owned protection held through one automatic retirement effect group.
-/// Dropping the guard releases admission exclusion, including on an error.
+/// Dropping releases local activity exclusion. A separately persisted native
+/// fence remains until exact settled state publication and explicit completion.
 pub trait BrowserIdleRetirementGuard {}
 impl BrowserIdleRetirementGuard for () {}
 
@@ -150,6 +154,17 @@ pub trait BrowserSessionEffects {
         Ok(())
     }
 
+    /// Exact automatic-retirement operations awaiting atomic state publication.
+    fn pending_idle_retirement_ids(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    /// Called after atomic publication, never from guard destruction. Unknown
+    /// provider completion retains original-operation readback obligations.
+    fn finish_idle_retirement_publication(&mut self, _ids: &[String]) -> Result<(), String> {
+        Ok(())
+    }
+
     /// An observed launch awaiting atomic session-and-custody publication.
     fn pending_launch_intent(&self) -> Option<crate::BrowserLaunchIntent> {
         None
@@ -157,6 +172,26 @@ pub trait BrowserSessionEffects {
 
     /// Called only after durable session-and-custody publication succeeds.
     fn acknowledge_launch_publication(&mut self) {}
+
+    /// Apply one freshly admitted automatic effect against frozen original
+    /// process/target custody. This must never fall back to current PID adoption.
+    fn apply_idle_retirement_effect(
+        &mut self,
+        _scope: &crate::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        Err("browser_session_idle_original_effect_unavailable".into())
+    }
+
+    /// Read only the original close outcome. True requires conclusive physical
+    /// absence; unknown observations never authorize another close attempt.
+    fn observe_idle_retirement_effect(
+        &mut self,
+        _scope: &crate::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        Err("browser_session_idle_effect_readback_unavailable".into())
+    }
 
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
 
@@ -971,6 +1006,15 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
                 SessionEndReason::HeartbeatExpired,
                 request.activity_at_ms,
             )?;
+        }
+        // A replacement must not reuse logical identity while native exclusion
+        // still belongs to the old operation. The host publishes once and resumes
+        // this already-selected profile, including a newly allocated disposable.
+        if !self.effects.pending_idle_retirement_ids().is_empty() {
+            return Err(format!(
+                "browser_session_retirement_publication_required:{}",
+                profile.id
+            ));
         }
         let existing_session = self
             .state

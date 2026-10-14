@@ -24,7 +24,7 @@ impl BrowserLaunchCustodyStore for Store {
             if record.intent != *intent {
                 return Err(LaunchCustodyStoreError::Conflict);
             }
-            return Ok(LaunchCustodyAdmission::Existing(record.clone()));
+            return Ok(LaunchCustodyAdmission::Existing(Box::new(record.clone())));
         }
         *self.record.borrow_mut() =
             Some(BrowserLaunchCustodyRecord::pending(intent.clone()).unwrap());
@@ -106,6 +106,7 @@ impl RemoteViewBrowserProcessEffects for Process {
             return Err(error);
         }
         Ok(BrowserLaunch {
+            process_identity: None,
             browser_id: "browser-a".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),

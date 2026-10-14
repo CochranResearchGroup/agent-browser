@@ -3902,6 +3902,58 @@ Keep a schema-2-capable binary with that database and its backups; schema-1-only
 binaries reject it. Unknown close outcomes retain their original custody for
 readback, including across backup creation and restart.
 
+The automatic-close candidate persists its exact operation before preparing
+native viewer exclusion, records each close attempt before the physical effect,
+and publishes session state with retirement custody before completing the fence.
+A lost completion reply is reconciled against the original fence after restart.
+Unresolved physical close outcomes retain custody; native workflow and installed
+acceptance remain pending.
+
+Pending retirement custody also fences changes to its browser, tab and session
+projection inside SQLite publication and launch/recovery admission transactions.
+Unrelated profiles can continue. `browser_session_publication_idle_retirement_fenced`
+means that publication would overwrite an unresolved original operation; it does
+not authorize another close or replacement launch.
+
+A physical close requires a fresh atomic attempt admission. A stale coordinator
+reads the original pending attempt instead of treating an idempotent record
+update as permission to close again. When one command expires old work and
+reopens its profile, the host publishes and completes the old retirement before
+reusing its logical browser identity.
+
+Preparation attempts also require fresh atomic admission. After interruption,
+the owner reads the exact original fence. A known prepared operation with no
+admitted close can publish unchanged task state before completing that fence;
+a delayed actor then cannot admit its old effect. An absent fence after an
+unknown prepare remains unresolved.
+
+Before delegating a browser command, the candidate checks durable profile custody.
+An unresolved retirement returns `browser_session_idle_readback_required` before
+tab acquisition, creation, navigation, focus or command execution. Process-liveness
+observation remains available. Atomic admission against a retirement starting
+concurrently with a new command remains pending source qualification.
+
+Normal close confirmation requires positive OS process absence. An unavailable
+process observation returns `browser_session_process_observation_unavailable`
+and leaves the outcome unresolved, including after a lost close reply. This
+absence check alone does not prove original process identity across PID reuse.
+
+The launch-custody candidate retains kernel start identity captured with the
+original launched child or verified profile attachment. Restart reads the stored
+identity; a reused PID or missing-identity replay cannot replace it. Older records
+remain explicitly without that evidence. Recording the first kernel identity
+promotes the private database reader version atomically. A new retirement scope
+freezes the published launch identity, and SQLite validates that exact join in
+its claim transaction. Restart preserves the frozen evidence. Admitted automatic
+effects and readback use that scope. A changed kernel start proves the original
+ended without attaching or closing its replacement. Live-target readback queries
+only the verified original browser and frozen target. New automatic groups with
+missing legacy evidence defer before any new claim, native preparation or attempt.
+Existing unresolved operations retain original readback obligations; a scoped
+runtime request without identity returns `browser_session_idle_original_identity_missing`
+and cannot adopt the current PID. Native workflow and installed qualification
+remain pending.
+
 ```bash
 agent-browser service status
 agent-browser service status --watch --interval 1000
