@@ -1,0 +1,21 @@
+{
+  "schemaVersion": "agent-browser.siteguide.v1",
+  "guideId": "qbo-session-v1",
+  "name": "QBO session verification starter template",
+  "allowedOrigins": ["https://qbo.intuit.com", "https://accounts.intuit.com", "https://signin.intuit.com"],
+  "authenticatedSelector": "[data-testid='qbo-company-shell']",
+  "account": {"selector":"[data-testid='intuit-account']"},
+  "organization": {"selector":"[data-testid='qbo-company-shell']", "attribute":"data-realm-id"},
+  "controls": {
+    "identifier": "input[name=userid]",
+    "password": "input[name=password]",
+    "submit": "button[type=submit]",
+    "accountScope": "[data-auth-account]",
+    "identifierSubmit": "button[data-testid='identifier-continue']"
+  },
+  "states": [
+    {"state":"password_required", "selector":"input[name=password]"},
+    {"state":"identifier_required", "selector":"input[name=userid]"},
+    {"state":"mfa_required", "selector":"input[autocomplete=one-time-code]"}
+  ]
+}

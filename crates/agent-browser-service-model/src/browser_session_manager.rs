@@ -1429,6 +1429,75 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         })
     }
 
+    /// Admit live provider-observed child targets only through an already-owned
+    /// opener in this same browser. Unknown targets and peer claims remain
+    /// untouched. The CLI adapter supplies fresh, sanitized CDP observations;
+    /// caller-provided target IDs are not an attribution proof.
+    pub fn observe_child_tabs(
+        &mut self,
+        session_id: &str,
+        observations: &[(String, String)],
+        activity_at_ms: u64,
+    ) -> Result<Vec<String>, String> {
+        let session = self
+            .state
+            .sessions
+            .get(session_id)
+            .cloned()
+            .ok_or("browser_session_not_found")?;
+        let mut owned = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.session_id == session_id && tab.browser_id == session.browser_id)
+            .map(|tab| tab.target_id.clone())
+            .collect::<BTreeSet<_>>();
+        let mut admitted = Vec::new();
+        // Bounded transitive opener chains allow a login popup to open its
+        // receiving destination. An unattached extension tab needs a separate
+        // producer attribution contract and is never guessed from its URL.
+        for _ in 0..64 {
+            let mut changed = false;
+            for (target, opener) in observations {
+                if target.is_empty()
+                    || target == opener
+                    || !owned.contains(opener)
+                    || owned.contains(target)
+                {
+                    continue;
+                }
+                if self.state.tabs.contains_key(target)
+                    || self.state.tabs.values().any(|tab| tab.target_id == *target)
+                {
+                    continue;
+                }
+                if admitted.len() >= 64 {
+                    return Err("browser_session_popup_limit_exceeded".into());
+                }
+                owned.insert(target.clone());
+                admitted.push(target.clone());
+                changed = true;
+            }
+            if !changed {
+                break;
+            }
+        }
+        for target in &admitted {
+            self.state.tabs.insert(
+                target.clone(),
+                ManagedBrowserTab {
+                    id: target.clone(),
+                    target_id: target.clone(),
+                    browser_id: session.browser_id.clone(),
+                    session_id: session.id.clone(),
+                    created_at_ms: activity_at_ms,
+                    last_activity_at_ms: activity_at_ms,
+                },
+            );
+        }
+        Ok(admitted)
+    }
+
     pub fn tab_for_navigation(
         &mut self,
         session_id: &str,

@@ -1,0 +1,19 @@
+{
+  "schemaVersion":"agent-browser.siteguide.v1",
+  "guideId":"reddit-feed-v1",
+  "name":"Reddit feed collection starter template",
+  "allowedOrigins":["https://www.reddit.com","https://old.reddit.com"],
+  "states":[
+    {"state":"login_required","selector":"[data-testid='login-wall']"},
+    {"state":"blocked","selector":"[data-testid='blocked-message']"}
+  ],
+  "retrieval":{
+    "containerSelector":"#siteTable",
+    "itemSelector":".thing",
+    "idAttribute":"data-fullname",
+    "titleSelector":"a.title",
+    "urlSelector":"a.bylink",
+    "noResultsSelector":".noresults",
+    "nextPageSelector":".next-button a"
+  }
+}

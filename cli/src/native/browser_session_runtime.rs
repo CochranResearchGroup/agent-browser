@@ -1202,6 +1202,7 @@ fn run_browser_worker(
                             .browser
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
+                        attach_owned_target_if_missing(manager, &tab.target_id).await?;
                         manager.tab_switch_target_id(&tab.target_id).await?;
                         manager.navigate(&url, WaitUntil::Load).await?;
                         Ok(())
@@ -1222,6 +1223,7 @@ fn run_browser_worker(
                             .as_mut()
                             .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
                         if let Some(tab) = tab {
+                            attach_owned_target_if_missing(manager, &tab.target_id).await?;
                             manager.tab_switch_target_id(&tab.target_id).await?;
                         }
                         manager.focus_for_view(true).await?;
@@ -1258,7 +1260,27 @@ fn run_browser_worker(
                                 .clear_initial_task_marker(&tab.target_id, &marker)
                                 .await;
                         }
+                        attach_owned_target_if_missing(manager, &tab.target_id).await?;
                         manager.tab_switch_target_id(&tab.target_id).await?;
+                        if command["action"] == "__observe_owned_popup_targets" {
+                            let observed = manager
+                                .client
+                                .send_command_no_params("Target.getTargets", None)
+                                .await?;
+                            let children = observed["targetInfos"]
+                                .as_array()
+                                .ok_or("browser_session_target_inventory_unavailable")?
+                                .iter()
+                                .filter(|target| target["type"] == "page")
+                                .filter_map(|target| {
+                                    Some(serde_json::json!({
+                                        "targetId":target["targetId"].as_str()?,
+                                        "openerId":target["openerId"].as_str()?,
+                                    }))
+                                })
+                                .collect::<Vec<_>>();
+                            return Ok(serde_json::json!({"children":children}));
+                        }
                         state.session_id = session_id;
                         state.session_name = Some(session_name);
                         Ok(super::actions::execute_managed_target_command(
@@ -1280,6 +1302,62 @@ fn run_browser_worker(
             manager.relinquish_browser_for_handoff();
         }
     }
+}
+
+/// Attach a freshly attributed popup through the existing browser transport.
+/// The caller has already selected a durable tab owned by this exact browser.
+async fn attach_owned_target_if_missing(
+    manager: &mut BrowserManager,
+    target_id: &str,
+) -> Result<(), String> {
+    if manager.has_target(target_id) {
+        return Ok(());
+    }
+    let observed = manager
+        .client
+        .send_command(
+            "Target.getTargetInfo",
+            Some(serde_json::json!({"targetId":target_id})),
+            None,
+        )
+        .await?;
+    if observed["targetInfo"]["targetId"] != target_id || observed["targetInfo"]["type"] != "page" {
+        return Err("browser_session_owned_target_missing".into());
+    }
+    let attached = manager
+        .client
+        .send_command(
+            "Target.attachToTarget",
+            Some(serde_json::json!({"targetId":target_id,"flatten":true})),
+            None,
+        )
+        .await?;
+    let session_id = attached["sessionId"]
+        .as_str()
+        .ok_or("browser_session_popup_attach_invalid")?
+        .to_owned();
+    if let Err(error) = manager.enable_domains_pub(&session_id).await {
+        let _ = manager
+            .client
+            .send_command(
+                "Target.detachFromTarget",
+                Some(serde_json::json!({"sessionId":session_id})),
+                None,
+            )
+            .await;
+        return Err(error);
+    }
+    manager.add_page_with_activation(
+        super::browser::PageInfo {
+            target_id: target_id.to_owned(),
+            session_id,
+            url: String::new(),
+            title: String::new(),
+            target_type: "page".into(),
+        },
+        false,
+    );
+    Ok(())
 }
 
 fn resolve_remote_view_display(

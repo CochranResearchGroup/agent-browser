@@ -1474,6 +1474,31 @@ where
         let mut response =
             self.effects
                 .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if command["observeChildTabs"] == true {
+            let observed = self.effects.execute_command(
+                &browser,
+                &tab,
+                &session.id,
+                &session.name,
+                &serde_json::json!({"action":"__observe_owned_popup_targets"}),
+            )?;
+            let children = observed["children"]
+                .as_array()
+                .ok_or("browser_session_popup_observation_invalid")?
+                .iter()
+                .map(|child| {
+                    Ok((
+                        required_string(child, "targetId")?.to_owned(),
+                        required_string(child, "openerId")?.to_owned(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            self.manager()?
+                .observe_child_tabs(&session.id, &children, now_ms)?;
+            if self.state != self.persisted_state {
+                self.commit_state()?;
+            }
+        }
         if command.get("action").and_then(serde_json::Value::as_str) == Some("navigate")
             && response.get("success").and_then(serde_json::Value::as_bool) == Some(true)
         {

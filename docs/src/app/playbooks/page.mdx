@@ -1,0 +1,134 @@
+# SiteGuides and website routines
+
+Agents and software can run a shared routine against an existing browser task.
+A SiteGuide describes website states and receiving identity checks. A playbook
+composes routines while preserving that task.
+
+## Verify an existing login
+
+Discover the focused metadata with `browser_discover` category `playbooks`.
+Request the `verify_login` operation for its schema, then use `browser_command`:
+
+```json
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-session-v1","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+```
+
+<table>
+  <thead><tr><th>Result</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>completed</td><td>Current application evidence matches the intended account and company</td></tr>
+    <tr><td>waiting</td><td>A recognized login or MFA step remains</td></tr>
+    <tr><td>adaptation_required</td><td>Observe again or adapt a changed SiteGuide</td></tr>
+    <tr><td>failed</td><td>The origin or identity differs, or the site is blocked</td></tr>
+  </tbody>
+</table>
+
+Verification reads bounded state/identity predicates, performs no credential
+submission and preserves peer tasks. A stale observation or changed task target
+cannot produce completion. The default observation window is 10000 ms;
+`maxObservationAgeMs` accepts 1 through 60000.
+
+## Use from software
+
+```js
+import {createPlaybookClient} from '@agent-browser/client/playbooks';
+const routines = createPlaybookClient((name, args) =>
+  client.callTool({name, arguments: args}));
+const result = await routines.verifyLogin({taskId, guideId, accountRef, organizationRef});
+```
+
+`listGuides(taskId)` and `inspectGuide(taskId, guideId)` read the configured
+registry. The existing MCP client provides transport; the routines create no
+second task or credential store.
+
+## Configure site knowledge
+
+Set `AGENT_BROWSER_SITEGUIDE_DIRECTORY` on the MCP server to a directory of
+reviewed `agent-browser.siteguide.v1` JSON files named by guideId. Each file is
+bounded to 64 KiB. A guide declares exact origins, an authenticated application
+selector, expected-identity locators and state selectors. It carries no account
+selection, credentials or private runtime state.
+
+The bundled BILL guide is a starter template. Validate its controls from current
+observations and synthetic fixtures before relying on it for a real account.
+Remote View supplies desktop interaction; shared auth helpers supply private
+credential/MFA operations. Session verification alone does not prove either
+provider integration or completed login automation.
+
+## Compose private login
+
+`@agent-browser/client/login-playbook` exports `createLoginPlaybook` with an
+existing routine client, a trusted auth-helper callback and a durable metadata
+checkpoint store. It uses request_login, inspect_request and authenticate;
+credentials and MFA values remain inside the helper's receiving adapter.
+
+Each advance returns the next actionable state. Preserve the original scope,
+task and expiry when continuing. The adapter records intent before submission
+and inspects the original request after a timeout or restart. It never blindly
+resubmits an uncertain login. Completion requires helper captureState ready
+plus current SiteGuide evidence for the intended account and company.
+
+The owned dummy fixture qualifies actual helper-source private filling and a
+guarded human-MFA wait. Independent Remote View capture suppression, actual
+LastPass/passkeys, automated MFA providers and installed helper readiness are
+separate capability or qualification gaps. Task tab listing attributes live
+popup opener chains through the existing owner. After private capture is ready,
+the adapter verifies new owned destinations and continues in the sole matching
+page. It preserves peer tabs and refuses ambiguous destinations. Extension-created
+tabs without an attributable opener still need a producer target-binding contract.
+
+## QBO and receiving controls
+
+The qbo-session-v1 starter uses the same task, routine, helper and checkpoint
+interfaces as BILL. Its company identity is a realm reference. An authenticated
+QBO browser is separate from QBO OAuth/API readiness and accounting operations.
+
+A reviewed guide may include controls with identifier, password, submit and
+accountScope selectors, plus identifierSubmit for a separate identifier step.
+The trusted receiving adapter consumes this metadata before private input;
+credential values and MFA material never appear in a guide. The owned QBO
+fixture qualifies identifier-first and password-first variants, human MFA waiting,
+asynchronous popup continuation and exact realm verification. Starter controls
+require current site evidence before real-account use.
+
+## Prepare actions and propose guide versions
+
+Discover prepare_login and validate_plan in the same focused playbooks category.
+The client methods `prepareLogin(options)` and `validatePlan({...options, plan})`
+use the existing task. Preparation freezes reviewed guide identity, control
+fingerprint, expected state and freshness. A plan_prepared result means that
+preparation completed; receiving login has not been verified.
+
+The private login adapter validates this plan before the helper retrieves a
+credential. Changed controls produce adaptation_required with no input. A stale
+observation of unchanged controls can refresh under the same request. Controller
+changes preserve the checkpoint and helper request/action identity.
+The login client requires prepareLogin and validatePlan. After reviewing changed controls, pass a freshly prepared plan as reviewedPlan to advance with the same options and retained guideId. It validates the replacement against the current task before saving it and retains the helper request/action. Reviewed guide content may change under that retained identifier through the candidate registry. A typed pre-input helper refusal can be retried only after exact-request inspection proves approved state with no started or input-attempt timestamp; a lost acknowledgement never permits retry.
+
+Password preparation requires a masked input; an unmasked replacement cannot
+become an authorized action merely by observing it afresh.
+
+Develop a guide from owned synthetic observations and explicit receiving
+assertions. When the site changes, place a proposed version outside the shared
+registry and test it through a candidate client configured with that directory.
+The authoring fixture demonstrates this with a changed password control and a
+v2 proposal, preserving the original task and canonical guide. Publication uses
+ordinary reviewed source changes; successful improvisation does not publish.
+
+## Collect a bounded feed
+
+collect_posts and the client collectPosts method use the same existing task and
+result envelope. A retrieval guide declares container/item selectors, ID
+attribute, title/link selectors, explicit no-results marker and optional next
+page selector. Login/account fields are optional for this non-login workflow.
+
+Defaults are 50 items, one page and zero scrolls; maximums are 200 items, 10 pages
+and 10 scrolls. Fresh observation and link revalidation precede navigation.
+Website DOM scrolling consumes a visible budget. Normalized item data contains
+IDs, bounded titles and HTTP(S) origin/path links with query/fragment removed.
+
+Explicit no-results, unproven empty extraction, malformed items, login/blocked
+pages and partial output have distinct reasons. Coverage includes pagesUsed,
+scrollsUsed and observations; partial records do not establish complete coverage.
+The Reddit guide is a starter and the owned fixture is the qualified target.
+Research/ranking policy stays downstream; no live social requests are included.

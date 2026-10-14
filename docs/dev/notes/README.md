@@ -79,6 +79,8 @@ is authorized by this index.
 
 ## PL-RECIPES | Reusable Automation
 
+- [Website automation provider qualification dependencies](0242-2026-10-14-website-automation-provider-dependencies.md)
+
 - [Access-plan service-request handoff](2026-05-09-access-plan-service-request-handoff.md)
 - [Access-plan monitor recipe](2026-05-10-access-plan-monitor-run-due-recipe.md)
 - [Managed-profile acquisition summary](2026-05-10-managed-profile-flow-acquisition-summary.md)
