@@ -34,9 +34,13 @@ revoke_route. These are locators in the provider repository, not copied code.
 
 ## Shared auth-helper capabilities
 
-The inspected grok-bots auth worktree is draft source at
-b1fa8e8ef2f9f0f4f65b0373a2c0fdb6227091b0. Its actual broker/service/private
-receiving/observer modules are pinned in /tmp/p242-helper-source-identity.json.
+Initial grok-bots draft source qualification used
+b1fa8e8ef2f9f0f4f65b0373a2c0fdb6227091b0 and
+/tmp/p242-helper-source-identity.json. The active foreign lane advanced during
+final checks to 23877a5c0c200b11517a0369cf35ced65e31ca99. Final qualification
+uses a read-only four-module source snapshot at /tmp/p242-auth-helper-final,
+with exact module hashes in /tmp/p242-helper-source-final-identity.json. No
+foreign source edit or installation is performed.
 Source request_login, inspect_request and authenticate are qualified through
 an owned dummy receiver and actual private IPC. Production installation and
 real LastPass/extension/passkey/MFA acceptance remain distinct.
@@ -51,8 +55,10 @@ to arbitrary email/SMS. The supported source injection can await human MFA.
 
 The current IPC timeout is 30 seconds and an apply operation may continue after
 disconnection. Inspect the original request; never resubmit an uncertain effect.
-Public running/challenge projection and private-operation recovery need producer
-qualification. The current origin assertion is singular; real redirected login
+The final pinned producer publishes a running boolean and start/input
+timestamps. P242 qualifies inspection and receiving reconciliation through its
+dummy lane; structured challenge projection and general private-operation
+recovery remain producer qualification dependencies. The current origin assertion is singular; real redirected login
 and receiving origins require explicit adapter/provider acceptance, not inferred
 credential authority for every SiteGuide origin.
 

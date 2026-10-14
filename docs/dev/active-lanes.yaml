@@ -7,13 +7,13 @@ lanes:
     plan: docs/dev/plans/0242-2026-10-14-implement-siteguides.md
     branch: recipes/siteguides-271
     target: main
-    plan_state: IN_PROGRESS
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P242 owns new playbook adapters MCP/client and own docs/fixtures; consumes existing task/lifecycle; P237 retains dashboard/native lifecycle; primary checkout reused"]
-    validation_status: All five slices source and isolated installed synthetic workflows validated; bounded whole-branch review remediation undergoing final checks
+    validation_status: All five slices and accepted whole-branch review findings validated on isolated final candidate; two unchanged baseline gate failures retained
     limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Comprehensive Rust retains unchanged service-help assertion failure; extra policy-wiring oracle expects retired links"]
     updated_at: 2026-10-14
   - id: P222

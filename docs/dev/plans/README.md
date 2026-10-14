@@ -1,7 +1,8 @@
 # Active plan index
 
 [P242: implement website automation](0242-2026-10-14-implement-siteguides.md),
-spec #271 and tickets #272–276; one integration branch, full workflow acceptance.
+spec #271 and tickets #272–276; completed local integration and isolated owned
+synthetic workflow qualification; provider/real-account acceptance remains separate.
 
 [P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
 #105; completed bounded source and isolated browser-workflow qualification.

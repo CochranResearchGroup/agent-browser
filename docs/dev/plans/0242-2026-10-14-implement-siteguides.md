@@ -4,7 +4,7 @@ Product lane: PL-RECIPES
 Work items: #199, #271, #272, #273, #274, #275, #276
 Branch: recipes/siteguides-271
 Baseline: cb765a7be2719383a54fb849eac9691ce0197b06
-State: IN_PROGRESS
+State: COMPLETED
 
 ## Objective and scope
 
@@ -290,10 +290,11 @@ provider proposals without foreign publication or a duplicate desktop layer.
 
 ## Next action
 
-Freeze the branch for one whole-branch Standards and Spec review against
-cb765a7be2719383a54fb849eac9691ce0197b06 and spec271. Adjudicate findings, perform
-one bounded remediation, verify accepted blockers/critical regressions, and
-retain precise final source/installed identity and pending broader gate results.
+The full bounded implement-spec delivery is complete locally. Source and
+owned synthetic qualification are retained on recipes/siteguides-271; no PR,
+merge, tracker closure, production deployment or real-account acceptance is
+claimed. Future canonical integration must reconcile the named P237 overlap
+and retain the two independently proven baseline validation limitations.
 
 ## Frozen whole-branch review and bounded remediation
 
@@ -332,3 +333,65 @@ parity check against generation42211b09d2c2. Documentation links passed in
 service parser, main dispatch and service-state integration test are byte
 unchanged from cb765a7b, as are both files responsible for the extra policy-wiring
 failure. No unrelated source repair or automatic CI activation is included.
+
+## Final installed qualification and closeout
+
+All five tickets are implemented, integrated locally and validated within the
+approved source/owned-synthetic scope. The one broad review and one bounded
+remediation are complete; all four accepted findings have focused protection
+and the actual existing-task adaptation fixture continues the retained helper
+request/action through a reviewed replacement plan. Default MCP remains 12.
+
+Qualified executable source commit: a427f65eefe0e95ee2652edacde3abcd96bb2514.
+Final isolated generation: 0.28.0-4af40efff22c. Binary SHA256:
+4af40efff22c41a56463385272f96ba9b3a9a6bba926b47be8e440cc04b25574.
+The executable is under the p242 generation bin directory. Publication receipt
+/tmp/p242-review-install.json proves production and default-development identity
+preservation and p242-only skill parity. Generation source metadata is null
+(unsealed build), not a fabricated clean-source provenance assertion. Units were
+not activated and the installed runtime status remains ready:false as expected
+for this no-activate qualification lane.
+
+The active foreign helper changed from the initial b1fa8e8e snapshot to
+23877a5c0c200b11517a0369cf35ced65e31ca99 during final checks. Final tests use
+an immutable read-only copy of its actual four modules, pinned by
+/tmp/p242-helper-source-final-identity.json at /tmp/p242-auth-helper-final.
+No foreign edits or installation occurred. This remains source/dummy producer
+qualification, separate from an installed producer and real credentials,
+LastPass extension/passkeys, automated factor access or desktop-wide privacy.
+
+Final-candidate public receipts:
+- /tmp/p242-final-installed-bill-pinned.log: verification, bounded retrieval,
+  versioned guide authoring, changed-control replacement, private dummy fill,
+  human MFA, popup continuation, restart and injected lost acknowledgement.
+- /tmp/p242-final-installed-qbo-identifier.log and
+  /tmp/p242-final-installed-qbo-password.log: distinct QBO controls/identity,
+  both login variants, MFA, receiving popup, exact company and peer preservation.
+- /tmp/p242-final-installed-wrong-credential.log: independent website rejection
+  of a wrong opaque credential, no false completion and zero residue.
+Each fixture reports a fresh zero-owned-process census.
+
+The required three-iteration development launch smoke passed in
+/tmp/p242-review-development-launch-green.json after an initial stale-daemon
+failure retained in /tmp/p242-review-development-launch.json. Exact idle p242
+host37416 still used the first bf895a5c9b61 generation. Read-only Service Status
+proved zero browser/session/tab records and runtime owners before SIGTERM of
+that positively identified owned host; no profiles, borrowed processes or
+foreign resources were removed. Final smoke-created idle host88643 was likewise
+retired after zero-record/owner readback. /tmp/p242-final-runtime-closeout.json
+records a fresh OS census with zero remaining p242 fixture processes.
+
+Source checks, docs and links passed. Comprehensive provider-free Rust remains
+accurately nativeLane=0/supportLane=1 because of the unchanged service-help
+integration assertion. The extra policy-wiring test remains a separately
+identified stale baseline oracle. Neither is erased or described as a pass;
+these are broader baseline repair inputs, not a defect in a validated slice.
+No GitHub CI was activated or dispatched. All owned fixtures were cleaned up;
+primary and foreign worktrees, retained candidate generations and prototype
+branch remain intact.
+
+Memory disposition: queued. The qualified curated P242 closeout was accepted
+by graphiti-runtime remember into agent_browser_main, job
+ea38b434-88e1-40a9-a090-c31f8d52c56f, receipt /tmp/p242-closeout-memory.json.
+Queue acceptance is recorded; persistence and grouped retrieval are not claimed.
+The source-backed singleton was written once; no Codex memory files were edited.
