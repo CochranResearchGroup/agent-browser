@@ -7079,7 +7079,7 @@ Default workflow tools:
   browser_continue      Continue the same task after human input
   browser_close         End this task while preserving peers and profile data
   browser_command       Run an advanced page action with action and params
-  browser_discover      Load one browser, diagnostic or administrative schema
+  browser_discover      Load browser, playbook or diagnostic metadata
 
 Workflow:
   Use browser_open's taskId on subsequent page actions.
@@ -7089,6 +7089,8 @@ Workflow:
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN on the MCP server for HTTPS handoffs.
   Use browser_discover only when advanced metadata is needed.
+  category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
   Retired authority MCP operations and the legacy catalog are unavailable.

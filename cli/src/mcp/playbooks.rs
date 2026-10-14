@@ -1,0 +1,339 @@
+//! Shared website routine discovery over the existing browser-task interface.
+//! This layer does not acquire a second browser or own credentials.
+use serde_json::{json, Value};
+
+use super::JsonRpcError;
+
+pub(super) const OPERATIONS: &[&str] = &["siteguides", "inspect_guide", "verify_login"];
+
+pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
+    let properties = match operation {
+        "siteguides" => json!({}),
+        "inspect_guide" => json!({"guideId":{"type":"string"}}),
+        "verify_login" => json!({"guideId":{"type":"string"},
+            "accountRef":{"type":"string"},"organizationRef":{"type":"string"},
+            "maxObservationAgeMs":{"type":"integer","minimum":1,"maximum":60000}}),
+        _ => return Err(JsonRpcError::invalid_params("Unknown playbook operation")),
+    };
+    let required = match operation {
+        "siteguides" => json!([]),
+        "inspect_guide" => json!(["guideId"]),
+        _ => json!(["guideId", "accountRef", "organizationRef"]),
+    };
+    Ok(json!({"type":"object","additionalProperties":false,
+        "properties":properties,"required":required}))
+}
+
+pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, JsonRpcError> {
+    let data = match super::optional_string_argument(arguments, "operation")? {
+        Some(operation) => json!({"category":"playbooks","operation":operation,
+            "inputSchema":schema(operation)?,
+            "execution":{"tool":"browser_command","action":"playbook",
+                "operation":operation,"arguments":"Supply taskId and put operation plus routine arguments in params."}}),
+        None => json!({"category":"playbooks","operations":OPERATIONS,
+            "next":"Request one operation for its schema."}),
+    };
+    Ok(super::tool_response_from_payload(
+        "browser_discover",
+        session,
+        json!({}),
+        data,
+        false,
+    ))
+}
+
+use crate::native::browser_session_store::BrowserSessionSqliteStore;
+use serde::{Deserialize, Serialize};
+use std::fs;
+use std::time::Instant;
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct IdentityField {
+    selector: String,
+    attribute: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PageState {
+    state: String,
+    selector: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SiteGuide {
+    schema_version: String,
+    guide_id: String,
+    name: String,
+    allowed_origins: Vec<String>,
+    authenticated_selector: String,
+    account: IdentityField,
+    organization: IdentityField,
+    states: Vec<PageState>,
+}
+
+fn fault(reason: &str) -> JsonRpcError {
+    JsonRpcError::invalid_params(reason)
+}
+
+fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
+    if guide_id.is_empty()
+        || guide_id.len() > 120
+        || !guide_id
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+    {
+        return Err(fault("siteguide_id_invalid"));
+    }
+    let bytes = if let Some(directory) = std::env::var_os("AGENT_BROWSER_SITEGUIDE_DIRECTORY") {
+        let path = std::path::PathBuf::from(directory).join(format!("{guide_id}.json"));
+        let metadata = fs::symlink_metadata(&path).map_err(|_| fault("siteguide_not_found"))?;
+        if !metadata.is_file() || metadata.file_type().is_symlink() || metadata.len() > 65_536 {
+            return Err(fault("siteguide_file_invalid"));
+        }
+        fs::read(path).map_err(|_| fault("siteguide_read_failed"))?
+    } else if guide_id == "bill-session-v1" {
+        include_bytes!("../../../config/siteguides/bill-session-v1.json").to_vec()
+    } else {
+        return Err(fault("siteguide_not_found"));
+    };
+    let guide: SiteGuide =
+        serde_json::from_slice(&bytes).map_err(|_| fault("siteguide_invalid"))?;
+    if guide.schema_version != "agent-browser.siteguide.v1"
+        || guide.guide_id != guide_id
+        || guide.allowed_origins.is_empty()
+        || guide.allowed_origins.len() > 16
+        || guide.states.len() > 16
+        || guide.name.is_empty()
+        || guide.name.len() > 256
+    {
+        return Err(fault("siteguide_contract_invalid"));
+    }
+    for origin in &guide.allowed_origins {
+        let url = url::Url::parse(origin).map_err(|_| fault("siteguide_origin_invalid"))?;
+        if !matches!(url.scheme(), "http" | "https")
+            || url.origin().ascii_serialization() != *origin
+        {
+            return Err(fault("siteguide_origin_invalid"));
+        }
+    }
+    let selectors = std::iter::once(guide.authenticated_selector.as_str())
+        .chain([
+            guide.account.selector.as_str(),
+            guide.organization.selector.as_str(),
+        ])
+        .chain(guide.states.iter().map(|state| state.selector.as_str()));
+    if selectors
+        .into_iter()
+        .any(|selector| selector.is_empty() || selector.len() > 512)
+    {
+        return Err(fault("siteguide_selector_invalid"));
+    }
+    for field in [&guide.account, &guide.organization] {
+        if field.attribute.as_ref().is_some_and(|attribute| {
+            attribute.len() > 120
+                || !(attribute.starts_with("data-")
+                    || attribute == "aria-label"
+                    || attribute == "title")
+        }) {
+            return Err(fault("siteguide_identity_attribute_invalid"));
+        }
+    }
+    if guide.states.iter().any(|state| {
+        !matches!(
+            state.state.as_str(),
+            "identifier_required"
+                | "password_required"
+                | "mfa_required"
+                | "login_required"
+                | "blocked"
+        )
+    }) {
+        return Err(fault("siteguide_state_invalid"));
+    }
+    Ok(guide)
+}
+
+fn task_context(task_id: &str) -> Result<Value, JsonRpcError> {
+    let path = BrowserSessionSqliteStore::default_sqlite_path()
+        .map_err(|_| fault("playbook_task_store_unavailable"))?;
+    let store = BrowserSessionSqliteStore::open_read_only(&path)
+        .map_err(|_| fault("playbook_task_store_unavailable"))?;
+    let state = store
+        .load_session_state()
+        .map_err(|_| fault("playbook_task_store_unavailable"))?;
+    let task = state
+        .sessions
+        .get(task_id)
+        .ok_or_else(|| fault("browser_task_not_found"))?;
+    let tab_id = task
+        .current_tab_id
+        .as_deref()
+        .filter(|id| state.tabs.contains_key(*id))
+        .ok_or_else(|| fault("browser_task_current_tab_missing"))?;
+    Ok(
+        json!({"taskId":task_id,"profileId":task.profile_id,"browserId":task.browser_id,
+        "tabId":tab_id,"sessionName":task.name}),
+    )
+}
+
+fn required_reference(arguments: &Value, name: &str) -> Result<String, JsonRpcError> {
+    let value = super::required_string_argument(arguments, name)?;
+    if value.len() > 256 {
+        return Err(fault("playbook_identity_invalid"));
+    }
+    Ok(value.to_string())
+}
+
+/// Observe only identity predicates and state markers. Passwords, challenge
+/// values, full page bodies and account text never cross the routine boundary.
+pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
+    let task_id = super::required_string_argument(arguments, "taskId")?;
+    let params = arguments
+        .get("params")
+        .ok_or_else(|| fault("playbook_params_required"))?;
+    let operation = super::required_string_argument(params, "operation")?;
+    let contract = schema(operation)?;
+    let properties = contract["properties"]
+        .as_object()
+        .expect("schema properties");
+    for key in params
+        .as_object()
+        .ok_or_else(|| fault("playbook_params_invalid"))?
+        .keys()
+    {
+        if key != "operation" && !properties.contains_key(key) {
+            return Err(fault("playbook_argument_unknown"));
+        }
+    }
+    task_context(task_id)?;
+    if operation == "siteguides" {
+        let data = json!({"guides":guide_names()?});
+        return Ok(super::tool_response_from_payload(
+            "browser_command",
+            transport_session,
+            json!({}),
+            data,
+            false,
+        ));
+    }
+    if operation == "inspect_guide" {
+        let guide = load_guide(super::required_string_argument(params, "guideId")?)?;
+        let data = serde_json::to_value(guide).map_err(|_| fault("siteguide_metadata_invalid"))?;
+        return Ok(super::tool_response_from_payload(
+            "browser_command",
+            transport_session,
+            json!({}),
+            data,
+            false,
+        ));
+    }
+    let guide = load_guide(super::required_string_argument(params, "guideId")?)?;
+    let account = required_reference(params, "accountRef")?;
+    let organization = required_reference(params, "organizationRef")?;
+    let maximum_age = match params.get("maxObservationAgeMs") {
+        Some(value) => value
+            .as_u64()
+            .filter(|age| (1..=60_000).contains(age))
+            .ok_or_else(|| fault("playbook_observation_age_invalid"))?,
+        None => 10_000,
+    };
+    let binding = task_context(task_id)?;
+    let descriptor = json!({"origins":guide.allowed_origins,"authenticated":guide.authenticated_selector,
+        "account":{"selector":guide.account.selector,"attribute":guide.account.attribute,"expected":account},
+        "organization":{"selector":guide.organization.selector,"attribute":guide.organization.attribute,"expected":organization},
+        "states":guide.states.iter().map(|state|json!({"state":state.state,"selector":state.selector})).collect::<Vec<_>>()});
+    let script = format!(
+        r#"(() => {{
+        const guide = {descriptor};
+        const origin = location.origin;
+        if (!guide.origins.includes(origin)) return {{origin, originAllowed:false}};
+        const matchIdentity = field => {{
+            const elements = document.querySelectorAll(field.selector);
+            if (elements.length !== 1 || elements[0].matches('input[type=password]')) return false;
+            const value = field.attribute ? elements[0].getAttribute(field.attribute) : elements[0].textContent;
+            return typeof value === 'string' && value.trim() === field.expected;
+        }};
+        const visible = element => element && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
+        const applications = [...document.querySelectorAll(guide.authenticated)].filter(visible);
+        const authenticated = applications.length === 1;
+        const state = guide.states.find(state => [...document.querySelectorAll(state.selector)].some(visible));
+        return {{origin,originAllowed:true,authenticated,
+            accountMatched:authenticated && matchIdentity(guide.account),
+            organizationMatched:authenticated && matchIdentity(guide.organization),
+            state:state ? state.state : 'site_changed'}};
+    }})()"#
+    );
+    let started = Instant::now();
+    let observed = super::workflow::execute(
+        json!({"id":uuid::Uuid::new_v4().to_string(),
+        "action":"evaluate","script":script,"sessionName":binding["sessionName"]}),
+        transport_session,
+    )?;
+    let current = task_context(task_id)?;
+    let evidence = observed
+        .get("result")
+        .filter(|value| value.is_object())
+        .ok_or_else(|| fault("playbook_observation_invalid"))?;
+    let (status, reason) = if current != binding {
+        ("adaptation_required", "task_target_changed")
+    } else if started.elapsed().as_millis() > u128::from(maximum_age) {
+        ("adaptation_required", "observation_stale")
+    } else if evidence["originAllowed"] != true {
+        ("failed", "origin_mismatch")
+    } else if evidence["authenticated"] == true && evidence["accountMatched"] != true {
+        ("failed", "account_mismatch")
+    } else if evidence["authenticated"] == true && evidence["organizationMatched"] != true {
+        ("failed", "organization_mismatch")
+    } else if evidence["authenticated"] == true {
+        ("completed", "authenticated")
+    } else {
+        match evidence["state"].as_str() {
+            Some("identifier_required") => ("waiting", "identifier_required"),
+            Some("password_required") => ("waiting", "password_required"),
+            Some("mfa_required") => ("waiting", "mfa_required"),
+            Some("login_required") => ("waiting", "login_required"),
+            Some("blocked") => ("failed", "site_blocked"),
+            _ => ("adaptation_required", "site_changed"),
+        }
+    };
+    let data = json!({"schemaVersion":"agent-browser.routine-result.v1","guideId":guide.guide_id,
+        "routine":"verify_login","status":status,"reasonCode":reason,"effectState":"no_effect",
+        "taskId":task_id,"profileId":binding["profileId"],"browserId":binding["browserId"],"tabId":binding["tabId"],
+        "accountVerified":status=="completed","organizationVerified":status=="completed",
+        "observationElapsedMs":started.elapsed().as_millis()});
+    Ok(super::tool_response_from_payload(
+        "browser_command",
+        transport_session,
+        json!({}),
+        data,
+        false,
+    ))
+}
+
+fn guide_names() -> Result<Vec<String>, JsonRpcError> {
+    let Some(directory) = std::env::var_os("AGENT_BROWSER_SITEGUIDE_DIRECTORY") else {
+        return Ok(vec!["bill-session-v1".into()]);
+    };
+    let mut names = Vec::new();
+    for entry in fs::read_dir(directory).map_err(|_| fault("siteguide_directory_unavailable"))? {
+        let entry = entry.map_err(|_| fault("siteguide_directory_unavailable"))?;
+        let path = entry.path();
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "json")
+        {
+            if let Some(name) = path.file_stem().and_then(|name| name.to_str()) {
+                load_guide(name)?;
+                names.push(name.to_string());
+            }
+        }
+        if names.len() > 64 {
+            return Err(fault("siteguide_directory_limit_exceeded"));
+        }
+    }
+    names.sort();
+    Ok(names)
+}

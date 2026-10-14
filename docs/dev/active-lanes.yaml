@@ -1,6 +1,21 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P242
+    product_lane: PL-RECIPES
+    objective: Implement shared SiteGuides routines and hybrid playbooks through installed public workflows
+    plan: docs/dev/plans/0242-2026-10-14-implement-siteguides.md
+    branch: recipes/siteguides-271
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P242 owns new playbook adapters MCP/client and own docs/fixtures; consumes existing task/lifecycle; P237 retains dashboard/native lifecycle; primary checkout reused"]
+    validation_status: Packet established and helper interface inspected; public first-slice red pending
+    limitations: ["No production/account/credential effects", "Helper has no public MFA continuation or task registration; integrated readiness must be qualified separately"]
+    updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM
     objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup

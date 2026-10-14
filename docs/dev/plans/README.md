@@ -1,5 +1,8 @@
 # Active plan index
 
+[P242: implement website automation](0242-2026-10-14-implement-siteguides.md),
+spec #271 and tickets #272–276; one integration branch, full workflow acceptance.
+
 [P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
 #105; completed bounded source and isolated browser-workflow qualification.
 Wider resource/cleanup acceptance remains open.

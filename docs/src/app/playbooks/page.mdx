@@ -1,0 +1,56 @@
+# SiteGuides and website routines
+
+Agents and software can run a shared routine against an existing browser task.
+A SiteGuide describes website states and receiving identity checks. A playbook
+composes routines while preserving that task.
+
+## Verify an existing login
+
+Discover the focused metadata with `browser_discover` category `playbooks`.
+Request the `verify_login` operation for its schema, then use `browser_command`:
+
+```json
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-fixture","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+```
+
+<table>
+  <thead><tr><th>Result</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td>completed</td><td>Current application evidence matches the intended account and company</td></tr>
+    <tr><td>waiting</td><td>A recognized login or MFA step remains</td></tr>
+    <tr><td>adaptation_required</td><td>Observe again or adapt a changed SiteGuide</td></tr>
+    <tr><td>failed</td><td>The origin or identity differs, or the site is blocked</td></tr>
+  </tbody>
+</table>
+
+Verification reads bounded state/identity predicates, performs no credential
+submission and preserves peer tasks. A stale observation or changed task target
+cannot produce completion. The default observation window is 10000 ms;
+`maxObservationAgeMs` accepts 1 through 60000.
+
+## Use from software
+
+```js
+import {createPlaybookClient} from '@agent-browser/client/playbooks';
+const routines = createPlaybookClient((name, args) =>
+  client.callTool({name, arguments: args}));
+const result = await routines.verifyLogin({taskId, guideId, accountRef, organizationRef});
+```
+
+`listGuides(taskId)` and `inspectGuide(taskId, guideId)` read the configured
+registry. The existing MCP client provides transport; the routines create no
+second task or credential store.
+
+## Configure site knowledge
+
+Set `AGENT_BROWSER_SITEGUIDE_DIRECTORY` on the MCP server to a directory of
+reviewed `agent-browser.siteguide.v1` JSON files named by guideId. Each file is
+bounded to 64 KiB. A guide declares exact origins, an authenticated application
+selector, expected-identity locators and state selectors. It carries no account
+selection, credentials or private runtime state.
+
+The bundled BILL guide is a starter template. Validate its controls from current
+observations and synthetic fixtures before relying on it for a real account.
+Remote View supplies desktop interaction; shared auth helpers supply private
+credential/MFA operations. Session verification alone does not prove either
+provider integration or completed login automation.

@@ -843,6 +843,39 @@ it reports `observation_only`; allow input or navigation only when it reports
 See the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx) for
 the complete agent, operator, reconnect, and troubleshooting workflows.
 
+
+## SiteGuides and website routines
+
+A SiteGuide describes website states and receiving identity checks. Agents and
+software invoke the same routines in an existing browser task. Discover the
+focused interface with `browser_discover({category:"playbooks"})`, then request
+one operation's schema. The default MCP tool count stays unchanged.
+
+Run login verification through `browser_command`:
+
+```json
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-fixture","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+```
+
+A result distinguishes `completed`, `waiting`, `adaptation_required` and `failed`.
+Verification reads only bounded identity predicates and state markers, performs
+no credential submission, and preserves peer tasks. A stale observation or
+changed target cannot produce completed verification. `maxObservationAgeMs`
+sets a 1 through 60000 millisecond observation window; the default is 10000.
+
+For deterministic clients, `@agent-browser/client/playbooks` exports
+`createPlaybookClient(callTool)`. Connect it to the existing MCP client's
+`tools/call`; use `inspectGuide`, `listGuides` and `verifyLogin` with the same
+opaque taskId used by an agent. See [the routine guide](skills/agent-browser/references/playbooks.md)
+for the JSON definition and software example.
+
+Set `AGENT_BROWSER_SITEGUIDE_DIRECTORY` on the MCP server process to a directory
+of reviewed `agent-browser.siteguide.v1` JSON files, named by guideId. This is
+server configuration, not a browser/profile override. Each file is bounded to
+64 KiB and identity fields never read password values. The bundled BILL guide
+is a starter template, not live-site qualification; use observed controls and
+fixtures to validate its selectors before relying on it for an account.
+
 ## Commands
 
 ### Core Commands

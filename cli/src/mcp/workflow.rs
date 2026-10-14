@@ -93,7 +93,7 @@ fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
     Ok(())
 }
 
-fn execute(command: Value, session: &str) -> Result<Value, JsonRpcError> {
+pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcError> {
     // Runtime-host dispatch selects the managed lane before action execution.
     // Keep that transport lane bound to the addressed task, as page tools do.
     let session = command

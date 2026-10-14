@@ -80,6 +80,14 @@ agent-browser --session editing click @e2
 Use the workflow MCP tools for durable profile/task continuity and human handoff.
 The CLI remains available for independent diagnostics and supported maintenance.
 
+## SiteGuide routines
+
+For reusable website work, discover `category:"playbooks"` and run the selected
+routine through `browser_command` in the existing task. `verify_login` checks
+intended account/company from current page evidence; waiting or adaptation is
+not successful login. Read [the routine guide](references/playbooks.md) only
+when developing or using a SiteGuide.
+
 ## Read more only when needed
 
 New-process memory pressure uses eligible owner cleanup and a bounded wait;
