@@ -1085,19 +1085,8 @@ impl BrowserSessionSqliteStore {
         if state != *expected
             || state.browsers.get(&browser.id) != Some(browser)
             || claim.published
-            || claim
-                .observed_browser_id
-                .as_ref()
-                .is_some_and(|id| id != &browser.id)
             || claim.intent.profile_id != browser.profile_id
             || records.records.get(&claim.intent.intent_id) != Some(claim)
-            || assignment_fenced(&records, &claim.intent.assignment)
-            || !records.records.values().any(|prior| {
-                prior.published
-                    && prior.observed_browser_id.as_ref() == Some(&browser.id)
-                    && prior.observed_pid == Some(browser.pid)
-                    && prior.intent.assignment == claim.intent.assignment
-            })
         {
             return Err(Error::Conflict);
         }

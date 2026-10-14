@@ -3026,4 +3026,41 @@ fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
     let retained = fixture.store(false).unpublished_launch_records().unwrap();
     assert_eq!(retained.len(), 1, "mismatched history remains diagnostic");
     assert_eq!(retained[0].observed_pid, Some(99));
+    // Historical publication for the previous PID is not a prerequisite for
+    // later recovery after this current browser exits.
+    drop(resumed);
+    provider.borrow_mut().window_pid = None;
+    let mut store = fixture.store(false);
+    crate::native::browser_session_remote_view::reconcile_pending_recoveries(
+        &mut Process {
+            mode: Mode::IdleRecovery,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        &mut store,
+    )
+    .unwrap();
+    assert!(store.unpublished_launch_records().unwrap().is_empty());
+    let mut recovered = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let result = recovered
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":103
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+    assert_eq!(
+        calls.get(),
+        2,
+        "recovery launches once after current absence"
+    );
 }

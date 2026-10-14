@@ -7,13 +7,15 @@ lanes:
     plan: docs/dev/plans/0243-2026-10-14-ordinary-browser-availability.md
     branch: fix/ordinary-browser-availability
     target: main
+    accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/287
     plan_state: IN_PROGRESS
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#284, CochranResearchGroup/agent-browser#286]
     dependencies: []
     overlaps: [P237, P242]
     reconciled_overlaps: ["P243 owns download and bounded observed-launch repair; preserve P237 dirty lifecycle/UI work and P242 PR285; reconcile shared launch-store/remote-view adapter behavior at integration"]
-    validation_status: Installed 284 failure confirmed; 286 regression pending
+    validation_status: Installed public failures reproduced; first public download and concurrent same-process continuation pass; final canonical source qualification in progress
     updated_at: 2026-10-14
   - id: P242
     product_lane: PL-RECIPES
