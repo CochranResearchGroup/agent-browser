@@ -640,7 +640,7 @@ async function testIdentityFirstGuidanceDrift() {
     readFile(new URL('../README.md', import.meta.url), 'utf8'),
     readFile(new URL('../docs/src/app/service-mode/page.mdx', import.meta.url), 'utf8'),
     readFile(new URL('../docs/src/app/commands/page.mdx', import.meta.url), 'utf8'),
-    readFile(new URL('../skills/agent-browser/SKILL.md', import.meta.url), 'utf8'),
+    readFile(new URL('../skills/agent-browser/references/cli-and-service.md', import.meta.url), 'utf8'),
   ]);
 
   assertContainsAll(readme, [
@@ -673,7 +673,7 @@ async function testIdentityFirstGuidanceDrift() {
     '`getServiceAccessPlan()` with `serviceName`, `agentName`, `taskName`',
     'request the tab by the same identity through `requestServiceTab()`',
     'Register a new managed login profile only when agent-browser',
-    'MCP `service_profile_freshness_update`',
+    '`updateServiceProfileFreshness()`',
     '`upsertServiceProfileReadinessMonitor()`',
     '`attention`',
   ]);

@@ -331,3 +331,73 @@ The first probe incorrectly minimized Alpha and waited for restoration while its
 The first corrected fence run passes: Alpha takes 5.04 seconds and Beta succeeds in 0.19 seconds while Alpha is still executing. Final command: `python3 scripts/test-p237-native-selection.py --runtime-cli /tmp/p237-managed-operator-final-cli-20261013 --chrome /usr/bin/google-chrome --artifact-dir /tmp/p237-independent-desktop-qualified-artifacts-20261013 --runtime-cross-client-focus independent`. It passes in 48.75 seconds against unchanged c8f9e5d7 source pin. Actual Chrome PIDs 97772/98397 occupy displays :90/:91, with distinct source allocation IDs display:private_virtual_display:session-p237-alpha/beta. The final run returns Beta in 0.17 seconds while Alpha takes 7.27 seconds. Beta does not change Alpha's physical scene. Both source browsers close normally; their private Xvfb resources stop. Cleanup and fresh exact-session/private-root OS readback are empty. The original shared-desktop ordering oracle also passes after these fixture changes at /tmp/p237-independent-change-shared-regression-artifacts-20261013, with fresh zero residue.
 
 Only opt-in fixture and evidence/custody documentation change, so product gates retain their scope. Python syntax, patch hygiene, policy wiring and changed links pass. Standards and Spec reviews against abf603571 accept the real creator's allocation identity and actual-fence admission witness. This closes native independent-desktop progress for retained source routes; it does not qualify managed public operator proof/fencing, native provider/viewer, chosen UI, reload/ambiguous completion or canonical integration. Full P237 remains IN_PROGRESS.
+
+
+## P238/P240 source reconciliation, evening renewal 2026-10-13
+
+The fixed point is P237 `f4db68b656179df78f7afd47282953d9b8a24ea2`.
+Fresh canonical main is `cb765a7be2719383a54fb849eac9691ce0197b06`,
+including P238 PR267, P239 PR268 and P240 PR269. Reconciliation occurs only
+in the owned P237 branch. The foreign enrollment checkout and immutable pins
+remain retained. RUNBOOK and active-index conflicts preserve both lanes' intent.
+P240 retains admission, atomic archival and exact host projection publication;
+P237 retains handoff/lifetime/metadata and native selection behavior. Guidance
+keeps the compact P238 workflow catalog and both P237/P240 additions.
+
+The first combined browser-session test build fails with E0063: P240's
+RemoteViewTabHandoff fixture omits P237 resume, recreation, target_expired and
+native_observation fields. The repair explicitly initializes those fields
+without changing the existing archive assertions. Preserve the original compile
+failure in `/tmp/p237-renewal-reconcile-browser-session-20261013.log`.
+The unchanged suite then passes 123 tests with eight ignored. Service Model
+passes 343 unit/integration/doc tests. Admission4, supervisor15 and output39 pass.
+Required workspace format and strict workspace Clippy pass. The extra stricter
+all-targets Clippy attempt fails on 11 service-model integration-test and 57 CLI
+test lint findings; it is retained, not presented as a passing required gate.
+
+A separately pinned combined source executable is
+`/tmp/p237-renewal-reconcile-cli-20261013`, SHA256
+`bcbe9886cb926fffeafc227fcfd2ad568ce57ba334f99ecb0a6b8879d1eff29d`.
+It is a source debug build from the merge candidate, not an installed generation
+or an embedded identity of the later custody commit. With
+`AGENT_BROWSER_TERMINAL_HISTORY_LIMIT=0`, the existing real managed
+restart/replay/operator-denial fixture passes in 29.56 seconds. Original task
+metadata and same-browser continuation preserve physical peer selection;
+scoped/last close and closed-request replay rejection still pass. The fixture
+does not independently assert archive counts. Its artifact directory is
+`/tmp/p237-renewal-reconcile-managed-artifacts-20261013`; cleanup and a fresh
+exact-session/private-root OS readback both find zero residue.
+
+The existing public resource smoke also passes on these same bytes: five completed
+tasks yield bounded archive pages; live edits/continuation and peer-preserving
+close survive archival; an impossible reserve rejects new-process demand while
+an existing borrowed browser remains usable and survives scoped close. Both
+fixture censuses are zero. The separate fresh OS prefix census is retained in
+`/tmp/p237-renewal-reconcile-resource-fresh-os-20261013.json`.
+
+Client, development-runtime fixtures, docs build, policy wiring, handoff guidance,
+changed links and patch hygiene pass. Logs use the prefix
+`/tmp/p237-renewal-reconcile-` and suffix `-20261013.log`. The navigator assertion
+still fails on missing runtime-health prose in the compact P238 skill; no
+unrelated skill expansion or installed guidance publication hides it.
+
+### Standards
+
+Serial review uses the fixed P237 checkpoint and canonical P240 source intent.
+The fixture contract repair is blocking and resolved. Both documentation
+conflicts preserve source custody and acceptance limits. No new abstraction,
+permission relaxation, provider effect or runtime publication is introduced.
+The optional all-targets lint failure remains an explicit validation limitation;
+this checkpoint does not claim full branch merge readiness.
+
+### Spec
+
+P240 history projection pins handoff references and preserves P237's own retained
+recreation intent; host publication adopts that exact projection before later
+CAS. Launch waiting stays on new-process paths after existing-browser reuse.
+The unchanged model/consumer and actual managed/resource workflows qualify this
+bounded reconciliation. Layout choice, chosen real UI, public managed operator
+binding/effect fencing, native provider/viewer, expired-target Properties,
+reload/ambiguous completion, foreign/post-effect qualification and canonical
+integration remain open. No full P237 acceptance, installed effect or lost page
+state restoration is claimed. Progress classification: blocker_reduction.

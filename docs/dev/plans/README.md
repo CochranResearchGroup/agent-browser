@@ -1,5 +1,13 @@
 # Active plan index
 
+[P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
+#105; completed bounded source and isolated browser-workflow qualification.
+Wider resource/cleanup acceptance remains open.
+
+[P239: failed-upgrade drain preservation](0239-2026-10-12-failed-upgrade-preservation.md),
+#183; bounded isolated preservation fixture complete. Workstation-wide shutdown
+and failed-transaction reconciliation remain open under #183.
+
 [P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS for issues #261 and #260. Confirmed domain rules are recorded; prototype review and actual lifecycle/native-workspace acceptance remain required.
 
 [P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.

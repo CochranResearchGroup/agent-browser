@@ -107,6 +107,13 @@ The CLI remains available for independent diagnostics and supported maintenance.
 
 ## Read more only when needed
 
+New-process memory pressure uses eligible owner cleanup and a bounded wait;
+continue existing tasks through their taskId. Completed session/tab history is
+bounded in active memory and retained durably. Use `agent-browser runtime history
+sessions 100 --json` or `runtime history tabs 100 --json` for bounded archive pages;
+pass `data.nextCursor` as the next positional cursor. Handoff target evidence
+remains available. Read the advanced reference for host resource settings.
+
 - [Commands](references/commands.md): detailed CLI syntax.
 - [Snapshot references](references/snapshot-refs.md): find and use element refs.
 - [Authentication](references/authentication.md): requested login and state reuse.

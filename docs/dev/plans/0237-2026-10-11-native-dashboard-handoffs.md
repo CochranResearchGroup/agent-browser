@@ -550,3 +550,18 @@ Actual public source CLI private_virtual_display creation assigns two different 
 ### Resource closeout source re-anchor
 
 Fresh main is cb765a7be2719383a54fb849eac9691ce0197b06, integrating P240 through PR269. The retained resource worktree is clean at efb23fc9ce09061cd735fea88bba411dd7e4fb3a on platform/resource-bounds-105. P237 remains on its own source branch and draft PR270; no main adoption or integration occurred. Earlier P240 dirty-work observations remain historical evidence. Reconcile the now-integrated resource/lifecycle/guidance changes and P238 against this fresh main before canonical integration. Layout choice remains pending. The renewed resource allocation is stopping at a checkpoint before its two-million-token/six-active-hour ceilings; this is not completion or a requested pause.
+
+
+### P238/P240 combined source reconciliation
+
+Canonical main cb765a7be is adopted into the owned P237 branch, preserving P240
+resource waits/atomic durable archives and P238 ordinary routing/replay alongside
+P237 handoff/metadata/native selection. The [source receipt](../notes/0237-2026-10-12-native-selection-proof.md)
+retains the E0063 combined-fixture failure, minimal contract repair, 123 consumer
+and 343 model passes, required quality/docs/client gates and the unchanged
+navigator plus optional all-targets lint limitations. Actual managed restart,
+peer selection and closed replay pass on the combined source pin with recent
+history configured to zero; public archive/pressure/continuation also pass with
+fresh zero-residue readbacks. This is bounded blocker reduction, not complete
+P237 acceptance. Layout choice and the remaining UI/public managed/provider,
+recreation Properties, reload, foreign/post-effect and canonical gates remain.

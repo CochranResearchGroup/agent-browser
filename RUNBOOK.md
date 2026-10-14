@@ -4,9 +4,33 @@ Updated: 2026-10-12
 
 ## Current execution
 
+### 2026-10-13 P240 resource budgets and terminal archives
+
+[P240](docs/dev/plans/0240-2026-10-13-resource-bounds.md) implements configurable
+reserve and bounded new-process waiting, a soft supervisor budget without a
+default hard cap, and atomic durable terminal session/tab archives with a bounded
+working projection. Handoff evidence and existing-browser reuse are protected.
+The [receipt](docs/dev/notes/0240-2026-10-13-resource-bounds.md) records red/green,
+Rust/client/docs gates, two-axis review and installed p240 workflow acceptance.
+Its own units are stopped and disabled. Production/default development are
+unchanged. Full install readiness, longer soak and wider #105 convergence remain
+unqualified. #183 is deferred by the operator until after the next reboot.
+
+### 2026-10-12 P239 failed-upgrade drain preservation
+
+[P239](docs/dev/plans/0239-2026-10-12-failed-upgrade-preservation.md) adds an isolated
+public MCP acceptance fixture for #183. An active admission drain rejects new
+work, exact graceful host exit preserves the browser PID/CDP/profile lock, and
+the same task continues afterward. The negative control catches browser loss;
+final fixture census is zero. No production shutdown or provider effect.
+The [receipt](docs/dev/notes/0239-2026-10-12-failed-upgrade-preservation.md) separates
+two corrected fixture assertions from product evidence. #183 still requires
+the workstation-wide terminal shutdown operation and failed-ledger, generation,
+escalation and retry qualification. P237 retains #260/#261 ownership.
+
 ### 2026-10-11 P237 dashboard and handoff lifecycle
 
-[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS in `platform/native-dashboard-261`. CONTEXT.md records the settled separation of link lifetime, tab lifetime and explicit link deletion, including recreation through a still-valid link. The next gate is review of a synthetic dashboard prototype. No replacement UI or lifecycle implementation is accepted yet; installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS in `platform/native-dashboard-261`, with draft PR270. The [selection receipt](docs/dev/notes/0237-2026-10-12-native-selection-proof.md) preserves qualified source lifecycle, native selection and restart workflows with their limits. The required layout choice and replacement UI remain pending. Integrated P238/P240 are being reconciled in the owned branch; canonical integration and native provider/viewer acceptance remain open. Installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
 
 ### 2026-10-12 P238 workflow MCP
 

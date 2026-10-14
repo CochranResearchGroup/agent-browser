@@ -1,5 +1,28 @@
 # Advanced CLI and service reference
 
+## Host resource settings and completed history
+
+At host startup, `AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES` overrides the adaptive
+reserve (5% RAM, minimum 1 GiB); zero disables this floor.
+`AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS` selects a 0 through 60000 millisecond
+memory-pressure wait (default 5000). New task acquisition uses the existing
+owner reaper's eligible idle work; existing task/profile continuation is protected.
+
+Workstation installation captures explicit settings into the supervisor unit.
+`AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES` supplies a positive soft-threshold byte
+value instead of the default 25% RAM. There is no default hard memory cap.
+
+`AGENT_BROWSER_TERMINAL_HISTORY_LIMIT` sets recent unreferenced completed records
+per kind in active memory (default 1000; zero archives all). Older records remain
+in an append-only SQLite archive with no automatic expiry. Archival and active
+publication are atomic. Handoff references retain their evidence beyond this
+budget. Service Status reports effective reserve/source and archive counts.
+
+Read archived evidence with `agent-browser runtime history sessions 100 --json`
+or `agent-browser runtime history tabs 100 --json`. Pass `data.nextCursor` as
+the next positional cursor. Pages are newest-first and capped at 1000 records.
+The command never creates, migrates or launches runtime state.
+
 Read this only for an explicit CLI/API or diagnostic task. The default MCP
 workflow is described in the main SKILL.md. Older MCP tool names in this
 reference are unavailable; use browser_discover for current metadata and the

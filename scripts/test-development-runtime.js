@@ -247,6 +247,21 @@ try {
   assert.equal(developmentRuntimeDescriptor({ ...env, AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY: 'enabled' })
     .externalBrowserDiscovery, 'disabled');
   const units = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser');
+  assert.match(units[descriptor.unitNames.runtimeHost], /^MemoryHigh=25%$/m);
+  assert.match(units[descriptor.unitNames.runtimeHost], /^MemoryMax=infinity$/m);
+  const budgeted = renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser', {
+    AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES: '8589934592',
+    AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES: '4294967296',
+    AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS: '2000',
+    AGENT_BROWSER_TERMINAL_HISTORY_LIMIT: '3',
+  })[descriptor.unitNames.runtimeHost];
+  assert.match(budgeted, /^MemoryHigh=8589934592$/m);
+  assert.match(budgeted, /^Environment=AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES=4294967296$/m);
+  assert.match(budgeted, /^Environment=AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS=2000$/m);
+  assert.match(budgeted, /^Environment=AGENT_BROWSER_TERMINAL_HISTORY_LIMIT=3$/m);
+  assert.throws(() => renderDevelopmentUnits(descriptor, '/candidate/bin/agent-browser', {
+    AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS: '60001',
+  }), /runtime_resource_config_invalid/);
   for (const source of Object.values(units)) {
     assert.match(source, /AGENT_BROWSER_RUNTIME_ENVIRONMENT=development/);
     assert.match(source, /^Environment=AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY=disabled$/m);
@@ -624,7 +639,7 @@ try {
   for (const documentationPath of [
     'README.md',
     'AGENTS.md',
-    'skills/agent-browser/SKILL.md',
+    'skills/agent-browser/references/cli-and-service.md',
     'docs/src/app/dashboard/page.mdx',
   ]) {
     const documentation = readFileSync(documentationPath, 'utf8');

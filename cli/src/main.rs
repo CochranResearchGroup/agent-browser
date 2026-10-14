@@ -915,6 +915,46 @@ fn daemon_profile_for_launch<'a>(
 
 fn run_runtime_command(clean: &[String], flags: &Flags) {
     match clean.get(1).map(|s| s.as_str()) {
+        Some("history") => {
+            let result = (|| -> Result<serde_json::Value, String> {
+                if clean.len() > 5 {
+                    return Err("terminal_history_arguments_invalid".into());
+                }
+                let kind = clean.get(2).map(String::as_str).unwrap_or("sessions");
+                let limit = clean
+                    .get(3)
+                    .map(|value| value.parse::<usize>())
+                    .transpose()
+                    .map_err(|_| "terminal_history_page_invalid")?
+                    .unwrap_or(100);
+                let before = clean
+                    .get(4)
+                    .map(|value| value.parse::<i64>())
+                    .transpose()
+                    .map_err(|_| "terminal_history_page_invalid")?;
+                if !matches!(kind, "sessions" | "tabs")
+                    || !(1..=1000).contains(&limit)
+                    || before.is_some_and(|value| value <= 0)
+                {
+                    return Err("terminal_history_page_invalid".into());
+                }
+                let path =
+                    native::browser_session_store::BrowserSessionSqliteStore::default_sqlite_path(
+                    )?;
+                if !path.exists() {
+                    return Ok(json!({"records":[],"nextCursor":null}));
+                }
+                native::browser_session_store::BrowserSessionSqliteStore::open_read_only(&path)?
+                    .archived_terminal_history(kind, limit, before)
+            })();
+            match result {
+                Ok(data) => print_json_value(json!({"success":true,"data":data})),
+                Err(error) => {
+                    print_json_error(error);
+                    std::process::exit(1);
+                }
+            }
+        }
         Some("create") => {
             let runtime_name = selected_runtime_name(clean, flags, 2);
             if let Err(e) =
@@ -1360,7 +1400,8 @@ fn run_runtime_command(clean: &[String], flags: &Flags) {
             }
         }
         _ => {
-            let msg = "Usage: agent-browser runtime <create|list|status|login|attach> [name|url]";
+            let msg =
+                "Usage: agent-browser runtime <create|list|status|login|attach|history> [name|url]";
             if flags.json {
                 print_json_error(msg);
             } else {
@@ -2180,7 +2221,13 @@ fn main() {
                         print_command_help("runtime create");
                         return;
                     }
-                    if !["list", "status", "login", "attach"].contains(&subcommand.as_str()) {
+                    if subcommand == "history" {
+                        print_command_help("runtime history");
+                        return;
+                    }
+                    if !["list", "status", "login", "attach", "history"]
+                        .contains(&subcommand.as_str())
+                    {
                         let message = format!("Unknown runtime subcommand: {subcommand}\nUse agent-browser runtime create --help to create a profile, or agent-browser runtime --help for supported commands.");
                         if flags.json {
                             print_json_error_with_type(message, "unknown_subcommand");

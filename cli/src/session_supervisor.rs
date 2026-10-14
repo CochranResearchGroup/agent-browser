@@ -171,8 +171,42 @@ pub(crate) fn validate_manifest(manifest: &SessionSupervisorManifest) -> Result<
 pub(crate) fn render_unit(executable_path: &str) -> Result<String, String> {
     validate_absolute_text_path(executable_path, "executable path")?;
     let executable = systemd_quote(executable_path);
+    // Soft throttling is configurable; no default hard cap kills active work.
+    let memory_high = match env::var("AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES") {
+        Ok(value) => {
+            let bytes = value
+                .parse::<u64>()
+                .map_err(|_| "runtime_memory_high_invalid")?;
+            if bytes == 0 {
+                return Err("runtime_memory_high_invalid".into());
+            }
+            bytes.to_string()
+        }
+        Err(env::VarError::NotPresent) => "25%".to_string(),
+        Err(_) => return Err("runtime_memory_high_invalid".into()),
+    };
+    let mut resource_environment = String::new();
+    for (name, maximum) in [
+        ("AGENT_BROWSER_HOST_MEMORY_RESERVE_BYTES", u64::MAX),
+        ("AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS", 60_000),
+        ("AGENT_BROWSER_TERMINAL_HISTORY_LIMIT", u64::MAX),
+    ] {
+        match env::var(name) {
+            Ok(value) => {
+                let number = value
+                    .parse::<u64>()
+                    .map_err(|_| format!("runtime_resource_config_invalid:{name}"))?;
+                if number > maximum {
+                    return Err(format!("runtime_resource_config_invalid:{name}"));
+                }
+                resource_environment.push_str(&format!("Environment={name}={number}\n"));
+            }
+            Err(env::VarError::NotPresent) => {}
+            Err(_) => return Err(format!("runtime_resource_config_invalid:{name}")),
+        }
+    }
     Ok(format!(
-        "[Unit]\nDescription=Agent Browser user runtime host\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run-host\nRestart=on-failure\nRestartSec=2\nKillMode=process\nNoNewPrivileges=true\nPrivateTmp=false\nStateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp\nStateDirectoryMode=0700\nBindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp\n\n[Install]\nWantedBy=default.target\n"
+        "[Unit]\nDescription=Agent Browser user runtime host\nAfter=default.target\nStartLimitIntervalSec=60\nStartLimitBurst=5\n\n[Service]\nType=simple\nExecStart={executable} session supervisor run-host\nRestart=on-failure\nRestartSec=2\nKillMode=process\nMemoryHigh={memory_high}\nMemoryMax=infinity\n{resource_environment}NoNewPrivileges=true\nPrivateTmp=false\nStateDirectory=agent-browser/runtime-tmp/%N/tmp agent-browser/runtime-tmp/%N/var-tmp\nStateDirectoryMode=0700\nBindPaths=%S/agent-browser/runtime-tmp/%N/tmp:/tmp %S/agent-browser/runtime-tmp/%N/var-tmp:/var/tmp\n\n[Install]\nWantedBy=default.target\n"
     ))
 }
 
@@ -1602,6 +1636,14 @@ mod tests {
             .unwrap(),
             "[Service]\nEnvironment=AGENT_BROWSER_SOCKET_DIR=\"/run/user/1000/agent-browser/runtime-hosts/selected\"\n"
         );
+    }
+
+    #[test]
+    fn runtime_unit_has_soft_memory_budget_without_killing_active_work() {
+        let unit = render_unit("/home/test/bin/agent-browser").unwrap();
+        assert!(unit.contains("MemoryHigh=25%\n"));
+        assert!(unit.contains("MemoryMax=infinity\n"));
+        assert!(unit.contains("KillMode=process\n"));
     }
 
     #[test]
