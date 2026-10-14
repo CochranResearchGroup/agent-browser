@@ -61,6 +61,18 @@ struct PageState {
     selector: String,
 }
 
+/// Reviewed semantic controls consumed by a trusted private receiving adapter.
+/// They identify fields and buttons, never credential values or account choice.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LoginControls {
+    identifier: String,
+    password: String,
+    submit: String,
+    account_scope: String,
+    identifier_submit: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct SiteGuide {
@@ -72,6 +84,7 @@ struct SiteGuide {
     account: IdentityField,
     organization: IdentityField,
     states: Vec<PageState>,
+    controls: Option<LoginControls>,
 }
 
 fn fault(reason: &str) -> JsonRpcError {
@@ -96,6 +109,8 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
         fs::read(path).map_err(|_| fault("siteguide_read_failed"))?
     } else if guide_id == "bill-session-v1" {
         include_bytes!("../../../config/siteguides/bill-session-v1.json").to_vec()
+    } else if guide_id == "qbo-session-v1" {
+        include_bytes!("../../../config/siteguides/qbo-session-v1.json").to_vec()
     } else {
         return Err(fault("siteguide_not_found"));
     };
@@ -130,6 +145,24 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
         .any(|selector| selector.is_empty() || selector.len() > 512)
     {
         return Err(fault("siteguide_selector_invalid"));
+    }
+    if let Some(controls) = &guide.controls {
+        let selectors = [
+            &controls.identifier,
+            &controls.password,
+            &controls.submit,
+            &controls.account_scope,
+        ];
+        if selectors
+            .iter()
+            .any(|selector| selector.is_empty() || selector.len() > 512)
+            || controls
+                .identifier_submit
+                .as_ref()
+                .is_some_and(|selector| selector.is_empty() || selector.len() > 512)
+        {
+            return Err(fault("siteguide_control_invalid"));
+        }
     }
     for field in [&guide.account, &guide.organization] {
         if field.attribute.as_ref().is_some_and(|attribute| {
@@ -315,7 +348,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
 
 fn guide_names() -> Result<Vec<String>, JsonRpcError> {
     let Some(directory) = std::env::var_os("AGENT_BROWSER_SITEGUIDE_DIRECTORY") else {
-        return Ok(vec!["bill-session-v1".into()]);
+        return Ok(vec!["bill-session-v1".into(), "qbo-session-v1".into()]);
     };
     let mut names = Vec::new();
     for entry in fs::read_dir(directory).map_err(|_| fault("siteguide_directory_unavailable"))? {

@@ -17,11 +17,22 @@ Object.assign(context.env,{AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD:binary,AGENT_BR
  AGENT_BROWSER_HOME:context.agentHome,AGENT_BROWSER_SOCKET_DIR:context.socketDir,AGENT_BROWSER_RUNTIME_HOST:'1',
  AGENT_BROWSER_SITEGUIDE_DIRECTORY:directory,XDG_RUNTIME_DIR:join(context.tempHome,'runtime'),XDG_CONFIG_HOME:join(context.tempHome,'config'),XDG_DATA_HOME:join(context.tempHome,'data')});
 mkdirSync(context.env.XDG_RUNTIME_DIR,{mode:0o700});
-const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end('<main id="application" data-account="demo-account" data-company="demo-company"><h1>BILL fixture company</h1></main>');});
+const qbo=process.env.AGENT_BROWSER_SMOKE_SITE==='qbo';
+const guideId=qbo?'qbo-fixture':'bill-fixture';
+const accountRef=qbo?'intuit-fixture-user':'demo-account';
+const organizationRef=qbo?'realm-fixture-42':'demo-company';
+const appId=qbo?'qbo-company':'application';
+const companyAttribute=qbo?'data-realm-id':'data-company';
+const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-realm-id="${organizationRef}"><span id="qbo-user" data-user="${accountRef}">${accountRef}</span></main>`:
+ `<main id="application" data-account="${accountRef}" data-company="${organizationRef}">${accountRef}</main>`;
+const controls=qbo?{identifier:'input[name=userid]',password:'input[name=password]',submit:'#intuit-signin',accountScope:'[data-auth-account]',identifierSubmit:'#intuit-next'}:
+ {identifier:'#username',password:'#password',submit:'#submit',accountScope:'[data-auth-account]'};
+const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(appHtml);});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
-writeFileSync(join(directory,'bill-fixture.json'),JSON.stringify({schemaVersion:'agent-browser.siteguide.v1',guideId:'bill-fixture',name:'Synthetic BILL',allowedOrigins:[origin],
- authenticatedSelector:'#application',account:{selector:'#application',attribute:'data-account'},organization:{selector:'#application',attribute:'data-company'},
- states:[{state:'password_required',selector:'input[type=password]'}]}));
+writeFileSync(join(directory,guideId+'.json'),JSON.stringify({schemaVersion:'agent-browser.siteguide.v1',guideId,name:qbo?'Synthetic QBO':'Synthetic BILL',allowedOrigins:[origin],
+ authenticatedSelector:'#'+appId,account:{selector:qbo?'#qbo-user':'#application',attribute:qbo?'data-user':'data-account'},
+ organization:{selector:'#'+appId,attribute:companyAttribute},controls,
+ states:[{state:'password_required',selector:controls.password},{state:'identifier_required',selector:controls.identifier},{state:'mfa_required',selector:'input[autocomplete=one-time-code]'}]}));
 const client=createMcpStdioClient({context,args:['mcp','serve'],onFatal:()=>{}});
 const tasks=[];
 async function call(name,args){const result=await client.send('tools/call',{name,arguments:args});const payload=JSON.parse(result.content.find(item=>item.type==='text').text);assert.equal(payload.success,true,JSON.stringify(payload));return payload.data;}
@@ -40,11 +51,11 @@ try {
  const discovery=await call('browser_discover',{category:'playbooks'});assert(discovery.operations.includes('verify_login'));
  console.log('Public SiteGuide routine discovery passed');
  const alice=await call('browser_open',{profile:'siteguide-fixture',profileMode:'persistent',taskKey:'alice',url:origin});tasks.push(alice.taskId);
- const guide=await call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'inspect_guide',guideId:'bill-fixture'}});assert.equal(guide.guideId,'bill-fixture');
+ const guide=await call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'inspect_guide',guideId}});assert.equal(guide.guideId,guideId);
  const bob=await call('browser_open',{profile:'siteguide-fixture',profileMode:'existing',taskKey:'bob',url:'data:text/html,<p>Peer work preserved</p>'});tasks.push(bob.taskId);
- const verify=params=>call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'verify_login',guideId:'bill-fixture',accountRef:'demo-account',organizationRef:'demo-company',...params}});
+ const verify=params=>call('browser_command',{taskId:alice.taskId,action:'playbook',params:{operation:'verify_login',guideId,accountRef,organizationRef,...params}});
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
- const completed=await software.verifyLogin({taskId:alice.taskId,guideId:'bill-fixture',accountRef:'demo-account',organizationRef:'demo-company'});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
+ const completed=await software.verifyLogin({taskId:alice.taskId,guideId,accountRef,organizationRef});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
  if(process.env.AGENT_BROWSER_SMOKE_POPUP_ATTRIBUTION==='1') {
   const opened=await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`window.open(${JSON.stringify(origin+'/password-manager-destination')},'fixture-login-destination')!==null`}});
@@ -54,14 +65,14 @@ try {
  }
  if(process.env.AGENT_BROWSER_SMOKE_AUTH_HELPER_SOURCE) {
   const {runAuthFixture}=await import('./siteguide-auth-fixture.js');
-  await runAuthFixture({context,software,taskId:alice.taskId,origin});
+  await runAuthFixture({context,software,taskId:alice.taskId,origin,guideId,accountRef,organizationRef,appHtml,qbo});
  }
- await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'document.querySelector("#application").setAttribute("data-company","wrong-company")'}});
+ await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).setAttribute(${JSON.stringify(companyAttribute)},"wrong-company")`}});
  const wrong=await verify();assert.equal(wrong.status,'failed');assert.equal(wrong.reasonCode,'organization_mismatch');
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'const select=document.querySelectorAll.bind(document); document.querySelectorAll=(...args)=>{const end=performance.now()+25;while(performance.now()<end){};return select(...args)}'}});
  const stale=await verify({maxObservationAgeMs:1});assert.equal(stale.status,'adaptation_required');assert.equal(stale.reasonCode,'observation_stale');
 
- await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'document.body.innerHTML="<input type=password aria-label=Password>"'}});
+ await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.body.innerHTML=${JSON.stringify(qbo?'<input name=password type=password aria-label=Password>':'<input id=password type=password aria-label=Password>')}`}});
  const login=await verify();assert.equal(login.status,'waiting');assert.equal(login.reasonCode,'password_required');
  assert(JSON.stringify(await call('browser_snapshot',{taskId:bob.taskId})).includes('Peer work preserved'));
  console.log('Public existing-session verification, wrong company, login-required and peer-preserving replay passed');

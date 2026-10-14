@@ -76,3 +76,17 @@ popup opener chains through the existing owner. After private capture is ready,
 the adapter verifies new owned destinations and continues in the sole matching
 page. It preserves peer tabs and refuses ambiguous destinations. Extension-created
 tabs without an attributable opener still need a producer target-binding contract.
+
+## QBO and receiving controls
+
+The qbo-session-v1 starter uses the same task, routine, helper and checkpoint
+interfaces as BILL. Its company identity is a realm reference. An authenticated
+QBO browser is separate from QBO OAuth/API readiness and accounting operations.
+
+A reviewed guide may include controls with identifier, password, submit and
+accountScope selectors, plus identifierSubmit for a separate identifier step.
+The trusted receiving adapter consumes this metadata before private input;
+credential values and MFA material never appear in a guide. The owned QBO
+fixture qualifies identifier-first and password-first variants, human MFA waiting,
+asynchronous popup continuation and exact realm verification. Starter controls
+require current site evidence before real-account use.

@@ -7092,6 +7092,7 @@ Workflow:
   category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
   Software login-playbook composes these routines with trusted shared auth-helper custody.
   browser_tab list observes owned popup children; login continuation verifies new destinations.
+  BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.

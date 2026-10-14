@@ -126,3 +126,24 @@ excluded. This supports attributable site/password-manager popups. Extension
 tabs with no attributable opener require a producer target-binding capability;
 the system never guesses ownership from a URL. Real LastPass, automated MFA and
 installed helper readiness retain their separate qualification requirements.
+
+## QBO uses the same contract
+
+Choose qbo-session-v1 for the QBO starter template or a reviewed fixture guide.
+Use the same verifyLogin and createLoginPlaybook interfaces, retaining the
+intended account and company/realm reference in private runtime options.
+Browser company verification does not prove OAuth token or accounting API
+readiness. Books Receipts keeps those operations and financial policy.
+
+A guide's optional controls describe identifier, password, submit and
+accountScope locators, plus identifierSubmit for an identifier-first variant.
+The trusted helper receiving adapter reads these reviewed controls through
+inspectGuide before starting protected input. It owns credentials and validates
+the target before each consequential input. The guide carries no values,
+selected account, MFA material or helper access grant.
+
+The QBO fixture uses different controls, a separate account element and a
+data-realm-id company marker. Identifier-first and password-first variants use
+one private helper contract; human MFA wait and asynchronous popup continuation
+retain the original task. Shared routines contain no BILL URL or company-path
+assumption. Real Intuit controls and account acceptance remain separately scoped.

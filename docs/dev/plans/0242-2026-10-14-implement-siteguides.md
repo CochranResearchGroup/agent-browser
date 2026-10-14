@@ -45,8 +45,8 @@ accepted prototype are locators and design references, not runtime proof.
 | --- | --- | --- | --- | --- |
 | #272 BILL existing-session verification | none | validated | primary, public playbook/MCP/client adapters | installed generation 0.28.0-bf895a5c9b61; receipts below |
 | #273 BILL helper login/MFA | #272 | validated | primary, client composition and narrow popup-owner provider contract | installed synthetic + actual helper-source dummy; limits below |
-| #274 QBO same contracts | #273 | running | primary, QBO guide and fixtures | none |
-| #275 guide development/adaptation | #274 | pending | primary, guide tooling/skills/client acceptance | none |
+| #274 QBO same contracts | #273 | validated | primary, QBO guide and shared fixtures | installed identifier/password variants; receipt below |
+| #275 guide development/adaptation | #274 | running | primary, guide tooling/skills/client acceptance | none |
 | #276 Reddit retrieval | #275 | pending | primary, retrieval guide/routine/fixtures | none |
 
 Readiness requires the predecessor validated on this branch, not issue closure.
@@ -166,8 +166,35 @@ extension targets are named producer capabilities. They do not manufacture live
 acceptance or prevent this approved provider-free/source delivery. Tracker
 closure, broad final review and production publication remain separate.
 
+## Ticket274 validation receipt
+
+QBO consumes the same software/agent routine, private helper and owned-popup
+contracts with different selectors, account element and realm identity. Reviewed
+SiteGuide controls now configure the trusted receiving adapter. No QBO OAuth,
+API operation or tenant state is included. The embedded BILL/QBO guides are
+starter templates, not claims that real controls have been qualified.
+
+Public old-binary red: /tmp/p242-qbo-guide-red.log rejected the new guide shape
+before source support. Candidate green: /tmp/p242-qbo-identifier-green-attempt.log
+and /tmp/p242-qbo-password-green-attempt.log. Final gates: format
+/tmp/p242-qbo-fmt.log, strict Clippy /tmp/p242-qbo-clippy.log, MCP
+/tmp/p242-qbo-mcp-tests.log (132 pass), shared client typing/contracts
+/tmp/p242-qbo-client.log, docs /tmp/p242-qbo-docs.log, changed links
+/tmp/p242-qbo-links.log and patch hygiene.
+
+Installed p242 candidate: 0.28.0-beadcb7eb149, SHA256
+beadcb7eb149958fab519df32e8be8dd9bb12a551cafa01b2ac8513ebf715c5a.
+/tmp/p242-qbo-install.json records isolated publication. Installed public client
+receipts /tmp/p242-qbo-installed-identifier.log,
+/tmp/p242-qbo-installed-password.log and
+/tmp/p242-qbo-installed-bill-regression.log pass existing-session reuse, private
+actual-source dummy login, human MFA wait, asynchronous owned destination,
+wrong realm, freshness, controller restart, peer preservation and zero residue.
+Earlier host/model custody gates remain causally valid because this slice did
+not change them. Provider/helper production gaps from ticket273 remain explicit.
+
 ## Next action
 
-Implement QBO with the same routine, private helper and task contracts; exercise
-different semantic controls, company identity, identifier/password variants and
-asynchronous destination creation. Preserve the full five-ticket objective.
+Implement ticket275 frozen login preparation and validation, then demonstrate
+changed-control rejection, candidate guide revision without canonical rewrite,
+fixture qualification and continuation through one installed supported client.

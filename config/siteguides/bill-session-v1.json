@@ -6,6 +6,12 @@
   "authenticatedSelector": "[data-testid='app-shell']",
   "account": {"selector": "[data-testid='account-email']"},
   "organization": {"selector": "[data-testid='company-id']", "attribute": "data-company-id"},
+  "controls": {
+    "identifier": "input[type=email]",
+    "password": "input[type=password]",
+    "submit": "button[type=submit]",
+    "accountScope": "[data-auth-account]"
+  },
   "states": [
     {"state": "identifier_required", "selector": "input[type=email]"},
     {"state": "password_required", "selector": "input[type=password]"},

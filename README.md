@@ -855,6 +855,9 @@ helper/provider qualification gaps.
 Task tab listing attributes live popup opener chains. Private login continuation
 checks new task-owned destinations for the intended account/company while
 preserving peers and pre-login tabs.
+The registry includes BILL and QBO starter guides. QBO uses the same verification
+and login APIs with its own controls and realm identity; browser login does not
+establish QBO OAuth/API readiness. Validate starter selectors before real use.
 
 A SiteGuide describes website states and receiving identity checks. Agents and
 software invoke the same routines in an existing browser task. Discover the

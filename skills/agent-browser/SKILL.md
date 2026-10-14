@@ -87,6 +87,8 @@ Software can compose verification and private helper login with
 inspect the same helper request after uncertainty; never resubmit a lost login.
 Task tab listing discovers attributable popup children. Login continuation checks
 new owned destinations after the helper's capture barrier is ready.
+BILL and QBO share these interfaces. Select the reviewed guide and intended
+company/realm; QBO browser login and OAuth/API readiness are separate outcomes.
 
 For reusable website work, discover `category:"playbooks"` and run the selected
 routine through `browser_command` in the existing task. `verify_login` checks
