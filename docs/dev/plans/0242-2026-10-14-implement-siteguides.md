@@ -435,3 +435,20 @@ expects retired links. Their verified unchanged-source provenance is recorded
 above. They are not silently waived for a clean comprehensive or production
 claim. Tracker issues remain open, and no merge/deployment is included in this
 publication step.
+
+## Shared source custody
+
+Draft [PR285](https://github.com/CochranResearchGroup/agent-browser/pull/285) is
+open against main and assigned to ecochran76. Initial forge readback matches
+published commit41f2054ff51a85f33ccb7f49e5a62d4722894cd6 and base
+cb765a7be2719383a54fb849eac9691ce0197b06; GitHub reports MERGEABLE against
+current main. This does not resolve the separately documented prospective
+P237 merge. The PR references spec271 and tickets272–276 without closing them.
+No CI activation, issue closure, merge or deployment occurred. A final
+documentation-only custody commit retains the PR locator on the same branch.
+
+PR closeout memory disposition: unavailable. graphiti-runtime doctor reports
+mcp_http down and provider readiness skipped, despite a working advisory tool
+read. No write is attempted on an unqualified runtime; the machine-readable
+non-write receipt is /tmp/p242-pr-memory-disposition.json. The prior implementation
+closeout's queued receipt remains preserved and is not retried.

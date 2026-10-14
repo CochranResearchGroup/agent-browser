@@ -11,6 +11,7 @@ lanes:
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
     accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/285
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
