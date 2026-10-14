@@ -4,6 +4,19 @@ Agent Browser coordinates browser automation and operator-visible remote control
 
 ## Language
 
+**SiteGuide**: Versioned knowledge for recognizing a website's states, locating
+controls, interpreting results and verifying an intended outcome. Site knowledge
+is separate from the selected account and its credentials.
+
+**Routine**: A reusable executable subtask with declared inputs, expected state,
+result and effect semantics.
+
+**Playbook**: A composition of routines to reach a website goal. Software, an
+agent, or a combination of both can choose the next routine.
+
+**Automation skill**: Guidance for choosing routines and adapting to unexpected
+website states using the same SiteGuide and routine contracts as software.
+
 **Host memory reserve**: Available memory kept for other work and recovery when
 admitting a new browser process. Reusing an existing browser does not allocate a
 second process. Pressure handling preserves current work.

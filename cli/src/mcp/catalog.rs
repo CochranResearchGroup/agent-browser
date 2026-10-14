@@ -62,7 +62,7 @@ pub(super) fn tools() -> Vec<Value> {
         json!({"name":"browser_discover","title":"Discover advanced operations",
             "description":"Read supported browser, diagnostic or administrative operation metadata on demand. Select an operation for its argument schema and CLI/API guidance.",
             "inputSchema":{"type":"object","additionalProperties":false,
-                "properties":{"category":{"enum":["browser","diagnostics","administration"]},
+                "properties":{"category":{"enum":["browser","diagnostics","administration","playbooks"]},
                     "operation":{"type":"string"}},"required":["category"]}}),
     ]);
     tools
@@ -72,6 +72,9 @@ pub(super) fn tools() -> Vec<Value> {
 /// and administrative effects use the independently supported CLI/API surface.
 pub(super) fn discover(arguments: &Value, session: &str) -> Result<Value, super::JsonRpcError> {
     let category = super::required_string_argument(arguments, "category")?;
+    if category == "playbooks" {
+        return super::playbooks::discover(arguments, session);
+    }
     let operation = super::optional_string_argument(arguments, "operation")?;
     let names = operation_names(category)?;
     let payload = if let Some(operation) = operation {

@@ -61,7 +61,7 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+Supported command help, including `service --help` and `service -h`, succeeds locally without starting a browser or rewriting Service State. Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's
@@ -79,6 +79,35 @@ agent-browser --session editing click @e2
 
 Use the workflow MCP tools for durable profile/task continuity and human handoff.
 The CLI remains available for independent diagnostics and supported maintenance.
+
+## SiteGuide routines
+
+Software can compose verification and private helper login with
+`@agent-browser/client/login-playbook`. Persist its metadata checkpoint and
+inspect the same helper request after uncertainty; never resubmit a lost login.
+Task tab listing discovers attributable popup children. Login continuation checks
+new owned destinations after the helper's capture barrier is ready.
+BILL and QBO share these interfaces. Select the reviewed guide and intended
+company/realm; QBO browser login and OAuth/API readiness are separate outcomes.
+Prepare and validate a login plan before private input. Changed controls require
+fresh evidence and fixture validation of a proposed guide version. Preserve the
+checkpoint and helper request when controllers switch; publication uses normal
+versioned review.
+Password preparation requires a masked input, even after fresh observation.
+For bounded feed retrieval, discover collect_posts and supply a reviewed guide
+and explicit item/page/scroll budgets. Treat empty extraction as unproven unless
+noResultsVerified is true; retain partial results and their reason.
+
+The login client requires preparation and validation. Use reviewedPlan to resume
+a reviewed change under the retained guideId, task and helper action. A lost
+acknowledgement never permits another submission. See the routine guide for
+the exact pre-input refusal reconciliation rule.
+
+For reusable website work, discover `category:"playbooks"` and run the selected
+routine through `browser_command` in the existing task. `verify_login` checks
+intended account/company from current page evidence; waiting or adaptation is
+not successful login. Read [the routine guide](references/playbooks.md) only
+when developing or using a SiteGuide.
 
 ## Read more only when needed
 

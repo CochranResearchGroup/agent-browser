@@ -779,6 +779,10 @@ agent-browser screenshot page.png
 agent-browser close
 ```
 
+Command help is local and read-only: `agent-browser service --help` and
+`agent-browser service -h` succeed without starting a browser or changing
+Service State. Unsupported commands and subcommands return typed errors.
+
 ### Traditional Selectors (also supported)
 
 ```bash
@@ -842,6 +846,63 @@ it reports `observation_only`; allow input or navigation only when it reports
 
 See the [RDP remote-view handoff guide](docs/src/app/remote-view/page.mdx) for
 the complete agent, operator, reconnect, and troubleshooting workflows.
+
+
+## SiteGuides and website routines
+
+Private login composition is available through
+`@agent-browser/client/login-playbook`. Supply existing SiteGuide routines, the
+trusted shared auth-helper connection and a durable metadata checkpoint store.
+It persists submission custody and reconciles the same request after an unknown
+result. See the routine guide below for observer privacy requirements and current
+helper/provider qualification gaps.
+Task tab listing attributes live popup opener chains. Private login continuation
+checks new task-owned destinations for the intended account/company while
+preserving peers and pre-login tabs.
+The registry includes BILL and QBO starter guides. QBO uses the same verification
+and login APIs with its own controls and realm identity; browser login does not
+establish QBO OAuth/API readiness. Validate starter selectors before real use.
+Use prepareLogin and validatePlan to freeze reviewed guide/control evidence
+before private input. Changed controls produce adaptation_required with no
+submission. Validate proposed guide versions through a candidate registry and
+publish them through ordinary reviewed source changes.
+The login client requires prepareLogin and validatePlan. After reviewing changed controls, pass a freshly prepared plan as reviewedPlan to advance with the same options and retained guideId. It validates the replacement against the current task before saving it and retains the helper request/action. Reviewed guide content may change under that retained identifier through the candidate registry. A typed pre-input helper refusal can be retried only after exact-request inspection proves approved state with no started or input-attempt timestamp; a lost acknowledgement never permits retry.
+
+Password preparation also requires a masked password input.
+The collectPosts routine reads a reviewed Reddit feed with item/page/scroll
+budgets and normalized IDs, titles and links. Verified no-results is distinct
+from malformed or unproven empty extraction; incomplete coverage returns partial.
+It shares the task interface and leaves ranking and research policy downstream.
+
+A SiteGuide describes website states and receiving identity checks. Agents and
+software invoke the same routines in an existing browser task. Discover the
+focused interface with `browser_discover({category:"playbooks"})`, then request
+one operation's schema. The default MCP tool count stays unchanged.
+
+Run login verification through `browser_command`:
+
+```json
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-session-v1","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+```
+
+A result distinguishes `completed`, `waiting`, `adaptation_required` and `failed`.
+Verification reads only bounded identity predicates and state markers, performs
+no credential submission, and preserves peer tasks. A stale observation or
+changed target cannot produce completed verification. `maxObservationAgeMs`
+sets a 1 through 60000 millisecond observation window; the default is 10000.
+
+For deterministic clients, `@agent-browser/client/playbooks` exports
+`createPlaybookClient(callTool)`. Connect it to the existing MCP client's
+`tools/call`; use `inspectGuide`, `listGuides` and `verifyLogin` with the same
+opaque taskId used by an agent. See [the routine guide](skills/agent-browser/references/playbooks.md)
+for the JSON definition and software example.
+
+Set `AGENT_BROWSER_SITEGUIDE_DIRECTORY` on the MCP server process to a directory
+of reviewed `agent-browser.siteguide.v1` JSON files, named by guideId. This is
+server configuration, not a browser/profile override. Each file is bounded to
+64 KiB and identity fields never read password values. The bundled BILL guide
+is a starter template, not live-site qualification; use observed controls and
+fixtures to validate its selectors before relying on it for an account.
 
 ## Commands
 

@@ -3,6 +3,7 @@ use std::io::{self, BufRead, Write};
 use serde_json::{json, Map, Value};
 
 mod catalog;
+mod playbooks;
 mod workflow;
 
 use crate::connection::{send_command, Response};
@@ -5403,6 +5404,9 @@ fn call_service_mcp_tool(
         return workflow::continue_task(arguments, session);
     }
     if name == "browser_command" {
+        if arguments["action"] == "playbook" {
+            return playbooks::call(arguments, session);
+        }
         validate_browser_command_action(arguments)?;
     }
     let task_session = if name.starts_with("browser_") {

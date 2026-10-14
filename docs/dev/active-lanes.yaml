@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P242
+    product_lane: PL-RECIPES
+    objective: Implement shared SiteGuides routines and hybrid playbooks through installed public workflows
+    plan: docs/dev/plans/0242-2026-10-14-implement-siteguides.md
+    branch: recipes/siteguides-271
+    target: main
+    plan_state: COMPLETED
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
+    accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/285
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
+    validation_status: All five slices qualified; baseline help and policy-wiring failures repaired with 10 affected integration tests, strict Rust quality, docs and policy negative checks; prior failed receipts retained
+    limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Earlier comprehensive failure retained; affected integration compartment and policy wiring now pass, no new full-suite claim"]
+    updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM
     objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup
