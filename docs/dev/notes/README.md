@@ -79,6 +79,8 @@ is authorized by this index.
 
 ## PL-RECIPES | Reusable Automation
 
+- [Website automation source study](0241-2026-10-14-website-automation-source-study.md), adopted by P241 for #199; compares social retrieval, QBO guidance and BILL authentication.
+
 - [Access-plan service-request handoff](2026-05-09-access-plan-service-request-handoff.md)
 - [Access-plan monitor recipe](2026-05-10-access-plan-monitor-run-due-recipe.md)
 - [Managed-profile acquisition summary](2026-05-10-managed-profile-flow-acquisition-summary.md)

@@ -1,5 +1,8 @@
 # Active plan index
 
+[P241: website playbook model](0241-2026-10-14-website-playbook-model.md), #199;
+synthetic model prototype on a retained prototype branch, no production delivery.
+
 [P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
 #105; completed bounded source and isolated browser-workflow qualification.
 Wider resource/cleanup acceptance remains open.

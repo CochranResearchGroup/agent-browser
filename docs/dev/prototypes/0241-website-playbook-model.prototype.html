@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Website playbook model · prototype</title>
+<style>
+:root{color-scheme:light;--ink:#172d31;--accent:#176c62;--muted:#52666a;--line:#d4dfdc;--paper:#f6f8f5}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 system-ui,sans-serif}main{max-width:1180px;margin:auto;padding:36px 24px}h1{font-size:34px;line-height:1.15;margin:12px 0}h2{font-size:21px;margin:0 0 12px}p{max-width:850px}.label{font-size:12px;text-transform:uppercase;letter-spacing:.13em;color:var(--accent);font-weight:700}.grid{display:grid;grid-template-columns:1.1fr 1fr;gap:22px}.card{background:white;border:1px solid var(--line);border-radius:12px;padding:22px;margin:18px 0}button,select{font:inherit;border:1px solid var(--line);background:white;color:var(--ink);padding:9px 12px;border-radius:7px;cursor:pointer}button:hover,button:focus-visible{border-color:var(--accent);background:#eef7f3}button:disabled{opacity:.45;cursor:default}.buttons,.tabs,.toolbar{display:flex;flex-wrap:wrap;gap:8px}.tabs button[aria-selected=true]{background:var(--accent);color:white}.toolbar{align-items:center}.status{font-size:24px;color:var(--accent);font-weight:650}dl{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;margin:15px 0}dt{color:var(--muted)}dd{margin:0;overflow-wrap:anywhere}small,.muted{color:var(--muted)}.notice{border-left:3px solid var(--accent);padding-left:14px;min-height:48px}.log{max-height:300px;overflow:auto;padding-left:22px;font-size:14px}.log li{padding:5px 0;border-bottom:1px solid #eef2ef}.steps{display:grid;gap:8px}.steps button{text-align:left}code{background:#edf3ef;padding:2px 5px;border-radius:4px;font-size:13px}@media(max-width:800px){.grid{grid-template-columns:1fr}main{padding:24px 16px}dl{grid-template-columns:120px 1fr}}
+</style>
+<main>
+<div class="label">P241 · Throwaway logic prototype · Synthetic data only</div>
+<h1>One website playbook, two ways to run it</h1>
+<p>Can a SiteGuide, reusable routines and shared task progress support both software and an agent through login, MFA, site changes and uncertain submissions? Explore BILL and QBO using the same model. This demo performs no browser, credential, network or desktop operations. Its layout is a model inspector, not a proposed product dashboard.</p>
+<div class="toolbar"><label>Site <select id="site"><option>BILL</option><option>QBO</option></select></label><label>Controller <select id="mode"><option>Software</option><option>Agent</option></select></label><button id="reset">Reset synthetic task</button></div>
+<div class="grid"><section>
+<div class="card"><h2>Current task</h2><div class="status" id="phase" aria-live="polite"></div><dl id="state"></dl><p class="notice" id="notice" aria-live="polite"></p></div>
+<div class="card"><h2>Free play</h2><p class="muted">Buttons remain available to reveal invalid transitions. Changing the controller preserves the task and checkpoint.</p><div class="buttons" id="actions"></div></div>
+</section><section>
+<div class="card"><h2>Guided walkthroughs</h2><div class="tabs" id="tabs" role="tablist" aria-label="Scenarios"></div><p id="scenarioText"></p><div class="steps" id="steps"></div><p class="muted">Start a tab to reset the scenario. Press each step in order.</p></div>
+<div class="card"><h2>What just happened</h2><ol class="log" id="log"></ol></div>
+</section></div>
+<div class="card"><h2>Develop and adapt a SiteGuide</h2><p>A SiteGuide recognizes states and states what success means. A routine performs one reusable subtask. A playbook chooses the next routine; a skill guides an agent through the same choices. In this model, guide revision 1 recognizes the initial page variant. A changed control requires a fresh observation and a new guide revision before the playbook can prepare another routine.</p><p>For a real guide: capture synthetic examples, define recognizable states and exact-account success, implement a small routine, exercise changes and uncertain outcomes, then document how an agent adapts. Guide revision here is a simulation; automatically saving or publishing an unreviewed site change is not a settled product behavior.</p><p><strong>Provider boundary:</strong> Remote View supplies desktop effects. The shared auth helper supplies private credential/MFA operations. Agent Browser interprets website state and preserves task progress. This prototype simulates the boundaries; it does not prove those integrations.</p></div>
+</main>
+<script id="model">
+// Portable pure state model. No DOM, network, storage or provider calls.
+const labels={observe:'Observe current page',prepare:'Choose next routine',execute:'Run prepared routine',helper:'MFA helper responds',change:'Website controls change',adapt:'Agent adapts the guide',uncertain:'Submission outcome is unknown',readback:'Read back: submission happened',absent:'Read back: submission did not happen',verify:'Verify intended account',reuse:'Use existing logged-in session',wrong:'Observe a different company',switch:'Switch controller'};
+function initial(site='BILL',mode='Software'){
+ return{site,mode,task:'task-demo-199',profile:'profile-demo',tab:'tab-demo',peer:'Other task remains untouched',phase:'Observe the website',page:'Identifier form',siteRevision:1,guideRevision:1,observedRevision:0,observedPage:null,knownVariant:true,routine:null,operation:0,pending:null,helper:'Available; private credentials remain inside helper',mfa:'Not requested',expectedAccount:'demo-account',expectedCompany:'demo-company',seenCompany:null,seenAccount:null,verified:false,submitted:0,checkpoint:0,notice:'Begin with a fresh observation.',log:[]};
+}
+function transition(previous,action){
+ let s=structuredClone(previous); let message='';
+ const reject=text=>{s.notice=text;s.log.push(text);return s;};
+ if(action==='switch'){s.mode=s.mode==='Agent'?'Software':'Agent';message='Controller changed. Task, tab, checkpoint and pending effect are preserved.';}
+ else if(action==='change'){s.siteRevision++;s.verified=false;s.knownVariant=false;s.observedRevision=0;s.observedPage=null;s.routine=null;s.phase=s.pending?'Read back the uncertain submission':'Agent adaptation needed';message='Controls changed. Old observations and prepared routine are invalid.';}
+ else if(action==='wrong'){if(s.pending)return reject('Read back the pending submission before replacing its receiving state.');s.page='Authenticated application';s.seenCompany='different-company';s.observedRevision=0;s.observedPage=null;s.routine=null;s.verified=false;s.phase='Observe the website';message='A login exists, but the company differs from the requested company.';}
+ else if(action==='reuse'){if(s.checkpoint||s.pending)return reject('Existing-session scenario starts before work. Reset to explore it.');s.page='Authenticated application';s.seenCompany=s.expectedCompany;s.seenAccount=s.expectedAccount;s.phase='Observe the website';message='Reusing the existing session performs no login submission.';}
+ else if(action==='observe'){if(s.pending)return reject('An ordinary observation does not reconcile a submitted effect. Use receiving readback.');s.observedRevision=s.siteRevision;s.observedPage=s.page;s.routine=null;s.phase=s.knownVariant?'Choose a routine':'Agent adaptation needed';message='Observed '+s.page+'. No effect performed.';}
+ else if(action==='adapt'){if(s.pending)return reject('Reconcile the pending submission before adapting the next routine.');s.guideRevision++;s.knownVariant=true;s.observedRevision=0;s.observedPage=null;s.routine=null;s.phase='Observe the website';message='Agent proposes a guide revision from the changed controls. Re-observe before preparing a routine.';}
+ else if(action==='prepare'){
+  if(s.pending)return reject('Read back the uncertain submission before selecting another routine.');
+  if(!s.knownVariant)return reject('The guide does not recognize these controls. An agent must adapt from fresh evidence.');
+  if(s.observedRevision!==s.siteRevision||s.observedPage!==s.page)return reject('Observe the current page before choosing a routine.');
+  if(s.page==='Authenticated application'){s.routine=null;s.phase='Verify intended account';message='Application reached. Verify account and company before claiming completion.';}
+  else if(s.page==='MFA challenge'&&s.mfa!=='Fresh matching challenge ready'){s.mfa='Waiting for matching helper result';s.helper='MFA request bound to task, account and current challenge';s.phase='Waiting for MFA helper';message='Preserve the original task while waiting. No secret appears in the playbook.';}
+  else{s.routine=s.page==='Identifier form'?'Enter account identifier':s.page==='Password form'?'Private credential fill and submit':'Private MFA fill and submit';s.phase='Routine prepared';message='Prepared '+s.routine+' against the current observation.';}
+ }
+ else if(action==='helper'){if(s.phase!=='Waiting for MFA helper')return reject('No current MFA request is waiting. A helper result cannot start an unrelated action.');s.mfa='Fresh matching challenge ready';s.phase='Choose a routine';message='Helper matched the current task, account and challenge. Its value stays private.';}
+ else if(action==='execute'||action==='uncertain'){
+  if(s.pending)return reject('Repeat submission withheld. Read back the pending operation first.');
+  if(!s.routine||s.observedRevision!==s.siteRevision||s.observedPage!==s.page)return reject('No fresh prepared routine. Observe and choose before execution.');
+  if(action==='uncertain'&&s.page==='Identifier form')return reject('This walkthrough models uncertainty on credential or MFA submission. Prepare that routine first.');
+  s.operation++;const routine=s.routine;s.routine=null;
+  if(action==='uncertain'){
+   s.submitted++;s.pending={id:'operation-'+s.operation,routine,pageBefore:s.page};s.phase='Read back the uncertain submission';message='Submitted operation-'+s.operation+', but acknowledgement is missing. Preserve it without replay.';
+  }else{
+   if(s.page==='Password form'||s.page==='MFA challenge')s.submitted++;
+   s.page=s.page==='Identifier form'?'Password form':s.page==='Password form'?'MFA challenge':'Authenticated application';
+   if(s.page==='Authenticated application'){s.seenCompany=s.expectedCompany;s.seenAccount=s.expectedAccount;}
+   s.checkpoint++;s.phase='Observe the website';s.observedRevision=0;s.observedPage=null;message=routine+' acknowledged. Verify the receiving page next.';
+  }
+ }
+ else if(action==='readback'||action==='absent'){
+  if(!s.pending)return reject('No uncertain submission to reconcile.');
+  const pending=s.pending;s.pending=null;
+  if(action==='readback'){s.page=pending.pageBefore==='Password form'?'MFA challenge':'Authenticated application';if(s.page==='Authenticated application'){s.seenCompany=s.expectedCompany;s.seenAccount=s.expectedAccount;}s.checkpoint++;message=pending.id+' occurred. Adopt the receiving state without another submission.';}
+  else {s.page=pending.pageBefore;message=pending.id+' is proven not applied. Re-observe before preparing another attempt.';}
+  s.observedRevision=0;s.observedPage=null;s.phase=s.knownVariant?'Observe the website':'Agent adaptation needed';
+ }
+ else if(action==='verify'){
+  if(s.pending)return reject('Pending submission is unresolved. Authentication cannot be declared.');
+  if(s.page!=='Authenticated application'||s.observedRevision!==s.siteRevision||s.observedPage!==s.page)return reject('Fresh receiving observation of the application is required.');
+  if(s.seenCompany!==s.expectedCompany||s.seenAccount!==s.expectedAccount){s.phase='Correct account selection needed';message='Login is not complete for the requested company. Preserve the task for account selection.';}
+  else{s.verified=true;s.phase='Login complete';message='Verified intended demo account and company in the same task. No accounting action performed.';}
+ }
+ s.notice=message;s.log.push(message);return s;
+}
+const scenarios=[
+ {name:'Normal login',description:'Identifier, private credentials, MFA and receiving verification use the same model for BILL and QBO.',actions:['observe','prepare','execute','observe','prepare','execute','observe','prepare','helper','prepare','execute','observe','verify']},
+ {name:'Existing login',description:'Reuse an authenticated session and verify the intended company without submitting credentials.',actions:['reuse','observe','verify']},
+ {name:'MFA continuation',description:'Switch to an agent while waiting. The helper result resumes the original task and tab.',actions:['observe','prepare','execute','observe','prepare','execute','observe','prepare','switch','helper','prepare','execute','observe','verify']},
+ {name:'Changed controls',description:'Old prepared actions are invalidated. Agent adaptation produces a new guide revision before another routine.',actions:['observe','prepare','change','execute','switch','adapt','observe','prepare','execute']},
+ {name:'Unknown submission',description:'A second submission is withheld. Receiving readback proves the first happened, then the playbook continues.',actions:['observe','prepare','execute','observe','prepare','uncertain','execute','switch','readback','observe','prepare','helper','prepare','execute','observe','verify']},
+ {name:'Wrong company',description:'A signed-in page alone is insufficient. Receiving verification catches a different company.',actions:['reuse','wrong','observe','verify']}
+];
+</script>
+<script>
+let state=initial(),selected=0,step=0;
+const $=id=>document.getElementById(id);
+function dispatch(action){state=transition(state,action);render();}
+function render(){
+ $('phase').textContent=state.phase;$('notice').textContent=state.notice;$('mode').value=state.mode;
+ const rows=[['Site / controller',state.site+' / '+state.mode],['Task / profile / tab',state.task+' / '+state.profile+' / '+state.tab],['Current page',state.page],['SiteGuide / website','revision '+state.guideRevision+' / '+state.siteRevision],['Recognized controls',state.knownVariant?'Yes':'Changed; needs adaptation'],['Observation',state.observedPage||'No fresh observation'],['Prepared routine',state.routine||'None'],['Checkpoint',state.checkpoint],['Operation ordinal',state.operation],['Credential/MFA submissions',state.submitted],['Pending effect',state.pending?state.pending.id+' / '+state.pending.routine:'None'],['Auth helper',state.helper],['MFA',state.mfa],['Account / expected company',state.expectedAccount+' / '+state.expectedCompany],['Observed account / company',(state.seenAccount||'Unverified')+' / '+(state.seenCompany||'Unverified')],['Verified outcome',state.verified?'Intended login verified':'Not complete'],['Peer work',state.peer]];
+ $('state').replaceChildren();for(const [name,value]of rows){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=name;dd.textContent=value;$('state').append(dt,dd);}
+ $('log').replaceChildren();for(const text of state.log){const li=document.createElement('li');li.textContent=text;$('log').append(li);} $('log').scrollTop=$('log').scrollHeight;
+ $('scenarioText').textContent=scenarios[selected].description;$('steps').replaceChildren();scenarios[selected].actions.forEach((action,i)=>{const b=document.createElement('button');b.textContent=(i+1)+'. '+labels[action];b.disabled=i!==step;b.onclick=()=>{state=transition(state,action);step++;render();};$('steps').append(b);});
+ [...$('tabs').children].forEach((b,i)=>b.setAttribute('aria-selected',String(i===selected)));
+}
+for(const [action,label]of Object.entries(labels)){const b=document.createElement('button');b.textContent=label;b.onclick=()=>dispatch(action);$('actions').append(b);}
+scenarios.forEach((scenario,i)=>{const b=document.createElement('button');b.textContent=scenario.name;b.setAttribute('role','tab');b.onclick=()=>{selected=i;step=0;state=initial($('site').value,$('mode').value);render();};$('tabs').append(b);});
+$('reset').onclick=()=>{state=initial($('site').value,$('mode').value);step=0;render();};$('site').onchange=()=>{state=initial($('site').value,$('mode').value);step=0;render();};$('mode').onchange=()=>{state=transition(state,'switch');render();};render();
+</script>
+</html>
