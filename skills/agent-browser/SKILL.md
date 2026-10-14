@@ -61,7 +61,7 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+Supported command help, including `service --help` and `service -h`, succeeds locally without starting a browser or rewriting Service State. Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's

@@ -15,8 +15,8 @@ lanes:
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
-    validation_status: All five slices and accepted whole-branch review findings validated on isolated final candidate; two unchanged baseline gate failures retained
-    limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Comprehensive Rust retains unchanged service-help assertion failure; extra policy-wiring oracle expects retired links"]
+    validation_status: All five slices qualified; baseline help and policy-wiring failures repaired with 10 affected integration tests, strict Rust quality, docs and policy negative checks; prior failed receipts retained
+    limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Earlier comprehensive failure retained; affected integration compartment and policy wiring now pass, no new full-suite claim"]
     updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM

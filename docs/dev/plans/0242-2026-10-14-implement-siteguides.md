@@ -452,3 +452,62 @@ mcp_http down and provider readiness skipped, despite a working advisory tool
 read. No write is attempted on an unqualified runtime; the machine-readable
 non-write receipt is /tmp/p242-pr-memory-disposition.json. The prior implementation
 closeout's queued receipt remains preserved and is not retried.
+
+## Baseline repair batch for PR285
+
+Operator approved /diagnosing-bugs after draft publication. Reuse the clean
+recipes/siteguides-271 checkout, baseline860358db8, with bounded ownership of
+main.rs help dispatch, the existing service-state integration oracle and
+policy-wiring script plus matching documentation. Preserve P237; no merge,
+production effect or CI activation. Both minimized REDs were run before fixes:
+/tmp/p242-baseline-service-help-red.log (installed generation4af40efff22c,
+service --help exits1 while state bytes stay unchanged) and
+/tmp/p242-baseline-policy-red.log (Node assertion requires retired AGENTS links).
+The feedback loops finish in under one second.
+
+Ranked hypotheses distinguished parser flag leakage, absent renderer and
+installed drift for help; old AGENTS contract, missing manifest route and
+selector drift for policy wiring. Source proves clean_args retains help switches
+and main validates those raw command arguments before an existing service help
+renderer. Canonical pilot0053 and current AGENTS replace individual links with
+profile/task loading plus fallback; the inventory retains the four policies,
+and selector version remains0.1.26. Repair those exact causes without loosening
+unknown-subcommand checks or refreshing canonical hashes.
+
+Baseline repair results supersede the previous unresolved disposition without
+erasing either RED. main now strips --help/-h only from its local help-path
+arguments before validating commands. Ordinary command cleaning and dispatch
+are unchanged. The existing service-state integration test also exercises
+short/pre-command help, runtime create and eval stdin help, plus a real typed
+unknown-subcommand negative. All four CLI integration binaries passed on the
+final source debug executable: 10 tests total. Receipts are
+/tmp/p242-baseline-service-final.log and /tmp/p242-baseline-other-integration.log.
+The original isolated CLI loop passes in /tmp/p242-baseline-service-help-green.log,
+without a daemon or state-byte changes. Source debug SHA256:
+7625c2eed8f44d6a98cc6d3fb026dbd17903fcbc0288996055d5810ba15ed452.
+
+Policy wiring now checks the current AGENTS pilot trigger, all inventoried
+source hashes, required profiles/task kinds and canonical fallback routing,
+rather than restoring old inline links. /tmp/p242-baseline-policy-final.log
+passes with 48 unique policy identities and unchanged selector0.1.26. The
+actual script rejects source drift, missing profile, missing fallback and
+uninventoried policy in a disposable copied-source sandbox, then passes again
+after restoration: /tmp/p242-baseline-policy-negative.log. No canonical policy,
+AGENTS or reviewed manifest hash changed.
+
+Final strict workspace Clippy, fmt, docs build, validation-selector contracts
+and changed-document links passed in /tmp/p242-baseline-clippy.log,
+/tmp/p242-baseline-final-fmt.log, /tmp/p242-baseline-docs.log,
+/tmp/p242-baseline-validation-selector.log and /tmp/p242-baseline-links.log.
+No temporary instrumentation or fixture source remains in the repository.
+Previously passed native/crate compartments and installed website-flow receipts
+remain applicable to unchanged executable behavior outside the has_help branch.
+The earlier full comprehensive receipt remains a failed historical run; this
+batch runs the entire affected integration compartment, not another full suite.
+The p242 installed generation remains4af40efff22c and was not replaced by this
+source repair. Real-provider acceptance and production deployment stay separate.
+
+PR285 can now be marked ready for independent review against unchanged current
+main. Its two baseline check blockers are repaired. P237 remains foreign,
+active and unmerged; preserve both runtime intents when its branch later joins.
+No live workflow needs unfinished P237 source to qualify this PR.

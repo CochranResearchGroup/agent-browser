@@ -2190,16 +2190,22 @@ fn main() {
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
 
     if has_help {
-        if let Some(cmd) = clean.first() {
+        // Help switches select this read-only path, never a command subcommand.
+        let help_args: Vec<String> = clean
+            .iter()
+            .filter(|arg| !matches!(arg.as_str(), "--help" | "-h"))
+            .cloned()
+            .collect();
+        if let Some(cmd) = help_args.first() {
             // Reuse read-only command parsing for unsupported subcommands.
             // Explicit stdin modes must never consume input merely for help.
-            if clean.len() > 1
-                && !clean
+            if help_args.len() > 1
+                && !help_args
                     .iter()
                     .any(|arg| arg == "--stdin" || arg == "--password-stdin")
             {
                 if let Err(error @ ParseError::UnknownSubcommand { .. }) =
-                    parse_command(&clean, &flags)
+                    parse_command(&help_args, &flags)
                 {
                     let message = format!(
                         "{}\nUse agent-browser {cmd} --help for supported subcommands.",
@@ -2216,7 +2222,7 @@ fn main() {
             // Help is read-only. Reject unsupported paths before falling back
             // to a broad command listing, and focus profile creation help.
             if cmd == "runtime" {
-                if let Some(subcommand) = clean.get(1) {
+                if let Some(subcommand) = help_args.get(1) {
                     if subcommand == "create" {
                         print_command_help("runtime create");
                         return;

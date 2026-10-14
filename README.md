@@ -779,6 +779,10 @@ agent-browser screenshot page.png
 agent-browser close
 ```
 
+Command help is local and read-only: `agent-browser service --help` and
+`agent-browser service -h` succeed without starting a browser or changing
+Service State. Unsupported commands and subcommands return typed errors.
+
 ### Traditional Selectors (also supported)
 
 ```bash

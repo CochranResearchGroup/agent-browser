@@ -6733,6 +6733,9 @@ Examples:
             r##"
 agent-browser service - Inspect service-mode state
 
+Use service --help or service -h for local help without starting a browser
+or rewriting Service State. Unsupported subcommands remain typed errors.
+
 Usage:
   agent-browser service state validate --path <absolute-path> --json
   agent-browser service status [--full-tab-history]
