@@ -7090,6 +7090,8 @@ Workflow:
   Configure AGENT_BROWSER_PUBLIC_ORIGIN on the MCP server for HTTPS handoffs.
   Use browser_discover only when advanced metadata is needed.
   category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
+  Software login-playbook composes these routines with trusted shared auth-helper custody.
+  browser_tab list observes owned popup children; login continuation verifies new destinations.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.

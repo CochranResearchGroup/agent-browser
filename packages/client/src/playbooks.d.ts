@@ -24,6 +24,8 @@ export interface RoutineResult {
   observationElapsedMs: number;
 }
 export function createPlaybookClient(callTool: CallTool): {
+  listTabs(taskId:string):Promise<{taskId:string;currentTabId:string;tabs:Array<{tabId:string}>}>;
+  selectTab(taskId:string,tabId:string):Promise<unknown>;
   discover(operation?: 'siteguides' | 'inspect_guide' | 'verify_login'): Promise<unknown>;
   listGuides(taskId: string): Promise<{guides: string[]}>;
   inspectGuide(taskId: string, guideId: string): Promise<unknown>;

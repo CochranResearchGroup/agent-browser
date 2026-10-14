@@ -54,3 +54,25 @@ observations and synthetic fixtures before relying on it for a real account.
 Remote View supplies desktop interaction; shared auth helpers supply private
 credential/MFA operations. Session verification alone does not prove either
 provider integration or completed login automation.
+
+## Compose private login
+
+`@agent-browser/client/login-playbook` exports `createLoginPlaybook` with an
+existing routine client, a trusted auth-helper callback and a durable metadata
+checkpoint store. It uses request_login, inspect_request and authenticate;
+credentials and MFA values remain inside the helper's receiving adapter.
+
+Each advance returns the next actionable state. Preserve the original scope,
+task and expiry when continuing. The adapter records intent before submission
+and inspects the original request after a timeout or restart. It never blindly
+resubmits an uncertain login. Completion requires helper captureState ready
+plus current SiteGuide evidence for the intended account and company.
+
+The owned dummy fixture qualifies actual helper-source private filling and a
+guarded human-MFA wait. Independent Remote View capture suppression, actual
+LastPass/passkeys, automated MFA providers and installed helper readiness are
+separate capability or qualification gaps. Task tab listing attributes live
+popup opener chains through the existing owner. After private capture is ready,
+the adapter verifies new owned destinations and continues in the sole matching
+page. It preserves peer tabs and refuses ambiguous destinations. Extension-created
+tabs without an attributable opener still need a producer target-binding contract.

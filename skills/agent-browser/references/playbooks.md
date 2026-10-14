@@ -70,3 +70,59 @@ explicit 1 through 60000 ms bound. Task/tab identity is rechecked after reading.
 Remote View owns desktop effects. Shared auth helpers own private credential
 and MFA operations. These verification calls do not establish helper readiness,
 real login acceptance or passkey support.
+
+## Private login composition
+
+The supported software adapter composes existing verification and shared helper
+operations without moving credentials into the client:
+
+```js
+import {createLoginPlaybook} from '@agent-browser/client/login-playbook';
+const login = createLoginPlaybook({
+  browser: playbooks,
+  helper: callTrustedAuthHelper,
+  checkpoints: durableMetadataStore,
+});
+const result = await login.advance({
+  taskId, guideId, accountRef, organizationRef,
+  scope: {person, tenant, account, origin, source, capabilities: ['login']},
+  expiresAt,
+});
+```
+
+`helper` calls the shared producer's request_login, inspect_request and
+authenticate operations and returns their sanitized structured summary. Its
+trusted receiving configuration must bind this exact live task and page.
+The store implements asynchronous load(key) and save(key, checkpoint); save
+must durably complete before returning. Checkpoints contain scope, task/page
+binding and request metadata, never credential or challenge values. Preserve
+the same inputs, including expiresAt, when resuming a checkpoint.
+
+`approval_required` waits for the shared helper's approved request. After a
+submission attempt, each advance inspects that request. A missing response,
+30-second helper timeout or restart yields helper_running_or_uncertain and
+effectState unknown; never create another request or resubmit to recover it.
+Completed helper authentication also requires captureState ready and fresh
+receiving verification. A held capture, changed task target or wrong company
+cannot produce playbook completion. Unsupported extension/passkey methods and
+helper absence produce waiting states with no submission.
+An uncertain terminal helper request with capture ready and no inputAttemptedAt
+proves that private input did not begin. It yields password_source_unavailable;
+check the configured source and password-manager unlock state in the helper.
+The current producer intentionally does not disclose whether the source was
+locked, absent or otherwise unavailable. Exact lock-state detection remains a
+producer capability gap; the client does not infer it from a failed login.
+
+Configure privacy at the producer and every observer before using private
+input. The current synthetic qualification uses actual helper source and a
+dummy credential, guarded client reads, no viewer/recorders/watches, and human
+MFA simulation. Remote View currently lacks a provider-wide privacy hold; the
+adapter does not claim suppression of independent captures or viewer streams.
+Task tab listing observes live opener chains through the existing browser owner.
+After helper capture is ready, the adapter checks newly attributed task tabs for
+the intended receiving account/company. One match becomes the continued task
+page; multiple matches require adaptation. Existing peer and pre-login tabs are
+excluded. This supports attributable site/password-manager popups. Extension
+tabs with no attributable opener require a producer target-binding capability;
+the system never guesses ownership from a URL. Real LastPass, automated MFA and
+installed helper readiness retain their separate qualification requirements.

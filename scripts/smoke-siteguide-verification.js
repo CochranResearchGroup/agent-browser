@@ -46,6 +46,16 @@ try {
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
  const completed=await software.verifyLogin({taskId:alice.taskId,guideId:'bill-fixture',accountRef:'demo-account',organizationRef:'demo-company'});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
+ if(process.env.AGENT_BROWSER_SMOKE_POPUP_ATTRIBUTION==='1') {
+  const opened=await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`window.open(${JSON.stringify(origin+'/password-manager-destination')},'fixture-login-destination')!==null`}});
+  assert.equal(opened.result,true,'Synthetic popup was created');
+  const tabs=await call('browser_tab',{taskId:alice.taskId,operation:'list'});
+  assert.equal(tabs.tabs.length,2,'Password-manager destination must be attributed to the original task');
+ }
+ if(process.env.AGENT_BROWSER_SMOKE_AUTH_HELPER_SOURCE) {
+  const {runAuthFixture}=await import('./siteguide-auth-fixture.js');
+  await runAuthFixture({context,software,taskId:alice.taskId,origin});
+ }
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'document.querySelector("#application").setAttribute("data-company","wrong-company")'}});
  const wrong=await verify();assert.equal(wrong.status,'failed');assert.equal(wrong.reasonCode,'organization_mismatch');
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'const select=document.querySelectorAll.bind(document); document.querySelectorAll=(...args)=>{const end=performance.now()+25;while(performance.now()<end){};return select(...args)}'}});

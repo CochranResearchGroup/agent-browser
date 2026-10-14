@@ -30,6 +30,10 @@ export function createPlaybookClient(callTool) {
     taskId, action: 'playbook', params: {operation, ...params},
   });
   return {
+    /** @param {string} taskId */
+    listTabs: taskId => invoke(callTool,'browser_tab',{taskId,operation:'list'}),
+    /** @param {string} taskId @param {string} tabId */
+    selectTab: (taskId,tabId) => invoke(callTool,'browser_tab',{taskId,operation:'select',tabId}),
     /** @param {string} [operation] */
     discover: operation => invoke(callTool, 'browser_discover', {
       category: 'playbooks', ...(operation ? {operation} : {}),

@@ -846,6 +846,16 @@ the complete agent, operator, reconnect, and troubleshooting workflows.
 
 ## SiteGuides and website routines
 
+Private login composition is available through
+`@agent-browser/client/login-playbook`. Supply existing SiteGuide routines, the
+trusted shared auth-helper connection and a durable metadata checkpoint store.
+It persists submission custody and reconciles the same request after an unknown
+result. See the routine guide below for observer privacy requirements and current
+helper/provider qualification gaps.
+Task tab listing attributes live popup opener chains. Private login continuation
+checks new task-owned destinations for the intended account/company while
+preserving peers and pre-login tabs.
+
 A SiteGuide describes website states and receiving identity checks. Agents and
 software invoke the same routines in an existing browser task. Discover the
 focused interface with `browser_discover({category:"playbooks"})`, then request

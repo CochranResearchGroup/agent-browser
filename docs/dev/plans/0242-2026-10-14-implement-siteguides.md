@@ -25,8 +25,14 @@ completion to source tests, advertisements or fixture-only simulations.
 Reuse the clean primary checkout from fetched origin/main. Preserve foreign
 P237 dashboard and enrollment worktrees and all candidates. P242 owns new
 playbook adapters, bounded MCP/catalog extensions, matching public client,
-CLI/help/README/skills/MDX/docs and synthetic fixtures. P237 retains dashboard
-and browser/tab/handoff lifecycle. Consume its existing task interfaces.
+CLI/help/README/skills/MDX/docs and synthetic fixtures. P237 retains dashboard and its existing lifecycle/handoff work. P242 is the
+primary writer for the narrow observed-popup task-ownership contract required
+by ticket273: a pure method on the existing manager, one runtime observation
+adapter, host publication and existing MCP tab-list consumption. These overlap
+browser_session_host.rs and browser_session_runtime.rs with P237. Preserve its
+dirty checkout and establish this provider contract on P242 before dependent
+recipe use; any later integration with P237 must reconcile the narrow provider
+change explicitly. No second task owner or viewer is introduced.
 
 The review fixed point is cb765a7be2719383a54fb849eac9691ce0197b06, recorded under operator-authorized implement-spec
 execution. One broad Standards/Spec review and one bounded remediation pass.
@@ -38,8 +44,8 @@ accepted prototype are locators and design references, not runtime proof.
 | Ticket | Blocked by | State | Primary ownership | Evidence |
 | --- | --- | --- | --- | --- |
 | #272 BILL existing-session verification | none | validated | primary, public playbook/MCP/client adapters | installed generation 0.28.0-bf895a5c9b61; receipts below |
-| #273 BILL helper login/MFA | #272 | pending | primary, auth-helper adapter | helper discovery below |
-| #274 QBO same contracts | #273 | pending | primary, QBO guide and fixtures | none |
+| #273 BILL helper login/MFA | #272 | validated | primary, client composition and narrow popup-owner provider contract | installed synthetic + actual helper-source dummy; limits below |
+| #274 QBO same contracts | #273 | running | primary, QBO guide and fixtures | none |
 | #275 guide development/adaptation | #274 | pending | primary, guide tooling/skills/client acceptance | none |
 | #276 Reddit retrieval | #275 | pending | primary, retrieval guide/routine/fixtures | none |
 
@@ -116,9 +122,52 @@ neither gates captures, OCR, watchers or viewers. General private-input provider
 acceptance remains a named dependency. Owned synthetic acceptance must omit
 viewers/watchers/recorders and guard every fixture read through authPrivacy.
 
+## Ticket273 validation receipt
+
+The supported login-playbook client composes the existing routine and actual
+request_login/inspect_request/authenticate protocol, with durable metadata
+custody before submission. A restart inspects the same request. Source-unavailable
+receiving readback with capture ready and no input marker proves no private
+input. Exact locked-vs-unavailable disclosure is absent from the producer;
+password_source_unavailable is actionable without inventing that fact.
+
+Task tab list now admits provider-observed popup opener chains through the
+existing BrowserSessionManager and CAS publication. Peer, unknown-opener and
+pre-existing tab claims are excluded. Known owned popups attach through the
+existing browser transport. One fresh account/company-matching new destination
+continues the original task; ambiguous matches require adaptation.
+
+Focused source gates: strict Clippy /tmp/p242-273-clippy.log; format
+/tmp/p242-273-fmt.log; host tests /tmp/p242-273-host-tests.log (6 pass);
+model integration /tmp/p242-273-model-tests.log (34 pass); public package exports
+/tmp/p242-273-exports.log; client typing/contracts /tmp/p242-273-client-final.log;
+docs /tmp/p242-273-docs.log; links /tmp/p242-273-links.log. Existing generated
+client checks are retained because no generated helper or generator changed.
+
+Red receipts preserve actual popup non-attribution, then attached-page lookup
+failure: /tmp/p242-popup-attribution-probe.log and
+/tmp/p242-popup-helper-green-attempt.log. The focused custody oracle also failed
+before the overflow atomicity fix: /tmp/p242-popup-atomic-red.log, then green.
+Locked-source first assertion incorrectly expected immediate knowledge from an
+error response; retained /tmp/p242-273-locked-source.log. Corrected fixture
+inspects the same request before claiming no effect;
+/tmp/p242-273-locked-source-reconciled.log passes with zero residue.
+
+Final installed candidate 0.28.0-6e2aa0ccd463, SHA256
+6e2aa0ccd4631d65a826527cb9a30bf288c5d92d76ff49ba5c961b1ced0f9ed1;
+/tmp/p242-273-install.json and /tmp/p242-273-installed-green.log prove isolated
+publication and the actual-source dummy private fill, human MFA wait, popup
+continuation, capture hold, no resubmission, peer preservation and zero residue.
+/tmp/p242-helper-source-identity.json pins the four actual draft helper modules.
+The producer is source-qualified in this constrained fixture, not a claimed
+installed LastPass or stock-desktop acceptance. Provider-wide observer privacy,
+exact password-manager locked/presence discrimination, passkeys and un-attributable
+extension targets are named producer capabilities. They do not manufacture live
+acceptance or prevent this approved provider-free/source delivery. Tracker
+closure, broad final review and production publication remain separate.
+
 ## Next action
 
-Advance ticket273 using supported client composition and exact helper request
-custody. Qualify a constrained installed dummy workflow with actual helper
-source, separately from unavailable provider-wide privacy and real MFA methods.
-Keep all five tickets in scope; do not claim full-spec readiness from ticket272.
+Implement QBO with the same routine, private helper and task contracts; exercise
+different semantic controls, company identity, identifier/password variants and
+asynchronous destination creation. Preserve the full five-ticket objective.

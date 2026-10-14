@@ -82,6 +82,12 @@ The CLI remains available for independent diagnostics and supported maintenance.
 
 ## SiteGuide routines
 
+Software can compose verification and private helper login with
+`@agent-browser/client/login-playbook`. Persist its metadata checkpoint and
+inspect the same helper request after uncertainty; never resubmit a lost login.
+Task tab listing discovers attributable popup children. Login continuation checks
+new owned destinations after the helper's capture barrier is ready.
+
 For reusable website work, discover `category:"playbooks"` and run the selected
 routine through `browser_command` in the existing task. `verify_login` checks
 intended account/company from current page evidence; waiting or adaptation is
