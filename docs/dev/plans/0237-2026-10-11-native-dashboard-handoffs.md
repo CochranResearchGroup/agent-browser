@@ -615,6 +615,18 @@ The operator approved the acceptance seam and seven-ticket breakdown, then invok
 
 Native selection integration preserves the product seam: the native Remote View application assignment is the current desktop authority; it does not require a second Agent Browser viewer lease. The implementation ledger retains a public RED where the owner-created native task is rejected for missing legacy routeId. The bounded repair gives signed dashboard focus an explicit native-assignment scope, joined to exact managed launch custody, current provider lifecycle/viewing generations, profile view policy and current dashboard role. Legacy controller-route focus retains its existing independent checks. No new viewer, auth ceremony, installed publication or provider mutation is authorized by this source repair.
 
+Pressure retirement uses the provider's durable native admission fence from
+Remote View checkpoint22775a23ea1271e60838b4d95b9992e7533a1e5d.
+Typed reads and mutations validate the complete current assignment target,
+native viewing generation, slot revision and exact operation identity. This
+protocol adapter does not own browser effects or infer close authority from a
+provider observation. The existing Browser Runtime SQLite owner must persist
+operation intent before prepare, retain unknown effects, and complete the same
+fence only after the exact target/browser close is conclusively settled.
+Guard destruction and transport timeout must preserve native exclusion.
+Provider source qualification is separate from application custody, actual
+Chrome pressure/recovery acceptance and canonical provider integration.
+
 Native framing preserves Remote View's existing boundary: its ordinary viewer
 uses frame-ancestors none; workspace=true permits same-origin embedding. The
 public read-only locator selects that existing renderer mode for iframe

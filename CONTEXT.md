@@ -86,6 +86,15 @@ capacity preflight precedes durable intent; failure there creates no process
 claim. Failure after intent admission still requires exact reconciliation.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
 
+**Native idle retirement fence**:
+The provider's durable exclusion of new native viewer admission during one
+exact application retirement operation. Its monotonic slot revision and
+operation digest prevent stale requests from borrowing another operation.
+A typed observation or prepared receipt is not browser-close authority.
+Application custody must precede preparation and retain unknown effects;
+neither a timeout nor dropping a local guard settles the native fence.
+Typed contract qualification remains separate from automatic retirement adoption.
+
 **Request provenance**:
 The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.
 _Avoid_: Log message, caller label, lane selector

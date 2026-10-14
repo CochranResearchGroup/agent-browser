@@ -17,6 +17,9 @@ pub enum RemoteViewApplicationTransportError {
     OutcomeUnknown,
     /// Exact provider response proves the retained view grant is terminal.
     ViewGrantTerminal,
+    /// Exact prepare rejection proves no new retirement fence was created by
+    /// this request. It does not settle an earlier application close attempt.
+    IdleRetirementDeferred,
 }
 
 pub trait RemoteViewApplicationTransport {

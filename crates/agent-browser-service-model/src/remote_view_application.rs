@@ -48,6 +48,28 @@ pub enum RemoteViewApplicationRequest {
         assignment_id: String,
         expected_generation: u64,
     },
+    ReadIdleRetirement {
+        assignment_id: String,
+        expected_generation: u64,
+        expected_viewing_generation: u64,
+    },
+    PrepareIdleRetirement {
+        assignment_id: String,
+        expected_generation: u64,
+        expected_viewing_generation: u64,
+        idempotency_key: String,
+        expected_revision: u64,
+        expected_retirement: crate::RemoteViewDesktopViewingRetirement,
+    },
+    CompleteIdleRetirement {
+        assignment_id: String,
+        expected_generation: u64,
+        expected_viewing_generation: u64,
+        idempotency_key: String,
+        expected_retirement: crate::RemoteViewDesktopViewingRetirement,
+        fence: crate::RemoteViewIdleRetirementFence,
+        effects_settled: bool,
+    },
     LaunchEnvironment {
         assignment_id: String,
         expected_generation: u64,

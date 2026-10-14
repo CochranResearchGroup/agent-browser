@@ -47,6 +47,7 @@ mod remote_view_application_mutation;
 mod remote_view_application_records;
 mod remote_view_application_response;
 mod remote_view_consumer;
+mod remote_view_idle_retirement;
 mod remote_view_native_handoff;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
@@ -262,6 +263,11 @@ pub use remote_view_consumer::{
     RemoteViewViewerSessionState, RemoteViewViewerSessionStatus, RemoteViewViewingRoute,
     REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
     REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
+};
+pub use remote_view_idle_retirement::{
+    RemoteViewIdleRetirementFence, RemoteViewIdleRetirementIntent, RemoteViewIdleRetirementRead,
+    RemoteViewIdleRetirementReceipt, RemoteViewIdleRetirementReceiptState,
+    RemoteViewIdleRetirementState, REMOTE_VIEW_IDLE_RETIREMENT_SOURCE_CHECKPOINT,
 };
 pub use remote_view_native_handoff::{
     RemoteViewNativeHandoffObservation, RemoteViewNativeHandoffUse, RemoteViewNativeHandoffUseRead,
