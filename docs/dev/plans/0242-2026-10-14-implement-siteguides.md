@@ -46,8 +46,8 @@ accepted prototype are locators and design references, not runtime proof.
 | #272 BILL existing-session verification | none | validated | primary, public playbook/MCP/client adapters | installed generation 0.28.0-bf895a5c9b61; receipts below |
 | #273 BILL helper login/MFA | #272 | validated | primary, client composition and narrow popup-owner provider contract | installed synthetic + actual helper-source dummy; limits below |
 | #274 QBO same contracts | #273 | validated | primary, QBO guide and shared fixtures | installed identifier/password variants; receipt below |
-| #275 guide development/adaptation | #274 | running | primary, guide tooling/skills/client acceptance | none |
-| #276 Reddit retrieval | #275 | pending | primary, retrieval guide/routine/fixtures | none |
+| #275 guide development/adaptation | #274 | validated | primary, frozen plans and versioned candidate workflow | installed authoring/private-flow receipts below |
+| #276 Reddit retrieval | #275 | running | primary, retrieval guide/routine/fixtures | none |
 
 Readiness requires the predecessor validated on this branch, not issue closure.
 For every slice retain command, result, exact source/binary and installed identity.
@@ -193,8 +193,55 @@ wrong realm, freshness, controller restart, peer preservation and zero residue.
 Earlier host/model custody gates remain causally valid because this slice did
 not change them. Provider/helper production gaps from ticket273 remain explicit.
 
+## Ticket275 validation receipt
+
+prepare_login freezes guide/task/control/state/freshness evidence; validate_plan
+rejects changed evidence before private input. The supported login client retains
+its helper request/action identity and checks the plan before credential retrieval.
+A stale observation of unchanged controls can refresh without another grant.
+Password preparation requires a masked input; fresh preparation cannot bless
+missing controls or an unmasked replacement.
+
+The authoring fixture validates a v2 proposal through a candidate MCP client
+in the original task and proves canonical bytes/registry remain unchanged.
+Controller switch during MFA preserves checkpoint/action identity; lost helper
+acknowledgement reconciles receiving state without another retrieval/submission.
+
+Retained reds: /tmp/p242-authoring-red.log, /tmp/p242-authoring-native-red.log,
+/tmp/p242-authoring-preparation-red.log and
+/tmp/p242-275-unmasked-preparation-red.log. MDX prose braces failed parsing in
+/tmp/p242-275-docs.log; inline-code correction passed. Final gates:
+/tmp/p242-275-final-fmt.log, /tmp/p242-275-final-clippy.log,
+/tmp/p242-275-final-client.log, /tmp/p242-275-final-docs.log and
+/tmp/p242-275-links.log. MCP metadata tests passed 132 in
+/tmp/p242-275-mcp-tests.log; mask-only predicate change is separately exercised
+by public preparation/authoring fixtures.
+
+Qualification correction: earlier private-flow fixtures let the receiving
+adapter insert authenticated DOM. Those receipts establish protocol traversal,
+not independent credential delivery. The strengthened website independently
+checks an opaque runtime-generated dummy password and username, presents its
+MFA challenge and opens the receiving page only on human confirmation. The
+adapter no longer writes authenticated DOM. Producer/final results are checked
+for absence of that opaque secret. /tmp/p242-275-wrong-private-credential.log
+proves a wrong private password produces no false completion and leaves zero
+owned process residue. These stronger receipts supersede that limitation for
+all three preceding tickets; earlier receipts remain retained.
+
+Final installed candidate 0.28.0-157f9ec751df, SHA256
+157f9ec751df7df182338f7dc7d062eac1a218b915fcd4e3bf9ed7681be6e665.
+/tmp/p242-275-final-install.json and installed public-client receipts
+/tmp/p242-275-installed-bill-authoring-ack.log,
+/tmp/p242-275-installed-qbo-identifier.log,
+/tmp/p242-275-installed-qbo-password.log pass independent website login,
+authoring/adaptation, source-helper private filling, human MFA, controller
+continuation, injected lost acknowledgement, owned popup, exact company/realm,
+peer preservation and zero residue. Default MCP stays at 12 tools.
+Real credentials, installed helper production readiness and stock desktop/viewer
+privacy remain unclaimed provider-qualified work.
+
 ## Next action
 
-Implement ticket275 frozen login preparation and validation, then demonstrate
-changed-control rejection, candidate guide revision without canonical rewrite,
-fixture qualification and continuation through one installed supported client.
+Implement the final non-login Reddit retrieval slice with bounded items,
+pagination/scroll and distinct no-results/malformed/login/blocked/partial states.
+Then run the one frozen whole-branch Standards/Spec review and bounded remediation.

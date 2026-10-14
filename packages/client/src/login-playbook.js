@@ -46,12 +46,19 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
             return result('waiting','authentication_method_unsupported','no_effect');
           }
           if(!['identifier_required','password_required','login_required','mfa_required'].includes(observed.reasonCode))return observed;
+          let preparedPlan;
+          if(browser.prepareLogin) {
+            const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
+            if(!preparation.plan)return preparation;
+            preparedPlan=preparation.plan;
+          }
           let requested;
           try {requested=await helper('request_login',{...scope,expiresAt});}
           catch {return result('waiting','helper_unavailable','no_effect');}
           if(!matches(requested))throw Error('helper_binding_mismatch');
           checkpoint={binding,requestId:requested.requestId,attempted:false,
             profileId:observed.profileId,browserId:observed.browserId,tabId:observed.tabId,
+            ...(preparedPlan?{preparedPlan}:{}),
             knownTabIds:browser.listTabs ? (await browser.listTabs(taskId)).tabs.map(tab=>tab.tabId) : [observed.tabId]};
           await checkpoints.save(key,checkpoint);
         }
@@ -76,6 +83,18 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         }
         if(summary.state!=='approved')return result('failed','helper_state_invalid','no_effect',checkpoint);
         if(summary.expiresAt<=Date.now())return result('waiting','helper_grant_expired','no_effect',checkpoint);
+        if(checkpoint.preparedPlan && browser.validatePlan) {
+          let validation=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:checkpoint.preparedPlan});
+          if(validation.reasonCode==='plan_stale' && browser.prepareLogin) {
+            const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
+            if(preparation.plan && preparation.plan.guideDigest===checkpoint.preparedPlan.guideDigest &&
+              preparation.plan.controlFingerprint===checkpoint.preparedPlan.controlFingerprint) {
+              checkpoint={...checkpoint,preparedPlan:preparation.plan};await checkpoints.save(key,checkpoint);
+              validation=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:preparation.plan});
+            }
+          }
+          if(validation.status!=='completed')return {...validation,routine:'login',requestId:checkpoint.requestId,actionId:checkpoint.requestId,effectState:'no_effect'};
+        }
         // Persist before any call that can submit. Failure to save makes no input.
         checkpoint={...checkpoint,attempted:true};
         await checkpoints.save(key,checkpoint);
@@ -124,12 +143,14 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
             }
           }
           return {...observed,routine:'login',requestId:current.requestId,
+            actionId:current.requestId,
             effectState:observed.status==='completed'?'verified':'unknown'};
         }
         /** @param {string} status @param {string} reasonCode @param {string} effectState @param {Checkpoint} [current] */
         function result(status,reasonCode,effectState,current) {
           return {schemaVersion:'agent-browser.routine-result.v1',routine:'login',taskId,guideId,
             status,reasonCode,effectState,...(current?{requestId:current.requestId,
+              actionId:current.requestId,
               profileId:current.profileId,browserId:current.browserId,tabId:current.tabId}:{})};
         }
       } finally {busy.delete(key);}

@@ -90,3 +90,25 @@ credential values and MFA material never appear in a guide. The owned QBO
 fixture qualifies identifier-first and password-first variants, human MFA waiting,
 asynchronous popup continuation and exact realm verification. Starter controls
 require current site evidence before real-account use.
+
+## Prepare actions and propose guide versions
+
+Discover prepare_login and validate_plan in the same focused playbooks category.
+The client methods `prepareLogin(options)` and `validatePlan({...options, plan})`
+use the existing task. Preparation freezes reviewed guide identity, control
+fingerprint, expected state and freshness. A plan_prepared result means that
+preparation completed; receiving login has not been verified.
+
+The private login adapter validates this plan before the helper retrieves a
+credential. Changed controls produce adaptation_required with no input. A stale
+observation of unchanged controls can refresh under the same request. Controller
+changes preserve the checkpoint and helper request/action identity.
+Password preparation requires a masked input; an unmasked replacement cannot
+become an authorized action merely by observing it afresh.
+
+Develop a guide from owned synthetic observations and explicit receiving
+assertions. When the site changes, place a proposed version outside the shared
+registry and test it through a candidate client configured with that directory.
+The authoring fixture demonstrates this with a changed password control and a
+v2 proposal, preserving the original task and canonical guide. Publication uses
+ordinary reviewed source changes; successful improvisation does not publish.

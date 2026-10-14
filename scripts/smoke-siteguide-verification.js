@@ -23,8 +23,8 @@ const accountRef=qbo?'intuit-fixture-user':'demo-account';
 const organizationRef=qbo?'realm-fixture-42':'demo-company';
 const appId=qbo?'qbo-company':'application';
 const companyAttribute=qbo?'data-realm-id':'data-company';
-const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-realm-id="${organizationRef}"><span id="qbo-user" data-user="${accountRef}">${accountRef}</span></main>`:
- `<main id="application" data-account="${accountRef}" data-company="${organizationRef}">${accountRef}</main>`;
+const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-realm-id="${organizationRef}"><span id="qbo-user" data-user="${accountRef}">${accountRef}@example.invalid</span></main>`:
+ `<main id="application" data-account="${accountRef}" data-company="${organizationRef}">${accountRef}@example.invalid</main>`;
 const controls=qbo?{identifier:'input[name=userid]',password:'input[name=password]',submit:'#intuit-signin',accountScope:'[data-auth-account]',identifierSubmit:'#intuit-next'}:
  {identifier:'#username',password:'#password',submit:'#submit',accountScope:'[data-auth-account]'};
 const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(appHtml);});
@@ -57,16 +57,22 @@ try {
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
  const completed=await software.verifyLogin({taskId:alice.taskId,guideId,accountRef,organizationRef});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
+ if(process.env.AGENT_BROWSER_SMOKE_GUIDE_AUTHORING==='1') {
+  const {runAuthoringFixture}=await import('./siteguide-authoring-fixture.js');
+  await runAuthoringFixture({call,software,taskId:alice.taskId,guide,context,directory,appHtml});
+ }
  if(process.env.AGENT_BROWSER_SMOKE_POPUP_ATTRIBUTION==='1') {
   const opened=await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`window.open(${JSON.stringify(origin+'/password-manager-destination')},'fixture-login-destination')!==null`}});
   assert.equal(opened.result,true,'Synthetic popup was created');
   const tabs=await call('browser_tab',{taskId:alice.taskId,operation:'list'});
   assert.equal(tabs.tabs.length,2,'Password-manager destination must be attributed to the original task');
  }
+ let negative=false;
  if(process.env.AGENT_BROWSER_SMOKE_AUTH_HELPER_SOURCE) {
   const {runAuthFixture}=await import('./siteguide-auth-fixture.js');
-  await runAuthFixture({context,software,taskId:alice.taskId,origin,guideId,accountRef,organizationRef,appHtml,qbo});
+  negative=(await runAuthFixture({context,software,taskId:alice.taskId,origin,guideId,accountRef,organizationRef,appHtml,qbo}))?.negative===true;
  }
+ if(!negative){
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`document.querySelector(${JSON.stringify('#'+appId)}).setAttribute(${JSON.stringify(companyAttribute)},"wrong-company")`}});
  const wrong=await verify();assert.equal(wrong.status,'failed');assert.equal(wrong.reasonCode,'organization_mismatch');
  await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:'const select=document.querySelectorAll.bind(document); document.querySelectorAll=(...args)=>{const end=performance.now()+25;while(performance.now()<end){};return select(...args)}'}});
@@ -76,6 +82,7 @@ try {
  const login=await verify();assert.equal(login.status,'waiting');assert.equal(login.reasonCode,'password_required');
  assert(JSON.stringify(await call('browser_snapshot',{taskId:bob.taskId})).includes('Peer work preserved'));
  console.log('Public existing-session verification, wrong company, login-required and peer-preserving replay passed');
+ }
 } finally {
  try{for(const taskId of tasks.reverse())await call('browser_close',{taskId});}finally{await cleanup();}
 }

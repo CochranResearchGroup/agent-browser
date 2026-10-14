@@ -10,7 +10,7 @@ window at a login page is not an authenticated intended account/company.
 2. Request `operation:"verify_login"` for its exact schema.
 3. `browser_command({taskId,action:"playbook",params:{operation:"verify_login",guideId,accountRef,organizationRef}})` verifies the current task.
 
-`completed` means both intended identities match the current authenticated
+For verify_login, `completed` means both intended identities match the current authenticated
 application evidence. `waiting` identifies an observed login/MFA state;
 `adaptation_required` identifies a stale observation, changed task target or
 unrecognized site; `failed` identifies wrong origin/account/company or a blocked
@@ -147,3 +147,40 @@ data-realm-id company marker. Identifier-first and password-first variants use
 one private helper contract; human MFA wait and asynchronous popup continuation
 retain the original task. Shared routines contain no BILL URL or company-path
 assumption. Real Intuit controls and account acceptance remain separately scoped.
+
+## Develop and adapt a guide
+
+1. Bind an owned synthetic browser task and define exact success: origin,
+   application state, account and company. Observe its variants through the
+   ordinary task interface. Never copy private recordings or credentials.
+2. Write a versioned guide with state selectors, receiving assertions and
+   semantic controls. Use the fixture directory, not a tenant-state file in
+   the product repository. Implement stable subtasks with normal code.
+3. Call prepareLogin with the same verification options. A plan_prepared result
+   completes preparation, not login. The plan freezes guide digest, task binding,
+   control fingerprint, expected state and bounded observation age.
+4. Pass the unchanged plan to validatePlan before input. A changed guide,
+   control, state, task or stale plan yields adaptation_required and no effect.
+   The login adapter enforces this before the helper retrieves any credential.
+   It can refresh only stale observations of unchanged controls under the same
+   helper request. A plan is metadata, never an access grant.
+   Password preparation requires an input of type password; fresh evidence
+   never authorizes filling an unmasked replacement.
+5. Observe changed controls afresh and propose a new guideId version outside
+   the configured shared registry. Run a candidate client with that proposal
+   directory against the same owned fixture task; verify the expected states
+   and outcome. Keep the canonical guide unchanged during adaptation.
+6. Publish the tested version through the normal source review/version path.
+   A successful task improvisation never silently rewrites shared knowledge.
+
+The executable example is scripts/siteguide-authoring-fixture.js. It prepares a
+BILL login, changes its password control, proves the old action is invalid,
+tests a v2 proposal through a candidate MCP client in the same task and proves
+that canonical bytes and registry membership are unchanged. The shared QBO
+fixture exercises the same guide schema with different controls and realm identity.
+
+To continue with an agent, preserve the durable login checkpoint and its helper
+requestId/actionId. The next controller calls the same advance method and
+inspects pending effect custody. During MFA waiting or after a lost response,
+the existing request is inspected; no new task, private store, viewer or login
+submission is created. Native Remote View remains the human handoff surface.

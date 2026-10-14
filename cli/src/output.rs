@@ -7093,6 +7093,7 @@ Workflow:
   Software login-playbook composes these routines with trusted shared auth-helper custody.
   browser_tab list observes owned popup children; login continuation verifies new destinations.
   BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
+  prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.

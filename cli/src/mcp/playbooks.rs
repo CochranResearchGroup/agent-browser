@@ -1,23 +1,35 @@
 //! Shared website routine discovery over the existing browser-task interface.
 //! This layer does not acquire a second browser or own credentials.
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 
 use super::JsonRpcError;
 
-pub(super) const OPERATIONS: &[&str] = &["siteguides", "inspect_guide", "verify_login"];
+pub(super) const OPERATIONS: &[&str] = &[
+    "siteguides",
+    "inspect_guide",
+    "verify_login",
+    "prepare_login",
+    "validate_plan",
+];
 
 pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
-    let properties = match operation {
+    let mut properties = match operation {
         "siteguides" => json!({}),
         "inspect_guide" => json!({"guideId":{"type":"string"}}),
-        "verify_login" => json!({"guideId":{"type":"string"},
+        "verify_login" | "prepare_login" | "validate_plan" => json!({"guideId":{"type":"string"},
             "accountRef":{"type":"string"},"organizationRef":{"type":"string"},
             "maxObservationAgeMs":{"type":"integer","minimum":1,"maximum":60000}}),
         _ => return Err(JsonRpcError::invalid_params("Unknown playbook operation")),
     };
+    if operation == "validate_plan" {
+        properties["plan"] =
+            json!({"type":"object","description":"The unchanged plan returned by prepare_login."});
+    }
     let required = match operation {
         "siteguides" => json!([]),
         "inspect_guide" => json!(["guideId"]),
+        "validate_plan" => json!(["guideId", "accountRef", "organizationRef", "plan"]),
         _ => json!(["guideId", "accountRef", "organizationRef"]),
     };
     Ok(json!({"type":"object","additionalProperties":false,
@@ -85,6 +97,37 @@ struct SiteGuide {
     organization: IdentityField,
     states: Vec<PageState>,
     controls: Option<LoginControls>,
+}
+
+/// A bounded observation plan is task-bound metadata, not an access grant.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PreparedLoginPlan {
+    plan_id: String,
+    guide_id: String,
+    guide_digest: String,
+    binding_digest: String,
+    control_fingerprint: String,
+    expected_state: String,
+    task_id: String,
+    profile_id: String,
+    browser_id: String,
+    tab_id: String,
+    prepared_at_ms: u64,
+    maximum_age_ms: u64,
+}
+
+fn digest(value: &impl Serialize) -> Result<String, JsonRpcError> {
+    Ok(hex::encode(Sha256::digest(
+        serde_json::to_vec(value).map_err(|_| fault("playbook_metadata_invalid"))?,
+    )))
+}
+
+fn now_ms() -> Result<u64, JsonRpcError> {
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| fault("playbook_clock_invalid"))?;
+    u64::try_from(elapsed.as_millis()).map_err(|_| fault("playbook_clock_invalid"))
 }
 
 fn fault(reason: &str) -> JsonRpcError {
@@ -274,10 +317,13 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         None => 10_000,
     };
     let binding = task_context(task_id)?;
+    let guide_digest = digest(&guide)?;
+    let binding_digest = digest(&json!([binding, account, organization]))?;
     let descriptor = json!({"origins":guide.allowed_origins,"authenticated":guide.authenticated_selector,
         "account":{"selector":guide.account.selector,"attribute":guide.account.attribute,"expected":account},
         "organization":{"selector":guide.organization.selector,"attribute":guide.organization.attribute,"expected":organization},
-        "states":guide.states.iter().map(|state|json!({"state":state.state,"selector":state.selector})).collect::<Vec<_>>()});
+        "states":guide.states.iter().map(|state|json!({"state":state.state,"selector":state.selector})).collect::<Vec<_>>(),
+        "controls":guide.controls});
     let script = format!(
         r#"(() => {{
         const guide = {descriptor};
@@ -293,10 +339,15 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         const applications = [...document.querySelectorAll(guide.authenticated)].filter(visible);
         const authenticated = applications.length === 1;
         const state = guide.states.find(state => [...document.querySelectorAll(state.selector)].some(visible));
+        const controlState = Object.entries(guide.controls || {{}}).filter(([,selector])=>typeof selector === 'string').map(([name,selector])=>{{
+            const elements = document.querySelectorAll(selector);
+            const element = elements.length === 1 ? elements[0] : null;
+            return {{name,count:elements.length,tag:element ? element.tagName : null,type:element && typeof element.type === 'string' ? element.type : null}};
+        }});
         return {{origin,originAllowed:true,authenticated,
             accountMatched:authenticated && matchIdentity(guide.account),
             organizationMatched:authenticated && matchIdentity(guide.organization),
-            state:state ? state.state : 'site_changed'}};
+            state:state ? state.state : 'site_changed',controlState}};
     }})()"#
     );
     let started = Instant::now();
@@ -310,7 +361,7 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         .get("result")
         .filter(|value| value.is_object())
         .ok_or_else(|| fault("playbook_observation_invalid"))?;
-    let (status, reason) = if current != binding {
+    let (mut status, mut reason) = if current != binding {
         ("adaptation_required", "task_target_changed")
     } else if started.elapsed().as_millis() > u128::from(maximum_age) {
         ("adaptation_required", "observation_stale")
@@ -332,10 +383,114 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
             _ => ("adaptation_required", "site_changed"),
         }
     };
+    let fingerprint = digest(&evidence["controlState"])?;
+    let mut prepared = None;
+    if operation == "prepare_login"
+        && status == "waiting"
+        && matches!(
+            reason,
+            "identifier_required" | "password_required" | "login_required"
+        )
+    {
+        let required = if reason == "identifier_required"
+            && guide
+                .controls
+                .as_ref()
+                .is_some_and(|controls| controls.identifier_submit.is_some())
+        {
+            vec!["identifier", "identifierSubmit", "accountScope"]
+        } else if reason == "identifier_required" {
+            vec!["identifier", "password", "submit", "accountScope"]
+        } else {
+            vec!["password", "submit", "accountScope"]
+        };
+        let masked = evidence["controlState"].as_array().is_some_and(|controls| {
+            controls.iter().any(|control| {
+                control["name"] == "password"
+                    && control["count"] == 1
+                    && control["tag"] == "INPUT"
+                    && control["type"] == "password"
+            })
+        });
+        let password_required = required.contains(&"password");
+        let ready = (!password_required || masked)
+            && guide.controls.is_some()
+            && evidence["controlState"].as_array().is_some_and(|controls| {
+                required.iter().all(|name| {
+                    controls
+                        .iter()
+                        .any(|control| control["name"] == *name && control["count"] == 1)
+                })
+            });
+        if !ready {
+            status = "adaptation_required";
+            reason = "prepared_controls_missing";
+        } else {
+            let mut plan = PreparedLoginPlan {
+                plan_id: String::new(),
+                guide_id: guide.guide_id.clone(),
+                guide_digest: guide_digest.clone(),
+                binding_digest: binding_digest.clone(),
+                control_fingerprint: fingerprint.clone(),
+                expected_state: reason.into(),
+                task_id: task_id.into(),
+                profile_id: binding["profileId"].as_str().unwrap_or_default().into(),
+                browser_id: binding["browserId"].as_str().unwrap_or_default().into(),
+                tab_id: binding["tabId"].as_str().unwrap_or_default().into(),
+                prepared_at_ms: now_ms()?,
+                maximum_age_ms: maximum_age,
+            };
+            plan.plan_id = digest(&plan)?;
+            prepared = Some(plan);
+            status = "completed";
+            reason = "plan_prepared";
+        }
+    }
+    if operation == "validate_plan" {
+        let mut plan: PreparedLoginPlan = serde_json::from_value(
+            params
+                .get("plan")
+                .cloned()
+                .ok_or_else(|| fault("playbook_plan_required"))?,
+        )
+        .map_err(|_| fault("playbook_plan_invalid"))?;
+        let supplied = std::mem::take(&mut plan.plan_id);
+        if supplied != digest(&plan)? || !(1..=60_000).contains(&plan.maximum_age_ms) {
+            return Err(fault("playbook_plan_invalid"));
+        }
+        if status != "failed" {
+            (status, reason) =
+                if plan.guide_id != guide.guide_id || plan.guide_digest != guide_digest {
+                    ("adaptation_required", "prepared_guide_changed")
+                } else if plan.binding_digest != binding_digest
+                    || plan.task_id != task_id
+                    || current != binding
+                    || binding["profileId"] != plan.profile_id
+                    || binding["browserId"] != plan.browser_id
+                    || binding["tabId"] != plan.tab_id
+                {
+                    ("adaptation_required", "task_target_changed")
+                } else if plan.control_fingerprint != fingerprint {
+                    ("adaptation_required", "prepared_controls_changed")
+                } else if evidence["state"] != plan.expected_state {
+                    ("adaptation_required", "prepared_state_changed")
+                } else if now_ms()?
+                    .checked_sub(plan.prepared_at_ms)
+                    .is_none_or(|age| age > plan.maximum_age_ms)
+                {
+                    ("adaptation_required", "plan_stale")
+                } else if started.elapsed().as_millis() > u128::from(maximum_age) {
+                    ("adaptation_required", "observation_stale")
+                } else {
+                    ("completed", "plan_current")
+                };
+        }
+    }
     let data = json!({"schemaVersion":"agent-browser.routine-result.v1","guideId":guide.guide_id,
-        "routine":"verify_login","status":status,"reasonCode":reason,"effectState":"no_effect",
+        "routine":operation,"status":status,"reasonCode":reason,"effectState":"no_effect",
         "taskId":task_id,"profileId":binding["profileId"],"browserId":binding["browserId"],"tabId":binding["tabId"],
-        "accountVerified":status=="completed","organizationVerified":status=="completed",
+        "accountVerified":reason=="authenticated","organizationVerified":reason=="authenticated",
+        "guideDigest":guide_digest,"plan":prepared,
         "observationElapsedMs":started.elapsed().as_millis()});
     Ok(super::tool_response_from_payload(
         "browser_command",

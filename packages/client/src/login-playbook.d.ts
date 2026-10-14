@@ -12,10 +12,13 @@ export interface Checkpoint {
   browserId:string;
   tabId:string;
   knownTabIds?:string[];
+  preparedPlan?:Record<string, unknown>;
   [field:string]:unknown;
 }
 export interface Dependencies {
   browser:{verifyLogin(options:VerifyLoginOptions):Promise<RoutineResult & Record<string, any>>;
+    prepareLogin?(options:VerifyLoginOptions):Promise<RoutineResult & Record<string, any>>;
+    validatePlan?(options:VerifyLoginOptions & {plan:Record<string, unknown>}):Promise<RoutineResult & Record<string, any>>;
     listTabs?(taskId:string):Promise<{tabs:Array<{tabId:string}>}>;
     selectTab?(taskId:string,tabId:string):Promise<unknown>};
   helper(operation:'request_login'|'inspect_request'|'authenticate',args:Record<string, unknown>):Promise<Record<string, any>>;

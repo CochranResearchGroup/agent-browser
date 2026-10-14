@@ -44,5 +44,9 @@ export function createPlaybookClient(callTool) {
     inspectGuide: (taskId, guideId) => run(taskId, 'inspect_guide', {guideId}),
     /** @param {VerifyLoginOptions} options @returns {Promise<RoutineResult>} */
     verifyLogin: ({taskId, ...params}) => run(taskId, 'verify_login', params),
+    /** @param {VerifyLoginOptions} options */
+    prepareLogin: ({taskId,...params}) => run(taskId,'prepare_login',params),
+    /** @param {VerifyLoginOptions & {plan:Record<string, unknown>}} options */
+    validatePlan: ({taskId,...params}) => run(taskId,'validate_plan',params),
   };
 }

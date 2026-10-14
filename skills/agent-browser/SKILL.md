@@ -89,6 +89,11 @@ Task tab listing discovers attributable popup children. Login continuation check
 new owned destinations after the helper's capture barrier is ready.
 BILL and QBO share these interfaces. Select the reviewed guide and intended
 company/realm; QBO browser login and OAuth/API readiness are separate outcomes.
+Prepare and validate a login plan before private input. Changed controls require
+fresh evidence and fixture validation of a proposed guide version. Preserve the
+checkpoint and helper request when controllers switch; publication uses normal
+versioned review.
+Password preparation requires a masked input, even after fresh observation.
 
 For reusable website work, discover `category:"playbooks"` and run the selected
 routine through `browser_command` in the existing task. `verify_login` checks
