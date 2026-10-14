@@ -1,6 +1,25 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P243
+    product_lane: PL-BUGFIX
+    objective: Remove historical ownership vetoes from downloads and ordinary continuation
+    plan: docs/dev/plans/0243-2026-10-14-ordinary-browser-availability.md
+    branch: fix/ordinary-browser-availability
+    target: main
+    accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/287
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#284, CochranResearchGroup/agent-browser#286]
+    dependencies: []
+    overlaps: [P237, P242]
+    reconciled_overlaps: ["P243 owns download and bounded observed-launch repair; preserve P237 dirty lifecycle/UI work and P242 PR285; reconcile shared launch-store/remote-view adapter behavior at integration"]
+    validation_status: Selected Rust gates, 330 Service Model tests, strict Clippy, docs and three public synthetic workflows pass with zero owned residue; linker EAGAIN and bounded retry preserved
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/287
+    checkpoint: 2278205344cb8045b77184aabf50b44995a613e3
+    limitations: ["Source qualification only; production not published", "Original manual recovery build/presentation symptoms and real-account/native-provider acceptance remain unverified", "Preserve P237 dirty lifecycle work and merge these adapter repairs by behavior"]
+    updated_at: 2026-10-14
   - id: P242
     product_lane: PL-RECIPES
     objective: Implement shared SiteGuides routines and hybrid playbooks through installed public workflows

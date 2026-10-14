@@ -2,6 +2,11 @@
 
 Run multiple isolated browser instances.
 
+Ordinary continuation reconnects to the current live profile browser and
+reconciles interrupted publication automatically. It preserves the logical
+task and authenticated profile without client record repair or a replacement
+launch while the browser is live.
+
 Native browser commands without attribution use `serviceName=agent-browser-cli`
 and the session name as `agentName`, giving successive CLI connections a stable
 self-declared identity. A first `open` checks `profile_use` and `tab_create`

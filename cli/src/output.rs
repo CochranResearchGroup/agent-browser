@@ -4488,6 +4488,8 @@ Usage: agent-browser download <selector> <path>
 Clicks an element that triggers a download and saves the file to the specified path.
 Preserves the browser download policy and peer destinations. Only the requested
 target's completed download is delivered; existing destination files are preserved.
+Uses the current browser process; no historical owner binding is required.
+Ordinary task continuation reconciles interrupted publication of its live browser.
 Local browser process proof is required for artifact delivery.
 
 Arguments:

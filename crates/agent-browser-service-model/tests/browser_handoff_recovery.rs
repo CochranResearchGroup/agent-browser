@@ -150,7 +150,14 @@ impl RemoteViewBrowserProcessEffects for Runtime {
         _: &BrowserProfileCatalogEntry,
     ) -> Result<(), RemoteViewBrowserProcessError> {
         self.evidence.borrow_mut().effects.push("absence".into());
-        if self.absent {
+        if self.absent
+            && self
+                .evidence
+                .borrow()
+                .pending
+                .as_ref()
+                .is_none_or(|r| r.observed_pid.is_none())
+        {
             Ok(())
         } else {
             Err(RemoteViewBrowserProcessError::Rejected)
@@ -345,10 +352,6 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
             assert!(evidence.borrow().pending.is_none());
             assert_eq!(evidence.borrow().effects, ["absence"]);
         } else {
-            assert_eq!(
-                effects.begin_operation(&state).unwrap_err(),
-                "remote_view_session_launch_readback_required"
-            );
             assert!(!evidence.borrow().pending.as_ref().unwrap().published);
             assert_eq!(
                 evidence.borrow().pending.as_ref().unwrap().observed_pid,
@@ -380,6 +383,9 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                     ]
                 );
             }
+            // Interrupted bookkeeping does not poison the next ordinary task.
+            effects.begin_operation(&state).unwrap();
+            assert!(effects.pending_launch_intent().is_none());
             let mut restarted = RemoteViewSessionEffects::new(
                 Runtime {
                     evidence: evidence.clone(),
@@ -405,7 +411,7 @@ fn recovery_restores_peer_tabs_and_failed_restoration_keeps_unpublished_custody(
                 restarted
                     .recover_browser(&browser, &profile, &tabs, &navigation)
                     .unwrap_err(),
-                "remote_view_session_launch_readback_required"
+                "browser_session_recovery_absence_unproven"
             );
         }
     }

@@ -137,10 +137,9 @@ pub(super) fn runtime_effects(
     }
 }
 
-/// Reconcile only retained recovery claims with proven absence. Cold launches,
-/// observed outcomes and uncertain profiles retain custody without blocking the
-/// construction of effects for unrelated sessions. Profile-scoped admission
-/// refuses any remaining claim before another launch for that profile.
+/// Retire interrupted recovery bookkeeping only after current profile/process
+/// observation proves absence. Live observed launches are joined during ordinary
+/// profile reconciliation; history never substitutes for current liveness.
 pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
     local: &mut E,
     store: &mut BrowserSessionSqliteStore,
@@ -154,9 +153,6 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
     let state = store.load_session_state()?;
     let catalog = store.load_profile_catalog()?.catalog;
     for claim in pending {
-        if claim.observed_pid.is_some() || claim.observed_browser_id.is_some() {
-            continue;
-        }
         let Some(browser) = state
             .browsers
             .values()
@@ -172,10 +168,14 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
         }) else {
             continue;
         };
-        if local.prove_recovery_absence(browser, profile).is_err() {
+        let mut observed = browser.clone();
+        if let Some(pid) = claim.observed_pid {
+            observed.pid = pid;
+        }
+        if local.prove_recovery_absence(&observed, profile).is_err() {
             continue;
         }
-        match store.reconcile_absent_unobserved_recovery(&claim, &state, browser) {
+        match store.reconcile_absent_recovery(&claim, &state, browser) {
             Ok(()) | Err(LaunchCustodyStoreError::Conflict) => {}
             Err(_) => return Err("remote_view_session_custody_unavailable".into()),
         }

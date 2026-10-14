@@ -44,13 +44,11 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }
-    if ledger.reconciled_absent.iter().any(|id| {
-        ledger.records.get(id).is_none_or(|record| {
-            record.published
-                || record.observed_pid.is_some()
-                || record.observed_browser_id.is_some()
-        })
-    }) {
+    if ledger
+        .reconciled_absent
+        .iter()
+        .any(|id| ledger.records.get(id).is_none_or(|record| record.published))
+    {
         return Err(LaunchCustodyStoreError::InvalidRecord);
     }
     for (id, target) in &ledger.release_fences {
@@ -315,9 +313,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
-        if current(&transaction)? != *expected {
-            return Err(Error::Conflict);
-        }
+        let actual = current(&transaction)?;
         let mut records = ledger(&transaction)?;
         if assignment_fenced(&records, &intent.assignment) {
             return Err(Error::ReleaseFenced);
@@ -327,6 +323,17 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .get_mut(&intent.intent_id)
             .ok_or(Error::InvalidRecord)?;
         if record.intent != *intent {
+            return Err(Error::Conflict);
+        }
+        if actual != *expected {
+            // Concurrent or interrupted publication of the identical result is
+            // already complete. A different state still requires fresh readback.
+            if record.published && actual == *state {
+                record
+                    .confirm_publication(&actual)
+                    .map_err(|_| Error::Conflict)?;
+                return Ok(());
+            }
             return Err(Error::Conflict);
         }
         record
@@ -452,19 +459,9 @@ fn validate_browser_publication(
     records: &Ledger,
     state: &BrowserSessionState,
 ) -> Result<(), LaunchCustodyStoreError> {
-    // An observed or ambiguous launch cannot bypass atomic custody publication
-    // through the ordinary whole-state writer. Co-located other profiles remain
-    // admissible; assignment return is governed separately below.
-    if records.records.values().any(|record| {
-        !record.published
-            && !records.reconciled_absent.contains(&record.intent.intent_id)
-            && state.browsers.values().any(|browser| {
-                browser.profile_id == record.intent.profile_id
-                    || record.observed_browser_id.as_ref() == Some(&browser.id)
-            })
-    }) {
-        return Err(LaunchCustodyStoreError::LaunchPending);
-    }
+    // Launch history does not veto ordinary state publication. New process
+    // effects use publish_launch_intent; current desktop retirement fences below
+    // protect only the exact resources being retired.
     if state.browsers.values().any(|browser| {
         if state.idle_closed_browsers.contains_key(&browser.id) {
             return false;
@@ -793,18 +790,18 @@ mod tests {
             .unwrap();
         let claim = store.unpublished_launch_records().unwrap().pop().unwrap();
         assert!(store
-            .reconcile_absent_unobserved_recovery(&claim, &initial, &browser)
+            .reconcile_absent_recovery(&claim, &initial, &browser)
             .is_err());
         let mut observed = claim.clone();
         observed.observe(&launch).unwrap();
         assert!(store
-            .reconcile_absent_unobserved_recovery(&observed, &retained, &browser)
+            .reconcile_absent_recovery(&observed, &retained, &browser)
             .is_err());
         store
-            .reconcile_absent_unobserved_recovery(&claim, &retained, &browser)
+            .reconcile_absent_recovery(&claim, &retained, &browser)
             .unwrap();
         store
-            .reconcile_absent_unobserved_recovery(&claim, &retained, &browser)
+            .reconcile_absent_recovery(&claim, &retained, &browser)
             .unwrap();
         drop(store);
         let mut store = fixture.open(false);
@@ -890,12 +887,10 @@ mod tests {
                 .unwrap_err(),
             LaunchCustodyStoreError::ProfileOccupied
         );
-        assert_eq!(
-            store
-                .compare_and_save_session_state(&retained, &retained)
-                .unwrap_err(),
-            "browser_session_publication_release_fenced"
-        );
+        // Pending history must not veto ordinary state or heartbeat updates.
+        store
+            .compare_and_save_session_state(&retained, &retained)
+            .unwrap();
         drop(store);
         let mut store = fixture.open(false);
         assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
@@ -1056,6 +1051,11 @@ mod tests {
         drop(store);
         let mut reopened = fixture.open(false);
         assert_eq!(reopened.load_session_state().unwrap(), published);
+        // A second publisher replays the same observed outcome after the first
+        // transaction committed, retaining the exact result without a new effect.
+        reopened
+            .publish_launch_intent(&intent, &newer, &published)
+            .unwrap();
         let LaunchCustodyAdmission::Existing(record) =
             reopened.admit_launch_intent(&intent, &published).unwrap()
         else {
@@ -1068,8 +1068,8 @@ mod tests {
 
 impl BrowserSessionSqliteStore {
     /// Called only after the runtime proves the exact retained profile absent.
-    /// Preserve the unobserved claim as history while retiring its occupancy.
-    pub(super) fn reconcile_absent_unobserved_recovery(
+    /// Preserve the claim as history while retiring its occupancy.
+    pub(super) fn reconcile_absent_recovery(
         &mut self,
         claim: &BrowserLaunchCustodyRecord,
         expected: &BrowserSessionState,
@@ -1085,17 +1085,8 @@ impl BrowserSessionSqliteStore {
         if state != *expected
             || state.browsers.get(&browser.id) != Some(browser)
             || claim.published
-            || claim.observed_pid.is_some()
-            || claim.observed_browser_id.is_some()
             || claim.intent.profile_id != browser.profile_id
             || records.records.get(&claim.intent.intent_id) != Some(claim)
-            || assignment_fenced(&records, &claim.intent.assignment)
-            || !records.records.values().any(|prior| {
-                prior.published
-                    && prior.observed_browser_id.as_ref() == Some(&browser.id)
-                    && prior.observed_pid == Some(browser.pid)
-                    && prior.intent.assignment == claim.intent.assignment
-            })
         {
             return Err(Error::Conflict);
         }
