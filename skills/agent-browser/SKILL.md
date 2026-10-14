@@ -94,6 +94,9 @@ fresh evidence and fixture validation of a proposed guide version. Preserve the
 checkpoint and helper request when controllers switch; publication uses normal
 versioned review.
 Password preparation requires a masked input, even after fresh observation.
+For bounded feed retrieval, discover collect_posts and supply a reviewed guide
+and explicit item/page/scroll budgets. Treat empty extraction as unproven unless
+noResultsVerified is true; retain partial results and their reason.
 
 For reusable website work, discover `category:"playbooks"` and run the selected
 routine through `browser_command` in the existing task. `verify_login` checks

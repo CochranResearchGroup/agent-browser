@@ -5,6 +5,7 @@ import {createServer} from 'node:http';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
 import {createMcpStdioClient,createSmokeContext} from './smoke-utils.js';
+import {retrievalPage,runRetrievalFixture} from './siteguide-retrieval-fixture.js';
 
 const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
 const chrome=process.env.AGENT_BROWSER_SMOKE_BROWSER_EXECUTABLE;
@@ -27,7 +28,7 @@ const appHtml=qbo?`<main id="qbo-company" data-account="${accountRef}" data-real
  `<main id="application" data-account="${accountRef}" data-company="${organizationRef}">${accountRef}@example.invalid</main>`;
 const controls=qbo?{identifier:'input[name=userid]',password:'input[name=password]',submit:'#intuit-signin',accountScope:'[data-auth-account]',identifierSubmit:'#intuit-next'}:
  {identifier:'#username',password:'#password',submit:'#submit',accountScope:'[data-auth-account]'};
-const server=createServer((_req,res)=>{res.setHeader('content-type','text/html');res.end(appHtml);});
+const server=createServer((req,res)=>{res.setHeader('content-type','text/html');res.end(retrievalPage(req.url)||appHtml);});
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));const origin=`http://127.0.0.1:${server.address().port}`;
 writeFileSync(join(directory,guideId+'.json'),JSON.stringify({schemaVersion:'agent-browser.siteguide.v1',guideId,name:qbo?'Synthetic QBO':'Synthetic BILL',allowedOrigins:[origin],
  authenticatedSelector:'#'+appId,account:{selector:qbo?'#qbo-user':'#application',attribute:qbo?'data-user':'data-account'},
@@ -57,6 +58,7 @@ try {
  const software=createPlaybookClient((name,args)=>client.send('tools/call',{name,arguments:args}));
  const completed=await software.verifyLogin({taskId:alice.taskId,guideId,accountRef,organizationRef});assert.equal(completed.status,'completed');assert.equal(completed.taskId,alice.taskId);assert.equal(completed.effectState,'no_effect');
  const replay=await verify();assert.equal(replay.taskId,alice.taskId);assert.equal(replay.tabId,completed.tabId);
+ if(process.env.AGENT_BROWSER_SMOKE_RETRIEVAL==='1')await runRetrievalFixture({call,software,taskId:alice.taskId,directory,origin});
  if(process.env.AGENT_BROWSER_SMOKE_GUIDE_AUTHORING==='1') {
   const {runAuthoringFixture}=await import('./siteguide-authoring-fixture.js');
   await runAuthoringFixture({call,software,taskId:alice.taskId,guide,context,directory,appHtml});

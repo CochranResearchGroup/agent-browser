@@ -47,7 +47,7 @@ accepted prototype are locators and design references, not runtime proof.
 | #273 BILL helper login/MFA | #272 | validated | primary, client composition and narrow popup-owner provider contract | installed synthetic + actual helper-source dummy; limits below |
 | #274 QBO same contracts | #273 | validated | primary, QBO guide and shared fixtures | installed identifier/password variants; receipt below |
 | #275 guide development/adaptation | #274 | validated | primary, frozen plans and versioned candidate workflow | installed authoring/private-flow receipts below |
-| #276 Reddit retrieval | #275 | running | primary, retrieval guide/routine/fixtures | none |
+| #276 Reddit retrieval | #275 | validated | primary, non-login guide/routine/fixture | installed bounded retrieval receipt below |
 
 Readiness requires the predecessor validated on this branch, not issue closure.
 For every slice retain command, result, exact source/binary and installed identity.
@@ -240,8 +240,57 @@ peer preservation and zero residue. Default MCP stays at 12 tools.
 Real credentials, installed helper production readiness and stock desktop/viewer
 privacy remain unclaimed provider-qualified work.
 
+## Ticket276 validation receipt
+
+Non-login SiteGuides declare retrieval assertions without fake account/company
+fields. collect_posts uses the existing task and shared result interface,
+bounded normalized items, page/link revalidation and DOM-scroll budget. Positive
+empty-state evidence is distinct from empty/malformed extraction and login/blocked
+pages. Actual coverage/freshness and partial results remain explicit. No ranking,
+posting, live social request or downstream migration is included.
+
+Red /tmp/p242-retrieval-red.log preceded the routine. A public malformed-link
+oracle failed in /tmp/p242-276-missing-link-red.log before the missing-href fix;
+/tmp/p242-276-fixed-public-green.log passes all cases. Source gates:
+/tmp/p242-276-final-fmt.log, /tmp/p242-276-final-clippy.log,
+/tmp/p242-276-final-client.log, /tmp/p242-276-docs.log and patch hygiene.
+The source change is also covered by final broader gates listed below.
+
+Installed candidate 0.28.0-42211b09d2c2, SHA256
+42211b09d2c2a71ad8120684ed980bbaa363f2e39f0cf18af1aa9e665e18f15f.
+/tmp/p242-276-install.json and /tmp/p242-276-installed-retrieval.log prove actual
+public-client bounded pages/scroll, deduplication, no-results, unproven emptiness,
+malformed/missing links, login/blocked/partial output, original task/peer
+preservation and zero residue. /tmp/p242-276-qbo-regression.log retains the
+shared login contract regression after optional non-login guide sections.
+
+## Whole-branch gates and dependencies
+
+All five slice states are validated on this integration branch; tracker closure
+is separate. The final comprehensive provider-free Rust run remains active under
+session82194, log /tmp/p242-final-rust-comprehensive.log. Its partition logs are
+/tmp/agent-browser-rust-tests.vhSKC3 while running and the aggregate preserves
+results on completion. Workstation fixtures/release-asset fixture and validation
+selection/client/handoff documentation contracts ran under
+/tmp/p242-final-workstation.log, /tmp/p242-final-client.log,
+/tmp/p242-final-validation-contract.log and /tmp/p242-final-handoff-docs.log.
+
+An extra policy-wiring check failed in /tmp/p242-final-policy-wiring.log because
+it expects retired bulk AGENTS links to policies0047–0049. Both AGENTS.md and
+scripts/test-policy-wiring.js are byte-unchanged from cb765a7b; that baseline
+already lacks the links and uses the current hash-bound policy-context pilot.
+No canonical routing or manifest hash is changed to appease this unrelated stale
+oracle. Current implementation/runtime governance packets were checked with
+explicit authorized synthetic effects. Record this baseline limitation separately
+from actual changed-surface failures.
+
+[Provider qualification dependencies](../notes/0242-2026-10-14-website-automation-provider-dependencies.md)
+are adopted by P242. The note preserves exact source capabilities and ready
+provider proposals without foreign publication or a duplicate desktop layer.
+
 ## Next action
 
-Implement the final non-login Reddit retrieval slice with bounded items,
-pagination/scroll and distinct no-results/malformed/login/blocked/partial states.
-Then run the one frozen whole-branch Standards/Spec review and bounded remediation.
+Freeze the branch for one whole-branch Standards and Spec review against
+cb765a7be2719383a54fb849eac9691ce0197b06 and spec271. Adjudicate findings, perform
+one bounded remediation, verify accepted blockers/critical regressions, and
+retain precise final source/installed identity and pending broader gate results.

@@ -112,3 +112,21 @@ registry and test it through a candidate client configured with that directory.
 The authoring fixture demonstrates this with a changed password control and a
 v2 proposal, preserving the original task and canonical guide. Publication uses
 ordinary reviewed source changes; successful improvisation does not publish.
+
+## Collect a bounded feed
+
+collect_posts and the client collectPosts method use the same existing task and
+result envelope. A retrieval guide declares container/item selectors, ID
+attribute, title/link selectors, explicit no-results marker and optional next
+page selector. Login/account fields are optional for this non-login workflow.
+
+Defaults are 50 items, one page and zero scrolls; maximums are 200 items, 10 pages
+and 10 scrolls. Fresh observation and link revalidation precede navigation.
+Website DOM scrolling consumes a visible budget. Normalized item data contains
+IDs, bounded titles and HTTP(S) origin/path links with query/fragment removed.
+
+Explicit no-results, unproven empty extraction, malformed items, login/blocked
+pages and partial output have distinct reasons. Coverage includes pagesUsed,
+scrollsUsed and observations; partial records do not establish complete coverage.
+The Reddit guide is a starter and the owned fixture is the qualified target.
+Research/ranking policy stays downstream; no live social requests are included.

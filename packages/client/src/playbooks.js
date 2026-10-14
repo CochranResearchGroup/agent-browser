@@ -48,5 +48,7 @@ export function createPlaybookClient(callTool) {
     prepareLogin: ({taskId,...params}) => run(taskId,'prepare_login',params),
     /** @param {VerifyLoginOptions & {plan:Record<string, unknown>}} options */
     validatePlan: ({taskId,...params}) => run(taskId,'validate_plan',params),
+    /** @param {import('./playbooks.d.ts').CollectPostOptions} options */
+    collectPosts: ({taskId,...params}) => run(taskId,'collect_posts',params),
   };
 }

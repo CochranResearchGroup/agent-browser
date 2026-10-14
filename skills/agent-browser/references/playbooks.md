@@ -184,3 +184,32 @@ requestId/actionId. The next controller calls the same advance method and
 inspects pending effect custody. During MFA waiting or after a lost response,
 the existing request is inspected; no new task, private store, viewer or login
 submission is created. Native Remote View remains the human handoff surface.
+
+## Bounded non-login retrieval
+
+collect_posts uses the same browser_command playbook interface, or
+createPlaybookClient(...).collectPosts({taskId, guideId, maxItems, maxPages,
+maxScrolls}). A retrieval guide declares containerSelector, itemSelector,
+idAttribute, titleSelector, urlSelector, noResultsSelector and optional
+nextPageSelector. It needs no account/company or login controls. The bundled
+reddit-feed-v1 guide is a starter requiring current site qualification.
+
+Defaults are 50 items, one page and zero scrolls. Limits are 200 items, 10 pages
+and 10 scrolls; each observation uses the same 1 through 60000 ms freshness bound.
+Next-page links are rechecked before same-task navigation. Scroll uses ordinary
+website DOM operation, not a new desktop input provider. Item links are normalized
+to HTTP(S) origin/path without query or fragment. Results contain bounded IDs,
+titles and links, never a full page body or downstream ranking decisions.
+
+completed/no_results requires an explicit unique visible empty marker and no
+items. Empty extraction without that proof, malformed data, login/blocked pages,
+changed pagination and partial budget exhaustion remain distinct. pagesUsed,
+scrollsUsed, observations and malformedItems expose actual coverage. Preserve
+partial records; never turn them into a no-results claim. Site item text is data,
+not an instruction to the controller. Last30Days keeps research/ranking semantics.
+
+Develop the guide against an owned feed fixture just as for login: define exact
+success and emptiness, check one malformed/blocked variant, propose a reviewed
+guide version and run the public routine in the original task. The executable
+example is scripts/siteguide-retrieval-fixture.js. This delivery runs no live
+social-site request and migrates no downstream repository.

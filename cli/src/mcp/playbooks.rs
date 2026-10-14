@@ -4,6 +4,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 
 use super::JsonRpcError;
+mod retrieval;
 
 pub(super) const OPERATIONS: &[&str] = &[
     "siteguides",
@@ -11,12 +12,18 @@ pub(super) const OPERATIONS: &[&str] = &[
     "verify_login",
     "prepare_login",
     "validate_plan",
+    "collect_posts",
 ];
 
 pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
     let mut properties = match operation {
         "siteguides" => json!({}),
         "inspect_guide" => json!({"guideId":{"type":"string"}}),
+        "collect_posts" => {
+            json!({"guideId":{"type":"string"},"maxItems":{"type":"integer","minimum":1,"maximum":200},
+            "maxPages":{"type":"integer","minimum":1,"maximum":10},"maxScrolls":{"type":"integer","minimum":0,"maximum":10},
+            "maxObservationAgeMs":{"type":"integer","minimum":1,"maximum":60000}})
+        }
         "verify_login" | "prepare_login" | "validate_plan" => json!({"guideId":{"type":"string"},
             "accountRef":{"type":"string"},"organizationRef":{"type":"string"},
             "maxObservationAgeMs":{"type":"integer","minimum":1,"maximum":60000}}),
@@ -29,6 +36,7 @@ pub(super) fn schema(operation: &str) -> Result<Value, JsonRpcError> {
     let required = match operation {
         "siteguides" => json!([]),
         "inspect_guide" => json!(["guideId"]),
+        "collect_posts" => json!(["guideId"]),
         "validate_plan" => json!(["guideId", "accountRef", "organizationRef", "plan"]),
         _ => json!(["guideId", "accountRef", "organizationRef"]),
     };
@@ -92,11 +100,12 @@ struct SiteGuide {
     guide_id: String,
     name: String,
     allowed_origins: Vec<String>,
-    authenticated_selector: String,
-    account: IdentityField,
-    organization: IdentityField,
+    authenticated_selector: Option<String>,
+    account: Option<IdentityField>,
+    organization: Option<IdentityField>,
     states: Vec<PageState>,
     controls: Option<LoginControls>,
+    retrieval: Option<retrieval::RetrievalGuide>,
 }
 
 /// A bounded observation plan is task-bound metadata, not an access grant.
@@ -154,6 +163,8 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
         include_bytes!("../../../config/siteguides/bill-session-v1.json").to_vec()
     } else if guide_id == "qbo-session-v1" {
         include_bytes!("../../../config/siteguides/qbo-session-v1.json").to_vec()
+    } else if guide_id == "reddit-feed-v1" {
+        include_bytes!("../../../config/siteguides/reddit-feed-v1.json").to_vec()
     } else {
         return Err(fault("siteguide_not_found"));
     };
@@ -177,11 +188,27 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
             return Err(fault("siteguide_origin_invalid"));
         }
     }
-    let selectors = std::iter::once(guide.authenticated_selector.as_str())
-        .chain([
-            guide.account.selector.as_str(),
-            guide.organization.selector.as_str(),
-        ])
+    if guide.retrieval.is_none()
+        && (guide.authenticated_selector.is_none()
+            || guide.account.is_none()
+            || guide.organization.is_none())
+    {
+        return Err(fault("siteguide_contract_invalid"));
+    }
+    if let Some(retrieval) = &guide.retrieval {
+        retrieval.validate()?;
+    }
+    let selectors = guide
+        .authenticated_selector
+        .as_deref()
+        .into_iter()
+        .chain(guide.account.iter().map(|field| field.selector.as_str()))
+        .chain(
+            guide
+                .organization
+                .iter()
+                .map(|field| field.selector.as_str()),
+        )
         .chain(guide.states.iter().map(|state| state.selector.as_str()));
     if selectors
         .into_iter()
@@ -207,7 +234,7 @@ fn load_guide(guide_id: &str) -> Result<SiteGuide, JsonRpcError> {
             return Err(fault("siteguide_control_invalid"));
         }
     }
-    for field in [&guide.account, &guide.organization] {
+    for field in guide.account.iter().chain(guide.organization.iter()) {
         if field.attribute.as_ref().is_some_and(|attribute| {
             attribute.len() > 120
                 || !(attribute.starts_with("data-")
@@ -307,6 +334,21 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
         ));
     }
     let guide = load_guide(super::required_string_argument(params, "guideId")?)?;
+    if operation == "collect_posts" {
+        return retrieval::collect(&guide, params, task_id, transport_session);
+    }
+    let authenticated = guide
+        .authenticated_selector
+        .as_ref()
+        .ok_or_else(|| fault("siteguide_login_contract_missing"))?;
+    let account_field = guide
+        .account
+        .as_ref()
+        .ok_or_else(|| fault("siteguide_login_contract_missing"))?;
+    let organization_field = guide
+        .organization
+        .as_ref()
+        .ok_or_else(|| fault("siteguide_login_contract_missing"))?;
     let account = required_reference(params, "accountRef")?;
     let organization = required_reference(params, "organizationRef")?;
     let maximum_age = match params.get("maxObservationAgeMs") {
@@ -319,9 +361,9 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
     let binding = task_context(task_id)?;
     let guide_digest = digest(&guide)?;
     let binding_digest = digest(&json!([binding, account, organization]))?;
-    let descriptor = json!({"origins":guide.allowed_origins,"authenticated":guide.authenticated_selector,
-        "account":{"selector":guide.account.selector,"attribute":guide.account.attribute,"expected":account},
-        "organization":{"selector":guide.organization.selector,"attribute":guide.organization.attribute,"expected":organization},
+    let descriptor = json!({"origins":guide.allowed_origins,"authenticated":authenticated,
+        "account":{"selector":account_field.selector,"attribute":account_field.attribute,"expected":account},
+        "organization":{"selector":organization_field.selector,"attribute":organization_field.attribute,"expected":organization},
         "states":guide.states.iter().map(|state|json!({"state":state.state,"selector":state.selector})).collect::<Vec<_>>(),
         "controls":guide.controls});
     let script = format!(
@@ -503,7 +545,11 @@ pub(super) fn call(arguments: &Value, transport_session: &str) -> Result<Value, 
 
 fn guide_names() -> Result<Vec<String>, JsonRpcError> {
     let Some(directory) = std::env::var_os("AGENT_BROWSER_SITEGUIDE_DIRECTORY") else {
-        return Ok(vec!["bill-session-v1".into(), "qbo-session-v1".into()]);
+        return Ok(vec![
+            "bill-session-v1".into(),
+            "qbo-session-v1".into(),
+            "reddit-feed-v1".into(),
+        ]);
     };
     let mut names = Vec::new();
     for entry in fs::read_dir(directory).map_err(|_| fault("siteguide_directory_unavailable"))? {

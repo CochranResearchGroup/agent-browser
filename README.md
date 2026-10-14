@@ -863,6 +863,10 @@ before private input. Changed controls produce adaptation_required with no
 submission. Validate proposed guide versions through a candidate registry and
 publish them through ordinary reviewed source changes.
 Password preparation also requires a masked password input.
+The collectPosts routine reads a reviewed Reddit feed with item/page/scroll
+budgets and normalized IDs, titles and links. Verified no-results is distinct
+from malformed or unproven empty extraction; incomplete coverage returns partial.
+It shares the task interface and leaves ranking and research policy downstream.
 
 A SiteGuide describes website states and receiving identity checks. Agents and
 software invoke the same routines in an existing browser task. Discover the
