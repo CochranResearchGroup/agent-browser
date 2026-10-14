@@ -10,13 +10,13 @@
  * @param {Dependencies} dependencies
  */
 export function createLoginPlaybook({browser,helper,checkpoints}) {
-  if (!browser || typeof helper !== 'function' || !checkpoints?.load || !checkpoints?.save) {
+  if (!browser || typeof browser.prepareLogin !== 'function' || typeof browser.validatePlan !== 'function' || typeof helper !== 'function' || !checkpoints?.load || !checkpoints?.save) {
     throw new TypeError('login_playbook_dependencies_required');
   }
   const busy=new Set();
   return {
     /**
-     * Advance once. A persisted attempted request can only be inspected; a lost
+     * Advance once. A persisted attempted request requires reconciliation; a lost
      * response never authorizes another authenticate call. Exact-task receiving
      * injection and observer privacy are deployment requirements, not inferred
      * from helper availability or supplied by this public client.
@@ -46,12 +46,9 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
             return result('waiting','authentication_method_unsupported','no_effect');
           }
           if(!['identifier_required','password_required','login_required','mfa_required'].includes(observed.reasonCode))return observed;
-          let preparedPlan;
-          if(browser.prepareLogin) {
-            const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
-            if(!preparation.plan)return preparation;
-            preparedPlan=preparation.plan;
-          }
+          const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
+          if(!preparation.plan)return preparation;
+          const preparedPlan=preparation.plan;
           let requested;
           try {requested=await helper('request_login',{...scope,expiresAt});}
           catch {return result('waiting','helper_unavailable','no_effect');}
@@ -78,20 +75,49 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         if(summary.state==='uncertain' && summary.captureState==='ready' && summary.inputAttemptedAt!==undefined) {
           return await verifyReceiving(checkpoint);
         }
+        // Only a typed pre-input refusal plus fresh exact-request evidence can
+        // clear local intent. Missing acknowledgement alone never permits retry.
+        if(checkpoint.attempted && checkpoint.preInputRefusal && summary.state==='approved' &&
+          summary.startedAt===undefined && summary.inputAttemptedAt===undefined) {
+          checkpoint={...checkpoint,attempted:false,preInputRefusal:undefined};
+          await checkpoints.save(key,checkpoint);
+        }
         if(checkpoint.attempted || summary.startedAt!==undefined || summary.inputAttemptedAt!==undefined || summary.state==='uncertain') {
           return result('waiting','helper_running_or_uncertain','unknown',checkpoint);
         }
         if(summary.state!=='approved')return result('failed','helper_state_invalid','no_effect',checkpoint);
         if(summary.expiresAt<=Date.now())return result('waiting','helper_grant_expired','no_effect',checkpoint);
-        if(checkpoint.preparedPlan && browser.validatePlan) {
-          let validation=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:checkpoint.preparedPlan});
-          if(validation.reasonCode==='plan_stale' && browser.prepareLogin) {
+        if(options.reviewedPlan) {
+          const replacement=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:options.reviewedPlan});
+          if(replacement.status!=='completed')return {...replacement,routine:'login',requestId:checkpoint.requestId,actionId:checkpoint.requestId,effectState:'no_effect'};
+          const retainedTarget=checkpoint;
+          if(['profileId','browserId','tabId'].some(field=>replacement[field]!==retainedTarget[field])) {
+            return result('adaptation_required','task_target_changed','no_effect',checkpoint);
+          }
+          checkpoint={...checkpoint,preparedPlan:options.reviewedPlan};
+          await checkpoints.save(key,checkpoint);
+        }
+        if(!checkpoint.preparedPlan) {
+          const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
+          if(!preparation.plan)return preparation;
+          checkpoint={...checkpoint,preparedPlan:preparation.plan};await checkpoints.save(key,checkpoint);
+        }
+        {
+          const retainedPlan=checkpoint.preparedPlan;
+          if(!retainedPlan)throw Error('prepared_plan_required');
+          let validation=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:retainedPlan});
+          if(validation.reasonCode==='plan_stale') {
             const preparation=await browser.prepareLogin({taskId,guideId,accountRef,organizationRef});
-            if(preparation.plan && preparation.plan.guideDigest===checkpoint.preparedPlan.guideDigest &&
-              preparation.plan.controlFingerprint===checkpoint.preparedPlan.controlFingerprint) {
+            if(preparation.plan && preparation.plan.guideDigest===retainedPlan.guideDigest &&
+              preparation.plan.controlFingerprint===retainedPlan.controlFingerprint &&
+              preparation.plan.expectedState===retainedPlan.expectedState && preparation.plan.bindingDigest===retainedPlan.bindingDigest) {
               checkpoint={...checkpoint,preparedPlan:preparation.plan};await checkpoints.save(key,checkpoint);
               validation=await browser.validatePlan({taskId,guideId,accountRef,organizationRef,plan:preparation.plan});
             }
+          }
+          const retainedTarget=checkpoint;
+          if(validation.status==='completed' && ['profileId','browserId','tabId'].some(field=>validation[field]!==retainedTarget[field])) {
+            return result('adaptation_required','task_target_changed','no_effect',checkpoint);
           }
           if(validation.status!=='completed')return {...validation,routine:'login',requestId:checkpoint.requestId,actionId:checkpoint.requestId,effectState:'no_effect'};
         }
@@ -101,6 +127,10 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         try {summary=await helper('authenticate',{requestId:checkpoint.requestId});}
         catch(error) {
           const code=error && typeof error==='object' && 'code' in error ? error.code : undefined;
+          if(['auth_not_authorized','auth_capture_held','auth_target_busy'].includes(String(code))) {
+            checkpoint={...checkpoint,preInputRefusal:String(code)};
+            await checkpoints.save(key,checkpoint);
+          }
           const reason=code==='auth_not_authorized'?'helper_authorization_required':
             code==='auth_capture_held'?'private_capture_held':'helper_running_or_uncertain';
           return result('waiting',reason,'unknown',checkpoint);

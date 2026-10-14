@@ -98,6 +98,11 @@ For bounded feed retrieval, discover collect_posts and supply a reviewed guide
 and explicit item/page/scroll budgets. Treat empty extraction as unproven unless
 noResultsVerified is true; retain partial results and their reason.
 
+The login client requires preparation and validation. Use reviewedPlan to resume
+a reviewed change under the retained guideId, task and helper action. A lost
+acknowledgement never permits another submission. See the routine guide for
+the exact pre-input refusal reconciliation rule.
+
 For reusable website work, discover `category:"playbooks"` and run the selected
 routine through `browser_command` in the existing task. `verify_login` checks
 intended account/company from current page evidence; waiting or adaptation is

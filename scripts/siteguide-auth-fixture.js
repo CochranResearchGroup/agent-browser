@@ -121,7 +121,7 @@ export async function runAuthFixture({context,software,taskId,origin,guideId,acc
     listTabs:id=>privacy.read('fixture-agent',()=>software.listTabs(id)),
     selectTab:(id,tab)=>privacy.read('fixture-agent',()=>software.selectTab(id,tab))};
   const playbook=createLoginPlaybook({browser:protectedBrowser,helper,checkpoints});
-  const options={taskId,guideId,accountRef,organizationRef,
+  let options={taskId,guideId,accountRef,organizationRef,
    scope:{person:'fixture-person',tenant:'fixture',account:accountRef,origin,source:'dummy-fixture',capabilities:['login']},expiresAt:Date.now()+60000};
   const pending=await playbook.advance(options);assert.equal(pending.reasonCode,'approval_required');
   await callAuthBroker(approver,'approve',{requestId:pending.requestId});
@@ -131,9 +131,13 @@ export async function runAuthFixture({context,software,taskId,origin,guideId,acc
    assert.equal(changed.reasonCode,'prepared_controls_changed');assert.equal(changed.effectState,'no_effect');
    assert.equal(privateReads,0,'Changed prepared controls prevent even private credential retrieval');
    assert.equal((await helper('inspect_request',{requestId:pending.requestId})).inputAttemptedAt,undefined);
-   await page.setContent(appHtml);
-   console.log('Changed prepared controls prevented private retrieval and input using the original approved request');
-   return;
+   // The operator reviews a corrected masked form with a changed identifier
+   // type. Its fresh plan replaces the retained plan, never the helper request.
+   await page.locator(qbo?'input[name=changed-control]':'#changed-control').evaluate((element,qbo)=>{if(qbo)element.name='password';else element.id='password';},qbo);
+   await page.locator(controls.identifier).evaluate(element=>element.type=element.type==='email'?'text':'email');
+   const replacement=await software.prepareLogin({taskId,guideId,accountRef,organizationRef});assert(replacement.plan);
+   options={...options,reviewedPlan:replacement.plan};
+   console.log('Changed controls prevented retrieval; reviewed replacement resumes the original approved request');
   }
   const running=playbook.advance(options);
   if(process.env.AGENT_BROWSER_SMOKE_WRONG_CREDENTIAL==='1') {

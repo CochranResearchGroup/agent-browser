@@ -2,6 +2,8 @@ import type {RoutineResult, VerifyLoginOptions} from './playbooks.js';
 export interface LoginOptions extends VerifyLoginOptions {
   scope: Record<string, any> & {person:string;tenant:string;account:string;origin:string;source:string;capabilities:['login']};
   expiresAt:number;
+  /** Explicitly reviewed replacement, checked against fresh same-task evidence. */
+  reviewedPlan?:Record<string, unknown>;
   authenticationMethod?:'password'|'extension'|'passkey';
 }
 export interface Checkpoint {
@@ -17,8 +19,8 @@ export interface Checkpoint {
 }
 export interface Dependencies {
   browser:{verifyLogin(options:VerifyLoginOptions):Promise<RoutineResult & Record<string, any>>;
-    prepareLogin?(options:VerifyLoginOptions):Promise<RoutineResult & Record<string, any>>;
-    validatePlan?(options:VerifyLoginOptions & {plan:Record<string, unknown>}):Promise<RoutineResult & Record<string, any>>;
+    prepareLogin(options:VerifyLoginOptions):Promise<RoutineResult & Record<string, any>>;
+    validatePlan(options:VerifyLoginOptions & {plan:Record<string, unknown>}):Promise<RoutineResult & Record<string, any>>;
     listTabs?(taskId:string):Promise<{tabs:Array<{tabId:string}>}>;
     selectTab?(taskId:string,tabId:string):Promise<unknown>};
   helper(operation:'request_login'|'inspect_request'|'authenticate',args:Record<string, unknown>):Promise<Record<string, any>>;

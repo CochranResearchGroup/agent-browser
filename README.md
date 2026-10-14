@@ -862,6 +862,8 @@ Use prepareLogin and validatePlan to freeze reviewed guide/control evidence
 before private input. Changed controls produce adaptation_required with no
 submission. Validate proposed guide versions through a candidate registry and
 publish them through ordinary reviewed source changes.
+The login client requires prepareLogin and validatePlan. After reviewing changed controls, pass a freshly prepared plan as reviewedPlan to advance with the same options and retained guideId. It validates the replacement against the current task before saving it and retains the helper request/action. Reviewed guide content may change under that retained identifier through the candidate registry. A typed pre-input helper refusal can be retried only after exact-request inspection proves approved state with no started or input-attempt timestamp; a lost acknowledgement never permits retry.
+
 Password preparation also requires a masked password input.
 The collectPosts routine reads a reviewed Reddit feed with item/page/scroll
 budgets and normalized IDs, titles and links. Verified no-results is distinct
@@ -876,7 +878,7 @@ one operation's schema. The default MCP tool count stays unchanged.
 Run login verification through `browser_command`:
 
 ```json
-{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-fixture","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-session-v1","accountRef":"<expected account>","organizationRef":"<expected company>"}}
 ```
 
 A result distinguishes `completed`, `waiting`, `adaptation_required` and `failed`.

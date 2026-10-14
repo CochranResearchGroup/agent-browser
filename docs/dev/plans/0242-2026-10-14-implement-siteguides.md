@@ -294,3 +294,41 @@ Freeze the branch for one whole-branch Standards and Spec review against
 cb765a7be2719383a54fb849eac9691ce0197b06 and spec271. Adjudicate findings, perform
 one bounded remediation, verify accepted blockers/critical regressions, and
 retain precise final source/installed identity and pending broader gate results.
+
+## Frozen whole-branch review and bounded remediation
+
+Standards and Spec reviewers examined cb765a7b through 7f7a8cb2 read-only.
+Accepted four findings: mandatory prepare/validate dependencies; checked explicit
+replacement of an unattempted plan on the retained request/action; reconciliation
+of typed pre-input refusals using fresh exact-request evidence; bundled guide
+IDs in copyable default examples. Remediation is confined to these findings,
+associated documentation and meaningful continuation tests. No second broad
+review or foreign edits. reviewedPlan retains guideId and exact scope/task
+binding; reviewed content can change in a candidate registry under that ID.
+
+The comprehensive provider-free run finished nativeLane=0 supportLane=1 in
+1279 seconds. All native and workstation compartments passed. One existing
+integration assertion expects service --help to succeed, but the current CLI
+rejects it as Unknown subcommand. The unchanged baseline parser/test provenance
+is being checked; this is retained as failed comprehensive evidence rather than
+reported as a comprehensive pass.
+
+Bounded remediation source gates passed: /tmp/p242-review-client.log (including
+required plan dependencies, invalid replacement rejection, preserved request
+and proven pre-input refusal retry), /tmp/p242-review-fmt.log,
+/tmp/p242-review-clippy.log and /tmp/p242-review-docs.log. The expanded client
+test fails against frozen 7f7a8cb2 in /tmp/p242-review-red.log at the transient
+pre-input continuation assertion. Public installed source-helper adaptation
+passed /tmp/p242-review-installed-adaptation-green.log, including changed
+controls, reviewed replacement, same action, dummy private fill, human MFA,
+popup attribution, injected lost acknowledgement and zero residue. Its first
+harness attempt failed because it forwarded login-only options to strict native
+preparation; /tmp/p242-review-installed-adaptation.log is retained, and the
+fixture now passes only declared preparation fields.
+
+/tmp/p242-final-service-collections.log passed the selected no-launch public
+parity check against generation42211b09d2c2. Documentation links passed in
+/tmp/p242-review-links.log. /tmp/p242-baseline-gate-provenance.json proves the
+service parser, main dispatch and service-state integration test are byte
+unchanged from cb765a7b, as are both files responsible for the extra policy-wiring
+failure. No unrelated source repair or automatic CI activation is included.

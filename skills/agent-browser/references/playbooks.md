@@ -28,7 +28,7 @@ import {createPlaybookClient} from '@agent-browser/client/playbooks';
 const playbooks = createPlaybookClient((name, args) =>
   mcpClient.callTool({name, arguments: args}));
 const result = await playbooks.verifyLogin({
-  taskId, guideId: 'bill-fixture',
+  taskId, guideId: 'bill-session-v1',
   accountRef: expectedAccount, organizationRef: expectedCompany,
 });
 ```
@@ -148,6 +148,8 @@ one private helper contract; human MFA wait and asynchronous popup continuation
 retain the original task. Shared routines contain no BILL URL or company-path
 assumption. Real Intuit controls and account acceptance remain separately scoped.
 
+The login client requires prepareLogin and validatePlan. After reviewing changed controls, pass a freshly prepared plan as reviewedPlan to advance with the same options and retained guideId. It validates the replacement against the current task before saving it and retains the helper request/action. Reviewed guide content may change under that retained identifier through the candidate registry. A typed pre-input helper refusal can be retried only after exact-request inspection proves approved state with no started or input-attempt timestamp; a lost acknowledgement never permits retry.
+
 ## Develop and adapt a guide
 
 1. Bind an owned synthetic browser task and define exact success: origin,
@@ -162,11 +164,11 @@ assumption. Real Intuit controls and account acceptance remain separately scoped
 4. Pass the unchanged plan to validatePlan before input. A changed guide,
    control, state, task or stale plan yields adaptation_required and no effect.
    The login adapter enforces this before the helper retrieves any credential.
-   It can refresh only stale observations of unchanged controls under the same
+   It automatically refreshes only stale observations of unchanged controls under the same
    helper request. A plan is metadata, never an access grant.
    Password preparation requires an input of type password; fresh evidence
    never authorizes filling an unmasked replacement.
-5. Observe changed controls afresh and propose a new guideId version outside
+5. Observe changed controls afresh and propose reviewed guide content outside
    the configured shared registry. Run a candidate client with that proposal
    directory against the same owned fixture task; verify the expected states
    and outcome. Keep the canonical guide unchanged during adaptation.

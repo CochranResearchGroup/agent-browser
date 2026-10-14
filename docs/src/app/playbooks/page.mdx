@@ -10,7 +10,7 @@ Discover the focused metadata with `browser_discover` category `playbooks`.
 Request the `verify_login` operation for its schema, then use `browser_command`:
 
 ```json
-{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-fixture","accountRef":"<expected account>","organizationRef":"<expected company>"}}
+{"taskId":"<existing task>","action":"playbook","params":{"operation":"verify_login","guideId":"bill-session-v1","accountRef":"<expected account>","organizationRef":"<expected company>"}}
 ```
 
 <table>
@@ -103,6 +103,8 @@ The private login adapter validates this plan before the helper retrieves a
 credential. Changed controls produce adaptation_required with no input. A stale
 observation of unchanged controls can refresh under the same request. Controller
 changes preserve the checkpoint and helper request/action identity.
+The login client requires prepareLogin and validatePlan. After reviewing changed controls, pass a freshly prepared plan as reviewedPlan to advance with the same options and retained guideId. It validates the replacement against the current task before saving it and retains the helper request/action. Reviewed guide content may change under that retained identifier through the candidate registry. A typed pre-input helper refusal can be retried only after exact-request inspection proves approved state with no started or input-attempt timestamp; a lost acknowledgement never permits retry.
+
 Password preparation requires a masked input; an unmasked replacement cannot
 become an authorized action merely by observing it afresh.
 

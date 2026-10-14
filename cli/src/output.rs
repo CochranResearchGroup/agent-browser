@@ -7094,6 +7094,7 @@ Workflow:
   browser_tab list observes owned popup children; login continuation verifies new destinations.
   BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
   prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.
+  Login requires both checks; reviewedPlan resumes a reviewed change on the same helper action.
   collect_posts bounds item/page/scroll reads and distinguishes verified no-results from failed extraction.
   AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
