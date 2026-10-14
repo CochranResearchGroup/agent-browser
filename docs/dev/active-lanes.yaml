@@ -1,6 +1,20 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P243
+    product_lane: PL-BUGFIX
+    objective: Remove historical ownership vetoes from downloads and ordinary continuation
+    plan: docs/dev/plans/0243-2026-10-14-ordinary-browser-availability.md
+    branch: fix/ordinary-browser-availability
+    target: main
+    plan_state: IN_PROGRESS
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#284, CochranResearchGroup/agent-browser#286]
+    dependencies: []
+    overlaps: [P237, P242]
+    reconciled_overlaps: ["P243 owns download and bounded observed-launch repair; preserve P237 dirty lifecycle/UI work and P242 PR285; reconcile shared launch-store/remote-view adapter behavior at integration"]
+    validation_status: Installed 284 failure confirmed; 286 regression pending
+    updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM
     objective: Complete dependable browser workflows, native human handoff and return, continuity and predictable cleanup

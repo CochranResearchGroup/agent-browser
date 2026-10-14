@@ -2801,3 +2801,229 @@ fn pool_demand_regrows_after_exact_native_release_without_local_release_receipt(
     );
     assert_eq!(provider.borrow().acquisitions.len(), 2);
 }
+
+#[test]
+fn ordinary_continuation_publishes_observed_live_launch_without_replacement() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let baseline = store.load_session_state().unwrap();
+    let original = baseline.browsers[browser_id].clone();
+    let intent = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: original.profile_id.clone(),
+        assignment: provider.borrow().assignments[0].clone(),
+    };
+    store
+        .admit_recovery_launch_intent(&intent, &baseline, &original)
+        .unwrap();
+    store
+        .observe_launch_intent(
+            &intent,
+            &BrowserLaunch {
+                browser_id: original.id.clone(),
+                pid: 91,
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                desktop: original.desktop.clone(),
+            },
+        )
+        .unwrap();
+    drop(store);
+    // The persisted PID is gone; direct profile and native window observations
+    // see the already-running replacement. No process launch is necessary.
+    std::fs::write(fixture.root.join("idle-process-absent"), "old PID absent").unwrap();
+    provider.borrow_mut().window_pid = Some(91);
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::LiveProfileReuse,
+    );
+    for now in [101, 102] {
+        let result = resumed
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":now
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+        assert_eq!(result["browserSession"]["tabId"], identity["tabId"]);
+        assert_eq!(resumed.state().browsers[browser_id].pid, 91);
+    }
+    assert_eq!(
+        calls.get(),
+        1,
+        "continuation must not launch a second browser"
+    );
+    assert!(fixture
+        .store(false)
+        .unpublished_launch_records()
+        .unwrap()
+        .is_empty());
+}
+
+#[test]
+fn ordinary_dead_observed_launch_recovers_after_current_profile_absence() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let baseline = store.load_session_state().unwrap();
+    let original = baseline.browsers[browser_id].clone();
+    let intent = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: original.profile_id.clone(),
+        assignment: provider.borrow().assignments[0].clone(),
+    };
+    store
+        .admit_recovery_launch_intent(&intent, &baseline, &original)
+        .unwrap();
+    store
+        .observe_launch_intent(
+            &intent,
+            &BrowserLaunch {
+                browser_id: original.id.clone(),
+                pid: 91,
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                desktop: original.desktop.clone(),
+            },
+        )
+        .unwrap();
+    drop(store);
+    std::fs::write(
+        fixture.root.join("idle-process-absent"),
+        "whole profile absent",
+    )
+    .unwrap();
+    let mut store = fixture.store(false);
+    crate::native::browser_session_remote_view::reconcile_pending_recoveries(
+        &mut Process {
+            mode: Mode::IdleRecovery,
+            root: fixture.root.clone(),
+            calls: calls.clone(),
+        },
+        &mut store,
+    )
+    .unwrap();
+    assert!(store.unpublished_launch_records().unwrap().is_empty());
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let result = resumed
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":101
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+    assert_eq!(
+        calls.get(),
+        2,
+        "exactly one replacement after proven absence"
+    );
+}
+
+#[test]
+fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let baseline = store.load_session_state().unwrap();
+    let original = baseline.browsers[browser_id].clone();
+    let intent = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: original.profile_id.clone(),
+        assignment: provider.borrow().assignments[0].clone(),
+    };
+    store
+        .admit_recovery_launch_intent(&intent, &baseline, &original)
+        .unwrap();
+    store
+        .observe_launch_intent(
+            &intent,
+            &BrowserLaunch {
+                browser_id: original.id.clone(),
+                pid: 99,
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                desktop: original.desktop.clone(),
+            },
+        )
+        .unwrap();
+    drop(store);
+    // The persisted PID is gone; direct profile and native window observations
+    // see the already-running replacement. No process launch is necessary.
+    std::fs::write(fixture.root.join("idle-process-absent"), "old PID absent").unwrap();
+    provider.borrow_mut().window_pid = Some(91);
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::LiveProfileReuse,
+    );
+    for now in [101, 102] {
+        let result = resumed
+            .execute_managed_command(
+                "Alice",
+                &serde_json::json!({
+                    "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":now
+                }),
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(result["success"], true, "{result}");
+        assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+        assert_eq!(result["browserSession"]["tabId"], identity["tabId"]);
+        assert_eq!(resumed.state().browsers[browser_id].pid, 91);
+    }
+    assert_eq!(
+        calls.get(),
+        1,
+        "continuation must not launch a second browser"
+    );
+    let retained = fixture.store(false).unpublished_launch_records().unwrap();
+    assert_eq!(retained.len(), 1, "mismatched history remains diagnostic");
+    assert_eq!(retained[0].observed_pid, Some(99));
+}

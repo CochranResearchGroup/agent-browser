@@ -1,5 +1,8 @@
 # Active plan index
 
+[P243: ordinary browser availability](0243-2026-10-14-ordinary-browser-availability.md),
+issues #284 and #286; repair in progress against Alice/Bob G05/G23/G42.
+
 [P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
 #105; completed bounded source and isolated browser-workflow qualification.
 Wider resource/cleanup acceptance remains open.

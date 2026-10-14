@@ -1026,8 +1026,19 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         else {
             return Ok(false);
         };
+        // Reattaching our same process or completing its observed launch keeps
+        // its managed lifecycle. A different externally discovered process is
+        // borrowed and must survive final task closure.
+        let managed = !self.state.shared_browser_ids.contains(&browser.id)
+            && (browser.pid == recovered.launch.pid
+                || self
+                    .effects
+                    .pending_launch_intent()
+                    .is_some_and(|intent| intent.profile_id == profile.id));
         self.publish_recovery(browser.clone(), tabs, recovered, true)?;
-        self.state.shared_browser_ids.insert(browser.id.clone());
+        if !managed {
+            self.state.shared_browser_ids.insert(browser.id.clone());
+        }
         Ok(true)
     }
 

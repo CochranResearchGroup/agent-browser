@@ -25,6 +25,11 @@ Page actions require `taskId`. Use `browser_tab` to list, create, select or clos
 task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
 this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
+For downloads, use `action: "download"` with the link selector and destination
+path in `params`. Existing-profile tasks use the current browser; clients do not
+establish ownership or repair stale internal records before downloading.
+Ordinary continuation reconciles interrupted publication using the current live
+profile browser, preserving the task and authenticated state.
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.

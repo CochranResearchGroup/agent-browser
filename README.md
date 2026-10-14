@@ -2626,7 +2626,10 @@ viewer/controller authority remain enforced. Never leave this mode enabled.
 download policy and peer destinations, then delivers only the completed download
 correlated to the requested target. The path is a delivery destination; existing
 files are preserved. Delivery requires a proven local browser process and reports
-cancellation or missing identity explicitly.
+cancellation or missing identity explicitly. Existing-profile tasks download through
+their current browser without a historical owner binding or manual recovery.
+Ordinary continuation reconnects to the live profile browser and reconciles an
+interrupted publication without replacing it or resetting its authenticated state.
 
 ## Observability Dashboard
 
