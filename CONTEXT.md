@@ -263,6 +263,7 @@ _Avoid_: Session count, eager maximum reservation, presentation slot
 **Compact native workspace**: The native desktop is the main working surface.
 Use a restrained neutral palette without the former green theme, compact
 chrome and a collapsible/resizable browser-tab rail. Handoff management is
-on demand through a small SVG control in the rail, opening a modal or drawer;
+on demand through a small SVG control in the rail, opening the operator-approved
+content-sized animated drawer;
 the handoff table does not permanently occupy the desktop. This supersedes
 the original A/B/C table-placement proposals.

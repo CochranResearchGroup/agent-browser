@@ -1,7 +1,7 @@
 # Compact native workspace review
 
 Product lane: PL-PLATFORM
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P237 version 2 / #261 / #260
 Related lanes: P238, P240
 
@@ -40,8 +40,8 @@ handoff panel or bottom variant switcher.
 The document shown inside the viewer is synthetic, giving the layout useful
 scale rather than a large empty placeholder. It is not a new native viewer.
 Properties, lifetime controls and link deletion operate only on in-memory
-synthetic inventory. The drawer is one interpretation of the requested
-modal-or-drawer direction, not a new settled choice by the operator.
+synthetic inventory. The drawer was initially one interpretation of the requested modal-or-drawer
+direction. The operator subsequently approved this revised prototype below.
 
 [Review session](https://previews.ecochran.dyndns.org/s/4bac1a44b748) contains
 self-contained interactive HTML and desktop/open-drawer/mobile screenshots.
@@ -70,6 +70,21 @@ retires that task. This qualifies synthetic layout behavior only.
 Serial Standards review preserves shadcn dialogs, accessible SVG names, neutral
 surfaces and prototype-only custody. Spec review confirms the operator's new
 on-demand/density requirements and retains full lifecycle semantics. No blocker
-remains for publishing this study. Review of this revised prototype precedes
-production UI replacement. The full P237 UI/public managed/provider/recreation,
+remains for publishing this study. The operator approved the revised prototype on 2026-10-14 with “I like it.”
+The visual review gate is satisfied for this compact neutral workspace and
+content-sized on-demand handoff drawer. The full P237 UI/public managed/provider/recreation,
 reload/foreign/post-effect and canonical acceptance gates remain open.
+
+
+## Approved direction
+
+Operator approval applies to the revised preview session 4bac1a44b748 and
+prototype d0686b9af. Preserve the useful compact browser-tab rail, restrained
+neutral charcoal palette, dominant desktop, small SVG actions and on-demand
+content-sized drawer. Keep collapse/resize, keyboard/focus restoration and
+reduced-motion behavior. The initial A/B/C layouts remain rejected.
+
+Next: rewrite the approved design against real inventory, durable handoff
+management and the existing native Remote View integration in the implementation
+branch. Do not merge or cherry-pick throwaway source. Visual approval is not
+real lifecycle/provider acceptance or authority to publish an installed runtime.

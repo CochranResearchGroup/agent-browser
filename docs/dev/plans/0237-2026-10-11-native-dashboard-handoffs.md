@@ -26,7 +26,7 @@ The primary checkout is agent-browser-dashboard. Prototype custody uses a child 
 
 1. Confirmed model and reviewable UI: the operator rejected all three initial layouts on 2026-10-14. Retain the left-rail direction, remove the green theme and minimize wasted space. Follow compact shared UX from AuraCall, grok-bots/codex-bots and Remote View: restrained neutral dark surfaces, small SVG controls, collapsible/resizable navigation and secondary content on demand. Handoffs are hidden initially and opened by a small left-rail SVG button in a modal or animated drawer. Revise the throwaway prototype and publish one review session before production UI replacement. Synthetic interactions demonstrate tabs, menus, Properties and independent link/tab lifetime controls.
 2. Independent lifecycle, blocked by step 1's model: deliver configurable link expiry, tab retention and explicit deletion through the existing service authority, public contracts and one real isolated workflow. Valid-link target recreation and last-tab browser closure must pass. Establish meaningful failing regressions at the public lifecycle seam before changes. Pressure admission protects active users/operations/peers and never silently changes link validity.
-3. Native workspace, blocked by review of the revised compact workspace: real browser/tab inventory and exact generation-bound selection, native tab activation and browser raise/maximize. Reuse Remote View's viewer; preserve peer state and selection under refresh. Include Share, Properties, Copy URL and allowed Close Tab with keyboard-accessible menus and shadcn dialogs.
+3. Native workspace, visual review approved on 2026-10-14: real browser/tab inventory and exact generation-bound selection, native tab activation and browser raise/maximize. Reuse Remote View's viewer; preserve peer state and selection under refresh. Include Share, Properties, Copy URL and allowed Close Tab with keyboard-accessible menus and shadcn dialogs.
 4. Handoff management and retirement, blocked by steps 2 and 3: on-demand compact real table, human metadata, independently labeled link/tab lifetime controls and explicit link deletion. Inventory/remove obsolete operator UI while preserving software APIs and existing handoff routes. No competing legacy dashboard remains as the default operator surface.
 
 These are proposed tracer-bullet delivery slices, not horizontal mock layers. Publish child tickets only after the operator reviews granularity and genuine blocking edges. Do not reinterpret a prototype or planning commit as feature acceptance.
@@ -592,5 +592,18 @@ P237 outcome. The rejected layouts' evidence remains intact.
 The [compact workspace review](../notes/0237-2026-10-14-compact-workspace-review.md)
 binds the operator correction to prototype d0686b9af on its separate branch,
 read-only UX references, the published review and synthetic browser checks.
-The content-sized drawer and neutral compact framing await review; no
-prototype code enters the implementation branch.
+The operator approved the content-sized drawer and neutral compact framing on
+2026-10-14 (“I like it”). The visual review gate is satisfied; real inventory,
+handoff management, native integration and remaining acceptance still require
+implementation and proof. No prototype code enters the implementation branch.
+
+
+### Compact workspace approved, 2026-10-14
+
+The operator approved revised preview 4bac1a44b748 and prototype d0686b9af.
+The next bounded implementation is the real compact workspace against existing
+browser/tab inventory and native Remote View integration, followed by real
+on-demand handoff management and old UI retirement with API/route compatibility.
+The prior A/B/C choice is not an outstanding gate. Native/provider/public managed,
+recreation Properties, reload/foreign/post-effect and canonical acceptance remain
+open. This approval grants no installed publication or provider mutation.
