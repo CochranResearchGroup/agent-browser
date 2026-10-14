@@ -2253,6 +2253,12 @@ reports redacted SQLite integrity, database size, migration archive state,
 verified-backup state, and current browser-launch admission. An unavailable
 database exposes only a stable failure code and launch admission, never its
 filesystem path. `agent-browser install doctor` prints the same health fields.
+`browserRuntime.workspace` adds current managed browser, session and tab
+inventory from the runtime owner, including supplied task metadata and
+independent retention records. Its `reported` state is owner-published identity,
+not current process liveness or native viewer readiness. Debugger endpoints
+and private launch environment are omitted. Dashboard login, session checks
+and logout remain required for the operator workspace.
 On Unix, detached launches retain the effective X11 display even when it came from the inherited `DISPLAY` environment variable. Service status can therefore associate the manual browser with the governed remote-view route for that display, allowing its detected dashboard tile to expose the available remote View or Control action.
 
 During development, a normal command that finds a daemon running a different executable prepares an authenticated handoff, starts the current executable, resumes the same browser PID and DevTools endpoint, and only then accepts new work. Missing handoff authority fails closed. Active browsers and their ports stay open across the daemon changeover, while orphaned retained session leases are expired during reconciliation so stale ownership cannot block a healthy profile.
@@ -6022,6 +6028,13 @@ checks the desktop's current Agent Browser assignment and lifecycle generation,
 and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
+
+Native workspace embedding requires the dashboard and Remote View to share a
+public origin. When an iframe opens the durable link, its read-only redirect
+selects Remote View's existing workspace mode; native authentication and its
+same-origin framing policy still apply. Ordinary top-level links keep the
+standalone viewer. Preparing a handoff for an exact existing managed target
+without a URL preserves its live document instead of navigating or relaunching.
 
 When a still-valid link has lost its retained target, the read-only public locator
 redirects to Remote View's native authenticated recovery continuation. The native

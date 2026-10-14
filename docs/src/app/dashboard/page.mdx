@@ -11,6 +11,19 @@ can be reviewed through <code>GET /api/service/failures?limit=100</code>. The
 reporter never sends the current page URL, iframe URL, raw handoff ID,
 credentials, headers, bearer material, or page content.
 
+The operator workspace retains its own login, authenticated session checks and
+logout. Native Remote View retains its existing viewer authentication.
+Native workspace embedding requires the dashboard and Remote View to share a
+public origin. An iframe handoff selects Remote View's existing workspace mode;
+Remote View enforces its same-origin framing policy. Opening the durable link
+normally retains the standalone native viewer. This adds no viewer grant.
+Service Status includes <code>browserRuntime.workspace</code>, a read-only
+projection of the current managed browsers, sessions, tabs, supplied task
+metadata and independent retention records. Its <code>reported</code> state
+identifies owner-published inventory; it does not establish process liveness
+or native viewer readiness. Debugger endpoints and private launch environment
+are omitted.
+
 ## Usage
 
 The dashboard is bundled into the binary and requires no separate install. Start the server and open any session:

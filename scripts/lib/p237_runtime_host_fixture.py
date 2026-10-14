@@ -33,8 +33,12 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
                 'AGENT_BROWSER_EXECUTABLE_PATH': chrome,
                 'AGENT_BROWSER_ARGS': '--no-sandbox,--no-proxy-server,--disable-background-networking',
                 'AGENT_BROWSER_EXTERNAL_BROWSER_DISCOVERY': 'disabled'})
+    managed_provider = None
     if managed_session:
         env['AGENT_BROWSER_SESSION_DISPLAY'] = env['DISPLAY']
+        if managed_operator or env.get('P237_NATIVE_MANAGED_RECOVERY') == '1':
+            from lib.p237_native_provider_fixture import start_native_provider_fixture
+            managed_provider = start_native_provider_fixture(env, artifacts)
     if cli_bootstrap:
         env.pop('AGENT_BROWSER_RUNTIME_HOST_PROCESS')
         env.pop('AGENT_BROWSER_DAEMON_AUTH_TOKEN')
@@ -96,6 +100,7 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
     assert manifest['executableGeneration'] == hashlib.sha256(Path(cli).read_bytes()).hexdigest(), 'runtime-host executable generation differs from the reviewed pin'
     (artifacts / 'runtime-host-observation.json').write_text(json.dumps(manifest, indent=2) + '\n')
     def restart_owned_host():
+        nonlocal daemon
         old = json.loads(manifest_path.read_text())
         assert daemon.poll() is None and old['pid'] == daemon.pid
         process = Path('/proc')/str(daemon.pid)
@@ -112,6 +117,10 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
         while daemon.poll() is None:
             assert time.monotonic() < deadline, 'exact source host is still live; do not start a replacement'
             time.sleep(0.025)
+        # The launcher publishes the token; a retiring host correctly removes
+        # its owned record. Match that launch contract on every replacement.
+        auth.write_text(token)
+        auth.chmod(0o600)
         env['AGENT_BROWSER_RUNTIME_HOST_PROCESS'] = '1'
         env['AGENT_BROWSER_DAEMON_AUTH_TOKEN'] = token
         try:
@@ -126,15 +135,27 @@ def run_runtime_host_fixture(spawn, env, root, artifacts, cli, chrome, workflow_
                 break
             assert replacement.poll() is None and time.monotonic() < deadline, 'replacement source host did not publish its own identity'
             time.sleep(0.025)
-        assert current['executableGeneration'] == old['executableGeneration'] and current['socketIdentity'] != old['socketIdentity']
+        socket_stat = (sockets / 'runtime-host.sock').stat()
+        assert current['executableGeneration'] == old['executableGeneration']
+        assert current['pid'] != old['pid'] and current['socketIdentity'] == f'unix:{socket_stat.st_dev}:{socket_stat.st_ino}', 'replacement process or published socket identity is unproven'
         manifest.clear()
         manifest.update(current)
-        receipt = {'oldOwner':ownership,'oldReturncode':daemon.returncode,'oldManifest':old,'newManifest':current}
+        assert auth.read_text().strip() == token, 'replacement authentication record is not published'
+        receipt = {'oldOwner':ownership,'oldReturncode':daemon.returncode,'oldManifest':old,'newManifest':current,
+                   'authenticationRecordPublished': True}
         (artifacts/'managed-source-host-restart.json').write_text(json.dumps(receipt,indent=2)+'\n')
+        daemon = replacement
         return receipt
     if managed_session:
         from lib.p237_managed_session_fixture import run_managed_session_fixture
-        run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator, restart_owned_host if managed_restart else None)
+        try:
+            run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, managed_replay, managed_operator, restart_owned_host if managed_restart else None, spawn, cli)
+        finally:
+            if managed_provider:
+                managed_provider.viewer_fixture.shutdown()
+                managed_provider.viewer_fixture.server_close()
+                managed_provider.shutdown()
+                managed_provider.server_close()
         return
 
     def command(session, *arguments):

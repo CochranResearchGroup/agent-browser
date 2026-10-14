@@ -84,6 +84,17 @@ from separate clients or runtime lanes. The host rechecks the operator proof aft
 allocations remain independent. Waits use the request timeout, with a ten-second
 default; inspect pending focus work before a new explicit selection if waiting
 expires.
+Service Status `browserRuntime.workspace` reports current managed browsers,
+sessions and tabs with supplied task metadata. `reported` is owner inventory,
+not native viewer readiness or current process liveness. Debugger endpoints and
+private launch environment are omitted. The dashboard keeps its own login,
+session checks and logout.
+Native workspace embedding requires the same public origin as Remote View.
+Iframe handoffs use its existing workspace mode and same-origin framing policy;
+ordinary durable links retain the standalone native viewer and existing auth.
+Preparing a managed handoff with an exact existing target and no URL preserves
+the live document instead of navigating or relaunching it.
+
 Managed view_focus marked as an operator request also requires current authenticated
 operator authority. An unbound request is rejected before selecting its target;
 ordinary explicit managed focus keeps its existing behavior.

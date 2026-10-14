@@ -327,6 +327,8 @@ export type WorkspaceServiceSession = {
 };
 
 export type WorkspaceServiceTab = {
+  /** Supplied task label, separate from the currently observed page title. */
+  taskLabel?: string | null;
   id: string;
   browserId?: string | null;
   targetId?: string | null;

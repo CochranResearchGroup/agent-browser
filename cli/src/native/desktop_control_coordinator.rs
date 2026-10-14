@@ -34,11 +34,8 @@ pub(crate) async fn begin_service_operator_selection(
 ) -> Result<agent_browser_desktop_services::DesktopSelectionGuard, String> {
     let repository = LockedServiceStateRepository::default_json()?;
     let snapshot = repository.load_snapshot()?;
-    super::stream::verify_operator_focus(&snapshot, command)?;
-    let route_id = command["routeId"]
-        .as_str()
-        .ok_or("operator_focus_binding_required: missing routeId")?;
-    let (root, identity) = service_route_fence_scope(&snapshot, route_id)?;
+    let authority = super::stream::verify_operator_focus_scope(&snapshot, command)?;
+    let (root, identity) = operator_scope_fence_scope(&authority)?;
     let scope = serde_json::to_string(&(
         root,
         identity.environment_id,
@@ -96,17 +93,42 @@ pub(crate) struct OperatorFocusGuard {
 }
 
 pub(crate) fn begin_service_operator_focus(
-    state: &ServiceState,
-    route_id: &str,
+    authority: &super::stream::OperatorFocusScope,
     request_id: &str,
 ) -> Result<OperatorFocusGuard, String> {
-    let (runtime_state_root, identity) = service_route_fence_scope(state, route_id)?;
+    let (runtime_state_root, identity) = operator_scope_fence_scope(authority)?;
     global_desktop_control_coordinator().begin_fenced_focus(
-        route_id,
+        &authority.resource_id,
         request_id,
         &runtime_state_root,
         &identity,
     )
+}
+
+/// Scope is produced only after current operator proof verification. Native
+/// assignments use their actual resource and desktop identities, not a grant
+/// record in the legacy viewer registry.
+fn operator_scope_fence_scope(
+    authority: &super::stream::OperatorFocusScope,
+) -> Result<(PathBuf, RouteEffectFenceIdentity), String> {
+    let state_path = default_service_state_path()?;
+    let root = state_path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("desktop_control_runtime_state_root_unavailable")?
+        .to_path_buf();
+    let environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "production".into());
+    Ok((
+        root,
+        RouteEffectFenceIdentity::new(
+            environment,
+            &authority.resource_id,
+            &authority.display_allocation_id,
+        ),
+    ))
 }
 
 fn service_route_fence_scope(

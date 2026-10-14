@@ -149,7 +149,6 @@ pub(crate) async fn execute_shared_remote_view_open(
     command["humanHandoff"] = serde_json::json!(true);
     pending_human_retention(&command)?;
     tokio::task::spawn_blocking(move || {
-        require_managed_runtime_admission("launch", &command)?;
         let mut shared = shared
             .lock()
             .map_err(|_| "browser_session_host_lock_poisoned")?;
@@ -157,6 +156,10 @@ pub(crate) async fn execute_shared_remote_view_open(
             *shared = Some(load_default_browser_session_host()?);
         }
         let host = shared.as_mut().ok_or("browser_session_host_missing")?;
+        if command.get("url").is_none() && command.get("browserId").is_some() && command.get("targetId").is_some() {
+            return host.prepare_existing_task_handoff(&name, &command).map(Some);
+        }
+        require_managed_runtime_admission("launch", &command)?;
         validate_handoff_ttl(&command, current_unix_ms(), &agent_browser_service_model::BrowserRetentionPolicy::default())?;
         let selected_build = optional_string(&command, "browserBuild");
         let selected_executable = match selected_build {
@@ -1840,6 +1843,142 @@ where
     /// the existing fenced owner before refreshing or executing a tab command.
     /// Explicit humanHandoff commands prepare a configured pending tab hold;
     /// AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS supplies the default maximum.
+    /// Prepare a durable native handoff for an existing task without a URL,
+    /// navigation, new task admission, or replacement of original provenance.
+    fn prepare_existing_task_handoff(
+        &mut self,
+        name: &str,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        let now_ms = current_unix_ms();
+        let mut focus = command.clone();
+        focus["action"] = serde_json::json!("view_focus");
+        focus["operatorFocus"] = serde_json::json!(true);
+        use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+        super::stream::verify_operator_focus(
+            &LockedServiceStateRepository::default_json()?.load_snapshot()?,
+            &focus,
+        )?;
+        let browser_id = required_string(command, "browserId")?;
+        let target_id = required_string(command, "targetId")?;
+        let tab = self
+            .state
+            .tabs
+            .values()
+            .find(|tab| tab.browser_id == browser_id && tab.target_id == target_id)
+            .ok_or("operator_focus_target_missing")?
+            .clone();
+        let session = self
+            .state
+            .sessions
+            .get(&tab.session_id)
+            .ok_or("operator_focus_session_missing")?
+            .clone();
+        if session.name != name {
+            return Err("operator_focus_binding_changed".into());
+        }
+        validate_handoff_ttl(command, now_ms, &self.state.retention_policy)?;
+        let ttl = pending_human_retention(command)?;
+        let id = self
+            .state
+            .remote_view_tab_handoffs
+            .values()
+            .find(|link| {
+                link.session_id == session.id
+                    && link.tab_id == tab.id
+                    && link.check_link_at(now_ms).is_ok()
+            })
+            .map(|link| link.id.clone())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let mut link = agent_browser_service_model::retain_remote_view_tab_handoff_at(
+            &mut self.state,
+            &id,
+            &session.id,
+            &tab.id,
+            now_ms,
+        )?;
+        if let Some(ttl) = command
+            .get("handoffTtlMs")
+            .and_then(serde_json::Value::as_u64)
+        {
+            link.extend_link_retention(now_ms, ttl)?;
+            self.state
+                .remote_view_tab_handoffs
+                .insert(id.clone(), link.clone());
+        }
+        self.commit_state()?;
+        let unused = self
+            .state
+            .tab_metadata
+            .get(&tab.id)
+            .is_none_or(|metadata| metadata.first_human_use_at_ms.is_none());
+        if unused && !self.state.pending_human_tabs.contains_key(&tab.id) {
+            if let Some(ttl) = ttl {
+                self.handle_command_result(&serde_json::json!({"action":"service_remote_view_handoff_resolve",
+                    "handoffId":id,"handoffOperation":"prepare_human","pendingHumanRetentionMs":ttl,"activityAtMs":now_ms}))?;
+            }
+        }
+        self.prepare_native_handoff_observation(&id, now_ms)?;
+        let selected = self.execute_operator_focus(&focus)?;
+        if selected["success"] != true {
+            return Ok(selected);
+        }
+        Ok(serde_json::json!({"id":command["id"],"success":true,
+            "data":{"handoffPrepared":true,"tabNavigation":false},
+            "browserSession":{"browserId":browser_id,"profileId":session.profile_id,
+                "sessionId":session.id,"sessionName":session.name,"tabId":tab.id,"targetId":tab.target_id,
+                "handoffId":id,"handoffUrl":format!("/remote-view/{id}"),
+                "handoffCreatedAtMs":link.created_at_ms,"handoffExpiresAtMs":link.expires_at_ms},
+            "presentationState":"native_desktop","operatorVisible":{"state":"ready","proofScope":"owned_browser_window"}}))
+    }
+
+    /// Keep signed operator focus separate from agent child custody. The runtime
+    /// rechecks the proof under the desktop effect fence before any tab switch.
+    pub(crate) fn execute_operator_focus(
+        &mut self,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String> {
+        if command["action"] != "view_focus" || command["operatorFocus"] != true {
+            return Err("operator_focus_action_mismatch".into());
+        }
+        let browser_id = required_string(command, "browserId")?;
+        let target_id = required_string(command, "targetId")?;
+        let name = required_string(command, "sessionName")?;
+        let browser = self
+            .state
+            .browsers
+            .get(browser_id)
+            .ok_or("operator_focus_browser_missing")?
+            .clone();
+        let mut matching = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser_id && tab.target_id == target_id);
+        let tab = matching
+            .next()
+            .ok_or("operator_focus_target_missing")?
+            .clone();
+        if matching.next().is_some() {
+            return Err("operator_focus_target_ambiguous".into());
+        }
+        let session = self
+            .state
+            .sessions
+            .get(&tab.session_id)
+            .ok_or("operator_focus_session_missing")?
+            .clone();
+        if session.name != name
+            || session.browser_id != browser.id
+            || self.persistence.load_session_state()? != self.persisted_state
+        {
+            return Err("operator_focus_binding_changed".into());
+        }
+        self.effects.begin_operation(&self.persisted_state)?;
+        self.effects
+            .execute_command(&browser, &tab, &session.id, &session.name, command)
+    }
+
     pub(crate) fn execute_managed_command(
         &mut self,
         session_name: &str,

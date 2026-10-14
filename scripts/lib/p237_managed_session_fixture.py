@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 
-def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False, operator_proof=False, restart_host=None):
+def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, workflow_log, replay_after_close=False, operator_proof=False, restart_host=None, spawn=None, source_cli=None):
     endpoint = next(path for path in sockets.iterdir() if path.is_socket()
                     and f'unix:{path.stat().st_dev}:{path.stat().st_ino}' == manifest['socketIdentity'])
     profile = root/'managed-profile'
@@ -119,6 +119,10 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
             assert observed['data'][action] == expected, 'managed lane read a peer target'
             assert after == before, 'managed read changed physical foreground'
             assert targets() == preserved, 'managed read changed peer targets'
+    if env.get('P237_NATIVE_MANAGED_RECOVERY') == '1':
+        from lib.p237_managed_recovery_fixture import run_managed_recovery_fixture
+        run_managed_recovery_fixture(request, root, artifacts, env, browser, targets, foreground,
+                                     spawn, source_cli, restart_host)
     if operator_proof:
         expected_id = f'p237-managed-{len(replies)}'
         denied = request('p237-managed-bob','view_focus',require_success=False,
@@ -132,6 +136,11 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
         assert not denied.get('success') and 'operator_focus' in denied.get('error',''), 'managed native focus accepted an invalid operator proof'
         assert denied.get('id') == expected_id, 'managed operator denial lost its request identity'
         assert after == before and targets() == preserved, 'rejected managed operator focus changed the desktop or targets'
+    if operator_proof:
+        from lib.p237_managed_operator_fixture import run_managed_operator_fixture
+        run_managed_operator_fixture(root, artifacts, sockets, state["browsers"][browser_id],
+                                     [('p237-managed-alice', alice_page), ('p237-managed-bob', bob_page)],
+                                     foreground, targets, expected_targets, spawn, source_cli, env)
     if restart_host:
         request('p237-managed-bob','browser_session_focus',browserId=browser_id,
                 targetId=bob_page['browserSession']['targetId'])

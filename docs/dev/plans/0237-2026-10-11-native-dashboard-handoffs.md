@@ -607,3 +607,19 @@ on-demand handoff management and old UI retirement with API/route compatibility.
 The prior A/B/C choice is not an outstanding gate. Native/provider/public managed,
 recreation Properties, reload/foreign/post-effect and canonical acceptance remain
 open. This approval grants no installed publication or provider mutation.
+
+
+## Approved spec execution (2026-10-14)
+
+The operator approved the acceptance seam and seven-ticket breakdown, then invoked implement-spec. Issue261 holds the approved synthesized specification; issues277 through283 hold delivery criteria and native blocking edges. The [implementation ledger](../notes/0237-2026-10-14-implementation-ledger.md) owns sequential execution states, exact custody, resource checkpoint, validation and remaining gates. Dashboard authentication remains independently preserved. Prototype approval is not native acceptance.
+
+Native selection integration preserves the product seam: the native Remote View application assignment is the current desktop authority; it does not require a second Agent Browser viewer lease. The implementation ledger retains a public RED where the owner-created native task is rejected for missing legacy routeId. The bounded repair gives signed dashboard focus an explicit native-assignment scope, joined to exact managed launch custody, current provider lifecycle/viewing generations, profile view policy and current dashboard role. Legacy controller-route focus retains its existing independent checks. No new viewer, auth ceremony, installed publication or provider mutation is authorized by this source repair.
+
+Native framing preserves Remote View's existing boundary: its ordinary viewer
+uses frame-ancestors none; workspace=true permits same-origin embedding. The
+public read-only locator selects that existing renderer mode for iframe
+navigation without granting access or changing ordinary top-level links. The
+dashboard and native viewer must share a reviewed public origin for embedding.
+The task-local TLS reverse proxy qualifies that source configuration only;
+external ingress remains an independent gate. No weakening of native CSP,
+duplicate renderer or additional viewer grant is included.

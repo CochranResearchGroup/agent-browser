@@ -1383,6 +1383,15 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
+                        if command["action"] == "view_focus" && command["operatorFocus"] == true {
+                            // No marker clearing or target activation may precede
+                            // the current operator proof and native effect fence.
+                            let data = super::browser_lifecycle::handle_view_focus(&command, state)
+                                .await?;
+                            return Ok(
+                                serde_json::json!({"id":command["id"],"success":true,"data":data}),
+                            );
+                        }
                         let manager = state
                             .browser
                             .as_mut()

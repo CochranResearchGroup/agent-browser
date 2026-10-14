@@ -1477,17 +1477,13 @@ pub(crate) mod action_commands {
             .transpose()?;
         let _operator_fence = if let Some(repository) = operator_repository.as_ref() {
             let snapshot = repository.load_snapshot()?;
-            let route_id = cmd
-                .get("routeId")
-                .and_then(Value::as_str)
-                .ok_or("operator_focus_binding_required: missing routeId")?;
-            crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+            let authority = crate::native::stream::verify_operator_focus_scope(&snapshot, cmd)?;
             let request_id = cmd
                 .get("id")
                 .and_then(Value::as_str)
                 .ok_or("operator_focus_binding_required: missing id")?;
             let guard = crate::native::desktop_control_coordinator::begin_service_operator_focus(
-                &snapshot, route_id, request_id,
+                &authority, request_id,
             )?;
             crate::native::stream::verify_operator_focus(&repository.load_snapshot()?, cmd)?;
             Some(guard)

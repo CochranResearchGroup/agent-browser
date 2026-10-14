@@ -9,7 +9,9 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 mod operator_focus;
-pub(crate) use operator_focus::{issue_operator_focus, verify_operator_focus};
+pub(crate) use operator_focus::{
+    issue_operator_focus, verify_operator_focus, verify_operator_focus_scope, OperatorFocusScope,
+};
 
 pub(super) fn require_current_operator_role(username: &str) -> Result<(), String> {
     if load_auth_store()?

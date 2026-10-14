@@ -188,9 +188,35 @@ impl BrowserSessionSqliteStore {
                 Err(_) => "unavailable",
             };
             let backup = store.backup_status()?;
+            let managed = store.load_session_state()?;
+            let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
+                (id.clone(), serde_json::json!({
+                    "id":id,"profileId":browser.profile_id,"pid":browser.pid,
+                    "desktop":browser.desktop,"activeSessionIds":browser.active_session_ids,
+                    "state":if managed.idle_closed_browsers.contains_key(id) { "sleeping" } else { "reported" }
+                }))
+            }).collect();
+            let tabs: std::collections::BTreeMap<_, _> = managed.tabs.iter().map(|(id, tab)| {
+                let destination = managed.navigation_history.iter().filter(|entry| entry.tab_id == *id)
+                    .max_by_key(|entry| entry.visited_at_ms).map(|entry| entry.url.as_str());
+                let metadata = managed.tab_metadata.get(id);
+                (id.clone(), serde_json::json!({
+                    "id":id,"targetId":tab.target_id,"browserId":tab.browser_id,"sessionId":tab.session_id,
+                    "createdAtMs":tab.created_at_ms,"url":destination,"taskMetadata":metadata,
+                    "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
+                }))
+            }).collect();
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
+                // Owner-published inventory is not provider readiness or an OS
+                // liveness claim. Debugger endpoints and launch environments
+                // remain private to the runtime owner.
+                "workspace": {
+                    "schemaVersion":"agent-browser.managed-workspace.v1",
+                    "source":"managed-owner","browsers":browsers,
+                    "sessions":managed.sessions,"tabs":tabs
+                },
                 "launchAdmission": launch_admission,
                 "storage": {
                     "integrityState": "ok",

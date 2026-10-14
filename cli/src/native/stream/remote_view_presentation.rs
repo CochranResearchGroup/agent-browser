@@ -162,7 +162,9 @@ pub(super) fn native_resume_operator(
 
 /// Read the current owned route without launching, recovering or focusing a browser.
 /// The destination's native Remote View authentication protects desktop access.
-pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> {
+/// Resolve without effects. Embedded callers use Remote View's existing
+/// same-origin workspace mode; this never grants access or weakens its CSP.
+pub(super) async fn resolve_public_location(id: &str, workspace: bool) -> Result<String, String> {
     let configured = std::env::var("AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN")
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
@@ -202,6 +204,9 @@ pub(super) async fn resolve_public_location(id: &str) -> Result<String, String> 
     };
     let mut location = url::Url::parse(&presentation_url(&origin, &route)?)
         .map_err(|_| "remote_view_presentation_path_invalid")?;
+    if workspace {
+        location.query_pairs_mut().append_pair("workspace", "true");
+    }
     if let Some(correlation) = correlation {
         location
             .query_pairs_mut()

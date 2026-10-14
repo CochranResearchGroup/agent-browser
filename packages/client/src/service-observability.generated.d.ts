@@ -985,8 +985,31 @@ export interface ServiceStateLockDiagnostics {
   };
 }
 
+/** Owner-published inventory; reported is not native viewer readiness. */
+export interface ServiceManagedWorkspace {
+  schemaVersion: 'agent-browser.managed-workspace.v1';
+  source: 'managed-owner';
+  browsers: Record<string, {
+    id: string; profileId: string; pid: number;
+    desktop: { desktop_id: string; generation: number; friendly_route_label: string } | null;
+    activeSessionIds: string[]; state: 'reported' | 'sleeping';
+  }>;
+  sessions: Record<string, {
+    id: string; name: string; profileId: string; browserId: string;
+    createdAtMs: number; lastActivityAtMs: number; expiresAtMs: number; currentTabId: string | null;
+  }>;
+  tabs: Record<string, {
+    id: string; targetId: string; browserId: string; sessionId: string;
+    createdAtMs: number; url: string | null;
+    taskMetadata: Record<string, unknown> | null;
+    lifetime: Record<string, unknown> | null;
+    pendingHuman: Record<string, unknown> | null;
+  }>;
+}
+
 export interface ServiceBrowserRuntimeOperationalStatus {
   schemaVersion: 'agent-browser.runtime-operational-status.v1';
+  workspace?: ServiceManagedWorkspace;
   state: 'available' | 'unavailable';
   failureCode?: string;
   launchAdmission: {
@@ -1000,6 +1023,7 @@ export interface ServiceBrowserRuntimeOperationalStatus {
     hostProcessLimit: number | null;
     browserProcessCount: number | null;
     maximumBrowserProcesses: number;
+    memoryReserveSource?: string;
     reasons: string[];
   };
   storage?: {
@@ -1007,6 +1031,7 @@ export interface ServiceBrowserRuntimeOperationalStatus {
     databaseBytes: number;
     backupState: 'missing' | 'verified' | 'gap';
     backupSha256: string | null;
+    terminalHistory?: { activeLimit: number; archivedSessionCount: number; archivedTabCount: number; retention: 'durable_no_expiry' };
   };
   migration?: {
     importedSourceCount: number;

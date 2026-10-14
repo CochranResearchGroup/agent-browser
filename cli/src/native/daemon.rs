@@ -714,6 +714,24 @@ impl RuntimeHostRouter {
     }
 
     async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
+        let _selection = if command["operatorFocus"] == true
+            && command["browserId"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("browser:"))
+        {
+            match super::desktop_control_coordinator::begin_service_operator_selection(&command)
+                .await
+            {
+                Ok(guard) => Some(guard),
+                Err(error) => {
+                    return Some(
+                        serde_json::json!({"id":command["id"],"success":false,"error":error}),
+                    )
+                }
+            }
+        } else {
+            None
+        };
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
             let mut host = browser_sessions
@@ -749,6 +767,13 @@ impl RuntimeHostRouter {
             }
             if host.is_none() {
                 *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+                return host
+                    .as_mut()
+                    .ok_or("browser_session_host_missing")?
+                    .execute_operator_focus(&command)
+                    .map(Some);
             }
             let command = browser_session_focus_command(
                 &command,

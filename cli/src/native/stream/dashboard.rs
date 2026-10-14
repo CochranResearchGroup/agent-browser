@@ -388,7 +388,12 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             .await;
             return;
         };
-        let response = match super::remote_view_presentation::resolve_public_location(id).await {
+        // This is only a renderer hint. Remote View keeps native authentication
+        // and enforces its same-origin workspace framing policy itself.
+        let workspace = headers
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("sec-fetch-dest") && value == "iframe");
+        let response = match super::remote_view_presentation::resolve_public_location(id, workspace).await {
             Ok(location) => format!("HTTP/1.1 303 See Other\r\nLocation: {location}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
             Err(reason) => {
                 let html = headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("accept") && value.contains("text/html"));

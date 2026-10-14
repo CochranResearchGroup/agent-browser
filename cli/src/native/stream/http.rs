@@ -2118,14 +2118,29 @@ fn service_request_command_with_state_and_authority(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
-    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+    let existing_managed_handoff = action_hint == "remote_view_open"
+        && command["browserId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("browser:"))
+        && command["targetId"].as_str().is_some()
+        && command.get("url").is_none();
+    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+        || existing_managed_handoff
+    {
+        // Preparing an existing native target includes exact focus, not agent
+        // navigation. Sign that bounded subaction using the authenticated actor.
+        let mut focus_command = command.clone();
+        if existing_managed_handoff {
+            focus_command["action"] = json!("view_focus");
+            command["operatorFocus"] = json!(true);
+        }
         let proof = authenticated_dashboard_user
             .zip(service_state)
             .ok_or_else(|| {
                 "operator_focus_authority_required: authenticated dashboard required".to_string()
             })
             .and_then(|(username, state)| {
-                dashboard_auth::issue_operator_focus(state, &command, username)
+                dashboard_auth::issue_operator_focus(state, &focus_command, username)
             })
             .map_err(|message| {
                 ServiceRequestRejection::record(

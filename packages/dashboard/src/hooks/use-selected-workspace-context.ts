@@ -41,7 +41,11 @@ import type {
 } from "@/lib/service-workspaces";
 import { deriveWorkspaceNodes, deriveWorkspaceViewAuthorityLedger } from "@/lib/service-workspaces";
 
+import type { ServiceBrowserRuntimeOperationalStatus, ServiceManagedWorkspace } from "@agent-browser/client/service-observability";
+import { managedWorkspaceSources } from "@/lib/managed-workspace";
+
 type ServiceStatusData = {
+  browserRuntime?: ServiceBrowserRuntimeOperationalStatus;
   service_state?: {
     browsers?: Record<string, WorkspaceServiceBrowser>;
     sessions?: Record<string, WorkspaceServiceSession>;
@@ -67,6 +71,9 @@ type ApiResponse<T> = {
 };
 
 export type UseSelectedWorkspaceContextResult = {
+  managedWorkspace?: ServiceManagedWorkspace;
+  nodes: readonly WorkspaceNode[];
+  tabs: readonly WorkspaceServiceTab[];
   context: SelectedWorkspaceContext;
   projection: WorkspaceViewProjection;
   sourceSnapshotIdentity: number;
@@ -152,15 +159,18 @@ export function useSelectedWorkspaceContext(
     return engineByPort;
   }, [daemonSessions, getEngineForPort]);
 
-  const { context, projection } = useMemo(() => {
-    const serviceBrowsers = Object.values(serviceStatus?.service_state?.browsers ?? {});
-    const serviceTabs = Object.values(serviceStatus?.service_state?.tabs ?? {});
+  const { context, projection, nodes, tabs } = useMemo(() => {
+    const managed = managedWorkspaceSources(serviceStatus?.browserRuntime?.workspace);
+    const mergeById = <T extends { id: string }>(legacy: T[], owned: T[]): T[] =>
+      [...new Map([...legacy, ...owned].map(record => [record.id, record])).values()];
+    const serviceBrowsers = mergeById(Object.values(serviceStatus?.service_state?.browsers ?? {}), managed.browsers);
+    const serviceTabs = mergeById(Object.values(serviceStatus?.service_state?.tabs ?? {}), managed.tabs);
     const nodeInput = {
       daemonSessions,
       daemonTabsByPort,
       daemonEngineByPort,
       serviceBrowsers,
-      serviceSessions: Object.values(serviceStatus?.service_state?.sessions ?? {}),
+      serviceSessions: mergeById(Object.values(serviceStatus?.service_state?.sessions ?? {}), managed.sessions),
       serviceTabs,
       profileAllocations: serviceStatus?.profileAllocations ?? [],
       manualBrowsers: serviceStatus?.manualBrowsers ?? [],
@@ -214,6 +224,8 @@ export function useSelectedWorkspaceContext(
       },
     });
     return {
+      nodes,
+      tabs: serviceTabs,
       projection,
       context: {
         ...baseContext,
@@ -237,7 +249,7 @@ export function useSelectedWorkspaceContext(
     preferences?.revision,
   ]);
 
-  return { context, projection, sourceSnapshotIdentity: refreshedAt, loading, error, refresh };
+  return { context, projection, nodes, tabs, managedWorkspace: serviceStatus?.browserRuntime?.workspace, sourceSnapshotIdentity: refreshedAt, loading, error, refresh };
 }
 
 function workspaceProjectionBrowser(browser: WorkspaceServiceBrowser): WorkspaceViewBrowserSource {

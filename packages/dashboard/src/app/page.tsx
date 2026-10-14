@@ -20,6 +20,8 @@ import { ConsolePanel } from "@/components/console-panel";
 import { StoragePanel } from "@/components/storage-panel";
 import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
+import { NativeTaskViewport } from "@/components/native-task-viewport";
+import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
 import { WorkspaceNavigator } from "@/components/workspace-navigator";
 import { AppShell, type DashboardSection } from "@/components/app-shell";
 import {
@@ -975,6 +977,26 @@ function DashboardExperience({
     runtimeEnvironment: runtimeManifest.manifest?.runtimeEnvironment ?? "production",
     runtimeNotice,
   };
+
+  // Temporary integration entry while dependent workflows are qualified.
+  // The final retirement slice makes this the default and removes this switch.
+  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace-ui") === "compact") {
+    const inventory = selectedWorkspace.managedWorkspace;
+    const browserId = selectedWorkspace.context.selection.browserId;
+    const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
+    const managedBrowser = browserId ? inventory?.browsers[browserId] : null;
+    const tab = tabId ? inventory?.tabs[tabId] : null;
+    const session = tab ? inventory?.sessions[tab.sessionId] : null;
+    const nativeTarget = managedBrowser?.desktop && tab?.browserId === managedBrowser.id && session
+      ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
+      : null;
+    return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
+      selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
+      onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}>
+      {managedBrowser ? <NativeTaskViewport target={nativeTarget} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+        projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
+    </CompactNativeWorkspace>;
+  }
 
   if (isDesktop) {
     if (!hasSessions && activeSection !== "service" && !hasWorkspaceViewportRoute) {
