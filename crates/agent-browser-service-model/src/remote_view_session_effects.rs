@@ -27,6 +27,7 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     retirements: BTreeMap<String, BrowserIdleRetirementRecord>,
     active_retirements: BTreeMap<String, Weak<()>>,
     operation_retirements: BTreeSet<String>,
+    activities: BTreeSet<String>,
 }
 
 impl<
@@ -72,6 +73,7 @@ impl<
             retirements: BTreeMap::new(),
             active_retirements: BTreeMap::new(),
             operation_retirements: BTreeSet::new(),
+            activities: BTreeSet::new(),
         })
     }
     /// Configure demand-driven capacity. This performs no provider request.
@@ -88,6 +90,38 @@ impl<
     pub fn with_view_clock(mut self, clock: fn() -> u64) -> Self {
         self.view_clock = Some(clock);
         self
+    }
+
+    fn with_browser_activity<R>(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        effect: impl FnOnce(&mut E) -> Result<R, String>,
+    ) -> Result<R, String> {
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        // Unpublished new roots already have exclusive launch custody. Their
+        // initial target work is published atomically with that launch.
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|(intent, _)| intent.profile_id == browser.profile_id)
+        {
+            return effect(&mut self.effects);
+        }
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("browser_session_activity_unavailable")?;
+        let id = (self.next_intent_id)();
+        self.store
+            .admit_browser_activity(&id, browser, expected)
+            .map_err(|_| "browser_session_activity_admission_conflict")?;
+        // Unknown effects retain the durable veto and are never replayed here.
+        let result = effect(&mut self.effects)?;
+        self.store
+            .acknowledge_browser_activity(&id)
+            .map_err(|_| "browser_session_activity_readback_required")?;
+        self.activities.insert(id);
+        Ok(result)
     }
 
     fn require_clear_profile_custody(&mut self, profile_id: &str) -> Result<(), String> {
@@ -239,14 +273,14 @@ impl<
                             .ok_or("browser_session_idle_custody_unavailable")?,
                     );
                 }
-                match self
-                    .store
-                    .claim_idle_retirement(&intent, &expected)
-                    .map_err(|_| "browser_session_idle_readback_required")?
-                {
-                    BrowserIdleRetirementAdmission::New => BrowserIdleRetirementRecord::new(intent)
-                        .map_err(|_| "browser_session_idle_custody_unavailable")?,
-                    BrowserIdleRetirementAdmission::Existing(record) => *record,
+                match self.store.claim_idle_retirement(&intent, &expected) {
+                    Ok(BrowserIdleRetirementAdmission::New) => {
+                        BrowserIdleRetirementRecord::new(intent)
+                            .map_err(|_| "browser_session_idle_custody_unavailable")?
+                    }
+                    Ok(BrowserIdleRetirementAdmission::Existing(record)) => *record,
+                    Err(BrowserIdleRetirementStoreError::ActivityActive) => return Ok(None),
+                    Err(_) => return Err("browser_session_idle_readback_required".into()),
                 }
             };
             self.operation_retirements.insert(record.intent.id.clone());
@@ -913,6 +947,9 @@ impl<
         self.expected = Some(expected.clone());
         Ok(())
     }
+    fn pending_browser_activity_ids(&self) -> Vec<String> {
+        self.activities.iter().cloned().collect()
+    }
     fn pending_idle_retirement_ids(&self) -> Vec<String> {
         self.operation_retirements
             .iter()
@@ -968,6 +1005,7 @@ impl<
             return;
         }
         self.pending = None;
+        self.activities.clear();
         self.expected = None;
         self.effects.acknowledge_launch_publication();
     }
@@ -1106,8 +1144,9 @@ impl<
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
-        self.effects
-            .acquire_initial_tab(browser, attributed_target_ids)
+        self.with_browser_activity(browser, |effects| {
+            effects.acquire_initial_tab(browser, attributed_target_ids)
+        })
     }
     fn acquire_session_initial_tab(
         &mut self,
@@ -1118,8 +1157,9 @@ impl<
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
-        self.effects
-            .acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
+        self.with_browser_activity(browser, |effects| {
+            effects.acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
+        })
     }
     fn create_tab(
         &mut self,
@@ -1127,7 +1167,7 @@ impl<
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
-        self.effects.create_tab(browser)
+        self.with_browser_activity(browser, |effects| effects.create_tab(browser))
     }
     fn close_tab(
         &mut self,
@@ -1168,7 +1208,7 @@ impl<
     ) -> Result<(), String> {
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
-        self.effects.navigate(browser, tab, url)
+        self.with_browser_activity(browser, |effects| effects.navigate(browser, tab, url))
     }
     fn focus_browser(
         &mut self,
@@ -1193,7 +1233,7 @@ impl<
         // CDP selects the addressed target. Provider observations then fence the
         // current desktop generations and prove the owned process is foreground.
         // This is window proof only; it does not establish viewer connectivity.
-        self.effects.focus_browser(browser, tab)?;
+        self.with_browser_activity(browser, |effects| effects.focus_browser(browser, tab))?;
         let windows = self
             .adapter
             .windows(&assignment)
@@ -1255,8 +1295,9 @@ impl<
     ) -> Result<serde_json::Value, String> {
         self.require_operation()?;
         self.require_clear_profile_custody(&browser.profile_id)?;
-        self.effects
-            .execute_command(browser, tab, session_id, session_name, command)
+        self.with_browser_activity(browser, |effects| {
+            effects.execute_command(browser, tab, session_id, session_name, command)
+        })
     }
 }
 

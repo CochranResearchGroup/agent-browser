@@ -505,8 +505,9 @@ pub(crate) trait BrowserSessionPersistence {
         state: &BrowserSessionState,
         intent: Option<&BrowserLaunchIntent>,
         retirement_ids: &[String],
+        activity_ids: &[String],
     ) -> Result<(), String> {
-        if !retirement_ids.is_empty() {
+        if !retirement_ids.is_empty() || !activity_ids.is_empty() {
             return Err("browser_session_idle_publication_unsupported".into());
         }
         self.publish_session_state(expected, state, intent)
@@ -531,11 +532,12 @@ impl BrowserSessionPersistence for BrowserSessionSqliteStore {
         state: &BrowserSessionState,
         intent: Option<&BrowserLaunchIntent>,
         retirement_ids: &[String],
+        activity_ids: &[String],
     ) -> Result<(), String> {
-        if retirement_ids.is_empty() {
+        if retirement_ids.is_empty() && activity_ids.is_empty() {
             self.publish_session_state(expected, state, intent)
         } else {
-            self.publish_session_retirements(expected, state, retirement_ids, intent)
+            self.publish_session_retirements(expected, state, retirement_ids, intent, activity_ids)
                 .map_err(|_| "browser_session_idle_publication_conflict".into())
         }
     }
@@ -1060,6 +1062,9 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
                 .is_ok_and(|state| state == self.state)
             {
                 self.persisted_state = self.state.clone();
+                // Exact publication readback includes the transaction's
+                // activity release. Drop its stale process-local IDs too.
+                self.effects.acknowledge_launch_publication();
             } else {
                 self.state = self.persisted_state.clone();
                 return Err(error);
@@ -1691,6 +1696,7 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             &self.state,
             intent.as_ref(),
             &retirement_ids,
+            &self.effects.pending_browser_activity_ids(),
         )?;
         // Publication may move completed history into the same durable archive.
         // Adopt its exact active projection so the next CAS sees the same state.
@@ -2039,8 +2045,13 @@ where
             return Err("operator_focus_binding_changed".into());
         }
         self.effects.begin_operation(&self.persisted_state)?;
-        self.effects
-            .execute_command(&browser, &tab, &session.id, &session.name, command)
+        let response =
+            self.effects
+                .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if !self.effects.pending_browser_activity_ids().is_empty() {
+            self.commit_state()?;
+        }
+        Ok(response)
     }
 
     pub(crate) fn execute_managed_command(
@@ -2303,6 +2314,9 @@ where
                         serde_json::json!(format!("/remote-view/{}", handoff.id));
                 }
             }
+        }
+        if !self.effects.pending_browser_activity_ids().is_empty() {
+            self.commit_state()?;
         }
         Ok(Some(response))
     }

@@ -6808,9 +6808,9 @@ Examples:
             r##"
 agent-browser service - Inspect service-mode state
 
-Browser Runtime reads database schemas 1 and 2. The first native idle-retirement
-custody claim atomically marks schema 2. Keep a schema-2-capable binary with its
-backups; backup commands preserve pending custody for original-operation readback.
+Browser Runtime reads database schemas 1, 2 and 3. Native idle-retirement custody
+marks schema 2; command-activity custody marks schema 3. Keep a schema-3-capable
+binary with its backups. Unknown effects retain custody for original readback.
 
 Usage:
   agent-browser service state validate --path <absolute-path> --json

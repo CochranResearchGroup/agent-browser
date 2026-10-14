@@ -155,6 +155,9 @@ pub trait BrowserSessionEffects {
     }
 
     /// Exact automatic-retirement operations awaiting atomic state publication.
+    fn pending_browser_activity_ids(&self) -> Vec<String> {
+        Vec::new()
+    }
     fn pending_idle_retirement_ids(&self) -> Vec<String> {
         Vec::new()
     }

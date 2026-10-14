@@ -300,6 +300,12 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn pending_browser_activity_ids(&self) -> Vec<String> {
+        match self {
+            Self::Local(effects) => effects.pending_browser_activity_ids(),
+            Self::Remote(effects) => effects.pending_browser_activity_ids(),
+        }
+    }
     fn pending_idle_retirement_ids(&self) -> Vec<String> {
         match self {
             Self::Local(effects) => effects.pending_idle_retirement_ids(),

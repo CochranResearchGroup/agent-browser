@@ -33,7 +33,7 @@ const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
 // Schema 2 marks durable idle-retirement obligations. A schema-1-only reader
 // must not silently ignore those obligations. Existing schema 1 is read without
 // migration; the first custody claim promotes it atomically with its record.
-const BROWSER_RUNTIME_DATABASE_MAX_SCHEMA: i64 = 2;
+const BROWSER_RUNTIME_DATABASE_MAX_SCHEMA: i64 = 3;
 const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
 const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
@@ -433,6 +433,7 @@ impl BrowserSessionSqliteStore {
             &current,
             state,
             &[],
+            &[],
         )
         .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
         super::browser_launch_custody_store::reject_fenced_browser_publication(&transaction, state)
@@ -496,6 +497,7 @@ impl BrowserSessionSqliteStore {
             &transaction,
             &previous,
             &state,
+            &[],
             &[],
         )
         .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;

@@ -17,6 +17,8 @@ type Result<T> = std::result::Result<T, Error>;
 #[serde(deny_unknown_fields)]
 struct Ledger {
     records: BTreeMap<String, BrowserIdleRetirementRecord>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    activities: BTreeMap<String, BrowserActivityRecord>,
 }
 
 fn wire_identity(intent: &BrowserIdleRetirementIntent) -> Result<String> {
@@ -44,8 +46,20 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|_| Error::Unavailable)?;
-    if !ledger.records.is_empty() && version != 2 {
+    if !ledger.records.is_empty() && !(2..=3).contains(&version) {
         return Err(Error::InvalidRecord);
+    }
+    if !ledger.activities.is_empty() && version != 3 {
+        return Err(Error::InvalidRecord);
+    }
+    for (id, activity) in &ledger.activities {
+        if id != &activity.id
+            || uuid::Uuid::parse_str(id).is_err()
+            || activity.browser.pid == 0
+            || activity.browser.profile_id.is_empty()
+        {
+            return Err(Error::InvalidRecord);
+        }
     }
     let mut operations = BTreeSet::new();
     let mut pending: Vec<&BrowserIdleRetirementIntent> = vec![];
@@ -106,7 +120,27 @@ pub(super) fn reject_retirement_publication(
     before: &BrowserSessionState,
     after: &BrowserSessionState,
     admitted_ids: &[String],
+    activity_ids: &[String],
 ) -> Result<()> {
+    for activity in ledger(connection)?
+        .activities
+        .values()
+        .filter(|activity| !activity_ids.contains(&activity.id))
+    {
+        let root = &activity.browser;
+        if after.browsers.get(&root.id).is_none_or(|candidate| {
+            candidate.pid != root.pid
+                || candidate.cdp_endpoint != root.cdp_endpoint
+                || candidate.profile_id != root.profile_id
+                || candidate.desktop != root.desktop
+        }) || before.idle_closed_browsers.get(&root.id)
+            != after.idle_closed_browsers.get(&root.id)
+            || before.shared_browser_ids.contains(&root.id)
+                != after.shared_browser_ids.contains(&root.id)
+        {
+            return Err(Error::ActivityActive);
+        }
+    }
     for record in ledger(connection)?
         .records
         .values()
@@ -195,6 +229,69 @@ pub(super) fn reject_retirement_publication(
 }
 
 impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
+    fn admit_browser_activity(
+        &mut self,
+        id: &str,
+        browser: &ManagedBrowserInstance,
+        expected: &BrowserSessionState,
+    ) -> Result<()> {
+        if uuid::Uuid::parse_str(id).is_err() {
+            return Err(Error::InvalidRecord);
+        }
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        if current(&transaction)? != *expected
+            || expected.browsers.get(&browser.id).is_none_or(|root| {
+                root.pid != browser.pid
+                    || root.cdp_endpoint != browser.cdp_endpoint
+                    || root.profile_id != browser.profile_id
+                    || root.desktop != browser.desktop
+            })
+            || expected.idle_closed_browsers.contains_key(&browser.id)
+            || records.activities.contains_key(id)
+            || records.records.values().any(|record| {
+                !record.is_terminal()
+                    && record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.profile_id == browser.profile_id)
+            })
+        {
+            return Err(Error::Conflict);
+        }
+        records.activities.insert(
+            id.into(),
+            BrowserActivityRecord {
+                id: id.into(),
+                browser: browser.clone(),
+                acknowledged: false,
+            },
+        );
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction
+            .pragma_update(None, "user_version", 3i64)
+            .map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
+    fn acknowledge_browser_activity(&mut self, id: &str) -> Result<()> {
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        records
+            .activities
+            .get_mut(id)
+            .ok_or(Error::Conflict)?
+            .acknowledged = true;
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
+
     fn idle_retirement_records(&mut self) -> Result<Vec<BrowserIdleRetirementRecord>> {
         Ok(ledger(self.remote_view_mutation_connection())?
             .records
@@ -224,6 +321,14 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         intent.matches_baseline(expected)?;
+        if records.activities.values().any(|activity| {
+            intent
+                .scopes
+                .iter()
+                .any(|scope| scope.browser.profile_id == activity.browser.profile_id)
+        }) {
+            return Err(Error::ActivityActive);
+        }
         super::browser_launch_custody_store::reject_pending_launch_for_retirement(
             &transaction,
             intent,
@@ -262,7 +367,14 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         // This marker and the first obligation commit together. Earlier
         // binaries reject schema 2 rather than ignoring pending close custody.
         transaction
-            .pragma_update(None, "user_version", 2i64)
+            .pragma_update(
+                None,
+                "user_version",
+                transaction
+                    .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                    .map_err(|_| Error::Unavailable)?
+                    .max(2),
+            )
             .map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)?;
         Ok(BrowserIdleRetirementAdmission::New)
@@ -354,7 +466,7 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         state: &BrowserSessionState,
         ids: &[String],
     ) -> Result<()> {
-        self.publish_session_retirements(expected, state, ids, None)
+        self.publish_session_retirements(expected, state, ids, None, &[])
     }
 }
 
@@ -367,8 +479,9 @@ impl BrowserSessionSqliteStore {
         state: &BrowserSessionState,
         ids: &[String],
         launch: Option<&BrowserLaunchIntent>,
+        activity_ids: &[String],
     ) -> Result<()> {
-        if ids.is_empty()
+        if (ids.is_empty() && activity_ids.is_empty())
             || ids.iter().collect::<BTreeSet<_>>().len() != ids.len()
             || state.schema_version != BROWSER_SESSION_STATE_SCHEMA_V1
         {
@@ -382,7 +495,20 @@ impl BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         let mut records = ledger(&transaction)?;
-        reject_retirement_publication(&transaction, expected, state, ids)?;
+        reject_retirement_publication(&transaction, expected, state, ids, activity_ids)?;
+        if activity_ids.iter().collect::<BTreeSet<_>>().len() != activity_ids.len() {
+            return Err(Error::InvalidRecord);
+        }
+        for id in activity_ids {
+            if !records
+                .activities
+                .get(id)
+                .is_some_and(|record| record.acknowledged)
+            {
+                return Err(Error::Conflict);
+            }
+        }
+
         for id in ids {
             let record = records.records.get(id).ok_or(Error::Conflict)?;
             for scope in &record.intent.scopes {
@@ -415,6 +541,9 @@ impl BrowserSessionSqliteStore {
             state,
         )
         .map_err(|_| Error::Unavailable)?;
+        for id in activity_ids {
+            records.activities.remove(id);
+        }
         // History projection may archive terminal rows in this transaction.
         // Bind custody to the actual retained session document, not a pre-archive copy.
         let published = current(&transaction)?;
@@ -457,6 +586,131 @@ mod tests {
         fn drop(&mut self) {
             std::fs::remove_dir_all(&self.0).unwrap();
         }
+    }
+
+    #[test]
+    fn browser_activity_and_retirement_admission_are_mutually_exclusive() {
+        let fixture = Fixture::new();
+        let mut activity_owner = fixture.open(true);
+        let (state, intent, _) = setup(&mut activity_owner);
+        let mut retirement_owner = fixture.open(false);
+        let id = uuid::Uuid::new_v4().to_string();
+        let browser = &intent.scopes[0].browser;
+        activity_owner
+            .admit_browser_activity(&id, browser, &state)
+            .unwrap();
+        assert_eq!(
+            retirement_owner.claim_idle_retirement(&intent, &state),
+            Err(BrowserIdleRetirementStoreError::ActivityActive)
+        );
+        activity_owner.acknowledge_browser_activity(&id).unwrap();
+        drop(activity_owner);
+        assert_eq!(
+            retirement_owner.claim_idle_retirement(&intent, &state),
+            Err(BrowserIdleRetirementStoreError::ActivityActive)
+        );
+        let version: i64 = retirement_owner
+            .remote_view_mutation_connection()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 3);
+
+        let other = Fixture::new();
+        let mut retirement_owner = other.open(true);
+        let (state, intent, _) = setup(&mut retirement_owner);
+        retirement_owner
+            .claim_idle_retirement(&intent, &state)
+            .unwrap();
+        let mut activity_owner = other.open(false);
+        assert_eq!(
+            activity_owner.admit_browser_activity(
+                &uuid::Uuid::new_v4().to_string(),
+                &intent.scopes[0].browser,
+                &state
+            ),
+            Err(BrowserIdleRetirementStoreError::Conflict)
+        );
+    }
+
+    #[test]
+    fn activity_release_is_atomic_with_successful_session_publication() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (state, intent, _) = setup(&mut owner);
+        let id = uuid::Uuid::new_v4().to_string();
+        owner
+            .admit_browser_activity(&id, &intent.scopes[0].browser, &state)
+            .unwrap();
+        assert_eq!(
+            owner.publish_session_retirements(&state, &state, &[], None, std::slice::from_ref(&id)),
+            Err(BrowserIdleRetirementStoreError::Conflict)
+        );
+        owner.acknowledge_browser_activity(&id).unwrap();
+        let mut next = state.clone();
+        next.next_session_sequence += 1;
+        owner
+            .remote_view_mutation_connection()
+            .execute_batch(
+                "CREATE TRIGGER reject_activity_publication BEFORE UPDATE ON state_documents
+             BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;",
+            )
+            .unwrap();
+        assert!(owner
+            .publish_session_retirements(&state, &next, &[], None, std::slice::from_ref(&id))
+            .is_err());
+        assert_eq!(owner.load_session_state().unwrap(), state);
+        let mut peer = fixture.open(false);
+        assert_eq!(
+            peer.claim_idle_retirement(&intent, &state),
+            Err(BrowserIdleRetirementStoreError::ActivityActive)
+        );
+        owner
+            .remote_view_mutation_connection()
+            .execute_batch("DROP TRIGGER reject_activity_publication;")
+            .unwrap();
+        owner
+            .publish_session_retirements(&state, &next, &[], None, &[id])
+            .unwrap();
+        assert_eq!(peer.load_session_state().unwrap(), next);
+        let next_intent = BrowserIdleRetirementIntent::new(
+            &intent.id,
+            intent.provider.clone(),
+            &next,
+            &[intent.scopes[0].browser.id.clone()],
+        )
+        .unwrap();
+        assert_eq!(
+            peer.claim_idle_retirement(&next_intent, &next).unwrap(),
+            BrowserIdleRetirementAdmission::New
+        );
+    }
+
+    #[test]
+    fn unresolved_activity_fences_physical_replacement_but_allows_metadata() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (state, intent, _) = setup(&mut owner);
+        owner
+            .admit_browser_activity(
+                &uuid::Uuid::new_v4().to_string(),
+                &intent.scopes[0].browser,
+                &state,
+            )
+            .unwrap();
+        let mut replacement = state.clone();
+        replacement.browsers.get_mut("browser-a").unwrap().pid += 1;
+        assert!(
+            owner
+                .compare_and_save_session_state(&state, &replacement)
+                .is_err(),
+            "ordinary publication replaced a root with an unresolved command"
+        );
+        let mut metadata = state.clone();
+        metadata.next_session_sequence += 1;
+        owner
+            .compare_and_save_session_state(&state, &metadata)
+            .unwrap();
+        assert_eq!(owner.load_session_state().unwrap(), metadata);
     }
 
     fn setup(

@@ -102,6 +102,14 @@ neither a timeout nor dropping a local guard settles the native fence.
 The automatic-close candidate joins this fence to application custody; source
 sequencing tests remain separate from native workflow and installed acceptance.
 
+**Browser activity reservation**:
+A passive Runtime SQLite veto on automatic retirement of an admitted command's
+published root. Admission and retirement serialize in one writer transaction.
+Successful command acknowledgement retains the veto until session publication
+removes it atomically. An unknown effect retains custody, not replay authority.
+The first reservation promotes the reader fence to schema 3. This record owns
+neither command results nor tab-creation replay.
+
 **Idle retirement custody**:
 The Browser Runtime's durable exact-baseline intent, native preparation, close
 attempts and conclusive settlements. Duplicate attempts require original

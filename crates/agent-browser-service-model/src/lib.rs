@@ -82,9 +82,9 @@ pub use browser_desktop_selector::{
     RemoteViewDesktopSelection,
 };
 pub use browser_idle_retirement::{
-    BrowserIdleRetirementAdmission, BrowserIdleRetirementCustodyStore, BrowserIdleRetirementEffect,
-    BrowserIdleRetirementEffectAdmission, BrowserIdleRetirementIntent, BrowserIdleRetirementRecord,
-    BrowserIdleRetirementScope, BrowserIdleRetirementStoreError,
+    BrowserActivityRecord, BrowserIdleRetirementAdmission, BrowserIdleRetirementCustodyStore,
+    BrowserIdleRetirementEffect, BrowserIdleRetirementEffectAdmission, BrowserIdleRetirementIntent,
+    BrowserIdleRetirementRecord, BrowserIdleRetirementScope, BrowserIdleRetirementStoreError,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,

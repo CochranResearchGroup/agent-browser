@@ -10,6 +10,7 @@ pub enum BrowserIdleRetirementStoreError {
     Unavailable,
     InvalidRecord,
     Conflict,
+    ActivityActive,
 }
 type Result<T> = std::result::Result<T, BrowserIdleRetirementStoreError>;
 
@@ -520,7 +521,30 @@ pub enum BrowserIdleRetirementAdmission {
     New,
     Existing(Box<BrowserIdleRetirementRecord>),
 }
+/// Passive veto on automatic retirement, not command replay or close authority.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BrowserActivityRecord {
+    pub id: String,
+    pub browser: ManagedBrowserInstance,
+    pub acknowledged: bool,
+}
+
 pub trait BrowserIdleRetirementCustodyStore {
+    /// Reserve the exact published root before entering a physical command.
+    fn admit_browser_activity(
+        &mut self,
+        _id: &str,
+        _browser: &ManagedBrowserInstance,
+        _expected: &BrowserSessionState,
+    ) -> Result<()> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
+    /// Acknowledgement alone does not release the retirement veto.
+    fn acknowledge_browser_activity(&mut self, _id: &str) -> Result<()> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
+
     fn idle_retirement_records(&mut self) -> Result<Vec<BrowserIdleRetirementRecord>>;
     fn claim_idle_retirement(
         &mut self,

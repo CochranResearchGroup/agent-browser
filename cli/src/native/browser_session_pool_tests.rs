@@ -560,6 +560,20 @@ fn claim_fixture_retirement(
     baseline: &BrowserSessionState,
     browser: &ManagedBrowserInstance,
 ) -> BrowserIdleRetirementIntent {
+    let intent = fixture_retirement_intent(fixture, provider, baseline, browser);
+    fixture
+        .store(false)
+        .claim_idle_retirement(&intent, baseline)
+        .unwrap();
+    intent
+}
+
+fn fixture_retirement_intent(
+    fixture: &Fixture,
+    provider: Rc<RefCell<Provider>>,
+    baseline: &BrowserSessionState,
+    browser: &ManagedBrowserInstance,
+) -> BrowserIdleRetirementIntent {
     let assignment = fixture
         .store(false)
         .published_launch_assignment(browser)
@@ -578,10 +592,6 @@ fn claim_fixture_retirement(
             .published_launch_process_identity(&scope.browser)
             .unwrap();
     }
-    fixture
-        .store(false)
-        .claim_idle_retirement(&intent, baseline)
-        .unwrap();
     intent
 }
 
@@ -4525,11 +4535,13 @@ struct NativeUseReplyFailure {
     attempts: Rc<Cell<u32>>,
 }
 impl BrowserSessionPersistence for NativeUseReplyFailure {
-    fn publish_session_state(
+    fn publish_session_effects(
         &mut self,
         expected: &BrowserSessionState,
         state: &BrowserSessionState,
         intent: Option<&BrowserLaunchIntent>,
+        retirement_ids: &[String],
+        activity_ids: &[String],
     ) -> Result<(), String> {
         let publishes_use = state.tab_metadata.iter().any(|(id, metadata)| {
             metadata.first_human_use_at_ms.is_some()
@@ -4542,17 +4554,34 @@ impl BrowserSessionPersistence for NativeUseReplyFailure {
             let mode = self.mode.replace(0);
             self.attempts.set(self.attempts.get() + 1);
             if mode == 2 {
-                BrowserSessionPersistence::publish_session_state(
+                BrowserSessionPersistence::publish_session_effects(
                     &mut self.store,
                     expected,
                     state,
                     intent,
+                    retirement_ids,
+                    activity_ids,
                 )?;
                 return Err("synthetic_native_use_reply_lost_after_commit".into());
             }
             return Err("synthetic_native_use_publication_unavailable".into());
         }
-        BrowserSessionPersistence::publish_session_state(&mut self.store, expected, state, intent)
+        BrowserSessionPersistence::publish_session_effects(
+            &mut self.store,
+            expected,
+            state,
+            intent,
+            retirement_ids,
+            activity_ids,
+        )
+    }
+    fn publish_session_state(
+        &mut self,
+        expected: &BrowserSessionState,
+        state: &BrowserSessionState,
+        intent: Option<&BrowserLaunchIntent>,
+    ) -> Result<(), String> {
+        self.publish_session_effects(expected, state, intent, &[], &[])
     }
     fn load_session_state(&self) -> Result<BrowserSessionState, String> {
         self.store.load_session_state()
@@ -4660,6 +4689,15 @@ fn native_use_publication_failure_preserves_durable_truth_and_exact_retry() {
             "publication failure must not register another viewer attempt"
         );
         assert_eq!(calls.get(), 1);
+        let continued = consumer.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/after-publication-readback",
+            "profileId":"profile-a", "activityAtMs":180
+        })).expect("publication readback must permit continued automation").unwrap();
+        assert_eq!(continued["success"], true, "{continued}");
+        assert_eq!(
+            fixture.store(false).load_session_state().unwrap(),
+            *consumer.state()
+        );
     }
 }
 
@@ -6110,4 +6148,54 @@ fn automatic_retirement_legacy_group_preflight_precedes_every_native_fence() {
         .operations
         .contains(&"prepare_idle_retirement"));
     assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
+}
+
+#[test]
+fn admitted_navigation_prevents_competing_retirement_before_its_effect() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls);
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    consumer
+        .navigate(&opened.session_id, "https://synthetic.example/before", 101)
+        .unwrap();
+    let baseline = consumer.state().clone();
+    let intent = fixture_retirement_intent(
+        &fixture,
+        provider,
+        &baseline,
+        &baseline.browsers[&opened.browser_id],
+    );
+    intent.matches_baseline(&baseline).unwrap();
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
+    std::fs::write(
+        fixture.root.join("command-retirement-race.json"),
+        serde_json::to_vec(&serde_json::json!({"intent":intent,"expected":baseline})).unwrap(),
+    )
+    .unwrap();
+    let navigation = consumer.navigate(
+        &opened.session_id,
+        "https://synthetic.example/admitted",
+        102,
+    );
+    assert!(
+        fixture
+            .store(false)
+            .idle_retirement_records()
+            .unwrap()
+            .is_empty(),
+        "a retirement acquired custody while the already-admitted navigation was executing"
+    );
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("racing-navigation-effect")).unwrap(),
+        "once"
+    );
+    navigation.unwrap();
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *consumer.state()
+    );
 }

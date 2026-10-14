@@ -444,10 +444,33 @@ impl BrowserSessionEffects for Process {
     }
     fn navigate(
         &mut self,
-        _browser: &ManagedBrowserInstance,
+        browser: &ManagedBrowserInstance,
         _tab: &ManagedBrowserTab,
         _url: &str,
     ) -> Result<(), String> {
+        let race = self.root.join("command-retirement-race.json");
+        if race.exists() {
+            use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};
+            let packet: Value = serde_json::from_slice(&std::fs::read(race).unwrap()).unwrap();
+            let mut runtime = BrowserManagerRuntime::start(Default::default()).unwrap();
+            let guard = runtime.acquire_idle_retirement_guard(std::slice::from_ref(browser))?;
+            if let Some(_guard) = guard {
+                let intent: BrowserIdleRetirementIntent =
+                    serde_json::from_value(packet["intent"].clone()).unwrap();
+                let expected: BrowserSessionState =
+                    serde_json::from_value(packet["expected"].clone()).unwrap();
+                match open_store(&self.root, false).claim_idle_retirement(&intent, &expected) {
+                    Ok(BrowserIdleRetirementAdmission::New) => {}
+                    Ok(_) => panic!("fresh competing retirement identity must not replay"),
+                    Err(error) => assert_eq!(
+                        format!("{error:?}"),
+                        "ActivityActive",
+                        "unrelated setup rejection is not admission exclusion"
+                    ),
+                }
+            }
+            std::fs::write(self.root.join("racing-navigation-effect"), "once").unwrap();
+        }
         Ok(())
     }
     fn focus_browser(

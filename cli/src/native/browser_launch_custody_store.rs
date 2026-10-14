@@ -44,7 +44,7 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
-        if version != 2 {
+        if !(2..=3).contains(&version) {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }
@@ -365,7 +365,14 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         if launch.process_identity.is_some() {
             // The original kernel evidence and reader fence commit together.
             transaction
-                .pragma_update(None, "user_version", 2i64)
+                .pragma_update(
+                    None,
+                    "user_version",
+                    transaction
+                        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                        .map_err(|_| Error::Unavailable)?
+                        .max(2),
+                )
                 .map_err(|_| Error::Unavailable)?;
         }
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
@@ -389,6 +396,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             &transaction,
             expected,
             state,
+            &[],
             &[],
         )
         .map_err(|_| Error::Conflict)?;
