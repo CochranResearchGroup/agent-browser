@@ -93,6 +93,8 @@ reuse after those contracts are frozen.
 
 ## PL-PLATFORM | Architecture and Infrastructure
 
+- [Compact workspace operator correction and revised prototype](0237-2026-10-14-compact-workspace-review.md)
+
 - [Native physical selection tracer](0237-2026-10-12-native-selection-proof.md)
 
 - [Public handoff native-use context repair](0237-2026-10-12-public-native-use-context.md)

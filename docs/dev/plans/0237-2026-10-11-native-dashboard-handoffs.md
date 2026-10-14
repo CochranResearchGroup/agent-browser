@@ -587,3 +587,10 @@ reference runtime, provider, private data or source is modified.
 Prototype-only edits stay on prototype/native-dashboard-261, which must not
 merge. Implementation source and draft PR270 retain the complete remaining
 P237 outcome. The rejected layouts' evidence remains intact.
+
+
+The [compact workspace review](../notes/0237-2026-10-14-compact-workspace-review.md)
+binds the operator correction to prototype d0686b9af on its separate branch,
+read-only UX references, the published review and synthetic browser checks.
+The content-sized drawer and neutral compact framing await review; no
+prototype code enters the implementation branch.
