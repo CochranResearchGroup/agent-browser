@@ -3896,6 +3896,12 @@ never persisted into Service State.
 
 Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser. `service runtime-backup status` verifies the current Browser Runtime SQLite backup without changing it. `service runtime-backup create` performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
+Browser Runtime reads database schemas 1 and 2. The first native idle-retirement
+custody claim atomically promotes schema 1 to schema 2 with its durable record.
+Keep a schema-2-capable binary with that database and its backups; schema-1-only
+binaries reject it. Unknown close outcomes retain their original custody for
+readback, including across backup creation and restart.
+
 ```bash
 agent-browser service status
 agent-browser service status --watch --interval 1000

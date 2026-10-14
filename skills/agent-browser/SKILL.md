@@ -63,6 +63,12 @@ the installed CLI to continue the task while integration is corrected; server
 
 Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
 
+Browser Runtime reads SQLite schemas 1 and 2. The first native idle-retirement
+custody claim promotes schema 1 to schema 2 in the same transaction as its record.
+Keep a schema-2-capable binary with that database and its backups. Unknown close
+outcomes retain the original operation for readback; a missing provider fence
+after an unknown response does not establish cancellation or authorize a close retry.
+
 For controller takeover, `desktop_input_route_fence_contended` reports
 `file_lock_wait` and `no_effect` before authority mutation. Inspect Service
 status and trace, then resolve the exact contention before any new attempt.

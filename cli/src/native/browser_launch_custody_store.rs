@@ -207,6 +207,39 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
     .ok_or(LaunchCustodyStoreError::InvalidRecord)
 }
 
+pub(super) fn published_assignment(
+    connection: &Connection,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
+    let state = current(connection)?;
+    if state.browsers.get(&browser.id) != Some(browser) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    let ledger = ledger(connection)?;
+    let records = ledger
+        .records
+        .values()
+        .filter(|record| {
+            record.published
+                && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
+                && record.observed_pid == Some(browser.pid)
+        })
+        .collect::<Vec<_>>();
+    let mut record = match records.as_slice() {
+        [record] => (*record).clone(),
+        _ => return Err(LaunchCustodyStoreError::Conflict),
+    };
+    record
+        .confirm_publication(&state)
+        .map_err(|_| LaunchCustodyStoreError::Conflict)?;
+    if assignment_fenced(&ledger, &record.intent.assignment)
+        && !assignment_release_completed(connection, &record.intent.assignment)?
+    {
+        return Err(LaunchCustodyStoreError::ReleaseFenced);
+    }
+    Ok(record.intent.assignment)
+}
+
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
     fn assignment_release_confirmed(
         &mut self,
@@ -219,36 +252,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         browser: &agent_browser_service_model::ManagedBrowserInstance,
     ) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError>
     {
-        let state = current(self.remote_view_mutation_connection())?;
-        if state.browsers.get(&browser.id) != Some(browser) {
-            return Err(LaunchCustodyStoreError::Conflict);
-        }
-        let ledger = ledger(self.remote_view_mutation_connection())?;
-        let records = ledger
-            .records
-            .values()
-            .filter(|record| {
-                record.published
-                    && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
-                    && record.observed_pid == Some(browser.pid)
-            })
-            .collect::<Vec<_>>();
-        let mut record = match records.as_slice() {
-            [record] => (*record).clone(),
-            _ => return Err(LaunchCustodyStoreError::Conflict),
-        };
-        record
-            .confirm_publication(&state)
-            .map_err(|_| LaunchCustodyStoreError::Conflict)?;
-        if assignment_fenced(&ledger, &record.intent.assignment)
-            && !assignment_release_completed(
-                self.remote_view_mutation_connection(),
-                &record.intent.assignment,
-            )?
-        {
-            return Err(LaunchCustodyStoreError::ReleaseFenced);
-        }
-        Ok(record.intent.assignment)
+        published_assignment(self.remote_view_mutation_connection(), browser)
     }
 
     fn unpublished_launch_records(

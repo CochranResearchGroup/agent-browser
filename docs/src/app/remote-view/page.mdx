@@ -761,6 +761,13 @@ positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
 
 Retention defaults are persisted in Browser Runtime SQLite. Explicit startup
 settings update that policy; omitted settings preserve it across restart.
+
+Browser Runtime reads database schemas 1 and 2. The first native idle-retirement
+custody claim atomically promotes schema 1 to schema 2 with its durable record.
+Keep a schema-2-capable binary with that database and its backups; schema-1-only
+binaries reject it. Unknown close outcomes retain their original custody for
+readback across backup creation and restart.
+
 `AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS` selects durable link retention (0 means
 no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects disposable
 link retention (0 means no time expiry). Both link defaults are 0.

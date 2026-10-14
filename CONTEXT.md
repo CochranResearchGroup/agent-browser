@@ -95,6 +95,13 @@ Application custody must precede preparation and retain unknown effects;
 neither a timeout nor dropping a local guard settles the native fence.
 Typed contract qualification remains separate from automatic retirement adoption.
 
+**Idle retirement custody**:
+The Browser Runtime's durable exact-baseline intent, native preparation, close
+attempts and conclusive settlements. Duplicate attempts require original
+readback. Session publication and custody commit together before native fence
+completion. The first claim atomically promotes the private database to schema 2
+so a schema-1-only reader cannot ignore this obligation.
+
 **Request provenance**:
 The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.
 _Avoid_: Log message, caller label, lane selector

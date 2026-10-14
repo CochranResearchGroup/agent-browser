@@ -30,7 +30,10 @@ mod terminal_history;
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
-const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
+// Schema 2 marks durable idle-retirement obligations. A schema-1-only reader
+// must not silently ignore those obligations. Existing schema 1 is read without
+// migration; the first custody claim promotes it atomically with its record.
+const BROWSER_RUNTIME_DATABASE_MAX_SCHEMA: i64 = 2;
 const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
 const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
@@ -883,7 +886,7 @@ fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
     let version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
-    if version != BROWSER_RUNTIME_DATABASE_SCHEMA {
+    if !(1..=BROWSER_RUNTIME_DATABASE_MAX_SCHEMA).contains(&version) {
         return Err(format!(
             "browser_runtime_database_schema_unsupported:{version}"
         ));

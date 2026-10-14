@@ -3,6 +3,7 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_idle_retirement;
 mod browser_launch_custody;
 pub use browser_launch_custody::{
     BrowserLaunchCustodyError, BrowserLaunchCustodyRecord, BrowserLaunchCustodyStore,
@@ -79,6 +80,11 @@ pub use browser_capability_registry::{
 pub use browser_desktop_selector::{
     select_least_crowded_remote_view_desktop, RemoteViewDesktopCandidate,
     RemoteViewDesktopSelection,
+};
+pub use browser_idle_retirement::{
+    BrowserIdleRetirementAdmission, BrowserIdleRetirementCustodyStore, BrowserIdleRetirementEffect,
+    BrowserIdleRetirementEffectAdmission, BrowserIdleRetirementIntent, BrowserIdleRetirementRecord,
+    BrowserIdleRetirementScope, BrowserIdleRetirementStoreError,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
