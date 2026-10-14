@@ -395,3 +395,43 @@ by graphiti-runtime remember into agent_browser_main, job
 ea38b434-88e1-40a9-a090-c31f8d52c56f, receipt /tmp/p242-closeout-memory.json.
 Queue acceptance is recorded; persistence and grouped retrieval are not claimed.
 The source-backed singleton was written once; no Codex memory files were edited.
+
+## Pull-request preparation
+
+Operator approved the ask-matt /pr step after local delivery. On 2026-10-14,
+fresh origin/main remains cb765a7be2719383a54fb849eac9691ce0197b06. The completed
+branch is based on that exact tip, so none of its executable inputs changed
+and the recorded validation remains applicable. No further broad review,
+Rust rebuild, provider replay, production effect or CI dispatch is necessary
+for this documentation/publication step.
+
+P237 remains an independent active lane. Published draft PR270 is at
+5a68c9bb12896dce36b7216754750817d3018e1b; its clean local checkout has advanced
+to 9cdb48c32e16b766abe6d13d25b93054ebcd6b28. Prospective merge-tree checks against
+both snapshots find the same two conflicts: browser_session_runtime.rs and
+active-lanes.yaml. No merge was applied, and neither foreign branch nor its
+checkout was modified. The other ten shared paths merge textually. A textual
+merge alone does not qualify the combined behavior.
+
+The runtime conflict joins adjacent independent requirements. Preserve P242's
+attach_owned_target_if_missing for attributed popup targets and its sanitized
+Target.getTargets observation. Preserve P237's bind_observation_target for
+managed title/URL reads instead of replacing the person's physical selection.
+When joining the branches, handle internal popup inventory without activating
+a target, attach a missing addressed owned target, then retain P237's split
+between non-activating title/URL reads and explicit target activation for other
+actions. Validate peer-selection/restart and private-login popup continuation
+on the combined source. Do not resolve by choosing one side's whole block.
+
+The catalog conflict is two independent insertions: retain both P242 and P237
+records with their own updated_at fields. P242 can be reviewed independently
+against current main; merging it first establishes its narrow provider contract,
+and P237 must reconcile the documented shared block before its own integration.
+This sequencing note is not acceptance of unfinished P237 work.
+
+The PR will remain draft with the explicit baseline-failure disposition visible:
+comprehensive Rust failed the unchanged service-help assertion; policy wiring
+expects retired links. Their verified unchanged-source provenance is recorded
+above. They are not silently waived for a clean comprehensive or production
+claim. Tracker issues remain open, and no merge/deployment is included in this
+publication step.

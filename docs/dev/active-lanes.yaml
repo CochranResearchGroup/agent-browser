@@ -10,9 +10,10 @@ lanes:
     plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
+    accountable_owner: ecochran76
     dependencies: []
     overlaps: [P237]
-    reconciled_overlaps: ["P242 owns new playbook adapters MCP/client and own docs/fixtures; consumes existing task/lifecycle; P237 retains dashboard/native lifecycle; primary checkout reused"]
+    reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
     validation_status: All five slices and accepted whole-branch review findings validated on isolated final candidate; two unchanged baseline gate failures retained
     limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Comprehensive Rust retains unchanged service-help assertion failure; extra policy-wiring oracle expects retired links"]
     updated_at: 2026-10-14
