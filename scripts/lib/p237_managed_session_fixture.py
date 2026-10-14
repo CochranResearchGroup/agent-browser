@@ -123,6 +123,12 @@ def run_managed_session_fixture(env, root, artifacts, sockets, manifest, token, 
         from lib.p237_managed_recovery_fixture import run_managed_recovery_fixture
         run_managed_recovery_fixture(request, root, artifacts, env, browser, targets, foreground,
                                      spawn, source_cli, restart_host)
+        if env.get('P237_NATIVE_RECOVERY_LAST_BROWSER') == '1':
+            final = request('p237-managed-recovery', 'browser_session_status')['data']
+            assert not final['browsers'] and not final['tabs'] and not final['sessions'], 'last-browser recovery cleanup left live owner records'
+            workflow_log.write('runtime-host-workflow: passed\n')
+            workflow_log.flush()
+            return
     if operator_proof:
         expected_id = f'p237-managed-{len(replies)}'
         denied = request('p237-managed-bob','view_focus',require_success=False,

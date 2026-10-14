@@ -7,6 +7,7 @@ import http.client
 import json
 import socket
 import time
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 from urllib.parse import urlsplit
 
@@ -14,12 +15,57 @@ from urllib.parse import urlsplit
 def run_managed_recovery_fixture(request, root, artifacts, environment, browser,
                                  targets, foreground, spawn, source_cli, restart_host):
     lane = 'p237-managed-recovery'
+    original_targets = targets
+    preparation = [{'stage': 'before', 'targets': original_targets()}]
+    last_browser = environment.get('P237_NATIVE_RECOVERY_LAST_BROWSER') == '1'
+    initial_browser = dict(browser)
+    latest_browser = dict(browser)
+    initial_unmanaged = set()
+    startup_urls = set()
+    if last_browser:
+        state = request(lane, 'browser_session_status')['data']
+        managed_ids = {tab['targetId'] for tab in state['tabs'].values()}
+        initial_unmanaged = {tab['id'] for tab in preparation[0]['targets']} - managed_ids
+        startup_urls = {tab['url'] for tab in preparation[0]['targets'] if tab['id'] in initial_unmanaged}
+        def targets():
+            nonlocal latest_browser
+            state = request(lane, 'browser_session_status')['data']
+            owners = [owner for owner in state['browsers'].values() if owner['profileId'] == initial_browser['profileId']]
+            assert len(owners) <= 1, 'recovery duplicated a profile owner'
+            if not owners:
+                return []
+            latest_browser = owners[0]
+            endpoint = urlsplit(latest_browser['cdpEndpoint'])
+            connection = http.client.HTTPConnection(endpoint.hostname, endpoint.port, timeout=5)
+            try:
+                connection.request('GET', '/json/list')
+                reply = connection.getresponse()
+                assert reply.status == 200
+                return sorted([{'id': tab['id'], 'title': tab['title'], 'url': tab['url']}
+                               for tab in json.loads(reply.read()) if tab['type'] == 'page'], key=lambda tab: tab['id'])
+            finally:
+                connection.close()
     peers = targets()
+    preparation.append({'stage': 'after-read', 'targets': original_targets()})
     request(lane, 'browser_session_open', profileId=browser['profileId'])
+    preparation.append({'stage': 'after-open', 'targets': original_targets()})
     created = request(lane, 'tab_new', url='data:text/html,<title>P237 retained recovery</title><p>Recovery</p>',
                       taskName='Original recovery task', purpose='Recover the addressed task',
                       originKind='synthetic-fixture')
     original = created['browserSession']
+    preparation.append({'stage': 'after-new-tab', 'targets': original_targets()})
+    (artifacts / 'recovery-preparation.json').write_text(json.dumps(preparation, indent=2) + '\n')
+    if last_browser:
+        staging = [{'stage': 'created', 'targets': targets()}]
+        request('p237-managed-alice', 'browser_session_close', leaveOpen=False)
+        staging.append({'stage': 'alice-closed', 'targets': targets()})
+        request('p237-managed-bob', 'browser_session_close', leaveOpen=False)
+        staging.append({'stage': 'bob-closed', 'targets': targets()})
+        (artifacts / 'last-browser-staging.json').write_text(json.dumps(staging, indent=2) + '\n')
+        peers = []
+        remaining = request(lane, 'browser_session_status')['data']
+        assert set(remaining['tabs']) == {original['tabId']}, 'last-browser staging left another managed task'
+        assert {tab['id'] for tab in targets()} == initial_unmanaged | {original['targetId']}, 'last-browser staging changed an untracked native target'
     link_id, tab_id = original['handoffId'], original['tabId']
     now = int(time.time() * 1000)
     configured = request(lane, 'service_remote_view_handoff_resolve', handoffId=link_id,
@@ -37,7 +83,6 @@ def run_managed_recovery_fixture(request, root, artifacts, environment, browser,
     def exchange(path, native=False, method='GET'):
         headers = {'Content-Length': '0'}
         if native:
-            from pathlib import Path
             headers.update({'Authorization': 'Bearer ' + Path(environment['AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE']).read_text().strip(),
                             'X-Remote-View-Operator': 'p237-synthetic-native-operator'})
         connection = http.client.HTTPConnection('127.0.0.1', port, timeout=100)
@@ -63,6 +108,11 @@ def run_managed_recovery_fixture(request, root, artifacts, environment, browser,
     expired = request(lane, 'browser_session_status')['data']
     assert tab_id not in expired['tabs'], 'configured real task did not expire'
     assert targets() == peers, 'task expiry changed a peer'
+    if last_browser:
+        deadline = time.monotonic() + 5
+        while Path(f"/proc/{initial_browser['pid']}").exists():
+            assert time.monotonic() < deadline, 'last target expiry did not end the original browser process'
+            time.sleep(0.025)
     restart = restart_host() if restart_host else None
     ready_owner = request(lane, 'browser_session_status')['data']
     assert tab_id not in ready_owner['tabs'] and targets() == peers, 'owner readiness probe changed expired task or peers'
@@ -95,12 +145,24 @@ def run_managed_recovery_fixture(request, root, artifacts, environment, browser,
     receipt = {'handoffId': link_id, 'oldTabId': tab_id, 'newTabId': new_tab['id'],
                'publicStatus': public_status, 'deniedStatus': denied,
                'callbackStatuses': [reply[0] for reply in replies], 'restart': restart,
+               'lastBrowser': last_browser, 'originalBrowser': initial_browser, 'recoveredBrowser': latest_browser,
                'targets': observed, 'scene': foreground(),
                'metadata': recovered['tabMetadata'][new_tab['id']],
                'scope': 'real source locator/callback, SQLite and Chrome; synthetic native actor/provider transport'}
     (artifacts / 'managed-public-recovery.json').write_text(json.dumps(receipt, indent=2) + '\n')
-    assert new_tab['id'] != tab_id and new_tab['browserId'] == browser['id'], 'recovery did not reuse its eligible browser'
-    assert len(observed) == len(peers) + 1 and all(peer in observed for peer in peers), 'concurrent recovery duplicated a target or changed peers'
+    assert new_tab['id'] != tab_id
+    if last_browser:
+        assert latest_browser['pid'] != initial_browser['pid'] and latest_browser['profileId'] == initial_browser['profileId'], 'recovery did not wake the exact retained profile'
+    else:
+        assert new_tab['browserId'] == browser['id'], 'recovery did not reuse its eligible browser'
+    if last_browser:
+        # The fresh owned Chrome may also publish its normal startup page.
+        # Qualify one recreated task, not a promise that Chrome has no chrome UI.
+        assert set(recovered['tabs']) == {new_tab['id']}, 'concurrent recovery duplicated an owned task'
+        assert sum(tab['id'] == new_tab['targetId'] for tab in observed) == 1
+        assert all(tab['id'] == new_tab['targetId'] or tab['url'] in startup_urls for tab in observed), 'recovery created an unrelated native document'
+    else:
+        assert len(observed) == len(peers) + 1 and all(peer in observed for peer in peers), 'concurrent recovery duplicated a target or changed peers'
     assert 'P237 retained recovery' in foreground()['title'], 'recovered task was not physically selected'
     assert receipt['metadata']['taskName'] == 'Original recovery task' and receipt['metadata']['purpose'] == 'Recover the addressed task'
     assert receipt['metadata']['firstHumanUseAtMs'] is None, 'readiness or callback fabricated native human use'
@@ -119,3 +181,8 @@ def run_managed_recovery_fixture(request, root, artifacts, environment, browser,
     assert targets() == observed, 'link deletion closed a live task'
     request(lane, 'browser_session_close', leaveOpen=False)
     assert targets() == peers, 'recovery task cleanup changed peers'
+    if last_browser:
+        deadline = time.monotonic() + 5
+        while Path(f"/proc/{latest_browser['pid']}").exists():
+            assert time.monotonic() < deadline, 'final recovery-task close did not end the woken browser'
+            time.sleep(0.025)
