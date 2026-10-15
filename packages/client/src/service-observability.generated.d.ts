@@ -985,10 +985,30 @@ export interface ServiceStateLockDiagnostics {
   };
 }
 
+/** Retained logical link display data, excluding private recovery/provider authority. */
+export interface ServiceManagedHandoff {
+  handoffId: string;
+  handoffUrl: string;
+  sessionId: string;
+  tabId: string;
+  sessionName: string | null;
+  profileId: string | null;
+  browserId: string | null;
+  createdAtMs: number | null;
+  expiresAtMs: number | null;
+  linkState: 'active' | 'expired';
+  targetState: 'reported' | 'expired' | 'ended';
+  taskMetadata: Record<string, unknown> | null;
+  tabLifetime: Record<string, unknown> | null;
+  pendingHuman: { handoffId: string; requestedAtMs: number; expiresAtMs: number | null } | null;
+}
+
 /** Owner-published inventory; reported is not native viewer readiness. */
 export interface ServiceManagedWorkspace {
   schemaVersion: 'agent-browser.managed-workspace.v1';
   source: 'managed-owner';
+  /** Absent on older owners; empty means no retained links. */
+  handoffs?: Record<string, ServiceManagedHandoff>;
   browsers: Record<string, {
     id: string; profileId: string; pid: number;
     desktop: { desktop_id: string; generation: number; friendly_route_label: string } | null;

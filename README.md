@@ -801,6 +801,11 @@ close preserves peer tabs; closing the final owned tab also closes its browser.
 If close cannot be confirmed, refresh inventory and inspect permission before
 trying again.
 
+Share prepares the exact existing task through the public handoff helper and
+shows its opaque native link in Handoffs. It preserves the selected peer and
+does not navigate the task. Use the small Handoffs rail control to reopen the
+panel, then copy or open the same link through existing Remote View authentication.
+
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before
 enabling its view or controls. It does not rewrite the selection to another tab

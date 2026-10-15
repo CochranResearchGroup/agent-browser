@@ -15,7 +15,7 @@ const supplied = (value: unknown): string => typeof value === "string" && value.
  * or handoff effect. Clipboard failure offers manual copying through Properties.
  * Close captures an exact identity and requires an owner-confirmed close receipt
  * before releasing the row or its selected native frame. */
-export function NativeTabActions({ node, tab, children, onClosed }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void> }) {
+export function NativeTabActions({ node, tab, children, onClosed, onShare, shareBusy }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void>; onShare?: (opener: HTMLElement | null) => void; shareBusy?: boolean }) {
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<WorkspaceServiceTab | null>(null);
   const [closeBusy, setCloseBusy] = useState(false);
@@ -83,6 +83,7 @@ export function NativeTabActions({ node, tab, children, onClosed }: { node: Work
             <DropdownMenuContent className="native-tab-menu" align="end" onCloseAutoFocus={event => {
               if (propertiesOpen || closeTarget) event.preventDefault();
             }}>
+              <DropdownMenuItem disabled={!onShare || shareBusy || !tab.desktopId} onSelect={() => onShare?.(returnFocus.current ?? trigger.current)}>Share</DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setPropertiesOpen(true)}>Properties</DropdownMenuItem>
               <DropdownMenuItem disabled={!tab.url} onSelect={() => void copyUrl()}>Copy URL</DropdownMenuItem>
               <DropdownMenuItem disabled={!canClose || closeBusy} onSelect={openClose}>Close Tab</DropdownMenuItem>
@@ -93,6 +94,7 @@ export function NativeTabActions({ node, tab, children, onClosed }: { node: Work
       <ContextMenuContent className="native-tab-menu" onCloseAutoFocus={event => {
         if (propertiesOpen || closeTarget) event.preventDefault();
       }}>
+        <ContextMenuItem disabled={!onShare || shareBusy || !tab.desktopId} onSelect={() => onShare?.(returnFocus.current ?? trigger.current)}>Share</ContextMenuItem>
         <ContextMenuItem onSelect={() => setPropertiesOpen(true)}>Properties</ContextMenuItem>
         <ContextMenuItem disabled={!tab.url} onSelect={() => void copyUrl()}>Copy URL</ContextMenuItem>
         <ContextMenuItem disabled={!canClose || closeBusy} onSelect={openClose}>Close Tab</ContextMenuItem>

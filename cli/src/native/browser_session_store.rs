@@ -209,6 +209,33 @@ impl BrowserSessionSqliteStore {
                     "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
                 }))
             }).collect();
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "browser_runtime_clock_readback_required")?
+                .as_millis() as u64;
+            // Deliberately whitelist display fields. A resume capsule, issued
+            // provider view and native correlation are private owner authority.
+            let handoffs: std::collections::BTreeMap<_, _> = managed.remote_view_tab_handoffs.iter().map(|(id, link)| {
+                let session = managed.sessions.get(&link.session_id);
+                let tab = managed.tabs.get(&link.tab_id);
+                let resume = link.resume.as_ref();
+                let metadata = managed.tab_metadata.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.task_metadata.as_ref()));
+                let lifetime = managed.tab_lifetimes.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.tab_lifetime.as_ref()));
+                (id.clone(), serde_json::json!({
+                    "handoffId":id,"handoffUrl":format!("/remote-view/{id}"),
+                    "sessionId":link.session_id,"tabId":link.tab_id,
+                    "sessionName":session.map(|session| session.name.as_str()).or_else(|| resume.map(|intent| intent.session_name.as_str())),
+                    "profileId":session.map(|session| session.profile_id.as_str()).or_else(|| resume.map(|intent| intent.profile_id.as_str())),
+                    "browserId":tab.map(|tab| tab.browser_id.as_str()),
+                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
+                    "linkState":if link.check_link_at(now_ms).is_ok() {"active"} else {"expired"},
+                    "targetState":if tab.is_some() {"reported"} else if link.target_expired {"expired"} else {"ended"},
+                    "taskMetadata":metadata,"tabLifetime":lifetime,
+                    "pendingHuman":managed.pending_human_tabs.get(&link.tab_id)
+                }))
+            }).collect();
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
@@ -218,7 +245,7 @@ impl BrowserSessionSqliteStore {
                 "workspace": {
                     "schemaVersion":"agent-browser.managed-workspace.v1",
                     "source":"managed-owner","browsers":browsers,
-                    "sessions":managed.sessions,"tabs":tabs
+                    "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs
                 },
                 "launchAdmission": launch_admission,
                 "storage": {
@@ -1664,6 +1691,35 @@ mod tests {
             .join(BROWSER_RUNTIME_BACKUP_DIRECTORY)
             .join(BROWSER_RUNTIME_BACKUP_PREVIOUS)
             .is_file());
+    }
+
+    #[test]
+    fn operational_status_lists_retained_handoffs_without_private_resume_routes() {
+        let directory = TempDirectory::new("handoff-inventory");
+        let legacy_path = directory.0.join("state.json");
+        let (mut store, _) =
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
+        let mut state = store.load_session_state().unwrap();
+        state.remote_view_tab_handoffs.insert("opaque-link".into(), serde_json::from_value(serde_json::json!({
+            "id":"opaque-link", "sessionId":"ended-task", "tabId":"expired-tab",
+            "createdAtMs":100, "expiresAtMs":null, "targetExpired":true,
+            "resume":{"sessionName":"original-task","profileId":"profile-a","disposablePolicyId":null,
+                "url":"https://provider.invalid/PRIVATE-RESUME-CANARY"}
+        })).unwrap());
+        store.save_session_state(&state).unwrap();
+        drop(store);
+        let path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let before = sha256_file(&path).unwrap();
+        let status = BrowserSessionSqliteStore::operational_status_read_only(&path);
+        let link = &status["workspace"]["handoffs"]["opaque-link"];
+        assert_eq!(link["handoffUrl"], "/remote-view/opaque-link");
+        assert_eq!(link["createdAtMs"], 100);
+        assert!(link["expiresAtMs"].is_null());
+        assert_eq!(link["profileId"], "profile-a");
+        assert_eq!(link["targetState"], "expired");
+        assert!(!status.to_string().contains("PRIVATE-RESUME-CANARY"));
+        assert!(link.get("resume").is_none());
+        assert_eq!(sha256_file(&path).unwrap(), before);
     }
 
     #[test]

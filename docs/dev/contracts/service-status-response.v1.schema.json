@@ -34,6 +34,111 @@
             "source": {
               "const": "managed-owner"
             },
+            "handoffs": {
+              "type": "object",
+              "description": "Retained logical links include ended targets. Display-only fields exclude issued views, provider routes, private resume capsules and native correlations.",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "handoffId",
+                  "handoffUrl",
+                  "sessionId",
+                  "tabId",
+                  "sessionName",
+                  "profileId",
+                  "browserId",
+                  "createdAtMs",
+                  "expiresAtMs",
+                  "linkState",
+                  "targetState",
+                  "taskMetadata",
+                  "tabLifetime",
+                  "pendingHuman"
+                ],
+                "properties": {
+                  "handoffId": {
+                    "type": "string"
+                  },
+                  "handoffUrl": {
+                    "type": "string",
+                    "pattern": "^/remote-view/[^/]+$"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "tabId": {
+                    "type": "string"
+                  },
+                  "sessionName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profileId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "browserId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "createdAtMs": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "expiresAtMs": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "linkState": {
+                    "enum": [
+                      "active",
+                      "expired"
+                    ]
+                  },
+                  "targetState": {
+                    "enum": [
+                      "reported",
+                      "expired",
+                      "ended"
+                    ]
+                  },
+                  "taskMetadata": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "tabLifetime": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "pendingHuman": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
             "browsers": {
               "type": "object",
               "additionalProperties": {

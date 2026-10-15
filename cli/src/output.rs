@@ -6452,6 +6452,11 @@ close preserves peer tabs; closing the final owned tab also closes its browser.
 If close cannot be confirmed, refresh inventory and inspect permission before
 trying again.
 
+Share prepares the exact existing task through the public handoff helper and
+shows its opaque native link in Handoffs. It preserves the selected peer and
+does not navigate the task. Use the small Handoffs rail control to reopen the
+panel, then copy or open the same link through existing Remote View authentication.
+
 
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a

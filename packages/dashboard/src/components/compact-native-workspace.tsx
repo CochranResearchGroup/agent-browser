@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search } from "lucide-react";
+import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2 } from "lucide-react";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
+import { requestServiceRemoteViewHandoff } from "@agent-browser/client/service-request";
+import { NativeHandoffDrawer } from "@/components/native-handoff-drawer";
 import { NativeTabActions } from "@/components/native-tab-actions";
 
 type Props = {
@@ -20,6 +22,30 @@ type Props = {
 
 /** Compact inventory and native viewer share one authoritative source snapshot. */
 export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLogout, onRefresh, children, loading, error }: Props) {
+  const [handoffsOpen, setHandoffsOpen] = useState(false);
+  const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const sharePending = useRef(false);
+  const [shareError, setShareError] = useState<string | null>(null);
+  const shareFocus = useRef<HTMLElement | null>(null);
+  const shareTab = async (tab: WorkspaceServiceTab, opener: HTMLElement | null) => {
+    if (sharePending.current || !tab.managedTask || !tab.desktopId || !tab.targetId || !tab.browserId || !(tab.ownerSessionId || tab.sessionId)) return;
+    shareFocus.current = opener;
+    sharePending.current = true; setShareBusy(true); setShareError(null); setSharedLink(null); setHandoffsOpen(true);
+    try {
+      const handoff = await requestServiceRemoteViewHandoff({
+        baseUrl: window.location.origin, signal: AbortSignal.timeout(15000),
+        browserId: tab.browserId, sessionName: tab.ownerSessionId || tab.sessionId!,
+        displayAllocationId: tab.desktopId, params: { targetId: tab.targetId },
+        serviceName: "agent-browser-dashboard", agentName: "operator", taskName: "Share browser task", jobTimeoutMs: 10000,
+      });
+      const url = new URL(handoff.handoffUrl, window.location.origin);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
+          || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
+      setSharedLink({ url: url.toString(), label: tab.title || tab.taskLabel || "Browser task" });
+    } catch { setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
+    finally { sharePending.current = false; setShareBusy(false); }
+  };
   const [collapsed, setCollapsed] = useState(false);
   const [width, setWidth] = useState(224);
   const [query, setQuery] = useState("");
@@ -83,6 +109,7 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
   return (
     <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
+        <button type="button" aria-label="Handoffs" title="Handoffs" onClick={event => { shareFocus.current = event.currentTarget; setHandoffsOpen(true); }}><Link2 size={15} /></button>
         <div className="native-workspace-rail-header">
           {!collapsed && <span>Browsers</span>}
           <button type="button" aria-label={collapsed ? "Show browser rail" : "Collapse browser rail"} onClick={toggleRail}>
@@ -98,7 +125,7 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
                 <button type="button" className="native-workspace-browser" aria-expanded={open} onClick={() => setClosedGroups(current => {
                   const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next;
                 })}><ChevronDown size={12} style={{ transform: open ? undefined : "rotate(-90deg)" }} /><Monitor size={13} /><span>{node.label}<small>{node.profileId ?? "Unknown profile"}</small></span><small>{browserTabs.length}</small></button>
-                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
+                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
               </section>;
             })}
             {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
@@ -116,6 +143,8 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
+      <NativeHandoffDrawer open={handoffsOpen} onOpenChange={setHandoffsOpen} busy={shareBusy} error={shareError} sharedLink={sharedLink}
+        onReturnFocus={() => shareFocus.current?.focus()} />
     </main>
   );
 }
