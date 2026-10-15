@@ -21,11 +21,24 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
     let ready = true;
+    let focusRejection = null;
     let frameAllowed = true;
     const requests = [];
     await page.route("**/api/service/request", async route => {
       const body = route.request().postDataJSON(); requests.push(body);
-      if (body.action === "view_focus") return route.fulfill({ json: { success: true, data: { focused: true } } });
+      if (body.action === "view_focus") {
+        if (focusRejection) return route.fulfill({ status: focusRejection.status, json: {
+          success: false,
+          error: 'operator_focus_profile_policy_denied: SYNTHETIC-PRIVATE-DETAIL https://provider.invalid/internal',
+          failure: focusRejection.legacyOnly ? undefined : {
+            schemaVersion: 'agent-browser.service-failure-recourse.v1',
+            code: focusRejection.code, axis: 'profile_access', phase: 'ingress_validation',
+            effectState: 'no_effect', retryDisposition: 'inspect_before_retry',
+            recommendedAction: 'inspect_operator_focus_authority', reuseAllowed: false,
+          },
+        } });
+        return route.fulfill({ json: { success: true, data: { focused: true } } });
+      }
       return route.fulfill({ json: { success: true, data: { handoffId: "task-link", handoffUrl: `http://127.0.0.1:${server.address().port}/remote-view/task-link`, operatorVisible: { state: ready ? "ready" : "pending" } } } });
     });
     await page.route("**/remote-view/task-link", route => route.fulfill({ contentType: "text/html",
@@ -75,6 +88,30 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     ready = true;
     await page.getByRole('button', { name: 'Retry native desktop' }).click();
     await page.getByTitle('Native Remote View desktop', { exact: true }).waitFor();
+    await page.getByRole('searchbox').fill('');
+    for (const rejection of [
+      { status: 400, code: 'operator_focus_profile_policy_denied', target: 'Bob invoice', access: true },
+      { status: 200, code: 'operator_focus_authority_required', target: 'Alice invoice', access: true },
+      { status: 200, code: 'future_focus_policy_error', target: 'Bob invoice', access: false },
+      { status: 400, legacyOnly: true, target: 'Alice invoice', access: false },
+    ]) {
+      focusRejection = rejection;
+      const beforeDeniedHandoffs = requests.filter(request => request.action === 'remote_view_open').length;
+      const beforeDeniedFocus = requests.filter(request => request.action === 'view_focus').length;
+      await page.getByRole('button', { name: rejection.target, exact: true }).click();
+      const alert = page.getByRole('region', { name: 'Native desktop', exact: true }).getByRole('alert');
+      await alert.filter({ hasText: rejection.access ? 'Check dashboard and profile access' : 'Refresh the task' }).waitFor({ timeout: 1500 });
+      assert.equal((await alert.innerText()).includes('Check dashboard and profile access'), rejection.access);
+      assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0);
+      assert.equal(requests.filter(request => request.action === 'view_focus').length, beforeDeniedFocus + 1,
+        'access rejection must not automatically repeat focus');
+      assert.equal(requests.filter(request => request.action === 'remote_view_open').length, beforeDeniedHandoffs,
+        'rejected focus must not request a handoff');
+      assert.equal((await page.locator('body').innerText()).includes('SYNTHETIC-PRIVATE-DETAIL'), false);
+      focusRejection = null;
+      await page.getByRole('button', { name: 'Retry native desktop' }).click();
+      await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+    }
     await page.getByRole('searchbox').fill('no-such-task');
     await page.getByRole('status').filter({ hasText: 'No matching browsers or tabs' }).waitFor({ timeout: 1500 });
     await page.getByRole('button', { name: 'Collapse browser rail' }).click();

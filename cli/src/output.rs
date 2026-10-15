@@ -6439,6 +6439,7 @@ In the compact workspace preview, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
+Dashboard/profile permission rejections offer access-check guidance before retrying.
 
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a

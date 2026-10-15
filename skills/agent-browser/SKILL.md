@@ -57,6 +57,7 @@ In the compact workspace preview, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
+Dashboard/profile permission rejections offer access-check guidance before retrying.
 
 ## CLI fallback
 

@@ -6097,6 +6097,7 @@ In the compact workspace preview, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
+Dashboard/profile permission rejections offer access-check guidance before retrying.
 
 Native workspace embedding requires the dashboard and Remote View to share a
 public origin. When an iframe opens the durable link, its read-only redirect

@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { postServiceRequest, requestServiceRemoteViewHandoff } from "@agent-browser/client/service-request";
+import {
+  postServiceRequest, requestServiceRemoteViewHandoff, requireServiceRequestSuccess,
+  ServiceOperationError, ServiceRequestHttpError,
+} from "@agent-browser/client/service-request";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 
 export type NativeTaskViewportTarget = {
@@ -11,11 +14,12 @@ export type NativeTaskViewportTarget = {
   displayAllocationId: string;
 };
 
-type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string };
+type ViewState = { identity: string; status: "opening" | "opened" | "failed"; url?: string; accessCheckRequired?: boolean };
 
 /** Native Remote View supplies the viewer and its authentication. This component
  * selects the exact owned task and embeds only its ready durable handoff.
- * A missing selected target preserves the requested identity and offers inventory refresh. */
+ * A missing selected target preserves the requested identity and offers inventory refresh.
+ * Known access recourse selects bounded guidance without exposing producer diagnostics. */
 export function NativeTaskViewport({ target, hasSelection, loading = false, onRefresh }: {
   target: NativeTaskViewportTarget | null;
   hasSelection?: boolean;
@@ -52,7 +56,7 @@ export function NativeTaskViewport({ target, hasSelection, loading = false, onRe
           request: { ...attribution, action: "view_focus", params: { targetId, sessionName, operatorFocus: true, maximize: true } },
         });
         if (generation.current !== current) return;
-        if (selected.success !== true) throw new Error("native_selection_failed");
+        requireServiceRequestSuccess(selected);
         const handoff = await requestServiceRemoteViewHandoff({
           ...attribution, baseUrl: window.location.origin,
           displayAllocationId, params: { targetId }, signal: AbortSignal.timeout(15000),
@@ -63,8 +67,12 @@ export function NativeTaskViewport({ target, hasSelection, loading = false, onRe
           throw new Error("native_handoff_url_invalid");
         }
         setView({ identity, status: "opened", url: url.toString() });
-      } catch {
-        if (generation.current === current) setView({ identity, status: "failed" });
+      } catch (error) {
+        const failure = error instanceof ServiceOperationError || error instanceof ServiceRequestHttpError
+          ? error.failure : null;
+        const accessCheckRequired = failure?.code === "operator_focus_profile_policy_denied"
+          || failure?.code === "operator_focus_authority_required";
+        if (generation.current === current) setView({ identity, status: "failed", accessCheckRequired });
       }
     });
     return () => { generation.current += 1; };
@@ -77,7 +85,9 @@ export function NativeTaskViewport({ target, hasSelection, loading = false, onRe
       {onRefresh && <button type="button" disabled={loading} onClick={() => void onRefresh()}>{loading ? "Refreshing browsers" : "Refresh browsers"}</button>}
     </div> : <p className="native-task-message">Select a tab to open its native desktop.</p>
       : current?.status === "failed" ? <div role="alert" className="native-task-message">
-        <p>The native desktop could not be opened. Refresh the task, then retry this selection.</p>
+        <p>{current.accessCheckRequired
+          ? "Check dashboard and profile access before retrying this selection, or choose another tab."
+          : "The native desktop could not be opened. Refresh the task, then retry this selection."}</p>
         {current.url && <>
           <p>Open Remote View to sign in or check the desktop, then retry.</p>
           <a href={current.url} target="_blank" rel="noopener noreferrer">Open Remote View</a>
