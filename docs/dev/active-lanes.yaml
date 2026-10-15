@@ -9,12 +9,16 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#288]
-    plan_state: IN_PROGRESS
-    custody_state: ACTIVE_WORKTREE
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
     dependencies: []
     overlaps: [P237]
     reconciled_overlaps: ["P244 owns daemon profile selection and ordinary publication; preserve P237 lifecycle/UI work and reconcile shared adapters by behavior"]
-    validation_status: Reproduction in progress
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    checkpoint: d68100c16
+    validation_status: Affected Rust suites, format, strict Clippy, docs and four pinned public synthetic workflows pass with zero owned residue
+    limitations: ["Source and isolated synthetic qualification; production not published", "No exhaustive denial-path, real-account or native viewer qualification", "New-process admission and destructive recovery remain separate protocols"]
     updated_at: 2026-10-14
   - id: P243
     product_lane: PL-BUGFIX

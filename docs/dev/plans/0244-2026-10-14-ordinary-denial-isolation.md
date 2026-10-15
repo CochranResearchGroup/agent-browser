@@ -2,7 +2,7 @@
 
 Product lane: PL-BUGFIX
 Work item: #288
-State: IN_PROGRESS
+State: COMPLETED
 Branch: fix/ordinary-denial-isolation
 
 ## Outcome
@@ -22,3 +22,7 @@ Require deterministic red/green at actual profile selection and SQLite publicati
 The installed public malformed-custody fixture fails with browser_session_publication_release_fenced and zero owned residue. Both actual SQLite ordinary-publication regressions fail with that same code before the repair and pass afterward. The shared-local owner-ambiguity test fails with existing_session_profile_identity_ambiguous before the ordering repair; its first draft had a Rust fixture move error, corrected before establishing the assertion failure. Native startup reads the same historical document and is included in this bounded regression set.
 
 Clippy first encountered a cache-wrapper compiler-spawn failure before lint evaluation. Retained output is redacted; retry uses a sanitized environment, cache disabled and four jobs. This is not a source lint failure or a passed gate.
+
+## Completed source outcome
+
+Source checkpoint d68100c16 repairs all reproduced bounded paths. Ten store tests, 110 routing tests, 100 session tests with six ignored opt-in browser tests, 39 output tests, format, strict workspace Clippy, docs and policy/link guidance gates pass. Four pinned-candidate public synthetic workflows pass with zero fixture residue. Failed attempts and the two-axis primary review remain in the [curated receipt](../notes/0244-2026-10-14-ordinary-denial-isolation.md). PR289 owns canonical integration; no production publication is claimed.
