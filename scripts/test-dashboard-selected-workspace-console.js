@@ -34,8 +34,8 @@ assert.match(
 );
 assert.match(
   page,
-  /setSidePanelTab\("chat"\)[\s\S]*agent-browser-dashboard-console-send-to-chat/s,
-  'Dashboard must switch the right pane to Chat when Console sends evidence.',
+  /setTool\("chat"\)[\s\S]*agent-browser-dashboard-console-send-to-chat/s,
+  'Diagnostics must switch to Chat when Console sends evidence.',
 );
 assert.match(
   streamStore,
@@ -50,7 +50,7 @@ assert.match(
 assert.match(
   page,
   /data-selected-workspace-context=\{selectedWorkspace\.context\.node \? "ready"/s,
-  'The right pane must expose selected-workspace context readiness independent of the active tab.',
+  'Diagnostics must expose selected-workspace context readiness independent of the active tab.',
 );
 assert.match(
   runtimeSmoke,
