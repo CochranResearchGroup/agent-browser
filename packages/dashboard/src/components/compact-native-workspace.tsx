@@ -4,12 +4,14 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2 } from "lucide-react";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
+import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { requestServiceRemoteViewHandoff } from "@agent-browser/client/service-request";
 import { NativeHandoffDrawer } from "@/components/native-handoff-drawer";
 import { NativeTabActions } from "@/components/native-tab-actions";
 
 type Props = {
   nodes: readonly WorkspaceNode[];
+  handoffs?: readonly ServiceManagedHandoff[];
   tabs: readonly WorkspaceServiceTab[];
   selection: { browserId: string | null; tabId: string | null };
   userLabel: string;
@@ -21,7 +23,7 @@ type Props = {
 };
 
 /** Compact inventory and native viewer share one authoritative source snapshot. */
-export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLogout, onRefresh, children, loading, error }: Props) {
+export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userLabel, onLogout, onRefresh, children, loading, error }: Props) {
   const [handoffsOpen, setHandoffsOpen] = useState(false);
   const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -144,6 +146,7 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
       <NativeHandoffDrawer open={handoffsOpen} onOpenChange={setHandoffsOpen} busy={shareBusy} error={shareError} sharedLink={sharedLink}
+        records={handoffs} inventoryLoading={loading} inventoryError={error ? "Could not refresh handoffs. Showing the last reported records." : null} onRefresh={onRefresh}
         onReturnFocus={() => shareFocus.current?.focus()} />
     </main>
   );

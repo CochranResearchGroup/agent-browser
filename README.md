@@ -806,6 +806,11 @@ shows its opaque native link in Handoffs. It preserves the selected peer and
 does not navigate the task. Use the small Handoffs rail control to reopen the
 panel, then copy or open the same link through existing Remote View authentication.
 
+Handoffs lists retained owner records even after target expiry, with supplied
+origin, creation/use status and separate link/tab policies. Inspect shows task
+context; Copy and Open reuse the opaque link. A failed refresh retains the last
+reported records. Unavailable inventory is distinct from an empty list.
+
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before
 enabling its view or controls. It does not rewrite the selection to another tab

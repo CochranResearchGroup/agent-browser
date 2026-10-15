@@ -991,6 +991,7 @@ function DashboardExperience({
       ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
       : null;
     return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
+      handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
       selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
       onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}>
       {managedBrowser ? <NativeTaskViewport target={nativeTarget} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}

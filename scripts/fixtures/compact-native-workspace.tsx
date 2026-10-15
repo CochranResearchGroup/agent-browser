@@ -14,6 +14,10 @@ const tabs = [
   { id: "carol", browserId: "carol-browser", sessionId: "carol-session", targetId: "target-carol", title: "Carol report", url: "https://example.test/carol", lifecycle: "active" },
   { id: "closed", browserId: "alice-browser", targetId: "target-closed", title: "Closed invoice", lifecycle: "closed" },
 ];
+const handoffs = [{ handoffId: "retained-old", handoffUrl: "/remote-view/retained-old", sessionId: "ended-session", tabId: "expired-original",
+  sessionName: "old-task", profileId: "archived-profile", browserId: null, createdAtMs: 1000, expiresAtMs: null,
+  linkState: "active", targetState: "expired", taskMetadata: { taskName: "Retained review", serviceName: "Audit service", humanName: "Casey operator", originKind: "agent", attribution: "supplied" },
+  tabLifetime: { inactivityMs: 30000 }, pendingHuman: null }];
 function fixtureTabs() {
   const closed: string[] = JSON.parse(sessionStorage.getItem("fixture-closed-tabs") || "[]");
   return tabs.filter(tab => !closed.includes(tab.id));
@@ -22,15 +26,38 @@ function Fixture() {
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
   const [availableTabs, setAvailableTabs] = useState(fixtureTabs);
   const [refreshing, setRefreshing] = useState(false);
+  const [availableHandoffs, setAvailableHandoffs] = useState<typeof handoffs | undefined>(handoffs);
+  const failHandoffRefresh = useRef(false);
   const pauseRefresh = useRef(false);
   const releaseRefresh = useRef<(() => void) | null>(null);
   const refresh = async () => {
     setRefreshing(true);
     try {
       if (pauseRefresh.current) await new Promise<void>(resolve => { releaseRefresh.current = resolve; });
+      if (failHandoffRefresh.current) throw new Error("SYNTHETIC-PRIVATE-INVENTORY-DETAIL");
       setAvailableTabs(fixtureTabs());
+      setAvailableHandoffs(handoffs);
     } finally { setRefreshing(false); }
   };
+  useEffect(() => {
+    const empty = () => setAvailableHandoffs([]);
+    const unavailable = () => setAvailableHandoffs(undefined);
+    const fail = () => { failHandoffRefresh.current = true; };
+    const route = () => setAvailableHandoffs([{ ...handoffs[0], handoffUrl: "https://provider.invalid/internal?token=PRIVATE-ROUTE-CANARY" }]);
+    const repair = () => { failHandoffRefresh.current = false; };
+    window.addEventListener("fixture-handoffs-empty", empty);
+    window.addEventListener("fixture-handoffs-unavailable", unavailable);
+    window.addEventListener("fixture-handoffs-fail", fail);
+    window.addEventListener("fixture-handoffs-route", route);
+    window.addEventListener("fixture-handoffs-repair", repair);
+    return () => {
+      window.removeEventListener("fixture-handoffs-empty", empty);
+      window.removeEventListener("fixture-handoffs-unavailable", unavailable);
+      window.removeEventListener("fixture-handoffs-fail", fail);
+      window.removeEventListener("fixture-handoffs-route", route);
+      window.removeEventListener("fixture-handoffs-repair", repair);
+    };
+  }, []);
   useEffect(() => {
     const removeSelected = () => setAvailableTabs(current => current.filter(tab => tab.id !== readDashboardWorkspaceUrlSelection().tabId));
     const pause = () => { pauseRefresh.current = true; };
@@ -51,7 +78,7 @@ function Fixture() {
     return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, update);
   }, []);
   const selectedTab = availableTabs.find(tab => tab.id === selection.tabId);
-  return <CompactNativeWorkspace nodes={nodes as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
+  return <CompactNativeWorkspace nodes={nodes as any} handoffs={availableHandoffs as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
     <NativeTaskViewport hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab ? {
       browserId: selection.browserId!, sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
       displayAllocationId: selection.browserId === "carol-browser" ? "desktop-b" : "desktop-a",
