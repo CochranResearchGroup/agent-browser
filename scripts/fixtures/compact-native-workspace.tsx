@@ -44,6 +44,8 @@ function Fixture() {
     const empty = () => setAvailableHandoffs([]);
     const unavailable = () => setAvailableHandoffs(undefined);
     const fail = () => { failHandoffRefresh.current = true; };
+    const live = () => setAvailableHandoffs([{ ...handoffs[0], targetState: "reported", browserId: "alice-browser" }]);
+    const rearmed = () => setAvailableHandoffs([{ ...handoffs[0], targetState: "reported", browserId: "alice-browser", taskMetadata: { ...handoffs[0].taskMetadata, firstHumanUseAtMs: 2000 }, pendingHuman: { handoffId: "retained-old", requestedAtMs: 3000, expiresAtMs: null } }]);
     const pending = () => setAvailableHandoffs([{ ...handoffs[0], pendingHuman: { handoffId: "retained-old", requestedAtMs: 1000, expiresAtMs: null } }]);
     const used = () => setAvailableHandoffs([{ ...handoffs[0], taskMetadata: { ...handoffs[0].taskMetadata, firstHumanUseAtMs: 2000 }, pendingHuman: null }]);
     const route = () => setAvailableHandoffs([{ ...handoffs[0], handoffUrl: "https://provider.invalid/internal?token=PRIVATE-ROUTE-CANARY" }]);
@@ -51,6 +53,8 @@ function Fixture() {
     window.addEventListener("fixture-handoffs-empty", empty);
     window.addEventListener("fixture-handoffs-unavailable", unavailable);
     window.addEventListener("fixture-handoffs-fail", fail);
+    window.addEventListener("fixture-handoffs-live", live);
+    window.addEventListener("fixture-handoffs-rearmed", rearmed);
     window.addEventListener("fixture-handoffs-route", route);
     window.addEventListener("fixture-handoffs-pending", pending);
     window.addEventListener("fixture-handoffs-used", used);
@@ -59,6 +63,8 @@ function Fixture() {
       window.removeEventListener("fixture-handoffs-empty", empty);
       window.removeEventListener("fixture-handoffs-unavailable", unavailable);
       window.removeEventListener("fixture-handoffs-fail", fail);
+      window.removeEventListener("fixture-handoffs-live", live);
+      window.removeEventListener("fixture-handoffs-rearmed", rearmed);
       window.removeEventListener("fixture-handoffs-route", route);
       window.removeEventListener("fixture-handoffs-pending", pending);
       window.removeEventListener("fixture-handoffs-used", used);

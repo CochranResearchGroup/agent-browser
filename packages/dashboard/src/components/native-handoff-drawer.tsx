@@ -69,7 +69,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
           const detailsOpen = inspected === record.handoffId;
           return <Fragment key={record.handoffId}><tr>
             <td><strong>{supplied(metadata?.taskName)}</strong><span><small>Service: </small><span>{supplied(metadata?.serviceName)}</span></span><span><small>Agent: </small><span>{supplied(metadata?.agentName)}</span></span><span><small>Human: </small><span>{supplied(metadata?.humanName)}</span></span><small>Origin: {supplied(metadata?.originKind)} · {supplied(metadata?.attribution)}</small></td>
-            <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{typeof metadata?.firstHumanUseAtMs === "number" ? "Used" : record.pendingHuman ? "Awaiting use" : "Use not recorded"}</span></td>
+            <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{record.pendingHuman ? "Awaiting use" : typeof metadata?.firstHumanUseAtMs === "number" ? "Used" : "Use not recorded"}</span></td>
             <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span>Link status: {record.linkState}</span><span>Tab: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Unknown"}</span><span>Target: {record.targetState === 'reported' ? 'Reported' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Until used' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
             <td className="native-handoff-actions">
               {url && <a href={url} target="_blank" rel="noopener noreferrer">Open</a>}

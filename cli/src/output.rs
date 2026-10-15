@@ -6466,6 +6466,11 @@ Policies opens link lifetime controls for a retained record. Choose Perpetual or
 a finite duration in seconds; the finite window starts when saved. This leaves
 tab lifetime and unused retention unchanged. Expired links remain revoked.
 
+Tab inactivity and unused retention have separate saves in Policies. Tab expiry
+uses the task's last activity; unused retention starts a new wait-for-human window
+when saved. Choose finite seconds or keep the unused task until used. A current
+wait appears as Awaiting use; Inspect preserves the original first-use timestamp.
+
 
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a

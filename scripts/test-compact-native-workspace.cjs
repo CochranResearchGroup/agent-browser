@@ -27,6 +27,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     let closeDenied = false;
     let shareFailure = false;
     let policyFailure = false;
+    let policyWrongTab = false;
     let shareHold = null;
     let closeHold = null;
     let ready = true;
@@ -44,7 +45,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       }
       if (body.action === 'service_remote_view_handoff_resolve') {
         if (policyFailure) return route.fulfill({ status: 403, json: { success: false, error: 'PRIVATE-POLICY-DETAIL' } });
-        return route.fulfill({ json: { success: true, data: { handoffId: body.params.handoffId, status: 'link_lifetime_updated', expiresAtMs: body.params.ttlMs === 0 ? null : Date.now() + body.params.ttlMs } } });
+        const data = body.params.handoffOperation === 'set_tab_lifetime'
+          ? { handoffId: body.params.handoffId, tabId: policyWrongTab ? 'peer-tab' : 'expired-original', status: 'tab_lifetime_updated', tabLifetime: { inactivityMs: body.params.tabInactivityMs || null, pressureInactivityMs: 90000 } }
+          : body.params.handoffOperation === 'prepare_human'
+            ? { handoffId: body.params.handoffId, tabId: policyWrongTab ? 'peer-tab' : 'expired-original', status: 'pending_human', pendingHuman: { handoffId: body.params.handoffId, requestedAtMs: 1000, expiresAtMs: body.params.pendingHumanRetentionMs === 0 ? null : 1000 + body.params.pendingHumanRetentionMs } }
+          : { handoffId: body.params.handoffId, status: 'link_lifetime_updated', expiresAtMs: body.params.ttlMs === 0 ? null : Date.now() + body.params.ttlMs };
+        return route.fulfill({ json: { success: true, data } });
       }
       if (body.action === "tab_close") {
         if (closeHold) await closeHold;
@@ -170,6 +176,61 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.keyboard.press('Enter');
     assert.equal(requests.length, deniedPolicies, 'denied policy update must not automatically repeat');
     policyFailure = false;
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-live')));
+    const tabForm = retainedDrawer.getByRole('form', { name: 'Tab inactivity', exact: true });
+    await tabForm.waitFor({ timeout: 1500 });
+    await tabForm.getByLabel('Tab inactivity mode', { exact: true }).selectOption('finite');
+    await tabForm.getByLabel('Tab inactivity seconds', { exact: true }).fill('60');
+    const tabReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.handoffOperation === 'set_tab_lifetime');
+    await tabForm.getByRole('button', { name: 'Save tab inactivity', exact: true }).click();
+    await tabReply;
+    await tabForm.getByRole('status').filter({ hasText: 'Tab inactivity saved' }).waitFor();
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'set_tab_lifetime', tabInactivityMs: 60000 });
+    assert.equal(requests.at(-1).params.ttlMs, undefined);
+    assert.equal(requests.at(-1).params.pendingHumanRetentionMs, undefined);
+    assert.equal(requests.at(-1).params.pressureInactivityMs, undefined);
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-live')));
+    await tabForm.getByLabel('Tab inactivity mode', { exact: true }).selectOption('perpetual');
+    const tabPerpetual = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.tabInactivityMs === 0);
+    await tabForm.getByRole('button', { name: 'Save tab inactivity', exact: true }).click();
+    await tabPerpetual;
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'set_tab_lifetime', tabInactivityMs: 0 });
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-live')));
+    policyWrongTab = true;
+    await tabForm.getByLabel('Tab inactivity mode', { exact: true }).selectOption('finite');
+    await tabForm.getByLabel('Tab inactivity seconds', { exact: true }).fill('70');
+    await tabForm.getByRole('button', { name: 'Save tab inactivity', exact: true }).click();
+    await tabForm.getByRole('alert').filter({ hasText: 'Could not confirm this change' }).waitFor();
+    assert.equal(await tabForm.getByRole('status').filter({ hasText: 'Tab inactivity saved' }).count(), 0, 'a peer-tab receipt cannot confirm this task policy');
+    policyWrongTab = false;
+    const unusedForm = retainedDrawer.getByRole('form', { name: 'Unused retention', exact: true });
+    await unusedForm.waitFor({ timeout: 1500 });
+    await unusedForm.getByLabel('Unused retention mode', { exact: true }).selectOption('finite');
+    await unusedForm.getByLabel('Unused retention seconds', { exact: true }).fill('14400');
+    await page.setViewportSize({ width: 390, height: 760 });
+    await unusedForm.scrollIntoViewIfNeeded();
+    assert.equal(await unusedForm.evaluate(node => node.scrollWidth <= node.clientWidth), true);
+    await page.screenshot({ path: path.join(artifacts, 'unused-retention-policy-narrow.png') });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    const unusedReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.handoffOperation === 'prepare_human');
+    await unusedForm.getByRole('button', { name: 'Save unused retention', exact: true }).click();
+    await unusedReply;
+    await unusedForm.getByRole('status').filter({ hasText: 'Unused retention saved' }).waitFor();
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'prepare_human', pendingHumanRetentionMs: 14400000 });
+    assert.equal(requests.at(-1).params.ttlMs, undefined);
+    assert.equal(requests.at(-1).params.tabInactivityMs, undefined);
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-live')));
+    await unusedForm.getByLabel('Unused retention mode', { exact: true }).selectOption('perpetual');
+    const untilUsed = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.pendingHumanRetentionMs === 0);
+    await unusedForm.getByRole('button', { name: 'Save unused retention', exact: true }).click();
+    await untilUsed;
+    await unusedForm.getByRole('status').filter({ hasText: 'Unused retention saved' }).waitFor();
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'prepare_human', pendingHumanRetentionMs: 0 });
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-rearmed')));
+    await retainedRow.getByText('Awaiting use', { exact: true }).waitFor({ timeout: 1500 });
+    assert.equal(await retainedRow.getByText('Used', { exact: true }).count(), 0, 'historical first use must not mask a newly requested unused-retention window');
+
 
     assert.equal(new URL(page.url()).searchParams.get('tab'), null);
     requests.length = 0;

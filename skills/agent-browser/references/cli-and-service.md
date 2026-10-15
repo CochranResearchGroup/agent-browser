@@ -4008,3 +4008,17 @@ addressed link, preserving tab lifetime, unused retention and browser state.
 An expired link cannot be renewed through this control. Opening controls has no
 effect; saving requires an exact owner acknowledgement. Unconfirmed results
 retain bounded guidance and require inspection before another attempt.
+
+Tab inactivity and unused retention each have their own save. Tab inactivity
+calls set_tab_lifetime with tabInactivityMs only, preserving link validity,
+pressure thresholds and unused retention. It is measured from last task activity;
+zero removes explicit inactivity expiry. Expiring the final owned tab can close
+its browser. The existing owner protects borrowed browsers.
+
+Unused retention calls prepare_human with pendingHumanRetentionMs only. Its new
+window starts at owner acceptance; zero means until qualified human use. It does
+not change link expiry or tab inactivity and cannot assert human use. Tab and
+unused controls require an active link and reported target, with current state
+rechecked by the owner. A fresh wait takes display precedence over historical
+use, while Inspect keeps the original first-use timestamp. All saves require
+an exact link/status receipt; target policies also require the exact tab ID.
