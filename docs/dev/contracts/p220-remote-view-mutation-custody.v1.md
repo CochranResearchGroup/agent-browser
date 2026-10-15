@@ -3,8 +3,8 @@
 This Agent Browser contract coordinates public revision 3 acquire, activate,
 issue-view, revoke-view and release requests. It is request custody, not a
 desktop reservation ledger or installed execution authority. The
-[P220 plan](../../history/2026-10-05-legacy-planning/plans/0220-2026-09-28-remote-view-consumer-integration.md)
-owns runtime adoption and acceptance.
+[P220 successor work item](https://github.com/CochranResearchGroup/agent-browser/issues/202)
+records its runtime adoption and acceptance history.
 
 The service-model boundary carries the exact application envelope and a stable
 client mutation key. The application selector is resource context. A client
