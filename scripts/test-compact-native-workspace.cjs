@@ -21,6 +21,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   let releaseHeldFocus = null;
   let releaseHeldClose = null;
   let releaseHeldShare = null;
+  let releaseHeldDelete = null;
   try {
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
@@ -28,6 +29,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     let shareFailure = false;
     let policyFailure = false;
     let policyWrongTab = false;
+    let deleteWrongId = false;
+    let deleteHold = null;
     let shareHold = null;
     let closeHold = null;
     let ready = true;
@@ -44,6 +47,15 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
         if (shareHold) await shareHold;
       }
       if (body.action === 'service_remote_view_handoff_resolve') {
+        if (body.params.handoffOperation === 'delete') {
+          if (deleteHold) await deleteHold;
+          if (deleteWrongId) return route.fulfill({ json: { success: true, data: { handoffId: 'peer-link', status: 'deleted' } } });
+          await page.evaluate(id => {
+            const deleted = JSON.parse(sessionStorage.getItem('fixture-deleted-handoffs') || '[]');
+            sessionStorage.setItem('fixture-deleted-handoffs', JSON.stringify([...deleted, id]));
+          }, body.params.handoffId);
+          return route.fulfill({ json: { success: true, data: { handoffId: body.params.handoffId, status: 'deleted' } } });
+        }
         if (policyFailure) return route.fulfill({ status: 403, json: { success: false, error: 'PRIVATE-POLICY-DETAIL' } });
         const data = body.params.handoffOperation === 'set_tab_lifetime'
           ? { handoffId: body.params.handoffId, tabId: policyWrongTab ? 'peer-tab' : 'expired-original', status: 'tab_lifetime_updated', tabLifetime: { inactivityMs: body.params.tabInactivityMs || null, pressureInactivityMs: 90000 } }
@@ -615,12 +627,70 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(await page.locator('iframe[title="Native Remote View desktop"]').count(), 0, 'selected closed task must release its stale native frame');
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob', 'close must not silently select a peer');
     assert.equal(requests.slice(requestsBeforeSelectedClose).filter(request => request.action !== 'tab_close').length, 0, 'close must not issue a new peer handoff or focus');
+    await page.getByRole('button', { name: 'Handoffs', exact: true }).press('Enter');
+    const deleteDrawer = page.getByRole('dialog', { name: 'Handoffs', exact: true });
+    const deletingRow = deleteDrawer.getByRole('row').filter({ hasText: 'Retained review' });
+    const deleteCount = requests.length;
+    await deletingRow.getByRole('button', { name: 'Delete link', exact: true }).click();
+    const deleteDialog = page.getByRole('dialog', { name: 'Delete link?', exact: true });
+    await deleteDialog.getByText('Retained review', { exact: true }).waitFor();
+    await page.setViewportSize({ width: 390, height: 760 });
+    const deleteBounds = await deleteDialog.boundingBox();
+    assert.ok(deleteBounds.x >= 0 && deleteBounds.x + deleteBounds.width <= 390);
+    await page.screenshot({ path: path.join(artifacts, 'delete-link-confirmation-narrow.png') });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    assert.equal(requests.length, deleteCount, 'opening deletion confirmation must have no effect');
+    await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    assert.equal(requests.length, deleteCount, 'cancel must not revoke a link');
+    await deletingRow.waitFor();
+    deleteWrongId = true;
+    await deletingRow.getByRole('button', { name: 'Delete link', exact: true }).click();
+    await deleteDialog.getByRole('button', { name: 'Delete link', exact: true }).click();
+    await deleteDialog.getByRole('alert').filter({ hasText: 'Could not confirm deletion' }).waitFor();
+    assert.equal(await deleteDialog.getByRole('button', { name: 'Delete link', exact: true }).isDisabled(), true);
+    assert.equal((await deleteDialog.innerText()).includes('peer-link'), false);
+    await page.keyboard.press('Escape');
+    await deletingRow.waitFor();
+    assert.equal(await deleteDrawer.getByRole('status').filter({ hasText: 'Link deleted.' }).count(), 0);
+    assert.equal(requests.length, deleteCount + 1, 'unconfirmed deletion must not automatically repeat');
+    deleteWrongId = false;
+    deleteHold = new Promise(resolve => { releaseHeldDelete = resolve; });
+    await deletingRow.getByRole('button', { name: 'Delete link', exact: true }).click();
+    const deleteReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.handoffOperation === 'delete');
+    await deleteDialog.getByRole('button', { name: 'Delete link', exact: true }).click();
+    await deleteDialog.getByRole('status').filter({ hasText: 'Deleting link…' }).waitFor();
+    assert.equal(await deleteDialog.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
+    assert.equal(await deleteDialog.getByRole('button', { name: 'Delete link', exact: true }).isDisabled(), true);
+    await page.keyboard.press('Escape');
+    await deleteDialog.waitFor();
+    assert.equal(requests.length, deleteCount + 2);
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-pause-refresh')));
+    releaseHeldDelete(); deleteHold = null;
+    await deleteReply;
+    await deletingRow.waitFor({ state: 'hidden' });
+    assert.equal(requests.length, deleteCount + 2);
+    assert.equal(requests.at(-1).action, 'service_remote_view_handoff_resolve');
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'delete' });
+    await deleteDrawer.getByRole('status').filter({ hasText: 'Link deleted.' }).waitFor();
+    await page.waitForFunction(() => {
+      const dialog = [...document.querySelectorAll('[role="dialog"]')].find(node => node.textContent.includes('Handoffs'));
+      return dialog?.contains(document.activeElement);
+    }, null, { timeout: 1500 });
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-finish-refresh')));
+
+    await deleteDrawer.getByRole('button', { name: 'Refresh handoffs', exact: true }).click();
+    assert.equal(await deletingRow.count(), 0);
+    await page.reload();
+    await page.getByRole('button', { name: 'Handoffs', exact: true }).press('Enter');
+    await page.getByRole('dialog', { name: 'Handoffs', exact: true }).getByRole('status').filter({ hasText: 'No retained handoffs.' }).waitFor();
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
     releaseHeldFocus?.(null);
     releaseHeldClose?.();
     releaseHeldShare?.();
+    releaseHeldDelete?.();
     if (browser) {
       const session = await browser.newBrowserCDPSession();
       const { processInfo } = await session.send('SystemInfo.getProcessInfo');

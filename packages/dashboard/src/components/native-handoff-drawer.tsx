@@ -1,5 +1,6 @@
 "use client";
 
+import { NativeHandoffDelete } from "@/components/native-handoff-delete";
 import { NativeHandoffPolicies } from "@/components/native-handoff-policies";
 import { Fragment, useRef, useState } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
@@ -30,6 +31,11 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
   records?: readonly ServiceManagedHandoff[]; inventoryLoading?: boolean; inventoryError?: string | null;
   onRefresh: () => Promise<void>;
 }) {
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
+  const [deletionNotice, setDeletionNotice] = useState(false);
+  const refreshButton = useRef<HTMLButtonElement>(null);
+  const visibleRecords = records?.filter(record => !deleted.has(record.handoffId));
+  const visibleSharedLink = sharedLink && ![...deleted].some(id => sharedLink.url.endsWith(`/remote-view/${id}`)) ? sharedLink : null;
   const [copyFeedback, setCopyFeedback] = useState<{ id: string; failed: boolean } | null>(null);
   const [inspected, setInspected] = useState<string | null>(null);
   const [policies, setPolicies] = useState<string | null>(null);
@@ -42,6 +48,15 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
     try { await onRefresh(); } catch { setRefreshError(true); }
     finally { refreshPending.current = false; setRefreshing(false); }
   };
+  const linkDeleted = (id: string) => {
+    // Only an exact owner acknowledgement suppresses a stale revoked row.
+    // This is transient display state, never a persistent link registry.
+    setDeleted(current => new Set(current).add(id)); setDeletionNotice(true); setCopyFeedback(null);
+    if (inspected === id) setInspected(null);
+    if (policies === id) setPolicies(null);
+    void refresh();
+    requestAnimationFrame(() => refreshButton.current?.focus());
+  };
   const copy = async (id: string, url: string) => {
     try { await navigator.clipboard.writeText(new URL(url, window.location.origin).toString()); setCopyFeedback({ id, failed: false }); }
     catch { setCopyFeedback({ id, failed: true }); }
@@ -49,21 +64,22 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
   return <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="native-tab-properties native-handoff-drawer" onCloseAutoFocus={event => { event.preventDefault(); onReturnFocus(); }}>
       <DialogHeader><DialogTitle>Handoffs</DialogTitle><DialogDescription>Native Remote View links. Link validity and target lifetime are independent.</DialogDescription></DialogHeader>
-      <button type="button" className="native-handoff-refresh" disabled={refreshing || inventoryLoading} onClick={() => void refresh()}>Refresh handoffs</button>
+      <button ref={refreshButton} type="button" className="native-handoff-refresh" disabled={refreshing || inventoryLoading} onClick={() => void refresh()}>Refresh handoffs</button>
       {(refreshing || inventoryLoading) && <p role="status">Refreshing handoffs…</p>}
       {(inventoryError || refreshError) && <p role="alert">Could not refresh handoffs. Showing the last reported records.</p>}
       {busy && <p role="status">Preparing link…</p>}
       {error && <p role="alert">{error}</p>}
-      {sharedLink && <section aria-label="Shared task">
-        <p>{sharedLink.label}</p><label>Shared handoff URL<input aria-label="Shared handoff URL" readOnly value={sharedLink.url} /></label>
-        <div className="native-tab-dialog-actions"><button type="button" onClick={() => void copy('shared', sharedLink.url)}>Copy link</button><a href={sharedLink.url} target="_blank" rel="noopener noreferrer">Open Remote View</a></div>
+      {visibleSharedLink && <section aria-label="Shared task">
+        <p>{visibleSharedLink.label}</p><label>Shared handoff URL<input aria-label="Shared handoff URL" readOnly value={visibleSharedLink.url} /></label>
+        <div className="native-tab-dialog-actions"><button type="button" onClick={() => void copy('shared', visibleSharedLink.url)}>Copy link</button><a href={visibleSharedLink.url} target="_blank" rel="noopener noreferrer">Open Remote View</a></div>
       </section>}
+      {deletionNotice && <p role="status">Link deleted.</p>}
       {copyFeedback && <p role={copyFeedback.failed ? "alert" : "status"}>{copyFeedback.failed ? "Could not copy this link. Inspect it to copy the URL manually." : "Link copied"}</p>}
       {records === undefined && !inventoryLoading && <p role="status">Handoff inventory is unavailable. Refresh to check the current owner.</p>}
-      {records?.length === 0 && <p role="status">No retained handoffs. Share a task to prepare a link.</p>}
-      {records && records.length > 0 && <table aria-label="Retained handoffs" className="native-handoff-table">
+      {visibleRecords?.length === 0 && <p role="status">No retained handoffs. Share a task to prepare a link.</p>}
+      {visibleRecords && visibleRecords.length > 0 && <table aria-label="Retained handoffs" className="native-handoff-table">
         <thead><tr><th scope="col">Task and origin</th><th scope="col">Created and use</th><th scope="col">Lifetimes and target</th><th scope="col">Actions</th></tr></thead>
-        <tbody>{records.map(record => {
+        <tbody>{visibleRecords.map(record => {
           const metadata = record.taskMetadata;
           const url = durableUrl(record);
           const detailsOpen = inspected === record.handoffId;
@@ -76,6 +92,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
               <button type="button" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}>Copy</button>
               <button type="button" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}>Inspect</button>
               <button type="button" disabled={!url} aria-expanded={policies === record.handoffId} onClick={() => setPolicies(policies === record.handoffId ? null : record.handoffId)}>Policies</button>
+              <NativeHandoffDelete record={record} onDeleted={linkDeleted} />
               {!url && <span role="alert">Link unavailable</span>}
             </td>
           </tr>

@@ -820,6 +820,10 @@ uses the task's last activity; unused retention starts a new wait-for-human wind
 when saved. Choose finite seconds or keep the unused task until used. A current
 wait appears as Awaiting use; Inspect preserves the original first-use timestamp.
 
+Delete link asks for confirmation and revokes only the selected link. Its browser
+and tabs stay open; Cancel has no effect. Unconfirmed deletion keeps the record
+visible and offers refresh guidance without an automatic retry.
+
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before
 enabling its view or controls. It does not rewrite the selection to another tab

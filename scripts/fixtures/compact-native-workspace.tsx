@@ -19,6 +19,10 @@ const handoffs: ServiceManagedHandoff[] = [{ handoffId: "retained-old", handoffU
   sessionName: "old-task", profileId: "archived-profile", browserId: null, createdAtMs: 1000, expiresAtMs: null,
   linkState: "active", targetState: "expired", taskMetadata: { taskName: "Retained review", serviceName: "Audit service", humanName: "Casey operator", originKind: "agent", attribution: "supplied" },
   tabLifetime: { inactivityMs: 30000 }, pendingHuman: null }];
+function fixtureHandoffs() {
+  const deleted: string[] = JSON.parse(sessionStorage.getItem("fixture-deleted-handoffs") || "[]");
+  return handoffs.filter(record => !deleted.includes(record.handoffId));
+}
 function fixtureTabs() {
   const closed: string[] = JSON.parse(sessionStorage.getItem("fixture-closed-tabs") || "[]");
   return tabs.filter(tab => !closed.includes(tab.id));
@@ -27,7 +31,7 @@ function Fixture() {
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
   const [availableTabs, setAvailableTabs] = useState(fixtureTabs);
   const [refreshing, setRefreshing] = useState(false);
-  const [availableHandoffs, setAvailableHandoffs] = useState<typeof handoffs | undefined>(handoffs);
+  const [availableHandoffs, setAvailableHandoffs] = useState<typeof handoffs | undefined>(fixtureHandoffs);
   const failHandoffRefresh = useRef(false);
   const pauseRefresh = useRef(false);
   const releaseRefresh = useRef<(() => void) | null>(null);
@@ -37,7 +41,7 @@ function Fixture() {
       if (pauseRefresh.current) await new Promise<void>(resolve => { releaseRefresh.current = resolve; });
       if (failHandoffRefresh.current) throw new Error("SYNTHETIC-PRIVATE-INVENTORY-DETAIL");
       setAvailableTabs(fixtureTabs());
-      setAvailableHandoffs(handoffs);
+      setAvailableHandoffs(fixtureHandoffs());
     } finally { setRefreshing(false); }
   };
   useEffect(() => {

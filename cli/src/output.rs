@@ -6471,6 +6471,10 @@ uses the task's last activity; unused retention starts a new wait-for-human wind
 when saved. Choose finite seconds or keep the unused task until used. A current
 wait appears as Awaiting use; Inspect preserves the original first-use timestamp.
 
+Delete link asks for confirmation and revokes only the selected link. Its browser
+and tabs stay open; Cancel has no effect. Unconfirmed deletion keeps the record
+visible and offers refresh guidance without an automatic retry.
+
 
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a

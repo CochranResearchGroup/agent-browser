@@ -4022,3 +4022,13 @@ unused controls require an active link and reported target, with current state
 rechecked by the owner. A fresh wait takes display precedence over historical
 use, while Inspect keeps the original first-use timestamp. All saves require
 an exact link/status receipt; target policies also require the exact tab ID.
+
+Delete link uses an application confirmation dialog and the existing public
+delete operation for one handoff ID. Cancel sends no request. A confirmed exact
+owner receipt removes that link from the displayed inventory and suppresses a
+stale Share result for the same link. Browser, tab and peer-link lifetimes are
+unchanged. Pending deletion prevents duplicate confirmation or dismissal;
+failed or mismatched acknowledgement keeps the record visible, exposes no
+producer diagnostics and offers inspection before a new explicit attempt.
+Only transient acknowledged display state is kept in the UI; refreshed owner
+records and durable revocation remain server authority.
