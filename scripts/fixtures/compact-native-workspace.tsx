@@ -1,3 +1,4 @@
+import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import React, { useEffect, useRef, useState } from "react";
 import { DASHBOARD_WORKSPACE_SELECTION_EVENT, readDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
 import { createRoot } from "react-dom/client";
@@ -14,7 +15,7 @@ const tabs = [
   { id: "carol", browserId: "carol-browser", sessionId: "carol-session", targetId: "target-carol", title: "Carol report", url: "https://example.test/carol", lifecycle: "active" },
   { id: "closed", browserId: "alice-browser", targetId: "target-closed", title: "Closed invoice", lifecycle: "closed" },
 ];
-const handoffs = [{ handoffId: "retained-old", handoffUrl: "/remote-view/retained-old", sessionId: "ended-session", tabId: "expired-original",
+const handoffs: ServiceManagedHandoff[] = [{ handoffId: "retained-old", handoffUrl: "/remote-view/retained-old", sessionId: "ended-session", tabId: "expired-original",
   sessionName: "old-task", profileId: "archived-profile", browserId: null, createdAtMs: 1000, expiresAtMs: null,
   linkState: "active", targetState: "expired", taskMetadata: { taskName: "Retained review", serviceName: "Audit service", humanName: "Casey operator", originKind: "agent", attribution: "supplied" },
   tabLifetime: { inactivityMs: 30000 }, pendingHuman: null }];
@@ -43,18 +44,24 @@ function Fixture() {
     const empty = () => setAvailableHandoffs([]);
     const unavailable = () => setAvailableHandoffs(undefined);
     const fail = () => { failHandoffRefresh.current = true; };
+    const pending = () => setAvailableHandoffs([{ ...handoffs[0], pendingHuman: { handoffId: "retained-old", requestedAtMs: 1000, expiresAtMs: null } }]);
+    const used = () => setAvailableHandoffs([{ ...handoffs[0], taskMetadata: { ...handoffs[0].taskMetadata, firstHumanUseAtMs: 2000 }, pendingHuman: null }]);
     const route = () => setAvailableHandoffs([{ ...handoffs[0], handoffUrl: "https://provider.invalid/internal?token=PRIVATE-ROUTE-CANARY" }]);
     const repair = () => { failHandoffRefresh.current = false; };
     window.addEventListener("fixture-handoffs-empty", empty);
     window.addEventListener("fixture-handoffs-unavailable", unavailable);
     window.addEventListener("fixture-handoffs-fail", fail);
     window.addEventListener("fixture-handoffs-route", route);
+    window.addEventListener("fixture-handoffs-pending", pending);
+    window.addEventListener("fixture-handoffs-used", used);
     window.addEventListener("fixture-handoffs-repair", repair);
     return () => {
       window.removeEventListener("fixture-handoffs-empty", empty);
       window.removeEventListener("fixture-handoffs-unavailable", unavailable);
       window.removeEventListener("fixture-handoffs-fail", fail);
       window.removeEventListener("fixture-handoffs-route", route);
+      window.removeEventListener("fixture-handoffs-pending", pending);
+      window.removeEventListener("fixture-handoffs-used", used);
       window.removeEventListener("fixture-handoffs-repair", repair);
     };
   }, []);

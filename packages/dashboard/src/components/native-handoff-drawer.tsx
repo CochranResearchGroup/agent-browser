@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -65,7 +65,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
           const metadata = record.taskMetadata;
           const url = durableUrl(record);
           const detailsOpen = inspected === record.handoffId;
-          return <tr key={record.handoffId}>
+          return <Fragment key={record.handoffId}><tr>
             <td><strong>{supplied(metadata?.taskName)}</strong><span><small>Service: </small><span>{supplied(metadata?.serviceName)}</span></span><span><small>Agent: </small><span>{supplied(metadata?.agentName)}</span></span><span><small>Human: </small><span>{supplied(metadata?.humanName)}</span></span><small>Origin: {supplied(metadata?.originKind)} · {supplied(metadata?.attribution)}</small></td>
             <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{typeof metadata?.firstHumanUseAtMs === "number" ? "Used" : record.pendingHuman ? "Awaiting use" : "Use not recorded"}</span></td>
             <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span>Link status: {record.linkState}</span><span>Tab: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Unknown"}</span><span>Target: {record.targetState === 'reported' ? 'Reported' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Until used' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
@@ -74,13 +74,14 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
               <button type="button" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}>Copy</button>
               <button type="button" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}>Inspect</button>
               {!url && <span role="alert">Link unavailable</span>}
-              {detailsOpen && <dl className="native-handoff-details">
+            </td>
+          </tr>
+          {detailsOpen && <tr className="native-handoff-detail-row"><td colSpan={4}><dl className="native-handoff-details">
                 <div><dt>Link</dt><dd>{url ? new URL(url, window.location.origin).toString() : "Unavailable"}</dd></div><div><dt>Profile</dt><dd>{supplied(record.profileId)}</dd></div>
                 <div><dt>Session</dt><dd>{supplied(record.sessionName)}</dd></div><div><dt>Purpose</dt><dd>{supplied(metadata?.purpose)}</dd></div>
                 <div><dt>First human use</dt><dd>{timestamp(metadata?.firstHumanUseAtMs)}</dd></div>
-              </dl>}
-            </td>
-          </tr>;
+              </dl></td></tr>}
+          </Fragment>;
         })}</tbody>
       </table>}
     </DialogContent>

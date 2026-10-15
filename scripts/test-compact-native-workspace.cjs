@@ -20,10 +20,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   let browser;
   let releaseHeldFocus = null;
   let releaseHeldClose = null;
+  let releaseHeldShare = null;
   try {
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
     let closeDenied = false;
+    let shareFailure = false;
+    let shareHold = null;
     let closeHold = null;
     let ready = true;
     let focusRejection = null;
@@ -34,6 +37,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const lateSelections = [];
     await page.route("**/api/service/request", async route => {
       const body = route.request().postDataJSON(); requests.push(body);
+      if (body.action === 'remote_view_open' && body.taskName === 'Share browser task') {
+        if (shareFailure) return route.fulfill({ status: 403, json: { success: false, error: 'PRIVATE-SHARE-DIAGNOSTIC https://provider.invalid/internal' } });
+        if (shareHold) await shareHold;
+      }
       if (body.action === "tab_close") {
         if (closeHold) await closeHold;
         if (closeDenied) return route.fulfill({ status: 403, json: { success: false, error: "SYNTHETIC-PRIVATE-CLOSE-DETAIL", failure: { code: "operator_tab_close_profile_policy_denied" } } });
@@ -102,10 +109,25 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.setViewportSize({ width: 1280, height: 720 });
 
     assert.equal(requests.length, 0, 'opening retained records must not prepare or focus a task');
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-pending')));
+    await retainedRow.getByText('Awaiting use', { exact: true }).waitFor();
+    await retainedRow.getByText('Pending use: Until used', { exact: true }).waitFor();
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-handoffs-used')));
+    await retainedRow.getByText('Used', { exact: true }).waitFor();
+    assert.equal(await retainedRow.getByText('Awaiting use', { exact: true }).count(), 0);
+    await retainedDrawer.getByRole('button', { name: 'Refresh handoffs', exact: true }).click();
+    await retainedRow.getByText('Use not recorded', { exact: true }).waitFor();
+
     await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
-    await retainedRow.getByText('archived-profile', { exact: true }).waitFor();
-    await retainedRow.getByText('old-task', { exact: true }).waitFor();
-    await retainedRow.getByText(`http://127.0.0.1:${server.address().port}/remote-view/retained-old`, { exact: true }).waitFor();
+    await page.setViewportSize({ width: 1280, height: 720 });
+    const detailsWidth = (await retainedDrawer.locator('dl').boundingBox()).width;
+    const tableWidth = (await retainedDrawer.getByRole('table', { name: 'Retained handoffs', exact: true }).boundingBox()).width;
+    assert.ok(detailsWidth >= tableWidth * 0.8, 'inspection must use the row width rather than stretch only the actions column');
+
+    await retainedDrawer.getByText('archived-profile', { exact: true }).waitFor();
+    await retainedDrawer.getByText('old-task', { exact: true }).waitFor();
+    await retainedDrawer.getByText(`http://127.0.0.1:${server.address().port}/remote-view/retained-old`, { exact: true }).waitFor();
+    await page.screenshot({ path: path.join(artifacts, 'retained-handoff-inspection-wide.png') });
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await retainedRow.getByRole('button', { name: 'Copy', exact: true }).click();
     assert.equal(await page.evaluate(() => navigator.clipboard.readText()), `http://127.0.0.1:${server.address().port}/remote-view/retained-old`);
@@ -389,11 +411,28 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob');
     assert.equal(await page.getByRole('dialog', { name: 'Handoffs', exact: true }).count(), 0, 'handoffs must start hidden');
+    shareFailure = true;
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
+    const failedShare = page.getByRole('dialog', { name: 'Handoffs', exact: true });
+    await failedShare.getByRole('alert').filter({ hasText: 'Could not prepare this link.' }).waitFor();
+    assert.equal((await failedShare.innerText()).includes('PRIVATE-SHARE-DIAGNOSTIC'), false);
+    assert.equal(await failedShare.getByLabel('Shared handoff URL', { exact: true }).count(), 0);
+    const failedShareCount = requests.filter(request => request.taskName === 'Share browser task').length;
+    await page.keyboard.press('Enter');
+    assert.equal(requests.filter(request => request.taskName === 'Share browser task').length, failedShareCount, 'failed Share must not automatically repeat');
+    await page.keyboard.press('Escape');
+    await failedShare.waitFor({ state: 'hidden' });
+    shareFailure = false;
+    shareHold = new Promise(resolve => { releaseHeldShare = resolve; });
     const selectionBeforeShare = page.url();
     const focusBeforeShare = requests.filter(request => request.action === 'view_focus').length;
     await actions.click();
     await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
     const handoffs = page.getByRole('dialog', { name: 'Handoffs', exact: true });
+    await handoffs.getByRole('status').filter({ hasText: 'Preparing link…' }).waitFor();
+    assert.equal(await handoffs.getByLabel('Shared handoff URL', { exact: true }).count(), 0);
+    releaseHeldShare(); shareHold = null;
     await handoffs.getByLabel('Shared handoff URL', { exact: true }).waitFor();
     assert.match(await handoffs.getByLabel('Shared handoff URL', { exact: true }).inputValue(), /\/remote-view\/task-link/);
     assert.equal(page.url(), selectionBeforeShare, 'sharing must not replace selected Bob');
@@ -464,6 +503,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   } finally {
     releaseHeldFocus?.(null);
     releaseHeldClose?.();
+    releaseHeldShare?.();
     if (browser) {
       const session = await browser.newBrowserCDPSession();
       const { processInfo } = await session.send('SystemInfo.getProcessInfo');

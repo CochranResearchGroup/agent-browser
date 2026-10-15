@@ -5651,12 +5651,15 @@ button {
 .native-handoff-actions { display: flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
 .native-handoff-actions :is(button, a), .native-handoff-refresh { padding: 4px 7px; border: 1px solid #555560; border-radius: 4px; color: inherit; background: transparent; cursor: pointer; text-decoration: none; font: inherit; }
 .native-handoff-drawer :is(button, a, input):focus-visible { outline: 2px solid #bdbdc9; outline-offset: 2px; }
-.native-handoff-details { flex-basis: 100%; }
+.native-handoff-details { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; margin: 0 !important; }
+.native-handoff-details > div:first-child { grid-column: 1 / -1; }
+.native-handoff-table .native-handoff-detail-row td { max-width: none; }
 .native-handoff-drawer .native-handoff-details > div { grid-template-columns: 70px minmax(0, 1fr); }
 @media (max-width: 600px) {
   .native-handoff-table, .native-handoff-table tbody { display: block; }
   .native-handoff-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .native-handoff-table tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid #45454d; }
+  .native-handoff-details { grid-template-columns: minmax(0, 1fr); }
   .native-handoff-table td { max-width: none; padding: 4px 0; border: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .native-handoff-drawer { animation: none; transition: none; } }
