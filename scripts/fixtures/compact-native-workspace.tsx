@@ -4,10 +4,14 @@ import { createRoot } from "react-dom/client";
 import { NativeTaskViewport } from "@/components/native-task-viewport";
 import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
 
-const nodes = [{ id: "browser:alice-browser", browserId: "alice-browser", label: "Research", profileId: "shared-profile", live: true, relatedIds: { serviceSessionIds: ["alice-session"] } }];
+const nodes = [
+  { id: "browser:alice-browser", browserId: "alice-browser", label: "Research", profileId: "shared-profile", live: true, relatedIds: { serviceSessionIds: ["alice-session"] } },
+  { id: "browser:carol-browser", browserId: "carol-browser", label: "Analysis", profileId: "independent-profile", live: true, relatedIds: { serviceSessionIds: ["carol-session"] } },
+];
 const tabs = [
   { id: "alice", browserId: "alice-browser", sessionId: "alice-session", targetId: "target-alice", title: "Alice invoice", url: "https://example.test/alice", lifecycle: "active" },
   { id: "bob", browserId: "alice-browser", sessionId: "bob-session", targetId: "target-bob", title: "Bob invoice", url: "https://example.test/bob", lifecycle: "active" },
+  { id: "carol", browserId: "carol-browser", sessionId: "carol-session", targetId: "target-carol", title: "Carol report", url: "https://example.test/carol", lifecycle: "active" },
   { id: "closed", browserId: "alice-browser", targetId: "target-closed", title: "Closed invoice", lifecycle: "closed" },
 ];
 function Fixture() {
@@ -45,8 +49,8 @@ function Fixture() {
   const selectedTab = availableTabs.find(tab => tab.id === selection.tabId);
   return <CompactNativeWorkspace nodes={nodes as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
     <NativeTaskViewport hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab ? {
-      browserId: "alice-browser", sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
-      displayAllocationId: "desktop-a",
+      browserId: selection.browserId!, sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
+      displayAllocationId: selection.browserId === "carol-browser" ? "desktop-b" : "desktop-a",
     } : null} />
   </CompactNativeWorkspace>;
 }

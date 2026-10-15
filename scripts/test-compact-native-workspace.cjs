@@ -3,6 +3,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
+const crypto = require('node:crypto');
 const { chromium } = require('playwright');
 const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-browser-fixture.cjs');
 (async () => {
@@ -17,31 +18,43 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
+  let releaseHeldFocus = null;
   try {
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
     let ready = true;
     let focusRejection = null;
+    let focusHold = null;
+    let specificHandoffs = false;
     let frameAllowed = true;
     const requests = [];
+    const lateSelections = [];
     await page.route("**/api/service/request", async route => {
       const body = route.request().postDataJSON(); requests.push(body);
       if (body.action === "view_focus") {
-        if (focusRejection) return route.fulfill({ status: focusRejection.status, json: {
+        let rejection = focusRejection;
+        if (focusHold?.targetId === body.params.targetId) {
+          const held = focusHold;
+          focusHold = null;
+          held.started();
+          rejection = await held.reply;
+        }
+        if (rejection) return route.fulfill({ status: rejection.status, json: {
           success: false,
           error: 'operator_focus_profile_policy_denied: SYNTHETIC-PRIVATE-DETAIL https://provider.invalid/internal',
-          failure: focusRejection.legacyOnly ? undefined : {
+          failure: rejection.legacyOnly ? undefined : {
             schemaVersion: 'agent-browser.service-failure-recourse.v1',
-            code: focusRejection.code, axis: 'profile_access', phase: 'ingress_validation',
+            code: rejection.code, axis: 'profile_access', phase: 'ingress_validation',
             effectState: 'no_effect', retryDisposition: 'inspect_before_retry',
             recommendedAction: 'inspect_operator_focus_authority', reuseAllowed: false,
           },
         } });
         return route.fulfill({ json: { success: true, data: { focused: true } } });
       }
-      return route.fulfill({ json: { success: true, data: { handoffId: "task-link", handoffUrl: `http://127.0.0.1:${server.address().port}/remote-view/task-link`, operatorVisible: { state: ready ? "ready" : "pending" } } } });
+      const handoffId = specificHandoffs ? `task-link-${body.params.targetId}` : 'task-link';
+      return route.fulfill({ json: { success: true, data: { handoffId, handoffUrl: `http://127.0.0.1:${server.address().port}/remote-view/${handoffId}`, operatorVisible: { state: ready ? "ready" : "pending" } } } });
     });
-    await page.route("**/remote-view/task-link", route => route.fulfill({ contentType: "text/html",
+    await page.route("**/remote-view/task-link*", route => route.fulfill({ contentType: "text/html",
       headers: { 'Content-Security-Policy': frameAllowed ? "frame-ancestors 'self'" : "frame-ancestors 'none'" },
       body: '<body id="viewer" data-workspace="true"><p>Synthetic native viewer transport</p></body>' }));
     const errors = []; page.on('pageerror', e => errors.push(e.message));
@@ -112,6 +125,66 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       await page.getByRole('button', { name: 'Retry native desktop' }).click();
       await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     }
+    specificHandoffs = true;
+    for (const older of [
+      { title: 'Bob invoice', targetId: 'target-bob', sameDesktop: true },
+      { title: 'Carol report', targetId: 'target-carol', sameDesktop: false },
+    ]) {
+      for (const rejects of [false, true]) {
+        assert.equal(new URL(page.url()).searchParams.get('tab'), 'alice');
+        let announce;
+        const started = new Promise(resolve => { announce = resolve; });
+        const reply = new Promise(resolve => { releaseHeldFocus = resolve; });
+        focusHold = { targetId: older.targetId, started: announce, reply };
+        const beforeFocus = requests.filter(request => request.action === 'view_focus').length;
+        const beforeHandoffs = requests.filter(request => request.action === 'remote_view_open').length;
+        await page.getByRole('button', { name: older.title, exact: true }).click();
+        await started;
+        await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
+        if (older.sameDesktop) {
+          assert.equal(requests.filter(request => request.action === 'view_focus').length, beforeFocus + 1,
+            'one desktop must serialize older and newer focus');
+          assert.equal(await page.getByTitle('Native Remote View desktop', { exact: true }).count(), 0);
+        } else {
+          await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+          await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').evaluate(body => { body.dataset.continuity = 'keep-current-frame'; });
+        }
+        const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/service/request')
+          && response.request().postDataJSON().action === 'view_focus'
+          && response.request().postDataJSON().params.targetId === older.targetId);
+        releaseHeldFocus(rejects ? { status: 400, code: 'operator_focus_profile_policy_denied' } : null);
+        releaseHeldFocus = null;
+        await (await oldResponse).finished();
+        await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        assert.ok((await page.getByTitle('Native Remote View desktop', { exact: true }).getAttribute('src')).endsWith('/remote-view/task-link-target-alice'));
+        assert.equal(new URL(page.url()).searchParams.get('tab'), 'alice');
+        assert.equal(await page.getByRole('region', { name: 'Native desktop', exact: true }).getByRole('alert').count(), 0);
+        assert.deepEqual(requests.filter(request => request.action === 'view_focus').slice(beforeFocus).map(request => request.params.targetId),
+          [older.targetId, 'target-alice']);
+        assert.deepEqual(requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
+          ['target-alice'], 'obsolete focus must not prepare a handoff');
+        if (!older.sameDesktop) {
+          assert.equal(await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity'),
+            'keep-current-frame', 'late work from another desktop must not remount the current viewer');
+        }
+        lateSelections.push({
+          olderTarget: older.targetId,
+          syntheticScope: older.sameDesktop ? 'same-desktop' : 'independent-desktop',
+          olderReply: rejects ? 'access-rejection' : 'success',
+          focusRequestTargets: requests.filter(request => request.action === 'view_focus').slice(beforeFocus).map(request => request.params.targetId),
+          handoffRequestTargets: requests.filter(request => request.action === 'remote_view_open').slice(beforeHandoffs).map(request => request.params.targetId),
+          selectedTab: new URL(page.url()).searchParams.get('tab'),
+          viewerDocumentPreserved: older.sameDesktop ? null : await page.frameLocator('iframe[title="Native Remote View desktop"]').locator('body').getAttribute('data-continuity') === 'keep-current-frame',
+        });
+      }
+    }
+    fs.writeFileSync(path.join(artifacts, 'late-selections.json'), JSON.stringify({
+      seam: 'production components in Chromium; synthetic inventory, desktop identities, service and viewer transport',
+      bundleSha256: crypto.createHash('sha256').update(fs.readFileSync(path.join(artifacts, 'bundle.js'))).digest('hex'),
+      cases: lateSelections,
+    }, null, 2));
+    specificHandoffs = false;
     await page.getByRole('searchbox').fill('no-such-task');
     await page.getByRole('status').filter({ hasText: 'No matching browsers or tabs' }).waitFor({ timeout: 1500 });
     await page.getByRole('button', { name: 'Collapse browser rail' }).click();
@@ -159,6 +232,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
+    releaseHeldFocus?.(null);
     if (browser) {
       const session = await browser.newBrowserCDPSession();
       const { processInfo } = await session.send('SystemInfo.getProcessInfo');
