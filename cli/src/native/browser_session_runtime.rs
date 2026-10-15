@@ -1364,25 +1364,28 @@ fn run_browser_worker(
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::CreateTab { browser, reply } => {
-                let result = match browsers.get_mut(&browser.id) {
-                    Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
-                        let tab = if shared_browser_tabs.contains_key(&browser.id) {
-                            manager.tab_new_background(None).await?
-                        } else {
-                            manager.tab_new(None).await?
-                        };
-                        let acquisition = tab_acquisition(tab, BrowserTabSource::ExplicitNew)?;
-                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
-                            targets.insert(acquisition.target_id.clone());
-                        }
-                        Ok(acquisition)
-                    }),
-                    None => Err("browser_session_runtime_browser_missing".to_string()),
-                };
+                let result = runtime.block_on(async {
+                    // A retained owner record survives runtime restart; the
+                    // process-local CDP manager must be verified and reattached
+                    // before creating a new target in that recorded browser.
+                    if !recorded_browser_is_live(&mut browsers, &browser).await? {
+                        return Err("browser_session_runtime_browser_missing".into());
+                    }
+                    let manager = browsers
+                        .get_mut(&browser.id)
+                        .and_then(|state| state.browser.as_mut())
+                        .ok_or("browser_session_runtime_browser_missing")?;
+                    let tab = if shared_browser_tabs.contains_key(&browser.id) {
+                        manager.tab_new_background(None).await?
+                    } else {
+                        manager.tab_new(None).await?
+                    };
+                    let acquisition = tab_acquisition(tab, BrowserTabSource::ExplicitNew)?;
+                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                        targets.insert(acquisition.target_id.clone());
+                    }
+                    Ok(acquisition)
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::CloseTab {
@@ -3777,6 +3780,9 @@ mod tests {
         );
 
         let mut restarted = BrowserManagerRuntime::start(config).unwrap();
+        // Creating a tab must itself reattach after an owner restart.
+        // Keep the result until exact cleanup so a regression cannot orphan Chrome.
+        let new_tab = restarted.create_tab(&browser);
         let live = restarted.browser_is_live(&browser).unwrap();
         let tab = restarted.acquire_initial_tab(&browser, &[]).unwrap();
         let managed_tab = ManagedBrowserTab {
@@ -3820,6 +3826,10 @@ mod tests {
         assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
+        assert!(
+            new_tab.is_ok(),
+            "tab creation failed after restart: {new_tab:?}"
+        );
     }
 
     #[test]

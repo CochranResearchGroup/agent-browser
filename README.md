@@ -1596,6 +1596,8 @@ agent-browser network har stop [output.har]    # Stop and save HAR (temp path if
 
 ### Tabs & Windows
 
+For an owner-managed session, creating a tab after an owner restart reconnects to its verified live browser and preserves existing tabs.
+
 ```bash
 agent-browser tab                     # List tabs
 agent-browser tab new [url]           # New tab (optionally with URL)

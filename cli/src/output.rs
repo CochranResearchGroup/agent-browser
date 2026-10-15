@@ -5215,6 +5215,9 @@ Usage: agent-browser tab [operation] [args]
 
 Manage browser tabs in the current window.
 
+For owner-managed sessions, new reconnects to the verified live browser after
+an owner restart and preserves existing tabs.
+
 Operations:
   list                 List all tabs (default)
   new [url]            Open new tab

@@ -22,8 +22,9 @@ The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_nav
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
-task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
-this scope. Use `browser_discover` for one advanced operation's argument schema,
+task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
+an owner restart reconnects to the verified live browser and preserves existing
+tabs. Peer tabs stay outside this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
