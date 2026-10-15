@@ -6377,7 +6377,9 @@ operation. Native provider evidence and the exact browser owner establish actual
 Managed commands accept serviceName, agentName, humanName, originKind, taskName,
 purpose, requestId and jobId as descriptive context, never authenticated identity.
 Optional pressureInactivityMs opts into measured disposable quota retirement;
-0 disables it. Automatic retirement rechecks service activity under a close-effect
+0 disables it. Quota admission includes verified children of the selected browser;
+unrelated or unverified profile processes still defer retirement.
+Automatic retirement rechecks service activity under a close-effect
 admission guard; newly admitted work defers close. Explicit close remains separate.
 The automatic-close candidate persists intent and attempts before native exclusion
 and close effects, then publishes session state with custody before fence completion.

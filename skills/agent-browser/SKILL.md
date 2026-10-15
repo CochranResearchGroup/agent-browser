@@ -43,6 +43,8 @@ Tab-targeted automation can run without either tab being physically visible. Ser
 
 Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
 
+Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
+
 ## Product purpose
 
 Use Agent Browser when reusable browser operation, task-appropriate profiles,

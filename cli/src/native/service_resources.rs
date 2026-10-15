@@ -1087,6 +1087,9 @@ fn profile_cleanup_process_census() -> Result<Vec<ProcessSample>, String> {
     #[cfg(target_os = "linux")]
     {
         let mut samples = Vec::new();
+        let boot_id = fs::read_to_string("/proc/sys/kernel/random/boot_id")
+            .ok()
+            .map(|value| value.trim().to_string());
         let entries = fs::read_dir("/proc")
             .map_err(|error| format!("browser_disposable_cleanup_process_census_failed:{error}"))?;
         for entry in entries {
@@ -1097,11 +1100,23 @@ fn profile_cleanup_process_census() -> Result<Vec<ProcessSample>, String> {
                 continue;
             };
             if let Some(command) = profile_cleanup_process_command(&entry.path())? {
-                samples.push(ProcessSample {
-                    pid,
-                    command,
-                    ..Default::default()
-                });
+                let mut sample =
+                    linux_process_sample(pid, None, None, 1, boot_id.clone()).unwrap_or_default();
+                sample.pid = pid;
+                sample.command = command;
+                let stable = crate::process_identity::capture_process_identity(pid, None, None)
+                    .is_some_and(|identity| {
+                        sample.start_token.as_ref() == Some(&identity.start_token)
+                            && sample.executable == identity.executable_path
+                    });
+                if !stable {
+                    // An incomplete or raced observation remains a potential
+                    // profile blocker, but cannot establish tree membership.
+                    sample.ppid = None;
+                    sample.start_token = None;
+                    sample.executable = None;
+                }
+                samples.push(sample);
             }
         }
         if samples.is_empty() {
@@ -1195,7 +1210,21 @@ fn permits_disposable_profile_retirement_from_samples(
             return Ok(false);
         }
     }
+    let selected_descendants = retiring
+        .iter()
+        .filter(|browser| browser.profile_id == profile.id)
+        .flat_map(|browser| {
+            retained_tree::selected_profile_descendants(
+                processes,
+                browser.pid,
+                &profile.user_data_dir,
+            )
+        })
+        .collect::<BTreeSet<_>>();
     if processes.iter().any(|process| {
+        if selected_descendants.contains(&process.pid) {
+            return false;
+        }
         if retiring
             .iter()
             .any(|browser| browser.profile_id == profile.id && browser.pid == process.pid)
@@ -5264,5 +5293,123 @@ mod profile_cleanup_guard_tests {
             &[]
         )
         .is_err());
+    }
+
+    #[test]
+    fn quota_retirement_admits_verified_selected_browser_descendants() {
+        let profile = "/owned/root/profile";
+        let allocation = ManagedDisposableProfile {
+            profile: BrowserProfileCatalogEntry {
+                id: "owned".into(),
+                name: "owned".into(),
+                user_data_dir: profile.into(),
+                kind: BrowserProfileKind::Disposable,
+            },
+            policy_id: "default".into(),
+            session_name: "alice".into(),
+            user_data_root: "/owned/root".into(),
+            created_at_ms: 1,
+            cleanup_delay_ms: 0,
+            cleanup_eligible_at_ms: None,
+        };
+        let browser = agent_browser_service_model::ManagedBrowserInstance {
+            id: "browser:owned".into(),
+            profile_id: "owned".into(),
+            pid: 42,
+            cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/owned".into(),
+            desktop: None,
+            active_session_ids: Vec::new(),
+        };
+        let root = ProcessSample {
+            pid: 42,
+            ppid: Some(1),
+            start_token: Some("linux:test-boot:100".into()),
+            executable: Some("/opt/google/chrome/chrome".into()),
+            command: vec!["chrome".into(), format!("--user-data-dir={profile}")],
+            ..Default::default()
+        };
+        let child = ProcessSample {
+            pid: 43,
+            ppid: Some(42),
+            start_token: Some("linux:test-boot:101".into()),
+            executable: root.executable.clone(),
+            command: vec![
+                "chrome".into(),
+                "--type=renderer".into(),
+                format!("--user-data-dir={profile}"),
+            ],
+            ..Default::default()
+        };
+        let admitted = |samples: &[ProcessSample]| {
+            permits_disposable_retirement_group_from_samples(
+                &ServiceState::default(),
+                std::slice::from_ref(&allocation),
+                std::slice::from_ref(&browser),
+                "2026-10-15T10:00:00Z",
+                samples,
+            )
+            .unwrap()
+        };
+        assert!(
+            admitted(&[root.clone(), child.clone()]),
+            "a verified descendant of the selected browser blocked its own retirement"
+        );
+        let grandchild = ProcessSample {
+            pid: 44,
+            ppid: Some(43),
+            start_token: Some("linux:test-boot:102".into()),
+            ..child.clone()
+        };
+        assert!(admitted(&[root.clone(), child.clone(), grandchild]));
+        for case in [
+            "unrelated",
+            "missing-parent",
+            "older-child",
+            "other-boot",
+            "other-executable",
+            "missing-executable",
+            "missing-birth",
+            "separate-browser",
+            "conflicting-parent-profile",
+            "missing-root",
+            "duplicate-pid",
+        ] {
+            let mut changed_root = root.clone();
+            let mut changed_child = child.clone();
+            match case {
+                "unrelated" => changed_child.ppid = Some(1),
+                "missing-parent" => changed_child.ppid = None,
+                "older-child" => changed_child.start_token = Some("linux:test-boot:99".into()),
+                "other-boot" => changed_child.start_token = Some("linux:other-boot:101".into()),
+                "other-executable" => changed_child.executable = Some("/foreign/chrome".into()),
+                "missing-executable" => changed_child.executable = None,
+                "missing-birth" => changed_child.start_token = None,
+                "separate-browser" => changed_child
+                    .command
+                    .retain(|arg| !arg.starts_with("--type=")),
+                "conflicting-parent-profile" => {
+                    changed_root.command =
+                        vec!["chrome".into(), "--user-data-dir=/foreign/profile".into()]
+                }
+                "missing-root" => changed_root.pid = 999,
+                "duplicate-pid" => changed_root.pid = changed_child.pid,
+                _ => unreachable!(),
+            }
+            assert!(
+                !admitted(&[changed_root, changed_child]),
+                "unsafe descendant admitted: {case}"
+            );
+        }
+        assert!(
+            !permits_disposable_profile_cleanup_from_samples(
+                &ServiceState::default(),
+                &allocation,
+                "2026-10-15T10:00:00Z",
+                &[root, child],
+                &[],
+            )
+            .unwrap(),
+            "orphan cleanup must not inherit selected-browser admission"
+        );
     }
 }
