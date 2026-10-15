@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search } from "lucide-react";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
+import { NativeTabActions } from "@/components/native-tab-actions";
 
 type Props = {
   nodes: readonly WorkspaceNode[];
@@ -78,7 +79,7 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
                 <button type="button" className="native-workspace-browser" aria-expanded={open} onClick={() => setClosedGroups(current => {
                   const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next;
                 })}><ChevronDown size={12} style={{ transform: open ? undefined : "rotate(-90deg)" }} /><Monitor size={13} /><span>{node.label}<small>{node.profileId ?? "Unknown profile"}</small></span><small>{browserTabs.length}</small></button>
-                {open && visibleTabs.map(tab => <button key={tab.id} type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button>)}
+                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
               </section>;
             })}
             {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}

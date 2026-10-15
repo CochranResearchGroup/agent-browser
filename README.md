@@ -789,6 +789,12 @@ agent-browser find role button click --name "Submit"
 
 ## RDP Remote-View Quick Start
 
+In the compact workspace preview, open a tab’s SVG overflow menu or use its
+context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
+origin and purpose alongside current browser, profile, desktop, URL, title and
+status. Missing values remain Unknown; descriptive names are not identity proof.
+Copy URL copies the task URL without creating a handoff or changing selection.
+
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before
 enabling its view or controls. It does not rewrite the selection to another tab

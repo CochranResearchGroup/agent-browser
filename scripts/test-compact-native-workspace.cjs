@@ -60,6 +60,63 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
+    const actions = page.getByRole('button', { name: 'Tab actions for Alice invoice', exact: true });
+    await actions.waitFor({ timeout: 1500 });
+    await actions.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('menuitem', { name: 'Properties', exact: true }).press('Enter');
+    const properties = page.getByRole('dialog', { name: 'Tab properties', exact: true });
+    await properties.waitFor();
+    for (const value of ['Synthetic billing', 'Ada worker', 'Review operator', 'Review invoice',
+      'Check supplied invoice totals', 'shared-profile', 'desktop-a', 'https://example.test/alice', 'Alice invoice']) {
+      await properties.getByText(value, { exact: true }).waitFor();
+    }
+    await page.screenshot({ path: path.join(artifacts, 'properties-desktop.png') });
+    await page.setViewportSize({ width: 390, height: 760 });
+    const dialogBounds = await properties.boundingBox();
+    await page.screenshot({ path: path.join(artifacts, 'properties-narrow.png') });
+    assert.ok(dialogBounds.x >= 0 && dialogBounds.x + dialogBounds.width <= 390, 'Properties must fit a narrow screen');
+    assert.ok(dialogBounds.y >= 0 && dialogBounds.y + dialogBounds.height <= 760, 'Properties must fit the visible height');
+    await page.setViewportSize({ width: 1280, height: 720 });
+    assert.equal(requests.length, 0, 'reading Properties must not focus, navigate or prepare a handoff');
+    await page.keyboard.press('Escape');
+    await properties.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Tab actions for Alice invoice', null, { timeout: 1500 });
+    const bobContext = page.getByRole('button', { name: 'Bob invoice', exact: true });
+    await bobContext.focus();
+    await page.keyboard.press('Shift+F10');
+    await page.getByRole('menuitem', { name: 'Properties', exact: true }).waitFor({ timeout: 1500 });
+    await page.getByRole('menuitem', { name: 'Properties', exact: true }).press('Enter');
+    await properties.waitFor();
+    for (const field of ['Service', 'Agent', 'Human', 'Origin', 'Task', 'Purpose', 'Attribution', 'Desktop']) {
+      assert.equal(await properties.locator('dt').filter({ hasText: new RegExp(`^${field}$`) }).locator('..').locator('dd').innerText(), 'Unknown');
+    }
+    assert.equal((await properties.innerText()).includes('Ada worker'), false, 'peer provenance must not fill missing task values');
+    assert.equal(requests.length, 0);
+    await page.keyboard.press('Escape');
+    await properties.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Bob invoice', null, { timeout: 1500 });
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+    await bobContext.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Copy URL', exact: true }).waitFor({ timeout: 1500 });
+    await page.getByRole('menuitem', { name: 'Copy URL', exact: true }).press('Enter');
+    await page.getByRole('status').filter({ hasText: 'URL copied' }).waitFor();
+    assert.equal(await page.evaluate(() => navigator.clipboard.readText()), 'https://example.test/bob');
+    assert.equal(requests.length, 0, 'Copy URL must not navigate or prepare a handoff');
+    await page.evaluate(() => {
+      window.fixtureClipboardWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+      navigator.clipboard.writeText = async () => { throw new DOMException('SYNTHETIC-PRIVATE-CLIPBOARD-DETAIL', 'NotAllowedError'); };
+    });
+    await bobContext.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Copy URL', exact: true }).click();
+    await page.getByRole('alert').filter({ hasText: 'Open Properties to copy it manually' }).waitFor();
+    assert.equal((await page.locator('body').innerText()).includes('SYNTHETIC-PRIVATE-CLIPBOARD-DETAIL'), false);
+    await page.evaluate(() => { navigator.clipboard.writeText = window.fixtureClipboardWrite; delete window.fixtureClipboardWrite; });
+    await bobContext.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Copy URL', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: 'URL copied' }).waitFor();
+    assert.equal(requests.length, 0);
+
     const rail = page.getByRole('complementary', { name: 'Browsers and tabs' });
     assert.equal(Math.round((await rail.boundingBox()).width), 224);
     const resize = page.getByRole('separator', { name: 'Browser rail width' });

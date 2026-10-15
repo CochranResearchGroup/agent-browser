@@ -5612,6 +5612,20 @@ button {
 .native-workspace-tab { display: block; width: 100%; padding: 6px 12px 6px 38px; text-align: left; }
 .native-workspace-tab span { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .native-workspace-tab[aria-current] { background: #36363d; color: #fff; }
+.native-workspace-tab-row { display: flex; align-items: stretch; min-width: 0; }
+.native-workspace-tab-row .native-workspace-tab { min-width: 0; flex: 1; }
+.native-tab-actions { flex: 0 0 28px; display: grid; place-items: center; color: #b7b7c0; }
+.native-tab-menu, .native-tab-properties { background: #242427; color: #e6e6e8; border: 1px solid #45454d; font: 12px system-ui, sans-serif; }
+.native-tab-menu { min-width: 140px; padding: 4px; border-radius: 6px; }
+.native-tab-menu [role=menuitem] { padding: 6px 10px; border-radius: 3px; outline: none; cursor: pointer; }
+.native-tab-menu [role=menuitem][data-highlighted] { background: #3c3c44; }
+.native-tab-menu [role=menuitem][data-disabled] { opacity: .5; cursor: default; }
+.native-tab-feedback { margin: 0; padding: 2px 12px 4px 38px; font-size: 11px; color: #c4c4cd; }
+.native-tab-properties { box-sizing: border-box; position: fixed; top: 50%; left: 50%; translate: -50% -50%; transform: none; max-width: none; z-index: 60; width: min(480px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 18px; border-radius: 8px; }
+.native-tab-properties dl { margin-top: 16px; }
+.native-tab-properties dl > div { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 5px 0; }
+.native-tab-properties dt { color: #aaaab4; }
+.native-tab-properties dd { margin: 0; overflow-wrap: anywhere; }
 .native-workspace-resize { position: absolute; right: -3px; top: 0; bottom: 0; width: 6px; cursor: col-resize; touch-action: none; z-index: 3; }
 .native-workspace-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
 .native-workspace-toolbar { border-bottom: 1px solid #35353b; }
