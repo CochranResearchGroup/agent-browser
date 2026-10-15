@@ -11,9 +11,9 @@ impl BrowserIdleRetirementGuard for IdleRetirementGuard {}
 
 /// Composes existing browser effects with public consumer transport and process
 /// custody. Assignments are transient provider context, not a reservation ledger.
-/// Unresolved claims block launches and recovery for their own profile. Other
-/// profiles may continue; durable admission still fences conflicting assignments.
-/// A launch attempted by this adapter remains blocking until publication.
+/// Current browser observations qualify ordinary reuse independently of launch
+/// history. Interrupted observed publication joins the ordinary atomic commit.
+/// Durable admission still deduplicates new process effects.
 pub struct RemoteViewSessionEffects<E, T, S> {
     effects: E,
     adapter: RemoteViewApplicationAdapter<T>,
@@ -141,15 +141,9 @@ impl<
         {
             return Err("browser_session_idle_readback_required".into());
         }
-        if self
-            .store
-            .unpublished_launch_records()
-            .map_err(|_| "remote_view_session_custody_unavailable".to_string())?
-            .iter()
-            .any(|record| record.intent.profile_id == profile_id)
-        {
-            return Err("remote_view_session_launch_readback_required".into());
-        }
+        // Historical launch observations do not veto an ordinary operation on
+        // a currently verified live browser. New process effects still use
+        // durable launch admission; current retirement fences remain above.
         Ok(())
     }
     fn update_retirement(
@@ -424,9 +418,6 @@ impl<
     }
 
     fn require_operation(&self) -> Result<(), String> {
-        if self.pending.is_some() {
-            return Err("remote_view_session_launch_readback_required".into());
-        }
         if self.expected.is_none() {
             return Err("remote_view_session_operation_baseline_missing".into());
         }
@@ -568,6 +559,23 @@ impl<
                     .insert(assignment.desktop_id.clone(), assignment.clone());
             }
         }
+        // Direct process/profile/CDP and native window observations establish
+        // the browser we can use now. An interrupted publication is completed
+        // with that observation; historical claims never decide permission.
+        if let Ok(records) = self.store.unpublished_launch_records() {
+            if let Some(record) = records.into_iter().find(|record| {
+                record.intent.profile_id == profile.id
+                    && record.observed_browser_id.as_deref()
+                        == Some(recovered.launch.browser_id.as_str())
+                    && record.observed_pid == Some(recovered.launch.pid)
+                    && recovered.launch.desktop.as_ref().is_some_and(|desktop| {
+                        desktop.desktop_id == record.intent.assignment.desktop_id
+                            && desktop.generation == record.intent.assignment.generation
+                    })
+            }) {
+                self.pending = Some((record.intent, true));
+            }
+        }
         Ok(Some(recovered))
     }
 
@@ -579,7 +587,6 @@ impl<
         navigation: &[BrowserNavigationRecord],
     ) -> Result<BrowserRecovery, String> {
         self.require_operation()?;
-        self.require_clear_profile_custody(&profile.id)?;
         self.effects
             .prove_recovery_absence(browser, profile)
             .map_err(|_| "browser_session_recovery_absence_unproven")?;
@@ -847,9 +854,10 @@ impl<
     }
 
     fn begin_operation(&mut self, expected: &BrowserSessionState) -> Result<(), String> {
-        if self.pending.is_some() {
-            return Err("remote_view_session_launch_readback_required".into());
-        }
+        // A failed earlier operation leaves its observation in the durable
+        // journal. It must not poison another task through process-local state.
+        // Current profile reconciliation can join that observation again.
+        self.pending = None;
         let activities = self
             .store
             .browser_activity_records()
@@ -973,6 +981,7 @@ impl<
             }
         }
         self.operation_retirements.clear();
+
         self.effects.begin_operation(expected)?;
         self.expected = Some(expected.clone());
         Ok(())
@@ -1045,7 +1054,6 @@ impl<
         desktop: Option<&RemoteViewFixedDesktop>,
     ) -> Result<BrowserLaunch, String> {
         self.require_operation()?;
-        self.require_clear_profile_custody(&profile.id)?;
         let desktop = desktop.ok_or_else(|| "remote_view_session_desktop_required".to_string())?;
         let assignment = self
             .assignments

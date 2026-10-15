@@ -56,13 +56,11 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }
-    if ledger.reconciled_absent.iter().any(|id| {
-        ledger.records.get(id).is_none_or(|record| {
-            record.published
-                || record.observed_pid.is_some()
-                || record.observed_browser_id.is_some()
-        })
-    }) {
+    if ledger
+        .reconciled_absent
+        .iter()
+        .any(|id| ledger.records.get(id).is_none_or(|record| record.published))
+    {
         return Err(LaunchCustodyStoreError::InvalidRecord);
     }
     for (id, target) in &ledger.release_fences {
@@ -389,7 +387,27 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
-        if current(&transaction)? != *expected {
+        let actual = current(&transaction)?;
+        let mut records = ledger(&transaction)?;
+        if assignment_fenced(&records, &intent.assignment) {
+            return Err(Error::ReleaseFenced);
+        }
+        let record = records
+            .records
+            .get_mut(&intent.intent_id)
+            .ok_or(Error::InvalidRecord)?;
+        if record.intent != *intent {
+            return Err(Error::Conflict);
+        }
+        if actual != *expected {
+            // Concurrent or interrupted publication of the identical result is
+            // already complete. A different state still requires fresh readback.
+            if record.published && actual == *state {
+                record
+                    .confirm_publication(&actual)
+                    .map_err(|_| Error::Conflict)?;
+                return Ok(());
+            }
             return Err(Error::Conflict);
         }
         super::browser_idle_retirement_store::reject_retirement_publication(
@@ -401,6 +419,7 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         )
         .map_err(|_| Error::Conflict)?;
         confirm_launch_publication(&transaction, intent, state)?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -525,19 +544,9 @@ fn validate_browser_publication(
     records: &Ledger,
     state: &BrowserSessionState,
 ) -> Result<(), LaunchCustodyStoreError> {
-    // An observed or ambiguous launch cannot bypass atomic custody publication
-    // through the ordinary whole-state writer. Co-located other profiles remain
-    // admissible; assignment return is governed separately below.
-    if records.records.values().any(|record| {
-        !record.published
-            && !records.reconciled_absent.contains(&record.intent.intent_id)
-            && state.browsers.values().any(|browser| {
-                browser.profile_id == record.intent.profile_id
-                    || record.observed_browser_id.as_ref() == Some(&browser.id)
-            })
-    }) {
-        return Err(LaunchCustodyStoreError::LaunchPending);
-    }
+    // Launch history does not veto ordinary state publication. New process
+    // effects use publish_launch_intent; current desktop retirement fences below
+    // protect only the exact resources being retired.
     if state.browsers.values().any(|browser| {
         if state.idle_closed_browsers.contains_key(&browser.id) {
             return false;
@@ -595,11 +604,65 @@ pub(super) fn confirm_launch_publication(
     save_document(connection, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)
 }
 
+/// Ordinary publication reads current retirement fences independently of
+/// historical launch records. Destructive effects retain the complete ledger.
+#[derive(Default, Deserialize)]
+struct PublicationReleaseState {
+    #[serde(default)]
+    release_fences: BTreeMap<String, RemoteViewApplicationReleaseTarget>,
+    #[serde(default)]
+    release_outcomes: BTreeMap<String, RemoteViewJoinedReleaseOutcome>,
+}
+
 pub(super) fn reject_fenced_browser_publication(
     connection: &Connection,
+    expected: &BrowserSessionState,
     state: &BrowserSessionState,
 ) -> Result<(), LaunchCustodyStoreError> {
-    validate_browser_publication(&ledger(connection)?, state)
+    let changed_desktops = state
+        .browsers
+        .iter()
+        .filter_map(|(id, browser)| {
+            if state.idle_closed_browsers.contains_key(id) {
+                return None;
+            }
+            let desktop = browser.desktop.as_ref()?;
+            let changed = expected.browsers.get(id).is_none_or(|previous| {
+                previous.profile_id != browser.profile_id
+                    || previous.pid != browser.pid
+                    || previous.cdp_endpoint != browser.cdp_endpoint
+                    || previous
+                        .desktop
+                        .as_ref()
+                        .map(|d| (&d.desktop_id, d.generation))
+                        != Some((&desktop.desktop_id, desktop.generation))
+                    || expected.idle_closed_browsers.contains_key(id)
+            });
+            changed.then_some(desktop)
+        })
+        .collect::<Vec<_>>();
+    if changed_desktops.is_empty() {
+        return Ok(());
+    }
+    let releases: PublicationReleaseState = load_optional_document(connection, DOCUMENT, SCHEMA)
+        .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    for desktop in changed_desktops {
+        for (id, target) in &releases.release_fences {
+            if target.assignment.desktop_id != desktop.desktop_id
+                || target.assignment.generation != desktop.generation
+            {
+                continue;
+            }
+            let completed = releases
+                .release_outcomes
+                .get(id)
+                .is_some_and(|outcome| target.validate_outcome(outcome).is_ok());
+            if !completed {
+                return Err(LaunchCustodyStoreError::ReleaseFenced);
+            }
+        }
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -662,6 +725,176 @@ mod tests {
             },
         )
     }
+    #[test]
+    fn ordinary_remote_startup_ignores_malformed_history() {
+        struct NoProcessEffects;
+        impl agent_browser_service_model::RemoteViewBrowserProcessEffects for NoProcessEffects {
+            fn launch(
+                &mut self,
+                _: &agent_browser_service_model::BrowserProfileCatalogEntry,
+                _: &BrowserLaunchIntent,
+                _: agent_browser_service_model::RemoteViewPrivateLaunchEnvironment,
+                _: &agent_browser_service_model::RemoteViewAssignmentObservation,
+            ) -> Result<BrowserLaunch, agent_browser_service_model::RemoteViewBrowserProcessError>
+            {
+                panic!("startup must not launch a process");
+            }
+        }
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        store
+            .remote_view_mutation_connection()
+            .execute(
+                "INSERT INTO state_documents(kind, schema_version, json) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    DOCUMENT,
+                    SCHEMA,
+                    r#"{"records":{"broken":{"old":"history"}}}"#
+                ],
+            )
+            .unwrap();
+        super::super::browser_session_remote_view::reconcile_pending_recoveries(
+            &mut NoProcessEffects,
+            &mut store,
+        )
+        .expect("historical diagnostics must not block native host startup");
+        assert!(ledger(store.remote_view_mutation_connection()).is_err());
+    }
+
+    #[test]
+    fn ordinary_rebinding_ignores_completed_release_history() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let initial = store.load_session_state().unwrap();
+        let intent = intent();
+        let (target, snapshot) = release_evidence(&intent);
+        let release_id = uuid::Uuid::new_v4().to_string();
+        store
+            .admit_assignment_release(&target, &snapshot, &release_id)
+            .unwrap();
+        let mut released = target.assignment.clone();
+        released.state = agent_browser_service_model::RemoteViewAssignmentState::Released;
+        let outcome = RemoteViewJoinedReleaseOutcome {
+            assignment: released,
+            retirement: agent_browser_service_model::RemoteViewDesktopViewingRetirement {
+                schema_version: 1,
+                desktop_id: target.assignment.desktop_id.clone(),
+                generation: target.assignment.generation,
+                routes: vec![],
+                sessions: vec![],
+            },
+        };
+        store
+            .complete_assignment_release(&target, &release_id, &outcome)
+            .unwrap();
+        let mut observed = initial.clone();
+        observed.browsers.insert(
+            "observed".into(),
+            ManagedBrowserInstance {
+                id: "observed".into(),
+                profile_id: "current-profile".into(),
+                pid: 91,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: target.assignment.desktop_id,
+                    generation: target.assignment.generation,
+                    friendly_route_label: "current observation".into(),
+                }),
+                active_session_ids: vec![],
+            },
+        );
+        store
+            .compare_and_save_session_state(&initial, &observed)
+            .expect("completed release history must not require old launch publication proof");
+    }
+
+    #[test]
+    fn ordinary_publication_ignores_malformed_history() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let initial = store.load_session_state().unwrap();
+        store
+            .remote_view_mutation_connection()
+            .execute(
+                "INSERT INTO state_documents(kind, schema_version, json) VALUES (?1, ?2, ?3)",
+                rusqlite::params![
+                    DOCUMENT,
+                    SCHEMA,
+                    r#"{"records":{"broken":{"old":"history"}}}"#
+                ],
+            )
+            .unwrap();
+        let mut changed = initial.clone();
+        changed.next_session_sequence += 1;
+        store
+            .compare_and_save_session_state(&initial, &changed)
+            .expect("historical custody must not veto an ordinary task update");
+        assert_eq!(store.load_session_state().unwrap(), changed);
+        let mut observed = changed.clone();
+        observed.browsers.insert(
+            "current".into(),
+            ManagedBrowserInstance {
+                id: "current".into(),
+                profile_id: "profile-current".into(),
+                pid: 91,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: uuid::Uuid::new_v4().to_string(),
+                    generation: 1,
+                    friendly_route_label: "current".into(),
+                }),
+                active_session_ids: vec![],
+            },
+        );
+        store
+            .compare_and_save_session_state(&changed, &observed)
+            .expect("current observations must not need historical launch proof");
+        assert_eq!(store.load_session_state().unwrap(), observed);
+        assert!(ledger(store.remote_view_mutation_connection()).is_err());
+    }
+
+    #[test]
+    fn ordinary_publication_preserves_peer_with_release_fence() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let intent = intent();
+        let mut initial = store.load_session_state().unwrap();
+        initial.browsers.insert(
+            "peer".into(),
+            ManagedBrowserInstance {
+                id: "peer".into(),
+                profile_id: "peer-profile".into(),
+                pid: 42,
+                cdp_endpoint: "http://127.0.0.1:9222".into(),
+                desktop: Some(RemoteViewFixedDesktop {
+                    desktop_id: intent.assignment.desktop_id.clone(),
+                    generation: intent.assignment.generation,
+                    friendly_route_label: "peer".into(),
+                }),
+                active_session_ids: vec![],
+            },
+        );
+        store.save_session_state(&initial).unwrap();
+        let (target, _) = release_evidence(&intent);
+        let history = Ledger {
+            release_fences: BTreeMap::from([(uuid::Uuid::new_v4().to_string(), target)]),
+            ..Ledger::default()
+        };
+        save_document(
+            store.remote_view_mutation_connection(),
+            DOCUMENT,
+            SCHEMA,
+            &history,
+        )
+        .unwrap();
+        let mut changed = initial.clone();
+        changed.next_session_sequence += 1;
+        store
+            .compare_and_save_session_state(&initial, &changed)
+            .expect("a peer desktop fence must not veto this task update");
+        assert_eq!(store.load_session_state().unwrap(), changed);
+    }
+
     #[test]
     fn sqlite_release_completion_retains_exact_history_and_allows_fresh_same_generation_assignment()
     {
@@ -983,18 +1216,18 @@ mod tests {
             .unwrap();
         let claim = store.unpublished_launch_records().unwrap().pop().unwrap();
         assert!(store
-            .reconcile_absent_unobserved_recovery(&claim, &initial, &browser)
+            .reconcile_absent_recovery(&claim, &initial, &browser)
             .is_err());
         let mut observed = claim.clone();
         observed.observe(&launch).unwrap();
         assert!(store
-            .reconcile_absent_unobserved_recovery(&observed, &retained, &browser)
+            .reconcile_absent_recovery(&observed, &retained, &browser)
             .is_err());
         store
-            .reconcile_absent_unobserved_recovery(&claim, &retained, &browser)
+            .reconcile_absent_recovery(&claim, &retained, &browser)
             .unwrap();
         store
-            .reconcile_absent_unobserved_recovery(&claim, &retained, &browser)
+            .reconcile_absent_recovery(&claim, &retained, &browser)
             .unwrap();
         drop(store);
         let mut store = fixture.open(false);
@@ -1081,12 +1314,10 @@ mod tests {
                 .unwrap_err(),
             LaunchCustodyStoreError::ProfileOccupied
         );
-        assert_eq!(
-            store
-                .compare_and_save_session_state(&retained, &retained)
-                .unwrap_err(),
-            "browser_session_publication_release_fenced"
-        );
+        // Pending history must not veto ordinary state or heartbeat updates.
+        store
+            .compare_and_save_session_state(&retained, &retained)
+            .unwrap();
         drop(store);
         let mut store = fixture.open(false);
         assert_eq!(store.unpublished_launch_records().unwrap().len(), 1);
@@ -1248,6 +1479,11 @@ mod tests {
         drop(store);
         let mut reopened = fixture.open(false);
         assert_eq!(reopened.load_session_state().unwrap(), published);
+        // A second publisher replays the same observed outcome after the first
+        // transaction committed, retaining the exact result without a new effect.
+        reopened
+            .publish_launch_intent(&intent, &newer, &published)
+            .unwrap();
         let LaunchCustodyAdmission::Existing(record) =
             reopened.admit_launch_intent(&intent, &published).unwrap()
         else {
@@ -1260,8 +1496,8 @@ mod tests {
 
 impl BrowserSessionSqliteStore {
     /// Called only after the runtime proves the exact retained profile absent.
-    /// Preserve the unobserved claim as history while retiring its occupancy.
-    pub(super) fn reconcile_absent_unobserved_recovery(
+    /// Preserve the claim as history while retiring its occupancy.
+    pub(super) fn reconcile_absent_recovery(
         &mut self,
         claim: &BrowserLaunchCustodyRecord,
         expected: &BrowserSessionState,
@@ -1277,17 +1513,8 @@ impl BrowserSessionSqliteStore {
         if state != *expected
             || state.browsers.get(&browser.id) != Some(browser)
             || claim.published
-            || claim.observed_pid.is_some()
-            || claim.observed_browser_id.is_some()
             || claim.intent.profile_id != browser.profile_id
             || records.records.get(&claim.intent.intent_id) != Some(claim)
-            || assignment_fenced(&records, &claim.intent.assignment)
-            || !records.records.values().any(|prior| {
-                prior.published
-                    && prior.observed_browser_id.as_ref() == Some(&browser.id)
-                    && prior.observed_pid == Some(browser.pid)
-                    && prior.intent.assignment == claim.intent.assignment
-            })
         {
             return Err(Error::Conflict);
         }

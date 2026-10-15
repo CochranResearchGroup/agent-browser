@@ -1,8 +1,13 @@
 # Runbook
 
-Updated: 2026-10-12
+Updated: 2026-10-14
 
 ## Current execution
+
+### 2026-10-14 P244 ordinary denial isolation
+
+[P244](docs/dev/plans/0244-2026-10-14-ordinary-denial-isolation.md) completes the bounded #288 source repair through PR289. The [receipt](docs/dev/notes/0244-2026-10-14-ordinary-denial-isolation.md) preserves public/deterministic reds, malformed-history startup and publication, current-permission owner ambiguity, peer release isolation, completed-release rebinding and process-effect separation. Selected Rust suites, strict quality and docs gates pass; four pinned public synthetic workflows report zero owned residue. No production publication or exhaustive denial-path/native-viewer acceptance is claimed.
+
 
 ### 2026-10-13 P240 resource budgets and terminal archives
 
@@ -173,3 +178,18 @@ Start with [the active plan index](docs/dev/plans/README.md). Historical plans a
 ## Managed upgrade admission repair, 2026-10-11
 
 [P235](docs/dev/plans/0235-2026-10-11-managed-admission-drain.md) repairs issue 251: managed dispatch now enforces the existing upgrade drain before browser effects, including launch or recovery initiated by a read. Existing live observations and status remain available. The public sentinel red/green/control and real same-PID/CDP continuation during drain pass with exact cleanup; 91 broker tests, exact installer claims, 39 output tests, format, strict Clippy and docs pass. [The source receipt](docs/dev/notes/0235-2026-10-11-managed-admission-drain-repair.md) preserves failed drafts and qualification limits. No installed publication or reboot. The claimed-wire follow-up moves existing native attribution before managed dispatch. The complete source-free installer fixture now passes with its own synthetic profile and exact cleanup of two owned hosts, zero residue; failed attempts remain in the receipt. This is source qualification only.
+
+
+## Ordinary browser availability repair, 2026-10-14
+
+P243 and [PR287](https://github.com/CochranResearchGroup/agent-browser/pull/287)
+remove the historical owner-binding download gates and pending-custody vetoes
+behind issues #284 and #286, preserving Alice/Bob G05/G23/G42. Current process
+and profile observations qualify ordinary work; observed launch publication
+reconciles atomically and current absence does not require an old owner row.
+[The source receipt](docs/dev/notes/0243-2026-10-14-ordinary-browser-availability.md)
+records installed/public reds, integrated source checks, three public synthetic
+greens and zero fixture-owned residue. Preserve the linker resource failure and
+four-job retry. Production remains on its earlier generation; original manual
+service-recovery build/presentation symptoms and real-account/native-provider
+acceptance are unverified. P237's separate dirty lifecycle/UI work is preserved.

@@ -310,8 +310,19 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             if root.desktop.is_none() || expected.shared_browser_ids.contains(&root.id) {
                 None
             } else {
-                super::browser_launch_custody_store::published_process_identity(&transaction, root)
-                    .map_err(|_| Error::Unavailable)?
+                match super::browser_launch_custody_store::published_process_identity(
+                    &transaction,
+                    root,
+                ) {
+                    Ok(identity) => identity,
+                    // Current browser identity was checked above. Missing or
+                    // malformed history cannot veto ordinary activity or
+                    // manufacture original-process evidence for retirement.
+                    Err(
+                        LaunchCustodyStoreError::InvalidRecord | LaunchCustodyStoreError::Conflict,
+                    ) => None,
+                    Err(_) => return Err(Error::Unavailable),
+                }
             };
         let minimum_version = if process_identity.is_some() { 4 } else { 3 };
         records.activities.insert(
@@ -591,6 +602,7 @@ impl BrowserSessionSqliteStore {
         } else {
             super::browser_launch_custody_store::reject_fenced_browser_publication(
                 &transaction,
+                expected,
                 state,
             )
             .map_err(|_| Error::Conflict)?;
@@ -656,6 +668,40 @@ mod tests {
         fn drop(&mut self) {
             std::fs::remove_dir_all(&self.0).unwrap();
         }
+    }
+
+    #[test]
+    fn ordinary_activity_preserves_malformed_launch_history_without_using_it_as_authority() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let (state, intent, _) = setup(&mut owner);
+        let malformed = r#"{"records":{"broken":{"old":"history"}}}"#;
+        let changed = owner
+            .remote_view_mutation_connection()
+            .execute(
+                "UPDATE state_documents SET json=?1 WHERE kind='browser_launch_custody'",
+                [malformed],
+            )
+            .unwrap();
+        assert_eq!(changed, 1);
+        let id = uuid::Uuid::new_v4().to_string();
+        owner
+            .admit_browser_activity(&id, &intent.scopes[0].browser, &state)
+            .expect("historical launch metadata must not veto current ordinary activity");
+        assert!(owner.browser_activity_records().unwrap()[0]
+            .process_identity
+            .is_none());
+        let retained: String = owner
+            .remote_view_mutation_connection()
+            .query_row(
+                "SELECT json FROM state_documents WHERE kind='browser_launch_custody'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(retained, malformed);
+        // Missing positive original identity does not qualify destructive retirement.
+        assert!(owner.claim_idle_retirement(&intent, &state).is_err());
     }
 
     #[test]

@@ -2373,6 +2373,31 @@ where
         let mut response =
             self.effects
                 .execute_command(&browser, &tab, &session.id, &session.name, command)?;
+        if command["observeChildTabs"] == true {
+            let observed = self.effects.execute_command(
+                &browser,
+                &tab,
+                &session.id,
+                &session.name,
+                &serde_json::json!({"action":"__observe_owned_popup_targets"}),
+            )?;
+            let children = observed["children"]
+                .as_array()
+                .ok_or("browser_session_popup_observation_invalid")?
+                .iter()
+                .map(|child| {
+                    Ok((
+                        required_string(child, "targetId")?.to_owned(),
+                        required_string(child, "openerId")?.to_owned(),
+                    ))
+                })
+                .collect::<Result<Vec<_>, String>>()?;
+            self.manager()?
+                .observe_child_tabs(&session.id, &children, now_ms)?;
+            if self.state != self.persisted_state {
+                self.commit_state()?;
+            }
+        }
         if command.get("action").and_then(serde_json::Value::as_str) == Some("navigate")
             && response.get("success").and_then(serde_json::Value::as_bool) == Some(true)
         {
@@ -3066,10 +3091,13 @@ mod tests {
         let mut peer = open_store(false);
         assert_eq!(peer.load_session_state().unwrap(), initial);
         host.state.browsers.get_mut(&launch.browser_id).unwrap().pid = launch.pid;
-        assert!(peer
-            .compare_and_save_session_state(&initial, &host.state)
-            .is_err());
-        assert_eq!(peer.load_session_state().unwrap(), initial);
+        // Ordinary observations do not publish or consume process-effect custody.
+        peer.compare_and_save_session_state(&initial, &host.state)
+            .unwrap();
+        assert_eq!(peer.load_session_state().unwrap(), host.state);
+        assert!(!peer.unpublished_launch_records().unwrap()[0].published);
+        peer.compare_and_save_session_state(&host.state, &initial)
+            .unwrap();
         let mut competing = initial.clone();
         competing.next_session_sequence += 1;
         peer.compare_and_save_session_state(&initial, &competing)

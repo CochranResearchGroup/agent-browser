@@ -102,6 +102,81 @@ struct FixtureEffects {
 }
 
 #[test]
+fn observed_popup_custody_preserves_peers_and_rejects_overflow_without_partial_claims() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tabs: VecDeque::from(["alice-root", "bob-root"].map(|target| {
+            BrowserTabAcquisition {
+                tab_id: target.into(),
+                target_id: target.into(),
+                source: BrowserTabSource::SessionInitial,
+            }
+        })),
+        ..FixtureEffects::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 300_000,
+        remote_view_desktops: Vec::new(),
+    };
+    let mut manager =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+    let alice = manager
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1000,
+        ))
+        .unwrap();
+    manager.tab_for_navigation(&alice.session_id, 1000).unwrap();
+    let bob = manager
+        .open(OpenBrowserSession::exact_profile("bob", "profile-a", 1000))
+        .unwrap();
+    manager.tab_for_navigation(&bob.session_id, 1000).unwrap();
+    let observations = [
+        ("destination", "popup"),
+        ("popup", "alice-root"),
+        ("peer-child", "bob-root"),
+        ("bob-root", "alice-root"),
+        ("unowned", "unknown"),
+    ]
+    .map(|(target, opener)| (target.into(), opener.into()));
+    let admitted = manager
+        .observe_child_tabs(&alice.session_id, &observations, 1100)
+        .unwrap();
+    assert_eq!(admitted.len(), 2);
+    assert!(manager
+        .observe_child_tabs(&alice.session_id, &observations, 1200)
+        .unwrap()
+        .is_empty());
+    drop(manager);
+    assert_eq!(
+        state.sessions[&alice.session_id].current_tab_id.as_deref(),
+        Some("alice-root")
+    );
+    assert_eq!(state.tabs["bob-root"].session_id, bob.session_id);
+    assert!(!state.tabs.contains_key("peer-child"));
+    assert!(!state.tabs.contains_key("unowned"));
+    let before = state.clone();
+    let oversized = (0..65)
+        .map(|index| (format!("overflow-{index}"), "alice-root".into()))
+        .collect::<Vec<_>>();
+    let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+    assert_eq!(
+        manager
+            .observe_child_tabs(&alice.session_id, &oversized, 1300)
+            .unwrap_err(),
+        "browser_session_popup_limit_exceeded"
+    );
+    drop(manager);
+    assert_eq!(
+        state, before,
+        "Rejected observations publish no partial custody"
+    );
+}
+
+#[test]
 fn repeated_command_reuses_and_refreshes_named_session() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();

@@ -16,7 +16,63 @@ lanes:
     overlaps: [P232, P238, P240, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
     reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
     shared_source_coordination: "P238 foreign head575c2634 owns public read-only locator and MCP workflow; P237 owns target recovery, first-use acknowledgement and the bounded authenticated-operator branch in bind_native_service_tab_command as primary writer. P238 retains ordinary/headless child dispatch and replay ownership; reconcile this shared native binder against its current canonical integration before merge. Reconcile public locator, presentation/auth adapter and shared documentation before integration; no foreign source adoption. P237 owns the native title/URL presentation-preparation branch and BrowserManager observation helper; P238 child admission, permissions, connection custody, replay and managed routing remain unchanged. Reconcile adjacent action adapter and guidance surfaces before integration. P237 also owns only managed title/URL presentation preparation in BrowserRuntimeCommand::Execute; P238 managed routing, admission and replay remain unchanged. With P238 integrated via PR267 and absent from current worktree inventory, P237 owns the bounded closed-lifecycle retained-request routing join; existing P238 replay validator, ordinary new-request routing and permission contracts remain authoritative. Dependency: integrated P238 closed-target replay regression. P237 owns provider-neutral desktop selection sequencing and authenticated operator preparation for the actual cross-client focus RED; route/controller/input authority and P238 ordinary paths remain unchanged. P237 is primary writer for operator-marked managed view_focus proof admission in the daemon adapter; P238 ordinary managed focus/routing/replay and P240 resource/lifecycle mechanics remain unchanged. Dependency: reconcile P240 resource-bound and terminal-history guidance against P237 operator paragraphs before canonical integration; foreign source remains preserved."
-    validation_status: Source notes retain exact scopes, REDs, pins and gates for lifecycle/recovery, native selection, metadata observation, public grant creation, EOF and bootstrap. Retained session routes pass actual HTTP focus ordering across clients, queued proof rejection/timeout, guarded public takeover and native cancellation with successor progress. Managed native admission rejects unbound operator focus and preserves its request ID; ordinary focus, metadata, replay and scoped/last close pass. Actual task-owned source-host restart preserves original Properties, the same Chrome process and both targets; first Alice getter without reopen preserves physically selected Bob. Final restart composition passes in 28.88 seconds on c8f9e5d7 with fresh zero residue. Actual source-created independent native desktops also pass: Beta returns in 0.17 seconds while Alpha holds its real fence and continues, preserving both desktop scenes; private Xvfb/browser cleanup and fresh residue are zero. Relevant Rust quality, focused suites and docs gates pass; legacy navigator prose assertion remains failed. Draft PR270 links issues261/260 and remains unmerged. Fresh main cb765a7be integrates P240 via PR269; retained foreign resource worktree is clean at efb23fc9c. Combined P238/P240 source reconciliation passes 123 consumer and 343 model tests, managed restart/replay with zero recent history and public archive/pressure workflows; source receipt retains compile failure/repair and optional all-targets lint failure. Initial A/B/C layouts rejected on 2026-10-14; version2 retains rail, removes green and prioritizes compact workspace with handoffs in an on-demand modal/drawer. Operator approved revised prototype d0686b9af and session4bac1a44b748 on 2026-10-14; visual review gate satisfied. Implement-spec ledger docs/dev/notes/0237-2026-10-14-implementation-ledger.md tracks tickets277 through283. Compact source inventory, native assignment proof/fencing, exact physical selection, existing-task handoff, reload and shared-origin native framing pass their bounded fixtures. Actual native renderer and browser-owner first-use consumption pass with synthetic authentication, upstream frames and physical custody. Full physical native-viewer composition, recovery/pressure, dependent UI workflows, sole default replacement and canonical integration remain open
+    validation_status: All seven tickets locally validated with one bounded review and remediation; fresh-main integration with P242/P243/P244 under qualification; provider PR441 canonical; installed and public adoption remain separate
+    updated_at: 2026-10-15
+  - id: P244
+    product_lane: PL-BUGFIX
+    objective: Isolate ordinary browser work from historical owner and unrelated release vetoes
+    plan: docs/dev/plans/0244-2026-10-14-ordinary-denial-isolation.md
+    branch: fix/ordinary-denial-isolation
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#288]
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P244 owns daemon profile selection and ordinary publication; preserve P237 lifecycle/UI work and reconcile shared adapters by behavior"]
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    checkpoint: d68100c16
+    validation_status: Affected Rust suites, format, strict Clippy, docs and four pinned public synthetic workflows pass with zero owned residue
+    limitations: ["Source and isolated synthetic qualification; production not published", "No exhaustive denial-path, real-account or native viewer qualification", "New-process admission and destructive recovery remain separate protocols"]
+    updated_at: 2026-10-14
+  - id: P243
+    product_lane: PL-BUGFIX
+    objective: Remove historical ownership vetoes from downloads and ordinary continuation
+    plan: docs/dev/plans/0243-2026-10-14-ordinary-browser-availability.md
+    branch: fix/ordinary-browser-availability
+    target: main
+    accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/287
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#284, CochranResearchGroup/agent-browser#286]
+    dependencies: []
+    overlaps: [P237, P242]
+    reconciled_overlaps: ["P243 owns download and bounded observed-launch repair; preserve P237 dirty lifecycle/UI work and P242 PR285; reconcile shared launch-store/remote-view adapter behavior at integration"]
+    validation_status: Selected Rust gates, 330 Service Model tests, strict Clippy, docs and three public synthetic workflows pass with zero owned residue; linker EAGAIN and bounded retry preserved
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/287
+    checkpoint: 2278205344cb8045b77184aabf50b44995a613e3
+    limitations: ["Source qualification only; production not published", "Original manual recovery build/presentation symptoms and real-account/native-provider acceptance remain unverified", "Preserve P237 dirty lifecycle work and merge these adapter repairs by behavior"]
+    updated_at: 2026-10-14
+  - id: P242
+    product_lane: PL-RECIPES
+    objective: Implement shared SiteGuides routines and hybrid playbooks through installed public workflows
+    plan: docs/dev/plans/0242-2026-10-14-implement-siteguides.md
+    branch: recipes/siteguides-271
+    target: main
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
+    accountable_owner: ecochran76
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/285
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
+    validation_status: All five slices qualified; baseline help and policy-wiring failures repaired with 10 affected integration tests, strict Rust quality, docs and policy negative checks; prior failed receipts retained
+    limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Earlier comprehensive failure retained; affected integration compartment and policy wiring now pass, no new full-suite claim"]
+
     updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM

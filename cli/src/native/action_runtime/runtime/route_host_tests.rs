@@ -5452,6 +5452,77 @@ fn shared_local_session_continuity_does_not_require_runtime_owner_proof() {
 }
 
 #[test]
+fn shared_local_session_continuity_ignores_ambiguous_historical_owners() {
+    let profile_id = "available-profile";
+    let session_id = "available-session";
+    let mut state = ServiceState::default();
+    state.profiles.insert(
+        profile_id.into(),
+        BrowserProfile {
+            id: profile_id.into(),
+            access_policy: Some(ServiceProfileAccessPolicy::shared_local_default(profile_id)),
+            ..BrowserProfile::default()
+        },
+    );
+    state.sessions.insert(
+        session_id.into(),
+        BrowserSession {
+            id: session_id.into(),
+            profile_id: Some(profile_id.into()),
+            ..BrowserSession::default()
+        },
+    );
+    let owner = crate::runtime_owner_transfer::ProfileOwner {
+        owner_id: "old-a".into(),
+        profile_identity_digest: "a".repeat(64),
+        state: crate::runtime_owner_transfer::ProfileOwnerState::Ready,
+        owner_generation: 1,
+        browser_id: "old-browser-a".into(),
+        daemon_session_route: session_id.into(),
+        process_instance_digest: "1".repeat(64),
+        browser_family: "chrome".into(),
+        cdp_endpoint_identity_digest: "2".repeat(64),
+        target_set_digest: "3".repeat(64),
+        pending_transfer: None,
+        last_transition: None,
+    };
+    let mut other = owner.clone();
+    other.owner_id = "old-b".into();
+    other.profile_identity_digest = "b".repeat(64);
+    other.browser_id = "old-browser-b".into();
+    let registry = crate::runtime_owner_transfer::RuntimeOwnerRegistry::from_owner(owner.clone());
+    let mut encoded = serde_json::to_value(registry).unwrap();
+    encoded["owners"] = json!({owner.profile_identity_digest.clone(): owner, other.profile_identity_digest.clone(): other});
+    state.runtime_owner_registry = serde_json::from_value(encoded).unwrap();
+    assert!(state.runtime_owner_binding_for_session(session_id).is_err());
+    let selected = apply_existing_session_profile_selection(
+        &mut LaunchOptions::default(),
+        &json!({"action":"navigate", "clientSubjectId":"client:alice", "identityAssurance":"self-declared"}),
+        Some(session_id), &state,
+    ).expect("current profile permission must not depend on historical owner uniqueness");
+    assert_eq!(selected, Some(ProfileSelectionReason::ExistingOwner));
+    assert!(
+        apply_existing_session_profile_selection(
+            &mut LaunchOptions::default(),
+            &json!({"action":"navigate"}),
+            Some(session_id),
+            &state,
+        )
+        .is_err(),
+        "owner history cannot grant a caller profile permission"
+    );
+    let mut conflicting = LaunchOptions {
+        runtime_profile: Some("different-profile".into()),
+        ..LaunchOptions::default()
+    };
+    assert!(apply_existing_session_profile_selection(
+        &mut conflicting,
+        &json!({"action":"navigate", "clientSubjectId":"client:alice", "identityAssurance":"self-declared"}),
+        Some(session_id), &state,
+    ).is_err(), "current conflicting profile selectors still fail");
+}
+
+#[test]
 fn test_service_profile_lease_gate_defers_to_attributed_tab_handle() {
     let command = json!({
         "action": "cdp_attach",

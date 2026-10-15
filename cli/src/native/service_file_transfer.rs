@@ -443,15 +443,8 @@ pub(crate) async fn run_service_download_capture(
         .ok_or("download_source_identity_unproven: local browser PID unavailable")?;
     let owner = crate::process_identity::capture_process_identity(pid, None, None)
         .ok_or("download_source_identity_unproven: local browser identity unavailable")?;
-    let binding = state
-        .runtime_owner_binding
-        .as_ref()
-        .ok_or("download_source_identity_unproven: current owner binding unavailable")?;
-    if crate::native::runtime_lifecycle::digest_json(&owner)?
-        != binding.claim.process_instance_digest
-    {
-        return Err("download_source_identity_unproven: process differs from current owner".into());
-    }
+    // Current task process evidence identifies the source. Historical owner
+    // bindings are not permission to download through this browser.
     let tree = mgr
         .client
         .send_command("Page.getFrameTree", None, Some(&session_id))

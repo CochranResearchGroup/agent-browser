@@ -463,8 +463,13 @@ impl BrowserSessionSqliteStore {
             &[],
         )
         .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
-        super::browser_launch_custody_store::reject_fenced_browser_publication(&transaction, state)
-            .map_err(|_| "browser_session_publication_release_fenced".to_string())?;
+        super::browser_launch_custody_store::reject_fenced_browser_publication(
+            &transaction,
+            expected,
+            state,
+        )
+        .map_err(|_| "browser_session_publication_release_fenced".to_string())?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -1697,7 +1702,7 @@ mod tests {
     fn operational_status_lists_retained_handoffs_without_private_resume_routes() {
         let directory = TempDirectory::new("handoff-inventory");
         let legacy_path = directory.0.join("state.json");
-        let (mut store, _) =
+        let (store, _) =
             BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
         let mut state = store.load_session_state().unwrap();
         state.remote_view_tab_handoffs.insert("opaque-link".into(), serde_json::from_value(serde_json::json!({

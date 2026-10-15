@@ -4488,6 +4488,9 @@ Usage: agent-browser download <selector> <path>
 Clicks an element that triggers a download and saves the file to the specified path.
 Preserves the browser download policy and peer destinations. Only the requested
 target's completed download is delivered; existing destination files are preserved.
+Uses the current browser process; no historical owner binding is required.
+Ordinary task continuation reconciles interrupted publication of its live browser.
+Ordinary updates ignore malformed launch history and unchanged peer release fences.
 Local browser process proof is required for artifact delivery.
 
 Arguments:
@@ -6848,6 +6851,10 @@ and resource settlement require schema 4. Keep a schema-4-capable binary with it
 backups. Unknown effects retain their record; only positive original-process exit
 settles the resource veto without replaying the command.
 
+Use service --help or service -h for local help without starting a browser
+or rewriting Service State. Unsupported subcommands remain typed errors.
+
+
 Usage:
   agent-browser service state validate --path <absolute-path> --json
   agent-browser service status [--full-tab-history]
@@ -7202,7 +7209,7 @@ Default workflow tools:
   browser_continue      Continue the same task after human input
   browser_close         End this task while preserving peers and profile data
   browser_command       Run an advanced page action with action and params
-  browser_discover      Load one browser, diagnostic or administrative schema
+  browser_discover      Load browser, playbook or diagnostic metadata
 
 Workflow:
   Use browser_open's taskId on subsequent page actions.
@@ -7212,6 +7219,14 @@ Workflow:
   Native Remote View owns the viewer and its authentication.
   Configure AGENT_BROWSER_PUBLIC_ORIGIN on the MCP server for HTTPS handoffs.
   Use browser_discover only when advanced metadata is needed.
+  category=playbooks exposes SiteGuide inspection and verify_login in browser_command.
+  Software login-playbook composes these routines with trusted shared auth-helper custody.
+  browser_tab list observes owned popup children; login continuation verifies new destinations.
+  BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
+  prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.
+  Login requires both checks; reviewedPlan resumes a reviewed change on the same helper action.
+  collect_posts bounds item/page/scroll reads and distinguishes verified no-results from failed extraction.
+  AGENT_BROWSER_SITEGUIDE_DIRECTORY selects reviewed guide JSON files for the MCP server.
   Diagnostic and administrative effects use supported CLI/API operations.
   Contract metadata reports the public mcpCatalog and per-adapter mcp.available.
   Retired authority MCP operations and the legacy catalog are unavailable.

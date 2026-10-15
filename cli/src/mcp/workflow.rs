@@ -93,7 +93,7 @@ fn ensure_transport(session: &str) -> Result<(), JsonRpcError> {
     Ok(())
 }
 
-fn execute(command: Value, session: &str) -> Result<Value, JsonRpcError> {
+pub(super) fn execute(command: Value, session: &str) -> Result<Value, JsonRpcError> {
     // Runtime-host dispatch selects the managed lane before action execution.
     // Keep that transport lane bound to the addressed task, as page tools do.
     let session = command
@@ -360,6 +360,13 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
     let task_id = required_string_argument(arguments, "taskId")?;
     let operation = required_string_argument(arguments, "operation")?;
     let session_name = task_session(task_id)?;
+    if operation == "list" {
+        execute(
+            json!({"id":uuid::Uuid::new_v4().to_string(),
+            "action":"url","sessionName":session_name,"observeChildTabs":true}),
+            transport_session,
+        )?;
+    }
     let path = BrowserSessionSqliteStore::default_sqlite_path().map_err(issue)?;
     let store = BrowserSessionSqliteStore::open_read_only(&path).map_err(issue)?;
     let state = store.load_session_state().map_err(issue)?;

@@ -22,6 +22,10 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md)
+
+- [Ordinary browser availability repair](0243-2026-10-14-ordinary-browser-availability.md)
+
 - [Incremental upgrade observations](0236-2026-10-11-incremental-upgrade-progress.md)
 
 - [Managed upgrade admission repair](0235-2026-10-11-managed-admission-drain-repair.md)
@@ -78,6 +82,8 @@ and blocked hCaptcha leaf respectively. No challenge replay or browser effect
 is authorized by this index.
 
 ## PL-RECIPES | Reusable Automation
+
+- [Website automation provider qualification dependencies](0242-2026-10-14-website-automation-provider-dependencies.md)
 
 - [Access-plan service-request handoff](2026-05-09-access-plan-service-request-handoff.md)
 - [Access-plan monitor recipe](2026-05-10-access-plan-monitor-run-due-recipe.md)

@@ -1,5 +1,17 @@
 # Active plan index
 
+[P244: ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md),
+#288; completed bounded historical-metadata repair and isolated public qualification.
+PR289 owns integration; production publication remains separate.
+
+[P243: ordinary browser availability](0243-2026-10-14-ordinary-browser-availability.md),
+issues #284 and #286; completed source and isolated public workflow qualification
+against Alice/Bob G05/G23/G42. Production publication remains separate.
+
+[P242: implement website automation](0242-2026-10-14-implement-siteguides.md),
+spec #271 and tickets #272–276; completed local integration and isolated owned
+synthetic workflow qualification; provider/real-account acceptance remains separate.
+
 [P240: resource budgets and terminal archives](0240-2026-10-13-resource-bounds.md),
 #105; completed bounded source and isolated browser-workflow qualification.
 Wider resource/cleanup acceptance remains open.

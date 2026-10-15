@@ -101,6 +101,9 @@ fn read_commands_do_not_refresh_or_rewrite_service_state() {
         vec!["service", "--help"],
         vec!["service", "-h"],
         vec!["runtime", "--help"],
+        vec!["--help", "service"],
+        vec!["runtime", "create", "--help"],
+        vec!["eval", "--stdin", "--help"],
         vec!["runtime", "list", "--json"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_agent-browser"))
@@ -161,4 +164,21 @@ fn installed_validator_returns_exact_hashed_invariant_error() {
             .is_none(),
         "rejected validation wrote under the isolated home"
     );
+}
+
+#[test]
+fn unknown_subcommand_help_remains_typed_and_read_only() {
+    let root = TempRoot::new();
+    let output = Command::new(env!("CARGO_BIN_EXE_agent-browser"))
+        .args(["service", "not-a-command", "--help", "--json"])
+        .env("HOME", &root.path)
+        .env("AGENT_BROWSER_SOCKET_DIR", root.path.join("sockets"))
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(value["type"], "unknown_subcommand");
+    assert!(value["error"].as_str().unwrap().contains("not-a-command"));
+    assert!(!root.path.join("sockets").exists());
+    assert!(!root.path.join(".agent-browser/service/state.json").exists());
 }

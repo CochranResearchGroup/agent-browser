@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: Browser task workflows through the Agent Browser MCP, with CLI fallback for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to "open a website", "fill out a form", "click a button", "take a screenshot", "scrape data from a page", "test this web app", "login to a site", "automate browser actions", or any task requiring programmatic web interaction.
+description: Browser task workflows through Agent Browser MCP, with CLI fallback. Use for website navigation, forms, login, extraction, screenshots, testing and browser automation.
 allowed-tools: Bash(agent-browser:*)
 ---
 
@@ -27,6 +27,15 @@ an owner restart reconnects to the verified live browser and preserves existing
 tabs. Peer tabs stay outside this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
 Close rejects a changed selection.
+
+For downloads, use `action: "download"` with the link selector and destination
+path in `params`. Existing-profile tasks use the current browser; clients do not
+establish ownership or repair stale internal records before downloading.
+Ordinary continuation reconciles interrupted publication using the current live
+profile browser, preserving the task and authenticated state.
+
+Ordinary task updates do not consult malformed launch history or unchanged peer desktop release fences. Current profile permission can resolve an ambiguous historical owner binding.
+
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.
@@ -54,33 +63,15 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
 
-In the default browser workspace, a selected tab missing from current inventory
-removes its stale viewer and offers Refresh browsers. The pending refresh is
-shown explicitly. The requested selection and peer tabs remain unchanged;
-refresh does not automatically choose another tab.
-Dashboard/profile permission rejections offer access-check guidance before retrying.
-In the default browser workspace, open a tab’s SVG overflow menu or use its
-context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
-origin and purpose alongside current browser, profile, desktop, URL, title and
-status. Missing values remain Unknown; descriptive names are not identity proof.
-Copy URL copies the task URL without creating a handoff or changing selection.
-Close Tab confirms one managed task before requesting its exact target through the
-existing browser owner. It requires authenticated dashboard access and current
-profile permission to close any tab. Cancelling sends no request. A confirmed
-close preserves peer tabs; closing the final owned tab also closes its browser.
-If close cannot be confirmed, refresh inventory and inspect permission before
-trying again.
-
-Share prepares the exact existing task through the public handoff helper and
-shows its opaque native link in Handoffs. It preserves the selected peer and
-does not navigate the task. Use the small Handoffs rail control to reopen the
-panel, then copy or open the same link through existing Remote View authentication.
-
-Handoffs lists retained owner records even after target expiry, with supplied
-origin, creation/use status and separate link/tab policies. Inspect shows task
-context; Copy and Open reuse the opaque link. A failed refresh retains the last
-reported records. Unavailable inventory is distinct from an empty list.
-Edit retention or delete links in Handoffs.
+Stale selections remove the viewer and offer Refresh browsers without choosing a peer.
+Use the tab SVG menu or Shift+F10 for Properties, Copy URL and permitted Close Tab.
+Properties includes supplied origin, purpose, task/job/request and creation context;
+missing values are Unknown, and names do not prove identity. Copy URL preserves selection.
+Close confirms the exact managed target and preserves peers; the final tab closes its browser.
+If completion is uncertain, refresh and inspect permission before retrying.
+Share prepares the existing task without navigation. The Handoffs rail control opens
+retained records, context, independent link/tab policies and explicit link deletion.
+Copy and Open reuse the opaque link; failed refresh retains the prior records.
 
 ## CLI fallback
 
@@ -90,11 +81,12 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Use `agent-browser runtime create --help` for profile guidance. Runtime creation returns `created` and `userDataDir`; MCP payloads use `success`, `data`, `error`; CLI failures use `success: false`, `error`, `type`.
+Command help, including `service --help` and `service -h`, runs locally without browser launch or Service State writes. Unknown command help returns a typed error. `runtime create --help` describes profiles; creation returns `created` and `userDataDir`. MCP payloads use `success`, `data`, `error`; CLI failures add `type`.
 
 Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
 bounded recourse. Read the advanced reference's runtime custody diagnostics
 before maintenance, retirement reconciliation or interpreting unknown effects.
+
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's
@@ -110,7 +102,18 @@ agent-browser --session editing fill @e1 "Draft text"
 agent-browser --session editing click @e2
 ```
 
-Use the workflow MCP tools for durable profile/task continuity and human handoff.
+## SiteGuide routines
+
+Discover `category:"playbooks"` and run reviewed routines through `browser_command`
+in the existing task. Read [the routine guide](references/playbooks.md) before
+login or guide development. `verify_login` requires intended account/company evidence;
+QBO browser login and OAuth/API readiness are separate. The login client
+`@agent-browser/client/login-playbook` requires preparation and validation, masked
+password input and checkpoint persistence. Use `reviewedPlan` for reviewed changes;
+inspect the same helper request after uncertainty and never resubmit lost login.
+Task tab listing discovers attributable popups after the capture barrier is ready.
+For `collect_posts`, supply reviewed guide and item/page/scroll budgets. Empty output
+is unproven unless `noResultsVerified`; preserve partial results and their reason.
 
 ## Read more only when needed
 
