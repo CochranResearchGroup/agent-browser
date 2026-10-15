@@ -2190,6 +2190,13 @@ fn main() {
     let has_version = args.iter().any(|a| a == "--version" || a == "-V");
 
     if has_help {
+        // Help selectors are not positional subcommands. Keep validating the
+        // remaining command path without dispatching any runtime operation.
+        let clean: Vec<String> = clean
+            .iter()
+            .filter(|arg| !matches!(arg.as_str(), "--help" | "-h"))
+            .cloned()
+            .collect();
         if let Some(cmd) = clean.first() {
             // Reuse read-only command parsing for unsupported subcommands.
             // Explicit stdin modes must never consume input merely for help.

@@ -99,6 +99,8 @@ fn read_commands_do_not_refresh_or_rewrite_service_state() {
     for args in [
         vec!["service", "resources", "--json"],
         vec!["service", "--help"],
+        vec!["service", "-h"],
+        vec!["runtime", "--help"],
         vec!["runtime", "list", "--json"],
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_agent-browser"))
