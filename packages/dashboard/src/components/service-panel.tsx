@@ -37,7 +37,6 @@ import {
   History,
   Loader2,
   Maximize2,
-  Minimize2,
   MoreHorizontal,
   RadioTower,
   ScanSearch,
@@ -54,7 +53,6 @@ import {
   SERVICE_API_BASE,
 } from "@/lib/dashboard-api";
 import { startCompletionDrivenDashboardPoll } from "@/lib/dashboard-read-coordinator";
-import { reportDashboardFailure } from "@/lib/failure-observation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -377,13 +375,6 @@ export type ServiceTab = {
   latestSnapshotId?: string | null;
   latestScreenshotId?: string | null;
   challengeId?: string | null;
-};
-
-type SelectedViewStream = {
-  stream: ServiceViewStream;
-  browser: ServiceBrowser;
-  tab?: ServiceTab | null;
-  focusMessage?: string | null;
 };
 
 export type ServiceJob = {
@@ -2656,40 +2647,14 @@ function ViewStreamCard({
         {embeddable && onInspect && (
           <Button size="sm" variant="default" className="ml-auto h-7 gap-1.5 px-2 text-[10px]" onClick={() => onInspect(stream)}>
             <Eye className="size-3" />
-            Inspect
-          </Button>
-        )}
-        {stream.url && (
-          <Button size="sm" variant="outline" className={cn("h-7 gap-1.5 px-2 text-[10px]", !embeddable || !onInspect ? "ml-auto" : "")} asChild>
-            <a href={stream.url} target="_blank" rel="noreferrer">
-              <ExternalLink className="size-3" />
-              Open
-            </a>
+            Open workspace
           </Button>
         )}
       </div>
-      {embeddable ? (
-        <iframe
-          title={`${viewStreamLabel(stream)} ${stream.id ?? ""}`.trim()}
-          src={stream.url ?? undefined}
-          className="h-[420px] w-full bg-black"
-          sandbox="allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-popups"
-          onError={() => void reportDashboardFailure({
-            category: stream.provider === "cdp_screencast" ? "cdp_stream" : "guacamole_load",
-            stage: "service_inspector_iframe",
-            code: "view_stream_iframe_load_failed",
-            summary: "The service inspector iframe failed to load its selected view stream.",
-            action: "remote_view_load",
-            routeId: stream.routeId,
-            displayId: stream.displayAllocationId,
-            streamProvider: stream.provider,
-          })}
-        />
-      ) : (
-        <div className="p-3">
-          <pre className="service-event-details-json">{formatDetails(stream)}</pre>
-        </div>
-      )}
+      <details className="p-3">
+        <summary className="cursor-pointer text-xs">Stream evidence</summary>
+        <pre className="service-event-details-json">{formatDetails(stream)}</pre>
+      </details>
       <div className="service-view-stream-route-strip" aria-label="View stream route metadata">
         <span>
           <strong>Route</strong>
@@ -4316,137 +4281,6 @@ function BrowserOwnershipCell({ ownership }: { ownership: BrowserOwnershipSummar
         task {formatStringList(ownership.taskNames, "unknown")}
       </span>
     </div>
-  );
-}
-
-function ViewStreamInspectDialog({
-  selection,
-  fullscreen,
-  onFullscreenChange,
-  onOpenChange,
-}: {
-  selection: SelectedViewStream | null;
-  fullscreen: boolean;
-  onFullscreenChange: (fullscreen: boolean) => void;
-  onOpenChange: (open: boolean) => void;
-}) {
-  const stream = selection?.stream;
-  const embeddable = stream ? canEmbedViewStream(stream) : false;
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const onFullscreenChangeRef = useRef(onFullscreenChange);
-
-  useEffect(() => {
-    if (typeof document === "undefined") return;
-    const onFullscreenChange = () => {
-      onFullscreenChangeRef.current(document.fullscreenElement === dialogRef.current);
-    };
-    document.addEventListener("fullscreenchange", onFullscreenChange);
-    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
-  }, []);
-
-  useEffect(() => {
-    onFullscreenChangeRef.current = onFullscreenChange;
-  }, [onFullscreenChange]);
-
-  const toggleDialogFullscreen = useCallback(async () => {
-    if (typeof document === "undefined") {
-      onFullscreenChange(!fullscreen);
-      return;
-    }
-
-    const root = dialogRef.current;
-    const isCurrentFullscreen = document.fullscreenElement === root;
-    try {
-      if (isCurrentFullscreen) {
-        await document.exitFullscreen();
-        return;
-      }
-      if (root?.requestFullscreen) {
-        await root.requestFullscreen();
-        return;
-      }
-    } catch {
-      // Keep the CSS fullscreen fallback available if the browser rejects native fullscreen.
-    }
-    onFullscreenChange(!fullscreen);
-  }, [fullscreen, onFullscreenChange]);
-
-  return (
-    <Dialog open={!!selection} onOpenChange={onOpenChange}>
-      <DialogContent
-        ref={dialogRef}
-        className={cn("service-view-stream-dialog", fullscreen && "service-view-stream-dialog-fullscreen")}
-      >
-        {selection && stream && (
-          <>
-            <DialogHeader>
-              <div className="flex items-start gap-3 pr-8">
-                <div className="min-w-0 flex-1">
-                  <DialogTitle className="truncate text-xl font-black tracking-[-0.04em]">
-                    {selection.tab?.title || selection.browser.id || "Remote browser view"}
-                  </DialogTitle>
-                  <DialogDescription>
-                    {viewStreamLabel(stream)} / {selection.browser.id}
-                    {selection.tab?.id ? ` / ${selection.tab.id}` : ""}
-                  </DialogDescription>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    <Badge variant="outline" className="h-5 px-1.5 text-[9px]">
-                      view {viewStreamLabel(stream)}
-                    </Badge>
-                    <Badge variant={canControlViewStream(stream) ? "default" : "secondary"} className="h-5 px-1.5 text-[9px]">
-                      input {controlInputLabel(stream)}
-                    </Badge>
-                  </div>
-                </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="h-8 gap-1.5 px-2 text-[10px]"
-                  onClick={() => void toggleDialogFullscreen()}
-                >
-                  {fullscreen ? <Minimize2 className="size-3" /> : <Maximize2 className="size-3" />}
-                  {fullscreen ? "Window" : "Fullscreen"}
-                </Button>
-              </div>
-            </DialogHeader>
-            <div className="service-event-dialog-body">
-              {selection.focusMessage && (
-                <p className="service-browser-error">
-                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" />
-                  <span>{selection.focusMessage}</span>
-                </p>
-              )}
-              {!canControlViewStream(stream) && (
-                <p className="service-browser-control-note">
-                  This stream is available for viewing. The service has not marked it as operator-controllable.
-                </p>
-              )}
-              {embeddable ? (
-                <iframe
-                  title={`${viewStreamLabel(stream)} ${stream.id ?? ""}`.trim()}
-                  src={stream.url ?? undefined}
-                  className="service-view-stream-frame"
-                  sandbox="allow-same-origin allow-scripts allow-forms allow-pointer-lock allow-popups"
-                  allow="clipboard-read; clipboard-write; fullscreen; pointer-lock"
-                  allowFullScreen
-                />
-              ) : (
-                <pre className="service-event-details-json">{formatDetails(stream)}</pre>
-              )}
-              {stream.url && (
-                <Button size="sm" variant="outline" className="w-fit gap-1.5" asChild>
-                  <a href={stream.url} target="_blank" rel="noreferrer">
-                    <ExternalLink className="size-3" />
-                    Open stream directly
-                  </a>
-                </Button>
-              )}
-            </div>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -7363,8 +7197,6 @@ export function ServicePanel({
   const [selectedProfileAllocationId, setSelectedProfileAllocationId] = useState<string | null>(null);
   const [selectedSession, setSelectedSession] = useState<ServiceSession | null>(null);
   const [selectedTab, setSelectedTab] = useState<ServiceTab | null>(null);
-  const [selectedViewStream, setSelectedViewStream] = useState<SelectedViewStream | null>(null);
-  const [viewStreamFullscreen, setViewStreamFullscreen] = useState(false);
   const [selectedJob, setSelectedJob] = useState<ServiceJob | null>(null);
   const [selectedProfileAllocation, setSelectedProfileAllocation] = useState<ServiceProfileAllocation | null>(null);
   const [selectedProfileAllocationLoading, setSelectedProfileAllocationLoading] = useState(false);
@@ -8334,9 +8166,18 @@ export function ServicePanel({
     return indexes;
   }, [tabRecords]);
   const openViewStream = useCallback(
-    (stream: ServiceViewStream, browser: ServiceBrowser, tab?: ServiceTab | null, focusMessage?: string | null) => {
-      setSelectedViewStream({ stream, browser, tab, focusMessage });
-      setViewStreamFullscreen(false);
+    (_stream: ServiceViewStream, browser: ServiceBrowser, tab?: ServiceTab | null, _focusMessage?: string | null) => {
+      // All browser viewing returns to the same workspace. Diagnostics never
+      // creates a second viewer or turns a provider stream URL into a handoff.
+      const url = new URL(window.location.href);
+      url.pathname = "/";
+      url.searchParams.set("view", "workspace:control");
+      window.history.pushState({ workspace: true }, "", `${url.pathname}${url.search}${url.hash}`);
+      updateDashboardWorkspaceUrlSelection({
+        workspaceId: null, browserId: browser.id, profileId: browser.profileId ?? null,
+        sessionId: tab?.sessionId ?? null, tabId: tab?.id ?? null, jobId: null,
+      });
+      window.dispatchEvent(new PopStateEvent("popstate", { state: window.history.state }));
     },
     [],
   );
@@ -8992,14 +8833,6 @@ export function ServicePanel({
             setBrowserRetirementPlan(null);
             setBrowserRetirementReceipt(null);
           }
-        }}
-      />
-      <ViewStreamInspectDialog
-        selection={selectedViewStream}
-        fullscreen={viewStreamFullscreen}
-        onFullscreenChange={setViewStreamFullscreen}
-        onOpenChange={(open) => {
-          if (!open) setSelectedViewStream(null);
         }}
       />
       <SessionDetailDialog

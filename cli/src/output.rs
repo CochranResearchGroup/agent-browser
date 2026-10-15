@@ -6107,29 +6107,16 @@ Usage: agent-browser dashboard [start|stop|ingress] [options]
 Manage the observability dashboard, a local web UI that shows live
 browser viewports and command activity feeds for all sessions.
 The dashboard is bundled into the binary and requires no separate install.
-Dashboard sections are URL-addressable at /service, /browsers, and /activity.
-Service record tabs persist as ?view=service:<name>; selected workspace,
-browser, session, tab, profile, and job IDs persist as query parameters. The
-left workspace navigator renders live Agent-browser owned browsers, live
-needs-attention browser diagnostics, and detected non-owned addressable
-browsers, while stale, retained, and resolved incident records stay in Service,
-trace, event, job, incident, and log viewers. Rows show service-sourced disabled action reasons, selected-row PID,
-memory, CPU, CDP, and stream-port indicators when available, and open a dense
-right-pane Workspace inspector with action reasons, page identity, ownership,
-viewport readiness, and collapsed diagnostic evidence. Selecting a row with an
-embeddable stream opens the workspace viewport, including CDP screencast streams.
-When a browser reports several streams, the viewport presents one compact View
-menu with Desktop, Live page, and Snapshot choices and remembers a usable
-operator selection. If the selected presentation is unavailable, the viewport
-automatically chooses a ready source, performs at most one safe route recovery
-or observer reconnect for the current binding, and keeps the live browser in
-Active. Normal recovery uses one connection status and one Retry connection
-fallback. Explicit Take control and lower-level route, viewer, reload, release,
-and Guacamole settings remain under Advanced connection controls. Observer-lease
-acknowledgement preserves the embedded frame while connecting or displaying the
-desktop; Reload view explicitly reloads it. Automatic
-recovery never takes controller ownership, releases a viewer, launches another
-browser, or mutates the profile.
+Open / or /browsers for the default native browser workspace. Its compact,
+resizable rail groups browsers and tabs; selecting a task opens its owned desktop
+through native Remote View authentication. The tab menu provides Properties,
+Copy URL, Share and scoped Close Tab. Handoffs opens retained links and their
+independent policies on demand.
+Diagnostics at /service retains Service inspection, Selection, Activity, Chat,
+Console, Network, Storage, Extensions and runtime health. /activity opens its
+Activity tool. Viewing controls return to the same browser workspace.
+Service record tabs retain ?view=service:<name>; selected workspace, browser,
+session, tab, profile and job IDs remain in query parameters across refreshes.
 Service clients opening remote views pass the access plan's browserId and
 sessionName at the top level. The helper preserves daemon routing alongside
 matching handoff metadata; nested action parameters alone do not select a session.
@@ -6440,12 +6427,12 @@ navigate or open a viewer; expiration preserves peer tabs and the handoff link.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Native desktop links do not require a viewer grant.
 Retained handoffs preserve logical tabs, not indefinite browser processes.
-In the compact workspace preview, a selected tab missing from current inventory
+In the default browser workspace, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
 Dashboard/profile permission rejections offer access-check guidance before retrying.
-In the compact workspace preview, open a tab’s SVG overflow menu or use its
+In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
 status. Missing values remain Unknown; descriptive names are not identity proof.

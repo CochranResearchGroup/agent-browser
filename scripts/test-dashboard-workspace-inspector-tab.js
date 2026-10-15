@@ -76,8 +76,8 @@ assert.match(
 
 assert.match(
   page,
-  /<TabsList variant="line" className="dashboard-right-tabs h-7 w-full">/,
-  'Dashboard right-pane tab list must use the compact scrollable tab styling.',
+  /overflow-x-auto[\s\S]*<TabsList variant="line" className="h-8 min-w-max">/,
+  'Optional diagnostic tools must remain horizontally scrollable.',
 );
 
 assert.match(

@@ -1609,38 +1609,21 @@ ownership, or resulting two-route topology does not pass readiness. It
 migrates supported legacy rows in place; it is not a PostgreSQL backup or
 restore.
 
-The Service view can inspect retained browser, session, and tab records. When
-a browser record includes an embeddable view stream such as an HTML5 RDP
-gateway, operators can open it from the browser details or from a service tab
-row. Tab inspection first asks the service queue to run <code>view_focus</code>
-with the tab <code>targetId</code> plus a stable <code>index</code> when both are
-known, then opens the stream in a dialog with a fullscreen toggle. The queued
-action retries the index if retained target state is stale, switches to the tab,
-brings the page to front, and asks Chrome to maximize the containing native
-window.
-Browser rows also expose contract-gated close and repair controls. Close queues
-<code>service_browser_close</code> for the active service browser and repair queues
-<code>service_browser_repair</code> for degraded or faulted retained browser records.
-The dashboard uses real routes for <code>/service</code>, <code>/browsers</code>,
-and <code>/activity</code>. Service record tabs persist through
-<code>?view=service:&lt;name&gt;</code>, while the left workspace navigator keeps
-the selected workspace, browser, session, tab, profile, and job IDs in separate
-query parameters so refreshes and handoff links reopen the same operational
-context. Selecting a workspace row shows PID, memory, CPU time, CDP port, stream
-port, available actions, and disabled-action reasons when the service reports
-them; rows with an embeddable and operator-visible stream open the workspace
-viewport, including <code>cdp_screencast</code> streams synthesized from live
-session stream files. RDP gateway rows require current browser-window proof
-before View, Control, or external open are enabled, so terminal-only,
-idle-display, missing-proof, wrong-tab, unavailable-route,
-missing-CDP-target, and stale-route rows move to needs-attention as disabled
-diagnostics.
-Guided browser/profile launches use <code>/api/service/request</code>. A launch
-response with browser or tab identity moves the operator into
-<code>?view=workspace:control</code> or <code>?view=workspace:view</code> when
-retained stream metadata is embeddable and operator-visible; otherwise the
-dashboard opens the Service Jobs view for the submitted job or leaves the row
-disabled with the route-proof reason.
+The default workspace at <code>/</code> or <code>/browsers</code> groups live
+browsers and tabs around the native Remote View desktop. Properties, Copy URL,
+Share and scoped Close Tab act on the selected task; Handoffs opens retained
+links and policies on demand.
+
+Diagnostics at <code>/service</code> retains Service records, selected context,
+Activity, Chat, Console, Network, Storage, Extensions and runtime health.
+<code>/activity</code> opens its Activity tool. Service viewing controls return
+to the same browser workspace instead of opening another viewer dialog.
+Service record selection preserves <code>?view=service:&lt;name&gt;</code>;
+workspace, browser, session, tab, profile and job IDs retain requested context
+across refresh. A missing selected target offers refresh rather than choosing
+a peer. Browser close and repair remain guarded public service operations.
+Create or resume tasks through the existing MCP or CLI workflows.
+
 Copied access-plan requests preserve the planner-selected
 <code>runtimeProfile</code>, configured profile path, and <code>browserBuild</code>,
 so a guided launch stays on the selected browser/profile lane. Non-blocking

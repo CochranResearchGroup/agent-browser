@@ -1,14 +1,13 @@
 "use client";
 
 import { type FormEvent, useCallback, useEffect, useState } from "react";
-import { useAtomValue, useSetAtom } from "jotai/react";
-import { activePortAtom, sessionsAtom, newSessionDialogAtom } from "@/store/sessions";
+import { useAtomValue } from "jotai/react";
+import { activePortAtom } from "@/store/sessions";
 import { useSessionsSync } from "@/store/sessions";
-import { useStreamSync, hasConsoleErrorsAtom, consoleLogsAtom } from "@/store/stream";
+import { useStreamSync, hasConsoleErrorsAtom } from "@/store/stream";
 import { useActivitySync } from "@/store/activity";
 import { activeExtensionsAtom } from "@/store/sessions";
 import { useChatStatusSync } from "@/store/chat";
-import { useMediaQuery } from "@/hooks/use-media-query";
 import { useSelectedWorkspaceContext } from "@/hooks/use-selected-workspace-context";
 import { useWorkspaceViewPreferences } from "@/hooks/use-workspace-view-preferences";
 import { Viewport } from "@/components/viewport";
@@ -22,8 +21,7 @@ import { ExtensionsPanel } from "@/components/extensions-panel";
 import { NetworkPanel } from "@/components/network-panel";
 import { NativeTaskViewport } from "@/components/native-task-viewport";
 import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
-import { WorkspaceNavigator } from "@/components/workspace-navigator";
-import { AppShell, type DashboardSection } from "@/components/app-shell";
+import type { DashboardSection } from "@/components/app-shell";
 import {
   DASHBOARD_WORKSPACE_SELECTION_EVENT,
   dashboardWorkspaceSelectionHasValue,
@@ -44,33 +42,19 @@ import {
   type ServiceInspectorActions,
   type ServiceInspectorSelection,
 } from "@/components/service-panel";
-import {
-  ResizablePanelGroup,
-  ResizablePanel,
-  ResizableHandle,
-} from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import {
   AlertTriangle,
-  PanelLeftClose,
-  PanelLeftOpen,
-  PanelRightClose,
-  PanelRightOpen,
-  Plus,
   ShieldCheck,
 } from "lucide-react";
 
-const LEFT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-left-pane-collapsed";
-const RIGHT_PANE_COLLAPSED_KEY = "agent-browser-dashboard-right-pane-collapsed";
 const SECTION_PATHS: Record<DashboardSection, string> = {
   overview: "/",
   browsers: "/browsers",
   service: "/service",
   activity: "/activity",
 };
-type MobileDashboardPanel = "workspaces" | "viewport" | "activity" | "service";
-type RightPaneTab = "workspace" | "chat" | "activity" | "console" | "network" | "storage" | "extensions";
 type DashboardAuthUser = {
   username: string;
   displayName?: string;
@@ -308,9 +292,24 @@ function dashboardSectionFromPath(pathname: string): DashboardSection {
   return "overview";
 }
 
+function readDashboardSection(fallback: DashboardSection): DashboardSection {
+  if (typeof window === "undefined") return fallback;
+  const view = new URLSearchParams(window.location.search).get("view");
+  if (view?.startsWith("workspace:")) return "overview";
+  if (view?.startsWith("service:")) return "service";
+  return dashboardSectionFromPath(window.location.pathname);
+}
+
 function dashboardSectionUrl(section: DashboardSection): string {
   if (typeof window === "undefined") return SECTION_PATHS[section];
   const params = new URLSearchParams(window.location.search);
+  if (section === "service") {
+    if (!params.get("view")?.startsWith("service:")) params.set("view", "service:status");
+  } else if (section === "activity") {
+    params.delete("view");
+  } else {
+    params.set("view", "workspace:control");
+  }
   const search = params.toString();
   return `${SECTION_PATHS[section]}${search ? `?${search}` : ""}${window.location.hash}`;
 }
@@ -332,18 +331,6 @@ function remoteViewHandoffIdFromPath(pathname: string): string | null {
   } catch {
     return null;
   }
-}
-
-function readStoredBoolean(key: string, fallback: boolean): boolean {
-  if (typeof window === "undefined") return fallback;
-  const value = window.localStorage.getItem(key);
-  if (value === null) return fallback;
-  return value === "true";
-}
-
-function writeStoredBoolean(key: string, value: boolean): void {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(key, String(value));
 }
 
 function runtimeManifestIssue(manifest: RuntimeManifest): string | null {
@@ -664,90 +651,90 @@ function formatRuntimeBytes(value?: number): string {
   return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
 }
 
+/** One browser workspace is the default; diagnostics retain separate tools. */
 function DashboardExperience({
-  initialSection = "overview",
-  user,
-  onLogout,
+  initialSection = "overview", user, onLogout,
 }: {
   initialSection?: DashboardSection;
   user: DashboardAuthUser;
   onLogout: () => void;
 }) {
-  const [activeSection, setActiveSection] = useState<DashboardSection>(() => {
-    if (typeof window === "undefined") return initialSection;
-    return dashboardSectionFromPath(window.location.pathname);
-  });
-  const [leftPaneCollapsed, setLeftPaneCollapsed] = useState(() =>
-    readStoredBoolean(LEFT_PANE_COLLAPSED_KEY, false),
-  );
-  const [rightPaneCollapsed, setRightPaneCollapsed] = useState(() =>
-    readStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, true),
-  );
-  const [mobilePanel, setMobilePanel] = useState<MobileDashboardPanel>(() => {
-    if (initialSection === "service") return "service";
-    if (initialSection === "activity") return "activity";
-    return "viewport";
-  });
-  const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
-  const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
-  const [hasWorkspaceViewportRoute, setHasWorkspaceViewportRoute] = useState(() => readWorkspaceViewportRoute());
-  const [sidePanelTab, setSidePanelTab] = useState<RightPaneTab>("chat");
-  const [runtimeManifest, setRuntimeManifest] = useState<RuntimeManifestState>({
-    loading: true,
-    manifest: null,
-    issue: null,
-  });
-  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthState>({
-    loading: true,
-    health: null,
-    issue: null,
-  });
+  const [section, setSection] = useState(() => readDashboardSection(initialSection));
+  useEffect(() => installDashboardFetchFailureInstrumentation(), []);
+  useEffect(() => {
+    const update = () => setSection(readDashboardSection(initialSection));
+    window.addEventListener("popstate", update);
+    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, update);
+    return () => {
+      window.removeEventListener("popstate", update);
+      window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, update);
+    };
+  }, [initialSection]);
+  return section === "service" || section === "activity"
+    ? <DashboardDiagnostics section={section} user={user} onLogout={onLogout} />
+    : <NativeBrowserWorkspace user={user} onLogout={onLogout} />;
+}
+
+function useDashboardSessionSource() {
   const activePort = useAtomValue(activePortAtom);
-  // A durable workspace route owns its selected view stream. Connecting the
-  // legacy active-session CDP socket as well creates an unrelated retry loop.
-  useStreamSync(activePort, !hasWorkspaceViewportRoute);
+  // Workspace transports own their selected stream; avoid a second daemon socket.
+  useStreamSync(activePort, !readWorkspaceViewportRoute());
   useSessionsSync();
+}
+
+function NativeBrowserWorkspace({ user, onLogout }: {
+  user: DashboardAuthUser;
+  onLogout: () => void;
+}) {
+  useSessionsSync();
+  const workspaceViewPreferences = useWorkspaceViewPreferences();
+  const selectedWorkspace = useSelectedWorkspaceContext(true, workspaceViewPreferences.snapshot);
+  const activePort = useAtomValue(activePortAtom);
+  const inventory = selectedWorkspace.managedWorkspace;
+  const browserId = selectedWorkspace.context.selection.browserId;
+  const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
+  const managedBrowser = browserId ? inventory?.browsers[browserId] : null;
+  const tab = tabId ? inventory?.tabs[tabId] : null;
+  const session = tab ? inventory?.sessions[tab.sessionId] : null;
+  useStreamSync(activePort, Boolean(selectedWorkspace.context.node) && !managedBrowser && !readWorkspaceViewportRoute());
+  const nativeTarget = managedBrowser?.desktop && tab?.browserId === managedBrowser.id && session
+    ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
+    : null;
+  return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
+    handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
+    selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
+    onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}
+    diagnosticsHref={dashboardSectionUrl("service")}>
+    {managedBrowser || (!browserId && !tabId) ? <NativeTaskViewport target={nativeTarget} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+      projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
+  </CompactNativeWorkspace>;
+}
+
+type DiagnosticTool = "service" | "workspace" | "chat" | "activity" | "console" | "network" | "storage" | "extensions";
+
+/** Existing inspection tools remain optional and mount no competing browser rail or viewport. */
+function DashboardDiagnostics({ section, user, onLogout }: {
+  section: "service" | "activity";
+  user: DashboardAuthUser;
+  onLogout: () => void;
+}) {
+  useDashboardSessionSource();
   useActivitySync();
   useChatStatusSync();
-
-  useEffect(() => installDashboardFetchFailureInstrumentation(), []);
-
-  const sessions = useAtomValue(sessionsAtom);
-  const hasSessions = sessions.length > 0;
-  const setNewSessionDialog = useSetAtom(newSessionDialogAtom);
-  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const [tool, setTool] = useState<DiagnosticTool>(section === "activity" ? "activity" : "service");
+  const [serviceInspectorSelection, setServiceInspectorSelection] = useState<ServiceInspectorSelection | null>(null);
+  const [serviceInspectorActions, setServiceInspectorActions] = useState<ServiceInspectorActions>({});
   const hasConsoleErrors = useAtomValue(hasConsoleErrorsAtom);
   const activeExtensions = useAtomValue(activeExtensionsAtom);
-  const selectedWorkspaceContextEnabled = !rightPaneCollapsed ||
-    hasWorkspaceViewportRoute ||
-    mobilePanel === "viewport" ||
-    mobilePanel === "activity";
   const workspaceViewPreferences = useWorkspaceViewPreferences();
-  const selectedWorkspace = useSelectedWorkspaceContext(
-    selectedWorkspaceContextEnabled,
-    workspaceViewPreferences.snapshot,
-  );
-  const changeDashboardSection = useCallback((section: DashboardSection) => {
-    setActiveSection(section);
-    if (typeof window === "undefined") return;
-    const nextUrl = dashboardSectionUrl(section);
-    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-    if (nextUrl !== currentUrl) {
-      window.history.pushState({ dashboardSection: section }, "", nextUrl);
-    }
-  }, []);
-  const openNewSession = useCallback(() => {
-    if (!isDesktop) setMobilePanel("workspaces");
-    setNewSessionDialog(true);
-  }, [isDesktop, setNewSessionDialog]);
-
+  const selectedWorkspace = useSelectedWorkspaceContext(true, workspaceViewPreferences.snapshot);
+  const [runtimeManifest, setRuntimeManifest] = useState<RuntimeManifestState>({ loading: true, manifest: null, issue: null });
+  const [runtimeHealth, setRuntimeHealth] = useState<RuntimeHealthState>({ loading: true, health: null, issue: null });
+  useEffect(() => { setTool(section === "activity" ? "activity" : "service"); }, [section]);
   useEffect(() => {
-    const onPopState = () => {
-      setActiveSection(dashboardSectionFromPath(window.location.pathname));
-      setHasWorkspaceViewportRoute(readWorkspaceViewportRoute());
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
+    const showChat = () => setTool("chat");
+    window.addEventListener("agent-browser-dashboard-console-send-to-chat", showChat);
+    return () => window.removeEventListener("agent-browser-dashboard-console-send-to-chat", showChat);
   }, []);
   useEffect(() => {
     let cancelled = false;
@@ -780,16 +767,6 @@ function DashboardExperience({
     };
   }, []);
   useEffect(() => {
-    const onWorkspaceSelection = () => setHasWorkspaceViewportRoute(readWorkspaceViewportRoute());
-    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
-    return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
-  }, []);
-  useEffect(() => {
-    if (activeSection === "service" || activeSection === "activity") {
-      setMobilePanel(activeSection);
-    }
-  }, [activeSection]);
-  useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
@@ -821,362 +798,46 @@ function DashboardExperience({
     };
   }, []);
 
-  const openRightPane = useCallback(() => {
-    setRightPaneCollapsed(false);
-    writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, false);
-  }, []);
-  useEffect(() => {
-    const onWorkspaceSelection = () => {
-      setSidePanelTab("workspace");
-      openRightPane();
-    };
-    window.addEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
-    return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, onWorkspaceSelection);
-  }, [openRightPane]);
-  useEffect(() => {
-    const onConsoleSendToChat = () => {
-      setSidePanelTab("chat");
-      openRightPane();
-    };
-    window.addEventListener("agent-browser-dashboard-console-send-to-chat", onConsoleSendToChat);
-    return () => window.removeEventListener("agent-browser-dashboard-console-send-to-chat", onConsoleSendToChat);
-  }, [openRightPane]);
-  const inspectServiceSelection = useCallback((selection: ServiceInspectorSelection) => {
-    setServiceInspectorSelection(selection);
-    openRightPane();
-  }, [openRightPane]);
-  const toggleLeftPane = () => {
-    const next = !leftPaneCollapsed;
-    setLeftPaneCollapsed(next);
-    writeStoredBoolean(LEFT_PANE_COLLAPSED_KEY, next);
-  };
-  const toggleRightPane = () => {
-    const next = !rightPaneCollapsed;
-    setRightPaneCollapsed(next);
-    writeStoredBoolean(RIGHT_PANE_COLLAPSED_KEY, next);
-  };
-  const leftPaneToggle = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="dashboard-pane-toggle dashboard-pane-toggle-left"
-      aria-label={leftPaneCollapsed ? "Show workspace pane" : "Collapse workspace pane"}
-      title={leftPaneCollapsed ? "Show workspace pane" : "Collapse workspace pane"}
-      onClick={toggleLeftPane}
-    >
-      {leftPaneCollapsed ? <PanelLeftOpen className="size-4" /> : <PanelLeftClose className="size-4" />}
-    </Button>
-  );
-  const rightPaneToggle = (
-    <Button
-      type="button"
-      variant="ghost"
-      size="icon"
-      className="dashboard-pane-toggle dashboard-pane-toggle-right"
-      aria-label={rightPaneCollapsed ? "Show detail pane" : "Collapse detail pane"}
-      title={rightPaneCollapsed ? "Show detail pane" : "Collapse detail pane"}
-      onClick={toggleRightPane}
-    >
-      {rightPaneCollapsed ? <PanelRightOpen className="size-4" /> : <PanelRightClose className="size-4" />}
-    </Button>
-  );
-  const primaryPanel = activeSection === "service"
-    ? (
-      <ServicePanel
-        onInspectSelection={inspectServiceSelection}
-        onInspectorActionsChange={setServiceInspectorActions}
-      />
-    )
-    : activeSection === "activity"
-      ? <ActivityFeed />
-      : (
-        <WorkspaceRemoteViewport
-          fallback={<Viewport />}
-          selectedWorkspaceContext={selectedWorkspace.context}
-          projection={selectedWorkspace.projection}
-          onRefresh={selectedWorkspace.refresh}
-          onSelectStream={workspaceViewPreferences.write}
-        />
-      );
-  const serviceInspectorPanel = (
-    <ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} />
-  );
-
-  const sidePanel = (
-    <Tabs value={sidePanelTab}
-      onValueChange={(value) => setSidePanelTab(value as RightPaneTab)}
-      className="flex h-full flex-col"
+  return <main className="dashboard-diagnostics flex h-dvh min-h-0 flex-col bg-background text-foreground">
+    <header className="native-workspace-toolbar">
+      <h1>Diagnostics</h1>
+      <a href={dashboardSectionUrl("overview")}>Browsers</a>
+      <span className="native-workspace-user">{user.displayName || user.username}</span>
+      <Button variant="ghost" size="sm" onClick={onLogout}>Sign out</Button>
+    </header>
+    <RuntimeManifestNotice state={runtimeManifest} />
+    <RuntimeHealthNotice state={runtimeHealth} />
+    <RuntimeHealthSummary state={runtimeHealth} />
+    <Tabs value={tool} onValueChange={value => setTool(value as DiagnosticTool)} className="flex min-h-0 flex-1 flex-col"
       data-selected-workspace-context={selectedWorkspace.context.node ? "ready" : selectedWorkspace.context.state}
       data-selected-workspace-id={selectedWorkspace.context.node?.id ?? ""}
       data-selected-workspace-state={selectedWorkspace.context.state}
-      data-selected-workspace-source={selectedWorkspace.context.source}
-    >
-      <div className="shrink-0 px-2 pt-1">
-        <TabsList variant="line" className="dashboard-right-tabs h-7 w-full">
-          <TabsTrigger value="workspace" className="text-[11px]">Workspace</TabsTrigger>
-          <TabsTrigger value="chat" className="text-[11px]">Chat</TabsTrigger>
-          <TabsTrigger value="activity" className="text-[11px]">Activity</TabsTrigger>
-          <TabsTrigger value="console" className="text-[11px]">
-            Console
-            {hasConsoleErrors && (
-              <span className="ml-1 inline-flex size-1.5 rounded-full bg-destructive" />
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="network" className="text-[11px]">Network</TabsTrigger>
-          <TabsTrigger value="storage" className="text-[11px]">Storage</TabsTrigger>
-          <TabsTrigger value="extensions" className="text-[11px]">
-            Extensions
-            {activeExtensions.length > 0 && (
-              <span className="ml-1 text-[9px] tabular-nums text-muted-foreground">{activeExtensions.length}</span>
-            )}
-          </TabsTrigger>
+      data-selected-workspace-source={selectedWorkspace.context.source}>
+      <div className="shrink-0 overflow-x-auto px-2 pt-1">
+        <TabsList variant="line" className="h-8 min-w-max">
+          <TabsTrigger value="service">Service</TabsTrigger>
+          <TabsTrigger value="workspace">Selection</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
+          <TabsTrigger value="chat">Chat</TabsTrigger>
+          <TabsTrigger value="console">Console{hasConsoleErrors && <span className="ml-1 inline-flex size-1.5 rounded-full bg-destructive" />}</TabsTrigger>
+          <TabsTrigger value="network">Network</TabsTrigger>
+          <TabsTrigger value="storage">Storage</TabsTrigger>
+          <TabsTrigger value="extensions">Extensions{activeExtensions.length > 0 && <span className="ml-1 text-[9px] tabular-nums">{activeExtensions.length}</span>}</TabsTrigger>
         </TabsList>
       </div>
-      <TabsContent value="workspace" className="min-h-0 flex-1 overflow-auto">
-        <WorkspaceSelectionPanel
-          context={selectedWorkspace.context}
-          loading={selectedWorkspace.loading}
-          error={selectedWorkspace.error}
-          onRefresh={() => void selectedWorkspace.refresh()}
-        />
-      </TabsContent>
-      <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden">
-        <ActivityFeed selectedWorkspaceContext={selectedWorkspace.context} />
-      </TabsContent>
-      <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden">
-        <ConsolePanel selectedWorkspaceContext={selectedWorkspace.context} />
-      </TabsContent>
-      <TabsContent value="network" className="min-h-0 flex-1 overflow-hidden">
-        <NetworkPanel selectedWorkspaceContext={selectedWorkspace.context} />
-      </TabsContent>
-      <TabsContent value="storage" className="min-h-0 flex-1 overflow-hidden">
-        <StoragePanel selectedWorkspaceContext={selectedWorkspace.context} />
-      </TabsContent>
-      <TabsContent value="extensions" className="min-h-0 flex-1 overflow-hidden">
-        <ExtensionsPanel selectedWorkspaceContext={selectedWorkspace.context} />
-      </TabsContent>
-      <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden">
-        <ChatPanel selectedWorkspaceContext={selectedWorkspace.context} authenticatedUser={user} />
-      </TabsContent>
-    </Tabs>
-  );
-  const runtimeNotice = runtimeManifest.issue || runtimeHealth.issue || runtimeHealth.health ? (
-    <>
-      <RuntimeManifestNotice state={runtimeManifest} />
-      <RuntimeHealthNotice state={runtimeHealth} />
-      <RuntimeHealthSummary state={runtimeHealth} />
-    </>
-  ) : null;
-  const appShellProps = {
-    activeSection,
-    onSectionChange: changeDashboardSection,
-    onNewSessionRequest: openNewSession,
-    authenticatedUser: user.displayName || user.username,
-    onLogout,
-    runtimeEnvironment: runtimeManifest.manifest?.runtimeEnvironment ?? "production",
-    runtimeNotice,
-  };
-
-  // Temporary integration entry while dependent workflows are qualified.
-  // The final retirement slice makes this the default and removes this switch.
-  if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("workspace-ui") === "compact") {
-    const inventory = selectedWorkspace.managedWorkspace;
-    const browserId = selectedWorkspace.context.selection.browserId;
-    const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
-    const managedBrowser = browserId ? inventory?.browsers[browserId] : null;
-    const tab = tabId ? inventory?.tabs[tabId] : null;
-    const session = tab ? inventory?.sessions[tab.sessionId] : null;
-    const nativeTarget = managedBrowser?.desktop && tab?.browserId === managedBrowser.id && session
-      ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
-      : null;
-    return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
-      handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
-      selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
-      onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}>
-      {managedBrowser ? <NativeTaskViewport target={nativeTarget} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
-        projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
-    </CompactNativeWorkspace>;
-  }
-
-  if (isDesktop) {
-    if (!hasSessions && activeSection !== "service" && !hasWorkspaceViewportRoute) {
-      return (
-        <AppShell {...appShellProps}>
-          <ResizablePanelGroup
-            orientation="horizontal"
-            className="dashboard-panel-grid"
-          >
-            {!leftPaneCollapsed && (
-              <>
-                <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
-                  <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
-                    {leftPaneToggle}
-                    <WorkspaceNavigator />
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle />
-              </>
-            )}
-            <ResizablePanel id="empty" defaultSize="85%">
-              <div className="dashboard-empty-state dashboard-pane-with-rails">
-                {leftPaneCollapsed && leftPaneToggle}
-                <div className="dashboard-empty-card">
-                  <div className="dashboard-empty-orb">
-                    <Plus className="size-6" />
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xl font-black tracking-[-0.04em] text-foreground">
-                      No active sessions
-                    </p>
-                    <p className="max-w-sm text-sm leading-6 text-muted-foreground">
-                      Start a managed browser workspace to inspect pages, stream a headed session, and prepare the service control plane.
-                    </p>
-                  </div>
-                  <Button
-                    size="lg"
-                    className="dashboard-primary-action"
-                    onClick={openNewSession}
-                  >
-                    <Plus className="size-4" />
-                    New session
-                  </Button>
-                </div>
-              </div>
-            </ResizablePanel>
-          </ResizablePanelGroup>
-        </AppShell>
-      );
-    }
-
-    if (!hasSessions && activeSection === "service") {
-      return (
-        <AppShell {...appShellProps}>
-          <ResizablePanelGroup
-            orientation="horizontal"
-            className="dashboard-panel-grid"
-          >
-            {!leftPaneCollapsed && (
-              <>
-                <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
-                  <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
-                    {leftPaneToggle}
-                    <WorkspaceNavigator />
-                  </div>
-                </ResizablePanel>
-                <ResizableHandle />
-              </>
-            )}
-            <ResizablePanel id="service" defaultSize={rightPaneCollapsed ? "85%" : "55%"} minSize="30%">
-              <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
-                {leftPaneCollapsed && leftPaneToggle}
-                {rightPaneCollapsed && rightPaneToggle}
-                <ServicePanel
-                  onInspectSelection={inspectServiceSelection}
-                  onInspectorActionsChange={setServiceInspectorActions}
-                />
-              </div>
-            </ResizablePanel>
-            {!rightPaneCollapsed && (
-              <>
-                <ResizableHandle />
-                <ResizablePanel id="service-inspector" defaultSize="30%" minSize="18%" maxSize="50%">
-                  <div className="dashboard-pane dashboard-pane-right dashboard-pane-with-toggle">
-                    {rightPaneToggle}
-                    {serviceInspectorPanel}
-                  </div>
-                </ResizablePanel>
-              </>
-            )}
-          </ResizablePanelGroup>
-        </AppShell>
-      );
-    }
-
-    return (
-      <AppShell {...appShellProps}>
-        <ResizablePanelGroup
-          orientation="horizontal"
-          className="dashboard-panel-grid"
-        >
-          {!leftPaneCollapsed && (
-            <>
-              <ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">
-                <div className="dashboard-pane dashboard-pane-left dashboard-pane-with-toggle">
-                  {leftPaneToggle}
-                  <WorkspaceNavigator />
-                </div>
-              </ResizablePanel>
-              <ResizableHandle />
-            </>
-          )}
-          <ResizablePanel id="viewport" defaultSize={rightPaneCollapsed ? "85%" : "55%"} minSize="30%">
-            <div className="dashboard-pane dashboard-pane-viewport dashboard-pane-with-rails">
-              {leftPaneCollapsed && leftPaneToggle}
-              {rightPaneCollapsed && rightPaneToggle}
-              {primaryPanel}
-            </div>
-          </ResizablePanel>
-          {!rightPaneCollapsed && (
-            <>
-              <ResizableHandle />
-              <ResizablePanel id="activity" defaultSize="30%" minSize="15%" maxSize="50%">
-                <div className="dashboard-pane dashboard-pane-right dashboard-pane-with-toggle">
-                  {rightPaneToggle}
-                  {activeSection === "service" ? serviceInspectorPanel : sidePanel}
-                </div>
-              </ResizablePanel>
-            </>
-          )}
-        </ResizablePanelGroup>
-      </AppShell>
-    );
-  }
-
-  return (
-    <AppShell {...appShellProps}>
-      <Tabs
-        value={mobilePanel}
-        onValueChange={(value) => {
-          if (value === "workspaces" || value === "viewport") {
-            setMobilePanel(value);
-            changeDashboardSection("overview");
-          } else if (value === "service" || value === "activity") {
-            setMobilePanel(value);
-            changeDashboardSection(value);
-          }
-        }}
-        className="dashboard-mobile-tabs min-h-0 flex-1"
-      >
-        <div className="dashboard-mobile-tabs-list shrink-0 px-3 pt-3">
-          <TabsList className="w-full rounded-2xl bg-white/60 p-1 shadow-sm ring-1 ring-foreground/10 backdrop-blur-xl dark:bg-white/5">
-            <TabsTrigger value="workspaces">Workspaces</TabsTrigger>
-            <TabsTrigger value="viewport">Viewport</TabsTrigger>
-            <TabsTrigger value="activity">Activity</TabsTrigger>
-            <TabsTrigger value="service">Service</TabsTrigger>
-          </TabsList>
+      <TabsContent value="service" className="min-h-0 flex-1 overflow-auto">
+        <div className="grid min-h-full grid-cols-1 xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <ServicePanel onInspectSelection={setServiceInspectorSelection} onInspectorActionsChange={setServiceInspectorActions} />
+          <aside className="min-h-0 border-l" aria-label="Service detail inspector"><ServiceDetailInspector selection={serviceInspectorSelection} actions={serviceInspectorActions} /></aside>
         </div>
-        <TabsContent value="workspaces" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          <WorkspaceNavigator />
-        </TabsContent>
-        <TabsContent value="viewport" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          <WorkspaceRemoteViewport
-            fallback={<Viewport />}
-            selectedWorkspaceContext={selectedWorkspace.context}
-            projection={selectedWorkspace.projection}
-            onRefresh={selectedWorkspace.refresh}
-            onSelectStream={workspaceViewPreferences.write}
-          />
-        </TabsContent>
-        <TabsContent value="activity" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          {sidePanel}
-        </TabsContent>
-        <TabsContent value="service" className="dashboard-mobile-panel min-h-0 overflow-hidden p-3">
-          <div className="dashboard-pane">
-            <ServicePanel />
-          </div>
-        </TabsContent>
-      </Tabs>
-    </AppShell>
-  );
+      </TabsContent>
+      <TabsContent value="workspace" className="min-h-0 flex-1 overflow-auto"><WorkspaceSelectionPanel context={selectedWorkspace.context} loading={selectedWorkspace.loading} error={selectedWorkspace.error} onRefresh={() => void selectedWorkspace.refresh()} /></TabsContent>
+      <TabsContent value="activity" className="min-h-0 flex-1 overflow-hidden"><ActivityFeed selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
+      <TabsContent value="chat" className="min-h-0 flex-1 overflow-hidden"><ChatPanel selectedWorkspaceContext={selectedWorkspace.context} authenticatedUser={user} /></TabsContent>
+      <TabsContent value="console" className="min-h-0 flex-1 overflow-hidden"><ConsolePanel selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
+      <TabsContent value="network" className="min-h-0 flex-1 overflow-hidden"><NetworkPanel selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
+      <TabsContent value="storage" className="min-h-0 flex-1 overflow-hidden"><StoragePanel selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
+      <TabsContent value="extensions" className="min-h-0 flex-1 overflow-hidden"><ExtensionsPanel selectedWorkspaceContext={selectedWorkspace.context} /></TabsContent>
+    </Tabs>
+  </main>;
 }

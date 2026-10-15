@@ -30,10 +30,18 @@ Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.
 
+Return, store and reopen only the opaque `handoffUrl` at `/remote-view/<handoff-id>`, never a provider URL.
 
-Returned durable links use `/remote-view/<handoff-id>`. Require `operatorVisible.state=ready`.
-Return, store, and reopen only `handoffUrl`, including after viewer reconnection.
-Never hand off a raw Guacamole URL or `providerExternalUrl` to the operator.
+## Operator workspace
+
+Open the dashboard root `/` or `/browsers` for the native browser workspace.
+Select the owned tab, inspect Properties or Share its durable link, and use
+Handoffs for retained records and independent policies. Refresh retains the
+requested identity. Diagnostics at `/service` keeps Service inspection,
+Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
+`?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
+query fields remain supported for diagnostic links. Native Remote View uses its
+existing authentication; dashboard logout remains separate.
 
 ## Sharing a profile between tasks
 
@@ -45,23 +53,12 @@ Close only the task's session. Closing one session must preserve its peers; the 
 
 Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
 
-## Product purpose
-
-Use Agent Browser when reusable browser operation, task-appropriate profiles,
-continuity, native Remote View human handoff and scoped cleanup make the task
-easier to complete. Existing client profiles, managed persistent profiles and
-disposable profiles are all valid choices. Preserve existing authentication
-when requested. Human assistance uses a direct native desktop link through
-Remote View authentication; the person and agent continue in the same browser.
-Keep returned context concise and diagnostics actionable. A simpler scripting
-workflow or specialized CDP code may already meet the task.
-
-In the compact workspace preview, a selected tab missing from current inventory
+In the default browser workspace, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
 Dashboard/profile permission rejections offer access-check guidance before retrying.
-In the compact workspace preview, open a tab’s SVG overflow menu or use its
+In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
 status. Missing values remain Unknown; descriptive names are not identity proof.
@@ -84,7 +81,6 @@ context; Copy and Open reuse the opaque link. A failed refresh retains the last
 reported records. Unavailable inventory is distinct from an empty list.
 Edit retention or delete links in Handoffs.
 
-
 ## CLI fallback
 
 If `browser_open` is absent from the client's callable tools, report missing
@@ -93,7 +89,7 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+Use `agent-browser runtime create --help` for profile guidance. Runtime creation returns `created` and `userDataDir`; MCP payloads use `success`, `data`, `error`; CLI failures use `success: false`, `error`, `type`.
 
 Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
 bounded recourse. Read the advanced reference's runtime custody diagnostics
@@ -114,7 +110,6 @@ agent-browser --session editing click @e2
 ```
 
 Use the workflow MCP tools for durable profile/task continuity and human handoff.
-The CLI remains available for independent diagnostics and supported maintenance.
 
 ## Read more only when needed
 
@@ -132,5 +127,4 @@ remains available. Read the advanced reference for host resource settings.
 - [Advanced CLI and service reference](references/cli-and-service.md): flags,
   installation, API contracts, diagnostics and explicit maintenance.
 
-The advanced reference is not a second MCP catalog or a caller authority
-workflow. `browser_discover` is the current source for advanced MCP metadata.
+Use `browser_discover` for advanced MCP metadata.

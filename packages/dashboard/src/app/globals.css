@@ -5601,8 +5601,8 @@ button {
 .native-workspace-rail { position: relative; min-width: 0; display: flex; flex-direction: column; background: #202023; border-right: 1px solid #35353b; }
 .native-workspace-rail-header, .native-workspace-toolbar { height: 36px; flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 0 8px; }
 .native-workspace-rail-header { justify-content: space-between; }
-.native-workspace-rail-header button, .native-workspace-toolbar button { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; }
-.native-workspace button:hover { background: #303034; }
+.native-workspace-rail-header button, .native-workspace-toolbar button, .native-workspace-diagnostics { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 4px; }
+.native-workspace button:hover, .native-workspace-diagnostics:hover { background: #303034; }
 .native-workspace-search { display: flex; align-items: center; gap: 6px; margin: 4px 8px 8px; padding: 4px 6px; border: 1px solid #3a3a40; border-radius: 4px; color: #a3a3ad; }
 .native-workspace-search input { min-width: 0; width: 100%; background: transparent; color: #e6e6e8; }
 .native-workspace-inventory { min-height: 0; overflow: auto; flex: 1; }

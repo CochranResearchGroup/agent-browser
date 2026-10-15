@@ -789,7 +789,7 @@ agent-browser find role button click --name "Submit"
 
 ## RDP Remote-View Quick Start
 
-In the compact workspace preview, open a tab’s SVG overflow menu or use its
+In the default browser workspace, open a tab’s SVG overflow menu or use its
 context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
 status. Missing values remain Unknown; descriptive names are not identity proof.
@@ -2673,7 +2673,7 @@ cancellation or missing identity explicitly.
 
 ## Observability Dashboard
 
-Monitor agent-browser sessions in real time with a local web dashboard showing a live viewport and command activity feed.
+Select, inspect, share and continue browser tasks in one native browser workspace. A compact browser/tab rail leaves the owned Remote View desktop central; Handoffs and diagnostics open when needed.
 
 ```bash
 # Start the dashboard server (runs in background on port 4848)
@@ -2687,7 +2687,7 @@ agent-browser open example.com
 agent-browser dashboard stop
 ```
 
-The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. All sessions automatically stream to the dashboard.
+The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. Current browsers and tabs appear automatically; select a task to view its owned desktop.
 
 Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. An ordinary dashboard without an explicit deployment-generation setting identifies itself by matching its own executable-bound runtime manifest to the selected backend; it cannot borrow a newer backend identity.
 
@@ -2778,16 +2778,18 @@ set that principal to the user granted the managed Guacamole connections.
 Do not grant every dashboard login duplicate Guacamole connection rows merely
 to make an embedded view load.
 
-Dashboard sections have stable paths, so refreshes and shared links keep the
-selected area instead of returning to the home view. Use `/service` for the
-Service view, `/browsers` for Browser sessions, and `/activity` for the
-activity stream. The Service view preserves its active record workspace in
-`?view=service:<name>` with values such as `service:browsers`,
-`service:profiles`, `service:incidents`, `service:sessions`, `service:tabs`,
-`service:jobs`, and `service:events`. The left workspace navigator separately
-persists selected workspace identity in `workspace`, `browser`, `session`,
-`tab`, `profile`, and `job` query parameters so row selection, inspector
-context, and the embedded viewport survive refreshes and handoff links.
+Open `/` or `/browsers` for the default browser workspace. Selecting a tab uses
+its current browser, profile and native desktop. The tab menu provides
+Properties, Copy URL, Share and scoped Close Tab. The rail can collapse and
+resize; Handoffs opens retained records and their independent policies on demand.
+
+Use **Diagnostics** at `/service` for Service inspection, Selection, Activity,
+Chat, Console, Network, Storage, Extensions and runtime health. `/activity` opens
+the Activity tool. Diagnostic viewing controls return to the same browser
+workspace. Service record selection retains `?view=service:<name>`, including
+`service:browsers`, `service:profiles`, `service:incidents`, `service:sessions`,
+`service:tabs`, `service:jobs` and `service:events`. Workspace, browser, session,
+tab, profile and job query parameters keep the requested context across refresh.
 
 On Linux workstations that should expose the dashboard through a stable local
 or external ingress route, install the user-scoped systemd service:
@@ -2857,10 +2859,10 @@ embedded dashboard asset SHA-256, supported UI features, current executable
 path, and current executable SHA-256. The publish command fails when that live
 manifest does not match the selected installed generation. Use
 `pnpm smoke:local-dashboard-runtime -- --expect-marker "Stream port"` when you
-only need to verify what the currently installed service is serving. If the
-dashboard detects a stale or missing runtime manifest, it renders a `Runtime
-contract drift` warning above the control surface with the local publish command
-needed to repair the live service. After login, the dashboard also polls the
+only need to verify what the currently installed service is serving. If
+Diagnostics detects a stale or missing runtime manifest, it renders a `Runtime
+contract drift` warning with the local publish command
+needed to repair the live service. While open, Diagnostics polls the
 authenticated `/api/runtime/health` endpoint every ten seconds. Its
 `agent-browser.runtime-health.v1` response compares active daemon executable,
 package, and stream metadata with the running binary and renders `Runtime status
@@ -2870,23 +2872,18 @@ restarts an active session automatically. `agent-browser install doctor --json` 
 `dashboardRuntime` manifest so CLI and dashboard readbacks describe the same
 installed binary and embedded UI bundle.
 
-Profile tiles provide **Open browser** for an exact-profile guided launch with a
-no-launch access-plan preflight. Every live service-owned browser provides
-**Close** in both the workspace tree and Service browser table. Detected
-non-owned browsers retain screenshot, watch, and borrowed-input controls but do
-not gain lifecycle ownership.
+Create or resume tasks through the MCP workflow tools or CLI. Their current
+browsers and tabs appear in the workspace. Lifecycle operations remain scoped
+to the owned task; diagnostic visibility does not grant browser ownership.
 
-The dashboard displays:
-- **Workspace navigator** — a compact left pane derived from service-owned browser, detected non-owned browser, session, tab, profile allocation, job, incident, and view-stream state. Each row carries a `WorkspaceInventoryClass` such as `service-owned-controllable-browser`, `service-owned-diagnostic-browser`, `detected-non-owned-browser`, `viewer-client`, `retained-history`, `service-owned-session`, or `service-profile-action`, so inspector, chat, console, and automation surfaces do not need to infer ownership from URL shape. The live rail shows only actionable Agent-browser owned and Detected non-owned browser groups; attention, stale, and retained records stay in Service, trace, event, job, incident, and log viewers instead of occupying the live control surface. It keeps raw IDs secondary to service, agent, task, profile, tab, and URL labels; shows disabled Launch, Seed, View, Control, Resume, Repair, and Close actions with service-sourced reasons; and includes a guided browser/profile launcher that starts the selected combo as its own daemon session. Selecting a row opens a dense right-pane Workspace inspector with a compact status strip, PID/RSS/CPU/CDP/stream indicators, the canonical inventory Class, action availability with reasons, page identity, ownership, viewport readiness, shared-profile actionability, and a collapsed diagnostic Evidence disclosure. Live service-owned browser rows distinguish "open the next operation as a tab through this retained profile owner" from "wait for or inspect the profile holder" so a profile in use by agent-browser is not shown as inherently unavailable; their enabled Add tab action posts `service_request` `tab_new` through that owner route. The same selection opens the workspace viewport when the row exposes an embeddable stream. Live daemon sessions publish a `cdp_screencast` stream from their runtime stream port, so rows such as `127.0.0.1:<port>/app` can render directly even when no service-owned browser record exists. Detected browsers that are not owned by agent-browser are explicitly labeled as non-owned rather than mixed into the owned group. RDP gateway rows require current operator-visible browser-window proof before View, Control, or external open become available; terminal-only, idle-display, missing-proof, wrong-tab, unavailable-route, missing-CDP-target, and stale-route routes move to needs-attention as disabled diagnostic rows instead of opening a generic desktop as if it were the browser. The launcher defaults to the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a `remote_headed` session so the resulting browser has a Guac-ready embedded viewport when `AGENT_BROWSER_REMOTE_VIEW_URL` and `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` are configured. When stream metadata is embeddable and operator-visible, the dashboard closes the launcher, replaces stale `tab=target:*` URL selections with the current live service tab, queues `view_focus` with the selected live target ID; an index is used only when no target ID is supplied, and opens the workspace viewport; otherwise it falls back to the Service Jobs view or keeps the row disabled with the route-proof reason.
-  Guided launches preserve the access-plan selected `runtimeProfile`, configured
-  profile path, `browserBuild`, and executable evidence in the spawned session,
-  and non-blocking freshness warnings do not disable Launch when the launchable
-  request itself is available.
-- **Live viewport** — real-time JPEG frames from the browser; when a browser exposes both CDP and RDP streams, the viewport shows an explicit source chooser and remembers the selection per browser. Recoverable browser tiles with no usable stream remain visible with a Wake stream action that reattaches or switches the retained route without launching another browser process. Detected non-owned browsers with reachable page CDP targets expose a PNG capture and a responsive Watch live image feed. A dashboard superuser can explicitly Borrow pointer, keyboard, and wheel input for up to five minutes and Release it early; Borrow never enables Close, Kill, profile release, or lifecycle ownership. Embedded Guacamole workspace viewports include a compact interaction-settings control that opens Guacamole's keyboard/input-method and mouse-mode panel without relying on the mobile edge gesture or Ctrl+Alt+Shift shortcut, and they detect single-active-viewer disconnects with a Take over action so another dashboard or popout can be served deliberately
+The workspace and optional Diagnostics provide:
+
+- **Browser workspace** — the default compact, collapsible and resizable browser/tab rail. Tab selection opens the exact owned native desktop; Properties preserves supplied context and current identity, Share prepares its opaque link, and Handoffs manages retained records on demand.
+- **Native desktop** — Remote View owns rendering, viewer authentication and desktop controls. The same opaque handoff URL supports standalone human assistance and continuation. Existing compatible daemon streams remain available for their tasks.
 - **Service view** — worker and browser health cards, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, copyable CLI and HTTP trace handoff strings, profile lease wait cards and timeline job rows that jump to their retained Jobs row, incident-backed timeline rows that jump to their retained Incidents row, incident detail actions that jump back to the related trace, display-allocation summary cards that jump to filtered Jobs rows, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with retained owner browser, shared client, lease/conflict, tab, and duplicate-launch guidance refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, filterable and sortable service jobs with naming warnings, requested display allocation, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered lifecycle, density, column visibility, and column width controls for browser table fields with a full table-view reset, selected-record inspection that opens browser, profile, incident, session, tab, and job rows in a desktop right pane or mobile dialog with a hero summary, primary actions, semantic fact sections, related-record jumps, and an Evidence disclosure for raw JSON, IDs, and endpoints, right-pane acknowledge/resolve actions for selected incidents, right-pane cancel for selected queued or running jobs, embedded remote-view inspection for browser view streams and service tabs with fullscreen and Guacamole interaction settings controls, a queued `view_focus` request that requires the selected live target ID when supplied and uses a tab index only without an explicit target, brings that tab forward, and asks Chrome to maximize the containing window before inspection, human-takeover sessions with visible owner, queue impact, lease/conflict details, disabled Resume until a service-owned release action exists, and preserved Control or View actions on related browsers that still expose controllable streams, filterable service events including tab lifecycle changes, and a reconcile action
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
-- **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
+- **Task creation** — use the existing MCP or CLI workflows; owned tasks appear in the workspace.
 - **AI Chat** — chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
 
 ### AI Chat
@@ -6130,7 +6127,7 @@ and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
 
-In the compact workspace preview, a selected tab missing from current inventory
+In the default browser workspace, a selected tab missing from current inventory
 removes its stale viewer and offers Refresh browsers. The pending refresh is
 shown explicitly. The requested selection and peer tabs remain unchanged;
 refresh does not automatically choose another tab.
