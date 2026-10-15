@@ -2728,6 +2728,84 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
 }
 
 #[test]
+fn expired_or_deleted_link_cannot_recreate_missing_target_after_restart() {
+    for deleted in [false, true] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut owner = host(&fixture, provider.clone(), calls.clone());
+        let alice = owner.execute_managed_command("Alice", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/revoked-recovery", "profileId":"profile-a", "activityAtMs":100
+        })).unwrap().unwrap();
+        let bob = owner.execute_managed_command("Bob", &serde_json::json!({
+            "action":"navigate", "url":"https://synthetic.example/preserved-peer", "profileId":"profile-a", "activityAtMs":101
+        })).unwrap().unwrap();
+        let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+        let configured = owner.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":101
+        }));
+        assert_eq!(configured["success"], true, "{configured}");
+        if !deleted {
+            let finite = owner.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve", "handoffId":id,
+                "handoffOperation":"set_link_lifetime", "ttlMs":30, "activityAtMs":100
+            }));
+            assert_eq!(finite["data"]["expiresAtMs"], 130, "{finite}");
+        }
+        let expired = owner.handle_command(&serde_json::json!({
+            "action":"browser_session_reap", "activityAtMs":130
+        }));
+        assert_eq!(expired["success"], true, "{expired}");
+        assert_eq!(
+            expired["data"]["expiredTabIds"],
+            serde_json::json!([alice["browserSession"]["tabId"]])
+        );
+        if deleted {
+            let revoked = owner.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve", "handoffId":id,
+                "handoffOperation":"delete", "activityAtMs":130
+            }));
+            assert_eq!(revoked["data"]["status"], "deleted", "{revoked}");
+        }
+        drop(owner);
+        let mut restarted = host(&fixture, provider.clone(), calls.clone());
+        let before = fixture.store(false).load_session_state().unwrap();
+        let effects = provider.borrow().operations.clone();
+        let views = provider.borrow().view_requests.clone();
+        let launches = calls.get();
+        let denied = restarted.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "nativeDesktop":true, "activityAtMs":131
+        }));
+        assert_eq!(denied["success"], false, "{denied}");
+        assert_eq!(
+            denied["error"],
+            if deleted {
+                "remote_view_tab_handoff_missing"
+            } else {
+                "remote_view_handoff_expired"
+            },
+            "{denied}"
+        );
+        assert_eq!(
+            calls.get(),
+            launches,
+            "invalid retained link must not launch"
+        );
+        assert_eq!(provider.borrow().operations, effects);
+        assert_eq!(provider.borrow().view_requests, views);
+        assert_eq!(fixture.store(false).load_session_state().unwrap(), before);
+        let peer = restarted.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":bob["browserSession"]["handoffId"],
+            "handoffOperation":"inspect", "activityAtMs":131
+        }));
+        assert_eq!(peer["success"], true, "{peer}");
+        assert_eq!(peer["data"]["tabId"], bob["browserSession"]["tabId"]);
+    }
+}
+
+#[test]
 fn valid_handoff_can_extend_after_target_expiry_without_recreation() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
