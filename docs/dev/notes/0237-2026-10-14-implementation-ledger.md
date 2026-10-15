@@ -1,7 +1,7 @@
 # P237 approved-spec implementation ledger
 
 Product lane: PL-PLATFORM
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P237, #261 and #260
 Related lanes: none
 
@@ -39,7 +39,7 @@ Current custody is the clean existing integration branch at 9cdb48c32e16b766abe6
 | 280 independent policy edits and revocation | 279 | validated | handoff policy workflow | actual native public policy/expiry/deletion composition plus owner SQLite restart/boundary/concurrent qualification |
 | 281 same-link expired-target recovery | none | validated | existing public lifecycle entry point | current paired native callbacks, exact host restart, native recovery/wake/Properties/two-peer composition and negative/stale/lost-reply owner tests |
 | 282 qualified human use and pressure | none | validated | native acknowledgement and eligibility | actual native first use, restart, pending/viewer/peer protection and eligible quota reclamation; separate controller/operation/clock and ambiguous-effect proofs |
-| 283 sole default workspace and compatibility | 278, 280, 281, 282 | running | default routing, retirement, docs and final qualification | native complete workflow passed; cumulative checks passed; bounded review remediation running |
+| 283 sole default workspace and compatibility | 278, 280, 281, 282 | validated | default routing, retirement, docs and final qualification | reviewed candidate full native workflow, cumulative source gates and bounded remediation pass |
 
 States distinguish implemented, integrated and validated; no ticket unlocks on source edits alone. Validate the resulting integration tip before unlocking dependents. Tracker closure is separate.
 
@@ -686,3 +686,13 @@ Frozen review head bc5bdc38c764a51202cd42d34b7e56e7366d2d69 against original bas
 The single allowed remediation pass repairs the accepted close race, Properties context, SVG actions, anchored motion-aware drawer and stale retirement guidance. Exact RED/GREEN and fixture-prerequisite distinctions are in `0237-2026-10-15-bounded-review.md`; current affected checks pass in `/tmp/p237-review-` receipts. Reconcile earlier intermediate handoff-doc pass claims against their actual failed logs: those claims used a later command's exit status. The independently verified final handoff-doc check now passes and the main agent skill is9962bytes. No test is silently excluded or historical failure rewritten.
 
 A clean repaired source candidate and one fresh complete native requalification remain before final local acceptance. The resource ledger decode follow-up stays nonblocking under P237/#105. No second broad review, publication, shared-skill sync, provider-home mutation, tracker closure, push, merge or CI is authorized.
+
+## Final local implementation acceptance
+
+All seven approved tickets277through283 are implemented, integrated into the owned local branch and locally validated. The single broad two-axis review and one bounded remediation pass are complete, with no accepted blocker left. The retained nonblocking resource-history follow-up is S1 in the bounded review, owned by P237/#105. Tracker issues remain open; no tracker state changes, push or merge occurred. P237's wider canonical integration and installed/public-provider adoption remain separate gates.
+
+Current source candidate is clean591da4b5dbc560d4a6ad99aab6b43d28a42060d2, SHA25647c9888b2bbfa1378a8178fcdc8be40bea5f9fce800e6d088e2c0557383611b6, ci build2m45s, uninstalled. Final native root `/tmp/p283-real-native-reviewed-20261015` passes in34.53389293seconds with terminal0, complete true, no failure or cleanupFailure and empty original/fresh independent owned process/cgroup/Docker censuses. Its qualification artifact is `/tmp/p237-native-candidates-20261015/p237-reviewed-native-qualified.json`; final source-only changes after the pin are closeout documentation. Exact provider binary21b2d9e3c and fixturee6867c5 remain unchanged.
+
+Cumulative successful compartment receipts remain reconciled in `/tmp/p283-cumulative-rust-qualified.json`; affected remediation gates pass in `/tmp/p237-review-` receipts. The native screenshot and rendered drawer/Properties screenshots were reviewed. Historical failed attempts, initial comprehensive compile failure, repaired help regression, obsolete MCP smoke expectations, prerequisite test errors and the accidental shared-provider authentication incident remain preserved. No unsupported failure-free lane or unobserved provider non-effect is claimed. Current source checks explicitly verify final handoff guidance rather than inferring it from a later command's status.
+
+No production/development installation, shared-skill publication, existing provider-home mutation, real private-account work, external ingress, CI, reboot or foreign cleanup is performed by this closeout. The earlier legacy test did authenticate to existing Guacamole, outside the authorized private boundary; that incident remains separately recorded and was not retried. Retain both owned branches for maintainer review; no worktree closeout/removal is requested.

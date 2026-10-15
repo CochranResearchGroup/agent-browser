@@ -1,9 +1,11 @@
 # P237 bounded integration review
 
 Product lane: PL-PLATFORM
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: P237, #261
 Related lanes: P238 workflow compatibility, P240 resource bounds
+
+Current disposition: all accepted blockers resolved through the one bounded remediation pass and focused native/source verification. S1 remains nonblocking. Canonical integration and publication are separate.
 
 ## Frozen packet
 
@@ -42,3 +44,11 @@ P2 reproduces zero SVGs for retained-row actions. Open, Copy, Inspect, Policies 
 S2 reconciles the active ticket283 cell, retired inspector-viewer README claims and the review-note index. Focused guidance checks also replace obsolete callable MCP examples with the current task workflow and a collapsed retained adapter/HTTP reference. Default guidance remains below10000bytes and explicitly requires ready visibility, opaque durable links and no provider URL handoff. Earlier intermediate claims that handoff-doc checks passed were incorrect: multi-command tool cells returned the final command status while those logs retained failures. The current independent handoff-doc invocation passes, alongside parity, affected routing/selection/Console/client checks, TypeScript, dashboard/docs builds, link/planning audits and strict Rust gates. The docs build's initial new table formatting error is retained and its corrected MDX build passes.
 
 Source remediation is complete within the one pass. The affected complete native default workflow still requires requalification on the repaired candidate. S1 remains nonblocking backlog. No second broad review is planned.
+
+## Focused final verification
+
+The repaired clean source `591da4b5dbc560d4a6ad99aab6b43d28a42060d2` builds in the ci profile in2m45s and remains uninstalled. Immutable binary SHA256 is `47c9888b2bbfa1378a8178fcdc8be40bea5f9fce800e6d088e2c0557383611b6`. Current stdio workflow-catalog smoke passes on that exact binary. Provider and fixture pins remain21b2d9e3c ande6867c5.
+
+The fresh actual native attempt `/tmp/p283-real-native-reviewed-20261015` passes the complete default workflow in34.53389293seconds, terminal zero, complete true, failure/cleanupFailure null, and empty original plus independent process/cgroup/Docker censuses. It preserves both physical peers through policy save, exact target expiry, owner restart, original-link recreation, refreshed Properties and native input, then exercises Diagnostics, dashboard logout and independent native authentication. Reviewed recreated Properties shows Job/Request Unknown when unsupplied and the supplied creation time; synthetic rendered checks separately verify supplied job/request values. `/tmp/p237-native-candidates-20261015/p237-reviewed-native-qualified.json` binds candidate, effect plan, receipt, pixels and cleanup hashes. This is private source qualification with synthetic local authentication/ingress, not installed/public-provider acceptance.
+
+P1 through P4 and S2 are resolved by the bounded remediation and focused checks. S1 remains nonblocking backlog owned by P237/#105; no architecture expansion or evidence deletion is authorized. All seven tickets are locally validated. Exactly one broad review and one bounded remediation pass were used; no second broad loop occurred. Final accepted findings: Standards2, highest low documentation blocker resolved, performance judgement retained; Spec4, highest high close-race blocker resolved. No blocking finding remains. Canonical integration, tracker resolution, installed/provider adoption, public ingress and formal release remain separate.

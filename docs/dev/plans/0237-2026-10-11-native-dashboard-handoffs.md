@@ -8,6 +8,10 @@ Version: 2
 Lane: P237
 Baseline: 3e5a38679d28ac8a20439e29004ea1315475ef8e
 
+## Current local acceptance, 2026-10-15
+
+The implementation ledger and bounded review record all seven approved tickets as locally validated after one broad two-axis review and one bounded remediation pass. Source candidate591da4b5d passes the final complete private native workflow in34.534seconds with exact empty cleanup. The source default is the compact workspace; Diagnostics is secondary. One nonblocking resource-history follow-up remains under P237/#105. Plan state stays IN_PROGRESS for canonical integration and wider installed/public-provider adoption. No push, merge, tracker closure, installation, shared-skill publication or external ingress is implied. Earlier pending states below are retained historical evidence; use this checkpoint and the ledger for current execution.
+
 ## Problem and agreed outcome
 
 Replace the existing operator dashboard with a simple workspace modeled on Remote View's root desktop. A person expands a browser app to its tabs, selects a tab to select its native target and raise/maximize its owning browser on the correct desktop, shares a durable handoff, and opens a compact handoff table on demand from a small SVG control in the left rail. Properties explains attributable origin and purpose. Keep the native Remote View viewer, desktop operations and existing authentication authoritative.
