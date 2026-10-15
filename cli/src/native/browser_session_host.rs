@@ -331,6 +331,30 @@ pub(crate) async fn execute_shared_managed_command(
     .map_err(|_| "browser_session_host_join_failed")?
 }
 
+/// Explicit managed closure never falls back to a different daemon or launches
+/// a replacement. Authenticate before constructing the retained runtime owner.
+pub(crate) async fn close_shared_operator_tab(
+    shared: SharedBrowserSessionHost,
+    command: serde_json::Value,
+) -> Result<serde_json::Value, String> {
+    tokio::task::spawn_blocking(move || {
+        use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+        let mut host = shared
+            .lock()
+            .map_err(|_| "browser_session_host_lock_poisoned")?;
+        let snapshot = LockedServiceStateRepository::default_json()?.load_snapshot()?;
+        super::stream::verify_operator_tab_close(&snapshot, &command)?;
+        if host.is_none() {
+            *host = Some(load_default_browser_session_host()?);
+        }
+        host.as_mut()
+            .ok_or("browser_session_host_missing")?
+            .close_operator_tab(&command)
+    })
+    .await
+    .map_err(|_| "browser_session_host_join_failed")?
+}
+
 /// Both socket dispatch and queued service resolution borrow the same owner.
 pub(crate) async fn resolve_shared_handoff_command(
     shared: SharedBrowserSessionHost,
@@ -830,6 +854,83 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             .close_current_tab(session_id, activity_at_ms)?;
         self.commit_state()?;
         Ok(result)
+    }
+
+    /// Resolve the named owner target rather than its mutable current tab.
+    /// The physical runtime revalidates operator authority before sending close.
+    pub(crate) fn close_operator_tab(
+        &mut self,
+        command: &serde_json::Value,
+    ) -> Result<serde_json::Value, String>
+    where
+        E: ManagedBrowserCommandEffects,
+    {
+        if command["action"] != "tab_close" || command["operatorClose"] != true {
+            return Err("operator_tab_close_binding_changed".into());
+        }
+        let browser_id = required_string(command, "browserId")?;
+        let target_id = required_string(command, "targetId")?;
+        let name = required_string(command, "sessionName")?;
+        let mut matches = self
+            .state
+            .tabs
+            .values()
+            .filter(|tab| tab.browser_id == browser_id && tab.target_id == target_id);
+        let tab = matches
+            .next()
+            .ok_or("operator_tab_close_target_missing")?
+            .clone();
+        if matches.next().is_some() {
+            return Err("operator_tab_close_target_ambiguous".into());
+        }
+        let session = self
+            .state
+            .sessions
+            .get(&tab.session_id)
+            .filter(|session| session.name == name && session.browser_id == browser_id)
+            .ok_or("operator_tab_close_binding_changed")?
+            .clone();
+        let now_ms = current_unix_ms();
+        let mut physical = serde_json::Value::Null;
+        let closed = self.manager()?.close_exact_tab_with(
+            &session.id,
+            &tab.id,
+            now_ms,
+            |effects, browser, target| {
+                let response = effects.execute_command(
+                    browser,
+                    target,
+                    &session.id,
+                    &session.name,
+                    command,
+                )?;
+                if response["success"] != true {
+                    return Err(response["error"]
+                        .as_str()
+                        .unwrap_or("tab_close_effect_uncertain")
+                        .to_string());
+                }
+                if response["data"]["targetId"] != target.target_id
+                    || response["data"]["physicalTabClosed"] != true
+                    || response["data"]["unrelatedTargetsPreserved"] != true
+                    || !response["data"]["closed"].is_u64()
+                    || !response["data"]["activeIndex"].is_u64()
+                {
+                    return Err("tab_close_effect_uncertain: exact physical receipt missing".into());
+                }
+                physical = response["data"].clone();
+                Ok(())
+            },
+        )?;
+        self.commit_state()?;
+        // Preserve the existing tab_close numeric index fields. Managed owner
+        // identities augment that receipt rather than changing their types.
+        physical["source"] = serde_json::json!("managed-owner");
+        physical["closedTabId"] = serde_json::json!(closed.closed_tab_id);
+        physical["currentTabId"] = serde_json::json!(closed.current_tab_id);
+        physical["browserClosed"] =
+            serde_json::json!(!self.state.browsers.contains_key(browser_id));
+        Ok(physical)
     }
 
     pub(crate) fn close_session(

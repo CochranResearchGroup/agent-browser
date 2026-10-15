@@ -1227,6 +1227,24 @@ async fn handle_connection<S>(
                         continue;
                     }
                 }
+                if action.as_deref() == Some("tab_close") && cmd["operatorClose"] == true {
+                    let id = cmd["id"].clone();
+                    let response = match super::browser_session_host::close_shared_operator_tab(
+                        router.browser_sessions.clone(),
+                        cmd,
+                    )
+                    .await
+                    {
+                        Ok(data) => serde_json::json!({"id":id,"success":true,"data":data}),
+                        Err(error) => serde_json::json!({"id":id,"success":false,"error":error}),
+                    };
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
+                }
                 if action
                     .as_deref()
                     .is_some_and(|action| action.starts_with("browser_session_"))

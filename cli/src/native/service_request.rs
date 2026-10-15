@@ -460,6 +460,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
 pub(crate) enum ServiceRequestIssueKind {
     InvalidRequest,
     OperatorFocusAuthority,
+    OperatorTabCloseAuthority,
     MissingAction,
     UnsupportedAction,
     UnknownField,
@@ -499,6 +500,17 @@ impl ServiceRequestIssue {
             return "profile_access_denied";
         }
         match self.kind {
+            ServiceRequestIssueKind::OperatorTabCloseAuthority => {
+                match self.message.split(':').next() {
+                    Some("operator_tab_close_authority_required") => {
+                        "operator_tab_close_authority_required"
+                    }
+                    Some("operator_tab_close_profile_policy_denied") => {
+                        "operator_tab_close_profile_policy_denied"
+                    }
+                    _ => "operator_tab_close_authority_unproven",
+                }
+            }
             ServiceRequestIssueKind::OperatorFocusAuthority => {
                 super::service_failure::operator_focus_failure_code(&self.message)
                     .unwrap_or("operator_focus_authority_unproven")
@@ -577,6 +589,15 @@ impl ServiceRequestRejection {
                 "blind_retry".to_string(),
                 "impersonate_profile_subject".to_string(),
             ];
+        }
+        if self.issue.kind == ServiceRequestIssueKind::OperatorTabCloseAuthority {
+            failure.axis = ServiceFailureAxis::ProfileAccess;
+            failure.recommended_action = "inspect_operator_tab_close_authority".to_string();
+            failure.safe_next_actions = vec!["inspect_operator_tab_close_authority".to_string()];
+            failure.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+            if self.issue.code() == "operator_tab_close_profile_policy_denied" {
+                failure.missing_permission = Some("tab_close_any".to_string());
+            }
         }
         failure.code = self.issue.code().to_string();
         failure.phase = ServiceFailurePhase::IngressValidation;
@@ -768,6 +789,7 @@ pub(crate) fn normalize_service_request(
                     | "connectionInstanceId"
                     | "profileChildAccess"
                     | "operatorFocusProofToken"
+                    | "operatorTabCloseProofToken"
             ) {
                 command[key] = value.clone();
             }
@@ -841,6 +863,28 @@ pub(crate) fn normalize_service_request(
         command["operationPrincipalId"] = json!(desktop_interact_operation_principal_id(request));
     }
 
+    if let Some(operator_close) = command.get("operatorClose") {
+        if !operator_close.is_boolean() {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidFieldType,
+                "operatorClose must be a boolean",
+            ));
+        }
+        if operator_close == true
+            && (action != "tab_close"
+                || command["targetId"]
+                    .as_str()
+                    .is_none_or(|id| id.trim().is_empty())
+                || ["index", "target_id", "serviceTabHandle"]
+                    .iter()
+                    .any(|field| command.get(*field).is_some()))
+        {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidRequest,
+                "operatorClose requires tab_close with one explicit targetId selector",
+            ));
+        }
+    }
     let principal_authority = input.authenticated_principal.cloned();
     if let Some(authority) = &principal_authority {
         // Queue provenance must identify the same validated actor as authorization,

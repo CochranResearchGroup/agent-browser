@@ -327,6 +327,8 @@ export type WorkspaceServiceSession = {
 };
 
 export type WorkspaceServiceTab = {
+  /** Owner-published managed task; operator close still needs current server authority. */
+  managedTask?: boolean;
   /** Owner-supplied provenance; absent values must remain unknown. */
   taskMetadata?: Record<string, unknown> | null;
   profileId?: string | null;

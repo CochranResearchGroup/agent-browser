@@ -794,6 +794,12 @@ context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
 origin and purpose alongside current browser, profile, desktop, URL, title and
 status. Missing values remain Unknown; descriptive names are not identity proof.
 Copy URL copies the task URL without creating a handoff or changing selection.
+Close Tab confirms one managed task before requesting its exact target through the
+existing browser owner. It requires authenticated dashboard access and current
+profile permission to close any tab. Cancelling sends no request. A confirmed
+close preserves peer tabs; closing the final owned tab also closes its browser.
+If close cannot be confirmed, refresh inventory and inspect permission before
+trying again. Native dashboard workflow qualification is still in progress.
 
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before

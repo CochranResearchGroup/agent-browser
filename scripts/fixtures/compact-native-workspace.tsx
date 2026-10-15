@@ -9,14 +9,18 @@ const nodes = [
   { id: "browser:carol-browser", browserId: "carol-browser", label: "Analysis", profileId: "independent-profile", live: true, relatedIds: { serviceSessionIds: ["carol-session"] } },
 ];
 const tabs = [
-  { id: "alice", browserId: "alice-browser", sessionId: "alice-session", targetId: "target-alice", profileId: "shared-profile", desktopId: "desktop-a", taskMetadata: { attribution: "supplied", serviceName: "Synthetic billing", agentName: "Ada worker", humanName: "Review operator", originKind: "agent", taskName: "Review invoice", purpose: "Check supplied invoice totals" }, title: "Alice invoice", url: "https://example.test/alice", lifecycle: "active" },
-  { id: "bob", browserId: "alice-browser", sessionId: "bob-session", targetId: "target-bob", title: "Bob invoice", url: "https://example.test/bob", lifecycle: "active" },
+  { id: "alice", managedTask: true, browserId: "alice-browser", sessionId: "alice-session", targetId: "target-alice", profileId: "shared-profile", desktopId: "desktop-a", taskMetadata: { attribution: "supplied", serviceName: "Synthetic billing", agentName: "Ada worker", humanName: "Review operator", originKind: "agent", taskName: "Review invoice", purpose: "Check supplied invoice totals" }, title: "Alice invoice", url: "https://example.test/alice", lifecycle: "active" },
+  { id: "bob", managedTask: true, browserId: "alice-browser", sessionId: "bob-session", targetId: "target-bob", title: "Bob invoice", url: "https://example.test/bob", lifecycle: "active" },
   { id: "carol", browserId: "carol-browser", sessionId: "carol-session", targetId: "target-carol", title: "Carol report", url: "https://example.test/carol", lifecycle: "active" },
   { id: "closed", browserId: "alice-browser", targetId: "target-closed", title: "Closed invoice", lifecycle: "closed" },
 ];
+function fixtureTabs() {
+  const closed: string[] = JSON.parse(sessionStorage.getItem("fixture-closed-tabs") || "[]");
+  return tabs.filter(tab => !closed.includes(tab.id));
+}
 function Fixture() {
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
-  const [availableTabs, setAvailableTabs] = useState(tabs);
+  const [availableTabs, setAvailableTabs] = useState(fixtureTabs);
   const [refreshing, setRefreshing] = useState(false);
   const pauseRefresh = useRef(false);
   const releaseRefresh = useRef<(() => void) | null>(null);
@@ -24,7 +28,7 @@ function Fixture() {
     setRefreshing(true);
     try {
       if (pauseRefresh.current) await new Promise<void>(resolve => { releaseRefresh.current = resolve; });
-      setAvailableTabs(tabs);
+      setAvailableTabs(fixtureTabs());
     } finally { setRefreshing(false); }
   };
   useEffect(() => {

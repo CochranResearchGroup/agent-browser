@@ -1036,6 +1036,16 @@ export interface ServiceTabSwitchData {
 export interface ServiceTabCloseData {
   closed: number;
   activeIndex: number;
+  targetId?: string;
+  closeCommandAcknowledged?: boolean;
+  closeCommandError?: string | null;
+  physicalTabClosed?: boolean;
+  targetRemovalVerified?: boolean;
+  unrelatedTargetsPreserved?: boolean;
+  source?: 'managed-owner';
+  closedTabId?: string;
+  currentTabId?: string | null;
+  browserClosed?: boolean;
 }
 
 export interface ServiceViewFocusData {

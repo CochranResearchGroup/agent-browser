@@ -25,6 +25,25 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
   const [query, setQuery] = useState("");
   const [closedGroups, setClosedGroups] = useState<Set<string>>(new Set());
   const drag = useRef<{ x: number; width: number } | null>(null);
+  const root = useRef<HTMLElement>(null);
+  const [closedTabs, setClosedTabs] = useState<Set<string>>(new Set());
+  const [closeRefreshError, setCloseRefreshError] = useState<string | null>(null);
+  const tabClosed = async (tab: WorkspaceServiceTab) => {
+    // Only an exact owner receipt reaches this callback. Hide its stale frame
+    // immediately while the authoritative inventory refresh completes.
+    setClosedTabs(current => new Set(current).add(tab.id));
+    setCloseRefreshError(null);
+    try { await onRefresh(); }
+    catch { setCloseRefreshError("The tab closed, but inventory could not refresh. Refresh browsers."); }
+    finally {
+      requestAnimationFrame(() => {
+        const next = root.current?.querySelector<HTMLButtonElement>(".native-workspace-tab[aria-current]")
+          ?? root.current?.querySelector<HTMLButtonElement>(".native-workspace-tab")
+          ?? root.current?.querySelector<HTMLButtonElement>('button[aria-label="Refresh browsers"]');
+        next?.focus();
+      });
+    }
+  };
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem("native-workspace-rail-collapsed") === "true");
@@ -57,12 +76,12 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
   const search = query.trim().toLowerCase();
   const browsers = [...new Map(nodes.filter(node => node.live && node.browserId).map(node => [node.browserId, node])).values()];
   const groups = browsers.map(node => {
-    const browserTabs = tabs.filter(tab => tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired");
+    const browserTabs = tabs.filter(tab => tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired" && !closedTabs.has(tab.id));
     const browserMatches = `${node.label} ${node.profileId ?? ""}`.toLowerCase().includes(search);
     return { node, browserTabs, visibleTabs: browserTabs.filter(tab => !search || browserMatches || `${tab.title ?? ""} ${tab.taskLabel ?? ""} ${tab.url ?? ""}`.toLowerCase().includes(search)), browserMatches };
   }).filter(group => !search || group.browserMatches || group.visibleTabs.length);
   return (
-    <main className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
+    <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
         <div className="native-workspace-rail-header">
           {!collapsed && <span>Browsers</span>}
@@ -79,7 +98,7 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
                 <button type="button" className="native-workspace-browser" aria-expanded={open} onClick={() => setClosedGroups(current => {
                   const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next;
                 })}><ChevronDown size={12} style={{ transform: open ? undefined : "rotate(-90deg)" }} /><Monitor size={13} /><span>{node.label}<small>{node.profileId ?? "Unknown profile"}</small></span><small>{browserTabs.length}</small></button>
-                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
+                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
               </section>;
             })}
             {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
@@ -93,8 +112,9 @@ export function CompactNativeWorkspace({ nodes, tabs, selection, userLabel, onLo
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
         <header className="native-workspace-toolbar"><span>Agent Browser</span><span className="native-workspace-user">{userLabel}</span><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
+        {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
-        <div className="native-workspace-desktop">{children}</div>
+        <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
     </main>
   );

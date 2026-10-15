@@ -2118,6 +2118,32 @@ fn service_request_command_with_state_and_authority(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
+    if action_hint == "tab_close" && command["operatorClose"] == true {
+        let proof = authenticated_dashboard_user
+            .zip(service_state)
+            .ok_or_else(|| {
+                "operator_tab_close_authority_required: authenticated dashboard required"
+                    .to_string()
+            })
+            .and_then(|(username, state)| {
+                dashboard_auth::issue_operator_tab_close(state, &command, username)
+            })
+            .map_err(|message| {
+                ServiceRequestRejection::record(
+                    "http_service_request",
+                    Some(action_hint),
+                    &request_id,
+                    effective_session,
+                    ServiceRequestIssue::new(
+                        ServiceRequestIssueKind::OperatorTabCloseAuthority,
+                        message,
+                    ),
+                )
+            })?;
+        command["operatorTabCloseProofToken"] = json!(proof);
+        command["clientSubjectId"] = json!(dashboard_principal);
+        command["identityAssurance"] = json!("authenticated-ingress");
+    }
     let existing_managed_handoff = action_hint == "remote_view_open"
         && command["browserId"]
             .as_str()
@@ -5797,6 +5823,7 @@ mod tests {
 
     include!("p237_physical_selection.rs");
     include!("p237_http_selection.rs");
+    include!("p278_tab_close.rs");
 
     #[test]
     fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {
@@ -5971,6 +5998,25 @@ mod tests {
             dashboard_auth::verify_operator_focus(&reassigned, &command).is_err(),
             "old desktop focus proof authorized a replacement desktop"
         );
+    }
+
+    #[test]
+    fn operator_tab_close_requires_authenticated_dashboard_without_accepting_caller_proof() {
+        let body = json!({
+            "action":"tab_close", "browserId":"browser:managed-a", "sessionName":"task-a",
+            "serviceName":"agent-browser-dashboard", "agentName":"operator", "taskName":"Close selected task",
+            "params":{"targetId":"target-a","operatorClose":true,"operatorTabCloseProofToken":"caller-forged-close"}
+        }).to_string();
+        let error = service_request_command_with_state_and_authority(
+            &body, None, None, "task-a", None,
+        ).expect_err("managed tab closure must not admit a caller label or supplied proof as operator authority");
+        let response = error.response();
+        assert_eq!(
+            response["failure"]["code"], "operator_tab_close_authority_required",
+            "{response}"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert!(!response.to_string().contains("caller-forged-close"));
     }
 
     #[test]

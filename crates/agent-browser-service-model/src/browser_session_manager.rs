@@ -1828,18 +1828,41 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
             .current_tab_id
             .clone()
             .ok_or_else(|| "browser_session_current_tab_absent".to_string())?;
+        self.close_exact_tab_with(
+            session_id,
+            &tab_id,
+            activity_at_ms,
+            |effects, browser, tab| effects.close_tab(browser, tab),
+        )
+    }
+
+    /// Close the addressed task even when its session's current tab changed.
+    /// The caller supplies its admitted effect at this seam; the manager owns
+    /// target attribution, peer state and last-owned-browser lifecycle rules.
+    pub fn close_exact_tab_with(
+        &mut self,
+        session_id: &str,
+        tab_id: &str,
+        activity_at_ms: u64,
+        close_target: impl FnOnce(
+            &mut E,
+            &ManagedBrowserInstance,
+            &ManagedBrowserTab,
+        ) -> Result<(), String>,
+    ) -> Result<CloseBrowserTabResult, String> {
         let browser_id = self
             .state
             .tabs
-            .get(&tab_id)
+            .get(tab_id)
             .ok_or_else(|| "browser_session_current_tab_missing".to_string())?
             .browser_id
             .clone();
-        let closed = self.close_named_tab(
+        let closed = self.close_named_tab_with(
             session_id,
-            &tab_id,
+            tab_id,
             BrowserTabEndReason::ExplicitClose,
             activity_at_ms,
+            close_target,
         )?;
         if !self
             .state
@@ -1869,6 +1892,27 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         reason: BrowserTabEndReason,
         activity_at_ms: u64,
     ) -> Result<CloseBrowserTabResult, String> {
+        self.close_named_tab_with(
+            session_id,
+            tab_id,
+            reason,
+            activity_at_ms,
+            |effects, browser, tab| effects.close_tab(browser, tab),
+        )
+    }
+
+    fn close_named_tab_with(
+        &mut self,
+        session_id: &str,
+        tab_id: &str,
+        reason: BrowserTabEndReason,
+        activity_at_ms: u64,
+        close_target: impl FnOnce(
+            &mut E,
+            &ManagedBrowserInstance,
+            &ManagedBrowserTab,
+        ) -> Result<(), String>,
+    ) -> Result<CloseBrowserTabResult, String> {
         let session = self
             .state
             .sessions
@@ -1897,7 +1941,7 @@ impl<'a, E: BrowserSessionEffects> BrowserSessionManager<'a, E> {
         } else {
             session.expires_at_ms
         };
-        self.effects.close_tab(&browser, &tab)?;
+        close_target(self.effects, &browser, &tab)?;
         self.state.tabs.remove(&tab.id);
         self.state.tab_lifetimes.remove(&tab.id);
         self.state.tab_metadata.remove(&tab.id);

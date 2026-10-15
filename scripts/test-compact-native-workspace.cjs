@@ -19,9 +19,12 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   let browser;
   let releaseHeldFocus = null;
+  let releaseHeldClose = null;
   try {
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
     const page = await browser.newPage();
+    let closeDenied = false;
+    let closeHold = null;
     let ready = true;
     let focusRejection = null;
     let focusHold = null;
@@ -31,6 +34,18 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const lateSelections = [];
     await page.route("**/api/service/request", async route => {
       const body = route.request().postDataJSON(); requests.push(body);
+      if (body.action === "tab_close") {
+        if (closeHold) await closeHold;
+        if (closeDenied) return route.fulfill({ status: 403, json: { success: false, error: "SYNTHETIC-PRIVATE-CLOSE-DETAIL", failure: { code: "operator_tab_close_profile_policy_denied" } } });
+        const tabId = { 'target-alice': 'alice', 'target-bob': 'bob', 'target-carol': 'carol' }[body.params.targetId];
+        await page.evaluate(id => {
+          const closed = JSON.parse(sessionStorage.getItem('fixture-closed-tabs') || '[]');
+          sessionStorage.setItem('fixture-closed-tabs', JSON.stringify([...closed, id]));
+        }, tabId);
+        return route.fulfill({ json: { success: true, data: { source: 'managed-owner', closed: 0, activeIndex: 1,
+          targetId: body.params.targetId, closedTabId: tabId, currentTabId: 'bob', physicalTabClosed: true,
+          unrelatedTargetsPreserved: true, browserClosed: false } } });
+      }
       if (body.action === "view_focus") {
         let rejection = focusRejection;
         if (focusHold?.targetId === body.params.targetId) {
@@ -117,6 +132,17 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('status').filter({ hasText: 'URL copied' }).waitFor();
     assert.equal(requests.length, 0);
 
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).waitFor({ timeout: 1500 });
+    await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).press('Enter');
+    const closeDialog = page.getByRole('dialog', { name: 'Close tab?', exact: true });
+    await closeDialog.waitFor();
+    await closeDialog.getByText('Alice invoice', { exact: true }).waitFor();
+    assert.equal(requests.length, 0, 'opening close confirmation must not send an effect');
+    await closeDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await closeDialog.waitFor({ state: 'hidden' });
+    await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Tab actions for Alice invoice');
+    assert.equal(requests.length, 0, 'cancelling close must preserve every task');
     const rail = page.getByRole('complementary', { name: 'Browsers and tabs' });
     assert.equal(Math.round((await rail.boundingBox()).width), 224);
     const resize = page.getByRole('separator', { name: 'Browser rail width' });
@@ -286,10 +312,63 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.keyboard.press('Enter');
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob');
+    closeDenied = true;
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).click();
+    await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).click();
+    await closeDialog.getByText('Close could not be confirmed. Refresh browsers and check close permission before trying again.', { exact: true }).waitFor();
+    assert.equal((await closeDialog.innerText()).includes('SYNTHETIC-PRIVATE-CLOSE-DETAIL'), false);
+    assert.equal(await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).isDisabled(), true);
+    assert.equal(await page.locator('button.native-workspace-tab[aria-label="Alice invoice"]').count(), 1);
+    const deniedCount = requests.filter(request => request.action === 'tab_close').length;
+    await page.keyboard.press('Enter');
+    assert.equal(requests.filter(request => request.action === 'tab_close').length, deniedCount, 'denied close must not automatically replay');
+    await closeDialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    closeDenied = false;
+    const beforeClose = requests.filter(request => request.action === 'tab_close').length;
+    const selectedBeforeClose = page.url();
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).click();
+    await closeDialog.waitFor();
+    closeHold = new Promise(resolve => { releaseHeldClose = resolve; });
+    const closeReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') &&
+      response.request().postDataJSON()?.action === 'tab_close', { timeout: 1500 });
+    await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).click();
+    await closeDialog.getByText('Closing tab…', { exact: true }).waitFor();
+    assert.equal(await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).isDisabled(), true);
+    assert.equal(await closeDialog.getByRole('button', { name: 'Cancel', exact: true }).isDisabled(), true);
+    await page.keyboard.press('Escape');
+    await closeDialog.waitFor();
+    assert.equal(requests.filter(request => request.action === 'tab_close').length, beforeClose + 1);
+    releaseHeldClose(); closeHold = null;
+    await closeReply;
+    await page.getByRole('button', { name: 'Alice invoice', exact: true }).waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
+    assert.equal(page.url(), selectedBeforeClose, 'closing a background task must preserve the selected peer');
+    const closes = requests.filter(request => request.action === 'tab_close');
+    assert.equal(closes.length, beforeClose + 1);
+    assert.equal(closes.at(-1).browserId, 'alice-browser');
+    assert.equal(closes.at(-1).sessionName, 'alice-session');
+    assert.deepEqual(closes.at(-1).params, { targetId: 'target-alice', operatorClose: true });
+    await page.getByRole('button', { name: 'Refresh browsers', exact: true }).click();
+    assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).count(), 0);
+    await page.reload();
+    await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).count(), 0);
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob');
+    const requestsBeforeSelectedClose = requests.length;
+    await page.getByRole('button', { name: 'Tab actions for Bob invoice', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).click();
+    await page.getByRole('dialog', { name: 'Close tab?', exact: true }).getByRole('button', { name: 'Close tab', exact: true }).click();
+    await page.getByRole('status').filter({ hasText: 'The selected tab was closed. Select another tab to continue.' }).waitFor();
+    assert.equal(await page.locator('iframe[title="Native Remote View desktop"]').count(), 0, 'selected closed task must release its stale native frame');
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob', 'close must not silently select a peer');
+    assert.equal(requests.slice(requestsBeforeSelectedClose).filter(request => request.action !== 'tab_close').length, 0, 'close must not issue a new peer handoff or focus');
     assert.deepEqual(errors, []);
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
     releaseHeldFocus?.(null);
+    releaseHeldClose?.();
     if (browser) {
       const session = await browser.newBrowserCDPSession();
       const { processInfo } = await session.send('SystemInfo.getProcessInfo');

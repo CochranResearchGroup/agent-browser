@@ -137,6 +137,12 @@
     "params": {
       "type": "object",
       "additionalProperties": true,
+      "properties": {
+        "operatorClose": {
+          "type": "boolean",
+          "description": "Explicit authenticated dashboard tab_close mode. Requires one targetId, managed browserId, current tab_close_any permission and server-issued exact-owner authority. Ordinary agent tab_close requests omit this field."
+        }
+      },
       "description": "Action-specific parameters. Reserved id and action fields inside params are ignored by the service request wrapper."
     },
     "jobTimeoutMs": {

@@ -1458,6 +1458,57 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Execute {
                 browser,
                 tab,
+                command,
+                reply,
+                ..
+            } if command["action"] == "tab_close" && command["operatorClose"] == true => {
+                let result = runtime.block_on(async {
+                    use super::service_store::{
+                        LockedServiceStateRepository, ServiceStateRepository,
+                    };
+                    let repository = LockedServiceStateRepository::default_json()?;
+                    super::stream::verify_operator_tab_close(
+                        &repository.load_snapshot()?,
+                        &command,
+                    )?;
+                    if command["targetId"] != tab.target_id
+                        || command["browserId"] != browser.id
+                        || !recorded_browser_is_live(&mut browsers, &browser).await?
+                    {
+                        return Err("operator_tab_close_process_changed".to_string());
+                    }
+                    let state = browsers
+                        .get_mut(&browser.id)
+                        .ok_or("operator_tab_close_process_changed")?;
+                    let manager = state
+                        .browser
+                        .as_mut()
+                        .ok_or("operator_tab_close_process_changed")?;
+                    if manager.browser_pid() != Some(browser.pid)
+                        || manager.get_cdp_url() != browser.cdp_endpoint
+                    {
+                        return Err("operator_tab_close_process_changed".into());
+                    }
+                    super::stream::verify_operator_tab_close(
+                        &repository.load_snapshot()?,
+                        &command,
+                    )?;
+                    let data = manager
+                        .tab_close_target_id_for_release(&tab.target_id)
+                        .await?;
+                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                        targets.remove(&tab.target_id);
+                    }
+                    state.ref_map.clear();
+                    state.iframe_sessions.clear();
+                    state.active_frame_id = None;
+                    Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                });
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::Execute {
+                browser,
+                tab,
                 session_id,
                 session_name,
                 command,

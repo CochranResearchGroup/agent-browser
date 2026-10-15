@@ -28,6 +28,7 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
       };
     }),
     tabs: Object.values(workspace.tabs).map(tab => ({
+      managedTask: true,
       id: tab.id, browserId: tab.browserId, targetId: tab.targetId,
       sessionId: tab.sessionId, ownerSessionId: workspace.sessions[tab.sessionId]?.name ?? null,
       lifecycle: 'ready', url: tab.url, title: null, taskLabel: text(tab.taskMetadata?.taskName),

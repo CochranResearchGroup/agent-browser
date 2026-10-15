@@ -658,6 +658,64 @@ fn explicit_new_tab_is_the_only_ordinary_tab_growth_path() {
 }
 
 #[test]
+fn explicit_close_uses_the_named_tab_after_current_selection_changes() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-original".into(),
+            target_id: "target-original".into(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        new_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-peer".into(),
+            target_id: "target-peer".into(),
+            source: BrowserTabSource::ExplicitNew,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        },
+    );
+    let opened = manager
+        .open(OpenBrowserSession::exact_profile("alice", "profile-a", 100))
+        .unwrap();
+    manager.tab_for_navigation(&opened.session_id, 110).unwrap();
+    manager.new_tab(&opened.session_id, 120).unwrap();
+    let denied = manager.close_exact_tab_with(
+        &opened.session_id,
+        "tab-original",
+        130,
+        |_effects, _browser, _tab| Err("synthetic close permission revoked".into()),
+    );
+    assert_eq!(denied.unwrap_err(), "synthetic close permission revoked");
+    let closed = manager
+        .close_exact_tab_with(
+            &opened.session_id,
+            "tab-original",
+            140,
+            |effects, browser, tab| effects.close_tab(browser, tab),
+        )
+        .unwrap();
+    assert_eq!(closed.closed_tab_id, "tab-original");
+    assert_eq!(closed.current_tab_id.as_deref(), Some("tab-peer"));
+    drop(manager);
+    assert_eq!(
+        effects.tab_closes,
+        [(opened.browser_id.clone(), "target-original".into())]
+    );
+    assert!(effects.closes.is_empty());
+    assert!(state.tabs.contains_key("tab-peer"));
+    assert!(!state.tabs.contains_key("tab-original"));
+}
+
+#[test]
 fn closing_current_tab_selects_most_recent_remaining_tab() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
