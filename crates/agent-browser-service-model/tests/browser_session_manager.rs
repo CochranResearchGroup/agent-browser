@@ -716,6 +716,63 @@ fn explicit_close_uses_the_named_tab_after_current_selection_changes() {
 }
 
 #[test]
+fn exact_final_tab_close_preserves_borrowed_browser_custody() {
+    for borrowed in [false, true] {
+        let catalog = catalog_with_named_profile();
+        let mut state = BrowserSessionState::default();
+        let mut effects = FixtureEffects {
+            initial_tab: Some(BrowserTabAcquisition {
+                tab_id: "tab-only".into(),
+                target_id: "target-only".into(),
+                source: BrowserTabSource::Bootstrap,
+            }),
+            ..FixtureEffects::default()
+        };
+        let config = BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        };
+        let mut manager =
+            BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+        let opened = manager
+            .open(OpenBrowserSession::exact_profile("alice", "profile-a", 100))
+            .unwrap();
+        manager.tab_for_navigation(&opened.session_id, 110).unwrap();
+        drop(manager);
+        // The existing adoption owner publishes this custody marker. Closing
+        // an attributed tab never transfers ownership of its borrowed browser.
+        if borrowed {
+            state.shared_browser_ids.insert(opened.browser_id.clone());
+        }
+        let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+        let closed = manager
+            .close_exact_tab_with(
+                &opened.session_id,
+                "tab-only",
+                120,
+                |effects, browser, tab| effects.close_tab(browser, tab),
+            )
+            .unwrap();
+        assert_eq!(closed.closed_tab_id, "tab-only");
+        drop(manager);
+        assert_eq!(
+            effects.tab_closes,
+            [(opened.browser_id.clone(), "target-only".into())]
+        );
+        assert!(state.tabs.is_empty());
+        assert_eq!(state.browsers.contains_key(&opened.browser_id), borrowed);
+        assert_eq!(
+            effects.closes,
+            if borrowed {
+                vec![]
+            } else {
+                vec![opened.browser_id]
+            }
+        );
+    }
+}
+
+#[test]
 fn closing_current_tab_selects_most_recent_remaining_tab() {
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();

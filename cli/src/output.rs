@@ -6450,7 +6450,7 @@ existing browser owner. It requires authenticated dashboard access and current
 profile permission to close any tab. Cancelling sends no request. A confirmed
 close preserves peer tabs; closing the final owned tab also closes its browser.
 If close cannot be confirmed, refresh inventory and inspect permission before
-trying again. Native dashboard workflow qualification is still in progress.
+trying again.
 
 
 The five-minute idle reaper closes a browser when all peers are idle and no

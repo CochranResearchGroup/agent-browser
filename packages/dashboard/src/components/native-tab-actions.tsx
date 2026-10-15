@@ -12,7 +12,9 @@ const supplied = (value: unknown): string => typeof value === "string" && value.
 
 /** Read supplied provenance without treating descriptive names as identity proof.
  * Opening Properties and copying the supplied URL have no browser, selection
- * or handoff effect. Clipboard failure offers manual copying through Properties. */
+ * or handoff effect. Clipboard failure offers manual copying through Properties.
+ * Close captures an exact identity and requires an owner-confirmed close receipt
+ * before releasing the row or its selected native frame. */
 export function NativeTabActions({ node, tab, children, onClosed }: { node: WorkspaceNode; tab: WorkspaceServiceTab; children: ReactNode; onClosed?: () => Promise<void> }) {
   const [propertiesOpen, setPropertiesOpen] = useState(false);
   const [closeTarget, setCloseTarget] = useState<WorkspaceServiceTab | null>(null);

@@ -79,6 +79,12 @@ fn operator_tab_close_binds_headless_owner_target_and_current_close_permission()
     let command = service_request_command_with_dashboard_generation(&body, Some(&state), "operator", "task-a", None).unwrap();
     assert_ne!(command["operatorTabCloseProofToken"], "caller-forged-close");
     dashboard_auth::verify_operator_tab_close(&state, &command).unwrap();
+    let provenance = crate::native::service_request_provenance::capture_service_request_provenance(
+        &command, "request", "job", "connection", "lane");
+    assert_eq!(provenance.client_subject_id.as_deref(), Some("dashboard:operator"));
+    assert_eq!(provenance.identity_assurance, "authenticated-ingress");
+    assert_eq!(provenance.agent_name.as_deref(), Some("caller-label"));
+    assert!(!serde_json::to_string(&provenance).unwrap().contains(command["operatorTabCloseProofToken"].as_str().unwrap()));
     assert_eq!(serde_json::to_value(&state).unwrap(), original);
     assert_eq!(store.load_session_state().unwrap(), managed, "proof issuance must not mutate the owner");
     assert!(dashboard_auth::verify_operator_focus(&state, &command).is_err(), "close authority is not focus authority");

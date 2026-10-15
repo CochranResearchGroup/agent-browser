@@ -31,19 +31,18 @@ escalation and retry qualification. P237 retains #260/#261 ownership.
 ### 2026-10-11 P237 dashboard and handoff lifecycle
 
 The [implementation ledger](docs/dev/notes/0237-2026-10-14-implementation-ledger.md)
-now owns execution of approved tickets277 through283 on this branch. Compact
-source assets consume managed owner inventory and select exact physical tasks
-through native assignment authority. Public existing-target handoffs preserve
-the live document; queued stale native and legacy proofs are denied. A
-policy-faithful shared-origin fixture qualifies native workspace framing and
-standalone-link compatibility. Separate actual native renderer/owner composition
-qualifies first-use consumption with synthetic authentication, frames and physical
-custody. These are source receipts, not full physical viewer or external ingress
-acceptance. Ticket277 remains running; dependent UI tickets remain pending.
-Independent recovery and pressure criteria remain open. The default UI has not
-been replaced or published.
+now owns execution of approved tickets277 through283 on this branch. Tickets277
+and278 are locally validated through exact private source candidates with real
+native pixels/input and actual dashboard/public HTTP tab actions. Properties,
+copy, cancellation, denied close, peer preservation and exact final owned-browser
+closure pass; model fixtures preserve borrowed custody. Separate synthetic
+dashboard/native authentication is retained. Ticket279 is next; independent
+recovery281, pressure282, policy UI280 and sole-default retirement283 remain open.
+No production/default installation or external ingress is qualified. The ledger
+retains failed attempts, immutable pins, criterion reconciliation and exact empty
+cleanup censuses.
 
-[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS in `platform/native-dashboard-261`, with draft PR270. The [selection receipt](docs/dev/notes/0237-2026-10-12-native-selection-proof.md) preserves qualified source lifecycle, native selection and restart workflows with their limits. The operator rejected all A/B/C layouts on 2026-10-14. Plan version 2 keeps the left rail, removes green, prioritizes density and shows handoffs only through an on-demand rail control. The operator approved the revised compact neutral workspace and content-sized handoff drawer on 2026-10-14; real replacement UI implementation remains pending. Integrated P238/P240 are being reconciled in the owned branch; canonical integration and native provider/viewer acceptance remain open. Installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS in `platform/native-dashboard-261`, with draft PR270. The [selection receipt](docs/dev/notes/0237-2026-10-12-native-selection-proof.md) preserves qualified source lifecycle, native selection and restart workflows with their limits. The operator rejected all A/B/C layouts on 2026-10-14. Plan version 2 keeps the left rail, removes green, prioritizes density and shows handoffs only through an on-demand rail control. The operator approved the revised compact neutral workspace and content-sized handoff drawer on 2026-10-14; the compact workspace and tab actions are locally qualified behind the temporary route. Share/drawer, policy UI and sole-default retirement remain pending. Integrated P238/P240 are being reconciled in the owned branch; canonical integration and wider native recovery/pressure acceptance remain open. Installed runtimes and the retained foreign enrollment checkout remain outside this packet's effects.
 
 ### 2026-10-12 P238 workflow MCP
 
