@@ -482,6 +482,7 @@ impl RemoteViewApplicationTransport for PoolTransport {
                 Ok(environment)
             }
             RemoteViewApplicationRequest::IssueView {
+                assignment_id,
                 idempotency_key,
                 audience,
                 capability,
@@ -516,6 +517,17 @@ impl RemoteViewApplicationTransport for PoolTransport {
                     return Err(RemoteViewApplicationTransportError::OutcomeUnknown);
                 }
                 let mut issuance = fixture["viewIssuance"].clone();
+                let assignment = provider
+                    .assignments
+                    .iter()
+                    .find(|assignment| assignment.assignment_id == *assignment_id)
+                    .unwrap();
+                let target = &mut issuance["grant"]["request"]["target"];
+                target["assignmentId"] = assignment.assignment_id.clone().into();
+                target["desktopId"] = assignment.desktop_id.clone().into();
+                if assignment.desktop_id != fixture["assignment"]["desktopId"] {
+                    target["viewingDesktopId"] = assignment.desktop_id.clone().into();
+                }
                 issuance["grant"]["request"]["idempotencyKey"] = if provider.delayed_scoped_view {
                     format!("provider-scoped-{idempotency_key}")
                 } else {
@@ -2650,11 +2662,56 @@ fn valid_handoff_recreates_expired_task_tab_after_host_restart() {
     // A valid handoff still requires an owned, active native window.
     provider.borrow_mut().window_pid = Some(44);
     drop(consumer);
-    let mut consumer = host(&fixture, provider, calls);
-    let reopened = consumer.handle_command(&serde_json::json!({
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    // Both callers cache the expired aggregate before either starts recovery.
+    let mut stale = host(&fixture, provider.clone(), calls.clone());
+    let reopen = serde_json::json!({
         "action":"service_remote_view_handoff_resolve", "handoffId":handoff_id,
         "nativeDesktop":true, "activityAtMs":131
-    }));
+    });
+    let first_reopen = consumer.handle_command(&reopen);
+    assert_eq!(first_reopen["success"], true, "{first_reopen}");
+    // Native selection and compatibility view issuance are separate contracts.
+    // Lose the latter reply only after the recreated task is durable.
+    provider.borrow_mut().view_issued_at = Some(131);
+    provider.borrow_mut().lose_view_reply = true;
+    assert!(consumer.resolve_tab_handoff_view(&handoff_id, 131).is_err());
+    let recreated = fixture.store(false).load_session_state().unwrap();
+    assert_eq!(recreated.tabs.len(), 1);
+    let recreated_link = recreated.remote_view_tab_handoffs[&handoff_id].clone();
+    assert!(!recreated_link.target_expired);
+    assert!(recreated_link.recreation.is_none());
+    let launches = calls.get();
+    let requests = provider.borrow().view_requests.clone();
+    assert_eq!(requests.len(), 1);
+    let stale_result = stale.handle_command(&reopen);
+    assert_eq!(stale_result["success"], false, "{stale_result}");
+    assert_eq!(calls.get(), launches, "stale reopen must not launch");
+    assert_eq!(provider.borrow().view_requests, requests);
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        recreated
+    );
+    drop(stale);
+    drop(consumer);
+    provider.borrow_mut().lose_view_reply = false;
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    consumer.resolve_tab_handoff_view(&handoff_id, 131).unwrap();
+    let reopened = consumer.handle_command(&reopen);
+    assert_eq!(
+        calls.get(),
+        launches,
+        "restart must reuse the recreated target"
+    );
+    assert_eq!(provider.borrow().view_requests.len(), 2);
+    assert_eq!(
+        provider.borrow().view_requests[0],
+        provider.borrow().view_requests[1]
+    );
+    let settled = &consumer.state().remote_view_tab_handoffs[&handoff_id];
+    assert_eq!(settled.session_id, recreated_link.session_id);
+    assert_eq!(settled.tab_id, recreated_link.tab_id);
+    assert_eq!(consumer.state().tabs, recreated.tabs);
     assert_eq!(reopened["success"], true, "{reopened}");
     assert_eq!(reopened["data"]["handoffId"], handoff_id);
     assert_eq!(reopened["data"]["operatorVisible"]["state"], "ready");
