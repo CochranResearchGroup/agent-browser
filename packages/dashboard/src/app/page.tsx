@@ -993,7 +993,7 @@ function DashboardExperience({
     return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
       selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
       onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}>
-      {managedBrowser ? <NativeTaskViewport target={nativeTarget} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+      {managedBrowser ? <NativeTaskViewport target={nativeTarget} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
         projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
     </CompactNativeWorkspace>;
   }

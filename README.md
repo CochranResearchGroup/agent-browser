@@ -6093,6 +6093,11 @@ and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
 
+In the compact workspace preview, a selected tab missing from current inventory
+removes its stale viewer and offers Refresh browsers. The pending refresh is
+shown explicitly. The requested selection and peer tabs remain unchanged;
+refresh does not automatically choose another tab.
+
 Native workspace embedding requires the dashboard and Remote View to share a
 public origin. When an iframe opens the durable link, its read-only redirect
 selects Remote View's existing workspace mode; native authentication and its

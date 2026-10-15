@@ -6392,7 +6392,8 @@ A missing fence after an unknown prepare remains unresolved.
 The candidate checks durable profile custody before tab acquisition, creation,
 navigation, focus and commands; pending custody returns
 browser_session_idle_readback_required. Process-liveness observation remains available.
-Atomic admission against concurrent command/retirement starts remains pending.
+Command activity and retirement share atomic Runtime SQLite admission. Activity
+remains protected through publication; native composition acceptance is pending.
 Normal close confirmation requires positive OS process absence. Failed census
 returns browser_session_process_observation_unavailable and preserves unknown
 outcomes, including a lost close reply; PID-reuse identity proof remains separate.
@@ -6434,6 +6435,11 @@ navigate or open a viewer; expiration preserves peer tabs and the handoff link.
 Converging means pending readiness. Require opened plus operatorVisible.state=ready
 before attachment. Native desktop links do not require a viewer grant.
 Retained handoffs preserve logical tabs, not indefinite browser processes.
+In the compact workspace preview, a selected tab missing from current inventory
+removes its stale viewer and offers Refresh browsers. The pending refresh is
+shown explicitly. The requested selection and peer tabs remain unchanged;
+refresh does not automatically choose another tab.
+
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a
 client request. With the Remote View application provider, normal open and resolve prepare the
