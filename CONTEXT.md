@@ -107,8 +107,12 @@ A passive Runtime SQLite veto on automatic retirement of an admitted command's
 published root. Admission and retirement serialize in one writer transaction.
 Successful command acknowledgement retains the veto until session publication
 removes it atomically. An unknown effect retains custody, not replay authority.
-The first reservation promotes the reader fence to schema 3. This record owns
+Reservations require at least reader schema 3. This record owns
 neither command results nor tab-creation replay.
+Original published kernel evidence is frozen at admission, never backfilled for
+legacy rows. Positive original-process exit settles only its resource veto;
+unknown command history remains. Evidence and ended-resource settlement require
+reader schema 4. Unavailable readback vetoes replacement before launch.
 
 **Idle retirement custody**:
 The Browser Runtime's durable exact-baseline intent, native preparation, close

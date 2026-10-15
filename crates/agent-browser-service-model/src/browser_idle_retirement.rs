@@ -528,9 +528,24 @@ pub struct BrowserActivityRecord {
     pub id: String,
     pub browser: ManagedBrowserInstance,
     pub acknowledged: bool,
+    /// Immutable original evidence joined from published launch custody.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub process_identity: Option<RecordedProcessIdentity>,
+    /// Resource settlement does not settle or replay the unknown command.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub original_ended: bool,
 }
 
 pub trait BrowserIdleRetirementCustodyStore {
+    /// Stores without activity admission cannot have activity obligations.
+    fn browser_activity_records(&mut self) -> Result<Vec<BrowserActivityRecord>> {
+        Ok(Vec::new())
+    }
+    /// CAS acknowledgement of positive original-process-ended readback only.
+    fn settle_browser_activity_resource(&mut self, _record: &BrowserActivityRecord) -> Result<()> {
+        Err(BrowserIdleRetirementStoreError::Unavailable)
+    }
+
     /// Reserve the exact published root before entering a physical command.
     fn admit_browser_activity(
         &mut self,

@@ -361,9 +361,22 @@ impl BrowserSessionEffects for Process {
     }
     fn observe_idle_retirement_effect(
         &mut self,
-        _scope: &BrowserIdleRetirementScope,
-        _tab: Option<&ManagedBrowserTab>,
+        scope: &BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
     ) -> Result<bool, String> {
+        if self.root.join("activity-original-readback").exists() {
+            assert!(
+                tab.is_none(),
+                "activity reconciliation observes the original root only"
+            );
+            assert_eq!(
+                scope.process_identity.as_ref().unwrap().start_token,
+                format!("synthetic-original:{}", scope.browser.pid)
+            );
+            if self.root.join("activity-readback-unavailable").exists() {
+                return Err("synthetic_original_activity_readback_unavailable".into());
+            }
+        }
         Ok(self.root.join("idle-process-absent").exists())
     }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
@@ -446,8 +459,18 @@ impl BrowserSessionEffects for Process {
         &mut self,
         browser: &ManagedBrowserInstance,
         _tab: &ManagedBrowserTab,
-        _url: &str,
+        url: &str,
     ) -> Result<(), String> {
+        if std::fs::read_to_string(self.root.join("command-activity-unknown-profile"))
+            .is_ok_and(|profile| profile == browser.profile_id)
+            && url == "https://synthetic.example/unknown"
+        {
+            let count_path = self.root.join("unknown-navigation-count");
+            let count = std::fs::read_to_string(&count_path)
+                .map_or(0, |value| value.parse::<u32>().unwrap());
+            std::fs::write(count_path, (count + 1).to_string()).unwrap();
+            return Err("synthetic_navigation_outcome_unknown".into());
+        }
         let race = self.root.join("command-retirement-race.json");
         if race.exists() {
             use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};

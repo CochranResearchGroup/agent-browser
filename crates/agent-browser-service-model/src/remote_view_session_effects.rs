@@ -850,6 +850,36 @@ impl<
         if self.pending.is_some() {
             return Err("remote_view_session_launch_readback_required".into());
         }
+        let activities = self
+            .store
+            .browser_activity_records()
+            .map_err(|_| "browser_session_activity_readback_unavailable")?;
+        // Only atomic publication removes transient acknowledged rows. A lost
+        // reply may leave local IDs after that commit, even with unchanged
+        // session JSON. Ended resources likewise keep history, not local vetoes.
+        self.activities.retain(|id| {
+            activities
+                .iter()
+                .any(|record| &record.id == id && !record.original_ended)
+        });
+        for activity in activities
+            .into_iter()
+            .filter(|activity| !activity.original_ended)
+        {
+            let scope = BrowserIdleRetirementScope {
+                browser: activity.browser.clone(),
+                process_identity: activity.process_identity.clone(),
+                tabs: Vec::new(),
+            };
+            // No target inventory, attachment or effect. Unavailable evidence
+            // retains the veto; only positive original exit settles resources.
+            if self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true) {
+                match self.store.settle_browser_activity_resource(&activity) {
+                    Ok(()) | Err(BrowserIdleRetirementStoreError::Conflict) => (),
+                    Err(_) => return Err("browser_session_activity_readback_unavailable".into()),
+                }
+            }
+        }
         self.retirements = self
             .store
             .idle_retirement_records()

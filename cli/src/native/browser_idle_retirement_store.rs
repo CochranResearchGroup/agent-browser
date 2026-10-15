@@ -46,10 +46,10 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
     let version: i64 = connection
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .map_err(|_| Error::Unavailable)?;
-    if !ledger.records.is_empty() && !(2..=3).contains(&version) {
+    if !ledger.records.is_empty() && !(2..=4).contains(&version) {
         return Err(Error::InvalidRecord);
     }
-    if !ledger.activities.is_empty() && version != 3 {
+    if !ledger.activities.is_empty() && !(3..=4).contains(&version) {
         return Err(Error::InvalidRecord);
     }
     for (id, activity) in &ledger.activities {
@@ -57,6 +57,15 @@ fn ledger(connection: &Connection) -> Result<Ledger> {
             || uuid::Uuid::parse_str(id).is_err()
             || activity.browser.pid == 0
             || activity.browser.profile_id.is_empty()
+            || ((activity.process_identity.is_some() || activity.original_ended) && version != 4)
+            || activity.process_identity.as_ref().is_some_and(|identity| {
+                identity.pid != activity.browser.pid
+                    || identity.start_token.trim().is_empty()
+                    || identity
+                        .executable_path
+                        .as_ref()
+                        .is_none_or(|path| path.trim().is_empty())
+            })
         {
             return Err(Error::InvalidRecord);
         }
@@ -98,6 +107,13 @@ pub(super) fn reject_retirement_admission(
     profile_id: &str,
     assignment: &RemoteViewAssignmentRecord,
 ) -> Result<()> {
+    if ledger(connection)?
+        .activities
+        .values()
+        .any(|activity| !activity.original_ended && activity.browser.profile_id == profile_id)
+    {
+        return Err(Error::ActivityActive);
+    }
     if ledger(connection)?.records.values().any(|record| {
         !record.is_terminal()
             && (record.intent.provider.assignment.desktop_id == assignment.desktop_id
@@ -125,7 +141,7 @@ pub(super) fn reject_retirement_publication(
     for activity in ledger(connection)?
         .activities
         .values()
-        .filter(|activity| !activity_ids.contains(&activity.id))
+        .filter(|activity| !activity.original_ended && !activity_ids.contains(&activity.id))
     {
         let root = &activity.browser;
         if after.browsers.get(&root.id).is_none_or(|candidate| {
@@ -229,6 +245,32 @@ pub(super) fn reject_retirement_publication(
 }
 
 impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
+    fn browser_activity_records(&mut self) -> Result<Vec<BrowserActivityRecord>> {
+        Ok(ledger(self.remote_view_mutation_connection())?
+            .activities
+            .into_values()
+            .collect())
+    }
+    fn settle_browser_activity_resource(&mut self, previous: &BrowserActivityRecord) -> Result<()> {
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let mut records = ledger(&transaction)?;
+        let record = records
+            .activities
+            .get_mut(&previous.id)
+            .ok_or(Error::Conflict)?;
+        if record != previous {
+            return Err(Error::Conflict);
+        }
+        record.original_ended = true;
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction
+            .pragma_update(None, "user_version", 4i64)
+            .map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
     fn admit_browser_activity(
         &mut self,
         id: &str,
@@ -263,17 +305,35 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         {
             return Err(Error::Conflict);
         }
+        let root = expected.browsers.get(&browser.id).ok_or(Error::Conflict)?;
+        let process_identity =
+            if root.desktop.is_none() || expected.shared_browser_ids.contains(&root.id) {
+                None
+            } else {
+                super::browser_launch_custody_store::published_process_identity(&transaction, root)
+                    .map_err(|_| Error::Unavailable)?
+            };
+        let minimum_version = if process_identity.is_some() { 4 } else { 3 };
         records.activities.insert(
             id.into(),
             BrowserActivityRecord {
                 id: id.into(),
                 browser: browser.clone(),
                 acknowledged: false,
+                process_identity,
+                original_ended: false,
             },
         );
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction
-            .pragma_update(None, "user_version", 3i64)
+            .pragma_update(
+                None,
+                "user_version",
+                transaction
+                    .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                    .map_err(|_| Error::Unavailable)?
+                    .max(minimum_version),
+            )
             .map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
@@ -283,11 +343,11 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
         let mut records = ledger(&transaction)?;
-        records
-            .activities
-            .get_mut(id)
-            .ok_or(Error::Conflict)?
-            .acknowledged = true;
+        let record = records.activities.get_mut(id).ok_or(Error::Conflict)?;
+        if record.original_ended {
+            return Err(Error::Conflict);
+        }
+        record.acknowledged = true;
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
@@ -322,10 +382,11 @@ impl BrowserIdleRetirementCustodyStore for BrowserSessionSqliteStore {
         }
         intent.matches_baseline(expected)?;
         if records.activities.values().any(|activity| {
-            intent
-                .scopes
-                .iter()
-                .any(|scope| scope.browser.profile_id == activity.browser.profile_id)
+            !activity.original_ended
+                && intent
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.browser.profile_id == activity.browser.profile_id)
         }) {
             return Err(Error::ActivityActive);
         }
@@ -503,7 +564,7 @@ impl BrowserSessionSqliteStore {
             if !records
                 .activities
                 .get(id)
-                .is_some_and(|record| record.acknowledged)
+                .is_some_and(|record| record.acknowledged || record.original_ended)
             {
                 return Err(Error::Conflict);
             }
@@ -542,7 +603,16 @@ impl BrowserSessionSqliteStore {
         )
         .map_err(|_| Error::Unavailable)?;
         for id in activity_ids {
-            records.activities.remove(id);
+            // Resource-ended history is immutable outcome evidence, not a
+            // transient reservation to delete. A delayed publisher can still
+            // discard its local ID without erasing the retained record.
+            if records
+                .activities
+                .get(id)
+                .is_some_and(|record| !record.original_ended)
+            {
+                records.activities.remove(id);
+            }
         }
         // History projection may archive terminal rows in this transaction.
         // Bind custody to the actual retained session document, not a pre-archive copy.
@@ -711,6 +781,55 @@ mod tests {
             .compare_and_save_session_state(&state, &metadata)
             .unwrap();
         assert_eq!(owner.load_session_state().unwrap(), metadata);
+    }
+
+    #[test]
+    fn activity_original_evidence_is_immutable_and_resource_settlement_is_retained() {
+        let fixture = Fixture::new();
+        let mut owner = fixture.open(true);
+        let original = RecordedProcessIdentity {
+            pid: 42,
+            start_token: "original-kernel".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: None,
+        };
+        let (state, intent, _) = setup_with_identity(&mut owner, Some(original.clone()));
+        let id = uuid::Uuid::new_v4().to_string();
+        owner
+            .admit_browser_activity(&id, &intent.scopes[0].browser, &state)
+            .unwrap();
+        let record = owner.browser_activity_records().unwrap().remove(0);
+        assert_eq!(record.process_identity, Some(original));
+        let version: i64 = owner
+            .remote_view_mutation_connection()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 4);
+        let mut substituted = record.clone();
+        substituted.process_identity.as_mut().unwrap().start_token = "replacement-kernel".into();
+        assert_eq!(
+            owner.settle_browser_activity_resource(&substituted),
+            Err(BrowserIdleRetirementStoreError::Conflict)
+        );
+        assert_eq!(
+            owner.browser_activity_records().unwrap(),
+            vec![record.clone()]
+        );
+        owner.settle_browser_activity_resource(&record).unwrap();
+        drop(owner);
+        let mut restarted = fixture.open(false);
+        let retained = restarted.browser_activity_records().unwrap().remove(0);
+        assert!(retained.original_ended);
+        assert!(!retained.acknowledged);
+        assert_eq!(retained.process_identity, record.process_identity);
+        assert_eq!(
+            restarted.acknowledge_browser_activity(&id),
+            Err(BrowserIdleRetirementStoreError::Conflict)
+        );
+        assert_eq!(
+            restarted.claim_idle_retirement(&intent, &state).unwrap(),
+            BrowserIdleRetirementAdmission::New
+        );
     }
 
     fn setup(

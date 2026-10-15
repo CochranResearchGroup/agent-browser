@@ -44,7 +44,7 @@ fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
         let version: i64 = connection
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
-        if !(2..=3).contains(&version) {
+        if !(2..=4).contains(&version) {
             return Err(LaunchCustodyStoreError::InvalidRecord);
         }
     }

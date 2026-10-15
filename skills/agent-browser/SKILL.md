@@ -63,13 +63,17 @@ the installed CLI to continue the task while integration is corrected; server
 
 Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
 
-Browser Runtime reads SQLite schemas 1, 2 and 3. The first native idle-retirement
+Browser Runtime reads SQLite schemas 1 through 4. The first native idle-retirement
 custody claim promotes schema 1 to schema 2 in the same transaction as its record.
-The first command-activity reservation atomically promotes the database to
-schema 3. Keep a schema-3-capable binary with that database and its backups;
-older readers reject it. Activity reservations prevent automatic retirement
+Command-activity reservations require at least schema 3. Original-process
+activity evidence and ended-resource settlement require schema 4. Each write
+atomically advances the database to its required reader version without downgrading it. Keep a schema-4-capable binary with that database and its
+backups; older readers reject it. Activity reservations prevent automatic retirement
 through command execution and session publication. Unknown effects retain their
 veto and original readback obligation; acknowledgement alone does not release it.
+Positive original-process exit permits resource recovery while preserving the
+unknown command record. Unavailable observation retains the veto; recovery does
+not replay the original command or adopt a replacement process as its evidence.
 
 The automatic-close candidate persists its exact operation before preparing
 native viewer exclusion, records each close attempt before the physical effect,

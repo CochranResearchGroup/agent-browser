@@ -4543,6 +4543,24 @@ impl BrowserSessionPersistence for NativeUseReplyFailure {
         retirement_ids: &[String],
         activity_ids: &[String],
     ) -> Result<(), String> {
+        if self.mode.get() == 3 && !activity_ids.is_empty() {
+            self.mode.set(0);
+            self.attempts.set(self.attempts.get() + 1);
+            return Err("synthetic_activity_publication_unavailable".into());
+        }
+        if self.mode.get() == 4 && !activity_ids.is_empty() {
+            self.mode.set(0);
+            self.attempts.set(self.attempts.get() + 1);
+            BrowserSessionPersistence::publish_session_effects(
+                &mut self.store,
+                expected,
+                state,
+                intent,
+                retirement_ids,
+                activity_ids,
+            )?;
+            return Err("synthetic_activity_publication_reply_lost".into());
+        }
         let publishes_use = state.tab_metadata.iter().any(|(id, metadata)| {
             metadata.first_human_use_at_ms.is_some()
                 && expected
@@ -6194,6 +6212,244 @@ fn admitted_navigation_prevents_competing_retirement_before_its_effect() {
         "once"
     );
     navigation.unwrap();
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *consumer.state()
+    );
+}
+
+#[test]
+fn unknown_command_activity_recovers_only_after_original_process_readback() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    let opened = consumer
+        .open(OpenBrowserSession::exact_profile("Alice", "profile-a", 100))
+        .unwrap();
+    consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert!(consumer
+        .state()
+        .remote_view_tab_handoffs
+        .values()
+        .any(|link| link.session_id == opened.session_id));
+    std::fs::write(
+        fixture.root.join("command-activity-unknown-profile"),
+        "profile-a",
+    )
+    .unwrap();
+    assert_eq!(
+        consumer
+            .navigate(&opened.session_id, "https://synthetic.example/unknown", 101)
+            .unwrap_err(),
+        "synthetic_navigation_outcome_unknown"
+    );
+    drop(consumer);
+    std::fs::write(
+        fixture.root.join("activity-original-readback"),
+        "observe only",
+    )
+    .unwrap();
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    resumed
+        .open(OpenBrowserSession::exact_profile("Bob", "profile-b", 102))
+        .unwrap();
+    assert_eq!(calls.get(), 2, "unrelated profile must remain usable");
+    let baseline = resumed.state().clone();
+    let intent = fixture_retirement_intent(
+        &fixture,
+        provider,
+        &baseline,
+        &baseline.browsers[&opened.browser_id],
+    );
+    assert_eq!(
+        fixture
+            .store(false)
+            .claim_idle_retirement(&intent, &baseline),
+        Err(BrowserIdleRetirementStoreError::ActivityActive)
+    );
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    std::fs::write(
+        fixture.root.join("activity-readback-unavailable"),
+        "unknown",
+    )
+    .unwrap();
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":103});
+    assert!(resumed.execute_managed_command("Alice", &read).is_err());
+    assert_eq!(
+        calls.get(),
+        2,
+        "unresolved original activity must deny replacement before launch"
+    );
+    std::fs::remove_file(fixture.root.join("activity-readback-unavailable")).unwrap();
+    let recovered = resumed
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    assert_eq!(recovered["success"], true, "{recovered}");
+    assert_eq!(recovered["browserSession"]["sessionId"], opened.session_id);
+    assert_eq!(calls.get(), 3);
+    assert_eq!(
+        std::fs::read_to_string(fixture.root.join("unknown-navigation-count")).unwrap(),
+        "1",
+        "unknown navigation must not replay during recovery"
+    );
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *resumed.state()
+    );
+    let records = fixture.store(false).browser_activity_records().unwrap();
+    assert_eq!(
+        records.len(),
+        1,
+        "successful transient activities must be removed"
+    );
+    assert!(records[0].original_ended);
+    assert!(
+        !records[0].acknowledged,
+        "resource recovery must not settle unknown command outcome"
+    );
+    assert_eq!(records[0].browser.id, opened.browser_id);
+    assert!(records[0].process_identity.is_some());
+}
+
+#[test]
+fn acknowledged_activity_exit_clears_local_ids_and_preserves_history() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let attempts = Rc::new(Cell::new(0));
+    let mut consumer = host_with_persistence(
+        &fixture,
+        provider,
+        calls.clone(),
+        Mode::IdleRecovery,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: attempts.clone(),
+        },
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let session_id = opened["browserSession"]["sessionId"].as_str().unwrap();
+    mode.set(3);
+    assert_eq!(
+        consumer
+            .navigate(session_id, "https://synthetic.example/acknowledged", 101)
+            .unwrap_err(),
+        "synthetic_activity_publication_unavailable"
+    );
+    assert_eq!(attempts.get(), 1);
+    let record = fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .remove(0);
+    assert!(record.acknowledged);
+    assert!(!record.original_ended);
+    std::fs::write(fixture.root.join("idle-process-absent"), "absent").unwrap();
+    let mut continued = read.clone();
+    continued["activityAtMs"] = serde_json::json!(102);
+    let resumed = consumer
+        .execute_managed_command("Alice", &continued)
+        .expect("original exit must retire stale process-local publication IDs")
+        .unwrap();
+    assert_eq!(resumed["success"], true, "{resumed}");
+    assert_eq!(calls.get(), 2);
+    let records = fixture.store(false).browser_activity_records().unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].id, record.id);
+    assert!(records[0].acknowledged && records[0].original_ended);
+    assert_eq!(
+        fixture.store(false).load_session_state().unwrap(),
+        *consumer.state()
+    );
+}
+
+#[test]
+fn unchanged_activity_publication_lost_reply_does_not_block_next_command() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mode = Rc::new(Cell::new(0));
+    let attempts = Rc::new(Cell::new(0));
+    let mut consumer = host_with_persistence(
+        &fixture,
+        provider,
+        calls.clone(),
+        Mode::Success,
+        || 2001,
+        NativeUseReplyFailure {
+            store: fixture.store(false),
+            mode: mode.clone(),
+            attempts: attempts.clone(),
+        },
+    );
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let before = consumer.state().clone();
+    mode.set(4);
+    assert_eq!(
+        consumer
+            .execute_managed_command("Alice", &read)
+            .unwrap_err(),
+        "synthetic_activity_publication_reply_lost"
+    );
+    assert_eq!(attempts.get(), 1);
+    assert_eq!(fixture.store(false).load_session_state().unwrap(), before);
+    assert_eq!(*consumer.state(), before);
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .is_empty());
+    let continued = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/after-unchanged-publication",
+                "runtimeProfile":"profile-a", "activityAtMs":101,
+            }),
+        )
+        .expect("already-published activity ID must not obstruct the next command")
+        .unwrap();
+    assert_eq!(continued["success"], true, "{continued}");
+    assert_eq!(calls.get(), 1);
+    assert!(fixture
+        .store(false)
+        .browser_activity_records()
+        .unwrap()
+        .is_empty());
     assert_eq!(
         fixture.store(false).load_session_state().unwrap(),
         *consumer.state()
