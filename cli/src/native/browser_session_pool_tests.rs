@@ -3348,6 +3348,246 @@ fn existing_link_lifetime_switches_finite_and_perpetual_without_target_effects()
 }
 
 #[test]
+fn expired_link_deletion_fences_stale_policy_and_recovery_publication() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut winner = host(&fixture, provider.clone(), calls.clone());
+    let alice = winner.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/alice", "profileId":"profile-a", "activityAtMs":100,
+        "serviceName":"Original service", "agentName":"Original agent", "purpose":"Preserve original task context"
+    })).unwrap().unwrap();
+    let bob = winner.execute_managed_command("Bob", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/bob", "profileId":"profile-a", "activityAtMs":101
+    })).unwrap().unwrap();
+    let id = alice["browserSession"]["handoffId"].as_str().unwrap();
+    let finite = winner.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"set_link_lifetime", "ttlMs":10, "activityAtMs":100
+    }));
+    assert_eq!(finite["data"]["expiresAtMs"], 110, "{finite}");
+    let mut stale = host(&fixture, provider.clone(), calls.clone());
+    let before = winner.state().clone();
+    let effects_before = provider.borrow().operations.clone();
+    let launches_before = calls.get();
+    let deleted = winner.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"delete", "activityAtMs":110
+    }));
+    assert_eq!(deleted["data"]["status"], "deleted", "{deleted}");
+    for params in [
+        serde_json::json!({"handoffOperation":"set_link_lifetime","ttlMs":0}),
+        serde_json::json!({"handoffOperation":"set_tab_lifetime","tabInactivityMs":0}),
+        serde_json::json!({"handoffOperation":"prepare_human","pendingHumanRetentionMs":0}),
+        serde_json::json!({}),
+    ] {
+        let mut command = serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,"activityAtMs":111});
+        command
+            .as_object_mut()
+            .unwrap()
+            .extend(params.as_object().unwrap().clone());
+        let rejected = stale.handle_command(&command);
+        assert_eq!(rejected["success"], false, "{rejected}");
+        assert_eq!(
+            rejected["error"], "browser_session_publication_conflict",
+            "{rejected}"
+        );
+    }
+    drop(stale);
+    drop(winner);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let missing = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":112
+    }));
+    assert_eq!(
+        missing["error"], "remote_view_tab_handoff_missing",
+        "{missing}"
+    );
+    assert!(restarted
+        .state()
+        .remote_view_tab_handoffs
+        .contains_key(bob["browserSession"]["handoffId"].as_str().unwrap()));
+    assert_eq!(restarted.state().tabs, before.tabs);
+    assert_eq!(restarted.state().browsers, before.browsers);
+    assert_eq!(restarted.state().sessions, before.sessions);
+    assert_eq!(restarted.state().tab_metadata, before.tab_metadata);
+    assert_eq!(restarted.state().tab_lifetimes, before.tab_lifetimes);
+    assert_eq!(
+        restarted.state().pending_human_tabs,
+        before.pending_human_tabs
+    );
+    assert_eq!(provider.borrow().operations, effects_before);
+    assert_eq!(calls.get(), launches_before);
+}
+
+#[test]
+fn competing_link_delete_and_policy_write_publish_one_restart_safe_outcome() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut initial = host(&fixture, provider, calls);
+    let opened = initial.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/concurrent","profileId":"profile-a","activityAtMs":100
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let before = initial.state().clone();
+    drop(initial);
+    let results = std::thread::scope(|scope| {
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let mut starts = Vec::new();
+        let mut workers = Vec::new();
+        for operation in ["delete", "set_link_lifetime"] {
+            let fixture = &fixture;
+            let id = id.clone();
+            let ready = ready_tx.clone();
+            let (start_tx, start_rx) = std::sync::mpsc::channel();
+            starts.push(start_tx);
+            workers.push(scope.spawn(move || {
+                let provider = Rc::new(RefCell::new(Provider::default()));
+                let calls = Rc::new(Cell::new(0));
+                let mut owner = host(fixture, provider.clone(), calls.clone());
+                ready.send(()).unwrap();
+                start_rx
+                    .recv_timeout(std::time::Duration::from_secs(10))
+                    .expect("bounded owner start");
+                let response = owner.handle_command(&serde_json::json!({
+                    "action":"service_remote_view_handoff_resolve","handoffId":id,
+                    "handoffOperation":operation,"ttlMs":1000,"activityAtMs":150
+                }));
+                assert!(provider.borrow().operations.is_empty());
+                assert_eq!(calls.get(), 0);
+                (operation, response)
+            }));
+        }
+        // A failed setup cannot strand its peer on an unbounded barrier.
+        for _ in 0..2 {
+            ready_rx
+                .recv_timeout(std::time::Duration::from_secs(10))
+                .expect("bounded owner readiness");
+        }
+        for start in starts {
+            start.send(()).unwrap();
+        }
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(
+        results
+            .iter()
+            .filter(|(_, response)| response["success"] == true)
+            .count(),
+        1,
+        "{results:?}"
+    );
+    for (_, response) in results
+        .iter()
+        .filter(|(_, response)| response["success"] != true)
+    {
+        assert_eq!(
+            response["error"], "browser_session_publication_conflict",
+            "{response}"
+        );
+    }
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    let readback = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":151
+    }));
+    let delete_won = results
+        .iter()
+        .any(|(operation, response)| *operation == "delete" && response["success"] == true);
+    if delete_won {
+        assert_eq!(
+            readback["error"], "remote_view_tab_handoff_missing",
+            "{readback}"
+        );
+    } else {
+        assert_eq!(readback["success"], true, "{readback}");
+        assert_eq!(readback["data"]["expiresAtMs"], 1150, "{readback}");
+    }
+    assert_eq!(restarted.state().tabs, before.tabs);
+    assert_eq!(restarted.state().browsers, before.browsers);
+    assert_eq!(restarted.state().sessions, before.sessions);
+    assert_eq!(restarted.state().tab_metadata, before.tab_metadata);
+    assert!(provider.borrow().operations.is_empty());
+    assert_eq!(calls.get(), 0);
+}
+
+#[test]
+fn independent_handoff_policy_deadlines_and_creation_context_survive_restart() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut owner = host(&fixture, provider.clone(), calls.clone());
+    let opened = owner.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate","url":"https://synthetic.example/policies","profileId":"profile-a","activityAtMs":100,
+        "serviceName":"Original service","agentName":"Original agent","humanName":"Supplied operator",
+        "originKind":"agent","purpose":"Original purpose","requestId":"creation-request"
+    })).unwrap().unwrap();
+    let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+    let before = owner.state().clone();
+    let effects = provider.borrow().operations.clone();
+    let launches = calls.get();
+    for params in [
+        serde_json::json!({"handoffOperation":"set_link_lifetime","ttlMs":1000,"activityAtMs":110}),
+        serde_json::json!({"handoffOperation":"set_tab_lifetime","tabInactivityMs":10000,"activityAtMs":120}),
+        serde_json::json!({"handoffOperation":"prepare_human","pendingHumanRetentionMs":50,"activityAtMs":130}),
+    ] {
+        let mut command = serde_json::json!({"action":"service_remote_view_handoff_resolve","handoffId":id,
+            "serviceName":"Later editor","agentName":"Later editor","purpose":"Do not replace origin"});
+        command
+            .as_object_mut()
+            .unwrap()
+            .extend(params.as_object().unwrap().clone());
+        let response = owner.handle_command(&command);
+        assert_eq!(response["success"], true, "{response}");
+    }
+    drop(owner);
+    let mut restarted = host(&fixture, provider.clone(), calls.clone());
+    for (now, retained) in [(179, true), (180, false)] {
+        let readback = restarted.handle_command(&serde_json::json!({
+            "action":"service_remote_view_handoff_resolve","handoffId":id,"handoffOperation":"inspect","activityAtMs":now
+        }));
+        assert_eq!(readback["success"], true, "{readback}");
+        assert_eq!(readback["data"]["createdAtMs"], 100);
+        assert_eq!(readback["data"]["expiresAtMs"], 1110);
+        assert_eq!(readback["data"]["tabLifetime"]["inactivityMs"], 10000);
+        assert_eq!(readback["data"]["pendingHuman"]["requestedAtMs"], 130);
+        assert_eq!(readback["data"]["pendingHuman"]["expiresAtMs"], 180);
+        assert_eq!(readback["data"]["pendingHuman"]["retained"], retained);
+        assert_eq!(
+            readback["data"]["taskMetadata"]["agentName"],
+            "Original agent"
+        );
+        assert_eq!(
+            readback["data"]["taskMetadata"]["purpose"],
+            "Original purpose"
+        );
+        assert_eq!(
+            readback["data"]["taskMetadata"]["requestId"],
+            "creation-request"
+        );
+    }
+    let expired = restarted.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve","handoffId":id,"activityAtMs":1110
+    }));
+    assert_eq!(expired["error"], "remote_view_handoff_expired", "{expired}");
+    assert!(restarted.state().remote_view_tab_handoffs.contains_key(id));
+    assert_eq!(restarted.state().tabs, before.tabs);
+    assert_eq!(restarted.state().browsers, before.browsers);
+    assert_eq!(restarted.state().sessions, before.sessions);
+    assert_eq!(restarted.state().tab_metadata, before.tab_metadata);
+    assert_eq!(provider.borrow().operations, effects);
+    assert_eq!(calls.get(), launches);
+}
+
+#[test]
 fn deleting_handoff_revokes_only_link_and_preserves_target_across_restart() {
     for link_ttl in [None, Some(5)] {
         let fixture = Fixture::new();
@@ -3361,7 +3601,7 @@ fn deleting_handoff_revokes_only_link_and_preserves_target_across_restart() {
         if let Some(ttl) = link_ttl {
             let limited = consumer.handle_command(&serde_json::json!({
                 "action":"service_remote_view_handoff_resolve", "handoffId":id,
-                "handoffOperation":"extend", "ttlMs":ttl, "activityAtMs":100
+                "handoffOperation":"set_link_lifetime", "ttlMs":ttl, "activityAtMs":100
             }));
             assert_eq!(limited["success"], true, "{limited}");
         }
