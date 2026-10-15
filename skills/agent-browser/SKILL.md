@@ -12,7 +12,7 @@ Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", 
 
 Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
 
-For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `data.operatorVisible.state: "ready"`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
+For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `operatorVisible.state=ready`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
 
 The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Readiness alone does not record human use; the owner requires native display confirmation. Keep using the same opaque URL while the owner maintains pending handoff context.
 
@@ -26,11 +26,12 @@ task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab aft
 an owner restart reconnects to the verified live browser and preserves existing
 tabs. Peer tabs stay outside this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
+Close rejects a changed selection.
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.
 
-Return, store and reopen only the opaque `handoffUrl` at `/remote-view/<handoff-id>`, never a provider URL.
+Return, store, and reopen only `handoffUrl` at `/remote-view/<handoff-id>`. Never send providerExternalUrl.
 
 ## Operator workspace
 

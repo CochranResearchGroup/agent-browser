@@ -147,7 +147,7 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>
       </section>
       <NativeHandoffDrawer open={handoffsOpen} onOpenChange={setHandoffsOpen} busy={shareBusy} error={shareError} sharedLink={sharedLink}
-        records={handoffs} inventoryLoading={loading} inventoryError={error ? "Could not refresh handoffs. Showing the last reported records." : null} onRefresh={onRefresh}
+        railWidth={collapsed ? 40 : width} records={handoffs} inventoryLoading={loading} inventoryError={error ? "Could not refresh handoffs. Showing the last reported records." : null} onRefresh={onRefresh}
         onReturnFocus={() => shareFocus.current?.focus()} />
     </main>
   );

@@ -137,3 +137,5 @@ Do not bulk-edit old notes merely to add lane metadata. Add metadata when a
 note becomes an active input or when a new plan cites it. This preserves hashes,
 links, and historical meaning while preventing the directory from becoming the
 active backlog.
+
+- [P237 bounded integration review](0237-2026-10-15-bounded-review.md): frozen Standards/Spec adjudication and one bounded remediation pass.

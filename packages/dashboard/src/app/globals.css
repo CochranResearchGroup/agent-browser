@@ -5642,7 +5642,9 @@ button {
 
 .native-tab-dialog-actions button:disabled { opacity: .5; cursor: default; }
 
-.native-handoff-drawer { width: max-content; min-width: min(420px, calc(100vw - 32px)); max-width: min(1000px, calc(100vw - 32px)); animation: none; transition: none; }
+.native-handoff-drawer { left: calc(var(--native-handoff-rail-width, 224px) + 8px); translate: 0 -50%; width: max-content; min-width: min(420px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); max-width: min(1000px, calc(100vw - var(--native-handoff-rail-width, 224px) - 24px)); animation: none; transition: none; }
+.native-handoff-drawer[data-state="open"] { animation: native-handoff-enter 140ms ease-out both; }
+@keyframes native-handoff-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .native-handoff-drawer input { display: block; box-sizing: border-box; width: 100%; min-width: 0; padding: 6px; border: 1px solid #555560; color: inherit; background: #202023; }
 .native-handoff-table { color: inherit; width: 100%; border-collapse: collapse; text-align: left; }
 .native-handoff-table th, .native-handoff-table td { padding: 8px; vertical-align: top; max-width: 240px; overflow-wrap: anywhere; border-bottom: 1px solid #3a3a40; }
@@ -5656,13 +5658,14 @@ button {
 .native-handoff-table .native-handoff-detail-row td { max-width: none; }
 .native-handoff-drawer .native-handoff-details > div { grid-template-columns: 70px minmax(0, 1fr); }
 @media (max-width: 600px) {
+  .native-handoff-drawer { left: 16px; min-width: min(420px, calc(100vw - 32px)); max-width: calc(100vw - 32px); }
   .native-handoff-table, .native-handoff-table tbody { display: block; }
   .native-handoff-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
   .native-handoff-table tr { display: grid; grid-template-columns: minmax(0, 1fr); padding: 8px 0; border-bottom: 1px solid #45454d; }
   .native-handoff-details { grid-template-columns: minmax(0, 1fr); }
   .native-handoff-table td { max-width: none; padding: 4px 0; border: 0; }
 }
-@media (prefers-reduced-motion: reduce) { .native-handoff-drawer { animation: none; transition: none; } }
+@media (prefers-reduced-motion: reduce) { .native-handoff-drawer[data-state="open"] { animation: none; transition: none; } }
 
 .native-handoff-policy { padding: 8px 0; }
 .native-handoff-policy fieldset { border: 1px solid #45454d; border-radius: 4px; padding: 12px; }

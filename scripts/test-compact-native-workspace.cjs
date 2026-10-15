@@ -24,7 +24,8 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   let releaseHeldDelete = null;
   try {
     browser = await chromium.launch({ executablePath: process.env.AGENT_BROWSER_TEST_CHROME || '/usr/bin/google-chrome', headless: true });
-    const page = await browser.newPage();
+    // Keep the supplied epoch-time assertion independent of the host timezone.
+    const page = await browser.newPage({ timezoneId: "UTC" });
     let closeDenied = false;
     let shareFailure = false;
     let policyFailure = false;
@@ -111,8 +112,24 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const retainedDrawer = page.getByRole('dialog', { name: 'Handoffs', exact: true });
     await retainedDrawer.waitFor({ timeout: 1500 });
     assert.equal(await retainedDrawer.evaluate(node => getComputedStyle(node).animationName), 'none');
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    const motion = await retainedDrawer.evaluate(node => ({ name: getComputedStyle(node).animationName,
+      seconds: parseFloat(getComputedStyle(node).animationDuration) }));
+    assert.notEqual(motion.name, 'none', 'the drawer must animate when motion is allowed');
+    assert.ok(motion.seconds > 0 && motion.seconds < 0.5, 'drawer motion must be brief');
+    const motionRailBounds = await page.getByRole('complementary', { name: 'Browsers and tabs', exact: true, includeHidden: true }).boundingBox();
+    const anchoredDrawerBounds = await retainedDrawer.boundingBox();
+    assert.ok(anchoredDrawerBounds.x >= motionRailBounds.x + motionRailBounds.width && anchoredDrawerBounds.x <= motionRailBounds.x + motionRailBounds.width + 16,
+      'desktop drawer must anchor alongside the browser rail');
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+
     const retainedRow = retainedDrawer.getByRole('row').filter({ hasText: 'Retained review' });
     await retainedRow.waitFor({ timeout: 1500 });
+    for (const control of [retainedRow.getByRole('link', { name: 'Open', exact: true }),
+      ...['Copy', 'Inspect', 'Policies', 'Delete link'].map(name => retainedRow.getByRole('button', { name, exact: true }))]) {
+      assert.equal(await control.locator('svg').count(), 1, 'handoff row actions must use compact accessible SVG controls');
+      assert.ok(await control.getAttribute('title'), 'handoff row controls need a tooltip');
+    }
     assert.equal(await retainedRow.evaluate(node => getComputedStyle(node).color), await retainedDrawer.evaluate(node => getComputedStyle(node).color), 'retained rows must inherit readable dialog text color');
     await retainedRow.getByText('Audit service', { exact: true }).waitFor();
     await retainedRow.getByText('Casey operator', { exact: true }).waitFor();
@@ -310,9 +327,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const properties = page.getByRole('dialog', { name: 'Tab properties', exact: true });
     await properties.waitFor();
     for (const value of ['Synthetic billing', 'Ada worker', 'Review operator', 'Review invoice',
-      'Check supplied invoice totals', 'shared-profile', 'desktop-a', 'https://example.test/alice', 'Alice invoice']) {
+      'Check supplied invoice totals', 'job-review', 'request-review', 'shared-profile', 'desktop-a', 'https://example.test/alice', 'Alice invoice']) {
       await properties.getByText(value, { exact: true }).waitFor();
     }
+    await properties.getByText(/1970/).waitFor();
     await page.screenshot({ path: path.join(artifacts, 'properties-desktop.png') });
     await page.setViewportSize({ width: 390, height: 760 });
     const dialogBounds = await properties.boundingBox();

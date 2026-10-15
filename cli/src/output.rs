@@ -7700,6 +7700,7 @@ MCP:
   Workflow catalog: open, navigate, snapshot, click, fill, screenshot, tab, handoff, continue, close.
   browser_command runs task page actions; browser_discover loads advanced metadata on demand.
   Every page action uses taskId; browser_tab preserves peers and replays a stable tabKey.
+  Tab close rejects a changed selection; refresh and select the intended tab again.
   Retired authority MCP operations and the legacy catalog are unavailable.
   mcp resources              List read-only service resource contracts
   mcp read <uri>             Read a service resource as JSON

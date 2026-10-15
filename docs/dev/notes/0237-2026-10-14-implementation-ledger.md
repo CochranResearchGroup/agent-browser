@@ -39,7 +39,7 @@ Current custody is the clean existing integration branch at 9cdb48c32e16b766abe6
 | 280 independent policy edits and revocation | 279 | validated | handoff policy workflow | actual native public policy/expiry/deletion composition plus owner SQLite restart/boundary/concurrent qualification |
 | 281 same-link expired-target recovery | none | validated | existing public lifecycle entry point | current paired native callbacks, exact host restart, native recovery/wake/Properties/two-peer composition and negative/stale/lost-reply owner tests |
 | 282 qualified human use and pressure | none | validated | native acknowledgement and eligibility | actual native first use, restart, pending/viewer/peer protection and eligible quota reclamation; separate controller/operation/clock and ambiguous-effect proofs |
-| 283 sole default workspace and compatibility | 278, 280, 281, 282 | running | default routing, retirement, docs and final qualification | next: retire the competing default UI and qualify the combined native workflow |
+| 283 sole default workspace and compatibility | 278, 280, 281, 282 | running | default routing, retirement, docs and final qualification | native complete workflow passed; cumulative checks passed; bounded review remediation running |
 
 States distinguish implemented, integrated and validated; no ticket unlocks on source edits alone. Validate the resulting integration tip before unlocking dependents. Tracker closure is separate.
 
@@ -680,3 +680,9 @@ Ticket283 is locally validated, and all seven tickets are locally validated. Tra
 ## Single broad review adjudicated
 
 Frozen review head bc5bdc38c764a51202cd42d34b7e56e7366d2d69 against original baseline3e5a38679d28ac8a20439e29004ea1315475ef8e is complete. `0237-2026-10-15-bounded-review.md` retains separate Standards and Spec axes and adjudications. One bounded remediation pass now covers exact MCP close expectation, Properties context, accessible SVG handoff actions, anchored motion-aware drawer and the stale ticket283 validation cell. Ledger decode growth is nonblocking backlog owned by P237/#105. Broad review is consumed; do not restart it. Ticket283 returns to running for focused remediation and affected native requalification.
+
+## Bounded remediation source checkpoint
+
+The single allowed remediation pass repairs the accepted close race, Properties context, SVG actions, anchored motion-aware drawer and stale retirement guidance. Exact RED/GREEN and fixture-prerequisite distinctions are in `0237-2026-10-15-bounded-review.md`; current affected checks pass in `/tmp/p237-review-` receipts. Reconcile earlier intermediate handoff-doc pass claims against their actual failed logs: those claims used a later command's exit status. The independently verified final handoff-doc check now passes and the main agent skill is9962bytes. No test is silently excluded or historical failure rewritten.
+
+A clean repaired source candidate and one fresh complete native requalification remain before final local acceptance. The resource ledger decode follow-up stays nonblocking under P237/#105. No second broad review, publication, shared-skill sync, provider-home mutation, tracker closure, push, merge or CI is authorized.

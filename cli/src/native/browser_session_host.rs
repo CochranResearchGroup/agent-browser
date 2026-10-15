@@ -1711,6 +1711,19 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             }
             "browser_session_tab_close" => {
                 let session_id = self.session_id_from_command(command)?;
+                // A task client can bind its earlier selection across commands.
+                // Reject a changed current tab before any physical close effect.
+                if command.get("expectedTabId").is_some() {
+                    let expected = required_string(command, "expectedTabId")?;
+                    let current = self
+                        .state
+                        .sessions
+                        .get(&session_id)
+                        .and_then(|session| session.current_tab_id.as_deref());
+                    if current != Some(expected) {
+                        return Err("browser_session_tab_close_selection_changed".into());
+                    }
+                }
                 let closed = self.close_current_tab(&session_id, now_ms)?;
                 Ok(serde_json::json!({
                     "sessionId": session_id,
@@ -3225,6 +3238,64 @@ mod tests {
         assert_eq!(result["data"]["tabId"], tab_id);
         assert_eq!(restarted.state().browsers.len(), 1);
         assert_eq!(restarted.state().tabs.len(), 1);
+    }
+
+    #[test]
+    fn task_tab_close_rejects_a_changed_current_tab_before_effects() {
+        let directory = TempDirectory::new();
+        let legacy_path = directory.0.join("state.json");
+        fs::write(
+            &legacy_path,
+            serde_json::json!({"profiles":{"work":{
+            "id":"work","name":"Work","userDataDir":directory.0.join("work"),
+            "profileClass":"durable_named"}}})
+            .to_string(),
+        )
+        .unwrap();
+        let mut host = BrowserSessionHost::load(
+            BrowserSessionJsonStore::new(&directory.0),
+            BrowserSessionEffectAdapter::new(FixtureRuntime {
+                live: true,
+                ..FixtureRuntime::default()
+            }),
+            &legacy_path,
+            BrowserSessionHostConfig {
+                session_idle_timeout_ms: 300_000,
+                remote_view_desktops: Vec::new(),
+                default_disposable_policy: None,
+                exact_url_history_maximum_bytes: 64 * 1024 * 1024,
+            },
+        )
+        .unwrap();
+        let task = host
+            .open(OpenBrowserSession::exact_profile("alice", "work", 1_000))
+            .unwrap();
+        let first = host.new_tab(&task.session_id, 1_100).unwrap();
+        // A different client selects another owned tab after MCP selected first.
+        let second = host.new_tab(&task.session_id, 1_200).unwrap();
+        let before = host.state().clone();
+        let stale = host.handle_command(&serde_json::json!({"id":"stale-close",
+            "action":"browser_session_tab_close","sessionId":task.session_id,
+            "expectedTabId":first.tab_id,"activityAtMs":1_300}));
+        assert_eq!(
+            stale["success"], false,
+            "stale close must not close the current peer"
+        );
+        assert_eq!(
+            stale["error"],
+            "browser_session_tab_close_selection_changed"
+        );
+        assert_eq!(host.state(), &before);
+        let exact = host.handle_command(&serde_json::json!({"id":"exact-close",
+            "action":"browser_session_tab_close","sessionId":task.session_id,
+            "expectedTabId":second.tab_id,"activityAtMs":1_400}));
+        assert_eq!(exact["success"], true);
+        assert_eq!(exact["data"]["closedTabId"], second.tab_id);
+        assert!(host.state().tabs.contains_key(&first.tab_id));
+        let legacy = host.handle_command(&serde_json::json!({"id":"legacy-close",
+            "action":"browser_session_tab_close","sessionId":task.session_id,"activityAtMs":1_500}));
+        assert_eq!(legacy["success"], true);
+        assert_eq!(legacy["data"]["closedTabId"], first.tab_id);
     }
 
     #[test]

@@ -1,8 +1,9 @@
 "use client";
 
+import { ExternalLink, Copy, Info, Clock3 } from "lucide-react";
 import { NativeHandoffDelete } from "@/components/native-handoff-delete";
 import { NativeHandoffPolicies } from "@/components/native-handoff-policies";
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useRef, useState, type CSSProperties } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
@@ -25,11 +26,11 @@ function durableUrl(record: ServiceManagedHandoff) {
 
 /** Transient Share output is separate from the owner's retained-record inventory.
  * Opening, copying and inspecting a record never issues a new handoff or selects a task. */
-export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLink, onReturnFocus, records, inventoryLoading, inventoryError, onRefresh }: {
+export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLink, onReturnFocus, records, inventoryLoading, inventoryError, onRefresh, railWidth = 224 }: {
   open: boolean; onOpenChange: (open: boolean) => void; busy: boolean; error: string | null;
   sharedLink: { url: string; label: string } | null; onReturnFocus: () => void;
   records?: readonly ServiceManagedHandoff[]; inventoryLoading?: boolean; inventoryError?: string | null;
-  onRefresh: () => Promise<void>;
+  onRefresh: () => Promise<void>; railWidth?: number;
 }) {
   const [deleted, setDeleted] = useState<Set<string>>(new Set());
   const [deletionNotice, setDeletionNotice] = useState(false);
@@ -62,7 +63,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
     catch { setCopyFeedback({ id, failed: true }); }
   };
   return <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="native-tab-properties native-handoff-drawer" onCloseAutoFocus={event => { event.preventDefault(); onReturnFocus(); }}>
+    <DialogContent style={{ "--native-handoff-rail-width": `${railWidth}px` } as CSSProperties} className="native-tab-properties native-handoff-drawer" onCloseAutoFocus={event => { event.preventDefault(); onReturnFocus(); }}>
       <DialogHeader><DialogTitle>Handoffs</DialogTitle><DialogDescription>Native Remote View links. Link validity and target lifetime are independent.</DialogDescription></DialogHeader>
       <button ref={refreshButton} type="button" className="native-handoff-refresh" disabled={refreshing || inventoryLoading} onClick={() => void refresh()}>Refresh handoffs</button>
       {(refreshing || inventoryLoading) && <p role="status">Refreshing handoffs…</p>}
@@ -88,10 +89,10 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
             <td><span>Created: {timestamp(record.createdAtMs)}</span><span>{record.pendingHuman ? "Awaiting use" : typeof metadata?.firstHumanUseAtMs === "number" ? "Used" : "Use not recorded"}</span></td>
             <td><span>Link: {record.expiresAtMs === null ? "Perpetual" : timestamp(record.expiresAtMs)}</span><span>Link status: {record.linkState}</span><span>Tab: {record.tabLifetime ? duration(record.tabLifetime.inactivityMs) : "Unknown"}</span><span>Target: {record.targetState === 'reported' ? 'Reported' : record.targetState === 'expired' ? 'Expired' : 'Ended'}</span><span>Pending use: {record.pendingHuman ? record.pendingHuman.expiresAtMs === null ? 'Until used' : timestamp(record.pendingHuman.expiresAtMs) : 'None reported'}</span></td>
             <td className="native-handoff-actions">
-              {url && <a href={url} target="_blank" rel="noopener noreferrer">Open</a>}
-              <button type="button" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}>Copy</button>
-              <button type="button" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}>Inspect</button>
-              <button type="button" disabled={!url} aria-expanded={policies === record.handoffId} onClick={() => setPolicies(policies === record.handoffId ? null : record.handoffId)}>Policies</button>
+              {url && <a href={url} target="_blank" rel="noopener noreferrer" aria-label="Open" title="Open"><ExternalLink size={14} aria-hidden="true" /></a>}
+              <button type="button" aria-label="Copy" title="Copy" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}><Copy size={14} aria-hidden="true" /></button>
+              <button type="button" aria-label="Inspect" title="Inspect" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}><Info size={14} aria-hidden="true" /></button>
+              <button type="button" aria-label="Policies" title="Policies" disabled={!url} aria-expanded={policies === record.handoffId} onClick={() => setPolicies(policies === record.handoffId ? null : record.handoffId)}><Clock3 size={14} aria-hidden="true" /></button>
               <NativeHandoffDelete record={record} onDeleted={linkDeleted} />
               {!url && <span role="alert">Link unavailable</span>}
             </td>

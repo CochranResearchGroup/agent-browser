@@ -9,6 +9,11 @@ import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspace
 import { postServiceRequest, requireServiceRequestSuccess, type ServiceTabCloseData } from "@agent-browser/client/service-request";
 
 const supplied = (value: unknown): string => typeof value === "string" && value.trim() ? value : "Unknown";
+const createdTime = (value: unknown): string => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) return "Unknown";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Unknown" : date.toLocaleString();
+};
 
 /** Read supplied provenance without treating descriptive names as identity proof.
  * Opening Properties and copying the supplied URL have no browser, selection
@@ -63,6 +68,7 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
     ["Service", metadata?.serviceName], ["Agent", metadata?.agentName],
     ["Human", metadata?.humanName], ["Origin", metadata?.originKind],
     ["Task", metadata?.taskName], ["Purpose", metadata?.purpose],
+    ["Job", metadata?.jobId], ["Request", metadata?.requestId], ["Created", createdTime(metadata?.createdAtMs)],
     ["Attribution", metadata?.attribution], ["Browser", tab.browserId],
     ["Profile", tab.profileId ?? node.profileId], ["Desktop", tab.desktopId],
     ["URL", tab.url], ["Title", tab.title], ["Inventory status", tab.inventoryState ?? tab.lifecycle],

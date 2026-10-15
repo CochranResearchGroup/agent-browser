@@ -1,5 +1,6 @@
 "use client";
 
+import { Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { postServiceRequest, requireServiceRequestSuccess } from "@agent-browser/client/service-request";
@@ -31,7 +32,7 @@ export function NativeHandoffDelete({ record, onDeleted }: { record: ServiceMana
     finally { pending.current = false; setBusy(false); }
   };
   return <>
-    <button ref={trigger} type="button" onClick={() => { confirmed.current = false; setFailed(false); setOpen(true); }}>Delete link</button>
+    <button ref={trigger} type="button" aria-label="Delete link" title="Delete link" onClick={() => { confirmed.current = false; setFailed(false); setOpen(true); }}><Trash2 size={14} aria-hidden="true" /></button>
     <Dialog open={open} onOpenChange={next => { if (!pending.current) setOpen(next); }}>
       <DialogContent className="native-tab-properties" showCloseButton={!busy} onCloseAutoFocus={event => { event.preventDefault(); if (!confirmed.current) trigger.current?.focus(); }}>
         <DialogHeader><DialogTitle>Delete link?</DialogTitle><DialogDescription>This revokes this link only. Its tab and browser stay open.</DialogDescription></DialogHeader>
