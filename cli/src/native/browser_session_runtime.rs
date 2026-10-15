@@ -1548,10 +1548,13 @@ fn run_browser_worker(
                                 .await;
                         }
                         attach_owned_target_if_missing(manager, &tab.target_id).await?;
-                        // Read the addressed managed task without replacing the
-                        // person's physical selection. Other actions retain
-                        // their existing exact-target activation semantics.
-                        if matches!(command["action"].as_str(), Some("title" | "url")) {
+                        // Read the addressed task or popup inventory without
+                        // replacing the person's physical selection. Other
+                        // actions retain exact-target activation semantics.
+                        if matches!(
+                            command["action"].as_str(),
+                            Some("title" | "url" | "__observe_owned_popup_targets")
+                        ) {
                             manager.bind_observation_target(&tab.target_id).await?;
                         } else {
                             manager.tab_switch_target_id(&tab.target_id).await?;
