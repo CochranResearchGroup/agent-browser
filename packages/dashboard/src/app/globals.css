@@ -5663,3 +5663,10 @@ button {
   .native-handoff-table td { max-width: none; padding: 4px 0; border: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .native-handoff-drawer { animation: none; transition: none; } }
+
+.native-handoff-policy { padding: 8px 0; }
+.native-handoff-policy fieldset { border: 1px solid #45454d; border-radius: 4px; padding: 12px; }
+.native-handoff-policy label { display: block; margin: 8px 0; }
+.native-handoff-policy select, .native-handoff-policy button { color: inherit; background: #242427; border: 1px solid #555560; border-radius: 4px; padding: 5px 8px; font: inherit; }
+.native-handoff-policy select { margin-left: 8px; }
+.native-handoff-policy button:disabled { opacity: .5; cursor: default; }

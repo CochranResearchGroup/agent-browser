@@ -3998,3 +3998,13 @@ the live document instead of navigating or relaunching it.
 Managed view_focus marked as an operator request also requires current authenticated
 operator authority. An unbound request is rejected before selecting its target;
 ordinary explicit managed focus keeps its existing behavior.
+
+## Handoff policy controls
+
+In the compact Handoffs drawer, Policies opens link lifetime controls. Perpetual
+removes link expiry. A finite duration is supplied in whole seconds and starts
+when the existing owner accepts the save. This operation changes only the
+addressed link, preserving tab lifetime, unused retention and browser state.
+An expired link cannot be renewed through this control. Opening controls has no
+effect; saving requires an exact owner acknowledgement. Unconfirmed results
+retain bounded guidance and require inspection before another attempt.

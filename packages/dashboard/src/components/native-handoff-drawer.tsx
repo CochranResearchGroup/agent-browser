@@ -1,5 +1,6 @@
 "use client";
 
+import { NativeHandoffPolicies } from "@/components/native-handoff-policies";
 import { Fragment, useRef, useState } from "react";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -31,6 +32,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
 }) {
   const [copyFeedback, setCopyFeedback] = useState<{ id: string; failed: boolean } | null>(null);
   const [inspected, setInspected] = useState<string | null>(null);
+  const [policies, setPolicies] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const refreshPending = useRef(false);
   const [refreshError, setRefreshError] = useState(false);
@@ -73,6 +75,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
               {url && <a href={url} target="_blank" rel="noopener noreferrer">Open</a>}
               <button type="button" disabled={!url} onClick={() => url && void copy(record.handoffId, url)}>Copy</button>
               <button type="button" aria-expanded={detailsOpen} onClick={() => setInspected(detailsOpen ? null : record.handoffId)}>Inspect</button>
+              <button type="button" disabled={!url} aria-expanded={policies === record.handoffId} onClick={() => setPolicies(policies === record.handoffId ? null : record.handoffId)}>Policies</button>
               {!url && <span role="alert">Link unavailable</span>}
             </td>
           </tr>
@@ -81,6 +84,7 @@ export function NativeHandoffDrawer({ open, onOpenChange, busy, error, sharedLin
                 <div><dt>Session</dt><dd>{supplied(record.sessionName)}</dd></div><div><dt>Purpose</dt><dd>{supplied(metadata?.purpose)}</dd></div>
                 <div><dt>First human use</dt><dd>{timestamp(metadata?.firstHumanUseAtMs)}</dd></div>
               </dl></td></tr>}
+          {policies === record.handoffId && <tr className="native-handoff-detail-row"><td colSpan={4}><NativeHandoffPolicies record={record} onUpdated={refresh} /></td></tr>}
           </Fragment>;
         })}</tbody>
       </table>}

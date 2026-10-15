@@ -26,6 +26,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const page = await browser.newPage();
     let closeDenied = false;
     let shareFailure = false;
+    let policyFailure = false;
     let shareHold = null;
     let closeHold = null;
     let ready = true;
@@ -40,6 +41,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       if (body.action === 'remote_view_open' && body.taskName === 'Share browser task') {
         if (shareFailure) return route.fulfill({ status: 403, json: { success: false, error: 'PRIVATE-SHARE-DIAGNOSTIC https://provider.invalid/internal' } });
         if (shareHold) await shareHold;
+      }
+      if (body.action === 'service_remote_view_handoff_resolve') {
+        if (policyFailure) return route.fulfill({ status: 403, json: { success: false, error: 'PRIVATE-POLICY-DETAIL' } });
+        return route.fulfill({ json: { success: true, data: { handoffId: body.params.handoffId, status: 'link_lifetime_updated', expiresAtMs: body.params.ttlMs === 0 ? null : Date.now() + body.params.ttlMs } } });
       }
       if (body.action === "tab_close") {
         if (closeHold) await closeHold;
@@ -118,6 +123,57 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await retainedDrawer.getByRole('button', { name: 'Refresh handoffs', exact: true }).click();
     await retainedRow.getByText('Use not recorded', { exact: true }).waitFor();
 
+    const beforePolicy = requests.length;
+    await retainedRow.getByRole('button', { name: 'Policies', exact: true }).click();
+    const linkForm = retainedDrawer.getByRole('form', { name: 'Link lifetime', exact: true });
+    await linkForm.waitFor({ timeout: 1500 });
+    assert.equal(requests.length, beforePolicy, 'opening policy controls must not change retention');
+    await linkForm.getByLabel('Link lifetime mode', { exact: true }).selectOption('finite');
+    await linkForm.getByLabel('Link lifetime seconds', { exact: true }).fill('30');
+    await page.setViewportSize({ width: 390, height: 760 });
+    await linkForm.scrollIntoViewIfNeeded();
+    assert.equal(await linkForm.evaluate(node => node.scrollWidth <= node.clientWidth), true, 'policy fields must fit a narrow dialog');
+    const policyBounds = await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).boundingBox();
+    assert.ok(policyBounds.x >= 0 && policyBounds.x + policyBounds.width <= 390);
+    await page.screenshot({ path: path.join(artifacts, 'link-lifetime-policy-narrow.png') });
+    await page.setViewportSize({ width: 1280, height: 720 });
+
+    const policyReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.handoffOperation === 'set_link_lifetime');
+    await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).click();
+    await policyReply;
+    await linkForm.getByRole('status').filter({ hasText: 'Link lifetime saved' }).waitFor();
+    const policyRequest = requests.at(-1);
+    assert.equal(policyRequest.action, 'service_remote_view_handoff_resolve');
+    assert.deepEqual(policyRequest.params, { handoffId: 'retained-old', handoffOperation: 'set_link_lifetime', ttlMs: 30000 });
+    assert.equal(policyRequest.params.tabInactivityMs, undefined);
+    assert.equal(policyRequest.params.pendingHumanRetentionMs, undefined);
+    await linkForm.getByLabel('Link lifetime mode', { exact: true }).selectOption('perpetual');
+    const perpetualReply = page.waitForResponse(response => response.url().endsWith('/api/service/request') && response.request().postDataJSON()?.params?.ttlMs === 0);
+    await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).click();
+    await perpetualReply;
+    await linkForm.getByRole('status').filter({ hasText: 'Link lifetime saved' }).waitFor();
+    assert.deepEqual(requests.at(-1).params, { handoffId: 'retained-old', handoffOperation: 'set_link_lifetime', ttlMs: 0 });
+    await linkForm.getByLabel('Link lifetime mode', { exact: true }).selectOption('finite');
+    const invalidCount = requests.length;
+    for (const value of ['-1', '1.5', '9999999999999999']) {
+      await linkForm.getByLabel('Link lifetime seconds', { exact: true }).fill(value);
+      assert.equal(await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).isDisabled(), true);
+    }
+    assert.equal(requests.length, invalidCount);
+    await linkForm.getByLabel('Link lifetime seconds', { exact: true }).fill('45');
+    policyFailure = true;
+    await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).click();
+    await linkForm.getByRole('alert').filter({ hasText: 'Could not confirm this change' }).waitFor();
+    assert.equal((await linkForm.innerText()).includes('PRIVATE-POLICY-DETAIL'), false);
+    assert.equal(await linkForm.getByRole('button', { name: 'Save link lifetime', exact: true }).isDisabled(), true);
+    const deniedPolicies = requests.length;
+    await page.keyboard.press('Enter');
+    assert.equal(requests.length, deniedPolicies, 'denied policy update must not automatically repeat');
+    policyFailure = false;
+
+    assert.equal(new URL(page.url()).searchParams.get('tab'), null);
+    requests.length = 0;
+    await retainedRow.getByRole('button', { name: 'Policies', exact: true }).click();
     await retainedRow.getByRole('button', { name: 'Inspect', exact: true }).click();
     await page.setViewportSize({ width: 1280, height: 720 });
     const detailsWidth = (await retainedDrawer.locator('dl').boundingBox()).width;

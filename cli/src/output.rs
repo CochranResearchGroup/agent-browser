@@ -6462,6 +6462,10 @@ origin, creation/use status and separate link/tab policies. Inspect shows task
 context; Copy and Open reuse the opaque link. A failed refresh retains the last
 reported records. Unavailable inventory is distinct from an empty list.
 
+Policies opens link lifetime controls for a retained record. Choose Perpetual or
+a finite duration in seconds; the finite window starts when saved. This leaves
+tab lifetime and unused retention unchanged. Expired links remain revoked.
+
 
 The five-minute idle reaper closes a browser when all peers are idle and no
 active operation holds custody, including after service restart without a
