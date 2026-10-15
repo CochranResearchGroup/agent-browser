@@ -635,3 +635,7 @@ dashboard and native viewer must share a reviewed public origin for embedding.
 The task-local TLS reverse proxy qualifies that source configuration only;
 external ingress remains an independent gate. No weakening of native CSP,
 duplicate renderer or additional viewer grant is included.
+
+## Bounded native execution authority receipt
+
+After the blocked source checkpoint, the operator explicitly authorized at most two private native fixture setups with temporary provider units, Docker resources, two desktops and exact cleanup. Both attempts are terminal preflight failures, not native acceptance: the first refused an occupied subnet, and the second installer refused runtime_home_not_empty_without_identity. No private installation identity, desktop, browser or provider stack was created. The implementation ledger preserves both receipts, fresh scoped cleanup readback and the corrected fixture's real read-only installer preflight. The two-setup allowance is consumed; no further apply is authorized by the source repair or prepared revised plan. Existing provider homes, default publication, private accounts, external ingress, CI and foreign cleanup remain excluded. Specification version 2 and all ticket acceptance criteria are unchanged.
