@@ -20,7 +20,7 @@ Wider resource/cleanup acceptance remains open.
 #183; bounded isolated preservation fixture complete. Workstation-wide shutdown
 and failed-transaction reconciliation remain open under #183.
 
-[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) is IN_PROGRESS for issues #261 and #260. Version 2 records the approved compact charcoal rail and on-demand handoff drawer. The [implementation ledger](../notes/0237-2026-10-14-implementation-ledger.md) tracks tickets277 through283. Current source receipts qualify managed inventory, native selection, document-preserving handoff and shared-origin framing; physical native viewer composition, lifecycle/pressure acceptance, dependent UI workflows and default replacement remain open.
+[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS for wider installed/public-provider adoption under #261 and #260. All seven source implementation tickets are qualified, including the sole default workspace, native first use, lifecycle/pressure and original-link recovery. The [implementation ledger](../notes/0237-2026-10-14-implementation-ledger.md) records fresh-main reconciliation, final36.259-second native acceptance and empty independent cleanup. PR270 owns consumer source delivery; Remote View PR441/442 supply canonical prerequisites.
 
 [P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.
 

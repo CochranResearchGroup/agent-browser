@@ -8,9 +8,9 @@ Version: 2
 Lane: P237
 Baseline: 3e5a38679d28ac8a20439e29004ea1315475ef8e
 
-## Current local acceptance, 2026-10-15
+## Current source delivery, 2026-10-15
 
-The implementation ledger and bounded review record all seven approved tickets as locally validated after one broad two-axis review and one bounded remediation pass. Source candidate591da4b5d passes the final complete private native workflow in34.534seconds with exact empty cleanup. The source default is the compact workspace; Diagnostics is secondary. One nonblocking resource-history follow-up remains under P237/#105. Plan state stays IN_PROGRESS for canonical integration and wider installed/public-provider adoption. No push, merge, tracker closure, installation, shared-skill publication or external ingress is implied. Earlier pending states below are retained historical evidence; use this checkpoint and the ledger for current execution.
+All seven approved implementation tickets are source-qualified through the implementation ledger and bounded review. The final combined candidate6fc7f26e0 passes the complete private native workflow in36.259seconds with original and independent empty cleanup. Fresh-main integration preserves P242 popup attribution and non-activating peer selection, P243/P244 ordinary-use availability, and P237 exact lifecycle custody. Remote View prerequisites are canonical through PR441 and442; PR270 owns consumer source delivery and ticket reconciliation. One nonblocking resource-history follow-up remains under P237/#105. Plan state stays IN_PROGRESS for wider installed/public-provider adoption. Source delivery does not imply installation, shared-skill publication, external ingress, CI or formal release. Earlier pending states below are historical evidence; use this checkpoint and the ledger for current execution.
 
 ## Problem and agreed outcome
 
