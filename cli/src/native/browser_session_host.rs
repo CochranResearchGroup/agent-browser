@@ -2032,10 +2032,13 @@ mod tests {
         let mut peer = open_store(false);
         assert_eq!(peer.load_session_state().unwrap(), initial);
         host.state.browsers.get_mut(&launch.browser_id).unwrap().pid = launch.pid;
-        assert!(peer
-            .compare_and_save_session_state(&initial, &host.state)
-            .is_err());
-        assert_eq!(peer.load_session_state().unwrap(), initial);
+        // Ordinary observations do not publish or consume process-effect custody.
+        peer.compare_and_save_session_state(&initial, &host.state)
+            .unwrap();
+        assert_eq!(peer.load_session_state().unwrap(), host.state);
+        assert!(!peer.unpublished_launch_records().unwrap()[0].published);
+        peer.compare_and_save_session_state(&host.state, &initial)
+            .unwrap();
         let mut competing = initial.clone();
         competing.next_session_sequence += 1;
         peer.compare_and_save_session_state(&initial, &competing)

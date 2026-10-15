@@ -1,8 +1,13 @@
 # Runbook
 
-Updated: 2026-10-12
+Updated: 2026-10-14
 
 ## Current execution
+
+### 2026-10-14 P244 ordinary denial isolation
+
+[P244](docs/dev/plans/0244-2026-10-14-ordinary-denial-isolation.md) completes the bounded #288 source repair through PR289. The [receipt](docs/dev/notes/0244-2026-10-14-ordinary-denial-isolation.md) preserves public/deterministic reds, malformed-history startup and publication, current-permission owner ambiguity, peer release isolation, completed-release rebinding and process-effect separation. Selected Rust suites, strict quality and docs gates pass; four pinned public synthetic workflows report zero owned residue. No production publication or exhaustive denial-path/native-viewer acceptance is claimed.
+
 
 ### 2026-10-13 P240 resource budgets and terminal archives
 

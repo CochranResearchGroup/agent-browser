@@ -144,9 +144,13 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
     local: &mut E,
     store: &mut BrowserSessionSqliteStore,
 ) -> Result<(), String> {
-    let pending = store
-        .unpublished_launch_records()
-        .map_err(|_| "remote_view_session_custody_unavailable")?;
+    let pending = match store.unpublished_launch_records() {
+        Ok(pending) => pending,
+        // Keep malformed history intact for diagnostics. It cannot veto host
+        // startup or authorize recovery, launch, or destructive cleanup.
+        Err(LaunchCustodyStoreError::InvalidRecord) => return Ok(()),
+        Err(_) => return Err("remote_view_session_custody_unavailable".into()),
+    };
     if pending.is_empty() {
         return Ok(());
     }

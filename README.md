@@ -2692,6 +2692,8 @@ their current browser without a historical owner binding or manual recovery.
 Ordinary continuation reconnects to the live profile browser and reconciles an
 interrupted publication without replacing it or resetting its authenticated state.
 
+Ordinary task updates do not consult malformed launch history or unchanged peer desktop release fences. Current profile permission can resolve an ambiguous historical owner binding.
+
 ## Observability Dashboard
 
 Monitor agent-browser sessions in real time with a local web dashboard showing a live viewport and command activity feed.

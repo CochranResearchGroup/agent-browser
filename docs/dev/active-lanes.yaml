@@ -1,6 +1,25 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P244
+    product_lane: PL-BUGFIX
+    objective: Isolate ordinary browser work from historical owner and unrelated release vetoes
+    plan: docs/dev/plans/0244-2026-10-14-ordinary-denial-isolation.md
+    branch: fix/ordinary-denial-isolation
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#288]
+    plan_state: COMPLETED
+    custody_state: INTEGRATED
+    dependencies: []
+    overlaps: [P237]
+    reconciled_overlaps: ["P244 owns daemon profile selection and ordinary publication; preserve P237 lifecycle/UI work and reconcile shared adapters by behavior"]
+    pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/289
+    checkpoint: d68100c16
+    validation_status: Affected Rust suites, format, strict Clippy, docs and four pinned public synthetic workflows pass with zero owned residue
+    limitations: ["Source and isolated synthetic qualification; production not published", "No exhaustive denial-path, real-account or native viewer qualification", "New-process admission and destructive recovery remain separate protocols"]
+    updated_at: 2026-10-14
   - id: P243
     product_lane: PL-BUGFIX
     objective: Remove historical ownership vetoes from downloads and ordinary continuation
@@ -27,7 +46,7 @@ lanes:
     branch: recipes/siteguides-271
     target: main
     plan_state: COMPLETED
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#271, CochranResearchGroup/agent-browser#272, CochranResearchGroup/agent-browser#273, CochranResearchGroup/agent-browser#274, CochranResearchGroup/agent-browser#275, CochranResearchGroup/agent-browser#276]
     accountable_owner: ecochran76
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/285

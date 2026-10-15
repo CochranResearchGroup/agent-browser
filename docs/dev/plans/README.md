@@ -1,5 +1,9 @@
 # Active plan index
 
+[P244: ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md),
+#288; completed bounded historical-metadata repair and isolated public qualification.
+PR289 owns integration; production publication remains separate.
+
 [P243: ordinary browser availability](0243-2026-10-14-ordinary-browser-availability.md),
 issues #284 and #286; completed source and isolated public workflow qualification
 against Alice/Bob G05/G23/G42. Production publication remains separate.

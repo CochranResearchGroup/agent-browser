@@ -77,7 +77,8 @@ try {
   const identity = [task.taskId, task.browserId, task.tabId];
   const snapshot = await call('browser_snapshot', { taskId: task.taskId });
   assert(JSON.stringify(snapshot).includes('Download'));
-  if (process.env.AGENT_BROWSER_SMOKE_STALE_CUSTODY === '1') {
+  if (process.env.AGENT_BROWSER_SMOKE_STALE_CUSTODY === '1' ||
+      process.env.AGENT_BROWSER_SMOKE_MALFORMED_CUSTODY === '1') {
     // Fault injection touches only this disposable fixture's SQLite document.
     // The real task/browser remain live; historical rows must not veto reads.
     const observedPid = Number(execFileSync('python3', ['-c', `
@@ -92,11 +93,13 @@ for pid, published in [(4000000000, True), (browser['pid'], False)]:
     intent = dict(intentId=str(uuid.uuid4()), profileId=browser['profileId'], assignment=assignment)
     records[intent['intentId']] = dict(schemaVersion=1, intent=intent,
         observedBrowserId=browser['id'], observedPid=pid, published=published)
+if sys.argv[3] == "malformed":
+    records = {"broken": {"old": "history"}}
 connection.execute("INSERT INTO state_documents(kind,schema_version,json) VALUES (?,?,?)",
     ('browser_launch_custody','agent-browser.browser-launch-custody.v1',json.dumps(dict(records=records))))
 connection.commit()
 print(browser['pid'])
-`, join(context.agentHome, 'service', 'runtime.sqlite3'), task.browserId]).toString().trim());
+`, join(context.agentHome, 'service', 'runtime.sqlite3'), task.browserId, process.env.AGENT_BROWSER_SMOKE_MALFORMED_CUSTODY === '1' ? 'malformed' : 'stale']).toString().trim());
     const startToken = () => {
       const stat = readFileSync(`/proc/${observedPid}/stat`, 'utf8');
       return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19];
@@ -110,7 +113,7 @@ print(browser['pid'])
       assert.deepEqual([result.taskId, result.browserId, result.tabId], identity);
     }
     assert.equal(startToken(), before, 'continuation retains the exact live process');
-    console.log('Concurrent continuation ignores stale custody and preserves the live task/process');
+    console.log('Concurrent continuation ignores historical custody and preserves the live task/process');
   }
   const destination = join(context.tempHome, 'fixture.txt');
   await call('browser_command', {
