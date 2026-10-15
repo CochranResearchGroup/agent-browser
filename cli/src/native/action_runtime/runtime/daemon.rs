@@ -759,9 +759,30 @@ pub(crate) fn apply_existing_session_profile_selection(
     let Some(session_id) = session_id else {
         return Ok(None);
     };
-    let binding = state
-        .runtime_owner_binding_for_session(&session_id)
-        .map_err(|_| "existing_session_profile_identity_ambiguous".to_string())?;
+    let binding = match state.runtime_owner_binding_for_session(&session_id) {
+        Ok(binding) => binding,
+        Err(_) => {
+            // Ambiguous historical owners do not revoke independent current
+            // profile permission. Do not select or repair either owner here.
+            if apply_registered_session_profile_continuity(options, command, &session_id, state)?
+                || apply_shared_local_session_profile_continuity(
+                    options,
+                    command,
+                    &session_id,
+                    state,
+                )?
+                || apply_authenticated_access_plan_profile_selection(
+                    options,
+                    command,
+                    &session_id,
+                    state,
+                )?
+            {
+                return Ok(Some(ProfileSelectionReason::ExistingOwner));
+            }
+            return Err("existing_session_profile_identity_ambiguous".to_string());
+        }
+    };
     let retained_observation = state
         .sessions
         .get(&session_id)

@@ -4490,6 +4490,7 @@ Preserves the browser download policy and peer destinations. Only the requested
 target's completed download is delivered; existing destination files are preserved.
 Uses the current browser process; no historical owner binding is required.
 Ordinary task continuation reconciles interrupted publication of its live browser.
+Ordinary updates ignore malformed launch history and unchanged peer release fences.
 Local browser process proof is required for artifact delivery.
 
 Arguments:
