@@ -3804,7 +3804,7 @@ fn configured_tab_lifetime_expires_only_its_target_and_keeps_the_link() {
         "{configured}"
     );
     drop(consumer);
-    let mut consumer = host(&fixture, provider, calls.clone());
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
     let before = consumer.handle_command(&serde_json::json!({
         "action":"browser_session_reap", "activityAtMs":129
     }));
@@ -3824,11 +3824,71 @@ fn configured_tab_lifetime_expires_only_its_target_and_keeps_the_link() {
     }));
     assert_eq!(inspected["data"]["expired"], false);
     assert!(inspected["data"]["expiresAtMs"].is_null());
+    let attempts = || {
+        std::fs::read_to_string(fixture.root.join("tab-acquisition-attempts"))
+            .unwrap()
+            .parse::<u32>()
+            .unwrap()
+    };
+    let before_recreation = attempts();
+    drop(consumer);
+    let mut unknown = host_mode(&fixture, provider.clone(), calls.clone(), Mode::UnknownTab);
+    let reopen = serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "nativeDesktop":true, "activityAtMs":131
+    });
+    let interrupted = unknown.handle_command(&reopen);
+    assert_eq!(interrupted["success"], false, "{interrupted}");
+    assert!(
+        interrupted["error"]
+            .as_str()
+            .unwrap()
+            .contains("synthetic_tab_reply_lost"),
+        "{interrupted}"
+    );
+    assert_eq!(attempts(), before_recreation + 1);
+    let pending = fixture.store(false).load_session_state().unwrap();
+    let request_id = pending.remote_view_tab_handoffs[&id]
+        .recreation
+        .as_ref()
+        .unwrap()
+        .request_id
+        .clone();
+    assert!(pending.managed_tab_requests[&request_id].response.is_none());
+    assert_eq!(pending.tabs.len(), 1);
+    let requests = provider.borrow().view_requests.clone();
+    drop(unknown);
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    for now in [132, 133] {
+        let mut retry = reopen.clone();
+        retry["activityAtMs"] = now.into();
+        let blocked = consumer.handle_command(&retry);
+        assert_eq!(blocked["success"], false, "{blocked}");
+        assert!(
+            blocked["error"]
+                .as_str()
+                .unwrap()
+                .contains("browser_session_tab_creation_readback_required"),
+            "{blocked}"
+        );
+        assert_eq!(fixture.store(false).load_session_state().unwrap(), pending);
+        assert_eq!(
+            calls.get(),
+            1,
+            "unknown recreation must not launch a replacement"
+        );
+        assert_eq!(provider.borrow().view_requests, requests);
+        assert_eq!(
+            attempts(),
+            before_recreation + 1,
+            "unknown acquisition must not be replayed"
+        );
+    }
     let continued = consumer
         .execute_managed_command(
             "Bob",
             &serde_json::json!({
-                "action":"get_url", "profileId":"profile-a", "activityAtMs":131
+                "action":"get_url", "profileId":"profile-a", "activityAtMs":134
             }),
         )
         .unwrap()

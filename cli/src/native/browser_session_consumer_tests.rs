@@ -302,6 +302,18 @@ impl RemoteViewBrowserProcessEffects for Process {
         })
     }
 }
+impl Process {
+    fn begin_tab_acquisition(&self) -> Result<(), String> {
+        let path = self.root.join("tab-acquisition-attempts");
+        let attempts =
+            std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
+        std::fs::write(path, (attempts + 1).to_string()).unwrap();
+        if matches!(self.mode, Mode::UnknownTab) {
+            return Err("synthetic_tab_reply_lost".into());
+        }
+        Ok(())
+    }
+}
 impl BrowserSessionEffects for Process {
     fn reconcile_profile_browser(
         &mut self,
@@ -421,6 +433,7 @@ impl BrowserSessionEffects for Process {
         browser: &ManagedBrowserInstance,
         attributed: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
+        self.begin_tab_acquisition()?;
         let suffix = if self.root.join("recovered-target-generation").exists() {
             format!(":recovered-{}", self.calls.get())
         } else if attributed.is_empty() {
@@ -438,9 +451,7 @@ impl BrowserSessionEffects for Process {
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<BrowserTabAcquisition, String> {
-        if matches!(self.mode, Mode::UnknownTab) {
-            return Err("synthetic_tab_reply_lost".into());
-        }
+        self.begin_tab_acquisition()?;
         let suffix = uuid::Uuid::new_v4();
         Ok(BrowserTabAcquisition {
             tab_id: format!("tab:{}:{suffix}", browser.id),
