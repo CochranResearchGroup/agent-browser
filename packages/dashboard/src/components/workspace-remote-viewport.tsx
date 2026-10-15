@@ -61,6 +61,7 @@ import {
   type WorkspaceViewportPreflightState,
   type WorkspaceViewportTarget,
 } from "@/lib/workspace-viewport-controller";
+import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -1372,11 +1373,19 @@ export function WorkspaceRemoteViewport({
   const viewportRef = useRef<HTMLElement | null>(null);
   const viewportFrameRef = useRef<HTMLIFrameElement | null>(null);
   const focusedKeyRef = useRef("");
+  const focusGenerationRef = useRef(0);
   const streamFrameRetryRef = useRef(0);
   const sharingRecoveryRetryRef = useRef(0);
   const viewerShareAttemptRef = useRef<GuacamoleShareFrameAttempt | null>(null);
   const automaticAttemptKeyRef = useRef(new Set<string>());
   const touchClickBridgeCleanupRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => () => {
+    // Discard requests that have not started when this viewport leaves.
+    // A request already at the native browser continues independently.
+    focusedKeyRef.current = "";
+    focusGenerationRef.current += 1;
+  }, []);
 
   const clearFullscreenFallbackOffset = useCallback(() => {
     const root = viewportRef.current;
@@ -1972,17 +1981,28 @@ export function WorkspaceRemoteViewport({
   }, [canRenderFrame, frameUrl, handleFrameLoadIssue]);
 
   useEffect(() => {
-    if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream) return;
-    if (!browser || !stream || !canControl) return;
+    if (!viewportSelection || viewportSelection.mode !== "control" || snapshotStream
+      || !browser || !stream || !canControl) {
+      focusedKeyRef.current = "";
+      focusGenerationRef.current += 1;
+      setFocusPending(false);
+      return;
+    }
     const operatorFocus = stream.provider === "rdp_gateway";
     if (operatorFocus && (!operatorController
       || operatorController.browserId !== browser.id
-      || operatorController.routeId !== stream.routeId)) return;
+      || operatorController.routeId !== stream.routeId)) {
+      focusedKeyRef.current = "";
+      focusGenerationRef.current += 1;
+      setFocusPending(false);
+      return;
+    }
     const tabIndex = tabSelection.tabIndex;
     const targetId = tabSelection.tab?.targetId?.trim();
     const focusKey = [browser.id, tabSelection.tab?.id ?? "", targetId ?? "", tabIndex ?? "", streamUrl ?? "", operatorController?.leaseId ?? ""].join("|");
     if (focusedKeyRef.current === focusKey) return;
     focusedKeyRef.current = focusKey;
+    const focusGeneration = ++focusGenerationRef.current;
     const browserForFocus = browser;
     const selectionForFocus = viewportSelection.selection;
     if (operatorFocus && !targetId) {
@@ -1994,7 +2014,10 @@ export function WorkspaceRemoteViewport({
       return;
     }
 
+    // A completed request may belong to a selection that has since changed.
+    // Its native effect is independent; only the current selection owns feedback.
     async function queueFocus() {
+      if (focusGenerationRef.current !== focusGeneration) return;
       const sessionName = daemonSessionNameForBrowser(browserForFocus, selectionForFocus);
       const params = targetId
         ? { targetId, ...(tabIndex !== null ? { index: tabIndex } : {}), maximize: true, ...(sessionName ? { sessionName } : {}) }
@@ -2020,6 +2043,7 @@ export function WorkspaceRemoteViewport({
           }),
         });
         const json = (await resp.json()) as ApiResponse<unknown>;
+        if (focusGenerationRef.current !== focusGeneration) return;
         if (!json.success) {
           setFocusMessage(json.error || "Remote-view focus request was not accepted; showing the stream anyway.");
           return;
@@ -2028,15 +2052,22 @@ export function WorkspaceRemoteViewport({
           ? "Recovered stale selected tab identity and queued view focus against the current live target."
           : "Queued view focus and maximize before opening the workspace viewport.");
       } catch (err) {
+        if (focusGenerationRef.current !== focusGeneration) return;
         setFocusMessage(err instanceof Error
           ? `Remote-view focus request failed: ${err.message}`
           : "Remote-view focus request failed; showing the stream anyway.");
       } finally {
-        setFocusPending(false);
+        if (focusGenerationRef.current === focusGeneration) setFocusPending(false);
       }
     }
 
-    void queueFocus();
+    const displayAllocationId = stream.displayAllocationId || browserForFocus.displayAllocationId;
+    void queueWorkspaceFocusRequest(
+      JSON.stringify(displayAllocationId
+        ? ["display", displayAllocationId]
+        : ["browser", serviceBase(activePort), browserForFocus.id]),
+      queueFocus,
+    );
   }, [activePort, activeSessionName, browser, canControl, operatorController, snapshotStream, stream, streamUrl, tabSelection.recoveredFromStaleSelection, tabSelection.tab?.id, tabSelection.tabIndex, viewportSelection]);
 
   useEffect(() => {

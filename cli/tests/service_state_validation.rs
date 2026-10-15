@@ -100,6 +100,7 @@ fn read_commands_do_not_refresh_or_rewrite_service_state() {
         vec!["service", "resources", "--json"],
         vec!["service", "--help"],
         vec!["service", "-h"],
+        vec!["runtime", "--help"],
         vec!["--help", "service"],
         vec!["runtime", "create", "--help"],
         vec!["eval", "--stdin", "--help"],

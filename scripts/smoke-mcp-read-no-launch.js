@@ -27,44 +27,9 @@ const targetServiceId = 'google';
 let mcp;
 
 const MCP_TOOL_ALLOWLIST = [
-  'service_access_plan', 'service_request', 'desktop_capture', 'desktop_locate',
-  'desktop_evidence_observe', 'desktop_prompt_observe', 'desktop_interact',
-  'service_job_cancel', 'service_browser_retry',
-  'service_status',
-  'service_incidents', 'service_remedies_apply', 'service_profile_upsert',
-  'service_profile_delete', 'service_profile_freshness_update',
-  'service_profile_seeding_handoff_update', 'service_session_upsert',
-  'service_session_delete', 'service_site_policy_upsert', 'service_site_policy_delete',
-  'service_monitor_upsert', 'service_monitor_delete', 'service_monitors_run_due',
-  'service_monitor_pause', 'service_monitor_resume', 'service_monitor_reset_failures',
-  'service_monitor_triage', 'service_provider_upsert', 'service_provider_delete',
-  'service_browser_capability_registry_upsert', 'service_browser_capability_preflight',
-  'service_remote_view_route_preflight', 'browser_snapshot', 'browser_get_url',
-  'browser_get_title', 'browser_tabs', 'browser_screenshot', 'browser_click', 'browser_fill',
-  'browser_wait', 'browser_type', 'browser_press', 'browser_hover', 'browser_select',
-  'browser_get_text', 'browser_get_value', 'browser_get_attribute', 'browser_get_html',
-  'browser_get_styles', 'browser_count', 'browser_get_box', 'browser_is_visible',
-  'browser_is_enabled', 'browser_check', 'browser_is_checked', 'browser_uncheck',
-  'browser_scroll', 'browser_scroll_into_view', 'browser_focus', 'browser_clear',
-  'browser_navigate', 'browser_requests', 'browser_request_detail', 'browser_headers',
-  'browser_offline', 'browser_cookies_get', 'browser_cookies_set',
-  'browser_cookies_clear', 'browser_storage_get', 'browser_storage_set',
-  'browser_storage_clear', 'browser_user_agent', 'browser_viewport',
-  'browser_geolocation', 'browser_permissions', 'browser_timezone', 'browser_locale',
-  'browser_media', 'browser_dialog', 'browser_upload', 'browser_download',
-  'browser_wait_for_download', 'browser_har_start', 'browser_har_stop', 'browser_route',
-  'browser_unroute', 'browser_console', 'browser_errors', 'browser_pdf',
-  'browser_response_body', 'browser_clipboard', 'browser_back', 'browser_forward',
-  'browser_reload', 'browser_tab_new', 'browser_tab_switch', 'browser_tab_close',
-  'browser_set_content', 'browser_command',
-  'service_profile_lease_rejoin', 'service_profile_lease_renew',
-  'service_profile_lease_release', 'service_profile_lease_reconcile_plan',
-  'service_profile_lease_reconcile_apply', 'service_profile_lease_recover_plan',
-  'service_profile_lease_recover_apply', 'service_profile_acquire',
-  'service_profile_recovery_plan', 'service_profile_recovery_apply',
-  'service_profile_recovery_status', 'service_profile_repair_plan',
-  'service_profile_repair_apply', 'service_profile_reset_plan',
-  'service_profile_reset_apply', 'service_trace',
+  'browser_open', 'browser_close', 'browser_handoff', 'browser_continue',
+  'browser_snapshot', 'browser_screenshot', 'browser_click', 'browser_fill',
+  'browser_navigate', 'browser_tab', 'browser_command', 'browser_discover',
 ];
 
 const MCP_RESOURCE_ALLOWLIST = [
@@ -262,18 +227,18 @@ try {
       'MCP operating guide resource',
     );
     assert(
-      operatingGuide.schemaVersion === 'agent-browser.operating-guide.v1',
+      operatingGuide.schemaVersion === 'agent-browser.operating-guide.v2',
       `operating guide version mismatch: ${JSON.stringify(operatingGuide)}`,
     );
     assert(
-      operatingGuide.readinessAxes?.browserAcquisition &&
-        operatingGuide.readinessAxes?.operatorPresentation &&
-        operatingGuide.readinessAxes?.runtimeMaintenance,
-      `operating guide axes missing: ${JSON.stringify(operatingGuide)}`,
+      ['browser_open', 'browser_snapshot', 'browser_handoff', 'browser_continue', 'browser_close']
+        .every(name => operatingGuide.workflow?.some(step => step.tool === name)),
+      'operating guide must describe the complete task workflow',
     );
     assert(
-      operatingGuide.ownership?.agentBrowser?.includes('classify and apply garbage collection'),
-      `operating guide ownership missing: ${JSON.stringify(operatingGuide)}`,
+      operatingGuide.ownership?.agentBrowser?.includes('task continuity') &&
+        operatingGuide.ownership?.remoteView?.includes('human viewer'),
+      'operating guide must preserve browser and native viewer ownership',
     );
     assertMcpDoesNotProduceFullStatus(inventory, 'MCP inventory');
     for (const tool of inventory.tools.tools ?? []) {
@@ -302,6 +267,7 @@ try {
       }
     }
     await assertStatusToolRejected('browser_command', {
+      taskId: 'absent-status-task',
       action: 'service_status',
       params: {},
     });

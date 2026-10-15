@@ -1477,17 +1477,13 @@ pub(crate) mod action_commands {
             .transpose()?;
         let _operator_fence = if let Some(repository) = operator_repository.as_ref() {
             let snapshot = repository.load_snapshot()?;
-            let route_id = cmd
-                .get("routeId")
-                .and_then(Value::as_str)
-                .ok_or("operator_focus_binding_required: missing routeId")?;
-            crate::native::stream::verify_operator_focus(&snapshot, cmd)?;
+            let authority = crate::native::stream::verify_operator_focus_scope(&snapshot, cmd)?;
             let request_id = cmd
                 .get("id")
                 .and_then(Value::as_str)
                 .ok_or("operator_focus_binding_required: missing id")?;
             let guard = crate::native::desktop_control_coordinator::begin_service_operator_focus(
-                &snapshot, route_id, request_id,
+                &authority, request_id,
             )?;
             crate::native::stream::verify_operator_focus(&repository.load_snapshot()?, cmd)?;
             Some(guard)
@@ -1511,6 +1507,10 @@ pub(crate) mod action_commands {
         {
             let target_id = target_id.trim();
             if mgr.active_target_id().ok() == Some(target_id) {
+                // The attached CDP target is logical selection, not evidence
+                // that Chrome currently displays it. Retained connections
+                // must activate the exact requested target as well.
+                mgr.tab_switch_target_id(target_id).await?;
                 tab_switched = Some(json!({ "targetId" : target_id, "state" : "already_active", }));
             } else {
                 // Admission can precede target closure. An explicit target

@@ -99,6 +99,13 @@ reuse after those contracts are frozen.
 
 ## PL-PLATFORM | Architecture and Infrastructure
 
+- [Compact workspace operator correction and revised prototype](0237-2026-10-14-compact-workspace-review.md)
+
+- [Native physical selection tracer](0237-2026-10-12-native-selection-proof.md)
+
+- [Public handoff native-use context repair](0237-2026-10-12-public-native-use-context.md)
+- [Retained native handoff URL recovery diagnosis](0237-2026-10-12-retained-url-recovery-diagnosis.md)
+
 - [Production upgrade qualification](2026-10-06-production-upgrade-decision.md): compatibility repairs and exact-pair development acceptance pass; production awaits the interactive helper contract refresh tracked by issue 218.
 
 - [Service roadmap](2026-04-22-agent-browser-service-roadmap.md)
@@ -136,3 +143,5 @@ Do not bulk-edit old notes merely to add lane metadata. Add metadata when a
 note becomes an active input or when a new plan cites it. This preserves hashes,
 links, and historical meaning while preventing the directory from becoming the
 active backlog.
+
+- [P237 bounded integration review](0237-2026-10-15-bounded-review.md): frozen Standards/Spec adjudication and one bounded remediation pass.

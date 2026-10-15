@@ -12,6 +12,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 ## Current work and boundaries
 
+[P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md) owns the simple native desktop dashboard replacement and independent configurable handoff link/tab lifetimes for #261 and #260. The approved compact workspace and all seven implementation tickets are locally validated, including native lifecycle/selection and one bounded review/remediation pass. PR270 owns consumer source delivery, paired with canonical Remote View PR441/442. Installed/public-provider adoption remains separate; RUNBOOK and the implementation ledger own current evidence.
+
 [P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) delivers the small workflow MCP, task-appropriate profiles, native handoff/continuation and supported Codex client guidance at the isolated installed seam. RUNBOOK and PR267 bind current qualification; production promotion remains separate.
 
 [P236](docs/dev/plans/0236-2026-10-11-incremental-upgrade-progress.md) owns the bounded incremental installer observation repair for #181, including its reviewed candidate entry point. Source qualification remains separate from production-shaped installation.

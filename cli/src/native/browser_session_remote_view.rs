@@ -188,6 +188,47 @@ pub(super) fn reconcile_pending_recoveries<E: RemoteViewBrowserProcessEffects>(
 }
 
 impl BrowserSessionEffects for RuntimeSessionEffects {
+    fn native_handoff_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        match self {
+            Self::Local(e) => e.native_handoff_assignment_target(target),
+            Self::Remote(e) => e.native_handoff_assignment_target(target),
+        }
+    }
+    fn register_native_handoff_observation(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        provider_target: &RemoteViewApplicationTarget,
+        target_digest: &str,
+        idempotency_key: &str,
+    ) -> Result<RemoteViewNativeHandoffObservation, String> {
+        match self {
+            Self::Local(e) => e.register_native_handoff_observation(
+                target,
+                provider_target,
+                target_digest,
+                idempotency_key,
+            ),
+            Self::Remote(e) => e.register_native_handoff_observation(
+                target,
+                provider_target,
+                target_digest,
+                idempotency_key,
+            ),
+        }
+    }
+    fn observe_native_handoff_use(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        registered: &RemoteViewNativeHandoffObservation,
+    ) -> Result<RemoteViewNativeHandoffUseRead, String> {
+        match self {
+            Self::Local(e) => e.observe_native_handoff_use(target, registered),
+            Self::Remote(e) => e.observe_native_handoff_use(target, registered),
+        }
+    }
     fn reconcile_profile_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -263,6 +304,24 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
             Self::Remote(effects) => effects.begin_operation(expected),
         }
     }
+    fn pending_browser_activity_ids(&self) -> Vec<String> {
+        match self {
+            Self::Local(effects) => effects.pending_browser_activity_ids(),
+            Self::Remote(effects) => effects.pending_browser_activity_ids(),
+        }
+    }
+    fn pending_idle_retirement_ids(&self) -> Vec<String> {
+        match self {
+            Self::Local(effects) => effects.pending_idle_retirement_ids(),
+            Self::Remote(effects) => effects.pending_idle_retirement_ids(),
+        }
+    }
+    fn finish_idle_retirement_publication(&mut self, ids: &[String]) -> Result<(), String> {
+        match self {
+            Self::Local(effects) => effects.finish_idle_retirement_publication(ids),
+            Self::Remote(effects) => effects.finish_idle_retirement_publication(ids),
+        }
+    }
     fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
         match self {
             Self::Local(effects) => effects.pending_launch_intent(),
@@ -298,6 +357,39 @@ impl BrowserSessionEffects for RuntimeSessionEffects {
         match self {
             Self::Local(effects) => effects.permits_idle_browser_close(browser),
             Self::Remote(effects) => effects.permits_idle_browser_close(browser),
+        }
+    }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        match self {
+            Self::Local(effects) => effects.acquire_profile_cleanup_guard(allocation),
+            Self::Remote(effects) => effects.acquire_profile_cleanup_guard(allocation),
+        }
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        match self {
+            Self::Local(effects) => effects.acquire_idle_retirement_guard(browsers),
+            Self::Remote(effects) => effects.acquire_idle_retirement_guard(browsers),
+        }
+    }
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[agent_browser_service_model::ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        match self {
+            Self::Local(effects) => {
+                effects.acquire_disposable_retirement_guard(allocations, browsers)
+            }
+            Self::Remote(effects) => {
+                effects.acquire_disposable_retirement_guard(allocations, browsers)
+            }
         }
     }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
@@ -462,6 +554,21 @@ mod tests {
 /// Remote View owns viewer authentication and lifetime; this read only joins
 /// the retained handoff to its current external desktop assignment.
 pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> {
+    read_handoff_desktop_presentation(id, false).map(|(route, _)| route)
+}
+
+/// Read the owned route and current private observation together. This does not
+/// register context, acknowledge use, recover a browser or focus a target.
+pub(crate) fn resolve_handoff_desktop_presentation(
+    id: &str,
+) -> Result<(String, Option<String>), String> {
+    read_handoff_desktop_presentation(id, true)
+}
+
+fn read_handoff_desktop_presentation(
+    id: &str,
+    include_native_context: bool,
+) -> Result<(String, Option<String>), String> {
     let store = BrowserSessionSqliteStore::default_sqlite()?;
     let state = store.load_session_state()?;
     state
@@ -480,7 +587,65 @@ pub(crate) fn resolve_handoff_desktop_route(id: &str) -> Result<String, String> 
         .adapter
         .inventory()
         .map_err(|_| "remote_view_runtime_inventory_unavailable")?;
-    owned_desktop_route(&inventory, &desktop.desktop_id, desktop.generation)
+    let route = owned_desktop_route(&inventory, &desktop.desktop_id, desktop.generation)?;
+    let binding = include_native_context
+        .then(|| {
+            state.remote_view_tab_handoffs[id]
+                .native_observation
+                .as_ref()
+        })
+        .flatten();
+    let correlation = match binding {
+        None => None,
+        Some(binding) => {
+            let digest = remote_view_native_target_digest(id, &target)?;
+            let observation = binding
+                .observation
+                .as_ref()
+                .ok_or("remote_view_native_registration_missing")?;
+            if binding.target_digest != digest
+                || observation.target_digest != digest
+                || observation.target != binding.provider_target
+                || binding.provider_target.desktop_id != desktop.desktop_id
+                || binding.provider_target.lifecycle_generation != desktop.generation
+            {
+                return Err("remote_view_human_use_target_changed".into());
+            }
+            let assignment = inventory
+                .assignments
+                .iter()
+                .find(|assignment| {
+                    binding
+                        .provider_target
+                        .validate_assignment(assignment)
+                        .is_ok()
+                })
+                .ok_or("remote_view_human_use_target_changed")?;
+            let read = context
+                .adapter
+                .observe_native_handoff_use_state(assignment, observation)
+                .map_err(|_| "remote_view_native_use_unavailable")?;
+            if read.state == RemoteViewNativeHandoffUseState::Expired {
+                return Err("remote_view_native_observation_expired".into());
+            }
+            // Mutable activity does not fence a physical target. Rejoin only
+            // its exact identity and registration after the private read.
+            let current = store.load_session_state()?;
+            let current_link = current
+                .remote_view_tab_handoffs
+                .get(id)
+                .ok_or("remote_view_tab_handoff_missing")?;
+            current_link.check_link_at(current_view_time_ms())?;
+            let current_target = resolve_remote_view_tab_handoff(&current, id)?;
+            if remote_view_native_target_digest(id, &current_target)? != digest
+                || current_link.native_observation.as_ref() != Some(binding)
+            {
+                return Err("remote_view_human_use_target_changed".into());
+            }
+            Some(observation.correlation_id.clone())
+        }
+    };
+    Ok((route, correlation))
 }
 
 fn owned_desktop_route(

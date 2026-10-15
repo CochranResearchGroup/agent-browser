@@ -74,6 +74,12 @@ fn exact_navigation_history_compacts_oldest_rows_into_restart_safe_daily_summari
 
 #[derive(Default)]
 struct FixtureEffects {
+    idle_retirement_permitted: Option<bool>,
+    retirement_guard_denied_browser: Option<String>,
+    profile_cleanup_permitted: Option<bool>,
+    profile_cleanup_denied_profile: Option<String>,
+    disposable_delete_error: Option<String>,
+    retirement_guard_active: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
     launches: Vec<String>,
     executable: String,
     launch_executables: Vec<(String, String)>,
@@ -261,6 +267,51 @@ fn open_after_expiry_ends_old_session_before_new_epoch() {
 }
 
 impl BrowserSessionEffects for FixtureEffects {
+    fn permits_idle_browser_close(
+        &mut self,
+        _browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        Ok(self.idle_retirement_permitted.unwrap_or(true))
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[agent_browser_service_model::ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        for browser in browsers {
+            if self.retirement_guard_denied_browser.as_deref() == Some(browser.id.as_str())
+                || !self.permits_idle_browser_close(browser)?
+            {
+                return Ok(None);
+            }
+        }
+        struct Guard(std::sync::Arc<std::sync::atomic::AtomicBool>);
+        impl agent_browser_service_model::BrowserIdleRetirementGuard for Guard {}
+        impl Drop for Guard {
+            fn drop(&mut self) {
+                self.0.store(false, std::sync::atomic::Ordering::SeqCst);
+            }
+        }
+        if let Some(active) = &self.retirement_guard_active {
+            active.store(true, std::sync::atomic::Ordering::SeqCst);
+            Ok(Some(Box::new(Guard(active.clone()))))
+        } else {
+            Ok(Some(Box::new(())))
+        }
+    }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &agent_browser_service_model::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        if !self.profile_cleanup_permitted.unwrap_or(true)
+            || self.profile_cleanup_denied_profile.as_deref()
+                == Some(allocation.profile.id.as_str())
+        {
+            return Ok(None);
+        }
+        self.acquire_idle_retirement_guard(&[])
+    }
     fn select_browser_executable(&mut self, path: String) -> Result<(), String> {
         self.executable = path;
         Ok(())
@@ -278,6 +329,7 @@ impl BrowserSessionEffects for FixtureEffects {
         self.browser_live = true;
         Ok(agent_browser_service_model::BrowserRecovery {
             launch: BrowserLaunch {
+                process_identity: None,
                 browser_id: browser.id.clone(),
                 pid: 5252,
                 cdp_endpoint: "http://127.0.0.1:9522".into(),
@@ -307,6 +359,7 @@ impl BrowserSessionEffects for FixtureEffects {
             .push((profile.id.clone(), self.executable.clone()));
         let sequence = self.launches.len();
         Ok(BrowserLaunch {
+            process_identity: None,
             browser_id: if sequence == 1 {
                 format!("browser:{}", profile.id)
             } else {
@@ -403,6 +456,15 @@ impl BrowserSessionEffects for FixtureEffects {
         &mut self,
         allocation: &agent_browser_service_model::ManagedDisposableProfile,
     ) -> Result<(), String> {
+        if let Some(active) = &self.retirement_guard_active {
+            assert!(
+                active.load(std::sync::atomic::Ordering::SeqCst),
+                "profile deletion must retain retirement admission exclusion"
+            );
+        }
+        if let Some(error) = &self.disposable_delete_error {
+            return Err(error.clone());
+        }
         self.disposable_deletions
             .push(allocation.profile.id.clone());
         Ok(())
@@ -668,6 +730,121 @@ fn explicit_new_tab_is_the_only_ordinary_tab_growth_path() {
         state.sessions[&alice.session_id].current_tab_id.as_deref(),
         Some("tab-new")
     );
+}
+
+#[test]
+fn explicit_close_uses_the_named_tab_after_current_selection_changes() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-original".into(),
+            target_id: "target-original".into(),
+            source: BrowserTabSource::Bootstrap,
+        }),
+        new_tab: Some(BrowserTabAcquisition {
+            tab_id: "tab-peer".into(),
+            target_id: "target-peer".into(),
+            source: BrowserTabSource::ExplicitNew,
+        }),
+        ..FixtureEffects::default()
+    };
+    let mut manager = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        },
+    );
+    let opened = manager
+        .open(OpenBrowserSession::exact_profile("alice", "profile-a", 100))
+        .unwrap();
+    manager.tab_for_navigation(&opened.session_id, 110).unwrap();
+    manager.new_tab(&opened.session_id, 120).unwrap();
+    let denied = manager.close_exact_tab_with(
+        &opened.session_id,
+        "tab-original",
+        130,
+        |_effects, _browser, _tab| Err("synthetic close permission revoked".into()),
+    );
+    assert_eq!(denied.unwrap_err(), "synthetic close permission revoked");
+    let closed = manager
+        .close_exact_tab_with(
+            &opened.session_id,
+            "tab-original",
+            140,
+            |effects, browser, tab| effects.close_tab(browser, tab),
+        )
+        .unwrap();
+    assert_eq!(closed.closed_tab_id, "tab-original");
+    assert_eq!(closed.current_tab_id.as_deref(), Some("tab-peer"));
+    drop(manager);
+    assert_eq!(
+        effects.tab_closes,
+        [(opened.browser_id.clone(), "target-original".into())]
+    );
+    assert!(effects.closes.is_empty());
+    assert!(state.tabs.contains_key("tab-peer"));
+    assert!(!state.tabs.contains_key("tab-original"));
+}
+
+#[test]
+fn exact_final_tab_close_preserves_borrowed_browser_custody() {
+    for borrowed in [false, true] {
+        let catalog = catalog_with_named_profile();
+        let mut state = BrowserSessionState::default();
+        let mut effects = FixtureEffects {
+            initial_tab: Some(BrowserTabAcquisition {
+                tab_id: "tab-only".into(),
+                target_id: "target-only".into(),
+                source: BrowserTabSource::Bootstrap,
+            }),
+            ..FixtureEffects::default()
+        };
+        let config = BrowserSessionManagerConfig {
+            session_idle_timeout_ms: 300_000,
+            remote_view_desktops: vec![],
+        };
+        let mut manager =
+            BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone());
+        let opened = manager
+            .open(OpenBrowserSession::exact_profile("alice", "profile-a", 100))
+            .unwrap();
+        manager.tab_for_navigation(&opened.session_id, 110).unwrap();
+        drop(manager);
+        // The existing adoption owner publishes this custody marker. Closing
+        // an attributed tab never transfers ownership of its borrowed browser.
+        if borrowed {
+            state.shared_browser_ids.insert(opened.browser_id.clone());
+        }
+        let mut manager = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config);
+        let closed = manager
+            .close_exact_tab_with(
+                &opened.session_id,
+                "tab-only",
+                120,
+                |effects, browser, tab| effects.close_tab(browser, tab),
+            )
+            .unwrap();
+        assert_eq!(closed.closed_tab_id, "tab-only");
+        drop(manager);
+        assert_eq!(
+            effects.tab_closes,
+            [(opened.browser_id.clone(), "target-only".into())]
+        );
+        assert!(state.tabs.is_empty());
+        assert_eq!(state.browsers.contains_key(&opened.browser_id), borrowed);
+        assert_eq!(
+            effects.closes,
+            if borrowed {
+                vec![]
+            } else {
+                vec![opened.browser_id]
+            }
+        );
+    }
 }
 
 #[test]
@@ -1917,9 +2094,7 @@ fn idle_browser_close_preserves_active_peers_and_external_operation_custody() {
 
 #[test]
 fn failed_idle_browser_close_does_not_publish_closed_state() {
-    use agent_browser_service_model::{
-        resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
-    };
+    use agent_browser_service_model::retain_remote_view_tab_handoff;
     let catalog = catalog_with_named_profile();
     let mut state = BrowserSessionState::default();
     let mut effects = FixtureEffects {
@@ -2114,4 +2289,322 @@ fn profile_executables_survive_restart_and_recovery_after_another_profile_select
             ("profile-b".into(), "/reviewed/stealth/chrome".into())
         ]
     );
+}
+
+#[test]
+fn pressure_policy_preserves_active_peer_after_link_deletion() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        initial_tab: Some(BrowserTabAcquisition {
+            tab_id: "pressure-alice-tab".into(),
+            target_id: "pressure-alice-target".into(),
+            source: BrowserTabSource::SessionInitial,
+        }),
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let alice = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 100))
+        .unwrap();
+    let alice_tab = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .tab_for_navigation(&alice.session_id, 100)
+        .unwrap();
+    agent_browser_service_model::retain_remote_view_tab_handoff(
+        &mut state,
+        "alice-link",
+        &alice.session_id,
+        &alice_tab.tab_id,
+    )
+    .unwrap();
+    state.tab_lifetimes.insert(
+        alice_tab.tab_id,
+        agent_browser_service_model::BrowserTabLifetime {
+            inactivity_ms: None,
+            pressure_inactivity_ms: Some(30),
+        },
+    );
+    effects.new_tab = Some(BrowserTabAcquisition {
+        tab_id: "pressure-peer-tab".into(),
+        target_id: "pressure-peer-target".into(),
+        source: BrowserTabSource::ExplicitNew,
+    });
+    let peer = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .new_tab(&alice.session_id, 125)
+        .unwrap();
+    state.remote_view_tab_handoffs.remove("alice-link");
+    state = serde_json::from_slice(&serde_json::to_vec(&state).unwrap()).unwrap();
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .open(OpenBrowserSession::disposable("bob", "default", 130));
+    assert_eq!(
+        result.unwrap_err(),
+        "browser_disposable_profile_count_quota_protected"
+    );
+    assert!(state.sessions.contains_key(&alice.session_id));
+    assert!(state.tabs.contains_key(&peer.tab_id));
+    assert!(effects.closes.is_empty());
+    assert!(effects.disposable_deletions.is_empty());
+}
+
+#[test]
+fn idle_retirement_guard_preserves_expired_matching_session_before_replacement() {
+    let catalog = catalog_with_named_profile();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig {
+        session_idle_timeout_ms: 1_000,
+        remote_view_desktops: vec![],
+    };
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::exact_profile(
+            "alice",
+            "profile-a",
+            1_000,
+        ))
+        .unwrap();
+    effects.idle_retirement_permitted = Some(false);
+    let replacement =
+        BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone()).open(
+            OpenBrowserSession::exact_profile("alice", "profile-a", 2_000),
+        );
+    assert!(
+        effects.closes.is_empty(),
+        "active authority must prevent expired-epoch replacement close"
+    );
+    assert!(replacement.is_err());
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert_eq!(effects.launches.len(), 1);
+    // Explicit user close remains authorized even while idle retirement is denied.
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .close_session(&first.session_id, SessionEndReason::ExplicitClose, 2_001)
+        .unwrap();
+    assert_eq!(effects.closes, [first.browser_id]);
+}
+
+#[test]
+fn idle_retirement_guard_covers_quota_profile_cleanup_and_releases() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        retirement_guard_active: Some(active.clone()),
+        ..Default::default()
+    };
+    let first = BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+    .unwrap();
+    BrowserSessionManager::new(
+        &mut state,
+        &catalog,
+        &mut effects,
+        BrowserSessionManagerConfig::default(),
+    )
+    .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+    .unwrap();
+    assert_eq!(effects.disposable_deletions, [first.profile_id]);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn quota_qualifies_all_candidates_before_first_retirement_effect() {
+    let mut catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    effects.retirement_guard_active = Some(active.clone());
+    let config = BrowserSessionManagerConfig::default();
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    let second = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+        .unwrap();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    effects.retirement_guard_denied_browser = Some(second.browser_id.clone());
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .enforce_disposable_quota("default", &Default::default(), 1, 0, 3_000);
+    assert_eq!(
+        result.unwrap_err(),
+        "browser_disposable_profile_activity_changed"
+    );
+    assert!(
+        effects.closes.is_empty(),
+        "later candidate protection must precede every close"
+    );
+    assert!(effects.disposable_deletions.is_empty());
+    assert!(state.sessions.contains_key(&first.session_id));
+    assert!(state.sessions.contains_key(&second.session_id));
+    assert_eq!(state.disposable_profiles.len(), 2);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+    effects.retirement_guard_denied_browser = None;
+    let admitted = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .enforce_disposable_quota("default", &Default::default(), 1, 0, 3_001)
+        .unwrap();
+    assert_eq!(admitted.quota_evicted_session_ids.len(), 2);
+    assert_eq!(effects.closes.len(), 2);
+    assert_eq!(effects.disposable_deletions.len(), 2);
+    assert!(state.sessions.is_empty());
+    assert!(state.disposable_profiles.is_empty());
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn scheduled_profile_cleanup_retains_activity_exclusion_through_deletion() {
+    let catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        retirement_guard_active: Some(active.clone()),
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 2_000)
+        .unwrap();
+    assert!(state.browsers.is_empty());
+    assert!(state.sessions.is_empty());
+    let due = state
+        .disposable_profiles
+        .get(&opened.profile_id)
+        .unwrap()
+        .cleanup_eligible_at_ms
+        .unwrap();
+    effects.profile_cleanup_permitted = Some(false);
+    let deferred = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .reap(due)
+        .unwrap();
+    assert!(deferred.deleted_disposable_profile_ids.is_empty());
+    assert!(effects.disposable_deletions.is_empty());
+    assert!(state.disposable_profiles.contains_key(&opened.profile_id));
+    effects.profile_cleanup_permitted = Some(true);
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .reap(due)
+        .unwrap();
+    assert_eq!(effects.disposable_deletions, [opened.profile_id]);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+}
+
+#[test]
+fn quota_preserves_orphan_profile_when_cleanup_authority_denies() {
+    let mut catalog = catalog_with_disposable_policy();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    let mut state = BrowserSessionState::default();
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let opened = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .close_session(&opened.session_id, SessionEndReason::ExplicitClose, 2_000)
+        .unwrap();
+    assert!(state.browsers.is_empty());
+    assert!(state.sessions.is_empty());
+    let before = state.clone();
+    effects.closes.clear();
+    effects.profile_cleanup_permitted = Some(false);
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .enforce_disposable_quota("default", &BTreeSet::new(), 1, 0, 2_001);
+    assert!(
+        effects.disposable_deletions.is_empty(),
+        "quota deleted a profile protected by cleanup authority"
+    );
+    assert!(effects.closes.is_empty());
+    assert_eq!(state, before);
+    assert!(
+        result.is_err(),
+        "pressure admission must defer when its required profile is protected"
+    );
+}
+
+#[test]
+fn quota_checks_later_orphan_before_closing_first_browser_and_releases_on_failure() {
+    let mut catalog = catalog_with_disposable_policy();
+    let mut state = BrowserSessionState::default();
+    let active = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut effects = FixtureEffects {
+        browser_live: true,
+        retirement_guard_active: Some(active.clone()),
+        ..Default::default()
+    };
+    let config = BrowserSessionManagerConfig::default();
+    let first = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("alice", "default", 1_000))
+        .unwrap();
+    let orphan = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .open(OpenBrowserSession::disposable("bob", "default", 2_000))
+        .unwrap();
+    BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .close_session(&orphan.session_id, SessionEndReason::ExplicitClose, 2_001)
+        .unwrap();
+    effects.closes.clear();
+    catalog
+        .disposable_policies
+        .get_mut("default")
+        .unwrap()
+        .maximum_retained_profiles = 1;
+    effects.profile_cleanup_denied_profile = Some(orphan.profile_id.clone());
+    let before = state.clone();
+    let error = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .enforce_disposable_quota("default", &BTreeSet::new(), 1, 0, 3_000)
+        .unwrap_err();
+    assert_eq!(error, "browser_disposable_profile_activity_changed");
+    assert!(effects.closes.is_empty());
+    assert!(effects.disposable_deletions.is_empty());
+    assert_eq!(state, before);
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+    effects.profile_cleanup_denied_profile = None;
+    effects.disposable_delete_error = Some("synthetic_delete_failure".into());
+    let error = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config.clone())
+        .enforce_disposable_quota("default", &BTreeSet::new(), 1, 0, 3_001)
+        .unwrap_err();
+    assert_eq!(error, "synthetic_delete_failure");
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
+    assert_eq!(effects.closes, [first.browser_id]);
+    assert!(state.disposable_profiles.contains_key(&first.profile_id));
+    assert!(state.disposable_profiles.contains_key(&orphan.profile_id));
+    effects.disposable_delete_error = None;
+    let result = BrowserSessionManager::new(&mut state, &catalog, &mut effects, config)
+        .enforce_disposable_quota("default", &BTreeSet::new(), 1, 0, 3_002)
+        .unwrap();
+    assert_eq!(result.deleted_disposable_profile_ids.len(), 2);
+    assert!(state.disposable_profiles.is_empty());
+    assert!(!active.load(std::sync::atomic::Ordering::SeqCst));
 }

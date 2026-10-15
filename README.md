@@ -53,7 +53,7 @@ Choose `profileMode: "existing"` to require an already registered profile. Choos
 
 Call `browser_handoff` with `taskId` to focus the current page and obtain its durable authenticated HTTPS Remote View link. The MCP server completes the link using its configured `AGENT_BROWSER_PUBLIC_ORIGIN`, the public origin of this Agent Browser service. This differs from `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`, which locates the native desktop viewer. A missing service origin reports `remote_view_public_origin_missing` with configuration guidance. Handoff preserves the task and current page.
 
-The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability.
 
 After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
 
@@ -792,6 +792,41 @@ agent-browser find role button click --name "Submit"
 ```
 
 ## RDP Remote-View Quick Start
+
+In the default browser workspace, open a tab’s SVG overflow menu or use its
+context menu (Shift+F10) for Properties and Copy URL. Properties shows supplied
+origin and purpose alongside current browser, profile, desktop, URL, title and
+status. Missing values remain Unknown; descriptive names are not identity proof.
+Copy URL copies the task URL without creating a handoff or changing selection.
+Close Tab confirms one managed task before requesting its exact target through the
+existing browser owner. It requires authenticated dashboard access and current
+profile permission to close any tab. Cancelling sends no request. A confirmed
+close preserves peer tabs; closing the final owned tab also closes its browser.
+If close cannot be confirmed, refresh inventory and inspect permission before
+trying again.
+
+Share prepares the exact existing task through the public handoff helper and
+shows its opaque native link in Handoffs. It preserves the selected peer and
+does not navigate the task. Use the small Handoffs rail control to reopen the
+panel, then copy or open the same link through existing Remote View authentication.
+
+Handoffs lists retained owner records even after target expiry, with supplied
+origin, creation/use status and separate link/tab policies. Inspect shows task
+context; Copy and Open reuse the opaque link. A failed refresh retains the last
+reported records. Unavailable inventory is distinct from an empty list.
+
+Policies opens link lifetime controls for a retained record. Choose Perpetual or
+a finite duration in seconds; the finite window starts when saved. This leaves
+tab lifetime and unused retention unchanged. Expired links remain revoked.
+
+Tab inactivity and unused retention have separate saves in Policies. Tab expiry
+uses the task's last activity; unused retention starts a new wait-for-human window
+when saved. Choose finite seconds or keep the unused task until used. A current
+wait appears as Awaiting use; Inspect preserves the original first-use timestamp.
+
+Delete link asks for confirmation and revokes only the selected link. Its browser
+and tabs stay open; Cancel has no effect. Unconfirmed deletion keeps the record
+visible and offers refresh guidance without an automatic retry.
 
 When a selected tab is temporarily absent from a dashboard inventory refresh,
 the dashboard preserves that tab's identity and waits for it to reappear before
@@ -1622,6 +1657,8 @@ agent-browser network har stop [output.har]    # Stop and save HAR (temp path if
 
 ### Tabs & Windows
 
+For an owner-managed session, creating a tab after an owner restart reconnects to its verified live browser and preserves existing tabs.
+
 ```bash
 agent-browser tab                     # List tabs
 agent-browser tab new [url]           # New tab (optionally with URL)
@@ -2314,6 +2351,12 @@ reports redacted SQLite integrity, database size, migration archive state,
 verified-backup state, and current browser-launch admission. An unavailable
 database exposes only a stable failure code and launch admission, never its
 filesystem path. `agent-browser install doctor` prints the same health fields.
+`browserRuntime.workspace` adds current managed browser, session and tab
+inventory from the runtime owner, including supplied task metadata and
+independent retention records. Its `reported` state is owner-published identity,
+not current process liveness or native viewer readiness. Debugger endpoints
+and private launch environment are omitted. Dashboard login, session checks
+and logout remain required for the operator workspace.
 On Unix, detached launches retain the effective X11 display even when it came from the inherited `DISPLAY` environment variable. Service status can therefore associate the manual browser with the governed remote-view route for that display, allowing its detected dashboard tile to expose the available remote View or Control action.
 
 During development, a normal command that finds a daemon running a different executable prepares an authenticated handoff, starts the current executable, resumes the same browser PID and DevTools endpoint, and only then accepts new work. Missing handoff authority fails closed. Active browsers and their ports stay open across the daemon changeover, while orphaned retained session leases are expired during reconciliation so stale ownership cannot block a healthy profile.
@@ -2696,7 +2739,7 @@ Ordinary task updates do not consult malformed launch history or unchanged peer 
 
 ## Observability Dashboard
 
-Monitor agent-browser sessions in real time with a local web dashboard showing a live viewport and command activity feed.
+Select, inspect, share and continue browser tasks in one native browser workspace. A compact browser/tab rail leaves the owned Remote View desktop central; Handoffs and diagnostics open when needed.
 
 ```bash
 # Start the dashboard server (runs in background on port 4848)
@@ -2710,7 +2753,7 @@ agent-browser open example.com
 agent-browser dashboard stop
 ```
 
-The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. All sessions automatically stream to the dashboard.
+The dashboard command starts a stable ingress process on port 4848 and a generation-specific backend on the next port. The ingress remains the public listener while validated backend generations change. It retains the previously selected backend as a draining fallback, returns typed converging status when neither backend is reachable, and never selects a candidate whose runtime manifest or authenticated operator-journey evidence fails validation. Current browsers and tabs appear automatically; select a task to view its owned desktop.
 
 Authenticated ready handoff resolution also records operator-journey acceptance for the already-selected dashboard generation after validating its live runtime manifest and current owner, route, display, target and provider evidence. This does not select a staged candidate or change fallback and rollback custody. Stale dashboard generations cannot refresh acceptance. An ordinary dashboard without an explicit deployment-generation setting identifies itself by matching its own executable-bound runtime manifest to the selected backend; it cannot borrow a newer backend identity.
 
@@ -2801,16 +2844,18 @@ set that principal to the user granted the managed Guacamole connections.
 Do not grant every dashboard login duplicate Guacamole connection rows merely
 to make an embedded view load.
 
-Dashboard sections have stable paths, so refreshes and shared links keep the
-selected area instead of returning to the home view. Use `/service` for the
-Service view, `/browsers` for Browser sessions, and `/activity` for the
-activity stream. The Service view preserves its active record workspace in
-`?view=service:<name>` with values such as `service:browsers`,
-`service:profiles`, `service:incidents`, `service:sessions`, `service:tabs`,
-`service:jobs`, and `service:events`. The left workspace navigator separately
-persists selected workspace identity in `workspace`, `browser`, `session`,
-`tab`, `profile`, and `job` query parameters so row selection, inspector
-context, and the embedded viewport survive refreshes and handoff links.
+Open `/` or `/browsers` for the default browser workspace. Selecting a tab uses
+its current browser, profile and native desktop. The tab menu provides
+Properties, Copy URL, Share and scoped Close Tab. The rail can collapse and
+resize; Handoffs opens retained records and their independent policies on demand.
+
+Use **Diagnostics** at `/service` for Service inspection, Selection, Activity,
+Chat, Console, Network, Storage, Extensions and runtime health. `/activity` opens
+the Activity tool. Diagnostic viewing controls return to the same browser
+workspace. Service record selection retains `?view=service:<name>`, including
+`service:browsers`, `service:profiles`, `service:incidents`, `service:sessions`,
+`service:tabs`, `service:jobs` and `service:events`. Workspace, browser, session,
+tab, profile and job query parameters keep the requested context across refresh.
 
 On Linux workstations that should expose the dashboard through a stable local
 or external ingress route, install the user-scoped systemd service:
@@ -2880,10 +2925,10 @@ embedded dashboard asset SHA-256, supported UI features, current executable
 path, and current executable SHA-256. The publish command fails when that live
 manifest does not match the selected installed generation. Use
 `pnpm smoke:local-dashboard-runtime -- --expect-marker "Stream port"` when you
-only need to verify what the currently installed service is serving. If the
-dashboard detects a stale or missing runtime manifest, it renders a `Runtime
-contract drift` warning above the control surface with the local publish command
-needed to repair the live service. After login, the dashboard also polls the
+only need to verify what the currently installed service is serving. If
+Diagnostics detects a stale or missing runtime manifest, it renders a `Runtime
+contract drift` warning with the local publish command
+needed to repair the live service. While open, Diagnostics polls the
 authenticated `/api/runtime/health` endpoint every ten seconds. Its
 `agent-browser.runtime-health.v1` response compares active daemon executable,
 package, and stream metadata with the running binary and renders `Runtime status
@@ -2893,23 +2938,18 @@ restarts an active session automatically. `agent-browser install doctor --json` 
 `dashboardRuntime` manifest so CLI and dashboard readbacks describe the same
 installed binary and embedded UI bundle.
 
-Profile tiles provide **Open browser** for an exact-profile guided launch with a
-no-launch access-plan preflight. Every live service-owned browser provides
-**Close** in both the workspace tree and Service browser table. Detected
-non-owned browsers retain screenshot, watch, and borrowed-input controls but do
-not gain lifecycle ownership.
+Create or resume tasks through the MCP workflow tools or CLI. Their current
+browsers and tabs appear in the workspace. Lifecycle operations remain scoped
+to the owned task; diagnostic visibility does not grant browser ownership.
 
-The dashboard displays:
-- **Workspace navigator** — a compact left pane derived from service-owned browser, detected non-owned browser, session, tab, profile allocation, job, incident, and view-stream state. Each row carries a `WorkspaceInventoryClass` such as `service-owned-controllable-browser`, `service-owned-diagnostic-browser`, `detected-non-owned-browser`, `viewer-client`, `retained-history`, `service-owned-session`, or `service-profile-action`, so inspector, chat, console, and automation surfaces do not need to infer ownership from URL shape. The live rail shows only actionable Agent-browser owned and Detected non-owned browser groups; attention, stale, and retained records stay in Service, trace, event, job, incident, and log viewers instead of occupying the live control surface. It keeps raw IDs secondary to service, agent, task, profile, tab, and URL labels; shows disabled Launch, Seed, View, Control, Resume, Repair, and Close actions with service-sourced reasons; and includes a guided browser/profile launcher that starts the selected combo as its own daemon session. Selecting a row opens a dense right-pane Workspace inspector with a compact status strip, PID/RSS/CPU/CDP/stream indicators, the canonical inventory Class, action availability with reasons, page identity, ownership, viewport readiness, shared-profile actionability, and a collapsed diagnostic Evidence disclosure. Live service-owned browser rows distinguish "open the next operation as a tab through this retained profile owner" from "wait for or inspect the profile holder" so a profile in use by agent-browser is not shown as inherently unavailable; their enabled Add tab action posts `service_request` `tab_new` through that owner route. The same selection opens the workspace viewport when the row exposes an embeddable stream. Live daemon sessions publish a `cdp_screencast` stream from their runtime stream port, so rows such as `127.0.0.1:<port>/app` can render directly even when no service-owned browser record exists. Detected browsers that are not owned by agent-browser are explicitly labeled as non-owned rather than mixed into the owned group. RDP gateway rows require current operator-visible browser-window proof before View, Control, or external open become available; terminal-only, idle-display, missing-proof, wrong-tab, unavailable-route, missing-CDP-target, and stale-route routes move to needs-attention as disabled diagnostic rows instead of opening a generic desktop as if it were the browser. The launcher defaults to the shared remote desktop display, RDP gateway view stream, and manual desktop input; selecting RDP gateway starts a `remote_headed` session so the resulting browser has a Guac-ready embedded viewport when `AGENT_BROWSER_REMOTE_VIEW_URL` and `AGENT_BROWSER_REMOTE_HEADED_DISPLAY` are configured. When stream metadata is embeddable and operator-visible, the dashboard closes the launcher, replaces stale `tab=target:*` URL selections with the current live service tab, queues `view_focus` with the selected live target ID; an index is used only when no target ID is supplied, and opens the workspace viewport; otherwise it falls back to the Service Jobs view or keeps the row disabled with the route-proof reason.
-  Guided launches preserve the access-plan selected `runtimeProfile`, configured
-  profile path, `browserBuild`, and executable evidence in the spawned session,
-  and non-blocking freshness warnings do not disable Launch when the launchable
-  request itself is available.
-- **Live viewport** — real-time JPEG frames from the browser; when a browser exposes both CDP and RDP streams, the viewport shows an explicit source chooser and remembers the selection per browser. Recoverable browser tiles with no usable stream remain visible with a Wake stream action that reattaches or switches the retained route without launching another browser process. Detected non-owned browsers with reachable page CDP targets expose a PNG capture and a responsive Watch live image feed. A dashboard superuser can explicitly Borrow pointer, keyboard, and wheel input for up to five minutes and Release it early; Borrow never enables Close, Kill, profile release, or lifecycle ownership. Embedded Guacamole workspace viewports include a compact interaction-settings control that opens Guacamole's keyboard/input-method and mouse-mode panel without relying on the mobile edge gesture or Ctrl+Alt+Shift shortcut, and they detect single-active-viewer disconnects with a Take over action so another dashboard or popout can be served deliberately
-- **Service view** — worker and browser health cards, compact retained-record status with hover details and cleanup alerts only when retained state needs attention, a remembered operator identity for incident audit metadata, optional operator notes for incident acknowledgement and resolution, prominent incident severity, escalation, recommended action displays, and remedy summary groups sourced from the service incident contract, a service-owned incident history timeline with local fallback, a trace explorer backed by `/api/service/trace` for service, agent, task, browser, profile, session, and time-window debugging, including ownership summary cards, naming warnings, copyable CLI and HTTP trace handoff strings, profile lease wait cards and timeline job rows that jump to their retained Jobs row, incident-backed timeline rows that jump to their retained Incidents row, incident detail actions that jump back to the related trace, display-allocation summary cards that jump to filtered Jobs rows, a browser-health transition timeline for crash/recovery visibility, a backend-owned profile allocation view from `profileAllocations` with retained owner browser, shared client, lease/conflict, tab, and duplicate-launch guidance refreshed from `GET /api/service/profiles/<id>/allocation` and guarded by `pnpm test:dashboard-profile-allocation`, a grouped incident browser panel with handling-state filters plus acknowledge and resolve actions, incident filtering for crash/disconnect/recovery and timed-out or cancelled jobs, reconciliation status, active-versus-retained summaries for sessions, tabs, and jobs, filterable and sortable service jobs with naming warnings, requested display allocation, and queued/running job cancellation, a managed browser table that defaults to actionable live or degraded records while keeping inert retained placeholders behind retained/all filters, grouped and locally remembered lifecycle, density, column visibility, and column width controls for browser table fields with a full table-view reset, selected-record inspection that opens browser, profile, incident, session, tab, and job rows in a desktop right pane or mobile dialog with a hero summary, primary actions, semantic fact sections, related-record jumps, and an Evidence disclosure for raw JSON, IDs, and endpoints, right-pane acknowledge/resolve actions for selected incidents, right-pane cancel for selected queued or running jobs, embedded remote-view inspection for browser view streams and service tabs with fullscreen and Guacamole interaction settings controls, a queued `view_focus` request that requires the selected live target ID when supplied and uses a tab index only without an explicit target, brings that tab forward, and asks Chrome to maximize the containing window before inspection, human-takeover sessions with visible owner, queue impact, lease/conflict details, disabled Resume until a service-owned release action exists, and preserved Control or View actions on related browsers that still expose controllable streams, filterable service events including tab lifecycle changes, and a reconcile action
+The workspace and optional Diagnostics provide:
+
+- **Browser workspace** — the default compact, collapsible and resizable browser/tab rail. Tab selection opens the exact owned native desktop; Properties preserves supplied context and current identity, Share prepares its opaque link, and Handoffs manages retained records on demand.
+- **Native desktop** — Remote View owns rendering, viewer authentication and desktop controls. The same opaque handoff URL supports standalone human assistance and continuation. Existing compatible daemon streams remain available for their tasks.
+- **Service diagnostics** — inspect browser, profile, session, tab, job, incident and event records, with trace context, ownership evidence and guarded record actions. View controls return to the single browser workspace; native Remote View owns desktop viewing and control.
 - **Activity feed** — chronological command/result stream with timing and expandable details
 - **Console output** — browser console messages (log, warn, error)
-- **Session creation** — create new sessions from the UI with local engines (Chrome, Lightpanda) or cloud providers (AgentCore, Browserbase, Browserless, Browser Use, Kernel)
+- **Task creation** — use the existing MCP or CLI workflows; owned tasks appear in the workspace.
 - **AI Chat** — chat with an AI assistant directly in the dashboard (requires Vercel AI Gateway configuration)
 
 ### AI Chat
@@ -3088,7 +3128,7 @@ agent-browser service browser-capability prefer \
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, pass `--service-reconcile-interval <ms>`, or set `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
-Due active service monitors are enqueued through the same service worker every 60000 ms by default. Set `service.monitorIntervalMs`, pass `--service-monitor-interval <ms>`, or set `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` to change the scheduler interval. Use `0` to disable monitor scheduling. Use `agent-browser service monitors run-due`, `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. The run-due response includes aggregate counts plus per-monitor results with `monitorId`, `target`, `success`, `result`, `checkedAt`, and `staleProfileIds` so clients can confirm which profile-readiness rows were expired by the queued pass. Use `agent-browser service monitors pause <id>` and `agent-browser service monitors resume <id>`, HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, or `pauseServiceMonitor()` and `resumeServiceMonitor()` to quiet or restore noisy monitors without clearing retained health history. Use `agent-browser service monitors triage <id>`, HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, or `triageServiceMonitor()` to acknowledge the related monitor incident and clear reviewed failures in one queued operation. Use `agent-browser service monitors reset <id>`, HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, or `resetServiceMonitorFailures()` when only the reviewed failure count should be cleared while retaining the last failure evidence. The runner updates `lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and `consecutiveFailures`; failed probes set the monitor `state` to `faulted` and append a service incident event.
+Due active service monitors are enqueued through the same service worker every 60000 ms by default. Set `service.monitorIntervalMs`, pass `--service-monitor-interval <ms>`, or set `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` to change the scheduler interval. Use `0` to disable monitor scheduling. Use `agent-browser service monitors run-due`, `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. The run-due response includes aggregate counts plus per-monitor results with `monitorId`, `target`, `success`, `result`, `checkedAt`, and `staleProfileIds` so clients can confirm which profile-readiness rows were expired by the queued pass. Use `agent-browser service monitors pause <id>` and `agent-browser service monitors resume <id>`, HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, or `pauseServiceMonitor()` and `resumeServiceMonitor()` to quiet or restore noisy monitors without clearing retained health history. Use `agent-browser service monitors triage <id>`, HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, or `triageServiceMonitor()` to acknowledge the related monitor incident and clear reviewed failures in one queued operation. Use `agent-browser service monitors reset <id>`, HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, or `resetServiceMonitorFailures()` when only the reviewed failure count should be cleared while retaining the last failure evidence. The runner updates `lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and `consecutiveFailures`; failed probes set the monitor `state` to `faulted` and append a service incident event.
 Use a monitor target such as `{ "profile_readiness": "acs" }` when the service should police retained profile freshness for a target login identity without launching Chrome. If a fresh readiness row has expired, the monitor marks that row stale, removes the target from `authenticatedServiceIds`, faults the monitor, and records `staleProfileIds` in the monitor event.
 
 Service control jobs default to a 900000 ms worker deadline. Set `service.jobTimeoutMs`, pass `--service-job-timeout <ms>`, or set `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to choose another deadline. A zero or absent configured value selects the built-in default, so every dispatched job has a recovery horizon. Background and explicit service reconciliation mark stranded `running` records `timed_out` after their persisted deadline without retrying the original effect; legacy records without timeout metadata use the same 900000 ms recovery horizon.
@@ -3683,11 +3723,10 @@ literal loopback Guacamole origin. Dashboard ingress allows up to 21 seconds
 for the bounded primary-start response. An uncertain startup outcome requires
 reconciliation before another attempt. Connection readiness does not establish
 visible pixels or successful input; those require separate outcome evidence.
-Use `pnpm test:service-dashboard-remote-control-ui-live` when changing the
-selected-browser inspector or embedded remote-control dialog; it drives the
-real dashboard UI with `agent-browser`, selects the remote-headed browser row,
-clicks the right-pane **Open remote control** action, verifies the iframe URL,
-and confirms a dashboard-owned `view_focus` job was queued.
+Qualify the default browser workspace through its bounded private native
+workflow: exact selection, authenticated native pixels/input, peer preservation
+and same-link continuation. The historical inspector-dialog live script describes
+the retired UI and does not qualify the current default workspace.
 Use `pnpm test:rdp-guac-viewer-transfer-live` for the Slice B two-client RDP
 and Guacamole gate. It refuses to run unless `AGENT_BROWSER_REMOTE_VIEW_URL`,
 `AGENT_BROWSER_REMOTE_HEADED_DISPLAY`,
@@ -3956,6 +3995,70 @@ never persisted into Service State.
 
 Use `service status` to inspect the service-mode control plane and configured service entities without launching a browser. `service runtime-backup status` verifies the current Browser Runtime SQLite backup without changing it. `service runtime-backup create` performs one online backup, validates its SQLite integrity and digest, and retains at most one previous backup. These backup commands never restore data and do not modify the separate Service State store.
 
+Browser Runtime reads database schemas 1 through 4. The first native idle-retirement
+custody claim atomically promotes schema 1 to schema 2 with its durable record.
+Command-activity reservations require at least schema 3. Original-process
+activity evidence and ended-resource settlement require schema 4. Each write
+atomically advances the database to its required reader version without downgrading it. Keep a schema-4-capable binary with that database and its
+backups; older readers reject it. Activity reservations prevent automatic retirement
+through command execution and session publication. Unknown effects retain their
+veto and original readback obligation; acknowledgement alone does not release it.
+Positive original-process exit permits resource recovery while preserving the
+unknown command record. Unavailable observation retains the veto; recovery does
+not replay the original command or adopt a replacement process as its evidence.
+
+The automatic-close candidate persists its exact operation before preparing
+native viewer exclusion, records each close attempt before the physical effect,
+and publishes session state with retirement custody before completing the fence.
+A lost completion reply is reconciled against the original fence after restart.
+Unresolved physical close outcomes retain custody; native workflow and installed
+acceptance remain pending.
+
+Pending retirement custody also fences changes to its browser, tab and session
+projection inside SQLite publication and launch/recovery admission transactions.
+Unrelated profiles can continue. `browser_session_publication_idle_retirement_fenced`
+means that publication would overwrite an unresolved original operation; it does
+not authorize another close or replacement launch.
+
+A physical close requires a fresh atomic attempt admission. A stale coordinator
+reads the original pending attempt instead of treating an idempotent record
+update as permission to close again. When one command expires old work and
+reopens its profile, the host publishes and completes the old retirement before
+reusing its logical browser identity.
+
+Preparation attempts also require fresh atomic admission. After interruption,
+the owner reads the exact original fence. A known prepared operation with no
+admitted close can publish unchanged task state before completing that fence;
+a delayed actor then cannot admit its old effect. An absent fence after an
+unknown prepare remains unresolved.
+
+Before delegating a browser command, the candidate checks durable profile custody.
+An unresolved retirement returns `browser_session_idle_readback_required` before
+tab acquisition, creation, navigation, focus or command execution. Process-liveness
+observation remains available. Atomic admission against a retirement starting
+concurrently with a new command remains pending source qualification.
+
+Normal close confirmation requires positive OS process absence. An unavailable
+process observation returns `browser_session_process_observation_unavailable`
+and leaves the outcome unresolved, including after a lost close reply. This
+absence check alone does not prove original process identity across PID reuse.
+
+The launch-custody candidate retains kernel start identity captured with the
+original launched child or verified profile attachment. Restart reads the stored
+identity; a reused PID or missing-identity replay cannot replace it. Older records
+remain explicitly without that evidence. Recording the first kernel identity
+promotes the private database reader version atomically. A new retirement scope
+freezes the published launch identity, and SQLite validates that exact join in
+its claim transaction. Restart preserves the frozen evidence. Admitted automatic
+effects and readback use that scope. A changed kernel start proves the original
+ended without attaching or closing its replacement. Live-target readback queries
+only the verified original browser and frozen target. New automatic groups with
+missing legacy evidence defer before any new claim, native preparation or attempt.
+Existing unresolved operations retain original readback obligations; a scoped
+runtime request without identity returns `browser_session_idle_original_identity_missing`
+and cannot adopt the current PID. Native workflow and installed qualification
+remain pending.
+
 ```bash
 agent-browser service status
 agent-browser service status --watch --interval 1000
@@ -4020,7 +4123,7 @@ agent-browser service events --kind profile_lease_wait_started
 agent-browser service events --kind tab_lifecycle_changed
 ```
 
-The response includes worker state, browser health, queue depth, profile lease wait pressure, persisted service state from `~/.agent-browser/service/state.json`, configured service-mode profiles, sessions, monitors, site policies, providers from `agent-browser.json` and `~/.agent-browser/config.json`, and a no-launch `launchConfig` diagnostic for the configured browser build and executable path. `launchConfig.profileSmoke` reports whether `pnpm test:wsl-windows-chromium-profile-live` is applicable for the current WSL Windows `chromium-stealthcdp` posture. In text mode, it summarizes profiles, the derived `profileAllocations` view, browsers, sessions, and profile lease wait pressure with service, agent, task, profile, profile selection reason, profile lease disposition, lease conflicts, lease, last lease observation timestamp, cleanup, browser linkage, health, and retained observation fields. `profileAllocations` is also returned by `service profiles`, `GET /api/service/profiles`, `GET /api/service/status`, and `agent-browser://profiles`; use `GET /api/service/profiles/<profile-id>/allocation` or `getServiceProfileAllocation()` when a software client needs one allocation row. Profile collections include `profileSources`, and profile lookup plus access-plan responses include `selectedProfileSource`, so clients can tell whether the effective profile came from config, runtime observation, or persisted state. The allocation view lists holder sessions, exclusive holders, waiting profile-lease jobs, conflict session IDs, related service, agent, and task labels, linked browsers, compact browser health summaries, linked tabs, the current lease state, and the recommended next action for each known profile. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. When reconciliation removes stale session/tab ownership links, it appends a `reconciliation` event with `details.action: "session_tab_ownership_repaired"` and the removed relationships. Configured profiles, sessions, monitors, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, close, and command-time stale-browser detection update the persisted browser health records for the active session. Browser records retain the latest non-ready health evidence in `lastHealthObservation`, so service status clients can inspect failure metadata without reconstructing events. Use `service profiles`, `service sessions`, `service browsers`, `service tabs`, `service monitors`, `service site-policies`, `service providers`, and `service challenges` for focused collection views without parsing the full status payload. Active monitor records are checked by the daemon scheduler when due; use `service monitors run-due`, `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. The response includes per-monitor results, including stale profile IDs for profile-readiness probes. Use monitor pause/resume commands or helpers to change only the retained monitor state while preserving health evidence. Checks update `lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and `consecutiveFailures`, and failed probes set the monitor `state` to `faulted` and append a service incident event. A `profile_readiness` monitor target checks retained no-launch readiness for a target login identity; expired fresh rows are marked stale and removed from `authenticatedServiceIds` without launching Chrome. Unexpected process-exit health and recovery events include `details.processExitCause: "unexpected_process_exit"` and `details.failureClass: "browser_process_exited"`; active local Chrome exits also include `processExitDetection`, `processExitPid`, exit code or signal when available, and `browserStderrLogPath` when Chrome stderr was captured under `~/.agent-browser/tmp/chrome-launches/`. Browser launch events include `browserStderrLogPath` when Chrome stderr capture is available. CDP-disconnect health events also include `browserStderrLogPath` when agent-browser owns the local Chrome process. During close, agent-browser first tries a polite browser shutdown and then force kills owned browser processes if needed; close-generated health events include `details.shutdownReasonKind: "operator_requested_close"`, `details.processExitCause: "operator_requested_close"`, and shutdown outcome flags. Polite shutdown failure leaves the browser record `degraded`, and force-kill failure leaves it `faulted` with an OS-degraded warning. When a queued command finds the active browser process exited or the CDP connection disconnected, agent-browser records that failure before cleanup and relaunch. Runtime profile and custom profile launches also populate linked service profile and session records, including `serviceName`, `agentName`, `taskName`, `profileSelectionReason`, `profileLeaseDisposition`, `profileLeaseConflictSessionIds`, and `lastLeaseObservedAt` when the caller provides enough context. Service-scoped launches reject active exclusive profile conflicts by default before starting another browser; set `profileLeasePolicy: "wait"` and `profileLeaseWaitTimeoutMs` to wait for release instead. Same-session retained browser reuse remains allowed.
+The response includes worker state, browser health, queue depth, profile lease wait pressure, persisted service state from `~/.agent-browser/service/state.json`, configured service-mode profiles, sessions, monitors, site policies, providers from `agent-browser.json` and `~/.agent-browser/config.json`, and a no-launch `launchConfig` diagnostic for the configured browser build and executable path. `launchConfig.profileSmoke` reports whether `pnpm test:wsl-windows-chromium-profile-live` is applicable for the current WSL Windows `chromium-stealthcdp` posture. In text mode, it summarizes profiles, the derived `profileAllocations` view, browsers, sessions, and profile lease wait pressure with service, agent, task, profile, profile selection reason, profile lease disposition, lease conflicts, lease, last lease observation timestamp, cleanup, browser linkage, health, and retained observation fields. `profileAllocations` is also returned by `service profiles`, `GET /api/service/profiles`, `GET /api/service/status`, and `agent-browser://profiles`; use `GET /api/service/profiles/<profile-id>/allocation` or `getServiceProfileAllocation()` when a software client needs one allocation row. Profile collections include `profileSources`, and profile lookup plus access-plan responses include `selectedProfileSource`, so clients can tell whether the effective profile came from config, runtime observation, or persisted state. The allocation view lists holder sessions, exclusive holders, waiting profile-lease jobs, conflict session IDs, related service, agent, and task labels, linked browsers, compact browser health summaries, linked tabs, the current lease state, and the recommended next action for each known profile. It refreshes the persisted control-plane snapshot in `state.json` but does not launch a browser. It also probes persisted browser records: dead local PIDs are marked `process_exited`, unreachable CDP endpoints with a live PID are marked `cdp_disconnected`, unreachable CDP endpoints without a PID are marked `unreachable`, and endpoints that answer health probes but fail target-list discovery are marked `degraded`. Reachable CDP endpoints are queried for live page and webview targets, updating `tabs` and known session/tab relationships in service state. Non-ready browsers close their known tabs during reconciliation so stale tab state does not look active. When reconciliation removes stale session/tab ownership links, it appends a `reconciliation` event with `details.action: "session_tab_ownership_repaired"` and the removed relationships. Configured profiles, sessions, monitors, site policies, and providers override entries with the same IDs from the persisted state. Browser launch, close, and command-time stale-browser detection update the persisted browser health records for the active session. Browser records retain the latest non-ready health evidence in `lastHealthObservation`, so service status clients can inspect failure metadata without reconstructing events. Use `service profiles`, `service sessions`, `service browsers`, `service tabs`, `service monitors`, `service site-policies`, `service providers`, and `service challenges` for focused collection views without parsing the full status payload. Active monitor records are checked by the daemon scheduler when due; use `service monitors run-due`, `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. The response includes per-monitor results, including stale profile IDs for profile-readiness probes. Use monitor pause/resume commands or helpers to change only the retained monitor state while preserving health evidence. Checks update `lastCheckedAt`, `lastSucceededAt`, `lastFailedAt`, `lastResult`, and `consecutiveFailures`, and failed probes set the monitor `state` to `faulted` and append a service incident event. A `profile_readiness` monitor target checks retained no-launch readiness for a target login identity; expired fresh rows are marked stale and removed from `authenticatedServiceIds` without launching Chrome. Unexpected process-exit health and recovery events include `details.processExitCause: "unexpected_process_exit"` and `details.failureClass: "browser_process_exited"`; active local Chrome exits also include `processExitDetection`, `processExitPid`, exit code or signal when available, and `browserStderrLogPath` when Chrome stderr was captured under `~/.agent-browser/tmp/chrome-launches/`. Browser launch events include `browserStderrLogPath` when Chrome stderr capture is available. CDP-disconnect health events also include `browserStderrLogPath` when agent-browser owns the local Chrome process. During close, agent-browser first tries a polite browser shutdown and then force kills owned browser processes if needed; close-generated health events include `details.shutdownReasonKind: "operator_requested_close"`, `details.processExitCause: "operator_requested_close"`, and shutdown outcome flags. Polite shutdown failure leaves the browser record `degraded`, and force-kill failure leaves it `faulted` with an OS-degraded warning. When a queued command finds the active browser process exited or the CDP connection disconnected, agent-browser records that failure before cleanup and relaunch. Runtime profile and custom profile launches also populate linked service profile and session records, including `serviceName`, `agentName`, `taskName`, `profileSelectionReason`, `profileLeaseDisposition`, `profileLeaseConflictSessionIds`, and `lastLeaseObservedAt` when the caller provides enough context. Service-scoped launches reject active exclusive profile conflicts by default before starting another browser; set `profileLeasePolicy: "wait"` and `profileLeaseWaitTimeoutMs` to wait for release instead. Same-session retained browser reuse remains allowed.
 
 `service leases` exposes first-class profile lease authority without launching a browser. HTTP `GET /api/service/profile-leases`, MCP `agent-browser://profile-leases`, and generated helpers `getServiceProfileLeases()` and `findServiceProfileLease()` return the same collection. Use `service leases watch` or `watchServiceProfileLeases()` for bounded or abortable polling. Each record names the authenticated principal, exact owner generation, subordinate session and tab work, blocking identity axes, authorized actions, typed continuity recourse, and doctor findings. A current canonical profile claim is the sole operational projection for that profile: retained sessions and owner bindings remain visible context but cannot add doctor blockers. It reports `state=active` with `recourse=continue_with_active_claim`; the claim does not by itself prove that a browser process exists. Use `service leases doctor`, `service leases <id> inspect`, or `service leases <id> explain` for focused diagnosis. Register a service principal with `service leases register --principal-id <id> --profile-id <id> --capability-out <absolute-private-path>`. Registration can happen before or after first launch. Rejoin, renew, and release require the exact current `--revision` and read the capability from `--capability-file`; the raw capability is never accepted on the command line or retained in Service State. When a pre-registered capability later has one exact uncontested ready owner session, or registration finds one live session blocked by `unproven_session_authority`, the lease authorizes `rejoin`. Run `service leases <id> rejoin --revision <revision> --capability-file <path> --expires-at <rfc3339>`. Rejoin may establish the missing binding or compare-and-swap the same principal, profile, and capability binding to a newer current ready owner generation, then binds only that unique exact session and its same-browser active tabs. After an unexpected browser exit, a non-expired registered session work lease preserves this exact profile selection while replay creates the next owner generation. Labels, expired work, and legacy observations cannot cross that gap. Ambiguous sessions, mismatched browsers, and foreign principals fail closed. HTTP mutations require an `Authorization: Bearer` header, while MCP mutation tools accept the ephemeral `profileCapability` field. `service leases <id> reconcile plan` and `planServiceProfileLeaseReconciliation()` return a sealed, expiring descriptor bound to the current boot epoch. When only the same registered capability's owner generation is stale and the exact ready profile, browser, process, and session route still agree, the plan contains one `refresh_principal_owner_binding` transition even when no subordinate session work remains. Apply rechecks every bound identity before advancing that binding and fails closed if the evidence or boot epoch changed. Legacy retained evidence remains observation-only and caller labels cannot grant profile authority. Rows backed only by released or expired legacy sessions report `state=historical`, expose read actions only, have no blocking identity axes, and do not make lease doctor unhealthy. Current nonterminal legacy session or owner evidence still requires identity reconciliation only when no canonical claim exists. Observation-only current lease rows advertise `profile_acquire` when the capability-bound acquisition coordinator is the executable recourse. The dashboard maps `reconcile_plan` to its no-effect Reconcile plan action and offers Acquire profile for `profile_acquire`; it does not reinterpret observation-only evidence as lease mutation authority.
 
@@ -4342,6 +4445,31 @@ the `profile_access` axis, `child_admission` phase, and
 lease `viewerId` with the interaction `agentName` before any new attempt. Never
 change identity labels to borrow controller authority.
 
+Controller takeover rejected with `desktop_input_route_fence_contended` reports
+the exact code, `file_lock_wait`, and `no_effect` before authority changes.
+Inspect Service status and trace to resolve contention before a new attempt;
+`inspect_before_retry` does not authorize automatic replay. The same error from
+other actions remains conservative because earlier effects may have occurred.
+
+Authorized native Service lane title and URL reads bind their exact target without activating its
+native tab or raising the browser. Explicit workspace focus and tab selection
+still activate the addressed target. This lets background metadata reads
+preserve the person's foreground desktop.
+Managed tasks sharing one browser preserve the currently visible tab when
+another task reads its title or URL; an explicit focus operation selects it.
+After a managed task closes, replaying its retained tab-creation request returns
+`browser_session_tab_request_target_closed` and does not launch a replacement.
+On retained session browser routes, authenticated operator focus requests sharing
+a declared desktop queue in
+admission order across clients and runtime lanes within one host. The queue
+holds through native selection, and the operator proof is checked again after
+waiting. Different desktop allocations remain independent. Waiting uses the
+request timeout, or ten seconds when none is supplied; inspect pending focus
+work before submitting another explicit selection after a wait expires.
+Managed view_focus marked as an operator request also requires current authenticated
+operator authority. An unbound request is rejected before selecting its target;
+ordinary explicit managed focus keeps its existing behavior.
+
 A retained-browser identity rejection such as
 `runtime_handoff_orphan_browser_hint_mismatch` is a failed resolution, not a
 successful retryable convergence response. Inspect the profile recovery plan
@@ -4390,7 +4518,7 @@ MCP `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,servi
 
 MCP `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}` mirrors `GET /api/service/access-plan` with the same account, URL, runtime-profile, browser-build, browser-host, view-stream, control-input, and display-isolation hints for software clients and agents that need the full no-launch recommendation. For RDP/manual/remote-headed login, payment, or challenge-style work, `decision.oneTimeProfileRecommendation` either plans a deterministic `managed_one_time` runtime profile when no durable profile was selected, or warns when the caller supplied an unknown one-time `runtimeProfile`.
 
-MCP `service_profile_freshness_update` mirrors `POST /api/service/profiles/<id>/freshness` for serialized profile freshness updates. MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` mirrors `GET /api/service/profiles/<id>/seeding-handoff` for handoff reads. MCP `service_profile_seeding_handoff_update` mirrors `POST /api/service/profiles/<id>/seeding-handoff` for detached seeding lifecycle changes such as launched, waiting for close, closed unverified, verification pending, fresh, failed, or abandoned. HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<id>`, MCP `service_monitor_upsert`, MCP `service_monitor_delete`, `upsertServiceMonitor()`, and `deleteServiceMonitor()` persist monitor definitions. Active monitors are checked by the daemon scheduler when due; use HTTP `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, `runDueServiceMonitors()`, or `agent-browser service monitors run-due` to run due active monitors immediately. Use HTTP `POST /api/service/monitors/<id>/pause`, HTTP `POST /api/service/monitors/<id>/resume`, MCP `service_monitor_pause`, MCP `service_monitor_resume`, `pauseServiceMonitor()`, `resumeServiceMonitor()`, or the matching CLI commands to quiet or restore a monitor without clearing health history. Use HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, `triageServiceMonitor()`, or `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and reset reviewed failures together. Use HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, `resetServiceMonitorFailures()`, or `agent-browser service monitors reset <id>` after a reviewed failure has been triaged and the retained failure evidence should remain available. Use HTTP `POST /api/service/remedies/apply?escalation=monitor_attention`, MCP `service_remedies_apply`, `applyServiceRemedies()`, or `agent-browser service remedies apply --escalation monitor_attention` to apply all active monitor remedies in one serialized operation. Use `escalation=browser_degraded` after operator review to batch retry enablement for active degraded-browser incidents. Use `escalation=os_degraded_possible` only after host inspection to batch the existing faulted-browser retry remedy for active OS-degraded-possible incidents.
+MCP `service_profile_freshness_update` mirrors `POST /api/service/profiles/<id>/freshness` for serialized profile freshness updates. MCP `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}` mirrors `GET /api/service/profiles/<id>/seeding-handoff` for handoff reads. MCP `service_profile_seeding_handoff_update` mirrors `POST /api/service/profiles/<id>/seeding-handoff` for detached seeding lifecycle changes such as launched, waiting for close, closed unverified, verification pending, fresh, failed, or abandoned. HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<id>`, MCP `service_monitor_upsert`, MCP `service_monitor_delete`, `upsertServiceMonitor()`, and `deleteServiceMonitor()` persist monitor definitions. Active monitors are checked by the daemon scheduler when due; use HTTP `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, `runDueServiceMonitors()`, or `agent-browser service monitors run-due` to run due active monitors immediately. Use HTTP `POST /api/service/monitors/<id>/pause`, HTTP `POST /api/service/monitors/<id>/resume`, MCP `service_monitor_pause`, MCP `service_monitor_resume`, `pauseServiceMonitor()`, `resumeServiceMonitor()`, or the matching CLI commands to quiet or restore a monitor without clearing health history. Use HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, `triageServiceMonitor()`, or `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and reset reviewed failures together. Use HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, `resetServiceMonitorFailures()`, or `agent-browser service monitors reset <id>` after a reviewed failure has been triaged and the retained failure evidence should remain available. Use HTTP `POST /api/service/remedies/apply?escalation=monitor_attention`, MCP `service_remedies_apply`, `applyServiceRemedies()`, or `agent-browser service remedies apply --escalation monitor_attention` to apply all active monitor remedies in one serialized operation. Use `escalation=browser_degraded` after operator review to batch retry enablement for active degraded-browser incidents. Use `escalation=os_degraded_possible` only after host inspection to batch the existing faulted-browser retry remedy for active OS-degraded-possible incidents.
 
 Software clients can use this TypeScript-shaped payload for `POST /api/service/request`:
 
@@ -5029,7 +5157,7 @@ with the `verify-seeding` CLI command, freshness HTTP and MCP write path,
 `runServiceAccessPlanPostSeedingProbe()` and `verifyServiceProfileSeeding()` helpers, and
 `examples/service-client/post-seeding-probe.mjs` command. It also includes
 `monitorRunDue`, a copyable due-monitor recipe for `POST
-/api/service/monitors/run-due`, MCP `service_monitors_run_due`, CLI
+/api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, CLI
 `agent-browser service monitors run-due`, and
 `runServiceAccessPlanMonitorRunDue()`. That helper returns the raw monitor
 run response plus `accessPlanSummary`, which maps per-monitor results back to
@@ -5361,19 +5489,506 @@ handoff; it verifies an access-plan response can be passed into
 `pnpm test:service-client-example-live` to validate the main trace
 example against a real isolated daemon and browser session.
 
-For MCP clients, use `mcp serve` to run a stdio server that exposes service resources without launching a browser. The server supports `initialize`, `ping`, `resources/list`, `resources/templates/list`, `resources/read`, `tools/list`, and `tools/call`. MCP tools include `service_request`, which queues one intent-based browser action with caller context and site/login hints, `service_job_cancel`, which cancels queued service jobs or requests cancellation for running jobs, `service_browser_retry`, which enables a new recovery attempt for a faulted browser, `service_incidents`, which reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP, `service_trace`, which reads related events, jobs, incidents, and activity from persisted service state, `service_profile_upsert`, `service_profile_delete`, `service_session_upsert`, `service_session_delete`, `service_site_policy_upsert`, `service_site_policy_delete`, `service_provider_upsert`, `service_provider_delete`, and `service_browser_capability_registry_upsert`, which mutate persisted service config through the service worker queue with the same ID checks as HTTP, `browser_navigate`, which queues typed navigation for the active browser session, `browser_requests`, which enables and filters request inspection, `browser_request_detail`, which reads one tracked request by ID, `browser_headers`, which sets extra HTTP headers for the active browser session, `browser_offline`, which toggles network offline emulation, `browser_cookies_get`, which reads cookies, `browser_cookies_set`, which sets cookies, `browser_cookies_clear`, which clears cookies, `browser_storage_get`, which reads localStorage or sessionStorage, `browser_storage_set`, which sets localStorage or sessionStorage, `browser_storage_clear`, which clears localStorage or sessionStorage, `browser_user_agent`, which sets the user agent, `browser_viewport`, which sets the viewport, `browser_geolocation`, which sets geolocation emulation, `browser_permissions`, which grants browser permissions, `browser_timezone`, which sets timezone emulation, `browser_locale`, which sets locale emulation, `browser_media`, which sets media emulation, `browser_dialog`, which handles dialog status or response, `browser_upload`, which uploads files, `browser_download`, which clicks and saves downloads, `browser_wait_for_download`, which waits for downloads, `browser_har_start` and `browser_har_stop`, which capture HAR files, `browser_route`, which routes matching requests, `browser_unroute`, which removes routes, `browser_console`, which reads or clears console messages, `browser_errors`, which reads page errors, `browser_pdf`, which saves PDFs, `browser_response_body`, which reads matching response bodies, `browser_clipboard`, which controls clipboard operations, `browser_command`, which queues any supported browser-control action for HTTP parity, `browser_snapshot`, which queues the existing snapshot command for the active browser session, `browser_get_url`, which reads the active browser URL, `browser_get_title`, which reads the active browser title, `browser_tabs`, which lists open tabs, `browser_screenshot`, which saves a screenshot for visual inspection, `browser_click`, which clicks a selector or cached ref through the queued control plane, `browser_fill`, which fills a field through the queued control plane, `browser_wait`, which waits for selector, text, URL, function, load-state, or fixed-duration conditions through the queued control plane, `browser_type`, which types text through the queued control plane, `browser_press`, which presses keys and key chords through the queued control plane, `browser_hover`, which hovers elements through the queued control plane, `browser_select`, which selects dropdown values through the queued control plane, `browser_get_text`, which reads element text through the queued control plane, `browser_get_value`, which reads field values through the queued control plane, `browser_get_attribute`, which reads element attributes through the queued control plane, `browser_get_html`, which reads element inner HTML through the queued control plane, `browser_get_styles`, which reads computed styles through the queued control plane, `browser_count`, which counts matching elements through the queued control plane, `browser_get_box`, which reads element geometry through the queued control plane, `browser_is_visible`, which reads element visibility through the queued control plane, `browser_is_enabled`, which reads element enabled state through the queued control plane, `browser_check`, which checks checkbox or radio controls through the queued control plane, `browser_is_checked`, which reads checkbox, radio, or ARIA checked state through the queued control plane, `browser_uncheck`, which unchecks checkbox controls through the queued control plane, `browser_scroll`, which scrolls pages or containers through the queued control plane, `browser_scroll_into_view`, which scrolls a target element into view through the queued control plane, `browser_focus`, which focuses a target element through the queued control plane, and `browser_clear`, which clears a target field through the queued control plane. MCP tool callers should include `serviceName`, `agentName`, and `taskName` when available so multi-service and multi-agent behavior remains traceable. Service jobs persist these caller context fields when commands provide them and persist advisory `namingWarnings` when any caller label is missing. Access-plan responses echo the same caller labels and report the same naming warnings in `query` and `decision`. Current warning values are `missing_service_name`, `missing_agent_name`, and `missing_task_name`; `hasNamingWarning` is `true` when `namingWarnings` is non-empty. The `agent-browser://contracts` resource mirrors HTTP `GET /api/service/contracts` with service request schema IDs, contract versions, route names, MCP tool names, and supported actions. The `agent-browser://browser-capability-registry` resource mirrors HTTP `GET /api/service/browser-capability-registry` and returns the advisory no-launch browser registry. `POST /api/service/browser-capability-registry/<collection>/<id>`, MCP `service_browser_capability_registry_upsert`, and `upsertServiceBrowserCapabilityRegistryRecord()` add or replace one advisory registry record and return the updated registry counts. The `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}` template mirrors HTTP `GET /api/service/access-plan` and returns the no-launch service-owned profile, policy, provider, challenge, readiness, and recommendation payload. The `agent-browser://jobs` resource returns the same service job record schema as HTTP: `docs/dev/contracts/service-job-record.v1.schema.json`; CLI and HTTP `service_jobs` response envelopes follow `docs/dev/contracts/service-jobs-response.v1.schema.json`. The `agent-browser://incidents` resource and `service_incidents` tool return the same service incident record schema as HTTP: `docs/dev/contracts/service-incident-record.v1.schema.json`; `service_incidents` response envelopes follow `docs/dev/contracts/service-incidents-response.v1.schema.json`. Run `pnpm test:mcp-live` to validate the live daemon, browser, MCP tool call, and retained job metadata path. Run `pnpm test:service-reconcile-live` to validate that `service reconcile` and MCP browser/tab resources agree on live service-owned state. Run `pnpm test:service-profile-live` to validate that runtime-profile launches populate MCP profile and session resources with caller metadata. Run `pnpm test:service-profile-http-live` to validate the same profile and session metadata through the HTTP service API. Run `pnpm test:service-request-live` to validate HTTP `/api/service/request` and MCP `service_request` over one isolated live browser session. Run `pnpm test:service-recovery-http-live` to validate the HTTP trace contract for crash detection, recovery start, and ready-after-relaunch events. Run `pnpm test:service-recovery-mcp-live` to validate the same recovery trace contract through MCP `service_trace`. Run `pnpm test:service-api-mcp-parity` to statically check that named browser-control HTTP endpoints, typed MCP tools, README, skill, and docs site stay aligned. For shell inspection, use `mcp resources` to list service resource contracts and `mcp read <uri>` to read one resource from persisted service state. Implemented resources are `agent-browser://contracts`, `agent-browser://browser-capability-registry`, `agent-browser://access-plan`, `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}`, `agent-browser://profiles/{profile_id}/readiness`, `agent-browser://profiles/{profile_id}/allocation`, `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}`, `agent-browser://incidents`, `agent-browser://profiles`, `agent-browser://sessions`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://site-policies`, `agent-browser://providers`, `agent-browser://challenges`, `agent-browser://jobs`, `agent-browser://events`, `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}`, and `agent-browser://incidents/{incident_id}/activity`.
+For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the twelve task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
 
 The equivalent MCP `tools/call` payload uses the same intent fields:
 
 ```json
-{"name":"service_request","arguments":{"serviceName":"JournalDownloader","agentName":"article-probe-agent","taskName":"probeACSwebsite","siteId":"acs","action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"jobTimeoutMs":30000}}
+{"name":"browser_open","arguments":{"profile":"editorial","taskKey":"review","url":"https://example.com"}}
+{"name":"browser_tab","arguments":{"taskId":"<task-id>","operation":"new","tabKey":"notes","url":"https://example.com/notes"}}
+{"name":"browser_discover","arguments":{"category":"browser","operation":"press"}}
+{"name":"browser_command","arguments":{"taskId":"<task-id>","action":"press","params":{"key":"Enter"}}}
+{"name":"browser_discover","arguments":{"category":"diagnostics","operation":"service_incidents"}}
 ```
+<details>
+<summary>Advanced adapter and HTTP reference</summary>
+
+These adapter identifiers describe retained implementation and HTTP contracts.
+Use the twelve workflow tools for MCP calls and browser_discover for selected
+operation metadata; this table does not add callable MCP tools.
+
+<table>
+  <thead>
+    <tr>
+      <th>Adapter identifier</th>
+      <th>Method</th>
+      <th>HTTP route</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>browser_get_url</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/url</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_title</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/title</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tabs</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/tabs</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_navigate</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/navigate</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_back</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/back</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_forward</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/forward</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_reload</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/reload</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_new</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/new-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_switch</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/switch-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_close</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/close-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_viewport</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/viewport</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_user_agent</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/user-agent</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_media</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/media</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_timezone</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/timezone</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_locale</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/locale</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_geolocation</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/geolocation</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_permissions</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/permissions</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_get</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/get</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_set</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/set</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_get</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/get</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_set</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/set</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_console</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/console</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_errors</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/errors</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_set_content</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/set-content</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_headers</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/headers</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_offline</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/offline</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_dialog</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/dialog</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_clipboard</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/clipboard</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_upload</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/upload</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_download</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/download</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_wait_for_download</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/wait-for-download</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_pdf</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/pdf</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_response_body</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/response-body</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_har_start</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/har/start</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_har_stop</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/har/stop</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_route</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/route</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_unroute</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/unroute</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_requests</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/requests</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_request_detail</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/request-detail</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_snapshot</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/snapshot</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_screenshot</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/screenshot</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_click</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/click</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_fill</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/fill</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_wait</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/wait</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_type</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/type</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_press</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/press</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_hover</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/hover</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_select</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/select</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_text</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-text</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_value</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-value</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_visible</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-visible</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_attribute</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-attribute</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_html</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-html</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_styles</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-styles</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_count</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/count</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_box</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-box</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_enabled</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-enabled</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_checked</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-checked</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_check</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/check</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_uncheck</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/uncheck</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_scroll</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/scroll</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_scroll_into_view</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/scroll-into-view</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_focus</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/focus</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>service_access_plan</code></td>
+      <td>GET</td>
+      <td><code>/api/service/access-plan</code></td>
+    </tr>
+    <tr>
+      <td><code>service_request</code></td>
+      <td>POST</td>
+      <td><code>/api/service/request</code></td>
+    </tr>
+    <tr>
+      <td><code>service_job_cancel</code></td>
+      <td>POST</td>
+      <td><code>/api/service/jobs/&lt;id&gt;/cancel</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_retry</code></td>
+      <td>POST</td>
+      <td><code>/api/service/browsers/&lt;id&gt;/retry</code></td>
+    </tr>
+    <tr>
+      <td><code>service_incidents</code></td>
+      <td>GET</td>
+      <td><code>/api/service/incidents</code></td>
+    </tr>
+    <tr>
+      <td><code>service_trace</code></td>
+      <td>GET</td>
+      <td><code>/api/service/trace</code></td>
+    </tr>
+    <tr>
+      <td><code>service_remedies_apply</code></td>
+      <td>POST</td>
+      <td><code>/api/service/remedies/apply</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_freshness_update</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;/freshness</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_seeding_handoff_update</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;/seeding-handoff</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/profiles/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_session_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/sessions/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_session_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/sessions/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_site_policy_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/site-policies/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_site_policy_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/site-policies/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/monitors/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitors_run_due</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/run-due</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_pause</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/pause</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_resume</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/resume</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_reset_failures</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/reset-failures</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_triage</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/triage</code></td>
+    </tr>
+    <tr>
+      <td><code>service_provider_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/providers/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_provider_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/providers/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_capability_registry_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/browser-capability-registry/&lt;collection&gt;/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_capability_preflight</code></td>
+      <td>GET</td>
+      <td><code>/api/service/browser-capability/preflight</code></td>
+    </tr>
+  </tbody>
+</table>
+</details>
+
+Retained resource templates include `agent-browser://incidents/{incident_id}/activity`
+and `agent-browser://profiles/{profile_id}/allocation`.
+
 
 Run `pnpm test:service-shutdown-health-live` to validate that a polite browser shutdown failure leaves the persisted service browser record `degraded` after the owned Chrome process is force-killed.
 
-Typed MCP tools also include `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for browser history, tab lifecycle, and page-content control.
+Use `browser_discover` with category `browser` and one operation for page argument metadata, then call `browser_command` with the same `taskId`, selected `action` and `params`. Diagnostics and administration discovery return supported CLI/API entry points. Those operation identifiers are metadata, not additional callable MCP tools.
 
-Use `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for typed navigation, tab, and page-content control. Use `browser_requests` for request discovery, `browser_request_detail` for one tracked request, `browser_headers` for extra HTTP headers, `browser_offline` for network emulation, `browser_cookies_*` for cookies, `browser_storage_*` for localStorage or sessionStorage, `browser_user_agent` for user agent emulation, `browser_viewport` for viewport emulation, `browser_geolocation` for geolocation emulation, `browser_permissions` for permission grants, `browser_timezone` for timezone emulation, `browser_locale` for locale emulation, `browser_media` for media emulation, `browser_dialog` for dialog status and responses, `browser_upload`, `browser_download`, `browser_wait_for_download`, `browser_har_start`, `browser_har_stop`, `browser_route`, `browser_unroute`, `browser_console`, `browser_errors`, `browser_pdf`, `browser_response_body`, and `browser_clipboard` for file, HAR, routing, observability, and artifact workflows. Use `browser_command` for controls that do not yet have typed MCP tools. The `action` field is the daemon action name, and `params` contains the same fields accepted by the CLI, HTTP wrapper, or `/api/command` path:
+Use `browser_tab` for owned task tabs and a stable `tabKey` for creation retries. A close rejects a selection changed before execution; refresh and select the intended tab again.
 
 ```json
 {"name":"browser_navigate","arguments":{"url":"https://example.com","waitUntil":"load","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
@@ -5419,7 +6034,7 @@ Use `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `br
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Set `service.reconcileIntervalMs`, `--service-reconcile-interval <ms>`, or `AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS` to change the interval. Use `0` to disable it.
 
-Due active service monitors are enqueued through the same service worker every 60000 ms by default. Set `service.monitorIntervalMs`, `--service-monitor-interval <ms>`, or `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` to change the interval. Use `0` to disable it. Use `service monitors run-due`, `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately.
+Due active service monitors are enqueued through the same service worker every 60000 ms by default. Set `service.monitorIntervalMs`, `--service-monitor-interval <ms>`, or `AGENT_BROWSER_SERVICE_MONITOR_INTERVAL_MS` to change the interval. Use `0` to disable it. Use `service monitors run-due`, `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately.
 
 Service control jobs use a 900000 ms worker deadline by default. Set `service.jobTimeoutMs`, `--service-job-timeout <ms>`, or `AGENT_BROWSER_SERVICE_JOB_TIMEOUT_MS` to choose another deadline. A zero or absent configured value selects the built-in default. For one ordinary CLI command, pass `--job-timeout-ms <ms>` so the daemon cancels that job and releases its serialized queue before any longer caller-side subprocess deadline expires.
 
@@ -6063,6 +6678,39 @@ checks the desktop's current Agent Browser assignment and lifecycle generation,
 and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
+
+In the default browser workspace, a selected tab missing from current inventory
+removes its stale viewer and offers Refresh browsers. The pending refresh is
+shown explicitly. The requested selection and peer tabs remain unchanged;
+refresh does not automatically choose another tab.
+Dashboard/profile permission rejections offer access-check guidance before retrying.
+
+Native workspace embedding requires the dashboard and Remote View to share a
+public origin. When an iframe opens the durable link, its read-only redirect
+selects Remote View's existing workspace mode; native authentication and its
+same-origin framing policy still apply. Ordinary top-level links keep the
+standalone viewer. Preparing a handoff for an exact existing managed target
+without a URL preserves its live document instead of navigating or relaunching.
+
+When a still-valid link has lost its retained target, the read-only public locator
+redirects to Remote View's native authenticated recovery continuation. The native
+gateway rejects prefetch and non-document requests, authenticates the operator,
+and requests recovery from the browser owner before redirecting to the current
+native viewer. Keep the same opaque link. Recovery restores the retained task URL;
+it does not restore lost in-memory page state or record successful human use.
+
+For this optional private integration, configure
+`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE` on the Agent Browser dashboard process
+and `REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE` on the Remote View gateway to
+reference the same dedicated private bearer file. Use an absolute regular file
+owned by the service user with no group or other permissions. Configure
+`REMOTE_VIEW_AGENT_BROWSER_HANDOFF_ENDPOINT` with the dashboard's explicit numeric
+loopback HTTP origin and port. Never expose the capability or callback as an
+operator link. The callback accepts only the fixed native-resume request from the
+authenticated gateway; browser cookies do not authenticate it. Missing or invalid
+configuration fails closed. Source qualification does not activate installed
+configuration or ingress.
+
 Remote View owns viewer authentication, input and viewer lifetime. Existing
 consumer-grant records are not access requirements for this desktop link.
 Keep the durable Agent Browser handoff as the bookmark so current placement
@@ -6092,23 +6740,51 @@ not establish operator viewing readiness.
 
 Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Ordinary automation commands also recover the same retained browser after idle cleanup, so continuation does not require opening the handoff link first. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
 
+A still-valid handoff for an automatically expired task recreates its addressed tab from retained task intent. It reuses an eligible recorded profile and browser, or wakes a browser through the existing owner. A cleaned disposable allocation can be recreated through its recorded policy. The original handoff URL and link expiry remain unchanged; the resolver does not select an unrelated current tab. Page memory is not restored. If a tab-creation outcome is unknown, obtain readback instead of blindly retrying. Explicitly closed tasks and expired links follow their separate terminal behavior.
+
+Software callers configure an addressed tab through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_tab_lifetime"` and `params.tabInactivityMs`. A positive value expires the tab after that many milliseconds without tab activity; 0 makes its retention perpetual. The policy is persisted separately from link lifetime. `inspect` reports `tabLifetime` alongside link expiry. Configuration does not navigate, open a viewer or renew link validity. Reaping an expired tab preserves its peer tabs and link; active external custody and viewer protection still apply.
+
+Handoff properties under development: `inspect` on `service_remote_view_handoff_resolve` reports `taskMetadata` captured once on the actual tab. Managed commands can supply `serviceName`, `agentName`, `humanName`, `originKind`, `taskName`, `purpose`, `requestId` and `jobId` (or broker `serviceJobId`). These are descriptive fields marked `attribution="supplied"`, not authenticated identity. Missing attribution is `unknown`; absent fields remain null. `createdAtMs` identifies original tab creation. Later inspection does not replace original context. Context persists separately from link lifetime and accompanies automatic target recreation. This source work is not complete dashboard Properties or real workflow acceptance.
+
+`taskMetadata.firstHumanUseAtMs` records the first exact-target human-use acknowledgement after qualified native focus. It is absent before use and does not infer an originating person or authenticated creation identity. Agent readiness, rejected acknowledgements and duplicate use do not set or advance it. Public HTTP and MCP service requests reject caller-supplied human-use evidence and the internal acknowledgement operation; authenticated presentation navigation registers exact continuation context. Use is recorded only after the native provider qualifies an authenticated connection, a delivered display frame and its matching acknowledgement, and the browser owner rejoins the current target. The value persists through restart and automatic target expiry; real HTTP/native workflow acceptance remains pending.
+
+Pressure retirement under development accepts `params.pressureInactivityMs` with `set_tab_lifetime`. A positive value opts the tab into retirement after that much inactivity when its disposable-profile count or byte quota requires space; 0 disables it, and omission preserves its setting. It is independent from ordinary tab inactivity and link expiry. Pending-human holds, ineligible peer work and active native viewers protect the target. Automatic retirement rechecks current Service State activity under a guard held through tab and browser close effects; newly admitted controller or operation activity defers close. Explicit close follows its separate user intent. Scheduled cleanup uses a separate profile-allocation guard and defers protected allocations. Quota cleanup qualifies every selected profile and browser together before any close or deletion, including profiles whose browsers already ended. Quota admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. The native candidate checks profile claims, profile operations, associated browser activity and process observations while retaining Service State exclusion through deletion. Process-census completeness, provider viewer admission and complete runtime acceptance remain unfinished; this source checkpoint is not pressure-policy acceptance.
+
+
+Closing the last live tab in an Agent Browser-owned browser also ends its empty sessions and closes that browser. Its handoff records retain their separate link lifetime. Closing one tab preserves other live tabs; borrowed browsers remain under their external owner.
+
+Automatic expiry of the last live tab also retires unprotected empty peer sessions in its owned browser, without creating replacement tabs. Active native viewers defer retirement, and shared browsers remain outside process custody.
+
+Software callers change an existing valid link through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_link_lifetime"` and `params.ttlMs`. A positive duration replaces its expiry with the edit time plus that duration; 0 selects perpetual validity. This can shorten a finite link or make a perpetual link finite. It persists across restart and works after automatic target expiry without recreating the target, preparing presentation or changing tab retention. Invalid or overflowing durations leave the link unchanged. `extend` retains its existing behavior of preserving a longer expiry. An already-expired link remains rejected for lifetime edits; explicit deletion remains available.
+
+Software callers delete a link through `service_remote_view_handoff_resolve` with `params.handoffOperation="delete"`. The owner removes only that durable link record and returns `status="deleted"`. The URL becomes unusable across restart; the target tab, browser, session, tab lifetime and pending-human hold are preserved. Deletion also accepts an expired link and does not recreate a missing target or prepare presentation.
+
+The owner operation `service_remote_view_handoff_resolve` with `params.handoffOperation="prepare_human"` and `params.pendingHumanRetentionMs` records a pending-human hold on the addressed tab. A positive value sets a maximum duration; 0 holds without an automatic deadline. `inspect` reports `pendingHuman` separately from link expiry and tab inactivity. The hold survives restart and does not navigate or open a viewer. The browser owner reads successful-use evidence through the private native provider transport, joined to the retained handoff, exact tab/target and current lifecycle/viewing generations. Caller-supplied `humanUseEvidence` is rejected. Pending, expired or failed native viewing preserves the hold. Qualified use and exact native focus release the hold and resume tab inactivity. Ordinary agent readiness resolution leaves the hold intact. Native `remote_view_open` automatically prepares this hold after successful browser work. Software managed commands can request it with `humanHandoff=true`. `pendingHumanRetentionMs` overrides `AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS`; the default 0 holds until use with no automatic deadline. Ordinary agent work does not prepare a human hold. Invalid configuration and overflowing pending deadlines are rejected before browser effects. Authenticated document navigation registers a continuation and redirects to the existing native viewer, including dashboard redirects that lose transient user activation. Registration does not require a fresh click on the API URL. The redirect and readiness do not acknowledge use; private owner polling consumes only provider-qualified use. Registration survives owner restart; replay preserves the first-use timestamp. Prefetches, background requests and missing navigation context retain the hold. This uses existing authentication and adds no operator confirmation step. Real browser/HTTP deployment acceptance remains pending.
+
+Native human handoff production prepares private observation context alongside the pending-human hold. The public opaque link reads the current binding and redirects into native Remote View authentication without a Dashboard login, browser recovery or focus effect. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention. This source behavior still requires final native public workflow qualification.
+
+
+
+
+
 Normal client `remote-view open` and `remote-view resolve` use the native Remote View desktop readiness path when the Remote View application provider is configured. They preserve the logical handoff and profile without issuing an extra Agent Browser viewer grant. Remote View retains its existing operator authentication. During a runtime-host restart, client commands briefly wait for the existing endpoint to finish publishing before reporting it unavailable.
 
 With the Remote View application provider, named-session batches keep their selected runtime profile and browser build. The shared browser owner launches or restores the browser when the navigation command runs.
 
-New durable-profile handoffs have no default time expiry. Disposable-profile
-handoffs default to 24 hours. Both are separate from browser idle cleanup and
+New durable-profile and disposable-profile handoffs default to perpetual
+link lifetime. Both are separate from browser idle cleanup and
 Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
 <milliseconds>` selects a positive lifetime for a newly issued link. JSON exposes
 `handoffCreatedAtMs` and `handoffExpiresAtMs`. `remote-view inspect <handoff-id>`
 shows expiry even after the link expires. `remote-view extend <handoff-id> --ttl-ms
 <milliseconds>` ensures at least that much remaining time without shortening a
-longer expiry. Extension does not restore a browser or issue a viewer grant.
+longer expiry. A still-valid link can be extended after its target tab expires.
+Extension does not recreate a tab, restore a browser or issue a viewer grant.
 Expired links return `remote_view_handoff_expired` (HTTP 410 on the deep-link
 endpoint); opening or extending them cannot revive them. A subsequent normal
 open can issue a new opaque link to the same retained tab. An already-connected
-native viewer remains connected. Legacy links receive historical 24-hour retention once
-when the shared owner first loads the upgraded state; restarts do not renew them.
+native viewer remains connected. Legacy links keep their recorded expiry, including no expiry, when the
+shared owner loads the upgraded state; restarts do not renew them.
 Service callers use `service_remote_view_handoff_resolve` with
 `params.handoffOperation` set to `inspect` or `extend`; extension also supplies
 positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
@@ -6116,12 +6792,15 @@ positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
 Retention defaults are persisted in Browser Runtime SQLite. Explicit startup
 settings update that policy; omitted settings preserve it across restart.
 `AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS` selects durable link retention (0 means
-no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects a positive
-disposable link lifetime; `AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a
-positive disposable inactivity lifetime. Disposable defaults are 86400000 ms.
+no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects disposable
+link retention (0 means no time expiry). Both link defaults are 0.
+`AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a positive disposable
+inactivity lifetime, defaulting to 86400000 ms. Existing persisted finite policy
+values remain configured until explicitly changed; set the matching link setting
+to 0 to make newly issued links perpetual.
 Policy changes apply to newly issued links. Existing finite links keep their
 expiry, including already-expired links. Legacy links with no creation marker
-receive the historical finite 24-hour retention once. Extending an unlimited
+receive creation metadata once without adding or changing their expiry. Extending an unlimited
 link preserves its unlimited lifetime. Explicitly closed tasks remain closed.
 
 

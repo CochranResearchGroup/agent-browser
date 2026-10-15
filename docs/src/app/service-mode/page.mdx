@@ -1355,6 +1355,32 @@ controller lease <code>viewerId</code> with the interaction
 <code>agentName</code> before any new attempt. Never change identity labels to
 borrow controller authority.
 
+Controller takeover rejected with <code>desktop_input_route_fence_contended</code>
+preserves that code and reports <code>file_lock_wait</code> and
+<code>no_effect</code> before authority mutation. Inspect Service status and
+trace and resolve the exact contention before a new attempt.
+<code>inspect_before_retry</code> does not authorize automatic replay. Other
+actions retain conservative recourse because earlier effects may have occurred.
+
+Authorized native Service lane title and URL reads bind their exact target without activating its
+native tab or raising the browser. Explicit workspace focus and tab selection
+still activate the addressed target. Child ownership and permissions continue
+to apply, so background metadata reads preserve the person's foreground desktop.
+Managed tasks sharing one browser preserve the currently visible tab when
+another task reads its title or URL; an explicit focus operation selects it.
+After a managed task closes, replaying its retained tab-creation request returns
+<code>browser_session_tab_request_target_closed</code> and does not launch a replacement.
+On retained session browser routes, authenticated operator focus requests sharing
+a declared desktop queue in
+admission order across clients and runtime lanes within one host. The queue
+holds through native selection, and the operator proof is checked again after
+waiting. Different desktop allocations remain independent. Waiting uses the
+request timeout, or ten seconds when none is supplied; inspect pending focus
+work before submitting another explicit selection after a wait expires.
+Managed view_focus marked as an operator request also requires current authenticated
+operator authority. An unbound request is rejected before selecting its target;
+ordinary explicit managed focus keeps its existing behavior.
+
 `service_tab_route_mismatch` means the supplied handle conflicts with the routed
 browser or session. It stops at `child_admission` with `effectState: "no_effect"`.
 Compare the explicit session selector with the original handle, or use the
@@ -1472,48 +1498,20 @@ If <code>accessPlan.readinessSummary.needsManualSeeding</code> is true, show the
 
 Access-plan <code>decision.launchPosture</code> also reports <code>viewStreamProvider</code>, <code>viewStreamProviderSource</code>, <code>controlInputProvider</code>, <code>controlInputProviderSource</code>, and remote-headed <code>displayIsolation</code>. The copied queued request carries <code>params.viewStreamProvider</code>, <code>params.controlInputProvider</code>, and <code>params.displayIsolation</code> when those posture decisions are selected, so the dashboard and software clients consume the service-owned posture instead of guessing whether RDP, noVNC, WebRTC, CDP screencast, manual desktop input, or a private virtual display should be used. Raw HTTP, MCP, and client access-plan requests can set <code>browserHost</code>, <code>viewStreamProvider</code>, <code>controlInputProvider</code>, and <code>displayIsolation</code>; raw service requests accept the same four top-level routing hints, while action-specific compatibility values may remain in <code>params</code>. <code>displayIsolation</code> accepts <code>private_virtual_display</code>, <code>shared_display</code>, or <code>ambient_display</code>. Remote-headed browser records persist the selected input provider on each <code>viewStreams</code> entry as <code>controlInput</code>, letting the dashboard distinguish a view-only stream from an operator-controllable stream. They also expose <code>displayIsolation</code> and <code>displayName</code> when the service can tell whether the browser is using a private virtual display, an explicitly shared display, or the daemon's ambient <code>DISPLAY</code>. The dashboard enables row-level View only for embeddable streams and Control only when the service reports an input provider, then uses the stream and display metadata for disabled-state explanations and selected-browser readiness.
 
-The dashboard Service view is directly reachable at <code>/service</code>. Its
-record workspaces persist in <code>?view=service:&lt;name&gt;</code> for refresh
-and handoff links, including <code>service:browsers</code>,
-<code>service:profiles</code>, <code>service:incidents</code>,
-<code>service:sessions</code>, <code>service:tabs</code>,
-<code>service:jobs</code>, and <code>service:events</code>. The default
-Service workspace is <code>browsers</code>, so managed browser records are
-visible immediately instead of requiring a scroll past service summary copy.
-The left workspace navigator uses separate <code>workspace</code>,
-<code>browser</code>, <code>session</code>, <code>tab</code>,
-<code>profile</code>, and <code>job</code> query parameters for selected
-workspace identity and related-record handoff. Its guided launcher queues
-supported browser/profile requests through <code>/api/service/request</code>.
-An available profile tile provides <strong>Open browser</strong>, which opens
-the launcher with that exact profile selected and runs its no-launch access-plan
-preflight. Every live service-owned browser provides <strong>Close</strong> in
-the workspace tree and Service browser table. Detected non-owned browsers
-retain screenshot, watch, and borrowed-input controls without lifecycle
-ownership.
-The launcher defaults to <code>shared_display</code>,
-<code>rdp_gateway</code>, and <code>manual_attached_desktop</code>. If an
-operator selects RDP gateway, the queued request is forced to
-<code>remote_headed</code> with <code>headless=false</code> so the launched
-browser appears in the same remote desktop that Guacamole embeds instead of
-becoming an invisible local-headless tab.
-When the service response includes browser or tab identity and the retained
-browser has an embeddable and operator-visible view stream, the launcher closes,
-the dashboard queues <code>view_focus</code>, and the operator lands in the
-embedded workspace viewport. RDP gateway rows require current browser-window
-proof before View, Control, or external open are enabled. Terminal-only,
-idle-display, and missing-proof route rows stay in the live workspace group as
-disabled diagnostics instead of opening a generic desktop as a successful
-browser stream. Responses that only include a job ID fall back to the Service
-Jobs view.
-When an access plan includes both a service profile identity and an exact
-custom user-data path, the dashboard launcher passes both
-<code>--runtime-profile &lt;id&gt;</code> and <code>--profile &lt;path&gt;</code> so
-service identity and exact stored browser state remain authoritative together.
-If a workspace URL carries a stale <code>tab=target:*</code> selection, the
-workspace viewport replaces it with the current live service tab before queuing
-control-mode focus, so manual control does not bind to a closed or missing CDP
-target.
+The default browser workspace at <code>/</code> or <code>/browsers</code> uses
+the current owned native desktop. Diagnostics at <code>/service</code> retains
+Service inspection and advanced tools; <code>/activity</code> opens its Activity
+tool. Service record workspaces preserve
+<code>?view=service:&lt;name&gt;</code>, including
+<code>service:browsers</code>, <code>service:profiles</code>,
+<code>service:incidents</code>, <code>service:sessions</code>,
+<code>service:tabs</code>, <code>service:jobs</code> and
+<code>service:events</code>. The Service default remains browser records.
+Workspace, browser, session, tab, profile and job query fields preserve requested
+context across refresh. Viewing controls return to the same browser workspace.
+Create tasks through the existing MCP or CLI workflows; selected-task Properties,
+Share, Close Tab and retained Handoffs remain in the browser workspace. A missing
+selected target offers refresh without selecting a peer automatically.
 
 For headed access plans, the copied service request includes <code>params.headless=false</code> and <code>params.browserHost</code>. A copied <code>remote_headed</code> request is executable in the daemon: on Linux it starts a hidden Xvfb-backed headed browser by default, keeps CDP control available, and records a view stream entry for operator or dashboard surfaces. Linux <code>remote_headed</code> headed launches disable Chromium's Vulkan/ANGLE path and force desktop GL so XRDP and Xvfb view streams paint the browser window instead of a blank white surface. Remote-headed launches also start maximized by default and run the same native maximize step as <code>view_focus</code>, so the browser window follows Guacamole or XRDP viewport resizing when the window manager supports it. Fresh CLI launches can pass <code>--browser-host remote_headed</code>, <code>--view-stream-provider rdp_gateway</code>, <code>--control-input-provider manual_attached_desktop</code>, and <code>--display-isolation private_virtual_display</code> to record the same isolated stream metadata without routing through an already-running backend browser. If a daemon is already running, the prelaunch command carries current <code>AGENT_BROWSER_REMOTE_HEADED_DISPLAY</code>, <code>AGENT_BROWSER_REMOTE_VIEW_URL</code>, <code>AGENT_BROWSER_REMOTE_VIEW_FRAME_URL</code>, <code>AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL</code>, <code>AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID</code>, <code>AGENT_BROWSER_GUACAMOLE_CONNECTION_ID</code>, <code>AGENT_BROWSER_GUACAMOLE_CONNECTION_NAME</code>, <code>AGENT_BROWSER_REMOTE_VIEW_PROVIDER</code>, and <code>AGENT_BROWSER_REMOTE_CONTROL_INPUT_PROVIDER</code> values into the daemon so stale daemon environment does not drop the Guac contract. The default service posture is one private virtual display per browser process, and access plans express that with <code>params.displayIsolation="private_virtual_display"</code>. That keeps focus, native-window geometry, input injection, streaming, recording, crash recovery, and repair scoped to the selected managed browser. Operators can set <code>displayIsolation="shared_display"</code> with <code>remoteHeadedDisplay</code>, <code>display</code>, or <code>AGENT_BROWSER_REMOTE_HEADED_DISPLAY</code> to place browsers on a shared display, but that is an explicit low-contention optimization because focus and window state become shared resources. Operators can set <code>displayIsolation="ambient_display"</code> when the daemon should deliberately use its inherited <code>DISPLAY</code>. Site policy can set <code>viewStream: "rdp_gateway"</code> and <code>controlInput: "manual_attached_desktop"</code> when browser viewing and operator control should flow through an HTML5 remote desktop viewer. Set <code>AGENT_BROWSER_REMOTE_VIEW_FRAME_URL</code> for an embeddable Guacamole or RDP gateway route, <code>AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL</code> for external windows, <code>AGENT_BROWSER_REMOTE_VIEW_ROUTE_ID</code> for route identity, and <code>AGENT_BROWSER_GUACAMOLE_CONNECTION_ID</code> when the provider exposes a concrete Guacamole connection. A bare Guacamole root URL is preserved as a root URL rather than repaired with a built-in connection hash. Set <code>AGENT_BROWSER_REMOTE_VIEW_PROVIDER=rdp_gateway</code> when the route points at an HTML5 RDP gateway that the dashboard should embed. Dashboard guided launches use <code>shared_display</code> for that RDP gateway posture and start the selected browser/profile combo as a fresh <code>remote_headed</code> daemon session, so the launched browser appears in the Guacamole desktop when <code>AGENT_BROWSER_REMOTE_HEADED_DISPLAY</code> points at that desktop's X display. The Service inspector uses selected-record views for browsers, profiles, incidents, sessions, tabs, and jobs. It gives each record a hero summary, primary action row, semantic runtime/control/ownership/activity sections, related-record jumps, and an Evidence disclosure for raw JSON, long IDs, and endpoints. The selected-browser view also shows a readiness strip with view readiness, control readiness, display isolation, provider, input, and gateway URL from the retained stream metadata. Its <code>Open remote control</code> action uses the same service-owned <code>view_focus</code> path as browser rows before opening the embedded stream. Run <code>pnpm test:rdp-gateway-readiness-live</code> to check local <code>guacd</code>, <code>xrdp</code>, <code>xfreerdp</code>, and TCP readiness before treating the workstation as RDP-gateway-ready. Run <code>pnpm test:service-remote-view-control-live</code> when changing remote-headed launch, retained view-stream records, or dashboard View and Control gating; it launches an isolated remote-headed browser, verifies the retained stream and input metadata, runs queued <code>view_focus</code>, and closes the browser through the service-owned path. Run <code>pnpm test:service-dashboard-remote-control-ui-live</code> when changing the selected-browser inspector or embedded dialog; it drives the real dashboard UI, clicks the right-pane remote-control action, verifies the iframe URL, and confirms the dashboard queued <code>view_focus</code>. Run <code>pnpm test:rdp-guac-viewer-transfer-live</code> for the guarded two-client Slice B gate. It requires a real <code>AGENT_BROWSER_REMOTE_VIEW_URL</code>, <code>AGENT_BROWSER_REMOTE_HEADED_DISPLAY</code>, and two different client executables in <code>AGENT_BROWSER_RDP_TEST_CLIENT_A_EXECUTABLE</code> and <code>AGENT_BROWSER_RDP_TEST_CLIENT_B_EXECUTABLE</code>; optional fixture overrides include <code>AGENT_BROWSER_RDP_TEST_BROWSER_A</code>, <code>AGENT_BROWSER_RDP_TEST_PROFILE_A</code>, <code>AGENT_BROWSER_RDP_TEST_PROFILE_B</code>, <code>AGENT_BROWSER_RDP_TEST_PUBLIC_URL</code>, and <code>AGENT_BROWSER_RDP_TEST_DISPLAY_ISOLATION</code>. The smoke records service-state samples and desktop plus mobile-size screenshots under <code>/tmp/agent-browser-rdp-guac-hardening-&lt;timestamp&gt;/</code>, proves simultaneous viewing or deterministic takeover, exercises external-open <code>view_takeover</code>, and refreshes both clients before reporting success. Run <code>pnpm test:rdp-guac-browser-switch-live</code> for the guarded Slice C managed-browser switching gate. It launches two <code>remote_headed</code> daemon sessions with distinct runtime profiles in the same isolated service home, switches client 1 from browser A to browser B through workspace routes, refreshes B, opens browser A in client 2 while client 1 remains routed to B, alternates A to B to A to B three times, exercises external-open <code>view_takeover</code>, and records screenshots plus service-state samples under <code>/tmp/agent-browser-rdp-guac-browser-switch-&lt;timestamp&gt;/</code>. It uses the same required inputs as the viewer-transfer smoke and also accepts <code>AGENT_BROWSER_RDP_TEST_BROWSER_B</code> to pin browser B's daemon session.
 

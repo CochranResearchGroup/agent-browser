@@ -2,9 +2,10 @@
 import assert from 'node:assert/strict';
 import {createPlaybookClient} from '../packages/client/src/playbooks.js';
 import {createServer} from 'node:http';
+import {execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,readlinkSync,readdirSync,realpathSync,writeFileSync} from 'node:fs';
 import {isAbsolute,join} from 'node:path';
-import {createMcpStdioClient,createSmokeContext} from './smoke-utils.js';
+import {createMcpStdioClient,createSmokeContext,rootDir} from './smoke-utils.js';
 import {retrievalPage,runRetrievalFixture} from './siteguide-retrieval-fixture.js';
 
 const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD;
@@ -66,8 +67,22 @@ try {
  if(process.env.AGENT_BROWSER_SMOKE_POPUP_ATTRIBUTION==='1') {
   const opened=await call('browser_command',{taskId:alice.taskId,action:'evaluate',params:{script:`window.open(${JSON.stringify(origin+'/password-manager-destination')},'fixture-login-destination')!==null`}});
   assert.equal(opened.result,true,'Synthetic popup was created');
+  await call('browser_tab',{taskId:bob.taskId,operation:'select',tabId:bob.tabId});
+  const binding=JSON.parse(execFileSync('/usr/bin/python3',['-c',`
+import json,sqlite3,sys
+connection=sqlite3.connect('file:'+sys.argv[1]+'?mode=ro',uri=True)
+state=json.loads(connection.execute("SELECT json FROM state_documents WHERE kind='browser_session_state'").fetchone()[0])
+tab=state['tabs'][sys.argv[2]]
+print(json.dumps({'endpoint':state['browsers'][tab['browserId']]['cdpEndpoint'],'targetId':tab['targetId']}))
+`,join(context.agentHome,'service','runtime.sqlite3'),alice.tabId],{encoding:'utf8'}));
+  const endpoint=new URL(binding.endpoint);endpoint.protocol='http:';endpoint.pathname='/json/list';
+  const target=(await (await fetch(endpoint)).json()).find(page=>page.id===binding.targetId);
+  assert(target,'Exact original task target remains observable');
+  const visibility=()=>JSON.parse(execFileSync('node',[join(rootDir,'scripts/lib/p237_cdp_value.cjs'),target.webSocketDebuggerUrl,'document.visibilityState'],{encoding:'utf8'}));
+  assert.equal(visibility(),'hidden','Peer selection must hide the original task before observation');
   const tabs=await call('browser_tab',{taskId:alice.taskId,operation:'list'});
   assert.equal(tabs.tabs.length,2,'Password-manager destination must be attributed to the original task');
+  assert.equal(visibility(),'hidden','Popup inventory must preserve the physically selected peer');
  }
  let negative=false;
  if(process.env.AGENT_BROWSER_SMOKE_AUTH_HELPER_SOURCE) {

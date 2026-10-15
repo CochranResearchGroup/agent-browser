@@ -27,6 +27,19 @@ durable history or change live tasks and valid handoffs.
 
 **Durable profile**: Browser data retained across tasks. Separate tasks can share its browser through distinct sessions and tabs. Profile retention is separate from process, desktop, session and handoff lifetimes.
 
+**Handoff link lifetime**: The configurable period during which a handoff link can be used. The default is perpetual. Link expiry does not end the target tab or delete the link record.
+
+**Tab lifetime**: The independent, configurable retention of a task's tab. An unused human handoff can protect its tab according to the pending-human retention policy. Ending one tab preserves its peers; the browser closes when its last live tab ends.
+
+**Handoff link deletion**: Explicit revocation of a handoff link, separate from its lifetime and its target tab's lifetime. It does not close the target tab or browser.
+
+**Handoff target recreation**: Opening a still-valid link recreates its expired target tab from retained target metadata in an eligible browser, or wakes a browser as needed. This restores target access rather than promising recovery of lost in-memory page state.
+
+**Pending-human retention**: Configured protection for a handed-off tab before confirmed human use. Its duration and pressure policy are independent of link validity; four hours is an example configuration value rather than a fixed timeout. Explicit human handoff production prepares this protection; ordinary agent work and readiness resolution do not consume it. Successful human use requires the native provider to qualify an authenticated connection, a delivered display frame and its matching acknowledgement. The browser owner joins that evidence to the current exact handoff/tab/target before consuming the hold. Readiness and redirects preserve retention; tab inactivity resumes after qualified use.
+
+**Pressure inactivity**: An opt-in threshold on each live tab, independent of ordinary tab lifetime and link validity. Disposable count and byte quotas can retire a browser only when every live target is eligible and current activity authority permits it. Link deletion does not make peer work eligible. Broader host resource governance remains a separate program.
+
+
 **Disposable profile**: Browser data allocated for temporary work and eligible for configured inactivity cleanup only after required references are released.
 
 **Leave-open close**: Preserves the managed task and its live browser for continuation, including across host restart and idle cleanup. It retains occupied profile custody. Explicit `--leave-open false close` ends the task; a full-shutdown operation overrides the preference.
@@ -84,7 +97,66 @@ launch or recovery for that profile while unrelated profiles continue through
 their own custody and assignment-generation checks. Native cold-launch path and
 capacity preflight precedes durable intent; failure there creates no process
 claim. Failure after intent admission still requires exact reconciliation.
+The launch observation optionally freezes the original kernel start identity.
+Capture is tied to the unreaped launched child or verified profile attachment;
+restart reads immutable custody instead of filling missing evidence from a live
+PID. Missing legacy evidence stays missing. Its first durable observation
+atomically promotes the database reader version. Retirement use of this evidence
+still requires separate effect and readback qualification.
 _Avoid_: Global runtime lock, browser readiness, profile access policy
+
+**Native idle retirement fence**:
+The provider's durable exclusion of new native viewer admission during one
+exact application retirement operation. Its monotonic slot revision and
+operation digest prevent stale requests from borrowing another operation.
+A typed observation or prepared receipt is not browser-close authority.
+Application custody must precede preparation and retain unknown effects;
+neither a timeout nor dropping a local guard settles the native fence.
+The automatic-close candidate joins this fence to application custody; source
+sequencing tests remain separate from native workflow and installed acceptance.
+
+**Browser activity reservation**:
+A passive Runtime SQLite veto on automatic retirement of an admitted command's
+published root. Admission and retirement serialize in one writer transaction.
+Successful command acknowledgement retains the veto until session publication
+removes it atomically. An unknown effect retains custody, not replay authority.
+Reservations require at least reader schema 3. This record owns
+neither command results nor tab-creation replay.
+Original published kernel evidence is frozen at admission, never backfilled for
+legacy rows. Positive original-process exit settles only its resource veto;
+unknown command history remains. Evidence and ended-resource settlement require
+reader schema 4. Unavailable readback vetoes replacement before launch.
+
+**Idle retirement custody**:
+The Browser Runtime's durable exact-baseline intent, native preparation, close
+attempts and conclusive settlements. Duplicate attempts require original
+readback. Session publication and custody commit together before native fence
+completion. The first claim atomically promotes the private database to schema 2
+so a schema-1-only reader cannot ignore this obligation.
+Pending scopes fence conflicting SQLite publications and launch/recovery
+admission in the same writer transaction; unrelated profiles remain usable.
+Physical attempt admission reads the current durable record atomically; a
+matching generic CAS replay cannot authorize a duplicate close.
+Preparation admission also distinguishes one fresh attempt from original
+readback. Known preparation with no admitted effects can reconcile through
+unchanged-state publication; unknown preparation with no fence cannot.
+Browser command delegation checks current durable profile custody before tab
+acquisition, creation, navigation, focus and command execution. This check denies
+already-pending retirement; it does not yet establish atomic admission against a
+concurrent retirement start. Process-liveness observations remain available.
+Normal close confirmation distinguishes positive OS absence from observation
+failure. An unavailable census retains an unresolved outcome; original-process
+identity across PID reuse requires separate evidence.
+A new retirement scope copies immutable published launch kernel evidence. Claim
+admission verifies that join in its SQLite writer transaction and retains the
+frozen value across restart. Admitted runtime effects and target readback use the
+frozen scope. A new kernel start may prove the original ended, never authority
+over its replacement. Live-target readback attaches only to the verified original
+browser; failed observation or missing legacy identity supplies no close authority.
+New groups preflight original kernel evidence across every selected assignment
+before new claims, native preparation or attempts. Missing legacy evidence defers
+without creating obligations; existing unresolved operations retain exact readback.
+Native workflow and installed qualification remain separate.
 
 **Request provenance**:
 The immutable causal identity carried from ingress through admission, execution, terminal response, job, event, trace, and incident records.
@@ -252,3 +324,18 @@ A new browser's need for a free Remote View desktop. Pool preparation keeps the 
 _Avoid_: Session count, eager maximum reservation, presentation slot
 
 **Graceful host restart**: The exiting host removes authentication metadata only while it owns the endpoint and matching token. Ordinary commands on an existing managed task check and attach its recorded live browser before using its tab, including headless named sessions. Physical recovery stays with the existing fenced owner.
+
+**Supplied tab task metadata**: Original creation context belongs to the actual tab and its recoverable target capsule. Descriptive service, agent, human, origin, task, purpose and request/job labels are explicitly supplied, never identity proof. Unknown attribution stays unknown. Inspecting or changing link lifetime does not replace creation context. The P237 native Properties UI and complete provenance workflow remain unfinished.
+
+**First human use**: A durable first-human-use timestamp follows provider-qualified native viewer use joined to the current exact handoff/tab/target and native focus, independently of originating attribution. Agent readiness or rejected context cannot establish it, and duplicate acknowledgement cannot advance it. Opening a prepared human handoff consumes its pending hold through the same qualified owner operation. Native/HTTP acceptance remains distinct from owner fixture qualification.
+
+**Native handoff observation**: Private continuation context joins one handoff/tab/target to the provider assignment and lifecycle/viewing generations without granting access. Registration intent survives owner restart. Pending and expired observations do not establish use; replay cannot advance the first-use timestamp. A new pending-human hold invalidates old observation bindings, and a changed provider epoch requires fresh registration through the same durable link.
+
+
+**Compact native workspace**: The native desktop is the main working surface.
+Use a restrained neutral palette without the former green theme, compact
+chrome and a collapsible/resizable browser-tab rail. Handoff management is
+on demand through a small SVG control in the rail, opening the operator-approved
+content-sized animated drawer;
+the handoff table does not permanently occupy the desktop. This supersedes
+the original A/B/C table-placement proposals.

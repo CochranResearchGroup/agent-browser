@@ -3,6 +3,8 @@
 export type DashboardReadPolicy = {
   cacheGroup?: string;
   freshForMs?: number;
+  /** Revalidate an explicit operator read through both document and HTTP caches. */
+  revalidate?: boolean;
 };
 
 type ResponseSnapshot = {
@@ -73,6 +75,10 @@ export class DashboardReadCoordinator {
 
   async read(input: RequestInfo | URL, policy: DashboardReadPolicy = {}): Promise<Response> {
     const key = input instanceof Request ? input.url : String(input);
+    if (policy.revalidate) {
+      this.deleteSnapshot(key);
+      this.flights.delete(key);
+    }
     const cacheGroupRevision = this.cacheGroupRevision(policy.cacheGroup);
     const cached = this.snapshots.get(key);
     const freshForMs = Math.max(0, policy.freshForMs ?? 0);
@@ -104,6 +110,9 @@ export class DashboardReadCoordinator {
         method: "GET",
         cache: "no-store",
         credentials: "same-origin",
+        // Chromium also adds no-cache to ordinary no-store fetches. Keep
+        // operator revalidation distinct from background transport behavior.
+        headers: policy.revalidate ? { "X-Agent-Browser-Revalidate": "1" } : undefined,
       }).then(async (response) => {
         const body = await response.blob();
         const snapshot: ResponseSnapshot = {
@@ -120,6 +129,7 @@ export class DashboardReadCoordinator {
           response.ok
           && freshForMs > 0
           && this.cacheGroupRevision(policy.cacheGroup) === cacheGroupRevision
+          && this.flights.get(key)?.promise === promise
         ) {
           this.storeSnapshot(key, snapshot);
         }

@@ -354,7 +354,8 @@ pub(super) fn handoff(arguments: &Value, transport_session: &str) -> Result<Valu
 }
 
 /// Resolve tab ownership from the native durable state before any selection or
-/// close. Replay of new tabs uses the native owner's existing request journal.
+/// close. The close expectation fences an intervening selection at the owner.
+/// Replay of new tabs uses the native owner's existing request journal.
 pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, JsonRpcError> {
     let task_id = required_string_argument(arguments, "taskId")?;
     let operation = required_string_argument(arguments, "operation")?;
@@ -407,7 +408,7 @@ pub(super) fn tab(arguments: &Value, transport_session: &str) -> Result<Value, J
                 let result = execute(
                     json!({"id":uuid::Uuid::new_v4().to_string(),
                     "action":"browser_session_tab_close","sessionName":session_name,
-                    "sessionId":task_id}),
+                    "sessionId":task_id,"expectedTabId":tab_id}),
                     transport_session,
                 )?;
                 json!({"taskId":task_id,"closedTabId":result["closedTabId"],

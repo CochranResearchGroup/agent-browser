@@ -467,6 +467,8 @@ agent-browser network har stop [output.har]    # Stop and save HAR (temp path if
 
 ## Tabs & frames
 
+For an owner-managed session, creating a tab after an owner restart reconnects to its verified live browser and preserves existing tabs.
+
 ```bash
 agent-browser tab                     # List tabs
 agent-browser tab new [url]           # New tab
@@ -977,7 +979,7 @@ separate blocked recovery class.
 
 `service profiles <id> reset` is scope-specific and plan-first. Runtime reset retires only an exact proven inert service-owned lane and its stale route, session, tab, and lock references while preserving the profile directory, authentication evidence, and peer profiles. Authentication reset removes only the selected target's retained authentication evidence, does not erase browser cookies, and returns a manual-seeding handoff. Full profile-data reset is unavailable until backup restore and rollback are supported. The reset plan/apply HTTP routes, MCP tools, and generated helpers enforce the same sealed-plan, capability, revision, and replay checks.
 
-Run `pnpm test:service-site-policy-sources-no-launch` to validate that HTTP `GET /api/service/site-policies`, MCP `agent-browser://site-policies`, and `getServiceSitePolicies()` report config, persisted-state, and built-in site-policy source metadata without launching Chrome. Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, monitor, site-policy, provider, and challenge collections for one live runtime-profile session. Use HTTP `GET /api/service/monitors`, MCP `agent-browser://monitors`, `service monitors`, or `getServiceMonitors()` to inspect retained monitor records. CLI and HTTP monitor collections support state, failed-only, and summary filters for operator triage; MCP keeps the full unfiltered resource. Active monitors are checked by the daemon scheduler when due. Use `service monitors run-due`, HTTP `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. Use `service monitors pause <id>` and `service monitors resume <id>`, HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, or `pauseServiceMonitor()` and `resumeServiceMonitor()` to quiet or restore noisy monitors. Use `service monitors triage <id>`, HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, or `triageServiceMonitor()` to acknowledge the related monitor incident and clear reviewed failures in one queued operation. Use `service monitors reset <id>`, HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, or `resetServiceMonitorFailures()` when only the reviewed failure counter should be cleared while retaining last failure evidence.
+Run `pnpm test:service-site-policy-sources-no-launch` to validate that HTTP `GET /api/service/site-policies`, MCP `agent-browser://site-policies`, and `getServiceSitePolicies()` report config, persisted-state, and built-in site-policy source metadata without launching Chrome. Run `pnpm test:service-collections-live` to validate that CLI, HTTP, and MCP expose matching service-owned profile, session, browser, tab, monitor, site-policy, provider, and challenge collections for one live runtime-profile session. Use HTTP `GET /api/service/monitors`, MCP `agent-browser://monitors`, `service monitors`, or `getServiceMonitors()` to inspect retained monitor records. CLI and HTTP monitor collections support state, failed-only, and summary filters for operator triage; MCP keeps the full unfiltered resource. Active monitors are checked by the daemon scheduler when due. Use `service monitors run-due`, HTTP `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, or `runDueServiceMonitors()` to check due active monitors immediately. Use `service monitors pause <id>` and `service monitors resume <id>`, HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, or `pauseServiceMonitor()` and `resumeServiceMonitor()` to quiet or restore noisy monitors. Use `service monitors triage <id>`, HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, or `triageServiceMonitor()` to acknowledge the related monitor incident and clear reviewed failures in one queued operation. Use `service monitors reset <id>`, HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, or `resetServiceMonitorFailures()` when only the reviewed failure counter should be cleared while retaining last failure evidence.
 
 Site policies can recommend a browser build and require CDP-free operation for bot-sensitive services. `service site-policies` includes `build` and `cdp_free` fields in text output, and access-plan responses expose the resolved posture through `launchPosture.browserBuild`, `launchPosture.requiresCdpFree`, and `launchPosture.cdpAttachmentAllowed`. The shipped Canva policy defaults to `cdp_free_headed`.
 
@@ -1184,7 +1186,7 @@ The HTTP API loads the same persisted and configured service state as the CLI be
 
 Access-plan `decision.attention` is the service-owned but UI-neutral intervention summary. It reports whether attention is required, who owns the next step, the severity, the reason, a message, and suggested action tokens. Clients decide whether that becomes a log line, agent prompt, dashboard affordance, or popup.
 
-Use `POST /api/service/profiles/<id>/freshness` or MCP `service_profile_freshness_update` to merge bounded-probe readiness evidence into an existing profile without replacing unrelated profile fields. Operators can use `agent-browser service profiles <id> verify-seeding <target>` for the same post-seeding verification write without hand-building JSON, and software clients can call `verifyServiceProfileSeeding()`. Add `--account-id <id>` or `--account-ids <id,id>` when the verified profile should also be selectable by account label. When the target has a closed but unverified seeding handoff, the same freshness update moves that lifecycle to `verification_pending` or `fresh`. Use HTTP `POST /api/service/profiles/<id>/seeding-handoff`, MCP `service_profile_seeding_handoff_update`, or `updateServiceProfileSeedingHandoff()` for explicit detached seeding lifecycle changes before the verification probe. Use HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<id>`, MCP `service_monitor_upsert`, MCP `service_monitor_delete`, `upsertServiceMonitor()`, `upsertServiceProfileReadinessMonitor()`, or `deleteServiceMonitor()` to persist monitor definitions. A `profile_readiness` monitor checks retained no-launch target readiness, marks expired fresh rows stale, removes the expired target from `authenticatedServiceIds`, and lets access-plan `monitorFindings` warn callers before they request a tab. Active monitors are checked by the daemon scheduler when due; use HTTP `POST /api/service/monitors/run-due`, MCP `service_monitors_run_due`, `runDueServiceMonitors()`, or `agent-browser service monitors run-due` to run due active monitors immediately. Use HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, `pauseServiceMonitor()`, `resumeServiceMonitor()`, or the matching CLI commands to quiet or restore monitors without clearing health history. Use HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, `triageServiceMonitor()`, or `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and reset reviewed failures together. Use HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, `resetServiceMonitorFailures()`, or `agent-browser service monitors reset <id>` after triage to clear only the failure counter while retaining last failure evidence. Use HTTP <code>POST /api/service/remedies/apply?escalation=monitor_attention</code>, MCP <code>service_remedies_apply</code>, <code>applyServiceRemedies()</code>, or `agent-browser service remedies apply --escalation monitor_attention` to apply all active monitor remedies in one serialized operation. Use <code>escalation=browser_degraded</code> after operator review to batch retry enablement for active degraded-browser incidents. Use <code>escalation=os_degraded_possible</code> only after host inspection to batch the existing faulted-browser retry remedy for active OS-degraded-possible incidents.
+Use `POST /api/service/profiles/<id>/freshness` or MCP `service_profile_freshness_update` to merge bounded-probe readiness evidence into an existing profile without replacing unrelated profile fields. Operators can use `agent-browser service profiles <id> verify-seeding <target>` for the same post-seeding verification write without hand-building JSON, and software clients can call `verifyServiceProfileSeeding()`. Add `--account-id <id>` or `--account-ids <id,id>` when the verified profile should also be selectable by account label. When the target has a closed but unverified seeding handoff, the same freshness update moves that lifecycle to `verification_pending` or `fresh`. Use HTTP `POST /api/service/profiles/<id>/seeding-handoff`, MCP `service_profile_seeding_handoff_update`, or `updateServiceProfileSeedingHandoff()` for explicit detached seeding lifecycle changes before the verification probe. Use HTTP `POST /api/service/monitors/<id>`, HTTP `DELETE /api/service/monitors/<id>`, MCP `service_monitor_upsert`, MCP `service_monitor_delete`, `upsertServiceMonitor()`, `upsertServiceProfileReadinessMonitor()`, or `deleteServiceMonitor()` to persist monitor definitions. A `profile_readiness` monitor checks retained no-launch target readiness, marks expired fresh rows stale, removes the expired target from `authenticatedServiceIds`, and lets access-plan `monitorFindings` warn callers before they request a tab. Active monitors are checked by the daemon scheduler when due; use HTTP `POST /api/service/monitors/run-due`, `browser_discover` administration metadata for `service_monitors_run_due`, `runDueServiceMonitors()`, or `agent-browser service monitors run-due` to run due active monitors immediately. Use HTTP `POST /api/service/monitors/<id>/pause` and `POST /api/service/monitors/<id>/resume` routes, MCP `service_monitor_pause` and `service_monitor_resume`, `pauseServiceMonitor()`, `resumeServiceMonitor()`, or the matching CLI commands to quiet or restore monitors without clearing health history. Use HTTP `POST /api/service/monitors/<id>/triage`, MCP `service_monitor_triage`, `triageServiceMonitor()`, or `agent-browser service monitors triage <id>` to acknowledge the related monitor incident and reset reviewed failures together. Use HTTP `POST /api/service/monitors/<id>/reset-failures`, MCP `service_monitor_reset_failures`, `resetServiceMonitorFailures()`, or `agent-browser service monitors reset <id>` after triage to clear only the failure counter while retaining last failure evidence. Use HTTP <code>POST /api/service/remedies/apply?escalation=monitor_attention</code>, MCP <code>service_remedies_apply</code>, <code>applyServiceRemedies()</code>, or `agent-browser service remedies apply --escalation monitor_attention` to apply all active monitor remedies in one serialized operation. Use <code>escalation=browser_degraded</code> after operator review to batch retry enablement for active degraded-browser incidents. Use <code>escalation=os_degraded_possible</code> only after host inspection to batch the existing faulted-browser retry remedy for active OS-degraded-possible incidents.
 
 Run <code>pnpm test:service-profile-target-mcp-live</code> to validate that typed MCP <code>browser_navigate</code> target hints select the authenticated target service profile.
 
@@ -1265,7 +1267,7 @@ Explicit <code>targetReadiness</code> rows supplied through profile mutation or 
 
 See <code>examples/service-client/</code> for a copyable software-client workflow that uses <code>acquireServiceLoginProfile()</code>, requests a service tab with <code>requestServiceTab</code>, reads <code>getServiceTrace</code>, prints trace and incident handoffs with <code>createServiceTraceHandoff()</code> and <code>createServiceIncidentHandoff()</code>, and can cancel a known queued job with <code>cancelServiceJob</code>. Pass <code>--run-due-readiness-monitor</code> to the generic example when the client should execute an access-plan-recommended profile-readiness monitor before browser work. The same example package includes <code>managed-profile-flow.mjs</code>, a CanvaCLI-style broker recipe that can run an access-plan-recommended due profile-readiness monitor with <code>--run-due-readiness-monitor</code>, refresh the access plan, and print <code>profileAcquisitionSummary</code> before requesting a tab. It also includes <code>post-seeding-probe.mjs</code> for bounded post-close seeding verification through <code>verifyServiceProfileSeeding()</code>, and access-plan callers can use <code>runServiceAccessPlanPostSeedingProbe()</code> instead of manually copying <code>decision.postSeedingProbe</code> fields. Run <code>pnpm test:service-client-example</code> to validate the no-launch broker-first example contract plus the dry-run modes, <code>pnpm test:service-client-managed-profile-flow-live</code> to validate the Canva-style due-monitor path against an isolated daemon and browser, or <code>pnpm test:service-client-example-live</code> to validate the generic example against an isolated live daemon and browser session.
 
-For MCP clients, use `mcp serve` to run a stdio server that exposes service resources without launching a browser. The server supports <code>initialize</code>, <code>ping</code>, <code>resources/list</code>, <code>resources/templates/list</code>, <code>resources/read</code>, <code>tools/list</code>, and <code>tools/call</code>. MCP tools include <code>service_job_cancel</code>, which cancels queued service jobs or requests cancellation for running jobs, <code>service_browser_retry</code>, which enables a new recovery attempt for a faulted browser, <code>service_incidents</code>, which reads grouped retained incidents with the same state, severity, escalation, handling, kind, browser, profile, session, service, agent, task, since, and summary filters as CLI and HTTP, <code>service_remedies_apply</code>, which applies supported active remedy groups through the service worker, <code>service_trace</code>, which reads related events, jobs, incidents, and activity from persisted service state, <code>service_profile_upsert</code>, <code>service_profile_freshness_update</code>, <code>service_profile_seeding_handoff_update</code>, <code>service_profile_delete</code>, <code>service_session_upsert</code>, <code>service_session_delete</code>, <code>service_site_policy_upsert</code>, <code>service_site_policy_delete</code>, <code>service_monitor_upsert</code>, <code>service_monitor_delete</code>, <code>service_monitor_pause</code>, <code>service_monitor_resume</code>, <code>service_monitor_reset_failures</code>, <code>service_monitor_triage</code>, <code>service_provider_upsert</code>, <code>service_provider_delete</code>, <code>service_browser_capability_registry_upsert</code>, and <code>service_browser_capability_preflight</code>, which mutate or inspect service-owned state through the service worker queue with the same ID checks as HTTP, plus <code>service_monitors_run_due</code> and browser-control tools. MCP tool callers should include <code>serviceName</code>, <code>agentName</code>, and <code>taskName</code> when available so multi-service and multi-agent behavior remains traceable. Service jobs and access-plan responses persist or echo these caller context fields when commands provide them. Service job and access-plan warning values are <code>missing_service_name</code>, <code>missing_agent_name</code>, and <code>missing_task_name</code>; <code>hasNamingWarning</code> is true when <code>namingWarnings</code> is non-empty. Run <code>pnpm test:service-config-live</code> to validate HTTP and MCP mutation parity for profiles, sessions, site policies, monitors, providers, and browser capability registry upserts. Run <code>pnpm test:service-api-mcp-parity</code> to statically check that named browser-control HTTP endpoints, typed MCP tools, README, skill, and docs site stay aligned. For shell inspection, use `mcp resources` to list service resource contracts and `mcp read &lt;uri&gt;` to read one resource from persisted service state. Implemented resources are `agent-browser://browser-capability-registry`, `agent-browser://access-plan`, `agent-browser://profiles/lookup{?query,hostname,profileId,profileName,serviceName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,authenticationState,freshnessState,tag,url,readinessProfileId,browserBuild}`, `agent-browser://profiles/{profile_id}/readiness`, `agent-browser://profiles/{profile_id}/allocation`, `agent-browser://profiles/{profile_id}/seeding-handoff{?targetServiceId,siteId,loginId}`, `agent-browser://display-allocations`, `agent-browser://remote-view-routes`, `agent-browser://route-pool`, `agent-browser://viewer-leases`, `agent-browser://incidents`, `agent-browser://profiles`, `agent-browser://sessions`, `agent-browser://browsers`, `agent-browser://tabs`, `agent-browser://monitors`, `agent-browser://site-policies`, `agent-browser://providers`, `agent-browser://challenges`, `agent-browser://jobs`, `agent-browser://events`, `agent-browser://access-plan{?serviceName,agentName,taskName,targetServiceId,targetServiceIds,siteId,siteIds,loginId,loginIds,accountId,accountIds,url,sitePolicyId,challengeId,readinessProfileId,runtimeProfile,browserBuild,browserHost,viewStreamProvider,controlInputProvider,displayIsolation}`, and `agent-browser://incidents/{incident_id}/activity`.
+For MCP clients, run `agent-browser mcp serve`. The default catalog exposes the twelve task workflow tools described above, including `browser_open`, `browser_tab`, `browser_handoff`, `browser_continue` and task-scoped page actions. Resource discovery and reads remain available without launching a browser. Read `agent-browser://operating-guide` for the current workflow and `agent-browser://contracts` for retained service contracts.
 
 The <code>agent-browser://jobs</code> resource returns the same service job record schema as HTTP: <code>docs/dev/contracts/service-job-record.v1.schema.json</code>. CLI and HTTP <code>service_jobs</code> response envelopes follow <code>docs/dev/contracts/service-jobs-response.v1.schema.json</code>. The MCP <code>agent-browser://incidents</code> resource and <code>service_incidents</code> tool return the same service incident record schema as HTTP: <code>docs/dev/contracts/service-incident-record.v1.schema.json</code>. <code>service_incidents</code> response envelopes follow <code>docs/dev/contracts/service-incidents-response.v1.schema.json</code>. The <code>agent-browser://events</code> resource returns the same service event record schema as HTTP: <code>docs/dev/contracts/service-event-record.v1.schema.json</code>. CLI and HTTP <code>service_events</code> response envelopes follow <code>docs/dev/contracts/service-events-response.v1.schema.json</code>.
 
@@ -1273,55 +1275,504 @@ Run <code>pnpm test:service-shutdown-health-live</code> to validate that a polit
 
 Run <code>pnpm test:service-shutdown-faulted-live</code> to validate that a force-kill failure leaves the persisted service browser record <code>faulted</code> and escalates the incident as possible OS degradation.
 
-Additional typed MCP tools cover <code>browser_get_url</code> with HTTP <code>GET /api/browser/url</code>, <code>browser_get_title</code> with HTTP <code>GET /api/browser/title</code>, <code>browser_tabs</code> with HTTP <code>GET /api/browser/tabs</code>, <code>browser_navigate</code> with HTTP <code>POST /api/browser/navigate</code>, <code>browser_back</code> with HTTP <code>POST /api/browser/back</code>, <code>browser_forward</code> with HTTP <code>POST /api/browser/forward</code>, <code>browser_reload</code> with HTTP <code>POST /api/browser/reload</code>, <code>browser_tab_new</code> with HTTP <code>POST /api/browser/new-tab</code>, <code>browser_tab_switch</code> with HTTP <code>POST /api/browser/switch-tab</code>, <code>browser_tab_close</code> with HTTP <code>POST /api/browser/close-tab</code>, <code>browser_viewport</code> with HTTP <code>POST /api/browser/viewport</code>, <code>browser_user_agent</code> with HTTP <code>POST /api/browser/user-agent</code>, <code>browser_media</code> with HTTP <code>POST /api/browser/media</code>, <code>browser_timezone</code> with HTTP <code>POST /api/browser/timezone</code>, <code>browser_locale</code> with HTTP <code>POST /api/browser/locale</code>, <code>browser_geolocation</code> with HTTP <code>POST /api/browser/geolocation</code>, <code>browser_permissions</code> with HTTP <code>POST /api/browser/permissions</code>, <code>browser_cookies_get</code> with HTTP <code>POST /api/browser/cookies/get</code>, <code>browser_cookies_set</code> with HTTP <code>POST /api/browser/cookies/set</code>, <code>browser_cookies_clear</code> with HTTP <code>POST /api/browser/cookies/clear</code>, <code>browser_storage_get</code> with HTTP <code>POST /api/browser/storage/get</code>, <code>browser_storage_set</code> with HTTP <code>POST /api/browser/storage/set</code>, <code>browser_storage_clear</code> with HTTP <code>POST /api/browser/storage/clear</code>, <code>browser_console</code> with HTTP <code>POST /api/browser/console</code>, <code>browser_errors</code> with HTTP <code>POST /api/browser/errors</code>, <code>browser_set_content</code> with HTTP <code>POST /api/browser/set-content</code>, <code>browser_headers</code> with HTTP <code>POST /api/browser/headers</code>, <code>browser_offline</code> with HTTP <code>POST /api/browser/offline</code>, <code>browser_dialog</code> with HTTP <code>POST /api/browser/dialog</code>, <code>browser_clipboard</code> with HTTP <code>POST /api/browser/clipboard</code>, <code>browser_upload</code> with HTTP <code>POST /api/browser/upload</code>, <code>browser_download</code> with HTTP <code>POST /api/browser/download</code>, <code>browser_wait_for_download</code> with HTTP <code>POST /api/browser/wait-for-download</code>, <code>browser_pdf</code> with HTTP <code>POST /api/browser/pdf</code>, <code>browser_response_body</code> with HTTP <code>POST /api/browser/response-body</code>, <code>browser_har_start</code> with HTTP <code>POST /api/browser/har/start</code>, <code>browser_har_stop</code> with HTTP <code>POST /api/browser/har/stop</code>, <code>browser_route</code> with HTTP <code>POST /api/browser/route</code>, and <code>browser_unroute</code> with HTTP <code>POST /api/browser/unroute</code>.
+Use `browser_discover` with category `browser` and one operation for page argument metadata, then call `browser_command` with the same `taskId`, selected `action` and `params`. Diagnostics and administration discovery return supported CLI/API entry points. Those operation identifiers are metadata, not additional callable MCP tools.
 
 Typed interaction and inspection tools cover <code>browser_requests</code> with HTTP <code>POST /api/browser/requests</code>, <code>browser_request_detail</code> with HTTP <code>POST /api/browser/request-detail</code>, <code>browser_snapshot</code> with HTTP <code>POST /api/browser/snapshot</code>, <code>browser_screenshot</code> with HTTP <code>POST /api/browser/screenshot</code>, <code>browser_click</code> with HTTP <code>POST /api/browser/click</code>, <code>browser_fill</code> with HTTP <code>POST /api/browser/fill</code>, <code>browser_wait</code> with HTTP <code>POST /api/browser/wait</code>, <code>browser_type</code> with HTTP <code>POST /api/browser/type</code>, <code>browser_press</code> with HTTP <code>POST /api/browser/press</code>, <code>browser_hover</code> with HTTP <code>POST /api/browser/hover</code>, <code>browser_select</code> with HTTP <code>POST /api/browser/select</code>, <code>browser_get_text</code> with HTTP <code>POST /api/browser/get-text</code>, <code>browser_get_value</code> with HTTP <code>POST /api/browser/get-value</code>, <code>browser_is_visible</code> with HTTP <code>POST /api/browser/is-visible</code>, <code>browser_get_attribute</code> with HTTP <code>POST /api/browser/get-attribute</code>, <code>browser_get_html</code> with HTTP <code>POST /api/browser/get-html</code>, <code>browser_get_styles</code> with HTTP <code>POST /api/browser/get-styles</code>, <code>browser_count</code> with HTTP <code>POST /api/browser/count</code>, <code>browser_get_box</code> with HTTP <code>POST /api/browser/get-box</code>, <code>browser_is_enabled</code> with HTTP <code>POST /api/browser/is-enabled</code>, <code>browser_is_checked</code> with HTTP <code>POST /api/browser/is-checked</code>, <code>browser_check</code> with HTTP <code>POST /api/browser/check</code>, <code>browser_uncheck</code> with HTTP <code>POST /api/browser/uncheck</code>, <code>browser_scroll</code> with HTTP <code>POST /api/browser/scroll</code>, <code>browser_scroll_into_view</code> with HTTP <code>POST /api/browser/scroll-into-view</code>, <code>browser_focus</code> with HTTP <code>POST /api/browser/focus</code>, and <code>browser_clear</code> with HTTP <code>POST /api/browser/clear</code>.
 
-Use `browser_navigate`, `browser_back`, `browser_forward`, `browser_reload`, `browser_tab_new`, `browser_tab_switch`, `browser_tab_close`, and `browser_set_content` for typed navigation, tab, and page-content control. Use `browser_requests` for request discovery, `browser_request_detail` for one tracked request, `browser_headers` for extra HTTP headers, `browser_offline` for network emulation, `browser_cookies_*` for cookies, `browser_storage_*` for localStorage or sessionStorage, `browser_user_agent` for user agent emulation, `browser_viewport` for viewport emulation, `browser_geolocation` for geolocation emulation, `browser_permissions` for permission grants, `browser_timezone` for timezone emulation, `browser_locale` for locale emulation, and `browser_media` for media emulation. Use `browser_command` for controls that do not yet have typed MCP tools. The `action` field is the daemon action name, and `params` contains the same fields accepted by the CLI, HTTP wrapper, or `/api/command` path:
+Use `browser_tab` for owned task tabs and a stable `tabKey` for creation retries. A close rejects a selection changed before execution; refresh and select the intended tab again.
 
 Use `browser_dialog`, `browser_upload`, `browser_download`, `browser_wait_for_download`, `browser_har_start`, `browser_har_stop`, `browser_route`, and `browser_unroute` for dialog, file-transfer, HAR, and request-routing workflows.
 
 ```json
-{"name":"browser_navigate","arguments":{"url":"https://example.com","waitUntil":"load","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_requests","arguments":{"filter":"/api","method":"GET","status":"2xx","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_request_detail","arguments":{"requestId":"<request-id>","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_headers","arguments":{"headers":{"Authorization":"Bearer <token>"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_offline","arguments":{"offline":false,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_cookies_get","arguments":{"urls":["https://example.com"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_cookies_set","arguments":{"name":"session","value":"abc","url":"https://example.com","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_storage_set","arguments":{"type":"local","key":"token","value":"abc","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_storage_get","arguments":{"type":"local","key":"token","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_user_agent","arguments":{"userAgent":"AgentBrowserBot/1.0","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_viewport","arguments":{"width":1280,"height":720,"deviceScaleFactor":1,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_geolocation","arguments":{"latitude":41.8781,"longitude":-87.6298,"accuracy":10,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_permissions","arguments":{"permissions":["geolocation"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_timezone","arguments":{"timezoneId":"America/Chicago","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_locale","arguments":{"locale":"en-US","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_media","arguments":{"media":"screen","colorScheme":"light","reducedMotion":"no-preference","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_dialog","arguments":{"response":"status","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_upload","arguments":{"selector":"#file","files":["/tmp/file.txt"],"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_download","arguments":{"selector":"#download","path":"/tmp/download.txt","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_wait_for_download","arguments":{"path":"/tmp/download.txt","timeoutMs":5000,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_har_start","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_har_stop","arguments":{"path":"/tmp/capture.har","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_route","arguments":{"url":"**/api/*","response":{"status":200,"body":"{}","contentType":"application/json"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_unroute","arguments":{"url":"**/api/*","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_console","arguments":{"clear":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_errors","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_pdf","arguments":{"path":"/tmp/page.pdf","printBackground":true,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_response_body","arguments":{"url":"/api/data","timeoutMs":5000,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_clipboard","arguments":{"operation":"write","text":"copied text","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_reload","arguments":{"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_tab_new","arguments":{"url":"https://example.com","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_tab_switch","arguments":{"index":0,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_tab_close","arguments":{"index":1,"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_set_content","arguments":{"html":"<main>Ready</main>","serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_command","arguments":{"action":"navigate","params":{"url":"https://example.com","waitUntil":"load"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_command","arguments":{"action":"headers","params":{"headers":{"Authorization":"Bearer <token>"}},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_command","arguments":{"action":"offline","params":{"offline":false},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_command","arguments":{"action":"requests","params":{"filter":"/api","method":"GET","status":"2xx"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
-{"name":"browser_command","arguments":{"action":"request_detail","params":{"requestId":"<request-id>"},"serviceName":"JournalDownloader","taskName":"probeACSwebsite"}}
+{"name":"browser_open","arguments":{"profile":"editorial","taskKey":"review","url":"https://example.com"}}
+{"name":"browser_tab","arguments":{"taskId":"<task-id>","operation":"new","tabKey":"notes","url":"https://example.com/notes"}}
+{"name":"browser_discover","arguments":{"category":"browser","operation":"press"}}
+{"name":"browser_command","arguments":{"taskId":"<task-id>","action":"press","params":{"key":"Enter"}}}
+{"name":"browser_discover","arguments":{"category":"diagnostics","operation":"service_incidents"}}
 ```
+<details>
+<summary>Advanced adapter and HTTP reference</summary>
+
+These adapter identifiers describe retained implementation and HTTP contracts.
+Use the twelve workflow tools for MCP calls and browser_discover for selected
+operation metadata; this table does not add callable MCP tools.
+
+<table>
+  <thead>
+    <tr>
+      <th>Adapter identifier</th>
+      <th>Method</th>
+      <th>HTTP route</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>browser_get_url</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/url</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_title</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/title</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tabs</code></td>
+      <td>GET</td>
+      <td><code>/api/browser/tabs</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_navigate</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/navigate</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_back</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/back</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_forward</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/forward</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_reload</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/reload</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_new</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/new-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_switch</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/switch-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_tab_close</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/close-tab</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_viewport</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/viewport</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_user_agent</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/user-agent</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_media</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/media</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_timezone</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/timezone</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_locale</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/locale</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_geolocation</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/geolocation</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_permissions</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/permissions</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_get</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/get</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_set</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/set</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_cookies_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/cookies/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_get</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/get</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_set</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/set</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_storage_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/storage/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_console</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/console</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_errors</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/errors</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_set_content</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/set-content</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_headers</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/headers</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_offline</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/offline</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_dialog</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/dialog</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_clipboard</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/clipboard</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_upload</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/upload</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_download</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/download</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_wait_for_download</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/wait-for-download</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_pdf</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/pdf</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_response_body</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/response-body</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_har_start</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/har/start</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_har_stop</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/har/stop</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_route</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/route</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_unroute</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/unroute</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_requests</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/requests</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_request_detail</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/request-detail</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_snapshot</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/snapshot</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_screenshot</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/screenshot</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_click</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/click</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_fill</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/fill</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_wait</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/wait</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_type</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/type</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_press</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/press</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_hover</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/hover</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_select</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/select</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_text</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-text</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_value</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-value</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_visible</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-visible</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_attribute</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-attribute</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_html</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-html</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_styles</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-styles</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_count</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/count</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_get_box</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/get-box</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_enabled</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-enabled</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_is_checked</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/is-checked</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_check</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/check</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_uncheck</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/uncheck</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_scroll</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/scroll</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_scroll_into_view</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/scroll-into-view</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_focus</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/focus</code></td>
+    </tr>
+    <tr>
+      <td><code>browser_clear</code></td>
+      <td>POST</td>
+      <td><code>/api/browser/clear</code></td>
+    </tr>
+    <tr>
+      <td><code>service_access_plan</code></td>
+      <td>GET</td>
+      <td><code>/api/service/access-plan</code></td>
+    </tr>
+    <tr>
+      <td><code>service_request</code></td>
+      <td>POST</td>
+      <td><code>/api/service/request</code></td>
+    </tr>
+    <tr>
+      <td><code>service_job_cancel</code></td>
+      <td>POST</td>
+      <td><code>/api/service/jobs/&lt;id&gt;/cancel</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_retry</code></td>
+      <td>POST</td>
+      <td><code>/api/service/browsers/&lt;id&gt;/retry</code></td>
+    </tr>
+    <tr>
+      <td><code>service_incidents</code></td>
+      <td>GET</td>
+      <td><code>/api/service/incidents</code></td>
+    </tr>
+    <tr>
+      <td><code>service_trace</code></td>
+      <td>GET</td>
+      <td><code>/api/service/trace</code></td>
+    </tr>
+    <tr>
+      <td><code>service_remedies_apply</code></td>
+      <td>POST</td>
+      <td><code>/api/service/remedies/apply</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_freshness_update</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;/freshness</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_seeding_handoff_update</code></td>
+      <td>POST</td>
+      <td><code>/api/service/profiles/&lt;id&gt;/seeding-handoff</code></td>
+    </tr>
+    <tr>
+      <td><code>service_profile_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/profiles/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_session_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/sessions/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_session_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/sessions/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_site_policy_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/site-policies/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_site_policy_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/site-policies/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/monitors/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitors_run_due</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/run-due</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_pause</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/pause</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_resume</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/resume</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_reset_failures</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/reset-failures</code></td>
+    </tr>
+    <tr>
+      <td><code>service_monitor_triage</code></td>
+      <td>POST</td>
+      <td><code>/api/service/monitors/&lt;id&gt;/triage</code></td>
+    </tr>
+    <tr>
+      <td><code>service_provider_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/providers/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_provider_delete</code></td>
+      <td>DELETE</td>
+      <td><code>/api/service/providers/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_capability_registry_upsert</code></td>
+      <td>POST</td>
+      <td><code>/api/service/browser-capability-registry/&lt;collection&gt;/&lt;id&gt;</code></td>
+    </tr>
+    <tr>
+      <td><code>service_browser_capability_preflight</code></td>
+      <td>GET</td>
+      <td><code>/api/service/browser-capability/preflight</code></td>
+    </tr>
+  </tbody>
+</table>
+</details>
+
+Retained resource templates include `agent-browser://incidents/{incident_id}/activity`
+and `agent-browser://profiles/{profile_id}/allocation`.
+
 
 Service browser-health reconciliation runs in the daemon background every 60000 ms by default. Reconcile also expires due service session leases without launching a browser and returns <code>expiredSessionLeases</code>, <code>expiredSessionLeaseCount</code>, and <code>remoteViewRepair</code> in the service reconcile response. Set <code>service.reconcileIntervalMs</code>, pass <code>--service-reconcile-interval &lt;ms&gt;</code>, or set <code>AGENT_BROWSER_SERVICE_RECONCILE_INTERVAL_MS</code> to change the interval. Use <code>0</code> to disable it.
 
@@ -1611,38 +2062,21 @@ ownership, or resulting two-route topology does not pass readiness. It
 migrates supported legacy rows in place; it is not a PostgreSQL backup or
 restore.
 
-The Service view can inspect retained browser, session, and tab records. When
-a browser record includes an embeddable view stream such as an HTML5 RDP
-gateway, operators can open it from the browser details or from a service tab
-row. Tab inspection first asks the service queue to run <code>view_focus</code>
-with the tab <code>targetId</code> plus a stable <code>index</code> when both are
-known, then opens the stream in a dialog with a fullscreen toggle. The queued
-action retries the index if retained target state is stale, switches to the tab,
-brings the page to front, and asks Chrome to maximize the containing native
-window.
-Browser rows also expose contract-gated close and repair controls. Close queues
-<code>service_browser_close</code> for the active service browser and repair queues
-<code>service_browser_repair</code> for degraded or faulted retained browser records.
-The dashboard uses real routes for <code>/service</code>, <code>/browsers</code>,
-and <code>/activity</code>. Service record tabs persist through
-<code>?view=service:&lt;name&gt;</code>, while the left workspace navigator keeps
-the selected workspace, browser, session, tab, profile, and job IDs in separate
-query parameters so refreshes and handoff links reopen the same operational
-context. Selecting a workspace row shows PID, memory, CPU time, CDP port, stream
-port, available actions, and disabled-action reasons when the service reports
-them; rows with an embeddable and operator-visible stream open the workspace
-viewport, including <code>cdp_screencast</code> streams synthesized from live
-session stream files. RDP gateway rows require current browser-window proof
-before View, Control, or external open are enabled, so terminal-only,
-idle-display, missing-proof, wrong-tab, unavailable-route,
-missing-CDP-target, and stale-route rows move to needs-attention as disabled
-diagnostics.
-Guided browser/profile launches use <code>/api/service/request</code>. A launch
-response with browser or tab identity moves the operator into
-<code>?view=workspace:control</code> or <code>?view=workspace:view</code> when
-retained stream metadata is embeddable and operator-visible; otherwise the
-dashboard opens the Service Jobs view for the submitted job or leaves the row
-disabled with the route-proof reason.
+The default workspace at <code>/</code> or <code>/browsers</code> groups live
+browsers and tabs around the native Remote View desktop. Properties, Copy URL,
+Share and scoped Close Tab act on the selected task; Handoffs opens retained
+links and policies on demand.
+
+Diagnostics at <code>/service</code> retains Service records, selected context,
+Activity, Chat, Console, Network, Storage, Extensions and runtime health.
+<code>/activity</code> opens its Activity tool. Service viewing controls return
+to the same browser workspace instead of opening another viewer dialog.
+Service record selection preserves <code>?view=service:&lt;name&gt;</code>;
+workspace, browser, session, tab, profile and job IDs retain requested context
+across refresh. A missing selected target offers refresh rather than choosing
+a peer. Browser close and repair remain guarded public service operations.
+Create or resume tasks through the existing MCP or CLI workflows.
+
 Copied access-plan requests preserve the planner-selected
 <code>runtimeProfile</code>, configured profile path, and <code>browserBuild</code>,
 so a guided launch stays on the selected browser/profile lane. Non-blocking

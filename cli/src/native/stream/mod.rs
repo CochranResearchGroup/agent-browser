@@ -6,7 +6,10 @@ pub(crate) mod chat;
 mod dashboard;
 mod dashboard_auth;
 mod remote_view_presentation;
-pub(crate) use dashboard_auth::verify_operator_focus;
+pub(crate) use dashboard_auth::{
+    verify_operator_focus, verify_operator_focus_scope, verify_operator_tab_close,
+    OperatorFocusScope,
+};
 mod discovery;
 mod foreign_cdp_control;
 mod guacamole_primary_binding;
@@ -24,6 +27,10 @@ pub use dashboard::run_dashboard_server;
 pub(crate) use dashboard::{
     dashboard_service_status_with_transports, service_status_dashboard_cli_fallback_fixture,
     service_status_handler_fixture, service_status_http_body_fixture,
+};
+#[cfg(all(test, unix))]
+pub(crate) use dashboard::{
+    native_handoff_http_fixture_credentials, run_native_handoff_http_fixture,
 };
 pub(crate) use http::{
     runtime_manifest_json, runtime_manifest_json_for_executable,

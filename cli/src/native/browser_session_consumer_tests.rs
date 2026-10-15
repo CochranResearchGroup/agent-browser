@@ -23,8 +23,11 @@ impl Fixture {
         let root =
             std::env::temp_dir().join(format!("p220-session-consumer-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir(&root).unwrap();
+        Self::with_root(root, true)
+    }
+    fn with_root(root: PathBuf, initialize: bool) -> Self {
         let fixture = Self { root };
-        let store = fixture.store(true);
+        let store = fixture.store(initialize);
         let mut catalog = BrowserProfileCatalog::default();
         for id in ["profile-a", "profile-b"] {
             catalog.profiles.insert(
@@ -97,6 +100,24 @@ impl Fixture {
 }
 impl Drop for Fixture {
     fn drop(&mut self) {
+        // Production initialization seals its migration archive. This fixture
+        // owns the disposable directory and makes only its archive removable.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            for entry in std::fs::read_dir(&self.root).unwrap() {
+                let entry = entry.unwrap();
+                if entry
+                    .file_name()
+                    .to_string_lossy()
+                    .starts_with("migration-archive-")
+                    && entry.file_type().unwrap().is_dir()
+                {
+                    std::fs::set_permissions(entry.path(), std::fs::Permissions::from_mode(0o700))
+                        .unwrap();
+                }
+            }
+        }
         std::fs::remove_dir_all(&self.root).unwrap();
     }
 }
@@ -209,9 +230,17 @@ impl RemoteViewBrowserProcessEffects for Process {
         let environment = environment
             .into_environment(observation, &intent.assignment)
             .unwrap();
+        let expected_environment =
+            match std::fs::read(self.root.join("native-composition-launch-environment.json")) {
+                Ok(bytes) => serde_json::from_slice::<Value>(&bytes).unwrap(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                    wire()["launchEnvironment"]["environment"].clone()
+                }
+                Err(error) => panic!("synthetic launch environment unavailable: {error}"),
+            };
         assert_eq!(
             serde_json::to_value(environment).unwrap(),
-            wire()["launchEnvironment"]["environment"]
+            expected_environment
         );
         let mut peer = open_store(&self.root, false);
         let records = peer.unpublished_launch_records().unwrap();
@@ -224,6 +253,17 @@ impl RemoteViewBrowserProcessEffects for Process {
         );
         assert!(records.iter().any(|record| record.intent == *intent));
         self.calls.set(self.calls.get() + 1);
+        if self
+            .root
+            .join("native-composition-launch-environment.json")
+            .exists()
+        {
+            std::fs::write(
+                self.root.join("native-composition-browser-pid"),
+                (42 + self.calls.get()).to_string(),
+            )
+            .unwrap();
+        }
         if matches!(self.mode, Mode::UnknownProcess) {
             return Err(RemoteViewBrowserProcessError::OutcomeUnknown);
         }
@@ -234,11 +274,22 @@ impl RemoteViewBrowserProcessEffects for Process {
         let live: Option<Value> = live_endpoint
             .exists()
             .then(|| serde_json::from_slice(&std::fs::read(live_endpoint).unwrap()).unwrap());
+        let pid = live.as_ref().map_or(42 + self.calls.get(), |value| {
+            value["pid"].as_u64().unwrap() as u32
+        });
         Ok(BrowserLaunch {
-            browser_id: format!("browser:{}", profile.id),
-            pid: live.as_ref().map_or(42 + self.calls.get(), |value| {
-                value["pid"].as_u64().unwrap() as u32
+            // Scripted current launch evidence, with an explicit legacy case.
+            process_identity: (!std::fs::read_to_string(self.root.join("legacy-launch-no-kernel"))
+                .ok()
+                .is_some_and(|legacy| legacy.trim() == profile.id))
+            .then(|| RecordedProcessIdentity {
+                pid,
+                start_token: format!("synthetic-original:{pid}"),
+                executable_path: Some("/synthetic/chrome".into()),
+                browser_family: None,
             }),
+            browser_id: format!("browser:{}", profile.id),
+            pid,
             cdp_endpoint: live.as_ref().map_or_else(
                 || "http://127.0.0.1:9222".into(),
                 |value| value["endpoint"].as_str().unwrap().into(),
@@ -249,6 +300,18 @@ impl RemoteViewBrowserProcessEffects for Process {
                 friendly_route_label: String::new(),
             }),
         })
+    }
+}
+impl Process {
+    fn begin_tab_acquisition(&self) -> Result<(), String> {
+        let path = self.root.join("tab-acquisition-attempts");
+        let attempts =
+            std::fs::read_to_string(&path).map_or(0, |value| value.parse::<u32>().unwrap());
+        std::fs::write(path, (attempts + 1).to_string()).unwrap();
+        if matches!(self.mode, Mode::UnknownTab) {
+            return Err("synthetic_tab_reply_lost".into());
+        }
+        Ok(())
     }
 }
 impl BrowserSessionEffects for Process {
@@ -264,6 +327,7 @@ impl BrowserSessionEffects for Process {
         }
         Ok(Some(BrowserRecovery {
             launch: BrowserLaunch {
+                process_identity: None,
                 browser_id: browser
                     .map(|browser| browser.id.clone())
                     .unwrap_or_else(|| "shared-browser".into()),
@@ -293,9 +357,74 @@ impl BrowserSessionEffects for Process {
     ) -> Result<BrowserLaunch, String> {
         panic!("ordinary launch must use consumer custody")
     }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        if self.root.join("replacement-kernel-observed").exists() {
+            assert!(scope.process_identity.is_some());
+            return Ok(()); // Scripted positive proof that the original ended.
+        }
+        match tab {
+            Some(tab) => self.close_tab(&scope.browser, tab),
+            None => self.close_browser(&scope.browser),
+        }
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        if self.root.join("activity-original-readback").exists() {
+            assert!(
+                tab.is_none(),
+                "activity reconciliation observes the original root only"
+            );
+            assert_eq!(
+                scope.process_identity.as_ref().unwrap().start_token,
+                format!("synthetic-original:{}", scope.browser.pid)
+            );
+            if self.root.join("activity-readback-unavailable").exists() {
+                return Err("synthetic_original_activity_readback_unavailable".into());
+            }
+        }
+        Ok(self.root.join("idle-process-absent").exists())
+    }
     fn close_browser(&mut self, _browser: &ManagedBrowserInstance) -> Result<(), String> {
+        if self.root.join("require-retirement-custody").exists() {
+            let count_path = self.root.join("retirement-close-count");
+            let count = std::fs::read_to_string(&count_path)
+                .map_or(0, |count| count.parse::<u32>().unwrap());
+            std::fs::write(count_path, (count + 1).to_string()).unwrap();
+            let mut store = open_store(&self.root, false);
+            let records = store.idle_retirement_records().unwrap();
+            let record = records
+                .iter()
+                .find(|record| {
+                    record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.id == _browser.id)
+                })
+                .unwrap();
+            let encoded = serde_json::to_value(record).unwrap();
+            assert_eq!(
+                encoded["effects"].as_array().unwrap().last().unwrap()["settled"],
+                false
+            );
+            assert!(
+                self.root.join("native-retirement-fence").exists(),
+                "close ran without native admission exclusion"
+            );
+        }
         if matches!(self.mode, Mode::IdleRecovery) {
             std::fs::write(self.root.join("idle-process-absent"), "absent").unwrap();
+        }
+        if self.root.join("lose-retirement-close-reply").exists() {
+            std::fs::remove_file(self.root.join("lose-retirement-close-reply")).unwrap();
+            return Err("synthetic_close_reply_lost".into());
         }
         Ok(())
     }
@@ -304,6 +433,7 @@ impl BrowserSessionEffects for Process {
         browser: &ManagedBrowserInstance,
         attributed: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
+        self.begin_tab_acquisition()?;
         let suffix = if self.root.join("recovered-target-generation").exists() {
             format!(":recovered-{}", self.calls.get())
         } else if attributed.is_empty() {
@@ -321,9 +451,7 @@ impl BrowserSessionEffects for Process {
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<BrowserTabAcquisition, String> {
-        if matches!(self.mode, Mode::UnknownTab) {
-            return Err("synthetic_tab_reply_lost".into());
-        }
+        self.begin_tab_acquisition()?;
         let suffix = uuid::Uuid::new_v4();
         Ok(BrowserTabAcquisition {
             tab_id: format!("tab:{}:{suffix}", browser.id),
@@ -340,10 +468,43 @@ impl BrowserSessionEffects for Process {
     }
     fn navigate(
         &mut self,
-        _browser: &ManagedBrowserInstance,
+        browser: &ManagedBrowserInstance,
         _tab: &ManagedBrowserTab,
-        _url: &str,
+        url: &str,
     ) -> Result<(), String> {
+        if std::fs::read_to_string(self.root.join("command-activity-unknown-profile"))
+            .is_ok_and(|profile| profile == browser.profile_id)
+            && url == "https://synthetic.example/unknown"
+        {
+            let count_path = self.root.join("unknown-navigation-count");
+            let count = std::fs::read_to_string(&count_path)
+                .map_or(0, |value| value.parse::<u32>().unwrap());
+            std::fs::write(count_path, (count + 1).to_string()).unwrap();
+            return Err("synthetic_navigation_outcome_unknown".into());
+        }
+        let race = self.root.join("command-retirement-race.json");
+        if race.exists() {
+            use super::browser_session_runtime::{BrowserManagerRuntime, BrowserRuntimeDriver};
+            let packet: Value = serde_json::from_slice(&std::fs::read(race).unwrap()).unwrap();
+            let mut runtime = BrowserManagerRuntime::start(Default::default()).unwrap();
+            let guard = runtime.acquire_idle_retirement_guard(std::slice::from_ref(browser))?;
+            if let Some(_guard) = guard {
+                let intent: BrowserIdleRetirementIntent =
+                    serde_json::from_value(packet["intent"].clone()).unwrap();
+                let expected: BrowserSessionState =
+                    serde_json::from_value(packet["expected"].clone()).unwrap();
+                match open_store(&self.root, false).claim_idle_retirement(&intent, &expected) {
+                    Ok(BrowserIdleRetirementAdmission::New) => {}
+                    Ok(_) => panic!("fresh competing retirement identity must not replay"),
+                    Err(error) => assert_eq!(
+                        format!("{error:?}"),
+                        "ActivityActive",
+                        "unrelated setup rejection is not admission exclusion"
+                    ),
+                }
+            }
+            std::fs::write(self.root.join("racing-navigation-effect"), "once").unwrap();
+        }
         Ok(())
     }
     fn focus_browser(

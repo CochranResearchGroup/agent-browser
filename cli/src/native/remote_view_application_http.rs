@@ -99,6 +99,26 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                     let value: Value =
                         serde_json::from_slice(&bytes).map_err(|_| Error::OutcomeUnknown)?;
                     if status == reqwest::StatusCode::BAD_REQUEST
+                        && envelope_operation == "prepare_idle_retirement"
+                        && value.get("schema_version").and_then(Value::as_u64) == Some(1)
+                        && value.get("retryable").and_then(Value::as_bool) == Some(true)
+                        && matches!(
+                            (
+                                value.get("code").and_then(Value::as_str),
+                                value.get("message").and_then(Value::as_str)
+                            ),
+                            (
+                                Some("idle_retirement_viewer_active"),
+                                Some("native retirement exclusion unavailable")
+                            ) | (
+                                Some("idle_retirement_activity_changed"),
+                                Some("viewing retirement target changed")
+                            )
+                        )
+                    {
+                        return Err(Error::IdleRetirementDeferred);
+                    }
+                    if status == reqwest::StatusCode::BAD_REQUEST
                         && matches!(envelope_operation.as_str(), "issue_view")
                         && value.get("schema_version").and_then(Value::as_u64) == Some(1)
                         && value.get("code").and_then(Value::as_str)
@@ -128,6 +148,73 @@ mod tests {
         io::{Read, Write},
         net::{TcpListener, TcpStream},
     };
+
+    #[test]
+    fn idle_retirement_denials_are_scoped_to_prepare_and_exact_pre_effect_errors() {
+        for (operation, code, message, retryable, expected) in [
+            (
+                "prepare_idle_retirement",
+                "idle_retirement_viewer_active",
+                "native retirement exclusion unavailable",
+                true,
+                Error::IdleRetirementDeferred,
+            ),
+            (
+                "prepare_idle_retirement",
+                "idle_retirement_activity_changed",
+                "viewing retirement target changed",
+                true,
+                Error::IdleRetirementDeferred,
+            ),
+            (
+                "inventory",
+                "idle_retirement_viewer_active",
+                "native retirement exclusion unavailable",
+                true,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "prepare_idle_retirement",
+                "idle_retirement_viewer_active",
+                "native retirement exclusion unavailable",
+                false,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "prepare_idle_retirement",
+                "idle_retirement_viewer_active",
+                "different failure",
+                true,
+                Error::OutcomeUnknown,
+            ),
+            (
+                "prepare_idle_retirement",
+                "idle_retirement_native_unavailable",
+                "native retirement exclusion unavailable",
+                true,
+                Error::OutcomeUnknown,
+            ),
+        ] {
+            let body = serde_json::json!({"schema_version":1,"code":code,"message":message,"retryable":retryable}).to_string();
+            let (origin, handle) = server(format!("HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body));
+            let request = if operation == "inventory" {
+                serde_json::json!({"operation":operation})
+            } else {
+                serde_json::json!({"operation":operation,"assignment_id":"assignment-a","expected_generation":7,
+                    "expected_viewing_generation":19,"idempotency_key":"close-one","expected_revision":0,
+                    "expected_retirement":{"schemaVersion":1,"desktopId":"22222222-2222-4222-8222-222222222222",
+                        "generation":7,"routes":[],"sessions":[]}})
+            };
+            let envelope = serde_json::from_value(
+                serde_json::json!({"application":"agent-browser","request":request}),
+            )
+            .unwrap();
+            let mut transport =
+                RemoteViewApplicationHttp::new(&origin, Duration::from_secs(5)).unwrap();
+            assert_eq!(transport.request(&envelope), Err(expected));
+            handle.join().unwrap();
+        }
+    }
 
     #[test]
     fn terminal_grant_response_is_scoped_to_issue_view_and_exact_error() {

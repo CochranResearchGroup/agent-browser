@@ -18,6 +18,301 @@
       "properties": {
         "schemaVersion": { "const": "agent-browser.runtime-operational-status.v1" },
         "state": { "enum": ["available", "unavailable"] },
+        "workspace": {
+          "type": "object",
+          "required": [
+            "schemaVersion",
+            "source",
+            "browsers",
+            "sessions",
+            "tabs"
+          ],
+          "properties": {
+            "schemaVersion": {
+              "const": "agent-browser.managed-workspace.v1"
+            },
+            "source": {
+              "const": "managed-owner"
+            },
+            "handoffs": {
+              "type": "object",
+              "description": "Retained logical links include ended targets. Display-only fields exclude issued views, provider routes, private resume capsules and native correlations.",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "handoffId",
+                  "handoffUrl",
+                  "sessionId",
+                  "tabId",
+                  "sessionName",
+                  "profileId",
+                  "browserId",
+                  "createdAtMs",
+                  "expiresAtMs",
+                  "linkState",
+                  "targetState",
+                  "taskMetadata",
+                  "tabLifetime",
+                  "pendingHuman"
+                ],
+                "properties": {
+                  "handoffId": {
+                    "type": "string"
+                  },
+                  "handoffUrl": {
+                    "type": "string",
+                    "pattern": "^/remote-view/[^/]+$"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "tabId": {
+                    "type": "string"
+                  },
+                  "sessionName": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "profileId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "browserId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "createdAtMs": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "expiresAtMs": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ],
+                    "minimum": 0
+                  },
+                  "linkState": {
+                    "enum": [
+                      "active",
+                      "expired"
+                    ]
+                  },
+                  "targetState": {
+                    "enum": [
+                      "reported",
+                      "expired",
+                      "ended"
+                    ]
+                  },
+                  "taskMetadata": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "tabLifetime": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "pendingHuman": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "browsers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "profileId",
+                  "pid",
+                  "desktop",
+                  "activeSessionIds",
+                  "state"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "profileId": {
+                    "type": "string"
+                  },
+                  "pid": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "desktop": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "properties": {
+                      "desktop_id": {
+                        "type": "string"
+                      },
+                      "generation": {
+                        "type": "integer",
+                        "minimum": 0
+                      },
+                      "friendly_route_label": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  },
+                  "activeSessionIds": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "state": {
+                    "enum": [
+                      "reported",
+                      "sleeping"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "sessions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name",
+                  "profileId",
+                  "browserId",
+                  "createdAtMs",
+                  "lastActivityAtMs",
+                  "expiresAtMs",
+                  "currentTabId"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string"
+                  },
+                  "profileId": {
+                    "type": "string"
+                  },
+                  "browserId": {
+                    "type": "string"
+                  },
+                  "createdAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "lastActivityAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "expiresAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "currentTabId": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              }
+            },
+            "tabs": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "targetId",
+                  "browserId",
+                  "sessionId",
+                  "createdAtMs",
+                  "url",
+                  "taskMetadata",
+                  "lifetime",
+                  "pendingHuman"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "targetId": {
+                    "type": "string"
+                  },
+                  "browserId": {
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "createdAtMs": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "url": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "taskMetadata": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "lifetime": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  },
+                  "pendingHuman": {
+                    "type": [
+                      "object",
+                      "null"
+                    ],
+                    "additionalProperties": true
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "additionalProperties": false,
+          "description": "Read-only current managed owner inventory. Reported means owner-published identity, not current process liveness or viewer readiness. Debugger endpoints, provider routes and launch environment are omitted."
+        },
         "failureCode": { "type": "string" },
         "launchAdmission": {
           "type": "object",
@@ -36,6 +331,7 @@
             "hostProcessLimit": { "type": ["integer", "null"], "minimum": 0 },
             "browserProcessCount": { "type": ["integer", "null"], "minimum": 0 },
             "maximumBrowserProcesses": { "type": "integer", "minimum": 0 },
+            "memoryReserveSource": { "type": "string" },
             "reasons": { "type": "array", "items": { "type": "string" } }
           },
           "additionalProperties": false
@@ -47,7 +343,34 @@
             "integrityState": { "const": "ok" },
             "databaseBytes": { "type": "integer", "minimum": 0 },
             "backupState": { "enum": ["missing", "verified", "gap"] },
-            "backupSha256": { "type": ["string", "null"] }
+            "backupSha256": { "type": ["string", "null"] },
+            "terminalHistory": {
+              "type": "object",
+              "required": [
+                "activeLimit",
+                "archivedSessionCount",
+                "archivedTabCount",
+                "retention"
+              ],
+              "properties": {
+                "activeLimit": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "archivedSessionCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "archivedTabCount": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "retention": {
+                  "const": "durable_no_expiry"
+                }
+              },
+              "additionalProperties": false
+            }
           },
           "additionalProperties": false
         },

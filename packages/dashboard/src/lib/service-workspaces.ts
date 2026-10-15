@@ -327,6 +327,16 @@ export type WorkspaceServiceSession = {
 };
 
 export type WorkspaceServiceTab = {
+  /** Owner-published managed task; operator close still needs current server authority. */
+  managedTask?: boolean;
+  /** Owner-supplied provenance; absent values must remain unknown. */
+  taskMetadata?: Record<string, unknown> | null;
+  profileId?: string | null;
+  desktopId?: string | null;
+  /** Owner-reported inventory state, separate from native viewer readiness. */
+  inventoryState?: string | null;
+  /** Supplied task label, separate from the currently observed page title. */
+  taskLabel?: string | null;
   id: string;
   browserId?: string | null;
   targetId?: string | null;

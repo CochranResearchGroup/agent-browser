@@ -249,6 +249,23 @@ pub async fn run_dashboard_server(port: u16) {
     }
 }
 
+/// Bind synthetic handoff acceptance to the production HTTP handler without
+/// bootstrapping a second browser owner or racing for a fixture port.
+#[cfg(all(test, unix))]
+pub(crate) async fn run_native_handoff_http_fixture(listener: TcpListener) {
+    loop {
+        let (stream, _) = listener.accept().await.unwrap();
+        tokio::spawn(handle_dashboard_connection(stream));
+    }
+}
+
+#[cfg(all(test, unix))]
+pub(crate) fn native_handoff_http_fixture_credentials() -> std::path::PathBuf {
+    dashboard_auth::ensure_dashboard_auth_config()
+        .unwrap()
+        .bootstrap_credential_file
+}
+
 pub(crate) async fn ensure_dashboard_service_backend() {
     if let Err(err) = ensure_dashboard_service_backend_with_retry(
         || super::http::ensure_service_daemon_session(DASHBOARD_SERVICE_BACKEND_SESSION, None),
@@ -371,12 +388,82 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             .await;
             return;
         };
-        let response = match super::remote_view_presentation::resolve_public_location(id).await {
+        // This is only a renderer hint. Remote View keeps native authentication
+        // and enforces its same-origin workspace framing policy itself.
+        let workspace = headers
+            .iter()
+            .any(|(name, value)| name.eq_ignore_ascii_case("sec-fetch-dest") && value == "iframe");
+        let response = match super::remote_view_presentation::resolve_public_location(id, workspace).await {
             Ok(location) => format!("HTTP/1.1 303 See Other\r\nLocation: {location}\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"),
             Err(reason) => {
                 let html = headers.iter().any(|(name, value)| name.eq_ignore_ascii_case("accept") && value.contains("text/html"));
                 super::remote_view_presentation::failure_response(&reason, html)
             }
+        };
+        let _ = stream.write_all(response.as_bytes()).await;
+        return;
+    }
+
+    // Capability-gated private native continuation. Browser cookies never
+    // authenticate this route and the public opaque GET remains read-only.
+    if path.starts_with("/api/native-remote-view/") {
+        let Some(id) = super::remote_view_presentation::native_resume_id(path) else {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_handoff_path_invalid",
+            )
+            .await;
+            return;
+        };
+        if method != "POST"
+            || query.is_some()
+            || header_str
+                .split_once("\r\n\r\n")
+                .is_none_or(|(_, body)| !body.is_empty())
+        {
+            write_json_error(
+                &mut stream,
+                "400 Bad Request",
+                "remote_view_native_callback_invalid",
+            )
+            .await;
+            return;
+        }
+        let operator = match stream
+            .peer_addr()
+            .map(|peer| peer.ip())
+            .map_err(|_| "remote_view_native_callback_denied".to_owned())
+            .and_then(|peer| {
+                super::remote_view_presentation::native_resume_operator(peer, &headers)
+            }) {
+            Ok(operator) => operator,
+            Err(_) => {
+                write_json_error(
+                    &mut stream,
+                    "403 Forbidden",
+                    "remote_view_native_callback_denied",
+                )
+                .await;
+                return;
+            }
+        };
+        let navigation = vec![
+            ("Sec-Fetch-Mode".into(), "navigate".into()),
+            ("Sec-Fetch-Dest".into(), "document".into()),
+        ];
+        let response = match super::remote_view_presentation::resolve_location(
+            id,
+            Some(&operator),
+            &navigation,
+        )
+        .await
+        {
+            Ok(location) => {
+                let body = json!({"schemaVersion":1,"location":location}).to_string();
+                format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nCache-Control: no-store\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len())
+            }
+            Err(reason) => super::remote_view_presentation::failure_response(&reason, false),
         };
         let _ = stream.write_all(response.as_bytes()).await;
         return;
@@ -413,9 +500,8 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
         };
         match super::remote_view_presentation::resolve_location(
             id,
-            authenticated_dashboard_user
-                .as_deref()
-                .unwrap_or("operator"),
+            authenticated_dashboard_user.as_deref(),
+            &headers,
         )
         .await
         {
@@ -567,6 +653,9 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             raw_path,
             &body_str,
             authenticated_dashboard_user,
+            headers
+                .iter()
+                .any(|(name, value)| name == "x-agent-browser-revalidate" && value == "1"),
         )
         .await;
         return;
@@ -715,6 +804,7 @@ async fn handle_service_api_request(
     path: &str,
     body: &str,
     authenticated_dashboard_user: &str,
+    revalidate: bool,
 ) {
     if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
         let limit = split_path_query(path)
@@ -1105,8 +1195,14 @@ async fn handle_service_api_request(
     }
 
     if dashboard_service_status_cacheable(method, path) {
+        let backend_port = dashboard_service_backend_port();
+        if revalidate {
+            if let Some(port) = backend_port {
+                revalidate_dashboard_service_status_cache(port, path).await;
+            }
+        }
         let result = dashboard_service_status_with_transports(
-            dashboard_service_backend_port(),
+            backend_port,
             path,
             |port, owned_path| async move {
                 proxy_dashboard_service_api_request(
@@ -1864,6 +1960,20 @@ fn service_api_handler_backend_response(
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
     static CACHE: OnceLock<Mutex<DashboardServiceStatusCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(DashboardServiceStatusCache::default()))
+}
+
+/// Explicit operator refresh discards only this backend projection. Removing
+/// an in-flight entry also fences its later completion from republishing it.
+async fn revalidate_dashboard_service_status_cache(port: u16, path: &str) {
+    dashboard_service_status_cache()
+        .lock()
+        .await
+        .entries
+        .remove(&DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port,
+            path: path.to_string(),
+        });
 }
 
 /// Persist one authenticated request failure before exposing its occurrence ID.
@@ -3838,6 +3948,369 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn authenticated_pending_handoff_relays_recovery_without_acknowledging_use() {
+        use crate::native::browser_session_store::BrowserSessionSqliteStore;
+        use tokio::io::AsyncBufReadExt;
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        struct RestoreState(agent_browser_service_model::BrowserSessionState);
+        impl Drop for RestoreState {
+            fn drop(&mut self) {
+                let result = (|| {
+                    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+                    let current = store.load_session_state()?;
+                    store.compare_and_save_session_state(&current, &self.0)
+                })();
+                if !std::thread::panicking() {
+                    assert!(result.is_ok(), "isolated browser state restoration failed");
+                }
+            }
+        }
+        struct AbortTask(tokio::task::JoinHandle<()>);
+        impl Drop for AbortTask {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        async fn exchange(request: String) -> Vec<u8> {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let server = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                handle_dashboard_connection(stream).await;
+            });
+            let mut client = tokio::net::TcpStream::connect(address).await.unwrap();
+            client.write_all(request.as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(3), client.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            server.await.unwrap();
+            response
+        }
+        let scratch =
+            Scratch(std::env::temp_dir().join(format!("p237-{}", uuid::Uuid::new_v4().simple())));
+        std::fs::create_dir_all(&scratch.0).unwrap();
+        let env = EnvGuard::new(&[
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+            "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+            "AGENT_BROWSER_SOCKET_DIR",
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            "AGENT_BROWSER_REMOTE_VIEW_POOL",
+            "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
+            "AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT",
+        ]);
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            scratch.0.join("auth").to_str().unwrap(),
+        );
+        env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        env.set(
+            "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
+            "https://synthetic-view.example",
+        );
+        env.set(
+            "AGENT_BROWSER_SOCKET_DIR",
+            scratch.0.join("sockets").to_str().unwrap(),
+        );
+        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
+        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .expect("synthetic bootstrap credential missing");
+        let login_body = json!({"username":"admin","password":password}).to_string();
+        let login = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", login_body.len(), login_body)).await;
+        assert_eq!(
+            http_response_status(&login),
+            Some(200),
+            "synthetic HTTP login failed"
+        );
+        let login_text = String::from_utf8(login).unwrap();
+        let cookie = login_text
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Set-Cookie: ")
+                    .and_then(|value| value.split(';').next())
+            })
+            .expect("synthetic signed session cookie missing");
+        let session = format!("p237-{}", uuid::Uuid::new_v4().simple());
+        let id = uuid::Uuid::new_v4().to_string();
+        let mut store = BrowserSessionSqliteStore::default_sqlite().unwrap();
+        let original = store.load_session_state().unwrap();
+        let _restore = RestoreState(original.clone());
+        let mut state = original.clone();
+        state.remote_view_tab_handoffs.insert(id.clone(), serde_json::from_value(json!({
+            "id":id,"sessionId":"expired-session","tabId":"expired-tab","createdAtMs":100,
+            "targetExpired":true,"resume":{"sessionName":session,"profileId":"synthetic-profile",
+                "disposablePolicyId":null,"url":"https://synthetic.example/task"}
+        })).unwrap());
+        store
+            .compare_and_save_session_state(&original, &state)
+            .unwrap();
+        let token = uuid::Uuid::new_v4().to_string();
+        crate::connection::write_daemon_auth_token(&session, &token).unwrap();
+        let listener =
+            tokio::net::UnixListener::bind(crate::connection::get_socket_path(&session)).unwrap();
+        let readiness = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        std::fs::write(
+            crate::connection::get_socket_dir().join(format!("{session}.stream")),
+            readiness.local_addr().unwrap().port().to_string(),
+        )
+        .unwrap();
+        let commands = Arc::new(std::sync::Mutex::new(Vec::<serde_json::Value>::new()));
+        let recovery_reply = Arc::new(std::sync::Mutex::new(json!({
+            "success":false,"error":"remote_view_browser_recovery_pending"
+        })));
+        let use_reply = Arc::new(std::sync::Mutex::new(json!({"success":true})));
+        let recovery_response = recovery_reply.clone();
+        let use_response = use_reply.clone();
+        let recorded = commands.clone();
+        let _daemon = AbortTask(tokio::spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.unwrap();
+                let mut stream = tokio::io::BufReader::new(socket);
+                let mut line = String::new();
+                if stream.read_line(&mut line).await.unwrap() == 0 {
+                    continue;
+                }
+                let command: serde_json::Value = serde_json::from_str(&line).unwrap();
+                assert!(
+                    command["_agentBrowserAuthToken"].as_str() == Some(token.as_str()),
+                    "daemon relay did not authenticate its owned connection"
+                );
+                let reply = if command["handoffOperation"] == "prepare_native_use" {
+                    serde_json::json!({"success":true,"data":{"handoffId":command["handoffId"],
+                        "tabId":command["expectedTabId"],"targetId":command["expectedTargetId"],
+                        "correlationId":"a".repeat(64),"status":"native_use_pending"}})
+                } else if command["handoffOperation"] == "observe_native_use" {
+                    serde_json::json!({"success":true,"data":{"status":"native_use_pending"}})
+                } else if command["handoffOperation"] == "confirm_human_use" {
+                    use_response.lock().unwrap().clone()
+                } else {
+                    recovery_response.lock().unwrap().clone()
+                };
+                recorded.lock().unwrap().push(command);
+                stream
+                    .get_mut()
+                    .write_all(format!("{reply}\n").as_bytes())
+                    .await
+                    .unwrap();
+            }
+        }));
+        let path = format!("/api/remote-view/{id}/presentation");
+        let denied = exchange(format!(
+            "GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nConnection: close\r\n\r\n"
+        ))
+        .await;
+        assert_eq!(http_response_status(&denied), Some(401));
+        assert!(
+            commands.lock().unwrap().is_empty(),
+            "unauthenticated request reached recovery"
+        );
+        let pending = exchange(format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nSec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n")).await;
+        assert_eq!(http_response_status(&pending), Some(503));
+        assert!(!String::from_utf8_lossy(&pending).contains("Location:"));
+        let recorded = commands.lock().unwrap();
+        assert_eq!(
+            recorded.len(),
+            1,
+            "pending recovery must not acknowledge first use"
+        );
+        assert_eq!(recorded[0]["action"], "service_remote_view_handoff_resolve");
+        assert_eq!(recorded[0]["handoffId"], id);
+        assert_eq!(recorded[0]["nativeDesktop"], true);
+        assert!(recorded[0]["handoffOperation"].is_null());
+        drop(recorded);
+        assert!(store.load_session_state().unwrap().remote_view_tab_handoffs[&id].target_expired);
+        // Publish synthetic owner recovery and qualify its exact desktop through
+        // the real local HTTP inventory transport. No installed provider is used.
+        let current = store.load_session_state().unwrap();
+        let mut recovered = current.clone();
+        let desktop_id = "22222222-2222-4222-8222-222222222222";
+        recovered.sessions.insert(
+            "expired-session".into(),
+            serde_json::from_value(json!({
+                "id":"expired-session","name":session,"profileId":"synthetic-profile",
+                "browserId":"synthetic-browser","createdAtMs":100,"lastActivityAtMs":100,
+                "expiresAtMs":u64::MAX,"currentTabId":"expired-tab"
+            }))
+            .unwrap(),
+        );
+        recovered.tabs.insert(
+            "expired-tab".into(),
+            serde_json::from_value(json!({
+                "id":"expired-tab","targetId":"recovered-target","browserId":"synthetic-browser",
+                "sessionId":"expired-session","createdAtMs":100,"lastActivityAtMs":100
+            }))
+            .unwrap(),
+        );
+        recovered.browsers.insert("synthetic-browser".into(), serde_json::from_value(json!({
+            "id":"synthetic-browser","profileId":"synthetic-profile","pid":43,
+            "cdpEndpoint":"ws://synthetic.example/cdp","activeSessionIds":["expired-session"],
+            "desktop":{"desktop_id":desktop_id,"friendly_route_label":"synthetic","generation":7}
+        })).unwrap());
+        recovered
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .target_expired = false;
+        store
+            .compare_and_save_session_state(&current, &recovered)
+            .unwrap();
+        *recovery_reply.lock().unwrap() = json!({"success":true,"data":{
+            "handoffId":id,"tabId":"expired-tab","targetId":"recovered-target",
+            "operatorVisible":{"state":"ready"}
+        }});
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../docs/dev/contracts/remote-view-application-r3.v1.fixture.json"
+        ))
+        .unwrap();
+        let mut inventory = fixture["inventory"].clone();
+        inventory["desktops"][0]["viewing"] = json!({
+            "lifecycleGeneration":7,"desktopId":"33333333-3333-4333-8333-333333333333",
+            "generation":4,"publicRoute":"/1"
+        });
+        let provider = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        env.set(
+            "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+            &format!("http://{}", provider.local_addr().unwrap()),
+        );
+        env.set("AGENT_BROWSER_REMOTE_VIEW_POOL", "main");
+        env.remove("AGENT_BROWSER_REMOTE_VIEW_APPLICATION");
+        env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
+        let provider_thread = std::thread::spawn(move || {
+            use std::io::{Read, Write};
+            for _ in 0..4 {
+                let (mut stream, _) = provider.accept().unwrap();
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(5)))
+                    .unwrap();
+                let mut header = Vec::new();
+                while !header.ends_with(b"\r\n\r\n") {
+                    let mut byte = [0];
+                    stream.read_exact(&mut byte).unwrap();
+                    header.push(byte[0]);
+                    assert!(header.len() < 8192);
+                }
+                let header = String::from_utf8(header).unwrap();
+                assert!(header.starts_with("POST /v1/consumer "));
+                let length: usize = header
+                    .lines()
+                    .find_map(|line| {
+                        line.to_ascii_lowercase()
+                            .strip_prefix("content-length:")
+                            .map(|value| value.trim().parse().unwrap())
+                    })
+                    .unwrap();
+                let mut body = vec![0; length];
+                stream.read_exact(&mut body).unwrap();
+                let request: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                assert_eq!(request["request"]["operation"], "inventory");
+                let body = inventory.to_string();
+                stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).unwrap();
+            }
+        });
+        let navigation = |extra: &str| {
+            format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\n{extra}Connection: close\r\n\r\n")
+        };
+        for headers in ["", "Sec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nSec-Purpose: prefetch\r\n"] {
+            let response = exchange(navigation(headers)).await;
+            assert_eq!(http_response_status(&response), Some(303));
+            assert_eq!(commands.lock().unwrap().iter().filter(|c| c["handoffOperation"] == "confirm_human_use").count(), 0,
+                "agent or prefetch navigation acknowledged first use");
+        }
+        let headers =
+            "Sec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n";
+        let used = exchange(navigation(headers)).await;
+        assert_eq!(http_response_status(&used), Some(303));
+        assert!(
+            String::from_utf8_lossy(&used).contains("Location: https://synthetic-view.example/1")
+        );
+        assert!(String::from_utf8_lossy(&used)
+            .contains(&format!("handoff-observation={}", "a".repeat(64))));
+        // The actual dashboard's React redirect preserves document navigation
+        // but not the original click's transient Sec-Fetch-User header.
+        let redirected = exchange(navigation(
+            "Sec-Fetch-Site: same-origin\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\n",
+        )).await;
+        assert_eq!(http_response_status(&redirected), Some(303));
+        assert!(String::from_utf8_lossy(&redirected)
+            .contains(&format!("handoff-observation={}", "a".repeat(64))));
+        provider_thread.join().unwrap();
+        let records = commands.lock().unwrap();
+        let acknowledgements = records
+            .iter()
+            .filter(|c| c["handoffOperation"] == "confirm_human_use")
+            .collect::<Vec<_>>();
+        assert!(
+            acknowledgements.is_empty(),
+            "handoff navigation acknowledged human use before any authenticated native viewer connection: {} acknowledgements",
+            acknowledgements.len()
+        );
+        for acknowledgement in acknowledgements {
+            assert_eq!(acknowledgement["handoffId"], id);
+            assert_eq!(acknowledgement["humanUseEvidence"]["operator"], "admin");
+            assert_eq!(acknowledgement["humanUseEvidence"]["tabId"], "expired-tab");
+            assert_eq!(
+                acknowledgement["humanUseEvidence"]["targetId"],
+                "recovered-target"
+            );
+        }
+        let relay_count = records.len();
+        drop(records);
+        let current = store.load_session_state().unwrap();
+        let mut expired = current.clone();
+        expired
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .expires_at_ms = Some(1);
+        store
+            .compare_and_save_session_state(&current, &expired)
+            .unwrap();
+        let request = || {
+            format!("GET {path} HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nSec-Fetch-User: ?1\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n")
+        };
+        let expired_response = exchange(request()).await;
+        assert_eq!(http_response_status(&expired_response), Some(410));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            relay_count,
+            "expired link reached recovery"
+        );
+        let current = store.load_session_state().unwrap();
+        let mut deleted = current.clone();
+        deleted.remote_view_tab_handoffs.remove(&id);
+        store
+            .compare_and_save_session_state(&current, &deleted)
+            .unwrap();
+        let deleted_response = exchange(request()).await;
+        assert_eq!(http_response_status(&deleted_response), Some(404));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            relay_count,
+            "deleted link reached recovery"
+        );
+    }
+
     #[tokio::test]
     async fn public_handoff_reports_readiness_without_dashboard_login() {
         let origin = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN"]);
@@ -4059,6 +4532,220 @@ mod tests {
                 path: "/api/service/status?full-tab-history=false".to_string(),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn dashboard_authenticated_http_refresh_distinguishes_background_no_store() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        async fn exchange(request: String) -> Vec<u8> {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let task = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                handle_dashboard_connection(stream).await;
+            });
+            let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(5), stream.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            task.await.unwrap();
+            response
+        }
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("p280-refresh-{}", uuid::Uuid::new_v4().simple())),
+        );
+        let env = EnvGuard::new(&[
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+        ]);
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            scratch.0.to_str().unwrap(),
+        );
+        env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+            &listener.local_addr().unwrap().port().to_string(),
+        );
+        let deadline = Arc::new(AtomicUsize::new(1110));
+        let reads = Arc::new(AtomicUsize::new(0));
+        let server = {
+            let deadline = deadline.clone();
+            let reads = reads.clone();
+            tokio::spawn(async move {
+                loop {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut request = vec![0; 4096];
+                    stream.read(&mut request).await.unwrap();
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    let body = format!(
+                        "{{\"success\":true,\"data\":{{\"expiresAtMs\":{}}}}}",
+                        deadline.load(Ordering::SeqCst)
+                    );
+                    stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                }
+            })
+        };
+        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
+        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .unwrap();
+        let login = json!({"username":"admin","password":password}).to_string();
+        let response = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{login}", login.len())).await;
+        assert_eq!(http_response_status(&response), Some(200));
+        let text = String::from_utf8(response).unwrap();
+        let cookie = text
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Set-Cookie: ")
+                    .and_then(|value| value.split(';').next())
+            })
+            .unwrap();
+        let request = |marker: &str| {
+            format!("GET /api/service/status?projection=dashboard-summary HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nCache-Control: no-cache\r\n{marker}Connection: close\r\n\r\n")
+        };
+        let initial = exchange(request("")).await;
+        assert_eq!(http_response_status(&initial), Some(200));
+        assert!(String::from_utf8_lossy(&initial).contains("1110"));
+        deadline.store(2220, Ordering::SeqCst);
+        assert_eq!(
+            exchange(request("")).await,
+            initial,
+            "browser no-store transport must retain the logical polling cache"
+        );
+        let refreshed = exchange(request("X-Agent-Browser-Revalidate: 1\r\n")).await;
+        assert_eq!(http_response_status(&refreshed), Some(200));
+        assert!(String::from_utf8_lossy(&refreshed).contains("2220"));
+        assert_eq!(exchange(request("")).await, refreshed);
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_refresh_reloads_policy_and_fences_old_flight() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let deadline = Arc::new(AtomicUsize::new(1110));
+        let reads = Arc::new(AtomicUsize::new(0));
+        let hold_next = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let accepted = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let server = {
+            let deadline = deadline.clone();
+            let reads = reads.clone();
+            let hold_next = hold_next.clone();
+            let accepted = accepted.clone();
+            let release = release.clone();
+            tokio::spawn(async move {
+                loop {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let observed = deadline.load(Ordering::SeqCst);
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    let hold = hold_next.swap(false, Ordering::SeqCst);
+                    let accepted = accepted.clone();
+                    let release = release.clone();
+                    tokio::spawn(async move {
+                        let mut request = vec![0; 4096];
+                        stream.read(&mut request).await.unwrap();
+                        if hold {
+                            accepted.notify_one();
+                            tokio::time::timeout(Duration::from_secs(5), release.notified())
+                                .await
+                                .unwrap();
+                        }
+                        let body =
+                            format!("{{\"success\":true,\"data\":{{\"expiresAtMs\":{observed}}}}}");
+                        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                        stream.write_all(response.as_bytes()).await.unwrap();
+                    });
+                }
+            })
+        };
+        let path = "/api/service/status?projection=dashboard-summary";
+        let read =
+            || proxy_dashboard_service_api_request(port, "GET", path, "", Duration::from_secs(5));
+        let first = read().await.unwrap();
+        let resources = proxy_dashboard_service_api_request(
+            port,
+            "GET",
+            "/api/service/resources",
+            "",
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        deadline.store(2220, Ordering::SeqCst);
+        assert_eq!(
+            read().await.unwrap(),
+            first,
+            "polling should retain its bounded cache"
+        );
+        revalidate_dashboard_service_status_cache(port, path).await;
+        let refreshed = read().await.unwrap();
+        assert!(String::from_utf8_lossy(&refreshed).contains("2220"));
+        assert_eq!(
+            proxy_dashboard_service_api_request(
+                port,
+                "GET",
+                "/api/service/resources",
+                "",
+                Duration::from_secs(5)
+            )
+            .await
+            .unwrap(),
+            resources,
+            "refresh must not evict a peer projection"
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 3);
+
+        revalidate_dashboard_service_status_cache(port, path).await;
+        hold_next.store(true, Ordering::SeqCst);
+        let old = tokio::spawn(async move {
+            proxy_dashboard_service_api_request(port, "GET", path, "", Duration::from_secs(5))
+                .await
+                .unwrap()
+        });
+        tokio::time::timeout(Duration::from_secs(5), accepted.notified())
+            .await
+            .unwrap();
+        deadline.store(3330, Ordering::SeqCst);
+        revalidate_dashboard_service_status_cache(port, path).await;
+        let latest = read().await.unwrap();
+        assert!(String::from_utf8_lossy(&latest).contains("3330"));
+        release.notify_one();
+        assert!(String::from_utf8_lossy(&old.await.unwrap()).contains("2220"));
+        assert_eq!(
+            read().await.unwrap(),
+            latest,
+            "late old completion must not replace refreshed policy"
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 5);
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
     }
 
     #[test]

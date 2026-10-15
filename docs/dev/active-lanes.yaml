@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P237
+    product_lane: PL-PLATFORM
+    objective: Replace operator dashboard with native browser-tab workspace and independent handoff lifetimes
+    plan: docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md
+    plan_ref: refs/heads/platform/native-dashboard-261
+    branch: platform/native-dashboard-261
+    target: main
+    plan_state: IN_PROGRESS
+    plan_version: 2
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#261, CochranResearchGroup/agent-browser#260]
+    dependencies: [P238, P240]
+    overlaps: [P232, P238, P240, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
+    reconciled_overlaps: ["P232 integrated through PR259; retained foreign worktree preserved; P237 owns new dashboard/lifecycle delivery and only its catalog/index entry; old inspector and resource-program overlap must be checked before source changes"]
+    shared_source_coordination: "P238 foreign head575c2634 owns public read-only locator and MCP workflow; P237 owns target recovery, first-use acknowledgement and the bounded authenticated-operator branch in bind_native_service_tab_command as primary writer. P238 retains ordinary/headless child dispatch and replay ownership; reconcile this shared native binder against its current canonical integration before merge. Reconcile public locator, presentation/auth adapter and shared documentation before integration; no foreign source adoption. P237 owns the native title/URL presentation-preparation branch and BrowserManager observation helper; P238 child admission, permissions, connection custody, replay and managed routing remain unchanged. Reconcile adjacent action adapter and guidance surfaces before integration. P237 also owns only managed title/URL presentation preparation in BrowserRuntimeCommand::Execute; P238 managed routing, admission and replay remain unchanged. With P238 integrated via PR267 and absent from current worktree inventory, P237 owns the bounded closed-lifecycle retained-request routing join; existing P238 replay validator, ordinary new-request routing and permission contracts remain authoritative. Dependency: integrated P238 closed-target replay regression. P237 owns provider-neutral desktop selection sequencing and authenticated operator preparation for the actual cross-client focus RED; route/controller/input authority and P238 ordinary paths remain unchanged. P237 is primary writer for operator-marked managed view_focus proof admission in the daemon adapter; P238 ordinary managed focus/routing/replay and P240 resource/lifecycle mechanics remain unchanged. Dependency: reconcile P240 resource-bound and terminal-history guidance against P237 operator paragraphs before canonical integration; foreign source remains preserved."
+    validation_status: All seven implementation tickets source-qualified; fresh-main P242/P243/P244 joins and public popup-peer/malformed-history checks pass; final native workflow36.259seconds with empty independent cleanup; PR270 owns source delivery; provider PR441/442 canonical
+    updated_at: 2026-10-15
   - id: P244
     product_lane: PL-BUGFIX
     objective: Isolate ordinary browser work from historical owner and unrelated release vetoes
@@ -55,6 +72,7 @@ lanes:
     reconciled_overlaps: ["P242 owns playbooks and narrow observed-popup provider contract; P237 retains dashboard/lifecycle and non-activating title/URL observation. Prospective merge has runtime Execute and lane catalog conflicts; retain both behaviors/records and qualify combined peer selection plus popup continuation before P237 integration. No foreign checkout modified."]
     validation_status: All five slices qualified; baseline help and policy-wiring failures repaired with 10 affected integration tests, strict Rust quality, docs and policy negative checks; prior failed receipts retained
     limitations: ["No production/account/real-credential effects", "Actual helper-source dummy protocol qualified; installed producer and real-provider acceptance remain separate", "Earlier comprehensive failure retained; affected integration compartment and policy wiring now pass, no new full-suite claim"]
+
     updated_at: 2026-10-14
   - id: P222
     product_lane: PL-PLATFORM

@@ -649,6 +649,12 @@ Missing or stale proof keeps open pending with an actionable reason. This route
 qualification does not prove connected viewer pixels or input; those require
 live acceptance after opening the authenticated handoff.
 
+In the compact workspace preview, a selected tab missing from current inventory
+removes its stale viewer and offers Refresh browsers. The pending refresh is
+shown explicitly. The requested selection and peer tabs remain unchanged;
+refresh does not automatically choose another tab.
+Dashboard/profile permission rejections offer access-check guidance before retrying.
+
 Managed handoffs navigate directly through the authenticated presentation
 endpoint to the Remote View desktop. No dashboard workspace selection or
 additional operator click is required.
@@ -661,6 +667,26 @@ checks the desktop's current Agent Browser assignment and lifecycle generation,
 and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
+
+When a still-valid link has lost its retained target, the read-only public locator
+redirects to Remote View's native authenticated recovery continuation. The native
+gateway rejects prefetch and non-document requests, authenticates the operator,
+and requests recovery from the browser owner before redirecting to the current
+native viewer. Keep the same opaque link. Recovery restores the retained task URL;
+it does not restore lost in-memory page state or record successful human use.
+
+For this optional private integration, configure
+`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE` on the Agent Browser dashboard process
+and `REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE` on the Remote View gateway to
+reference the same dedicated private bearer file. Use an absolute regular file
+owned by the service user with no group or other permissions. Configure
+`REMOTE_VIEW_AGENT_BROWSER_HANDOFF_ENDPOINT` with the dashboard's explicit numeric
+loopback HTTP origin and port. Never expose the capability or callback as an
+operator link. The callback accepts only the fixed native-resume request from the
+authenticated gateway; browser cookies do not authenticate it. Missing or invalid
+configuration fails closed. Source qualification does not activate installed
+configuration or ingress.
+
 Remote View owns viewer authentication, input and viewer lifetime. Existing
 consumer-grant records are not access requirements for this desktop link.
 Keep the durable Agent Browser handoff as the bookmark so current placement
@@ -690,36 +716,132 @@ not establish operator viewing readiness.
 
 Opening a durable handoff restores an idle-cleaned retained browser before redirecting to its current Remote View desktop. Ordinary automation commands also recover the same retained browser after idle cleanup, so continuation does not require opening the handoff link first. Explicitly closed sessions stay closed. The existing profile and handoff identity are preserved; no temporary viewer grant is required.
 
+A still-valid handoff for an automatically expired task recreates its addressed tab from retained task intent. It reuses an eligible recorded profile and browser, or wakes a browser through the existing owner. A cleaned disposable allocation can be recreated through its recorded policy. The original handoff URL and link expiry remain unchanged; the resolver does not select an unrelated current tab. Page memory is not restored. If a tab-creation outcome is unknown, obtain readback instead of blindly retrying. Explicitly closed tasks and expired links follow their separate terminal behavior.
+
+Software callers configure an addressed tab through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_tab_lifetime"` and `params.tabInactivityMs`. A positive value expires the tab after that many milliseconds without tab activity; 0 makes its retention perpetual. The policy is persisted separately from link lifetime. `inspect` reports `tabLifetime` alongside link expiry. Configuration does not navigate, open a viewer or renew link validity. Reaping an expired tab preserves its peer tabs and link; active external custody and viewer protection still apply.
+
+Handoff properties under development: `inspect` on `service_remote_view_handoff_resolve` reports `taskMetadata` captured once on the actual tab. Managed commands can supply `serviceName`, `agentName`, `humanName`, `originKind`, `taskName`, `purpose`, `requestId` and `jobId` (or broker `serviceJobId`). These are descriptive fields marked `attribution="supplied"`, not authenticated identity. Missing attribution is `unknown`; absent fields remain null. `createdAtMs` identifies original tab creation. Later inspection does not replace original context. Context persists separately from link lifetime and accompanies automatic target recreation. This source work is not complete dashboard Properties or real workflow acceptance.
+
+`taskMetadata.firstHumanUseAtMs` records the first exact-target human-use acknowledgement after qualified native focus. It is absent before use and does not infer an originating person or authenticated creation identity. Agent readiness, rejected acknowledgements and duplicate use do not set or advance it. Public HTTP and MCP service requests reject caller-supplied human-use evidence and the internal acknowledgement operation; authenticated presentation navigation registers exact continuation context. Use is recorded only after the native provider qualifies an authenticated connection, a delivered display frame and its matching acknowledgement, and the browser owner rejoins the current target. The value persists through restart and automatic target expiry; real HTTP/native workflow acceptance remains pending.
+
+Pressure retirement under development accepts `params.pressureInactivityMs` with `set_tab_lifetime`. A positive value opts the tab into retirement after that much inactivity when its disposable-profile count or byte quota requires space; 0 disables it, and omission preserves its setting. It is independent from ordinary tab inactivity and link expiry. Pending-human holds, ineligible peer work and active native viewers protect the target. Automatic retirement rechecks current Service State activity under a guard held through tab and browser close effects; newly admitted controller or operation activity defers close. Explicit close follows its separate user intent. Scheduled cleanup uses a separate profile-allocation guard and defers protected allocations. Quota cleanup qualifies every selected profile and browser together before any close or deletion, including profiles whose browsers already ended. Quota admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. The native candidate checks profile claims, profile operations, associated browser activity and process observations while retaining Service State exclusion through deletion. Process-census completeness, provider viewer admission and complete runtime acceptance remain unfinished; this source checkpoint is not pressure-policy acceptance.
+
+
+Closing the last live tab in an Agent Browser-owned browser also ends its empty sessions and closes that browser. Its handoff records retain their separate link lifetime. Closing one tab preserves other live tabs; borrowed browsers remain under their external owner.
+
+Automatic expiry of the last live tab also retires unprotected empty peer sessions in its owned browser, without creating replacement tabs. Active native viewers defer retirement, and shared browsers remain outside process custody.
+
+Software callers change an existing valid link through `service_remote_view_handoff_resolve` with `params.handoffOperation="set_link_lifetime"` and `params.ttlMs`. A positive duration replaces its expiry with the edit time plus that duration; 0 selects perpetual validity. This can shorten a finite link or make a perpetual link finite. It persists across restart and works after automatic target expiry without recreating the target, preparing presentation or changing tab retention. Invalid or overflowing durations leave the link unchanged. `extend` retains its existing behavior of preserving a longer expiry. An already-expired link remains rejected for lifetime edits; explicit deletion remains available.
+
+Software callers delete a link through `service_remote_view_handoff_resolve` with `params.handoffOperation="delete"`. The owner removes only that durable link record and returns `status="deleted"`. The URL becomes unusable across restart; the target tab, browser, session, tab lifetime and pending-human hold are preserved. Deletion also accepts an expired link and does not recreate a missing target or prepare presentation.
+
+The owner operation `service_remote_view_handoff_resolve` with `params.handoffOperation="prepare_human"` and `params.pendingHumanRetentionMs` records a pending-human hold on the addressed tab. A positive value sets a maximum duration; 0 holds without an automatic deadline. `inspect` reports `pendingHuman` separately from link expiry and tab inactivity. The hold survives restart and does not navigate or open a viewer. The browser owner reads successful-use evidence through the private native provider transport, joined to the retained handoff, exact tab/target and current lifecycle/viewing generations. Caller-supplied `humanUseEvidence` is rejected. Pending, expired or failed native viewing preserves the hold. Qualified use and exact native focus release the hold and resume tab inactivity. Ordinary agent readiness resolution leaves the hold intact. Native `remote_view_open` automatically prepares this hold after successful browser work. Software managed commands can request it with `humanHandoff=true`. `pendingHumanRetentionMs` overrides `AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS`; the default 0 holds until use with no automatic deadline. Ordinary agent work does not prepare a human hold. Invalid configuration and overflowing pending deadlines are rejected before browser effects. Authenticated document navigation registers a continuation and redirects to the existing native viewer, including dashboard redirects that lose transient user activation. Registration does not require a fresh click on the API URL. The redirect and readiness do not acknowledge use; private owner polling consumes only provider-qualified use. Registration survives owner restart; replay preserves the first-use timestamp. Prefetches, background requests and missing navigation context retain the hold. This uses existing authentication and adds no operator confirmation step. Real browser/HTTP deployment acceptance remains pending.
+
+Native human handoff production prepares private observation context alongside the pending-human hold. The public opaque link reads the current binding and redirects into native Remote View authentication without a Dashboard login, browser recovery or focus effect. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention. This source behavior still requires final native public workflow qualification.
+
+
+
+
+
 Normal client `remote-view open` and `remote-view resolve` use the native Remote View desktop readiness path when the Remote View application provider is configured. They preserve the logical handoff and profile without issuing an extra Agent Browser viewer grant. Remote View retains its existing operator authentication. During a runtime-host restart, client commands briefly wait for the existing endpoint to finish publishing before reporting it unavailable.
 
 With the Remote View application provider, named-session batches keep their selected runtime profile and browser build. The shared browser owner launches or restores the browser when the navigation command runs.
 
-New durable-profile handoffs have no default time expiry. Disposable-profile
-handoffs default to 24 hours. Both are separate from browser idle cleanup and
+New durable-profile and disposable-profile handoffs default to perpetual
+link lifetime. Both are separate from browser idle cleanup and
 Remote View authentication or viewer lifetime. `remote-view open --handoff-ttl-ms
 <milliseconds>` selects a positive lifetime for a newly issued link. JSON exposes
 `handoffCreatedAtMs` and `handoffExpiresAtMs`. `remote-view inspect <handoff-id>`
 shows expiry even after the link expires. `remote-view extend <handoff-id> --ttl-ms
 <milliseconds>` ensures at least that much remaining time without shortening a
-longer expiry. Extension does not restore a browser or issue a viewer grant.
+longer expiry. A still-valid link can be extended after its target tab expires.
+Extension does not recreate a tab, restore a browser or issue a viewer grant.
 Expired links return `remote_view_handoff_expired` (HTTP 410 on the deep-link
 endpoint); opening or extending them cannot revive them. A subsequent normal
 open can issue a new opaque link to the same retained tab. An already-connected
-native viewer remains connected. Legacy links receive historical 24-hour retention once
-when the shared owner first loads the upgraded state; restarts do not renew them.
+native viewer remains connected. Legacy links keep their recorded expiry, including no expiry, when the
+shared owner loads the upgraded state; restarts do not renew them.
 Service callers use `service_remote_view_handoff_resolve` with
 `params.handoffOperation` set to `inspect` or `extend`; extension also supplies
 positive `params.ttlMs`. New handoff requests can set `params.handoffTtlMs`.
 
 Retention defaults are persisted in Browser Runtime SQLite. Explicit startup
 settings update that policy; omitted settings preserve it across restart.
+
+Browser Runtime reads database schemas 1 through 4. The first native idle-retirement
+custody claim atomically promotes schema 1 to schema 2 with its durable record.
+Command-activity reservations require at least schema 3. Original-process
+activity evidence and ended-resource settlement require schema 4. Each write
+atomically advances the database to its required reader version without downgrading it. Keep a schema-4-capable binary with that database and its
+backups; older readers reject it. Activity reservations prevent automatic retirement
+through command execution and session publication. Unknown effects retain their
+veto and original readback obligation; acknowledgement alone does not release it.
+Positive original-process exit permits resource recovery while preserving the
+unknown command record. Unavailable observation retains the veto; recovery does
+not replay the original command or adopt a replacement process as its evidence.
+
+The automatic-close candidate persists its exact operation before preparing
+native viewer exclusion, records each close attempt before the physical effect,
+and publishes session state with retirement custody before completing the fence.
+A lost completion reply is reconciled against the original fence after restart.
+Unresolved physical close outcomes retain custody; native workflow and installed
+acceptance remain pending.
+
+Pending retirement custody also fences changes to its browser, tab and session
+projection inside SQLite publication and launch/recovery admission transactions.
+Unrelated profiles can continue. `browser_session_publication_idle_retirement_fenced`
+means that publication would overwrite an unresolved original operation; it does
+not authorize another close or replacement launch.
+
+A physical close requires a fresh atomic attempt admission. A stale coordinator
+reads the original pending attempt instead of treating an idempotent record
+update as permission to close again. When one command expires old work and
+reopens its profile, the host publishes and completes the old retirement before
+reusing its logical browser identity.
+
+Preparation attempts also require fresh atomic admission. After interruption,
+the owner reads the exact original fence. A known prepared operation with no
+admitted close can publish unchanged task state before completing that fence;
+a delayed actor then cannot admit its old effect. An absent fence after an
+unknown prepare remains unresolved.
+
+Before delegating a browser command, the candidate checks durable profile custody.
+An unresolved retirement returns `browser_session_idle_readback_required` before
+tab acquisition, creation, navigation, focus or command execution. Process-liveness
+observation remains available. Atomic admission against a retirement starting
+concurrently with a new command remains pending source qualification.
+
+Normal close confirmation requires positive OS process absence. An unavailable
+process observation returns `browser_session_process_observation_unavailable`
+and leaves the outcome unresolved, including after a lost close reply. This
+absence check alone does not prove original process identity across PID reuse.
+
+The launch-custody candidate retains kernel start identity captured with the
+original launched child or verified profile attachment. Restart reads the stored
+identity; a reused PID or missing-identity replay cannot replace it. Older records
+remain explicitly without that evidence. Recording the first kernel identity
+promotes the private database reader version atomically. A new retirement scope
+freezes the published launch identity, and SQLite validates that exact join in
+its claim transaction. Restart preserves the frozen evidence. Admitted automatic
+effects and readback use that scope. A changed kernel start proves the original
+ended without attaching or closing its replacement. Live-target readback queries
+only the verified original browser and frozen target. New automatic groups with
+missing legacy evidence defer before any new claim, native preparation or attempt.
+Existing unresolved operations retain original readback obligations; a scoped
+runtime request without identity returns `browser_session_idle_original_identity_missing`
+and cannot adopt the current PID. Native workflow and installed qualification
+remain pending.
+
 `AGENT_BROWSER_DURABLE_HANDOFF_TTL_MS` selects durable link retention (0 means
-no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects a positive
-disposable link lifetime; `AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a
-positive disposable inactivity lifetime. Disposable defaults are 86400000 ms.
+no time expiry); `AGENT_BROWSER_DISPOSABLE_HANDOFF_TTL_MS` selects disposable
+link retention (0 means no time expiry). Both link defaults are 0.
+`AGENT_BROWSER_DISPOSABLE_INACTIVITY_MS` selects a positive disposable
+inactivity lifetime, defaulting to 86400000 ms. Existing persisted finite policy
+values remain configured until explicitly changed; set the matching link setting
+to 0 to make newly issued links perpetual.
 Policy changes apply to newly issued links. Existing finite links keep their
 expiry, including already-expired links. Legacy links with no creation marker
-receive the historical finite 24-hour retention once. Extending an unlimited
+receive creation metadata once without adding or changing their expiry. Extending an unlimited
 link preserves its unlimited lifetime. Explicitly closed tasks remain closed.
 
 

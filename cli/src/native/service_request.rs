@@ -460,6 +460,7 @@ const SERVICE_REQUEST_FIELDS: &[ServiceRequestFieldSpec] = &[
 pub(crate) enum ServiceRequestIssueKind {
     InvalidRequest,
     OperatorFocusAuthority,
+    OperatorTabCloseAuthority,
     MissingAction,
     UnsupportedAction,
     UnknownField,
@@ -499,6 +500,17 @@ impl ServiceRequestIssue {
             return "profile_access_denied";
         }
         match self.kind {
+            ServiceRequestIssueKind::OperatorTabCloseAuthority => {
+                match self.message.split(':').next() {
+                    Some("operator_tab_close_authority_required") => {
+                        "operator_tab_close_authority_required"
+                    }
+                    Some("operator_tab_close_profile_policy_denied") => {
+                        "operator_tab_close_profile_policy_denied"
+                    }
+                    _ => "operator_tab_close_authority_unproven",
+                }
+            }
             ServiceRequestIssueKind::OperatorFocusAuthority => {
                 super::service_failure::operator_focus_failure_code(&self.message)
                     .unwrap_or("operator_focus_authority_unproven")
@@ -577,6 +589,15 @@ impl ServiceRequestRejection {
                 "blind_retry".to_string(),
                 "impersonate_profile_subject".to_string(),
             ];
+        }
+        if self.issue.kind == ServiceRequestIssueKind::OperatorTabCloseAuthority {
+            failure.axis = ServiceFailureAxis::ProfileAccess;
+            failure.recommended_action = "inspect_operator_tab_close_authority".to_string();
+            failure.safe_next_actions = vec!["inspect_operator_tab_close_authority".to_string()];
+            failure.retry_disposition = ServiceRetryDisposition::InspectBeforeRetry;
+            if self.issue.code() == "operator_tab_close_profile_policy_denied" {
+                failure.missing_permission = Some("tab_close_any".to_string());
+            }
         }
         failure.code = self.issue.code().to_string();
         failure.phase = ServiceFailurePhase::IngressValidation;
@@ -749,6 +770,18 @@ pub(crate) fn normalize_service_request(
                 "params must be a JSON object",
             )
         })?;
+        // Native correlation and qualified-use reads belong to the private
+        // presentation/owner path. Public callers cannot assert or relay use.
+        if matches!(
+            params.get("handoffOperation").and_then(Value::as_str),
+            Some("confirm_human_use" | "prepare_native_use" | "observe_native_use")
+        ) || params.contains_key("humanUseEvidence")
+        {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidRequest,
+                "human-use acknowledgement requires qualified native provider evidence",
+            ));
+        }
         for (key, value) in params {
             if !matches!(
                 key.as_str(),
@@ -756,6 +789,7 @@ pub(crate) fn normalize_service_request(
                     | "connectionInstanceId"
                     | "profileChildAccess"
                     | "operatorFocusProofToken"
+                    | "operatorTabCloseProofToken"
             ) {
                 command[key] = value.clone();
             }
@@ -829,6 +863,28 @@ pub(crate) fn normalize_service_request(
         command["operationPrincipalId"] = json!(desktop_interact_operation_principal_id(request));
     }
 
+    if let Some(operator_close) = command.get("operatorClose") {
+        if !operator_close.is_boolean() {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidFieldType,
+                "operatorClose must be a boolean",
+            ));
+        }
+        if operator_close == true
+            && (action != "tab_close"
+                || command["targetId"]
+                    .as_str()
+                    .is_none_or(|id| id.trim().is_empty())
+                || ["index", "target_id", "serviceTabHandle"]
+                    .iter()
+                    .any(|field| command.get(*field).is_some()))
+        {
+            return Err(ServiceRequestIssue::new(
+                ServiceRequestIssueKind::InvalidRequest,
+                "operatorClose requires tab_close with one explicit targetId selector",
+            ));
+        }
+    }
     let principal_authority = input.authenticated_principal.cloned();
     if let Some(authority) = &principal_authority {
         // Queue provenance must identify the same validated actor as authorization,
@@ -2595,6 +2651,70 @@ mod tests {
             request_id: "test-normalizer-request",
             effective_session: Some("test-normalizer"),
         })
+    }
+
+    #[test]
+    fn public_service_request_cannot_drive_private_native_use_operations() {
+        for operation in ["prepare_native_use", "observe_native_use"] {
+            let request = json!({"action":"service_remote_view_handoff_resolve","params":{
+                "handoffId":"synthetic-handoff","handoffOperation":operation
+            }});
+            let body = request.to_string();
+            assert!(normalize(request.clone()).is_err());
+            assert!(crate::native::stream::service_request_adapter_fixture(&body).is_err());
+            assert!(crate::mcp::service_request_adapter_fixture(&request).is_err());
+        }
+    }
+
+    #[test]
+    fn public_service_request_cannot_fabricate_authenticated_human_use() {
+        let request = json!({
+            "action": "service_remote_view_handoff_resolve",
+            "params": {
+                "handoffId": "synthetic-pending-handoff",
+                "handoffOperation": "confirm_human_use",
+                "humanUseEvidence": {
+                    "source": "authenticated_presentation_navigation",
+                    "operator": "fabricated-operator",
+                    "tabId": "synthetic-tab",
+                    "targetId": "synthetic-target"
+                }
+            }
+        });
+        let body = serde_json::to_string(&request).unwrap();
+        let commands = [
+            (
+                "normalizer",
+                normalize(request.clone())
+                    .ok()
+                    .map(|normalized| normalized.command),
+            ),
+            (
+                "HTTP",
+                crate::native::stream::service_request_adapter_fixture(&body).ok(),
+            ),
+            (
+                "MCP",
+                crate::mcp::service_request_adapter_fixture(&request).ok(),
+            ),
+        ];
+        let accepting = commands
+            .iter()
+            .filter_map(|(name, command)| {
+                command
+                    .as_ref()
+                    .filter(|command| {
+                        command["handoffOperation"] == "confirm_human_use"
+                            && command["humanUseEvidence"]["source"]
+                                == "authenticated_presentation_navigation"
+                    })
+                    .map(|_| *name)
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            accepting.is_empty(),
+            "public adapters forwarded fabricated authenticated human-use evidence: {accepting:?}"
+        );
     }
 
     #[test]

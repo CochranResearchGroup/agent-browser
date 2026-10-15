@@ -31,11 +31,10 @@ assert.match(
   'Session and tab polling must use the shared ten-second dashboard freshness bound',
 );
 
-assert.match(
-  page,
-  /import \{ WorkspaceNavigator \} from "@\/components\/workspace-navigator";/,
-  'Dashboard page must render the workspace navigator instead of importing SessionTree',
-);
+assert.match(page, /import \{ CompactNativeWorkspace \} from "@\/components\/compact-native-workspace";/,
+  'The default entry must use the qualified native workspace');
+assert.doesNotMatch(page, /<AppShell|<WorkspaceNavigator|\.get\("workspace-ui"\)/,
+  'The default entry must not mount a competing old shell or require a preview selector');
 
 assert.doesNotMatch(
   page,
@@ -43,17 +42,11 @@ assert.doesNotMatch(
   'Dashboard page must not render the raw session tree after the workspace navigator refactor',
 );
 
-assert.match(
-  page,
-  /type MobileDashboardPanel = "workspaces" \| "viewport" \| "activity" \| "service";[\s\S]*const \[mobilePanel, setMobilePanel\] = useState<MobileDashboardPanel>[\s\S]*value=\{mobilePanel\}[\s\S]*value="workspaces"[\s\S]*<WorkspaceNavigator \/>/,
-  'Mobile dashboard tabs must be able to render the workspace navigator instead of falling through to the viewport',
-);
+assert.match(page, /function NativeBrowserWorkspace[\s\S]*return <CompactNativeWorkspace/,
+  'Desktop and narrow-screen browser routes must share the same workspace');
 
-assert.match(
-  page,
-  /<ResizablePanel id="sessions" defaultSize="20%" minSize="14%" maxSize="34%">/,
-  'Desktop workspace pane must default wide enough for human labels, not only raw IDs',
-);
+assert.match(page, /function DashboardDiagnostics[\s\S]*<h1>Diagnostics<\/h1>/,
+  'Existing diagnostics must retain a separate optional surface');
 
 assert.match(
   page,
@@ -141,7 +134,7 @@ for (const [label, source] of [
 ]) {
   assert.match(
     source,
-    /fetchSharedServiceStatus\(\)/,
+    /fetchSharedServiceStatus\((?:revalidate)?\)/,
     `${label} must use the shared Service Status flight and freshness window`,
   );
 }
@@ -209,7 +202,6 @@ assert.match(
 for (const [label, source, guard] of [
   ['session synchronization', sessionsStore, 'fetchInFlightRef'],
   ['workspace navigator status', navigator, 'serviceStatusInFlightRef'],
-  ['selected workspace context', selectedWorkspaceContextHook, 'refreshInFlightRef'],
   ['service panel status', servicePanel, 'serviceFetchInFlightRef'],
 ]) {
   assert.match(
@@ -218,6 +210,9 @@ for (const [label, source, guard] of [
     `${label} must not start a new polling cycle while its prior cycle is still in flight`,
   );
 }
+
+// The selected workspace hook shares a promise and queues explicit refresh.
+// test:native-handoff-policy-refresh verifies that scheduling in Chromium.
 
 for (const [label, text] of [
   ['workspace navigator', navigator],
@@ -346,11 +341,8 @@ assert.match(
   'Workspace navigator must keep live attention rows visible at the bottom while separating owned work from detected non-owned browsers',
 );
 
-assert.match(
-  cliOutput,
-  /left workspace navigator renders live Agent-browser owned browsers, live\s+needs-attention browser diagnostics, and detected non-owned addressable\s+browsers[\s\S]*stale, retained, and resolved incident records stay in Service,/,
-  'CLI dashboard help must describe the live rail as owned plus live attention plus detected non-owned rows',
-);
+assert.match(cliOutput, /default native browser workspace[\s\S]*Diagnostics at \/service/,
+  'CLI help must describe the default workspace and optional diagnostics');
 
 assert.doesNotMatch(
   cliOutput,
@@ -538,11 +530,8 @@ assert.match(
   'Selecting a workspace with an embeddable stream must open the workspace viewport route',
 );
 
-assert.match(
-  page,
-  /type RightPaneTab = "workspace"[\s\S]*selectedWorkspaceContextEnabled = !rightPaneCollapsed[\s\S]*hasWorkspaceViewportRoute[\s\S]*useSelectedWorkspaceContext\([\s\S]*workspaceViewPreferences\.snapshot[\s\S]*<WorkspaceRemoteViewport[\s\S]*selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*projection=\{selectedWorkspace\.projection\}[\s\S]*<Tabs value=\{sidePanelTab\}[\s\S]*<TabsTrigger value="workspace"[\s\S]*<WorkspaceSelectionPanel[\s\S]*selectedWorkspace\.context/,
-  'Dashboard viewport and right pane must consume the shared selected workspace context',
-);
+assert.match(page, /function NativeBrowserWorkspace[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot\)[\s\S]*<WorkspaceRemoteViewport[\s\S]*selectedWorkspaceContext=\{selectedWorkspace\.context\}[\s\S]*function DashboardDiagnostics[\s\S]*useSelectedWorkspaceContext\(true, workspaceViewPreferences\.snapshot\)[\s\S]*<WorkspaceSelectionPanel context=\{selectedWorkspace\.context\}/,
+  'The default viewport and diagnostic tools must retain authoritative selection context');
 
 assert.match(
   serviceWorkspaces,
@@ -629,28 +618,8 @@ for (const [label, text] of [
 ]) {
   assert.match(
     text,
-    /profile[\s\S]*Open browser[\s\S]*service-owned browser[\s\S]*Close/i,
-    `${label} must document profile launch and service-owned browser close controls`,
-  );
-  assert.match(
-    text,
     /workspace[\s\S]*browser[\s\S]*session[\s\S]*tab[\s\S]*profile[\s\S]*job/,
     `${label} must document selected workspace identity query parameters`,
-  );
-}
-
-for (const [label, text] of [
-  ['README', readme],
-  ['dashboard docs', dashboardDocs],
-  ['service mode docs', serviceModeDocs],
-  ['commands docs', commandsDocs],
-  ['skill', skill],
-  ['CLI help', cliOutput],
-]) {
-  assert.match(
-    text,
-    /launch[\s\S]*(browser|tab) identity[\s\S]*(workspace viewport|embedded workspace viewport|Service Jobs|Jobs)/i,
-    `${label} must document post-launch viewport or Jobs routing`,
   );
 }
 
@@ -667,4 +636,4 @@ for (const [label, text] of [
   );
 }
 
-console.log('Dashboard workspace navigator structure smoke passed');
+console.log('Dashboard workspace routing and retained compatibility checks passed');

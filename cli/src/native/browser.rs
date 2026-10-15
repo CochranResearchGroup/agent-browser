@@ -1883,6 +1883,18 @@ impl BrowserManager {
         Ok(result)
     }
 
+    /// Bind an already attached target for observation without activating its
+    /// native tab or raising the browser. Authority is checked by the caller.
+    pub(crate) async fn bind_observation_target(&mut self, target_id: &str) -> Result<(), String> {
+        let index = page_index_for_target_id(&self.pages, target_id).ok_or_else(|| {
+            format!("Target ID {target_id} was not found in the attached tab list")
+        })?;
+        let session_id = self.pages[index].session_id.clone();
+        self.enable_domains(&session_id).await?;
+        self.active_page_index = index;
+        Ok(())
+    }
+
     /// Remove only an owned initial blank-page marker. Compare in the live
     /// document and retain history state so concurrent operator work survives.
     pub(crate) async fn clear_initial_task_marker(
@@ -2258,14 +2270,23 @@ impl BrowserManager {
 
     fn focus_native_window_for_view(&self) -> Option<Value> {
         let pid = self.browser_pid()?;
-        let display = env::var("DISPLAY")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .or_else(|| {
-                env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY")
-                    .ok()
-                    .filter(|value| !value.trim().is_empty())
-            })?;
+        // A service process can own browsers on distinct desktops. The
+        // launched process retains its assignment; ambient DISPLAY describes
+        // this daemon process and must not override that browser identity.
+        let display = match self.browser_process.as_ref() {
+            Some(BrowserProcess::Chrome(process)) => process.display_name().map(str::to_owned),
+            _ => None,
+        }
+        .or_else(|| {
+            env::var("DISPLAY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })
+        .or_else(|| {
+            env::var("AGENT_BROWSER_REMOTE_HEADED_DISPLAY")
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+        })?;
 
         #[cfg(target_os = "linux")]
         {
@@ -3151,6 +3172,134 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio::time::sleep;
     use tokio_tungstenite::tungstenite::Message;
+
+    /// Opt-in physical oracle on a fresh task-owned Xvfb/Openbox desktop.
+    /// The private namespace driver owns the display and process cleanup.
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    #[ignore = "requires the isolated P237 native-selection driver"]
+    async fn physical_selection_activates_exact_target_window_and_maximizes() {
+        let root = std::path::PathBuf::from(std::env::var("P237_NATIVE_SELECTION_ROOT").unwrap());
+        let display = std::env::var("DISPLAY").unwrap();
+        let executable = std::env::var("P237_NATIVE_SELECTION_CHROME").unwrap();
+        assert!(root.is_absolute() && root.is_dir());
+        assert!(std::path::Path::new(&executable).is_absolute());
+        let profile = root.join("browser-profile");
+        assert!(!profile.exists());
+        let mut manager = BrowserManager::launch(
+            LaunchOptions {
+                headless: false,
+                executable_path: Some(executable),
+                profile: Some(profile.to_string_lossy().into_owned()),
+                display: Some(display.clone()),
+                args: vec![
+                    "--no-sandbox".into(),
+                    "--no-proxy-server".into(),
+                    "--disable-background-networking".into(),
+                ],
+                ..Default::default()
+            },
+            None,
+        )
+        .await
+        .unwrap();
+        let pid = manager.browser_pid().unwrap();
+        std::fs::write(
+            root.join("browser-identity.json"),
+            json!({"pid":pid,"display":display,"profile":profile}).to_string(),
+        )
+        .unwrap();
+        let run = async {
+            let alice = manager.active_target_id()?.to_owned();
+            let bob = manager.client.send_command("Target.createTarget", Some(json!({
+                "url":"about:blank", "newWindow":true
+            })), None).await.map_err(|e|format!("create second native window: {e}"))?["targetId"].as_str().ok_or("new window target missing")?.to_owned();
+            manager.discover_and_attach_targets().await.map_err(|e|format!("attach both native targets: {e}"))?;
+            for (target, title) in [(&alice,"P237 Alice physical"),(&bob,"P237 Bob physical")] {
+                manager.tab_switch_target_id(target).await.map_err(|e|format!("switch exact physical target {target}: {e}"))?;
+                let session = manager.active_session_id()?.to_owned();
+                let expression = format!("document.title={}",serde_json::to_string(title).unwrap());
+                manager.client.send_command("Runtime.evaluate",Some(json!({"expression":expression,"returnByValue":true})),Some(&session)).await.map_err(|e|format!("set synthetic title for {target}: {e}"))?;
+            }
+            for (target, title) in [(&alice,"P237 Alice physical"),(&bob,"P237 Bob physical"),(&alice,"P237 Alice physical")] {
+                manager.tab_switch_target_id(target).await.map_err(|e|format!("switch exact physical target {target}: {e}"))?;
+                let focused = manager.focus_for_view(true).await.map_err(|e|format!("focus exact physical target {target}: {e}"))?;
+                let window = manager.client.send_command("Browser.getWindowForTarget",Some(json!({"targetId":target})),None).await?;
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+                let evidence = loop {
+                    let active = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+                    let active_id = String::from_utf8_lossy(&active.stdout).trim().to_owned();
+                    let name = std::process::Command::new("xdotool").args(["getwindowname",&active_id]).output().map_err(|e|e.to_string())?;
+                    let native_name = String::from_utf8_lossy(&name.stdout).trim().to_owned();
+                    let states = std::process::Command::new("xprop").args(["-id",&active_id,"_NET_WM_STATE","_NET_WM_PID"]).output().map_err(|e|e.to_string())?;
+                    let states = String::from_utf8_lossy(&states.stdout).into_owned();
+                    let maximized = states.contains("_NET_WM_STATE_MAXIMIZED_HORZ") && states.contains("_NET_WM_STATE_MAXIMIZED_VERT");
+                    let input = std::process::Command::new("xdotool").args(["getwindowfocus"]).output().map_err(|e|e.to_string())?;
+                    let input_id = String::from_utf8_lossy(&input.stdout).trim().to_owned();
+                    let stacking = std::process::Command::new("xprop").args(["-root","_NET_CLIENT_LIST_STACKING"]).output().map_err(|e|e.to_string())?;
+                    let stacking = String::from_utf8_lossy(&stacking.stdout).trim().to_owned();
+                    let topmost = active_id.parse::<u64>().ok().is_some_and(|id| stacking.split(',').next_back().is_some_and(|last|last.trim().ends_with(&format!("0x{id:x}"))));
+                    let owned = states.lines().any(|line|line==format!("_NET_WM_PID(CARDINAL) = {pid}"));
+                    if active.status.success() && name.status.success() && input.status.success() && native_name.contains(title) && maximized && owned && input_id==active_id && topmost {
+                        break json!({"targetId":target,"title":native_name,"activeWindow":active_id,"inputWindow":input_id,"topmost":topmost,"maximized":maximized,"cdpWindow":window,"focusReply":focused});
+                    }
+                    if std::time::Instant::now() >= deadline {
+                        return Err(format!("exact native selection failed: expected={title}, active={active_id}, name={native_name}, properties={states}, input={input_id}, stacking={stacking}, reply={focused}, cdpWindow={window}"));
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+                };
+                println!("physical-selection: {evidence}");
+            }
+            let foreground = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let foreground = String::from_utf8_lossy(&foreground.stdout).trim().to_owned();
+            manager.bind_observation_target(&bob).await?;
+            let observed_title = manager.get_title().await?;
+            let observed_url = manager.get_url().await?;
+            if observed_title != "P237 Bob physical" || observed_url != "about:blank" {
+                return Err(format!("background target metadata differed: title={observed_title}, url={observed_url}"));
+            }
+            let after = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let after = String::from_utf8_lossy(&after.stdout).trim().to_owned();
+            let input = std::process::Command::new("xdotool").args(["getwindowfocus"]).output().map_err(|e|e.to_string())?;
+            let input = String::from_utf8_lossy(&input.stdout).trim().to_owned();
+            if after != foreground || input != foreground {
+                return Err(format!("background observation changed physical selection: before={foreground}, after={after}, input={input}"));
+            }
+            println!("physical-background-observation: {}",json!({"targetId":bob,"title":observed_title,"url":observed_url,"beforeWindow":foreground,"afterWindow":after,"inputWindow":input}));
+            // Logical observation binding must not suppress explicit native
+            // activation of that now-already-bound target.
+            manager.tab_switch_target_id(&bob).await?;
+            manager.focus_for_view(true).await?;
+            let active = std::process::Command::new("xdotool").args(["getactivewindow"]).output().map_err(|e|e.to_string())?;
+            let active = String::from_utf8_lossy(&active.stdout).trim().to_owned();
+            let name = std::process::Command::new("xdotool").args(["getwindowname",&active]).output().map_err(|e|e.to_string())?;
+            if !String::from_utf8_lossy(&name.stdout).contains("P237 Bob physical") {
+                return Err("explicit selection did not activate the background-bound target".into());
+            }
+            let targets = manager.client.send_command("Target.getTargets",None,None).await?;
+            if ![&alice,&bob].iter().all(|id| targets["targetInfos"].as_array().unwrap().iter().any(|t|t["targetId"].as_str()==Some(id.as_str()))) {
+                return Err("physical selection removed a peer target".into());
+            }
+            Ok::<(),String>(())
+        }.await;
+        if let Err(error) = &run {
+            let proc_stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok();
+            let state = proc_stat
+                .as_ref()
+                .and_then(|raw| {
+                    raw.rsplit_once(") ")
+                        .map(|(_, fields)| fields.split_whitespace().next().unwrap_or("unknown"))
+                })
+                .unwrap_or("absent");
+            std::fs::write(
+                root.join("physical-failure.json"),
+                json!({"error":error,"browserPid":pid,"browserStateBeforeClose":state}).to_string(),
+            )
+            .unwrap();
+        }
+        manager.close().await.unwrap();
+        run.unwrap();
+    }
 
     #[tokio::test]
     async fn exact_tab_close_requires_acknowledged_target_removal_and_preserves_peers() {

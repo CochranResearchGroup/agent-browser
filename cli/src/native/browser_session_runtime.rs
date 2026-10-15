@@ -61,6 +61,55 @@ pub(crate) trait BrowserRuntimeDriver {
         None
     }
     fn acknowledge_launch_publication(&mut self) {}
+    /// Query current authority before automatic expiry or measured quota retirement.
+    fn permits_idle_browser_close(
+        &mut self,
+        _browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        Ok(true)
+    }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        _allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        Ok(Some(Box::new(())))
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        for browser in browsers {
+            if !self.permits_idle_browser_close(browser)? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(())))
+    }
+    /// Concurrent runtime drivers must qualify the whole quota group under one lock.
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        _allocations: &[ManagedDisposableProfile],
+        _browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        Err("browser_disposable_group_admission_unsupported".into())
+    }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        _scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        Err("browser_session_idle_original_effect_unavailable".into())
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        _scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        _tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        Err("browser_session_idle_effect_readback_unavailable".into())
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String>;
     fn launch_browser(
         &mut self,
@@ -218,6 +267,13 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
     fn acknowledge_launch_publication(&mut self) {
         self.runtime.acknowledge_launch_publication();
     }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime.acquire_profile_cleanup_guard(allocation)
+    }
     fn browser_is_live(&mut self, browser: &ManagedBrowserInstance) -> Result<bool, String> {
         self.runtime.browser_is_live(browser)
     }
@@ -230,6 +286,42 @@ impl<D: BrowserRuntimeDriver> BrowserSessionEffects for BrowserSessionEffectAdap
         self.runtime.launch_browser(profile, desktop)
     }
 
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        self.runtime.permits_idle_browser_close(browser)
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime.acquire_idle_retirement_guard(browsers)
+    }
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        self.runtime
+            .acquire_disposable_retirement_guard(allocations, browsers)
+    }
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        self.runtime.apply_idle_retirement_effect(scope, tab)
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        self.runtime.observe_idle_retirement_effect(scope, tab)
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.runtime.close_browser(browser)
     }
@@ -457,12 +549,20 @@ enum BrowserRuntimeCommand {
         command: Value,
         reply: mpsc::Sender<Result<Value, String>>,
     },
+    IdleRetirement {
+        scope: agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<ManagedBrowserTab>,
+        apply: bool,
+        reply: mpsc::Sender<Result<bool, String>>,
+    },
     Shutdown,
 }
 
 pub(crate) struct BrowserManagerRuntime {
     commands: mpsc::Sender<BrowserRuntimeCommand>,
     worker: Option<thread::JoinHandle<()>>,
+    #[cfg(test)]
+    idle_retirement_after_check: Option<fn(&ManagedBrowserInstance) -> Result<(), String>>,
 }
 
 impl BrowserManagerRuntime {
@@ -485,6 +585,8 @@ impl BrowserManagerRuntime {
             Ok(Ok(())) => Ok(Self {
                 commands,
                 worker: Some(worker),
+                #[cfg(test)]
+                idle_retirement_after_check: None,
             }),
             Ok(Err(error)) => {
                 let _ = worker.join();
@@ -641,6 +743,80 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
             },
         )
     }
+    fn permits_idle_browser_close(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+    ) -> Result<bool, String> {
+        let state = super::service_store::load_default_service_state_snapshot()?;
+        let permitted = super::service_resources::permits_managed_browser_idle_retirement(
+            &state,
+            browser,
+            &chrono::Utc::now().to_rfc3339(),
+        )?;
+        #[cfg(test)]
+        if permitted {
+            if let Some(after_check) = self.idle_retirement_after_check {
+                after_check(browser)?;
+            }
+        }
+        Ok(permitted)
+    }
+
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::service_resources::permits_disposable_profile_cleanup(
+            &guarded.state,
+            allocation,
+            &chrono::Utc::now().to_rfc3339(),
+        )? {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(guarded)))
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        let now = chrono::Utc::now().to_rfc3339();
+        for browser in browsers {
+            if !super::service_resources::permits_managed_browser_idle_retirement(
+                &guarded.state,
+                browser,
+                &now,
+            )? {
+                return Ok(None);
+            }
+        }
+        Ok(Some(Box::new(guarded)))
+    }
+
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn agent_browser_service_model::BrowserIdleRetirementGuard>>, String>
+    {
+        let repository = super::service_store::LockedServiceStateRepository::default_json()?;
+        let guarded = repository.hold_snapshot_for_effect()?;
+        if !super::service_resources::permits_disposable_retirement_group(
+            &guarded.state,
+            allocations,
+            browsers,
+            &chrono::Utc::now().to_rfc3339(),
+        )? {
+            return Ok(None);
+        }
+        Ok(Some(Box::new(guarded)))
+    }
+
     fn begin_operation(
         &mut self,
         expected: &agent_browser_service_model::BrowserSessionState,
@@ -691,6 +867,41 @@ impl BrowserRuntimeDriver for BrowserManagerRuntime {
         )
     }
 
+    fn apply_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<(), String> {
+        let (reply, receiver) = mpsc::channel();
+        let settled = self.request(
+            receiver,
+            BrowserRuntimeCommand::IdleRetirement {
+                scope: scope.clone(),
+                tab: tab.cloned(),
+                apply: true,
+                reply,
+            },
+        )?;
+        settled
+            .then_some(())
+            .ok_or_else(|| "browser_session_idle_effect_readback_unavailable".into())
+    }
+    fn observe_idle_retirement_effect(
+        &mut self,
+        scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+        tab: Option<&ManagedBrowserTab>,
+    ) -> Result<bool, String> {
+        let (reply, receiver) = mpsc::channel();
+        self.request(
+            receiver,
+            BrowserRuntimeCommand::IdleRetirement {
+                scope: scope.clone(),
+                tab: tab.cloned(),
+                apply: false,
+                reply,
+            },
+        )
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         let (reply, receiver) = mpsc::channel();
         self.request(
@@ -1027,12 +1238,24 @@ fn run_browser_worker(
                     let pid = manager
                         .browser_pid()
                         .ok_or_else(|| "browser_session_launch_pid_missing".to_string())?;
+                    // The unreaped child handle prevents PID reuse while this
+                    // launch observation is captured. Missing evidence is retained
+                    // as missing and must never be backfilled during retirement.
+                    let process_identity = if manager.poll_process_exit().is_none() {
+                        crate::process_identity::capture_process_identity(pid, None, None)
+                    } else {
+                        None
+                    };
+                    if manager.poll_process_exit().is_some() {
+                        return Err("browser_session_launch_process_exited".into());
+                    }
                     next_browser_sequence = sequence;
                     let browser_id = recovery_browser.as_ref().map_or_else(
                         || format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4()),
                         |browser| browser.id.clone(),
                     );
                     let launch = BrowserLaunch {
+                        process_identity,
                         browser_id: browser_id.clone(),
                         pid,
                         cdp_endpoint: manager.get_cdp_url().to_string(),
@@ -1080,11 +1303,10 @@ fn run_browser_worker(
                             close_reattached_browser(manager, browser.pid).await
                         }
                     }),
-                    None if !recorded_browser_process_exists(&browser) => Ok(()),
-                    None => runtime.block_on(async {
-                        let manager = attach_recorded_browser(&browser).await?;
-                        close_reattached_browser(&manager, browser.pid).await
-                    }),
+                    None => runtime.block_on(close_unattached_browser(
+                        &browser,
+                        crate::process_identity::observe_process(browser.pid),
+                    )),
                 };
                 let _ = reply.send(result);
             }
@@ -1142,25 +1364,28 @@ fn run_browser_worker(
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::CreateTab { browser, reply } => {
-                let result = match browsers.get_mut(&browser.id) {
-                    Some(state) => runtime.block_on(async {
-                        let manager = state
-                            .browser
-                            .as_mut()
-                            .ok_or_else(|| "browser_session_runtime_browser_missing".to_string())?;
-                        let tab = if shared_browser_tabs.contains_key(&browser.id) {
-                            manager.tab_new_background(None).await?
-                        } else {
-                            manager.tab_new(None).await?
-                        };
-                        let acquisition = tab_acquisition(tab, BrowserTabSource::ExplicitNew)?;
-                        if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
-                            targets.insert(acquisition.target_id.clone());
-                        }
-                        Ok(acquisition)
-                    }),
-                    None => Err("browser_session_runtime_browser_missing".to_string()),
-                };
+                let result = runtime.block_on(async {
+                    // A retained owner record survives runtime restart; the
+                    // process-local CDP manager must be verified and reattached
+                    // before creating a new target in that recorded browser.
+                    if !recorded_browser_is_live(&mut browsers, &browser).await? {
+                        return Err("browser_session_runtime_browser_missing".into());
+                    }
+                    let manager = browsers
+                        .get_mut(&browser.id)
+                        .and_then(|state| state.browser.as_mut())
+                        .ok_or("browser_session_runtime_browser_missing")?;
+                    let tab = if shared_browser_tabs.contains_key(&browser.id) {
+                        manager.tab_new_background(None).await?
+                    } else {
+                        manager.tab_new(None).await?
+                    };
+                    let acquisition = tab_acquisition(tab, BrowserTabSource::ExplicitNew)?;
+                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                        targets.insert(acquisition.target_id.clone());
+                    }
+                    Ok(acquisition)
+                });
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::CloseTab {
@@ -1170,7 +1395,9 @@ fn run_browser_worker(
             } => {
                 let result = runtime.block_on(async {
                     if !recorded_browser_is_live(&mut browsers, &browser).await? {
-                        return if !recorded_browser_process_exists(&browser) {
+                        return if !observed_process_presence(
+                            crate::process_identity::observe_process(browser.pid),
+                        )? {
                             Ok(())
                         } else {
                             Err("browser_session_reattach_unresponsive".into())
@@ -1236,6 +1463,57 @@ fn run_browser_worker(
             BrowserRuntimeCommand::Execute {
                 browser,
                 tab,
+                command,
+                reply,
+                ..
+            } if command["action"] == "tab_close" && command["operatorClose"] == true => {
+                let result = runtime.block_on(async {
+                    use super::service_store::{
+                        LockedServiceStateRepository, ServiceStateRepository,
+                    };
+                    let repository = LockedServiceStateRepository::default_json()?;
+                    super::stream::verify_operator_tab_close(
+                        &repository.load_snapshot()?,
+                        &command,
+                    )?;
+                    if command["targetId"] != tab.target_id
+                        || command["browserId"] != browser.id
+                        || !recorded_browser_is_live(&mut browsers, &browser).await?
+                    {
+                        return Err("operator_tab_close_process_changed".to_string());
+                    }
+                    let state = browsers
+                        .get_mut(&browser.id)
+                        .ok_or("operator_tab_close_process_changed")?;
+                    let manager = state
+                        .browser
+                        .as_mut()
+                        .ok_or("operator_tab_close_process_changed")?;
+                    if manager.browser_pid() != Some(browser.pid)
+                        || manager.get_cdp_url() != browser.cdp_endpoint
+                    {
+                        return Err("operator_tab_close_process_changed".into());
+                    }
+                    super::stream::verify_operator_tab_close(
+                        &repository.load_snapshot()?,
+                        &command,
+                    )?;
+                    let data = manager
+                        .tab_close_target_id_for_release(&tab.target_id)
+                        .await?;
+                    if let Some(targets) = shared_browser_tabs.get_mut(&browser.id) {
+                        targets.remove(&tab.target_id);
+                    }
+                    state.ref_map.clear();
+                    state.iframe_sessions.clear();
+                    state.active_frame_id = None;
+                    Ok(serde_json::json!({"id":command["id"],"success":true,"data":data}))
+                });
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::Execute {
+                browser,
+                tab,
                 session_id,
                 session_name,
                 command,
@@ -1243,6 +1521,15 @@ fn run_browser_worker(
             } => {
                 let result = match browsers.get_mut(&browser.id) {
                     Some(state) => runtime.block_on(async {
+                        if command["action"] == "view_focus" && command["operatorFocus"] == true {
+                            // No marker clearing or target activation may precede
+                            // the current operator proof and native effect fence.
+                            let data = super::browser_lifecycle::handle_view_focus(&command, state)
+                                .await?;
+                            return Ok(
+                                serde_json::json!({"id":command["id"],"success":true,"data":data}),
+                            );
+                        }
                         let manager = state
                             .browser
                             .as_mut()
@@ -1261,7 +1548,17 @@ fn run_browser_worker(
                                 .await;
                         }
                         attach_owned_target_if_missing(manager, &tab.target_id).await?;
-                        manager.tab_switch_target_id(&tab.target_id).await?;
+                        // Read the addressed task or popup inventory without
+                        // replacing the person's physical selection. Other
+                        // actions retain exact-target activation semantics.
+                        if matches!(
+                            command["action"].as_str(),
+                            Some("title" | "url" | "__observe_owned_popup_targets")
+                        ) {
+                            manager.bind_observation_target(&tab.target_id).await?;
+                        } else {
+                            manager.tab_switch_target_id(&tab.target_id).await?;
+                        }
                         if command["action"] == "__observe_owned_popup_targets" {
                             let observed = manager
                                 .client
@@ -1292,6 +1589,41 @@ fn run_browser_worker(
                     }),
                     None => Err("browser_session_runtime_browser_missing".to_string()),
                 };
+                let _ = reply.send(result);
+            }
+            BrowserRuntimeCommand::IdleRetirement {
+                scope,
+                tab,
+                apply,
+                reply,
+            } => {
+                let mut release_original_cache = false;
+                let result = runtime.block_on(async {
+                    if apply
+                        && tab.is_none()
+                        && original_retirement_process(
+                            &scope,
+                            crate::process_identity::observe_process(scope.browser.pid),
+                        )?
+                        .is_some()
+                    {
+                        if let Some(manager) = browsers
+                            .get_mut(&scope.browser.id)
+                            .and_then(|state| state.browser.as_mut())
+                        {
+                            if manager.browser_pid() == Some(scope.browser.pid)
+                                && manager.get_cdp_url() == scope.browser.cdp_endpoint
+                            {
+                                manager.approve_lifecycle_close();
+                                release_original_cache = true;
+                            }
+                        }
+                    }
+                    original_retirement_effect(&scope, tab.as_ref(), apply).await
+                });
+                if release_original_cache && result.as_ref().is_ok_and(|settled| *settled) {
+                    browsers.remove(&scope.browser.id);
+                }
                 let _ = reply.send(result);
             }
             BrowserRuntimeCommand::Shutdown => break,
@@ -1416,9 +1748,22 @@ async fn attach_current_profile_browser(
         .filter(|(port, path)| *port != 0 && path.starts_with("/devtools/browser/"))
         .ok_or("browser_session_profile_debug_endpoint_unavailable")?;
     let endpoint = format!("ws://127.0.0.1:{port}{browser_path}");
+    let process_identity = before
+        .start_token
+        .clone()
+        .zip(before.executable_path.clone())
+        .map(|(start_token, executable_path)| {
+            agent_browser_service_model::RecordedProcessIdentity {
+                pid,
+                start_token,
+                executable_path: Some(executable_path),
+                browser_family: before.browser_family.clone(),
+            }
+        });
     let manager = attach_verified_browser_endpoint(&endpoint, pid, before).await?;
     Ok(Some((
         BrowserLaunch {
+            process_identity,
             browser_id: browser_id
                 .map(str::to_owned)
                 .unwrap_or_else(|| format!("browser:{}:{}", profile.id, uuid::Uuid::new_v4())),
@@ -1526,6 +1871,205 @@ async fn attach_recorded_browser(
     Ok(manager)
 }
 
+fn original_retirement_process(
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<Option<crate::process_identity::ObservedProcessIdentity>, String> {
+    use crate::process_identity::ProcessObservation;
+    if scope.browser.pid == 0
+        || scope.browser.cdp_endpoint.is_empty()
+        || scope.process_identity.as_ref().is_some_and(|identity| {
+            identity.pid != scope.browser.pid
+                || identity.start_token.is_empty()
+                || identity
+                    .executable_path
+                    .as_ref()
+                    .is_none_or(|path| path.is_empty())
+        })
+    {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    let observed = match observation {
+        ProcessObservation::Missing => return Ok(None),
+        ProcessObservation::Failed { .. } => {
+            return Err("browser_session_idle_effect_readback_unavailable".into());
+        }
+        ProcessObservation::Observed(observed) => observed,
+    };
+    let original = scope
+        .process_identity
+        .as_ref()
+        .ok_or("browser_session_idle_original_identity_missing")?;
+    if original.pid != scope.browser.pid
+        || observed.pid != original.pid
+        || original.start_token.is_empty()
+        || original
+            .executable_path
+            .as_ref()
+            .is_none_or(|path| path.is_empty())
+    {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    let start = observed
+        .start_token
+        .as_ref()
+        .ok_or("browser_session_idle_effect_readback_unavailable")?;
+    if *start != original.start_token {
+        // Positive kernel-instance replacement proves the original ended. This
+        // observation never supplies authority over the current process.
+        return Ok(None);
+    }
+    if observed.executable_path != original.executable_path {
+        return Err("browser_session_idle_original_identity_conflict".into());
+    }
+    Ok(Some(observed))
+}
+
+async fn original_retirement_targets(
+    manager: &BrowserManager,
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+) -> Result<Option<BTreeSet<String>>, String> {
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(None);
+    }
+    let result = manager
+        .client
+        .send_command_no_params("Target.getTargets", None)
+        .await
+        .map_err(|_| "browser_session_idle_effect_readback_unavailable")?;
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(None);
+    }
+    let targets = result
+        .get("targetInfos")
+        .and_then(Value::as_array)
+        .ok_or("browser_session_idle_effect_readback_unavailable")?;
+    let mut pages = BTreeSet::new();
+    for target in targets {
+        if matches!(target["type"].as_str(), Some("page" | "webview")) {
+            let id = target["targetId"]
+                .as_str()
+                .filter(|id| !id.is_empty())
+                .ok_or("browser_session_idle_effect_readback_unavailable")?;
+            pages.insert(id.to_string());
+        }
+    }
+    Ok(Some(pages))
+}
+
+async fn original_retirement_effect(
+    scope: &agent_browser_service_model::BrowserIdleRetirementScope,
+    tab: Option<&ManagedBrowserTab>,
+    apply: bool,
+) -> Result<bool, String> {
+    if tab.is_some_and(|tab| {
+        !scope.tabs.iter().any(|original| {
+            original.id == tab.id
+                && original.target_id == tab.target_id
+                && original.browser_id == tab.browser_id
+                && tab.browser_id == scope.browser.id
+        })
+    }) {
+        return Err("browser_session_idle_original_target_conflict".into());
+    }
+    let Some(before) = original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    else {
+        return Ok(true);
+    };
+    if tab.is_none() && !apply {
+        return Ok(false);
+    }
+    let mut manager = match attach_verified_browser_endpoint(
+        &scope.browser.cdp_endpoint,
+        scope.browser.pid,
+        before,
+    )
+    .await
+    {
+        Ok(manager) => manager,
+        Err(_) => {
+            return match original_retirement_process(
+                scope,
+                crate::process_identity::observe_process(scope.browser.pid),
+            )? {
+                None => Ok(true),
+                Some(_) => Err("browser_session_idle_effect_readback_unavailable".into()),
+            };
+        }
+    };
+    if original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_none()
+    {
+        return Ok(true);
+    }
+    if let Some(tab) = tab {
+        let Some(targets) = original_retirement_targets(&manager, scope).await? else {
+            return Ok(true);
+        };
+        if !targets.contains(&tab.target_id) {
+            return Ok(true);
+        }
+        if !apply {
+            return Ok(false);
+        }
+        // The existing target-release owner proves disappearance and preserves
+        // every physical peer. Background attachment never activates a peer.
+        manager
+            .tab_close_target_id_for_release(&tab.target_id)
+            .await
+            .map_err(|_| "browser_session_idle_effect_readback_unavailable")?;
+        return match original_retirement_targets(&manager, scope).await? {
+            None => Ok(true),
+            Some(targets) if !targets.contains(&tab.target_id) => Ok(true),
+            Some(_) => Err("browser_session_idle_effect_readback_unavailable".into()),
+        };
+    }
+    let _close_reply = manager
+        .client
+        .send_command_no_params("Browser.close", None)
+        .await;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while original_retirement_process(
+        scope,
+        crate::process_identity::observe_process(scope.browser.pid),
+    )?
+    .is_some()
+    {
+        if Instant::now() >= deadline {
+            return Err("browser_session_idle_effect_readback_unavailable".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(true)
+}
+
+async fn close_unattached_browser(
+    browser: &ManagedBrowserInstance,
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<(), String> {
+    if !observed_process_presence(observation)? {
+        return Ok(());
+    }
+    let manager = attach_recorded_browser(browser).await?;
+    close_reattached_browser(&manager, browser.pid).await
+}
+
 async fn close_reattached_browser(
     manager: &BrowserManager,
     recorded_pid: u32,
@@ -1535,8 +2079,19 @@ async fn close_reattached_browser(
         .send_command_no_params("Browser.close", None)
         .await
         .err();
+    wait_for_recorded_process_exit(
+        || crate::process_identity::observe_process(recorded_pid),
+        close_error,
+    )
+    .await
+}
+
+async fn wait_for_recorded_process_exit(
+    mut observe: impl FnMut() -> crate::process_identity::ProcessObservation,
+    close_error: Option<String>,
+) -> Result<(), String> {
     let deadline = Instant::now() + Duration::from_secs(5);
-    while process_exists(recorded_pid) {
+    while observed_process_presence(observe())? {
         if Instant::now() >= deadline {
             return Err(match close_error {
                 Some(error) => {
@@ -1642,6 +2197,19 @@ fn prove_recovery_pid_absence(
     unrelated
         .then_some(())
         .ok_or_else(|| "browser_session_recovery_process_absence_unproven".into())
+}
+
+/// A failed census is neither positive liveness nor positive exit evidence.
+fn observed_process_presence(
+    observation: crate::process_identity::ProcessObservation,
+) -> Result<bool, String> {
+    match observation {
+        crate::process_identity::ProcessObservation::Observed(_) => Ok(true),
+        crate::process_identity::ProcessObservation::Missing => Ok(false),
+        crate::process_identity::ProcessObservation::Failed { .. } => {
+            Err("browser_session_process_observation_unavailable".into())
+        }
+    }
 }
 
 fn recorded_browser_process_exists(browser: &ManagedBrowserInstance) -> bool {
@@ -1753,6 +2321,506 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn native_idle_retirement_queries_current_controller_and_operation_authority() {
+        use super::super::service_store::{
+            default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+        };
+        use agent_browser_service_model::{
+            JobState, JobTarget, ServiceJob, ServiceState, ViewerLease,
+        };
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        let path = default_service_state_path().unwrap();
+        struct RestoreSnapshot {
+            path: std::path::PathBuf,
+            prior: Option<Vec<u8>>,
+        }
+        impl Drop for RestoreSnapshot {
+            fn drop(&mut self) {
+                if let Some(prior) = &self.prior {
+                    let _ = fs::write(&self.path, prior);
+                } else {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+        let _restore = RestoreSnapshot {
+            prior: fs::read(&path).ok(),
+            path: path.clone(),
+        };
+        let store = JsonServiceStateStore::new(&path);
+        let browser = ManagedBrowserInstance {
+            id: "pressure-runtime-browser".into(),
+            profile_id: "pressure-profile".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let mut effects = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let mut state = ServiceState::default();
+        state.viewer_leases.insert(
+            "controller".into(),
+            ViewerLease {
+                id: "controller".into(),
+                browser_id: Some(browser.id.clone()),
+                viewer_role: "controller".into(),
+                state: "active".into(),
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "current controller protects exact browser"
+        );
+        state.viewer_leases.get_mut("controller").unwrap().state = "released".into();
+        state.jobs.insert(
+            "operation".into(),
+            ServiceJob {
+                id: "operation".into(),
+                target: JobTarget::Browser(browser.id.clone()),
+                state: JobState::Running,
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "current operation protects exact browser"
+        );
+        state.jobs.get_mut("operation").unwrap().state = JobState::Succeeded;
+        store.save(&state).unwrap();
+        assert!(
+            effects.permits_idle_browser_close(&browser).unwrap(),
+            "released work allows otherwise eligible retirement"
+        );
+        state.jobs.get_mut("operation").unwrap().target =
+            JobTarget::Profile(browser.profile_id.clone());
+        state.jobs.get_mut("operation").unwrap().state = JobState::Running;
+        store.save(&state).unwrap();
+        assert!(
+            !effects.permits_idle_browser_close(&browser).unwrap(),
+            "profile operation protects its browser"
+        );
+        state.jobs.get_mut("operation").unwrap().state = JobState::Succeeded;
+        state.browsers.insert(
+            browser.id.clone(),
+            agent_browser_service_model::BrowserProcess {
+                id: browser.id.clone(),
+                pid: Some(99),
+                profile_id: Some(browser.profile_id.clone()),
+                cdp_endpoint: Some(browser.cdp_endpoint.clone()),
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        assert_eq!(
+            effects.permits_idle_browser_close(&browser).unwrap_err(),
+            "browser_session_idle_activity_identity_conflict"
+        );
+        fs::write(&path, b"invalid synthetic state").unwrap();
+        assert!(
+            effects.permits_idle_browser_close(&browser).is_err(),
+            "unreadable current authority fails closed"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn native_disposable_group_guard_checks_profile_jobs_and_releases_exclusion() {
+        use super::super::service_store::{
+            default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+        };
+        use agent_browser_service_model::{JobState, JobTarget, ServiceJob, ServiceState};
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        let path = default_service_state_path().unwrap();
+        struct Restore {
+            path: PathBuf,
+            prior: Option<Vec<u8>>,
+        }
+        impl Drop for Restore {
+            fn drop(&mut self) {
+                if let Some(prior) = &self.prior {
+                    let _ = fs::write(&self.path, prior);
+                } else {
+                    let _ = fs::remove_file(&self.path);
+                }
+            }
+        }
+        let _restore = Restore {
+            prior: fs::read(&path).ok(),
+            path: path.clone(),
+        };
+        let root = TempDirectory::new();
+        fs::create_dir_all(root.0.join("orphan")).unwrap();
+        let allocation = ManagedDisposableProfile {
+            profile: BrowserProfileCatalogEntry {
+                id: "group-orphan".into(),
+                name: "synthetic".into(),
+                user_data_dir: root.0.join("orphan").to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Disposable,
+            },
+            policy_id: "default".into(),
+            session_name: "alice".into(),
+            user_data_root: root.0.to_string_lossy().into_owned(),
+            created_at_ms: 1,
+            cleanup_delay_ms: 0,
+            cleanup_eligible_at_ms: Some(2),
+        };
+        let store = JsonServiceStateStore::new(&path);
+        let mut state = ServiceState::default();
+        state.jobs.insert(
+            "profile-work".into(),
+            ServiceJob {
+                id: "profile-work".into(),
+                target: JobTarget::Profile(allocation.profile.id.clone()),
+                state: JobState::Running,
+                ..Default::default()
+            },
+        );
+        store.save(&state).unwrap();
+        let mut effects = BrowserSessionEffectAdapter::new(
+            BrowserManagerRuntime::start(Default::default()).unwrap(),
+        );
+        let allocations = [allocation];
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .is_none());
+        assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
+        state.jobs.clear();
+        let unclaimed = state.clone();
+        let now = chrono::Utc::now();
+        state
+            .acquire_lease_claim(agent_browser_lease_authority::AcquireLeaseClaimRequest {
+                resource: agent_browser_lease_authority::LeaseResourceKey::profile(
+                    &allocations[0].profile.id,
+                ),
+                parent_claim_id: None,
+                principal_id: "synthetic-profile-user".into(),
+                capability_id: "synthetic-profile-capability".into(),
+                capability_revision: 1,
+                mode: agent_browser_lease_authority::LeaseClaimMode::Ephemeral,
+                expected_claim_revision: 0,
+                idempotency_key: "synthetic-profile-claim".into(),
+                now: now.to_rfc3339(),
+                expires_at: (now + chrono::Duration::minutes(5)).to_rfc3339(),
+                transition_deadline: None,
+                recovery_controller_id: None,
+                boot_epoch: Some("synthetic-boot".into()),
+                owner_generation: None,
+            })
+            .unwrap();
+        store.save(&state).unwrap();
+        assert!(
+            effects
+                .acquire_disposable_retirement_guard(&allocations, &[])
+                .unwrap()
+                .is_none(),
+            "current canonical profile claim protects an orphan allocation"
+        );
+        assert!(Path::new(&allocations[0].profile.user_data_dir).is_dir());
+        // Restore the independent unclaimed fixture, not a simulated claim release.
+        state = unclaimed;
+        store.save(&state).unwrap();
+        let guard = effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .unwrap();
+        let child = |blocked: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "native::service_store::tests::idle_retirement_publication_helper",
+                    "--test-threads=1",
+                ])
+                .env("AGENT_BROWSER_TEST_RETIREMENT_PUBLICATION_PATH", &path)
+                .env_remove("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED");
+            if blocked {
+                command.env("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED", "1");
+            }
+            let result = command.output().unwrap();
+            assert!(
+                result.status.success(),
+                "{} {}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr)
+            );
+        };
+        child(true);
+        effects.delete_disposable_profile(&allocations[0]).unwrap();
+        assert!(!Path::new(&allocations[0].profile.user_data_dir).exists());
+        drop(guard);
+        child(false);
+        fs::write(&path, b"invalid synthetic authority").unwrap();
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .is_err());
+        // Failed admission releases the repository lock, permitting restoration.
+        store.save(&state).unwrap();
+        assert!(effects
+            .acquire_disposable_retirement_guard(&allocations, &[])
+            .unwrap()
+            .is_some());
+    }
+
+    #[test]
+    fn runtime_original_retirement_does_not_adopt_a_reused_pid_or_missing_identity() {
+        let pid = std::process::id();
+        let current = crate::process_identity::capture_process_identity(pid, None, None).unwrap();
+        let mut scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser: ManagedBrowserInstance {
+                id: "synthetic-old-browser".into(),
+                profile_id: "synthetic-profile".into(),
+                pid,
+                cdp_endpoint: "ws://127.0.0.1:1/unreachable".into(),
+                desktop: None,
+                active_session_ids: vec![],
+            },
+            process_identity: Some(current.clone()),
+            tabs: vec![],
+        };
+        scope
+            .process_identity
+            .as_mut()
+            .unwrap()
+            .start_token
+            .push_str(":prior-instance");
+        let mut driver = BrowserManagerRuntime::start(Default::default()).unwrap();
+        assert!(driver.observe_idle_retirement_effect(&scope, None).unwrap());
+        driver.apply_idle_retirement_effect(&scope, None).unwrap();
+        assert_eq!(
+            crate::process_identity::capture_process_identity(pid, None, None),
+            Some(current.clone())
+        );
+        scope.process_identity = None;
+        assert_eq!(
+            driver
+                .apply_idle_retirement_effect(&scope, None)
+                .unwrap_err(),
+            "browser_session_idle_original_identity_missing"
+        );
+        assert_eq!(
+            driver
+                .observe_idle_retirement_effect(&scope, None)
+                .unwrap_err(),
+            "browser_session_idle_original_identity_missing"
+        );
+        scope.process_identity = Some(current);
+        assert!(original_retirement_process(
+            &scope,
+            crate::process_identity::ProcessObservation::Failed {
+                reason: "synthetic unavailable census".into(),
+            }
+        )
+        .is_err());
+        scope.browser.pid = u32::MAX;
+        assert!(original_retirement_process(
+            &scope,
+            crate::process_identity::ProcessObservation::Missing
+        )
+        .is_err());
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn runtime_original_retirement_reads_exact_targets_and_preserves_the_peer_after_restart() {
+        let directory = TempDirectory::new();
+        let profile = BrowserProfileCatalogEntry {
+            id: "original-retirement-fixture".into(),
+            name: "Original retirement fixture".into(),
+            user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+            kind: BrowserProfileKind::Named,
+        };
+        let config = BrowserManagerRuntimeConfig {
+            headless: true,
+            ..Default::default()
+        };
+        let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
+        let launch = first.launch_browser(&profile, None).unwrap();
+        let identity = launch
+            .process_identity
+            .clone()
+            .expect("capture original live child identity");
+        struct CleanupOriginal(crate::process_identity::VerifiedProcessTermination);
+        impl Drop for CleanupOriginal {
+            fn drop(&mut self) {
+                use crate::process_identity::VerifiedProcessSignal;
+                if self.0.is_running().unwrap_or(false) {
+                    let _ = self.0.signal(VerifiedProcessSignal::Terminate);
+                    let until = Instant::now() + Duration::from_secs(2);
+                    while self.0.is_running().unwrap_or(false) && Instant::now() < until {
+                        std::thread::sleep(Duration::from_millis(20));
+                    }
+                    if self.0.is_running().unwrap_or(false) {
+                        let _ = self.0.signal(VerifiedProcessSignal::Kill);
+                    }
+                }
+            }
+        }
+        let _cleanup = CleanupOriginal(
+            crate::process_identity::VerifiedProcessTermination::open(&identity)
+                .unwrap()
+                .unwrap(),
+        );
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id,
+            profile_id: profile.id,
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint,
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let original = first.acquire_initial_tab(&browser, &[]).unwrap();
+        let peer = first.create_tab(&browser).unwrap();
+        let tab = |item: BrowserTabAcquisition, session: &str| ManagedBrowserTab {
+            id: item.tab_id,
+            target_id: item.target_id,
+            browser_id: browser.id.clone(),
+            session_id: session.into(),
+            created_at_ms: 1,
+            last_activity_at_ms: 1,
+        };
+        let original = tab(original, "original");
+        let peer = tab(peer, "peer");
+        first
+            .navigate(
+                &browser,
+                &original,
+                "data:text/html,<title>original</title>",
+            )
+            .unwrap();
+        first
+            .navigate(&browser, &peer, "data:text/html,<title>peer</title>")
+            .unwrap();
+        let scope = agent_browser_service_model::BrowserIdleRetirementScope {
+            browser,
+            process_identity: Some(identity),
+            tabs: vec![original.clone(), peer.clone()],
+        };
+        drop(first);
+        let mut restarted = BrowserManagerRuntime::start(config).unwrap();
+        assert!(!restarted
+            .observe_idle_retirement_effect(&scope, Some(&original))
+            .unwrap());
+        restarted
+            .apply_idle_retirement_effect(&scope, Some(&original))
+            .unwrap();
+        assert!(restarted
+            .observe_idle_retirement_effect(&scope, Some(&original))
+            .unwrap());
+        assert!(!restarted
+            .observe_idle_retirement_effect(&scope, Some(&peer))
+            .unwrap());
+        assert!(restarted.browser_is_live(&scope.browser).unwrap());
+        let title = restarted
+            .execute_command(
+                &scope.browser,
+                &peer,
+                &peer.session_id,
+                "peer",
+                &serde_json::json!({"id":"preserved-peer", "action":"title"}),
+            )
+            .unwrap();
+        assert_eq!(title["success"], true);
+        assert_eq!(title["data"]["title"], "peer");
+        restarted
+            .apply_idle_retirement_effect(&scope, None)
+            .unwrap();
+        assert!(restarted
+            .observe_idle_retirement_effect(&scope, None)
+            .unwrap());
+        assert!(!recorded_browser_process_exists(&scope.browser));
+    }
+
+    #[test]
+    fn unattached_browser_close_requires_positive_process_absence() {
+        use crate::process_identity::ProcessObservation;
+        let browser = ManagedBrowserInstance {
+            id: "browser:unknown-close".into(),
+            profile_id: "work".into(),
+            pid: u32::MAX,
+            cdp_endpoint: "ws://127.0.0.1:1/unreachable".into(),
+            desktop: None,
+            active_session_ids: vec![],
+        };
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        assert_eq!(
+            runtime
+                .block_on(close_unattached_browser(
+                    &browser,
+                    ProcessObservation::Failed {
+                        reason: "synthetic census unavailable".into()
+                    }
+                ))
+                .unwrap_err(),
+            "browser_session_process_observation_unavailable"
+        );
+        runtime
+            .block_on(close_unattached_browser(
+                &browser,
+                ProcessObservation::Missing,
+            ))
+            .unwrap();
+    }
+
+    #[test]
+    fn browser_close_wait_requires_positive_process_absence() {
+        use crate::process_identity::{ObservedProcessIdentity, ProcessObservation};
+        let observed = ProcessObservation::Observed(ObservedProcessIdentity {
+            pid: 42,
+            start_token: Some("original-process".into()),
+            executable_path: None,
+            browser_family: None,
+            command_line: None,
+        });
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let mut unavailable = [
+            observed.clone(),
+            ProcessObservation::Failed {
+                reason: "synthetic process census failure".into(),
+            },
+        ]
+        .into_iter();
+        assert_eq!(
+            runtime
+                .block_on(wait_for_recorded_process_exit(
+                    || unavailable.next().expect("stop after failed observation"),
+                    None,
+                ))
+                .unwrap_err(),
+            "browser_session_process_observation_unavailable"
+        );
+        let mut exited = [observed, ProcessObservation::Missing].into_iter();
+        runtime
+            .block_on(wait_for_recorded_process_exit(
+                || exited.next().expect("stop after positive absence"),
+                Some("lost close reply".into()),
+            ))
+            .unwrap();
     }
 
     #[test]
@@ -2265,6 +3333,306 @@ mod tests {
         result.expect("unrelated profile metadata must not veto a free profile");
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    #[ignore = "launches a disposable local Chrome process"]
+    fn handoff_tab_expiry_preserves_peer_and_last_close_exits_real_browser() {
+        use super::super::browser_session_host::{BrowserSessionHost, BrowserSessionHostConfig};
+        use super::super::browser_session_store::BrowserSessionSqliteStore;
+        use agent_browser_service_model::BrowserProfileCatalog;
+        fn acquire_late_controller(browser: &ManagedBrowserInstance) -> Result<(), String> {
+            use super::super::service_store::{
+                default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+            };
+            let store = JsonServiceStateStore::new(default_service_state_path()?);
+            let mut state = store.load()?;
+            state.viewer_leases.insert(
+                "p237-late-controller".into(),
+                agent_browser_service_model::ViewerLease {
+                    id: "p237-late-controller".into(),
+                    browser_id: Some(browser.id.clone()),
+                    viewer_role: "controller".into(),
+                    state: "active".into(),
+                    ..Default::default()
+                },
+            );
+            store.save(&state)?;
+            let persisted = store.load()?;
+            assert!(
+                !super::super::service_resources::permits_managed_browser_idle_retirement(
+                    &persisted,
+                    browser,
+                    &chrono::Utc::now().to_rfc3339(),
+                )?,
+                "fresh authority must recognize the newly acquired controller"
+            );
+            Ok(())
+        }
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        for late_controller in [false, true] {
+            struct RestoreSnapshot {
+                path: PathBuf,
+                prior: Option<Vec<u8>>,
+            }
+            impl Drop for RestoreSnapshot {
+                fn drop(&mut self) {
+                    if let Some(prior) = &self.prior {
+                        let _ = fs::write(&self.path, prior);
+                    } else {
+                        let _ = fs::remove_file(&self.path);
+                    }
+                }
+            }
+            use super::super::service_store::{
+                default_service_state_path, JsonServiceStateStore, ServiceStateStore,
+            };
+            let service_path = default_service_state_path().unwrap();
+            let _restore = RestoreSnapshot {
+                prior: fs::read(&service_path).ok(),
+                path: service_path.clone(),
+            };
+            JsonServiceStateStore::new(&service_path)
+                .save(&agent_browser_service_model::ServiceState::default())
+                .unwrap();
+            let directory = TempDirectory::new();
+            fs::create_dir_all(&directory.0).unwrap();
+            let profile = BrowserProfileCatalogEntry {
+                id: "p237-real-lifetime".into(),
+                name: "Synthetic P237".into(),
+                user_data_dir: directory.0.join("profile").to_string_lossy().into_owned(),
+                kind: BrowserProfileKind::Named,
+            };
+            let service = directory.0.join("service");
+            let legacy = directory.0.join("unused-state.json");
+            let (store, _) = BrowserSessionSqliteStore::open_or_migrate(&service, &legacy).unwrap();
+            store
+                .save_profile_catalog(&BrowserProfileCatalog {
+                    profiles: std::collections::BTreeMap::from([(
+                        profile.id.clone(),
+                        profile.clone(),
+                    )]),
+                    ..Default::default()
+                })
+                .unwrap();
+            let config = BrowserManagerRuntimeConfig {
+                headless: true,
+                ..Default::default()
+            };
+            struct Cleanup {
+                browser: Option<ManagedBrowserInstance>,
+                config: BrowserManagerRuntimeConfig,
+            }
+            impl Drop for Cleanup {
+                fn drop(&mut self) {
+                    if let Some(browser) = &self.browser {
+                        if Path::new(&format!("/proc/{}", browser.pid)).exists() {
+                            if let Ok(mut runtime) =
+                                BrowserManagerRuntime::start(self.config.clone())
+                            {
+                                let _ = runtime.close_browser(browser);
+                            }
+                        }
+                    }
+                }
+            }
+            let mut cleanup = Cleanup {
+                browser: None,
+                config: config.clone(),
+            };
+            let mut host = BrowserSessionHost::load(
+                store,
+                BrowserSessionEffectAdapter::new(
+                    BrowserManagerRuntime::start(config.clone()).unwrap(),
+                ),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 4096,
+                },
+            )
+            .unwrap();
+            let opened = host
+                .open(
+                    agent_browser_service_model::OpenBrowserSession::exact_profile(
+                        "Alice",
+                        &profile.id,
+                        100,
+                    ),
+                )
+                .unwrap();
+            cleanup.browser = Some(host.state().browsers[&opened.browser_id].clone());
+            let alice = host
+                .execute_managed_command(
+                    "Alice",
+                    &serde_json::json!({
+                        "action":"navigate","url":"data:text/html,<title>Alice work</title>",
+                        "profileId":profile.id,"activityAtMs":100
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(alice["success"], true);
+            let browser_id = alice["browserSession"]["browserId"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            let original = host.state().browsers[&browser_id].clone();
+            cleanup.browser = Some(original.clone());
+            host.open(
+                agent_browser_service_model::OpenBrowserSession::exact_profile(
+                    "Bob",
+                    &profile.id,
+                    110,
+                ),
+            )
+            .unwrap();
+            let bob = host
+                .execute_managed_command(
+                    "Bob",
+                    &serde_json::json!({
+                        "action":"navigate","url":"data:text/html,<title>Bob work</title>",
+                        "profileId":profile.id,"activityAtMs":110
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(bob["success"], true);
+            assert_eq!(bob["browserSession"]["browserId"], browser_id);
+            // The bare local adapter does not publish Remote View links. Establish
+            // only that logical fixture; all browser and tab effects remain real.
+            let handoff_id = uuid::Uuid::new_v4().to_string();
+            let current = host.state().clone();
+            let mut retained = current.clone();
+            agent_browser_service_model::retain_remote_view_tab_handoff_at(
+                &mut retained,
+                &handoff_id,
+                &opened.session_id,
+                alice["browserSession"]["tabId"].as_str().unwrap(),
+                110,
+            )
+            .unwrap();
+            let mut persistence = BrowserSessionSqliteStore::open(&service).unwrap();
+            persistence
+                .compare_and_save_session_state(&current, &retained)
+                .unwrap();
+            drop(host);
+            let mut restarted_runtime = BrowserManagerRuntime::start(config.clone()).unwrap();
+            if late_controller {
+                restarted_runtime.idle_retirement_after_check = Some(acquire_late_controller);
+            }
+            let mut host = BrowserSessionHost::load(
+                persistence,
+                BrowserSessionEffectAdapter::new(restarted_runtime),
+                &legacy,
+                BrowserSessionHostConfig {
+                    session_idle_timeout_ms: 300_000,
+                    remote_view_desktops: vec![],
+                    default_disposable_policy: None,
+                    exact_url_history_maximum_bytes: 4096,
+                },
+            )
+            .unwrap();
+            let configured = host.handle_command(&serde_json::json!({
+                "action":"service_remote_view_handoff_resolve","handoffId":handoff_id,
+                "handoffOperation":"set_tab_lifetime","tabInactivityMs":30,"activityAtMs":110
+            }));
+            assert_eq!(configured["success"], true, "{configured}");
+            host.reap(129).unwrap();
+            assert!(host
+                .state()
+                .tabs
+                .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+            host.reap(130).unwrap();
+            if late_controller {
+                assert!(
+                    host.state()
+                        .tabs
+                        .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()),
+                    "controller acquired after eligibility must preserve its live tab"
+                );
+                assert!(host.state().browsers.contains_key(&browser_id));
+                continue;
+            }
+            assert!(!host
+                .state()
+                .tabs
+                .contains_key(alice["browserSession"]["tabId"].as_str().unwrap()));
+            assert!(host.state().remote_view_tab_handoffs[&handoff_id].target_expired);
+            assert!(host.state().remote_view_tab_handoffs[&handoff_id]
+                .expires_at_ms
+                .is_none());
+            assert!(Path::new(&format!("/proc/{}", original.pid)).exists());
+            let title = host
+                .execute_managed_command(
+                    "Bob",
+                    &serde_json::json!({
+                        "action":"title","profileId":profile.id,"activityAtMs":131
+                    }),
+                )
+                .unwrap()
+                .unwrap();
+            assert_eq!(title["data"]["title"], "Bob work");
+            assert_eq!(host.state().browsers[&browser_id].pid, original.pid);
+            assert_eq!(
+                host.state().browsers[&browser_id].cdp_endpoint,
+                original.cdp_endpoint
+            );
+            let closed = host.handle_command(&serde_json::json!({
+                "action":"browser_session_tab_close","sessionId":bob["browserSession"]["sessionId"],
+                "activityAtMs":140
+            }));
+            assert_eq!(closed["success"], true, "{closed}");
+            assert!(host.state().browsers.is_empty());
+            for _ in 0..50 {
+                if !process_exists(original.pid) {
+                    break;
+                }
+                thread::sleep(std::time::Duration::from_millis(100));
+            }
+            assert!(
+                !process_exists(original.pid),
+                "owned Chrome remained live after last-tab close"
+            );
+            // Reloading the worker inside this same OS process drops the original
+            // Child handle. Reap only this fixture's exited direct child, which a
+            // real owner-process exit would instead reparent to the OS reaper.
+            let deadline = Instant::now() + Duration::from_secs(5);
+            loop {
+                let mut status = 0;
+                let reaped =
+                    unsafe { libc::waitpid(original.pid as i32, &mut status, libc::WNOHANG) };
+                let error = (reaped == -1).then(|| std::io::Error::last_os_error().raw_os_error());
+                if reaped == original.pid as i32 || error == Some(Some(libc::ECHILD)) {
+                    break;
+                }
+                assert!(
+                    reaped == 0 || error == Some(Some(libc::EINTR)),
+                    "fixture child reaping failed: {error:?}"
+                );
+                assert!(
+                    Instant::now() < deadline,
+                    "fixture child reaping exceeded deadline"
+                );
+                thread::sleep(Duration::from_millis(20));
+            }
+            assert!(
+                !Path::new(&format!("/proc/{}", original.pid)).exists(),
+                "fixture child remained after reaping"
+            );
+            assert!(host
+                .state()
+                .remote_view_tab_handoffs
+                .contains_key(&handoff_id));
+        }
+    }
+
     #[test]
     #[ignore = "launches a disposable local Chrome process"]
     fn ordinary_open_reconciles_stale_inventory_and_preserves_alice_bob() {
@@ -2472,6 +3840,12 @@ mod tests {
             let mut first = BrowserManagerRuntime::start(config.clone()).unwrap();
             first.launch_browser(&profile, None).unwrap()
         };
+        let original_process_identity = launch
+            .process_identity
+            .clone()
+            .expect("the original live child must supply kernel identity");
+        assert_eq!(original_process_identity.pid, launch.pid);
+        assert!(!original_process_identity.start_token.is_empty());
         let browser = ManagedBrowserInstance {
             id: launch.browser_id,
             profile_id: profile.id,
@@ -2481,8 +3855,15 @@ mod tests {
             active_session_ids: vec!["session:alice:restart-fixture:1".to_string()],
         };
         assert!(recorded_browser_process_exists(&browser));
+        assert_eq!(
+            crate::process_identity::capture_process_identity(browser.pid, None, None),
+            Some(original_process_identity)
+        );
 
         let mut restarted = BrowserManagerRuntime::start(config).unwrap();
+        // Creating a tab must itself reattach after an owner restart.
+        // Keep the result until exact cleanup so a regression cannot orphan Chrome.
+        let new_tab = restarted.create_tab(&browser);
         let live = restarted.browser_is_live(&browser).unwrap();
         let tab = restarted.acquire_initial_tab(&browser, &[]).unwrap();
         let managed_tab = ManagedBrowserTab {
@@ -2526,6 +3907,10 @@ mod tests {
         assert_eq!(snapshot["success"], true);
         close.unwrap();
         assert!(!recorded_browser_process_exists(&browser));
+        assert!(
+            new_tab.is_ok(),
+            "tab creation failed after restart: {new_tab:?}"
+        );
     }
 
     #[test]

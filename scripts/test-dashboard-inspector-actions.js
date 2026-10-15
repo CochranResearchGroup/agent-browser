@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 
 const servicePanel = readFileSync('packages/dashboard/src/components/service-panel.tsx', 'utf8');
 const dashboardPage = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
-const appShell = readFileSync('packages/dashboard/src/components/app-shell.tsx', 'utf8');
+const compactWorkspace = readFileSync('packages/dashboard/src/components/compact-native-workspace.tsx', 'utf8');
 const serviceRoutePage = readFileSync('packages/dashboard/src/app/service/page.tsx', 'utf8');
 const activityRoutePage = readFileSync('packages/dashboard/src/app/activity/page.tsx', 'utf8');
 const browsersRoutePage = readFileSync('packages/dashboard/src/app/browsers/page.tsx', 'utf8');
@@ -299,17 +299,19 @@ assert.match(
   'Dashboard page must define direct route paths for top-level sections',
 );
 
-assert.match(
-  dashboardPage,
-  /dashboardSectionFromPath\(window\.location\.pathname\)[\s\S]*window\.history\.pushState\(\{ dashboardSection: section \}, "", nextUrl\)[\s\S]*window\.addEventListener\("popstate", onPopState\)/,
-  'Dashboard page must initialize, push, and restore active section state from browser history',
-);
+assert.match(dashboardPage, /readDashboardSection\(initialSection\)[\s\S]*window\.addEventListener\("popstate", update\)[\s\S]*DASHBOARD_WORKSPACE_SELECTION_EVENT, update/,
+  'Workspace and diagnostics routes must restore current URL selection on history and selection events');
 
-assert.match(
-  appShell,
-  /const NAV_PATHS: Record<DashboardSection, string> = \{[\s\S]*service: "\/service"[\s\S]*activity: "\/activity"[\s\S]*\};[\s\S]*<a[\s\S]*href=\{NAV_PATHS\[item\.id\]\}[\s\S]*aria-current=\{activeSection === item\.id \? "page" : undefined\}/,
-  'Dashboard nav must expose real hrefs for URL-addressable sections',
-);
+assert.match(compactWorkspace, /href=\{diagnosticsHref\}[\s\S]*aria-label="Diagnostics"/,
+  'The workspace must expose an ordinary link to optional diagnostics');
+assert.match(dashboardPage, /<a href=\{dashboardSectionUrl\("overview"\)\}>Browsers<\/a>/,
+  'Diagnostics must provide an ordinary return link to the sole workspace');
+assert.doesNotMatch(servicePanel, /<ViewStreamInspectDialog/,
+  'Service diagnostics must not mount a competing viewer dialog');
+assert.doesNotMatch(servicePanel, /<iframe\b|href=\{stream\.url\}/,
+  'Stream diagnostics must retain evidence without embedding or opening a raw provider viewer');
+assert.match(servicePanel, /const openViewStream = useCallback[\s\S]*url\.pathname = "\/"[\s\S]*updateDashboardWorkspaceUrlSelection\([\s\S]*browserId: browser\.id[\s\S]*tabId: tab\?\.id \?\? null/,
+  'Diagnostic view controls must return exact browser/tab context to the default workspace');
 
 assert.match(
   serviceRoutePage,

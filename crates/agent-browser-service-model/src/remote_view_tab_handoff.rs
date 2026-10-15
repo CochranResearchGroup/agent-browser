@@ -6,20 +6,20 @@ use crate::{
     BrowserSessionState, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
 };
 
-/// Persisted profile-aware retention. None means no automatic durable-link expiry.
+/// Persisted profile-aware retention. None means no automatic link expiry.
 /// Changes apply to newly issued links, never rewriting an existing expiry.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase", deny_unknown_fields)]
 pub struct BrowserRetentionPolicy {
     pub durable_handoff_ttl_ms: Option<u64>,
-    pub disposable_handoff_ttl_ms: u64,
+    pub disposable_handoff_ttl_ms: Option<u64>,
     pub disposable_inactivity_ms: u64,
 }
 impl Default for BrowserRetentionPolicy {
     fn default() -> Self {
         Self {
             durable_handoff_ttl_ms: None,
-            disposable_handoff_ttl_ms: DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+            disposable_handoff_ttl_ms: None,
             disposable_inactivity_ms: 24 * 60 * 60 * 1_000,
         }
     }
@@ -27,7 +27,7 @@ impl Default for BrowserRetentionPolicy {
 impl BrowserRetentionPolicy {
     pub fn validate(&self) -> Result<(), String> {
         if self.durable_handoff_ttl_ms == Some(0)
-            || self.disposable_handoff_ttl_ms == 0
+            || self.disposable_handoff_ttl_ms == Some(0)
             || self.disposable_inactivity_ms == 0
         {
             return Err("browser_retention_policy_invalid".into());
@@ -50,6 +50,68 @@ pub struct RemoteViewTabHandoff {
     pub expires_at_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<RemoteViewTabView>,
+    /// Task intent survives automatic tab expiry and history compaction.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume: Option<RemoteViewTabHandoffResumeIntent>,
+    /// A frozen creation request prevents duplicate tabs after an uncertain effect.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub recreation: Option<RemoteViewTabHandoffRecreation>,
+    /// Automatic retirement permits recreation; explicit close remains distinct.
+    #[serde(default)]
+    pub target_expired: bool,
+    /// Private provider correlation, separate from link validity and access.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_observation: Option<RemoteViewTabNativeObservation>,
+}
+
+/// Intent precedes provider registration so an uncertain reply uses the same
+/// key after restart. The digest pins physical browser and exact tab identity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabNativeObservation {
+    pub target_digest: String,
+    pub provider_target: crate::RemoteViewApplicationTarget,
+    pub idempotency_key: String,
+    pub observation: Option<crate::RemoteViewNativeHandoffObservation>,
+}
+
+/// Mutable activity timestamps and session bookkeeping do not change physical
+/// identity. Recreated tabs, browser processes or desktop generations do.
+pub fn remote_view_native_target_digest(
+    handoff_id: &str,
+    target: &RemoteViewTabHandoffTarget,
+) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let identity = serde_json::json!({
+        "handoffId":handoff_id,"sessionId":target.session.id,"tabId":target.tab.id,
+        "targetId":target.tab.target_id,"browserId":target.browser.id,
+        "profileId":target.browser.profile_id,"pid":target.browser.pid,
+        "cdpEndpoint":target.browser.cdp_endpoint,
+        "desktop":target.browser.desktop.as_ref().map(|desktop| (&desktop.desktop_id, desktop.generation)),
+    });
+    let bytes = serde_json::to_vec(&identity).map_err(|_| "remote_view_native_target_invalid")?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabHandoffResumeIntent {
+    pub session_name: String,
+    pub profile_id: String,
+    pub disposable_policy_id: Option<String>,
+    pub url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tab_lifetime: Option<crate::BrowserTabLifetime>,
+    /// Preserve original descriptive context through automatic target recreation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub task_metadata: Option<crate::BrowserTaskMetadata>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RemoteViewTabHandoffRecreation {
+    pub request_id: String,
+    pub requested_at_ms: u64,
 }
 
 /// A request retained before issuance, with its qualified outcome when known.
@@ -103,6 +165,10 @@ pub fn retain_remote_view_tab_handoff_at(
         view: None,
         created_at_ms: None,
         expires_at_ms: None,
+        resume: None,
+        recreation: None,
+        target_expired: false,
+        native_observation: None,
     };
     join(state, &proposed)?;
     if let Some(existing) = state.remote_view_tab_handoffs.get(handoff_id) {
@@ -144,6 +210,87 @@ pub fn resolve_remote_view_tab_handoff(
     join(state, record)
 }
 
+/// Read task intent before owner recovery without substituting a current tab.
+/// Legacy records can derive intent from retained terminal history, but only
+/// after positively identifying automatic expiry of their addressed target.
+pub fn remote_view_handoff_resume_intent(
+    state: &BrowserSessionState,
+    handoff_id: &str,
+    now_ms: u64,
+) -> Result<RemoteViewTabHandoffResumeIntent, String> {
+    let link = state
+        .remote_view_tab_handoffs
+        .get(handoff_id)
+        .ok_or("remote_view_tab_handoff_missing")?;
+    if link.id != handoff_id {
+        return Err("remote_view_tab_handoff_record_conflict".into());
+    }
+    link.check_link_at(now_ms)?;
+    let live = resolve_remote_view_tab_handoff(state, handoff_id);
+    if let Ok(target) = live.as_ref() {
+        return Ok(RemoteViewTabHandoffResumeIntent {
+            tab_lifetime: state.tab_lifetimes.get(&link.tab_id).cloned(),
+            task_metadata: state.tab_metadata.get(&link.tab_id).cloned(),
+            session_name: target.session.name.clone(),
+            profile_id: target.session.profile_id.clone(),
+            disposable_policy_id: state
+                .disposable_profiles
+                .get(&target.session.profile_id)
+                .map(|allocation| allocation.policy_id.clone()),
+            url: link
+                .resume
+                .as_ref()
+                .and_then(|intent| intent.url.clone())
+                .or_else(|| {
+                    state
+                        .navigation_history
+                        .iter()
+                        .filter(|row| row.tab_id == link.tab_id)
+                        .max_by_key(|row| row.visited_at_ms)
+                        .map(|row| row.url.clone())
+                }),
+        });
+    }
+    if !matches!(
+        live.as_ref().unwrap_err().as_str(),
+        "remote_view_tab_handoff_session_unavailable"
+            | "remote_view_tab_handoff_tab_unavailable"
+            | "remote_view_tab_handoff_browser_unavailable"
+    ) {
+        return Err(live.unwrap_err());
+    }
+    let ended = state
+        .session_history
+        .iter()
+        .rev()
+        .find(|session| session.id == link.session_id);
+    let automatic =
+        ended.is_some_and(|session| session.reason != crate::SessionEndReason::ExplicitClose);
+    if !link.target_expired && !automatic {
+        return Err(live.unwrap_err());
+    }
+    if let Some(intent) = &link.resume {
+        return Ok(intent.clone());
+    }
+    let ended = ended.ok_or("remote_view_handoff_resume_intent_missing")?;
+    Ok(RemoteViewTabHandoffResumeIntent {
+        tab_lifetime: state.tab_lifetimes.get(&link.tab_id).cloned(),
+        task_metadata: state.tab_metadata.get(&link.tab_id).cloned(),
+        session_name: ended.name.clone(),
+        profile_id: ended.profile_id.clone(),
+        disposable_policy_id: state
+            .disposable_profiles
+            .get(&ended.profile_id)
+            .map(|allocation| allocation.policy_id.clone()),
+        url: state
+            .navigation_history
+            .iter()
+            .filter(|row| row.tab_id == link.tab_id)
+            .max_by_key(|row| row.visited_at_ms)
+            .map(|row| row.url.clone()),
+    })
+}
+
 fn join(
     state: &BrowserSessionState,
     record: &RemoteViewTabHandoff,
@@ -178,7 +325,8 @@ fn join(
     })
 }
 
-/// Default retention for newly issued and once-migrated legacy operator links.
+/// Historical finite TTL retained for explicit compatibility callers.
+/// Current new-link defaults are perpetual.
 pub const DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS: u64 = 24 * 60 * 60 * 1_000;
 
 impl RemoteViewTabHandoff {
@@ -187,9 +335,9 @@ impl RemoteViewTabHandoff {
         self.initialize_profile_retention(now_ms, Some(ttl_ms))
     }
 
-    /// Initialize a new link once; None retains a durable link without expiry.
+    /// Initialize a new link once; None retains a link without expiry.
     /// The creation marker distinguishes an initialized unlimited link from a
-    /// legacy record awaiting its one-time finite migration.
+    /// legacy record awaiting its one-time creation-metadata migration.
     pub fn initialize_profile_retention(
         &mut self,
         now_ms: u64,
@@ -223,6 +371,21 @@ impl RemoteViewTabHandoff {
         }
         self.initialize_link_retention(now_ms, ttl_ms)?;
         self.expires_at_ms = Some(self.expires_at_ms.unwrap_or(expiry).max(expiry));
+        Ok(())
+    }
+
+    /// Set this valid link's remaining lifetime without changing its target.
+    /// Zero selects perpetual validity; positive durations replace the expiry.
+    /// Invalid deadlines reject before changing creation or expiry metadata.
+    pub fn set_link_lifetime(&mut self, now_ms: u64, ttl_ms: u64) -> Result<(), String> {
+        self.check_link_at(now_ms)?;
+        let expiry = if ttl_ms == 0 {
+            None
+        } else {
+            Some(link_expiry(now_ms, ttl_ms)?)
+        };
+        self.created_at_ms.get_or_insert(now_ms);
+        self.expires_at_ms = expiry;
         Ok(())
     }
 }

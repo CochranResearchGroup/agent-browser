@@ -1,12 +1,123 @@
-//! Request-bound operator focus proof. It grants no agent child ownership.
+//! Request-bound operator task proofs. They grant no agent child ownership.
 use super::*;
 
 const PURPOSE: &str = "agent-browser.operator-focus.v1";
 const TTL_SECONDS: u64 = 30;
 
+/// Join owner-published managed identity without persisting a second browser
+/// registry. Legacy routes retain their existing authority source.
+fn focus_authority<'a>(
+    state: &'a crate::native::service_model::ServiceState,
+    command: &serde_json::Value,
+) -> Result<
+    (
+        std::borrow::Cow<'a, crate::native::service_model::ServiceState>,
+        Option<String>,
+    ),
+    String,
+> {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    use sha2::Digest;
+    let browser_id = command["browserId"]
+        .as_str()
+        .ok_or("operator_focus_browser_missing")?;
+    if !browser_id.starts_with("browser:") {
+        return if state.browsers.contains_key(browser_id) {
+            Ok((std::borrow::Cow::Borrowed(state), None))
+        } else {
+            Err("operator_focus_browser_missing".into())
+        };
+    }
+    let store = BrowserSessionSqliteStore::default_sqlite()?;
+    let managed = store.load_session_state()?;
+    let browser = managed
+        .browsers
+        .get(browser_id)
+        .ok_or("operator_focus_browser_missing")?;
+    if managed.idle_closed_browsers.contains_key(browser_id) {
+        return Err("operator_focus_browser_not_live".into());
+    }
+    let target = command["targetId"]
+        .as_str()
+        .ok_or("operator_focus_target_missing")?;
+    let mut matching = managed
+        .tabs
+        .values()
+        .filter(|tab| tab.browser_id == browser_id && tab.target_id == target);
+    let tab = matching.next().ok_or("operator_focus_target_missing")?;
+    if matching.next().is_some() {
+        return Err("operator_focus_target_ambiguous".into());
+    }
+    let session = managed
+        .sessions
+        .get(&tab.session_id)
+        .ok_or("operator_focus_session_missing")?;
+    if command["sessionName"].as_str() != Some(session.name.as_str())
+        || session.browser_id != browser.id
+        || session.profile_id != browser.profile_id
+        || !browser.active_session_ids.contains(&session.id)
+    {
+        return Err("operator_focus_binding_changed".into());
+    }
+    let desktop = browser.desktop.as_ref();
+    if command["action"] == "view_focus" && desktop.is_none() {
+        return Err("operator_focus_display_missing".into());
+    }
+    let catalog = store.load_profile_catalog()?.catalog;
+    if !catalog.profiles.contains_key(&browser.profile_id)
+        && !managed
+            .disposable_profiles
+            .contains_key(&browser.profile_id)
+    {
+        return Err("operator_focus_profile_missing".into());
+    }
+    // Bind stable owner facts, not activity timestamps renewed by ordinary work.
+    let identity = serde_json::to_vec(&serde_json::json!([
+        browser.id,
+        browser.profile_id,
+        browser.pid,
+        browser.cdp_endpoint,
+        desktop,
+        session.id,
+        session.name,
+        session.created_at_ms,
+        tab.id,
+        tab.target_id,
+        tab.created_at_ms
+    ]))
+    .map_err(|_| "operator_focus_identity_encoding_failed")?;
+    let digest = format!("{:x}", Sha256::digest(identity));
+    let mut joined = state.clone();
+    joined
+        .profiles
+        .entry(browser.profile_id.clone())
+        .or_insert_with(|| crate::native::service_model::BrowserProfile {
+            id: browser.profile_id.clone(),
+            ..Default::default()
+        });
+    joined.browsers.insert(
+        browser.id.clone(),
+        serde_json::from_value(json!({
+            "id":browser.id,"profileId":browser.profile_id,"pid":browser.pid,"health":"ready",
+            "activeSessionIds":[session.name],"displayAllocationId":desktop.map(|value| &value.desktop_id)
+        }))
+        .map_err(|_| "operator_focus_identity_encoding_failed")?,
+    );
+    joined.tabs.insert(
+        format!("target:{target}"),
+        serde_json::from_value(json!({
+            "id":format!("target:{target}"),"browserId":browser.id,"targetId":target,
+            "sessionId":session.name,"ownerSessionId":session.name,"lifecycle":"ready"
+        }))
+        .map_err(|_| "operator_focus_identity_encoding_failed")?,
+    );
+    Ok((std::borrow::Cow::Owned(joined), Some(digest)))
+}
+
 fn current_binding(
     state: &crate::native::service_model::ServiceState,
     command: &serde_json::Value,
+    managed_identity: Option<String>,
 ) -> Result<OperatorFocusBinding, String> {
     let field = |name: &str| {
         command
@@ -16,9 +127,13 @@ fn current_binding(
             .map(str::to_string)
             .ok_or_else(|| format!("operator_focus_binding_required: missing {name}"))
     };
-    if command.get("action").and_then(serde_json::Value::as_str) != Some("view_focus") {
-        return Err("operator_focus_action_mismatch".into());
-    }
+    let action = match command["action"].as_str() {
+        Some("view_focus") => OperatorTaskAction::Focus,
+        Some("tab_close") if command["operatorClose"] == true && managed_identity.is_some() => {
+            OperatorTaskAction::CloseTab
+        }
+        _ => return Err("operator_focus_action_mismatch".into()),
+    };
     let browser_id = field("browserId")?;
     let browser = state
         .browsers
@@ -32,21 +147,41 @@ fn current_binding(
         .profiles
         .get(&profile_id)
         .ok_or("operator_focus_profile_missing")?;
-    let route_id = field("routeId")?;
-    let route = state
-        .remote_view_routes
-        .get(&route_id)
-        .ok_or("operator_focus_route_missing")?;
+    let authority = if action == OperatorTaskAction::CloseTab {
+        OperatorFocusAuthority::ManagedTarget
+    } else if command.get("routeId").is_none() && managed_identity.is_some() {
+        if command.get("controllerLeaseId").is_some() {
+            return Err("operator_focus_authority_scope_conflict".into());
+        }
+        OperatorFocusAuthority::NativeAssignment {
+            target: current_native_target(command)?,
+        }
+    } else {
+        let route_id = field("routeId")?;
+        let route = state
+            .remote_view_routes
+            .get(&route_id)
+            .ok_or("operator_focus_route_missing")?;
+        OperatorFocusAuthority::ControllerRoute {
+            route_id,
+            display_allocation_id: route
+                .display_allocation_id
+                .clone()
+                .ok_or("operator_focus_display_missing")?,
+            controller_lease_id: field("controllerLeaseId")?,
+            controller_epoch: route.controller_epoch,
+        }
+    };
     Ok(OperatorFocusBinding {
+        action,
+        managed_identity,
         request_id: field("id")?,
         browser_id,
         profile_id,
         session_name: field("sessionName")?,
         target_id: field("targetId")?,
         browser_pid: browser.pid.ok_or("operator_focus_process_missing")?,
-        route_id,
-        controller_lease_id: field("controllerLeaseId")?,
-        controller_epoch: route.controller_epoch,
+        authority,
         policy_revision: profile
             .access_policy
             .as_ref()
@@ -61,10 +196,67 @@ pub(crate) fn issue_operator_focus(
     command: &serde_json::Value,
     username: &str,
 ) -> Result<String, String> {
-    let binding = current_binding(state, command)?;
+    if command["action"] != "view_focus" {
+        return Err("operator_focus_action_mismatch".into());
+    }
+    let (authority, managed_identity) = focus_authority(state, command)?;
+    let state = authority.as_ref();
+    let binding = current_binding(state, command, managed_identity)?;
     let now = now_epoch_seconds();
     authorize_current(state, username, &binding, now)?;
     issue(&load_auth_store()?, username, binding, now)
+}
+
+/// Close authority needs no viewer or native presentation route. The same
+/// authenticated operator signer binds current managed ownership and policy.
+pub(crate) fn issue_operator_tab_close(
+    state: &crate::native::service_model::ServiceState,
+    command: &serde_json::Value,
+    username: &str,
+) -> Result<String, String> {
+    if command["action"] != "tab_close"
+        || command["operatorClose"] != true
+        || !command["browserId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("browser:"))
+    {
+        return Err("operator_tab_close_binding_changed".into());
+    }
+    let (authority, managed_identity) = focus_authority(state, command)?;
+    let state = authority.as_ref();
+    let binding = current_binding(state, command, managed_identity)?;
+    let now = now_epoch_seconds();
+    authorize_current(state, username, &binding, now)?;
+    issue(&load_auth_store()?, username, binding, now)
+}
+
+/// Revalidate the authenticated close action against current owner and policy.
+/// Presentation availability is not part of exact browser lifecycle authority.
+pub(crate) fn verify_operator_tab_close(
+    state: &crate::native::service_model::ServiceState,
+    command: &serde_json::Value,
+) -> Result<(), String> {
+    let verify_current = || {
+        if command["action"] != "tab_close" || command["operatorClose"] != true {
+            return Err("operator_tab_close_binding_changed".to_string());
+        }
+        let (authority, managed_identity) = focus_authority(state, command)?;
+        let state = authority.as_ref();
+        let binding = current_binding(state, command, managed_identity)?;
+        let token = command["operatorTabCloseProofToken"]
+            .as_str()
+            .ok_or("operator_tab_close_authority_required")?;
+        let now = now_epoch_seconds();
+        let username = verify(&load_auth_store()?, token, &binding, now)?;
+        authorize_current(state, &username, &binding, now)
+    };
+    verify_current().map_err(|error| {
+        if error.starts_with("operator_tab_close_profile_policy_denied") {
+            error
+        } else {
+            "operator_tab_close_authority_unproven: refresh task and inspect current close authority".into()
+        }
+    })
 }
 
 /// Verify again at child admission without transferring the child's owner.
@@ -72,44 +264,181 @@ pub(crate) fn verify_operator_focus(
     state: &crate::native::service_model::ServiceState,
     command: &serde_json::Value,
 ) -> Result<(), String> {
-    let binding = current_binding(state, command)?;
+    verify_operator_focus_scope(state, command).map(|_| ())
+}
+
+/// A verified effect scope is derived from current server-owned authority.
+pub(crate) struct OperatorFocusScope {
+    pub resource_id: String,
+    pub display_allocation_id: String,
+}
+
+pub(crate) fn verify_operator_focus_scope(
+    state: &crate::native::service_model::ServiceState,
+    command: &serde_json::Value,
+) -> Result<OperatorFocusScope, String> {
+    if command["action"] != "view_focus" {
+        return Err("operator_focus_action_mismatch".into());
+    }
+    let (authority, managed_identity) = focus_authority(state, command)?;
+    let state = authority.as_ref();
+    let binding = current_binding(state, command, managed_identity)?;
     let token = command
         .get("operatorFocusProofToken")
         .and_then(serde_json::Value::as_str)
         .ok_or("operator_focus_authority_required: authenticated operator proof missing")?;
     let now = now_epoch_seconds();
     let username = verify(&load_auth_store()?, token, &binding, now)?;
-    authorize_current(state, &username, &binding, now)
+    authorize_current(state, &username, &binding, now)?;
+    Ok(match binding.authority {
+        OperatorFocusAuthority::ControllerRoute {
+            route_id,
+            display_allocation_id,
+            ..
+        } => OperatorFocusScope {
+            resource_id: route_id,
+            display_allocation_id,
+        },
+        OperatorFocusAuthority::NativeAssignment { target } => OperatorFocusScope {
+            resource_id: format!(
+                "native-assignment:{}:{}",
+                target.assignment_id, target.lifecycle_generation
+            ),
+            display_allocation_id: target.desktop_id,
+        },
+        OperatorFocusAuthority::ManagedTarget => {
+            return Err("operator_focus_action_mismatch".into())
+        }
+    })
+}
+
+/// Observe the assignment published by the managed launch owner through the
+/// existing native consumer API. This creates no route or viewer grant.
+fn current_native_target(
+    command: &serde_json::Value,
+) -> Result<agent_browser_service_model::RemoteViewApplicationTarget, String> {
+    use crate::native::browser_session_store::BrowserSessionSqliteStore;
+    use agent_browser_service_model::{BrowserLaunchCustodyStore, RemoteViewApplicationAdapter};
+    let mut store = BrowserSessionSqliteStore::default_sqlite()?;
+    let managed = store.load_session_state()?;
+    let browser = managed
+        .browsers
+        .get(command["browserId"].as_str().unwrap_or_default())
+        .ok_or("operator_focus_browser_missing")?;
+    let assignment = store
+        .published_launch_assignment(browser)
+        .map_err(|_| "operator_focus_native_assignment_unproven")?;
+    let origin = std::env::var("AGENT_BROWSER_REMOTE_VIEW_ORIGIN")
+        .map_err(|_| "operator_focus_native_provider_unconfigured")?;
+    let application = std::env::var("AGENT_BROWSER_REMOTE_VIEW_APPLICATION")
+        .unwrap_or_else(|_| "agent-browser".into());
+    let transport = crate::native::remote_view_application_http::RemoteViewApplicationHttp::new(
+        &origin,
+        std::time::Duration::from_secs(5),
+    )
+    .map_err(|_| "operator_focus_native_provider_unavailable")?;
+    let mut adapter = RemoteViewApplicationAdapter::new(application, transport)
+        .map_err(|_| "operator_focus_native_provider_unavailable")?;
+    let observation = adapter
+        .observe_assignment(&assignment)
+        .map_err(|_| "operator_focus_native_assignment_unproven")?;
+    if browser.desktop.as_ref().is_none_or(|desktop| {
+        desktop.desktop_id != observation.target.desktop_id
+            || desktop.generation != observation.target.lifecycle_generation
+    }) {
+        return Err("operator_focus_native_assignment_changed".into());
+    }
+    Ok(observation.target)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(crate) enum OperatorFocusAuthority {
+    ManagedTarget,
+    ControllerRoute {
+        route_id: String,
+        display_allocation_id: String,
+        controller_lease_id: String,
+        controller_epoch: u64,
+    },
+    NativeAssignment {
+        target: agent_browser_service_model::RemoteViewApplicationTarget,
+    },
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum OperatorTaskAction {
+    #[default]
+    Focus,
+    CloseTab,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct OperatorFocusBinding {
+    /// Focus remains the default for already-issued short-lived focus proofs.
+    #[serde(default)]
+    pub action: OperatorTaskAction,
+    /// Hash of stable owner-published managed identity, including desktop generation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub managed_identity: Option<String>,
     pub request_id: String,
     pub browser_id: String,
     pub session_name: String,
     pub profile_id: String,
     pub target_id: String,
     pub browser_pid: u32,
-    pub route_id: String,
-    pub controller_lease_id: String,
-    pub controller_epoch: u64,
+    pub authority: OperatorFocusAuthority,
     pub policy_revision: u64,
 }
 
 impl OperatorFocusBinding {
     fn valid(&self) -> bool {
+        let scope_valid = match &self.authority {
+            OperatorFocusAuthority::ManagedTarget => {
+                self.action == OperatorTaskAction::CloseTab
+                    && self
+                        .managed_identity
+                        .as_ref()
+                        .is_some_and(|value| !value.is_empty())
+            }
+            OperatorFocusAuthority::ControllerRoute {
+                route_id,
+                display_allocation_id,
+                controller_lease_id,
+                controller_epoch,
+            } => {
+                self.action == OperatorTaskAction::Focus
+                    && *controller_epoch != 0
+                    && [route_id, display_allocation_id, controller_lease_id]
+                        .iter()
+                        .all(|value| !value.trim().is_empty())
+            }
+            OperatorFocusAuthority::NativeAssignment { target } => {
+                self.action == OperatorTaskAction::Focus
+                    && self
+                        .managed_identity
+                        .as_ref()
+                        .is_some_and(|value| !value.is_empty())
+                    && target.lifecycle_generation != 0
+                    && target.viewing_generation != 0
+            }
+        };
         self.browser_pid != 0
-            && self.controller_epoch != 0
             && self.policy_revision != 0
+            && scope_valid
             && [
                 &self.request_id,
                 &self.browser_id,
                 &self.session_name,
                 &self.profile_id,
                 &self.target_id,
-                &self.route_id,
-                &self.controller_lease_id,
             ]
             .iter()
             .all(|value| !value.trim().is_empty())
@@ -157,22 +486,46 @@ fn authorize_current(
         subject_id: Some(subject.clone()),
         assurance: ProfileIdentityAssurance::AuthenticatedIngress,
         connection_instance_id: None,
-        permission: ProfilePermission::ViewOpen,
-        operation: "view_focus",
+        permission: match binding.action {
+            OperatorTaskAction::Focus => ProfilePermission::ViewOpen,
+            OperatorTaskAction::CloseTab => ProfilePermission::TabCloseAny,
+        },
+        operation: match binding.action {
+            OperatorTaskAction::Focus => "view_focus",
+            OperatorTaskAction::CloseTab => "tab_close",
+        },
         incompatible_occupancy: Vec::new(),
     });
     if !decision.allowed || policy.revision != binding.policy_revision {
-        return Err(
-            "operator_focus_profile_policy_denied: inspect current profile view permission".into(),
-        );
+        return Err(match binding.action {
+            OperatorTaskAction::Focus => "operator_focus_profile_policy_denied: inspect current profile view permission",
+            OperatorTaskAction::CloseTab => "operator_tab_close_profile_policy_denied: inspect current profile tab-close-any permission",
+        }.into());
     }
-    let route = state
-        .remote_view_routes
-        .get(&binding.route_id)
-        .ok_or_else(denied)?;
+    if matches!(binding.authority, OperatorFocusAuthority::ManagedTarget) {
+        return Ok(());
+    }
+    let OperatorFocusAuthority::ControllerRoute {
+        route_id,
+        display_allocation_id,
+        controller_lease_id,
+        controller_epoch,
+    } = &binding.authority
+    else {
+        let OperatorFocusAuthority::NativeAssignment { target } = &binding.authority else {
+            unreachable!()
+        };
+        if browser.display_allocation_id.as_deref() != Some(target.desktop_id.as_str())
+            || binding.managed_identity.is_none()
+        {
+            return Err(denied());
+        }
+        return Ok(());
+    };
+    let route = state.remote_view_routes.get(route_id).ok_or_else(denied)?;
     let lease = state
         .viewer_leases
-        .get(&binding.controller_lease_id)
+        .get(controller_lease_id)
         .ok_or_else(denied)?;
     // Viewer leases without an expiry remain active until release or controller
     // replacement. The signed focus proof itself is always short-lived.
@@ -184,17 +537,16 @@ fn authorize_current(
     });
     if route.browser_id.as_ref() != Some(&binding.browser_id)
         || route.session_id.as_ref() != Some(&binding.session_name)
+        || route.display_allocation_id.as_deref() != Some(display_allocation_id.as_str())
         || route.display_allocation_id != browser.display_allocation_id
         || route.display_allocation_id.is_none()
         || route.read_only
         || route.state != "ready"
-        || route.controller_epoch != binding.controller_epoch
-        || route.controller_lease_id.as_ref() != Some(&binding.controller_lease_id)
-        || !route
-            .viewer_lease_ids
-            .contains(&binding.controller_lease_id)
-        || lease.id != binding.controller_lease_id
-        || lease.route_id.as_ref() != Some(&binding.route_id)
+        || route.controller_epoch != *controller_epoch
+        || route.controller_lease_id.as_ref() != Some(controller_lease_id)
+        || !route.viewer_lease_ids.contains(controller_lease_id)
+        || lease.id != *controller_lease_id
+        || lease.route_id.as_ref() != Some(route_id)
         || lease.browser_id.as_ref() != Some(&binding.browser_id)
         || lease.viewer_id.as_ref() != Some(&subject)
         || lease.viewer_role != "controller"
@@ -291,15 +643,20 @@ mod tests {
     fn operator_focus_requires_current_policy_controller_and_target_without_rebinding_child() {
         use crate::native::service_model::ServiceState;
         let binding = OperatorFocusBinding {
+            action: OperatorTaskAction::Focus,
+            managed_identity: None,
             request_id: "request-a".into(),
             browser_id: "browser-a".into(),
             session_name: "session-a".into(),
             profile_id: "profile-a".into(),
             target_id: "target-a".into(),
             browser_pid: 100,
-            route_id: "route-a".into(),
-            controller_lease_id: "controller-a".into(),
-            controller_epoch: 1,
+            authority: OperatorFocusAuthority::ControllerRoute {
+                route_id: "route-a".into(),
+                display_allocation_id: "display-a".into(),
+                controller_lease_id: "controller-a".into(),
+                controller_epoch: 1,
+            },
             policy_revision: 1,
         };
         let mut state = ServiceState::default();
@@ -398,15 +755,20 @@ mod tests {
             }],
         };
         let binding = OperatorFocusBinding {
+            action: OperatorTaskAction::Focus,
+            managed_identity: None,
             request_id: "request-a".into(),
             browser_id: "browser-a".into(),
             session_name: "session-a".into(),
             profile_id: "profile-a".into(),
             target_id: "target-a".into(),
             browser_pid: 100,
-            route_id: "route-a".into(),
-            controller_lease_id: "controller-a".into(),
-            controller_epoch: 1,
+            authority: OperatorFocusAuthority::ControllerRoute {
+                route_id: "route-a".into(),
+                display_allocation_id: "display-a".into(),
+                controller_lease_id: "controller-a".into(),
+                controller_epoch: 1,
+            },
             policy_revision: 1,
         };
         let token = issue(&store, "operator", binding.clone(), 1000).unwrap();
@@ -419,12 +781,21 @@ mod tests {
             "targetId",
             "browserPid",
             "routeId",
+            "displayAllocationId",
             "controllerLeaseId",
             "controllerEpoch",
             "policyRevision",
         ] {
             let mut changed = serde_json::to_value(&binding).unwrap();
-            changed[field] = if matches!(field, "browserPid" | "controllerEpoch" | "policyRevision")
+            let target = if matches!(
+                field,
+                "routeId" | "displayAllocationId" | "controllerLeaseId" | "controllerEpoch"
+            ) {
+                changed.get_mut("authority").unwrap()
+            } else {
+                &mut changed
+            };
+            target[field] = if matches!(field, "browserPid" | "controllerEpoch" | "policyRevision")
             {
                 json!(101)
             } else {
@@ -437,6 +808,48 @@ mod tests {
         assert!(verify(&store, &token, &binding, 999).is_err());
         assert!(verify(&store, &token, &binding, 1030).is_err());
         assert!(issue(&store, "unknown", binding.clone(), 1000).is_err());
+        let mut native = binding.clone();
+        native.managed_identity = Some("owner-published-target-digest".into());
+        native.authority = OperatorFocusAuthority::NativeAssignment {
+            target: agent_browser_service_model::RemoteViewApplicationTarget {
+                assignment_id: "assignment-a".into(),
+                registration_id: "registration-a".into(),
+                desktop_id: "22222222-2222-4222-8222-222222222222".into(),
+                lifecycle_generation: 7,
+                viewing_desktop_id: "33333333-3333-4333-8333-333333333333".into(),
+                viewing_generation: 19,
+            },
+        };
+        let native_token = issue(&store, "operator", native.clone(), 1000).unwrap();
+        assert_eq!(
+            verify(&store, &native_token, &native, 1001).unwrap(),
+            "operator"
+        );
+        for (pointer, value) in [
+            ("/managedIdentity", json!("changed-owner")),
+            (
+                "/authority/target/assignmentId",
+                json!("changed-assignment"),
+            ),
+            (
+                "/authority/target/desktopId",
+                json!("44444444-4444-4444-8444-444444444444"),
+            ),
+            ("/authority/target/lifecycleGeneration", json!(8)),
+            ("/authority/target/viewingGeneration", json!(20)),
+        ] {
+            let mut changed = serde_json::to_value(&native).unwrap();
+            *changed.pointer_mut(pointer).unwrap() = value;
+            let changed = serde_json::from_value(changed).unwrap();
+            assert!(
+                verify(&store, &native_token, &changed, 1001).is_err(),
+                "{pointer}"
+            );
+        }
+        assert!(
+            verify(&store, &native_token, &binding, 1001).is_err(),
+            "native proof cannot become a legacy controller grant"
+        );
         store.users[0].role = DASHBOARD_ROLE_OBSERVER.into();
         assert!(issue(&store, "operator", binding.clone(), 1000).is_err());
         assert!(verify(&store, &token, &binding, 1001).is_err());

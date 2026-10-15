@@ -36,6 +36,18 @@ struct Ledger {
 fn ledger(connection: &Connection) -> Result<Ledger, LaunchCustodyStoreError> {
     let ledger: Ledger = load_optional_document::<Ledger>(connection, DOCUMENT, SCHEMA)
         .map_err(|_| LaunchCustodyStoreError::InvalidRecord)?;
+    if ledger
+        .records
+        .values()
+        .any(|record| record.observed_process_identity.is_some())
+    {
+        let version: i64 = connection
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .map_err(|_| LaunchCustodyStoreError::Unavailable)?;
+        if !(2..=4).contains(&version) {
+            return Err(LaunchCustodyStoreError::InvalidRecord);
+        }
+    }
     for (id, record) in &ledger.records {
         record
             .validate()
@@ -205,6 +217,76 @@ fn current(connection: &Connection) -> Result<BrowserSessionState, LaunchCustody
     .ok_or(LaunchCustodyStoreError::InvalidRecord)
 }
 
+/// Retirement admission must see process claims that won the same SQLite
+/// writer lock first, including claims whose physical outcome is still unknown.
+pub(super) fn reject_pending_launch_for_retirement(
+    connection: &Connection,
+    intent: &agent_browser_service_model::BrowserIdleRetirementIntent,
+) -> Result<(), LaunchCustodyStoreError> {
+    let records = ledger(connection)?;
+    if records.records.values().any(|record| {
+        !record.published
+            && !records.reconciled_absent.contains(&record.intent.intent_id)
+            && (record.intent.assignment.desktop_id == intent.provider.assignment.desktop_id
+                || intent
+                    .scopes
+                    .iter()
+                    .any(|scope| scope.browser.profile_id == record.intent.profile_id))
+    }) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    Ok(())
+}
+
+pub(super) fn published_assignment(
+    connection: &Connection,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError> {
+    Ok(published_launch_record(connection, browser)?
+        .intent
+        .assignment)
+}
+
+pub(super) fn published_process_identity(
+    connection: &Connection,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<Option<agent_browser_service_model::RecordedProcessIdentity>, LaunchCustodyStoreError> {
+    Ok(published_launch_record(connection, browser)?.observed_process_identity)
+}
+
+fn published_launch_record(
+    connection: &Connection,
+    browser: &agent_browser_service_model::ManagedBrowserInstance,
+) -> Result<BrowserLaunchCustodyRecord, LaunchCustodyStoreError> {
+    let state = current(connection)?;
+    if state.browsers.get(&browser.id) != Some(browser) {
+        return Err(LaunchCustodyStoreError::Conflict);
+    }
+    let ledger = ledger(connection)?;
+    let records = ledger
+        .records
+        .values()
+        .filter(|record| {
+            record.published
+                && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
+                && record.observed_pid == Some(browser.pid)
+        })
+        .collect::<Vec<_>>();
+    let mut record = match records.as_slice() {
+        [record] => (*record).clone(),
+        _ => return Err(LaunchCustodyStoreError::Conflict),
+    };
+    record
+        .confirm_publication(&state)
+        .map_err(|_| LaunchCustodyStoreError::Conflict)?;
+    if assignment_fenced(&ledger, &record.intent.assignment)
+        && !assignment_release_completed(connection, &record.intent.assignment)?
+    {
+        return Err(LaunchCustodyStoreError::ReleaseFenced);
+    }
+    Ok(record)
+}
+
 impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
     fn assignment_release_confirmed(
         &mut self,
@@ -217,36 +299,15 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
         browser: &agent_browser_service_model::ManagedBrowserInstance,
     ) -> Result<agent_browser_service_model::RemoteViewAssignmentRecord, LaunchCustodyStoreError>
     {
-        let state = current(self.remote_view_mutation_connection())?;
-        if state.browsers.get(&browser.id) != Some(browser) {
-            return Err(LaunchCustodyStoreError::Conflict);
-        }
-        let ledger = ledger(self.remote_view_mutation_connection())?;
-        let records = ledger
-            .records
-            .values()
-            .filter(|record| {
-                record.published
-                    && record.observed_browser_id.as_deref() == Some(browser.id.as_str())
-                    && record.observed_pid == Some(browser.pid)
-            })
-            .collect::<Vec<_>>();
-        let mut record = match records.as_slice() {
-            [record] => (*record).clone(),
-            _ => return Err(LaunchCustodyStoreError::Conflict),
-        };
-        record
-            .confirm_publication(&state)
-            .map_err(|_| LaunchCustodyStoreError::Conflict)?;
-        if assignment_fenced(&ledger, &record.intent.assignment)
-            && !assignment_release_completed(
-                self.remote_view_mutation_connection(),
-                &record.intent.assignment,
-            )?
-        {
-            return Err(LaunchCustodyStoreError::ReleaseFenced);
-        }
-        Ok(record.intent.assignment)
+        published_assignment(self.remote_view_mutation_connection(), browser)
+    }
+
+    fn published_launch_process_identity(
+        &mut self,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<Option<agent_browser_service_model::RecordedProcessIdentity>, LaunchCustodyStoreError>
+    {
+        published_process_identity(self.remote_view_mutation_connection(), browser)
     }
 
     fn unpublished_launch_records(
@@ -299,6 +360,19 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             return Err(Error::Conflict);
         }
         record.observe(launch).map_err(|_| Error::Conflict)?;
+        if launch.process_identity.is_some() {
+            // The original kernel evidence and reader fence commit together.
+            transaction
+                .pragma_update(
+                    None,
+                    "user_version",
+                    transaction
+                        .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
+                        .map_err(|_| Error::Unavailable)?
+                        .max(2),
+                )
+                .map_err(|_| Error::Unavailable)?;
+        }
         save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
@@ -336,10 +410,16 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             }
             return Err(Error::Conflict);
         }
-        record
-            .confirm_publication(state)
-            .map_err(|_| Error::Conflict)?;
-        validate_browser_publication(&records, state)?;
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            expected,
+            state,
+            &[],
+            &[],
+        )
+        .map_err(|_| Error::Conflict)?;
+        confirm_launch_publication(&transaction, intent, state)?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -347,7 +427,6 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
             state,
         )
         .map_err(|_| Error::Unavailable)?;
-        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
         transaction.commit().map_err(|_| Error::Unavailable)
     }
 }
@@ -417,6 +496,12 @@ impl BrowserSessionSqliteStore {
             .remote_view_mutation_connection()
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|_| Error::Unavailable)?;
+        super::browser_idle_retirement_store::reject_retirement_admission(
+            &transaction,
+            "",
+            &target.assignment,
+        )
+        .map_err(|_| Error::Conflict)?;
         let state = current(&transaction)?;
         let mut records = ledger(&transaction)?;
         if let Some(existing) = records.release_fences.get(release_id) {
@@ -492,6 +577,31 @@ fn validate_browser_publication(
     }
 
     Ok(())
+}
+
+/// Join launch acknowledgement to the caller's existing aggregate transaction.
+pub(super) fn confirm_launch_publication(
+    connection: &Connection,
+    intent: &BrowserLaunchIntent,
+    state: &BrowserSessionState,
+) -> Result<(), LaunchCustodyStoreError> {
+    use LaunchCustodyStoreError as Error;
+    let mut records = ledger(connection)?;
+    if assignment_fenced(&records, &intent.assignment) {
+        return Err(Error::ReleaseFenced);
+    }
+    let record = records
+        .records
+        .get_mut(&intent.intent_id)
+        .ok_or(Error::InvalidRecord)?;
+    if record.intent != *intent {
+        return Err(Error::Conflict);
+    }
+    record
+        .confirm_publication(state)
+        .map_err(|_| Error::Conflict)?;
+    validate_browser_publication(&records, state)?;
+    save_document(connection, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)
 }
 
 /// Ordinary publication reads current retirement fences independently of
@@ -839,6 +949,7 @@ mod tests {
             LaunchCustodyAdmission::New
         );
         let launch = BrowserLaunch {
+            process_identity: None,
             browser_id: "fresh-browser".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -975,6 +1086,96 @@ mod tests {
     }
 
     #[test]
+    fn sqlite_published_launch_keeps_original_kernel_identity_after_restart() {
+        let fixture = Fixture::new();
+        let mut store = fixture.open(true);
+        let intent = intent();
+        let initial = store.load_session_state().unwrap();
+        store.admit_launch_intent(&intent, &initial).unwrap();
+        let original = agent_browser_service_model::RecordedProcessIdentity {
+            pid: 42,
+            start_token: "linux:boot:original".into(),
+            executable_path: Some("/synthetic/chrome".into()),
+            browser_family: None,
+        };
+        let launch = BrowserLaunch {
+            process_identity: Some(original.clone()),
+            browser_id: "retained-browser".into(),
+            pid: 42,
+            cdp_endpoint: "http://127.0.0.1:9222".into(),
+            desktop: Some(RemoteViewFixedDesktop {
+                desktop_id: intent.assignment.desktop_id.clone(),
+                generation: intent.assignment.generation,
+                friendly_route_label: "synthetic".into(),
+            }),
+        };
+        let mut invalid = launch.clone();
+        invalid
+            .process_identity
+            .as_mut()
+            .unwrap()
+            .start_token
+            .clear();
+        assert_eq!(
+            store.observe_launch_intent(&intent, &invalid).unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        let before_version: i64 = store
+            .remote_view_mutation_connection()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            before_version, 1,
+            "failed identity observation must not promote the reader version"
+        );
+        assert!(store.unpublished_launch_records().unwrap()[0]
+            .observed_process_identity
+            .is_none());
+        store.observe_launch_intent(&intent, &launch).unwrap();
+        let version: i64 = store
+            .remote_view_mutation_connection()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(version, 2);
+        let browser = ManagedBrowserInstance {
+            id: launch.browser_id.clone(),
+            profile_id: intent.profile_id.clone(),
+            pid: launch.pid,
+            cdp_endpoint: launch.cdp_endpoint.clone(),
+            desktop: launch.desktop.clone(),
+            active_session_ids: vec![],
+        };
+        let mut state = initial.clone();
+        state.browsers.insert(browser.id.clone(), browser.clone());
+        store
+            .publish_launch_intent(&intent, &initial, &state)
+            .unwrap();
+        drop(store);
+        let mut restarted = fixture.open(false);
+        assert_eq!(
+            restarted
+                .published_launch_process_identity(&browser)
+                .unwrap(),
+            Some(original.clone())
+        );
+        let mut reused = launch;
+        reused.process_identity.as_mut().unwrap().start_token = "linux:boot:replacement".into();
+        assert_eq!(
+            restarted
+                .observe_launch_intent(&intent, &reused)
+                .unwrap_err(),
+            LaunchCustodyStoreError::Conflict
+        );
+        assert_eq!(
+            restarted
+                .published_launch_process_identity(&browser)
+                .unwrap(),
+            Some(original)
+        );
+        assert_eq!(restarted.load_session_state().unwrap(), state);
+    }
+
+    #[test]
     fn sqlite_absent_unobserved_recovery_retains_history_and_unblocks_exact_profile() {
         let fixture = Fixture::new();
         let mut store = fixture.open(true);
@@ -982,6 +1183,7 @@ mod tests {
         let initial = store.load_session_state().unwrap();
         store.admit_launch_intent(&old, &initial).unwrap();
         let launch = BrowserLaunch {
+            process_identity: None,
             browser_id: "retained-browser".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -1052,6 +1254,7 @@ mod tests {
         let initial = store.load_session_state().unwrap();
         store.admit_launch_intent(&old, &initial).unwrap();
         let launch = BrowserLaunch {
+            process_identity: None,
             browser_id: "retained-browser".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -1222,6 +1425,7 @@ mod tests {
         let initial = store.load_session_state().unwrap();
         store.admit_launch_intent(&intent, &initial).unwrap();
         let launch = BrowserLaunch {
+            process_identity: None,
             browser_id: "browser-a".into(),
             pid: 42,
             cdp_endpoint: "http://127.0.0.1:9222".into(),
@@ -1338,6 +1542,12 @@ impl BrowserSessionSqliteStore {
         if state != *expected {
             return Err(Error::Conflict);
         }
+        super::browser_idle_retirement_store::reject_retirement_admission(
+            &transaction,
+            &intent.profile_id,
+            &intent.assignment,
+        )
+        .map_err(|_| Error::Conflict)?;
         let mut records = ledger(&transaction)?;
         if assignment_fenced(&records, &intent.assignment) {
             return Err(Error::ReleaseFenced);
@@ -1374,7 +1584,7 @@ impl BrowserSessionSqliteStore {
             if record.intent != *intent {
                 return Err(Error::Conflict);
             }
-            return Ok(LaunchCustodyAdmission::Existing(record.clone()));
+            return Ok(LaunchCustodyAdmission::Existing(Box::new(record.clone())));
         }
         if records.records.values().any(|record| {
             !record.published

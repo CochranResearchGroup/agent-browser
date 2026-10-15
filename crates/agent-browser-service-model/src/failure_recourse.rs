@@ -264,6 +264,34 @@ pub fn classify_service_failure(error: &str) -> ServiceFailureRecourse {
             ..ServiceFailureRecourse::default()
         };
     }
+    let code = error.split(':').next().unwrap_or_default();
+    if matches!(
+        code,
+        "operator_tab_close_authority_required"
+            | "operator_tab_close_authority_unproven"
+            | "operator_tab_close_binding_changed"
+            | "operator_tab_close_profile_policy_denied"
+            | "operator_tab_close_target_missing"
+            | "operator_tab_close_target_ambiguous"
+            | "operator_tab_close_process_changed"
+    ) {
+        return ServiceFailureRecourse {
+            code: code.to_string(),
+            axis: ServiceFailureAxis::ProfileAccess,
+            phase: ServiceFailurePhase::ChildAdmission,
+            effect_state: ServiceEffectState::NoEffect,
+            retry_disposition: ServiceRetryDisposition::InspectBeforeRetry,
+            recommended_action: "inspect_operator_tab_close_authority".into(),
+            safe_next_actions: vec![
+                "inspect_service_trace".into(),
+                "inspect_operator_tab_close_authority".into(),
+            ],
+            missing_permission: (code == "operator_tab_close_profile_policy_denied")
+                .then(|| "tab_close_any".into()),
+            hard_stops: vec!["blind_retry".into(), "impersonate_profile_subject".into()],
+            ..ServiceFailureRecourse::default()
+        };
+    }
     if let Some(code) = operator_focus_failure_code(error) {
         return ServiceFailureRecourse {
             schema_version: SERVICE_FAILURE_RECOURSE_SCHEMA_VERSION.to_string(),
@@ -1078,5 +1106,24 @@ mod tests {
             None
         );
         assert_eq!(operator_focus_failure_code("future_focus_error"), None);
+    }
+    #[test]
+    fn operator_close_denial_is_pre_effect_but_physical_uncertainty_is_not() {
+        let denied =
+            classify_service_failure("operator_tab_close_profile_policy_denied: diagnostic");
+        assert_eq!(denied.effect_state, ServiceEffectState::NoEffect);
+        assert_eq!(denied.axis, ServiceFailureAxis::ProfileAccess);
+        assert_eq!(denied.missing_permission.as_deref(), Some("tab_close_any"));
+        assert_eq!(
+            denied.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
+        let uncertain =
+            classify_service_failure("tab_close_effect_uncertain: target readback failed");
+        assert_eq!(uncertain.effect_state, ServiceEffectState::EffectUncertain);
+        assert_eq!(
+            uncertain.retry_disposition,
+            ServiceRetryDisposition::InspectBeforeRetry
+        );
     }
 }

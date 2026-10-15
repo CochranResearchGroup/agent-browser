@@ -11,7 +11,9 @@ pub(crate) use agent_browser_desktop_services::{
 
 use super::desktop_input_provider::{RouteEffectFence, RouteEffectFenceIdentity};
 use super::service_model::ServiceState;
-use super::service_store::default_service_state_path;
+use super::service_store::{
+    default_service_state_path, LockedServiceStateRepository, ServiceStateRepository,
+};
 
 const CONTROLLER_MUTATION_FENCE_DEADLINE: Duration = Duration::from_secs(5);
 
@@ -21,6 +23,43 @@ pub(crate) struct DesktopControllerMutationGuard {
 }
 
 static DESKTOP_CONTROL_COORDINATOR: OnceLock<DesktopControlCoordinator> = OnceLock::new();
+static DESKTOP_SELECTION_COORDINATOR: OnceLock<
+    agent_browser_desktop_services::DesktopSelectionCoordinator,
+> = OnceLock::new();
+
+/// Queue authenticated operator selections by service-owned desktop identity
+/// before CDP preparation. Waiting does not grant or preserve input authority.
+pub(crate) async fn begin_service_operator_selection(
+    command: &serde_json::Value,
+) -> Result<agent_browser_desktop_services::DesktopSelectionGuard, String> {
+    let repository = LockedServiceStateRepository::default_json()?;
+    let snapshot = repository.load_snapshot()?;
+    let authority = super::stream::verify_operator_focus_scope(&snapshot, command)?;
+    let (root, identity) = operator_scope_fence_scope(&authority)?;
+    let scope = serde_json::to_string(&(
+        root,
+        identity.environment_id,
+        identity.display_allocation_id,
+    ))
+    .map_err(|_| "desktop_selection_scope_invalid")?;
+    let reservation = DESKTOP_SELECTION_COORDINATOR
+        .get_or_init(agent_browser_desktop_services::DesktopSelectionCoordinator::new)
+        .request(&scope)?;
+    let timeout = command
+        .get("serviceJobTimeoutMs")
+        .or_else(|| command.get("jobTimeoutMs"))
+        .and_then(serde_json::Value::as_u64)
+        .filter(|value| *value > 0)
+        .map(Duration::from_millis)
+        .unwrap_or(Duration::from_secs(10));
+    let guard = tokio::task::spawn_blocking(move || reservation.wait(timeout))
+        .await
+        .map_err(|_| "desktop_selection_wait_failed")??;
+    // Another route operation may have changed this proof while it waited.
+    // Reject it before binding or activating any browser target.
+    super::stream::verify_operator_focus(&repository.load_snapshot()?, command)?;
+    Ok(guard)
+}
 
 pub(crate) fn global_desktop_control_coordinator() -> &'static DesktopControlCoordinator {
     DESKTOP_CONTROL_COORDINATOR.get_or_init(DesktopControlCoordinator::new)
@@ -54,17 +93,42 @@ pub(crate) struct OperatorFocusGuard {
 }
 
 pub(crate) fn begin_service_operator_focus(
-    state: &ServiceState,
-    route_id: &str,
+    authority: &super::stream::OperatorFocusScope,
     request_id: &str,
 ) -> Result<OperatorFocusGuard, String> {
-    let (runtime_state_root, identity) = service_route_fence_scope(state, route_id)?;
+    let (runtime_state_root, identity) = operator_scope_fence_scope(authority)?;
     global_desktop_control_coordinator().begin_fenced_focus(
-        route_id,
+        &authority.resource_id,
         request_id,
         &runtime_state_root,
         &identity,
     )
+}
+
+/// Scope is produced only after current operator proof verification. Native
+/// assignments use their actual resource and desktop identities, not a grant
+/// record in the legacy viewer registry.
+fn operator_scope_fence_scope(
+    authority: &super::stream::OperatorFocusScope,
+) -> Result<(PathBuf, RouteEffectFenceIdentity), String> {
+    let state_path = default_service_state_path()?;
+    let root = state_path
+        .parent()
+        .and_then(Path::parent)
+        .ok_or("desktop_control_runtime_state_root_unavailable")?
+        .to_path_buf();
+    let environment = std::env::var("AGENT_BROWSER_RUNTIME_ENVIRONMENT")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "production".into());
+    Ok((
+        root,
+        RouteEffectFenceIdentity::new(
+            environment,
+            &authority.resource_id,
+            &authority.display_allocation_id,
+        ),
+    ))
 }
 
 fn service_route_fence_scope(

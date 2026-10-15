@@ -13,6 +13,7 @@ pub enum RemoteViewApplicationResponseError {
     InvalidTarget,
     StaleTarget,
     LiveResourceRequired,
+    NativeAdmissionRequired,
     InvalidEnvironment,
 }
 
@@ -78,6 +79,7 @@ pub(crate) fn uuid(value: &str) -> bool {
 pub enum RemoteViewApplicationReadinessScope {
     ProviderRecord,
     LiveResource,
+    NativeAdmission,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

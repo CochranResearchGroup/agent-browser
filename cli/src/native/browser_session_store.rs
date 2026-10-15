@@ -30,7 +30,10 @@ mod terminal_history;
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
 const BROWSER_RUNTIME_DATABASE_FILENAME: &str = "runtime.sqlite3";
-const BROWSER_RUNTIME_DATABASE_SCHEMA: i64 = 1;
+// Schema 2 marks durable idle-retirement obligations. A schema-1-only reader
+// must not silently ignore those obligations. Existing schema 1 is read without
+// migration; the first custody claim promotes it atomically with its record.
+const BROWSER_RUNTIME_DATABASE_MAX_SCHEMA: i64 = 4;
 const BROWSER_RUNTIME_BACKUP_DIRECTORY: &str = "browser-runtime-backups";
 const BROWSER_RUNTIME_BACKUP_CURRENT: &str = "runtime.current.sqlite3";
 const BROWSER_RUNTIME_BACKUP_PREVIOUS: &str = "runtime.previous.sqlite3";
@@ -188,9 +191,62 @@ impl BrowserSessionSqliteStore {
                 Err(_) => "unavailable",
             };
             let backup = store.backup_status()?;
+            let managed = store.load_session_state()?;
+            let browsers: std::collections::BTreeMap<_, _> = managed.browsers.iter().map(|(id, browser)| {
+                (id.clone(), serde_json::json!({
+                    "id":id,"profileId":browser.profile_id,"pid":browser.pid,
+                    "desktop":browser.desktop,"activeSessionIds":browser.active_session_ids,
+                    "state":if managed.idle_closed_browsers.contains_key(id) { "sleeping" } else { "reported" }
+                }))
+            }).collect();
+            let tabs: std::collections::BTreeMap<_, _> = managed.tabs.iter().map(|(id, tab)| {
+                let destination = managed.navigation_history.iter().filter(|entry| entry.tab_id == *id)
+                    .max_by_key(|entry| entry.visited_at_ms).map(|entry| entry.url.as_str());
+                let metadata = managed.tab_metadata.get(id);
+                (id.clone(), serde_json::json!({
+                    "id":id,"targetId":tab.target_id,"browserId":tab.browser_id,"sessionId":tab.session_id,
+                    "createdAtMs":tab.created_at_ms,"url":destination,"taskMetadata":metadata,
+                    "lifetime":managed.tab_lifetimes.get(id),"pendingHuman":managed.pending_human_tabs.get(id)
+                }))
+            }).collect();
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_err(|_| "browser_runtime_clock_readback_required")?
+                .as_millis() as u64;
+            // Deliberately whitelist display fields. A resume capsule, issued
+            // provider view and native correlation are private owner authority.
+            let handoffs: std::collections::BTreeMap<_, _> = managed.remote_view_tab_handoffs.iter().map(|(id, link)| {
+                let session = managed.sessions.get(&link.session_id);
+                let tab = managed.tabs.get(&link.tab_id);
+                let resume = link.resume.as_ref();
+                let metadata = managed.tab_metadata.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.task_metadata.as_ref()));
+                let lifetime = managed.tab_lifetimes.get(&link.tab_id)
+                    .or_else(|| resume.and_then(|intent| intent.tab_lifetime.as_ref()));
+                (id.clone(), serde_json::json!({
+                    "handoffId":id,"handoffUrl":format!("/remote-view/{id}"),
+                    "sessionId":link.session_id,"tabId":link.tab_id,
+                    "sessionName":session.map(|session| session.name.as_str()).or_else(|| resume.map(|intent| intent.session_name.as_str())),
+                    "profileId":session.map(|session| session.profile_id.as_str()).or_else(|| resume.map(|intent| intent.profile_id.as_str())),
+                    "browserId":tab.map(|tab| tab.browser_id.as_str()),
+                    "createdAtMs":link.created_at_ms,"expiresAtMs":link.expires_at_ms,
+                    "linkState":if link.check_link_at(now_ms).is_ok() {"active"} else {"expired"},
+                    "targetState":if tab.is_some() {"reported"} else if link.target_expired {"expired"} else {"ended"},
+                    "taskMetadata":metadata,"tabLifetime":lifetime,
+                    "pendingHuman":managed.pending_human_tabs.get(&link.tab_id)
+                }))
+            }).collect();
             Ok(serde_json::json!({
                 "schemaVersion": "agent-browser.runtime-operational-status.v1",
                 "state": "available",
+                // Owner-published inventory is not provider readiness or an OS
+                // liveness claim. Debugger endpoints and launch environments
+                // remain private to the runtime owner.
+                "workspace": {
+                    "schemaVersion":"agent-browser.managed-workspace.v1",
+                    "source":"managed-owner","browsers":browsers,
+                    "sessions":managed.sessions,"tabs":tabs,"handoffs":handoffs
+                },
                 "launchAdmission": launch_admission,
                 "storage": {
                     "integrityState": "ok",
@@ -399,12 +455,21 @@ impl BrowserSessionSqliteStore {
         if current != *expected {
             return Err("browser_session_publication_conflict".into());
         }
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &current,
+            state,
+            &[],
+            &[],
+        )
+        .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
         super::browser_launch_custody_store::reject_fenced_browser_publication(
             &transaction,
             expected,
             state,
         )
         .map_err(|_| "browser_session_publication_release_fenced".to_string())?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -453,12 +518,22 @@ impl BrowserSessionSqliteStore {
             .connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|error| format!("browser_session_mutation_begin_failed:{error}"))?;
-        let mut state = load_document(
+        let mut state: BrowserSessionState = load_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
             BROWSER_SESSION_STATE_SCHEMA_V1,
         )?;
+        let previous = state.clone();
         let result = mutate(&mut state)?;
+        super::browser_idle_retirement_store::reject_retirement_publication(
+            &transaction,
+            &previous,
+            &state,
+            &[],
+            &[],
+        )
+        .map_err(|_| "browser_session_publication_idle_retirement_fenced".to_string())?;
+
         save_document(
             &transaction,
             SESSION_STATE_DOCUMENT,
@@ -861,7 +936,7 @@ fn validate_runtime_schema(connection: &Connection) -> Result<(), String> {
     let version = connection
         .query_row("PRAGMA user_version", [], |row| row.get::<_, i64>(0))
         .map_err(|error| format!("browser_runtime_database_schema_read_failed:{error}"))?;
-    if version != BROWSER_RUNTIME_DATABASE_SCHEMA {
+    if !(1..=BROWSER_RUNTIME_DATABASE_MAX_SCHEMA).contains(&version) {
         return Err(format!(
             "browser_runtime_database_schema_unsupported:{version}"
         ));
@@ -1397,6 +1472,10 @@ mod tests {
                 created_at_ms: None,
                 expires_at_ms: None,
                 view: None,
+                resume: None,
+                recreation: None,
+                target_expired: false,
+                native_observation: None,
             },
         );
         store.connection.execute_batch("CREATE TRIGGER fail_archive BEFORE INSERT ON terminal_history_archive BEGIN SELECT RAISE(ABORT,'fixture'); END;").unwrap();
@@ -1617,6 +1696,35 @@ mod tests {
             .join(BROWSER_RUNTIME_BACKUP_DIRECTORY)
             .join(BROWSER_RUNTIME_BACKUP_PREVIOUS)
             .is_file());
+    }
+
+    #[test]
+    fn operational_status_lists_retained_handoffs_without_private_resume_routes() {
+        let directory = TempDirectory::new("handoff-inventory");
+        let legacy_path = directory.0.join("state.json");
+        let (store, _) =
+            BrowserSessionSqliteStore::open_or_migrate(&directory.0, &legacy_path).unwrap();
+        let mut state = store.load_session_state().unwrap();
+        state.remote_view_tab_handoffs.insert("opaque-link".into(), serde_json::from_value(serde_json::json!({
+            "id":"opaque-link", "sessionId":"ended-task", "tabId":"expired-tab",
+            "createdAtMs":100, "expiresAtMs":null, "targetExpired":true,
+            "resume":{"sessionName":"original-task","profileId":"profile-a","disposablePolicyId":null,
+                "url":"https://provider.invalid/PRIVATE-RESUME-CANARY"}
+        })).unwrap());
+        store.save_session_state(&state).unwrap();
+        drop(store);
+        let path = directory.0.join(BROWSER_RUNTIME_DATABASE_FILENAME);
+        let before = sha256_file(&path).unwrap();
+        let status = BrowserSessionSqliteStore::operational_status_read_only(&path);
+        let link = &status["workspace"]["handoffs"]["opaque-link"];
+        assert_eq!(link["handoffUrl"], "/remote-view/opaque-link");
+        assert_eq!(link["createdAtMs"], 100);
+        assert!(link["expiresAtMs"].is_null());
+        assert_eq!(link["profileId"], "profile-a");
+        assert_eq!(link["targetState"], "expired");
+        assert!(!status.to_string().contains("PRIVATE-RESUME-CANARY"));
+        assert!(link.get("resume").is_none());
+        assert_eq!(sha256_file(&path).unwrap(), before);
     }
 
     #[test]

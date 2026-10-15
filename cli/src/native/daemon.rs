@@ -714,6 +714,24 @@ impl RuntimeHostRouter {
     }
 
     async fn try_handle_browser_session_focus(&self, command: Value) -> Option<Value> {
+        let _selection = if command["operatorFocus"] == true
+            && command["browserId"]
+                .as_str()
+                .is_some_and(|id| id.starts_with("browser:"))
+        {
+            match super::desktop_control_coordinator::begin_service_operator_selection(&command)
+                .await
+            {
+                Ok(guard) => Some(guard),
+                Err(error) => {
+                    return Some(
+                        serde_json::json!({"id":command["id"],"success":false,"error":error}),
+                    )
+                }
+            }
+        } else {
+            None
+        };
         let browser_sessions = self.browser_sessions.clone();
         match tokio::task::spawn_blocking(move || -> Result<Option<Value>, String> {
             let mut host = browser_sessions
@@ -726,12 +744,36 @@ impl RuntimeHostRouter {
                 if browser_session_focus_command(&command, &state).is_none() {
                     return Ok(None);
                 }
-                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
             } else if host
                 .as_ref()
                 .is_none_or(|host| browser_session_focus_command(&command, host.state()).is_none())
             {
                 return Ok(None);
+            }
+            // Keep the original view_focus action while checking its signed
+            // operator binding. Rewriting it first would bypass that admission.
+            if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+                use super::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+                let admission = LockedServiceStateRepository::default_json()
+                    .and_then(|repository| repository.load_snapshot())
+                    .and_then(|snapshot| super::stream::verify_operator_focus(&snapshot, &command));
+                if let Err(error) = admission {
+                    return Ok(Some(serde_json::json!({
+                        "id": command["id"].as_str().unwrap_or(""),
+                        "success": false,
+                        "error": error,
+                    })));
+                }
+            }
+            if host.is_none() {
+                *host = Some(super::browser_session_host::load_default_browser_session_host()?);
+            }
+            if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+                return host
+                    .as_mut()
+                    .ok_or("browser_session_host_missing")?
+                    .execute_operator_focus(&command)
+                    .map(Some);
             }
             let command = browser_session_focus_command(
                 &command,
@@ -1184,6 +1226,24 @@ async fn handle_connection<S>(
                         }
                         continue;
                     }
+                }
+                if action.as_deref() == Some("tab_close") && cmd["operatorClose"] == true {
+                    let id = cmd["id"].clone();
+                    let response = match super::browser_session_host::close_shared_operator_tab(
+                        router.browser_sessions.clone(),
+                        cmd,
+                    )
+                    .await
+                    {
+                        Ok(data) => serde_json::json!({"id":id,"success":true,"data":data}),
+                        Err(error) => serde_json::json!({"id":id,"success":false,"error":error}),
+                    };
+                    let mut serialized = serialize_daemon_response(response).await;
+                    serialized.push('\n');
+                    if writer.write_all(serialized.as_bytes()).await.is_err() {
+                        break;
+                    }
+                    continue;
                 }
                 if action
                     .as_deref()
@@ -1937,3 +1997,6 @@ mod tests {
         assert!(browser_session_focus_command(&foreign, &state).is_none());
     }
 }
+
+#[cfg(all(test, target_os = "linux"))]
+include!("p237_dispatch_fixture.rs");

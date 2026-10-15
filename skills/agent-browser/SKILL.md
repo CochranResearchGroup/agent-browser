@@ -1,6 +1,6 @@
 ---
 name: agent-browser
-description: Browser task workflows through the Agent Browser MCP, with CLI fallback for AI agents. Use when the user needs to interact with websites, including navigating pages, filling forms, clicking buttons, taking screenshots, extracting data, testing web apps, or automating any browser task. Triggers include requests to "open a website", "fill out a form", "click a button", "take a screenshot", "scrape data from a page", "test this web app", "login to a site", "automate browser actions", or any task requiring programmatic web interaction.
+description: Browser task workflows through Agent Browser MCP, with CLI fallback. Use for website navigation, forms, login, extraction, screenshots, testing and browser automation.
 allowed-tools: Bash(agent-browser:*)
 ---
 
@@ -12,9 +12,9 @@ Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", 
 
 Use `profileMode: "existing"` to require an existing profile. Use `profileMode: "disposable"` without `profile` for temporary work. Profile creation, session selection, replay, and scoped closure happen inside the workflow operation.
 
-For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `data.operatorVisible.state: "ready"`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
+For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `operatorVisible.state=ready`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
 
-The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. Opening this public link performs no browser recovery. Ask the task owner to check readiness if the desktop is unavailable.
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Readiness alone does not record human use; the owner requires native display confirmation. Keep using the same opaque URL while the owner maintains pending handoff context.
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 
@@ -22,9 +22,12 @@ The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_nav
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
 Page actions require `taskId`. Use `browser_tab` to list, create, select or close this
-task's tabs; repeat a stable `tabKey` when retrying creation. Peer tabs stay outside
-this scope. Use `browser_discover` for one advanced operation's argument schema,
+task's tabs; repeat a stable `tabKey` when retrying creation. Creating a tab after
+an owner restart reconnects to the verified live browser and preserves existing
+tabs. Peer tabs stay outside this scope. Use `browser_discover` for one advanced operation's argument schema,
 then `browser_command` with `taskId`, `action` and page arguments in `params`.
+Close rejects a changed selection.
+
 For downloads, use `action: "download"` with the link selector and destination
 path in `params`. Existing-profile tasks use the current browser; clients do not
 establish ownership or repair stale internal records before downloading.
@@ -32,14 +35,23 @@ Ordinary continuation reconciles interrupted publication using the current live
 profile browser, preserving the task and authenticated state.
 
 Ordinary task updates do not consult malformed launch history or unchanged peer desktop release fences. Current profile permission can resolve an ambiguous historical owner binding.
+
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
 through advanced dispatch. There is no legacy catalog mode.
 
+Return, store, and reopen only `handoffUrl` at `/remote-view/<handoff-id>`. Never send providerExternalUrl.
 
-Returned durable links use `/remote-view/<handoff-id>`. Require `operatorVisible.state=ready`.
-Return, store, and reopen only `handoffUrl`, including after viewer reconnection.
-Never hand off a raw Guacamole URL or `providerExternalUrl` to the operator.
+## Operator workspace
+
+Open the dashboard root `/` or `/browsers` for the native browser workspace.
+Select the owned tab, inspect Properties or Share its durable link, and use
+Handoffs for retained records and independent policies. Refresh retains the
+requested identity. Diagnostics at `/service` keeps Service inspection,
+Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
+`?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
+query fields remain supported for diagnostic links. Native Remote View uses its
+existing authentication; dashboard logout remains separate.
 
 ## Sharing a profile between tasks
 
@@ -49,16 +61,17 @@ Tab-targeted automation can run without either tab being physically visible. Ser
 
 Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
 
-## Product purpose
+Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
 
-Use Agent Browser when reusable browser operation, task-appropriate profiles,
-continuity, native Remote View human handoff and scoped cleanup make the task
-easier to complete. Existing client profiles, managed persistent profiles and
-disposable profiles are all valid choices. Preserve existing authentication
-when requested. Human assistance uses a direct native desktop link through
-Remote View authentication; the person and agent continue in the same browser.
-Keep returned context concise and diagnostics actionable. A simpler scripting
-workflow or specialized CDP code may already meet the task.
+Stale selections remove the viewer and offer Refresh browsers without choosing a peer.
+Use the tab SVG menu or Shift+F10 for Properties, Copy URL and permitted Close Tab.
+Properties includes supplied origin, purpose, task/job/request and creation context;
+missing values are Unknown, and names do not prove identity. Copy URL preserves selection.
+Close confirms the exact managed target and preserves peers; the final tab closes its browser.
+If completion is uncertain, refresh and inspect permission before retrying.
+Share prepares the existing task without navigation. The Handoffs rail control opens
+retained records, context, independent link/tab policies and explicit link deletion.
+Copy and Open reuse the opaque link; failed refresh retains the prior records.
 
 ## CLI fallback
 
@@ -68,7 +81,12 @@ stdio command in that client and reconnect to refresh its cached catalog. Use
 the installed CLI to continue the task while integration is corrected; server
 `tools/list` alone does not prove client exposure.
 
-Supported command help, including `service --help` and `service -h`, succeeds locally without starting a browser or rewriting Service State. Unknown command help fails with a concise typed error. Use `agent-browser runtime create --help` for focused profile creation guidance. Runtime creation returns a top-level record (`created`, `userDataDir`); workflow MCP text payloads use `success`, `data`, and `error`; JSON CLI failures use `success: false`, `error`, and `type`.
+Command help, including `service --help` and `service -h`, runs locally without browser launch or Service State writes. Unknown command help returns a typed error. `runtime create --help` describes profiles; creation returns `created` and `userDataDir`. MCP payloads use `success`, `data`, `error`; CLI failures add `type`.
+
+Inspect `agent-browser.runtime-health.v1` for proactive runtime drift and
+bounded recourse. Read the advanced reference's runtime custody diagnostics
+before maintenance, retirement reconciliation or interpreting unknown effects.
+
 
 Use the installed `agent-browser` executable when MCP is unavailable. Read
 `agent-browser <command> --help` for the requested operation. Choose the task's
@@ -84,37 +102,18 @@ agent-browser --session editing fill @e1 "Draft text"
 agent-browser --session editing click @e2
 ```
 
-Use the workflow MCP tools for durable profile/task continuity and human handoff.
-The CLI remains available for independent diagnostics and supported maintenance.
-
 ## SiteGuide routines
 
-Software can compose verification and private helper login with
-`@agent-browser/client/login-playbook`. Persist its metadata checkpoint and
-inspect the same helper request after uncertainty; never resubmit a lost login.
-Task tab listing discovers attributable popup children. Login continuation checks
-new owned destinations after the helper's capture barrier is ready.
-BILL and QBO share these interfaces. Select the reviewed guide and intended
-company/realm; QBO browser login and OAuth/API readiness are separate outcomes.
-Prepare and validate a login plan before private input. Changed controls require
-fresh evidence and fixture validation of a proposed guide version. Preserve the
-checkpoint and helper request when controllers switch; publication uses normal
-versioned review.
-Password preparation requires a masked input, even after fresh observation.
-For bounded feed retrieval, discover collect_posts and supply a reviewed guide
-and explicit item/page/scroll budgets. Treat empty extraction as unproven unless
-noResultsVerified is true; retain partial results and their reason.
-
-The login client requires preparation and validation. Use reviewedPlan to resume
-a reviewed change under the retained guideId, task and helper action. A lost
-acknowledgement never permits another submission. See the routine guide for
-the exact pre-input refusal reconciliation rule.
-
-For reusable website work, discover `category:"playbooks"` and run the selected
-routine through `browser_command` in the existing task. `verify_login` checks
-intended account/company from current page evidence; waiting or adaptation is
-not successful login. Read [the routine guide](references/playbooks.md) only
-when developing or using a SiteGuide.
+Discover `category:"playbooks"` and run reviewed routines through `browser_command`
+in the existing task. Read [the routine guide](references/playbooks.md) before
+login or guide development. `verify_login` requires intended account/company evidence;
+QBO browser login and OAuth/API readiness are separate. The login client
+`@agent-browser/client/login-playbook` requires preparation and validation, masked
+password input and checkpoint persistence. Use `reviewedPlan` for reviewed changes;
+inspect the same helper request after uncertainty and never resubmit lost login.
+Task tab listing discovers attributable popups after the capture barrier is ready.
+For `collect_posts`, supply reviewed guide and item/page/scroll budgets. Empty output
+is unproven unless `noResultsVerified`; preserve partial results and their reason.
 
 ## Read more only when needed
 
@@ -132,5 +131,4 @@ remains available. Read the advanced reference for host resource settings.
 - [Advanced CLI and service reference](references/cli-and-service.md): flags,
   installation, API contracts, diagnostics and explicit maintenance.
 
-The advanced reference is not a second MCP catalog or a caller authority
-workflow. `browser_discover` is the current source for advanced MCP metadata.
+Use `browser_discover` for advanced MCP metadata.

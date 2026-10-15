@@ -1,6 +1,13 @@
 //! Ordinary session effects joined to durable Remote View process admission.
 use crate::*;
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::{Arc, Weak};
+
+struct IdleRetirementGuard {
+    _local: Box<dyn BrowserIdleRetirementGuard>,
+    _scope: Arc<()>,
+}
+impl BrowserIdleRetirementGuard for IdleRetirementGuard {}
 
 /// Composes existing browser effects with public consumer transport and process
 /// custody. Assignments are transient provider context, not a reservation ledger.
@@ -17,10 +24,17 @@ pub struct RemoteViewSessionEffects<E, T, S> {
     expected: Option<BrowserSessionState>,
     pending: Option<(BrowserLaunchIntent, bool)>,
     view_clock: Option<fn() -> u64>,
+    retirements: BTreeMap<String, BrowserIdleRetirementRecord>,
+    active_retirements: BTreeMap<String, Weak<()>>,
+    operation_retirements: BTreeSet<String>,
+    activities: BTreeSet<String>,
 }
 
-impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
-    RemoteViewSessionEffects<E, T, S>
+impl<
+        E,
+        T: RemoteViewApplicationTransport,
+        S: BrowserLaunchCustodyStore + BrowserIdleRetirementCustodyStore,
+    > RemoteViewSessionEffects<E, T, S>
 {
     pub fn new(
         effects: E,
@@ -56,6 +70,10 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
             expected: None,
             pending: None,
             view_clock: None,
+            retirements: BTreeMap::new(),
+            active_retirements: BTreeMap::new(),
+            operation_retirements: BTreeSet::new(),
+            activities: BTreeSet::new(),
         })
     }
     /// Configure demand-driven capacity. This performs no provider request.
@@ -74,6 +92,331 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
         self
     }
 
+    fn with_browser_activity<R>(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        effect: impl FnOnce(&mut E) -> Result<R, String>,
+    ) -> Result<R, String> {
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        // Unpublished new roots already have exclusive launch custody. Their
+        // initial target work is published atomically with that launch.
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|(intent, _)| intent.profile_id == browser.profile_id)
+        {
+            return effect(&mut self.effects);
+        }
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("browser_session_activity_unavailable")?;
+        let id = (self.next_intent_id)();
+        self.store
+            .admit_browser_activity(&id, browser, expected)
+            .map_err(|_| "browser_session_activity_admission_conflict")?;
+        // Unknown effects retain the durable veto and are never replayed here.
+        let result = effect(&mut self.effects)?;
+        self.store
+            .acknowledge_browser_activity(&id)
+            .map_err(|_| "browser_session_activity_readback_required")?;
+        self.activities.insert(id);
+        Ok(result)
+    }
+
+    fn require_clear_profile_custody(&mut self, profile_id: &str) -> Result<(), String> {
+        if self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?
+            .iter()
+            .any(|record| {
+                !record.is_terminal()
+                    && record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.profile_id == profile_id)
+            })
+        {
+            return Err("browser_session_idle_readback_required".into());
+        }
+        // Historical launch observations do not veto an ordinary operation on
+        // a currently verified live browser. New process effects still use
+        // durable launch admission; current retirement fences remain above.
+        Ok(())
+    }
+    fn update_retirement(
+        &mut self,
+        previous: &BrowserIdleRetirementRecord,
+        next: BrowserIdleRetirementRecord,
+    ) -> Result<(), String> {
+        self.store
+            .update_idle_retirement(previous, &next)
+            .map_err(|_| "browser_session_idle_custody_unavailable")?;
+        self.retirements.insert(next.intent.id.clone(), next);
+        Ok(())
+    }
+
+    fn qualify_idle_viewers(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+        guard: Box<dyn BrowserIdleRetirementGuard>,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        if self.pool.is_none() || browsers.is_empty() {
+            return Ok(Some(guard));
+        }
+        let expected = self
+            .expected
+            .clone()
+            .ok_or("browser_session_idle_custody_unavailable")?;
+        let mut groups = BTreeMap::new();
+        for browser in browsers {
+            let baseline = expected
+                .browsers
+                .get(&browser.id)
+                .ok_or("browser_session_idle_custody_unavailable")?;
+            if baseline.pid != browser.pid
+                || baseline.cdp_endpoint != browser.cdp_endpoint
+                || baseline.profile_id != browser.profile_id
+                || baseline.desktop != browser.desktop
+            {
+                return Err("browser_session_idle_custody_identity_changed".into());
+            }
+            let assignment = self
+                .store
+                .published_launch_assignment(baseline)
+                .map_err(|_| "browser_session_idle_custody_unavailable")?;
+            groups.insert(assignment.assignment_id.clone(), assignment);
+        }
+        // Qualify all new groups before any claim or provider mutation. A
+        // deterministic legacy deferral must not leave an earlier group fenced.
+        // Existing operations retain their exact immutable readback obligation.
+        let mut original_identities = BTreeMap::new();
+        for assignment in groups.values() {
+            if self.retirements.values().any(|record| {
+                !record.is_terminal() && record.intent.provider.assignment == *assignment
+            }) {
+                continue;
+            }
+            for browser in expected.browsers.values().filter(|browser| {
+                browser.desktop.as_ref().is_some_and(|desktop| {
+                    desktop.desktop_id == assignment.desktop_id
+                        && desktop.generation == assignment.generation
+                })
+            }) {
+                let Some(identity) = self
+                    .store
+                    .published_launch_process_identity(browser)
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?
+                else {
+                    return Ok(None);
+                };
+                original_identities.insert(browser.id.clone(), identity);
+            }
+        }
+        for assignment in groups.into_values() {
+            let existing = self
+                .retirements
+                .values()
+                .find(|record| {
+                    !record.is_terminal() && record.intent.provider.assignment == assignment
+                })
+                .cloned();
+            let mut record = if let Some(record) = existing {
+                if record.published_state_digest.is_some() {
+                    return Err("browser_session_idle_readback_required".into());
+                }
+                record
+            } else {
+                let idle = self
+                    .adapter
+                    .observe_idle(&assignment)
+                    .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
+                if idle.viewer_active {
+                    return Ok(None);
+                }
+                let admission = self
+                    .adapter
+                    .read_idle_retirement(&assignment)
+                    .map_err(|_| "browser_session_idle_readback_required")?;
+                let id = (self.next_intent_id)();
+                let provider =
+                    RemoteViewIdleRetirementIntent::new(&assignment, &idle, &admission, &id)
+                        .map_err(|_| "browser_session_idle_readback_required")?;
+                // Freeze every published peer on this assignment once. Sequential
+                // tab/session closes reuse one native operation and slot revision.
+                let ids = expected
+                    .browsers
+                    .values()
+                    .filter(|browser| {
+                        browser.desktop.as_ref().is_some_and(|desktop| {
+                            desktop.desktop_id == assignment.desktop_id
+                                && desktop.generation == assignment.generation
+                        })
+                    })
+                    .map(|browser| browser.id.clone())
+                    .collect::<Vec<_>>();
+                let mut intent = BrowserIdleRetirementIntent::new(&id, provider, &expected, &ids)
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?;
+                for scope in &mut intent.scopes {
+                    scope.process_identity = Some(
+                        original_identities
+                            .get(&scope.browser.id)
+                            .cloned()
+                            .ok_or("browser_session_idle_custody_unavailable")?,
+                    );
+                }
+                match self.store.claim_idle_retirement(&intent, &expected) {
+                    Ok(BrowserIdleRetirementAdmission::New) => {
+                        BrowserIdleRetirementRecord::new(intent)
+                            .map_err(|_| "browser_session_idle_custody_unavailable")?
+                    }
+                    Ok(BrowserIdleRetirementAdmission::Existing(record)) => *record,
+                    Err(BrowserIdleRetirementStoreError::ActivityActive) => return Ok(None),
+                    Err(_) => return Err("browser_session_idle_readback_required".into()),
+                }
+            };
+            self.operation_retirements.insert(record.intent.id.clone());
+            let (current, new_preparation) = self
+                .store
+                .admit_idle_retirement_preparation(&record.intent)
+                .map_err(|_| "browser_session_idle_readback_required")?;
+            record = current;
+            self.retirements
+                .insert(record.intent.id.clone(), record.clone());
+            if new_preparation {
+                match self
+                    .adapter
+                    .prepare_idle_retirement(&record.intent.provider)
+                {
+                    Ok(prepared) => {
+                        let previous = record.clone();
+                        record
+                            .record_prepared(prepared)
+                            .map_err(|_| "browser_session_idle_readback_required")?;
+                        self.update_retirement(&previous, record.clone())?;
+                    }
+                    Err(RemoteViewApplicationAdapterError::Transport(
+                        RemoteViewApplicationTransportError::IdleRetirementDeferred,
+                    )) => {
+                        let previous = record.clone();
+                        record
+                            .defer_preparation()
+                            .map_err(|_| "browser_session_idle_readback_required")?;
+                        self.update_retirement(&previous, record)?;
+                        return Ok(None);
+                    }
+                    Err(_) => return Err("browser_session_idle_readback_required".into()),
+                }
+            } else {
+                let prepared = self
+                    .adapter
+                    .reconcile_idle_retirement(&record.intent.provider, record.prepared.as_ref())
+                    .map_err(|_| "browser_session_idle_readback_required")?;
+                if prepared.state != RemoteViewIdleRetirementReceiptState::Prepared {
+                    return Err("browser_session_idle_readback_required".into());
+                }
+                if record.prepared.is_none() {
+                    let previous = record.clone();
+                    record
+                        .record_prepared(prepared)
+                        .map_err(|_| "browser_session_idle_readback_required")?;
+                    self.update_retirement(&previous, record.clone())?;
+                }
+            }
+            self.retirements.insert(record.intent.id.clone(), record);
+        }
+        let scope = Arc::new(());
+        for browser in browsers {
+            self.active_retirements
+                .insert(browser.id.clone(), Arc::downgrade(&scope));
+        }
+        Ok(Some(Box::new(IdleRetirementGuard {
+            _local: guard,
+            _scope: scope,
+        })))
+    }
+
+    fn begin_retirement_effect(
+        &mut self,
+        browser: &ManagedBrowserInstance,
+        effect: BrowserIdleRetirementEffect,
+    ) -> Result<(Option<BrowserIdleRetirementRecord>, bool), String>
+    where
+        E: BrowserSessionEffects,
+    {
+        let Some(record) = self
+            .retirements
+            .values()
+            .find(|record| {
+                !record.is_terminal()
+                    && record
+                        .intent
+                        .scopes
+                        .iter()
+                        .any(|scope| scope.browser.id == browser.id)
+            })
+            .cloned()
+        else {
+            return Ok((None, true));
+        };
+        if self
+            .active_retirements
+            .get(&browser.id)
+            .is_none_or(|guard| guard.upgrade().is_none())
+        {
+            return Err("browser_session_idle_readback_required".into());
+        }
+        let scope = record
+            .intent
+            .scopes
+            .iter()
+            .find(|scope| scope.browser.id == browser.id)
+            .unwrap();
+        if scope.browser.pid != browser.pid
+            || scope.browser.cdp_endpoint != browser.cdp_endpoint
+            || scope.browser.profile_id != browser.profile_id
+            || scope.browser.desktop != browser.desktop
+        {
+            return Err("browser_session_idle_custody_identity_changed".into());
+        }
+        let (current, admission) = self
+            .store
+            .admit_idle_retirement_effect(&record.intent, effect.clone())
+            .map_err(|_| "browser_session_idle_readback_required")?;
+        self.retirements
+            .insert(current.intent.id.clone(), current.clone());
+        match admission {
+            BrowserIdleRetirementEffectAdmission::New => Ok((Some(current), true)),
+            BrowserIdleRetirementEffectAdmission::AlreadySettled => Ok((None, false)),
+            BrowserIdleRetirementEffectAdmission::PendingReadback => {
+                let tab = match &effect {
+                    BrowserIdleRetirementEffect::CloseTab { tab_id, .. } => {
+                        scope.tabs.iter().find(|tab| tab.id == *tab_id)
+                    }
+                    BrowserIdleRetirementEffect::CloseBrowser { .. } => None,
+                };
+                if !self.effects.observe_idle_retirement_effect(scope, tab)? {
+                    return Err("browser_session_idle_readback_required".into());
+                }
+                self.settle_retirement_effect(current, &effect)?;
+                Ok((None, false))
+            }
+        }
+    }
+
+    fn settle_retirement_effect(
+        &mut self,
+        record: BrowserIdleRetirementRecord,
+        effect: &BrowserIdleRetirementEffect,
+    ) -> Result<(), String> {
+        let mut next = record.clone();
+        next.settle_effect(effect)
+            .map_err(|_| "browser_session_idle_readback_required")?;
+        self.update_retirement(&record, next)
+    }
+
     fn require_operation(&self) -> Result<(), String> {
         if self.expected.is_none() {
             return Err("remote_view_session_operation_baseline_missing".into());
@@ -85,9 +428,94 @@ impl<E, T: RemoteViewApplicationTransport, S: BrowserLaunchCustodyStore>
 impl<
         E: BrowserSessionEffects + RemoteViewBrowserProcessEffects,
         T: RemoteViewApplicationTransport,
-        S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore,
+        S: BrowserLaunchCustodyStore + RemoteViewPoolRequestStore + BrowserIdleRetirementCustodyStore,
     > BrowserSessionEffects for RemoteViewSessionEffects<E, T, S>
 {
+    fn native_handoff_assignment_target(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+    ) -> Result<RemoteViewApplicationTarget, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        self.adapter
+            .observe_assignment(&assignment)
+            .map(|observed| observed.target)
+            .map_err(|_| "remote_view_native_target_unavailable".into())
+    }
+    fn register_native_handoff_observation(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        provider_target: &RemoteViewApplicationTarget,
+        target_digest: &str,
+        idempotency_key: &str,
+    ) -> Result<RemoteViewNativeHandoffObservation, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        if self
+            .adapter
+            .observe_assignment(&assignment)
+            .map_err(|_| "remote_view_native_target_unavailable")?
+            .target
+            != *provider_target
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let observation = self
+            .adapter
+            .register_native_handoff_observation(
+                &assignment,
+                target_digest.into(),
+                idempotency_key.into(),
+                300_000,
+            )
+            .map_err(|_| "remote_view_native_registration_unavailable")?;
+        if observation.target != *provider_target {
+            return Err("remote_view_native_target_changed".into());
+        }
+        Ok(observation)
+    }
+
+    fn observe_native_handoff_use(
+        &mut self,
+        target: &RemoteViewTabHandoffTarget,
+        registered: &RemoteViewNativeHandoffObservation,
+    ) -> Result<RemoteViewNativeHandoffUseRead, String> {
+        self.require_operation()?;
+        let expected = self
+            .expected
+            .as_ref()
+            .ok_or("remote_view_session_operation_baseline_missing")?;
+        if expected.browsers.get(&target.browser.id) != Some(&target.browser)
+            || expected.tabs.get(&target.tab.id) != Some(&target.tab)
+            || expected.sessions.get(&target.session.id) != Some(&target.session)
+        {
+            return Err("remote_view_native_target_changed".into());
+        }
+        let assignment = remote_view_tab_assignment(&mut self.adapter, &mut self.store, target)?;
+        self.adapter
+            .observe_native_handoff_use_state(&assignment, registered)
+            .map_err(|_| "remote_view_native_use_unavailable".into())
+    }
     fn reconcile_profile_browser(
         &mut self,
         profile: &BrowserProfileCatalogEntry,
@@ -430,8 +858,179 @@ impl<
         // journal. It must not poison another task through process-local state.
         // Current profile reconciliation can join that observation again.
         self.pending = None;
+        let activities = self
+            .store
+            .browser_activity_records()
+            .map_err(|_| "browser_session_activity_readback_unavailable")?;
+        // Only atomic publication removes transient acknowledged rows. A lost
+        // reply may leave local IDs after that commit, even with unchanged
+        // session JSON. Ended resources likewise keep history, not local vetoes.
+        self.activities.retain(|id| {
+            activities
+                .iter()
+                .any(|record| &record.id == id && !record.original_ended)
+        });
+        for activity in activities
+            .into_iter()
+            .filter(|activity| !activity.original_ended)
+        {
+            let scope = BrowserIdleRetirementScope {
+                browser: activity.browser.clone(),
+                process_identity: activity.process_identity.clone(),
+                tabs: Vec::new(),
+            };
+            // No target inventory, attachment or effect. Unavailable evidence
+            // retains the veto; only positive original exit settles resources.
+            if self.effects.observe_idle_retirement_effect(&scope, None) == Ok(true) {
+                match self.store.settle_browser_activity_resource(&activity) {
+                    Ok(()) | Err(BrowserIdleRetirementStoreError::Conflict) => (),
+                    Err(_) => return Err("browser_session_activity_readback_unavailable".into()),
+                }
+            }
+        }
+        self.retirements = self
+            .store
+            .idle_retirement_records()
+            .map_err(|_| "browser_session_idle_custody_unavailable")?
+            .into_iter()
+            .filter(|record| !record.is_terminal())
+            .map(|record| (record.intent.id.clone(), record))
+            .collect();
+        // Recover exact native preparation before attempting any new effect.
+        // A known prepared operation with no admitted effects can publish an
+        // unchanged state atomically. That publication fences a delayed actor's
+        // future effect admission before native exclusion is completed.
+        let reconcilable = self
+            .retirements
+            .values()
+            .filter(|record| {
+                record.published_state_digest.is_some()
+                    || (record.preparation_started() && !record.has_effect_attempts())
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        for original in reconcilable {
+            let Ok(observed) = self
+                .adapter
+                .reconcile_idle_retirement(&original.intent.provider, original.prepared.as_ref())
+            else {
+                continue;
+            };
+            let mut record = self
+                .store
+                .idle_retirement_records()
+                .map_err(|_| "browser_session_idle_custody_unavailable")?
+                .into_iter()
+                .find(|record| record.intent == original.intent)
+                .ok_or("browser_session_idle_readback_required")?;
+            self.retirements
+                .insert(record.intent.id.clone(), record.clone());
+            if record.is_terminal() {
+                continue;
+            }
+            if record.published_state_digest.is_none() {
+                if record.has_effect_attempts()
+                    || observed.state != RemoteViewIdleRetirementReceiptState::Prepared
+                {
+                    continue;
+                }
+                if record.prepared.is_none() {
+                    let mut next = record.clone();
+                    next.record_prepared(observed.clone())
+                        .map_err(|_| "browser_session_idle_readback_required")?;
+                    match self.store.update_idle_retirement(&record, &next) {
+                        Ok(()) => record = next,
+                        Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                        Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                    }
+                }
+                match self.store.publish_idle_retirement_state(
+                    expected,
+                    expected,
+                    std::slice::from_ref(&record.intent.id),
+                ) {
+                    Ok(()) => (),
+                    Err(BrowserIdleRetirementStoreError::Conflict) => continue,
+                    Err(_) => return Err("browser_session_idle_custody_unavailable".into()),
+                }
+                record = self
+                    .store
+                    .idle_retirement_records()
+                    .map_err(|_| "browser_session_idle_custody_unavailable")?
+                    .into_iter()
+                    .find(|current| current.intent == record.intent)
+                    .ok_or("browser_session_idle_readback_required")?;
+            }
+            let completed = if observed.state == RemoteViewIdleRetirementReceiptState::Completed {
+                Ok(observed)
+            } else {
+                self.adapter.complete_idle_retirement(
+                    &record.intent.provider,
+                    record
+                        .prepared
+                        .as_ref()
+                        .ok_or("browser_session_idle_readback_required")?,
+                    true,
+                )
+            };
+            if let Ok(completed) = completed {
+                let mut next = record.clone();
+                next.record_completed(completed)
+                    .map_err(|_| "browser_session_idle_readback_required")?;
+                self.update_retirement(&record, next)?;
+            }
+        }
+        self.operation_retirements.clear();
+
         self.effects.begin_operation(expected)?;
         self.expected = Some(expected.clone());
+        Ok(())
+    }
+    fn pending_browser_activity_ids(&self) -> Vec<String> {
+        self.activities.iter().cloned().collect()
+    }
+    fn pending_idle_retirement_ids(&self) -> Vec<String> {
+        self.operation_retirements
+            .iter()
+            .filter(|id| {
+                self.retirements.get(*id).is_some_and(|record| {
+                    !record.is_terminal() && record.published_state_digest.is_none()
+                })
+            })
+            .cloned()
+            .collect()
+    }
+    fn finish_idle_retirement_publication(&mut self, ids: &[String]) -> Result<(), String> {
+        for id in ids {
+            let record = self
+                .store
+                .idle_retirement_records()
+                .map_err(|_| "browser_session_idle_custody_unavailable")?
+                .into_iter()
+                .find(|record| record.intent.id == *id)
+                .ok_or("browser_session_idle_custody_unavailable")?;
+            if record.published_state_digest.is_none() {
+                return Err("browser_session_idle_readback_required".into());
+            }
+            if record.completed.is_some() {
+                continue;
+            }
+            let completed = self
+                .adapter
+                .complete_idle_retirement(
+                    &record.intent.provider,
+                    record
+                        .prepared
+                        .as_ref()
+                        .ok_or("browser_session_idle_readback_required")?,
+                    true,
+                )
+                .map_err(|_| "browser_session_idle_readback_required")?;
+            let mut next = record.clone();
+            next.record_completed(completed)
+                .map_err(|_| "browser_session_idle_readback_required")?;
+            self.update_retirement(&record, next)?;
+        }
         Ok(())
     }
     fn pending_launch_intent(&self) -> Option<BrowserLaunchIntent> {
@@ -445,6 +1044,7 @@ impl<
             return;
         }
         self.pending = None;
+        self.activities.clear();
         self.expected = None;
         self.effects.acknowledge_launch_publication();
     }
@@ -502,8 +1102,13 @@ impl<
         browser: &ManagedBrowserInstance,
     ) -> Result<bool, String> {
         self.require_operation()?;
+        // Provider idleness cannot override current controller or operation
+        // protection supplied by the browser runtime authority.
+        if !self.effects.permits_idle_browser_close(browser)? {
+            return Ok(false);
+        }
         if self.pool.is_none() {
-            return self.effects.permits_idle_browser_close(browser);
+            return Ok(true);
         }
         let assignment = self
             .store
@@ -515,9 +1120,60 @@ impl<
             .map_err(|_| "browser_session_idle_viewer_observation_unavailable")?;
         Ok(!observation.viewer_active)
     }
+    fn acquire_profile_cleanup_guard(
+        &mut self,
+        allocation: &crate::ManagedDisposableProfile,
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        self.effects.acquire_profile_cleanup_guard(allocation)
+    }
+    fn acquire_idle_retirement_guard(
+        &mut self,
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        let Some(guard) = self.effects.acquire_idle_retirement_guard(browsers)? else {
+            return Ok(None);
+        };
+        self.qualify_idle_viewers(browsers, guard)
+    }
+    fn acquire_disposable_retirement_guard(
+        &mut self,
+        allocations: &[crate::ManagedDisposableProfile],
+        browsers: &[ManagedBrowserInstance],
+    ) -> Result<Option<Box<dyn BrowserIdleRetirementGuard>>, String> {
+        self.require_operation()?;
+        let Some(guard) = self
+            .effects
+            .acquire_disposable_retirement_guard(allocations, browsers)?
+        else {
+            return Ok(None);
+        };
+        self.qualify_idle_viewers(browsers, guard)
+    }
     fn close_browser(&mut self, browser: &ManagedBrowserInstance) -> Result<(), String> {
         self.require_operation()?;
-        self.effects.close_browser(browser)
+        let effect = BrowserIdleRetirementEffect::CloseBrowser {
+            browser_id: browser.id.clone(),
+        };
+        let (record, apply) = self.begin_retirement_effect(browser, effect.clone())?;
+        if apply {
+            if let Some(record) = record.as_ref() {
+                let scope = record
+                    .intent
+                    .scopes
+                    .iter()
+                    .find(|scope| scope.browser.id == browser.id)
+                    .ok_or("browser_session_idle_custody_identity_changed")?;
+                self.effects.apply_idle_retirement_effect(scope, None)?;
+            } else {
+                self.effects.close_browser(browser)?;
+            }
+        }
+        if let Some(record) = record {
+            self.settle_retirement_effect(record, &effect)?;
+        }
+        Ok(())
     }
     fn acquire_initial_tab(
         &mut self,
@@ -525,8 +1181,10 @@ impl<
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
-        self.effects
-            .acquire_initial_tab(browser, attributed_target_ids)
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        self.with_browser_activity(browser, |effects| {
+            effects.acquire_initial_tab(browser, attributed_target_ids)
+        })
     }
     fn acquire_session_initial_tab(
         &mut self,
@@ -536,15 +1194,18 @@ impl<
         attributed_target_ids: &[String],
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
-        self.effects
-            .acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        self.with_browser_activity(browser, |effects| {
+            effects.acquire_session_initial_tab(browser, profile, session, attributed_target_ids)
+        })
     }
     fn create_tab(
         &mut self,
         browser: &ManagedBrowserInstance,
     ) -> Result<BrowserTabAcquisition, String> {
         self.require_operation()?;
-        self.effects.create_tab(browser)
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        self.with_browser_activity(browser, |effects| effects.create_tab(browser))
     }
     fn close_tab(
         &mut self,
@@ -552,7 +1213,30 @@ impl<
         tab: &ManagedBrowserTab,
     ) -> Result<(), String> {
         self.require_operation()?;
-        self.effects.close_tab(browser, tab)
+        let effect = BrowserIdleRetirementEffect::CloseTab {
+            browser_id: browser.id.clone(),
+            tab_id: tab.id.clone(),
+            target_id: tab.target_id.clone(),
+        };
+        let (record, apply) = self.begin_retirement_effect(browser, effect.clone())?;
+        if apply {
+            if let Some(record) = record.as_ref() {
+                let scope = record
+                    .intent
+                    .scopes
+                    .iter()
+                    .find(|scope| scope.browser.id == browser.id)
+                    .ok_or("browser_session_idle_custody_identity_changed")?;
+                self.effects
+                    .apply_idle_retirement_effect(scope, Some(tab))?;
+            } else {
+                self.effects.close_tab(browser, tab)?;
+            }
+        }
+        if let Some(record) = record {
+            self.settle_retirement_effect(record, &effect)?;
+        }
+        Ok(())
     }
     fn navigate(
         &mut self,
@@ -561,7 +1245,8 @@ impl<
         url: &str,
     ) -> Result<(), String> {
         self.require_operation()?;
-        self.effects.navigate(browser, tab, url)
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        self.with_browser_activity(browser, |effects| effects.navigate(browser, tab, url))
     }
     fn focus_browser(
         &mut self,
@@ -569,6 +1254,7 @@ impl<
         tab: Option<&ManagedBrowserTab>,
     ) -> Result<(), String> {
         self.require_operation()?;
+        self.require_clear_profile_custody(&browser.profile_id)?;
         let desktop = browser
             .desktop
             .as_ref()
@@ -585,7 +1271,7 @@ impl<
         // CDP selects the addressed target. Provider observations then fence the
         // current desktop generations and prove the owned process is foreground.
         // This is window proof only; it does not establish viewer connectivity.
-        self.effects.focus_browser(browser, tab)?;
+        self.with_browser_activity(browser, |effects| effects.focus_browser(browser, tab))?;
         let windows = self
             .adapter
             .windows(&assignment)
@@ -634,7 +1320,7 @@ impl<
 impl<
         E: ManagedBrowserCommandEffects,
         T: RemoteViewApplicationTransport,
-        S: BrowserLaunchCustodyStore,
+        S: BrowserLaunchCustodyStore + BrowserIdleRetirementCustodyStore,
     > ManagedBrowserCommandEffects for RemoteViewSessionEffects<E, T, S>
 {
     fn execute_command(
@@ -646,8 +1332,10 @@ impl<
         command: &serde_json::Value,
     ) -> Result<serde_json::Value, String> {
         self.require_operation()?;
-        self.effects
-            .execute_command(browser, tab, session_id, session_name, command)
+        self.require_clear_profile_custody(&browser.profile_id)?;
+        self.with_browser_activity(browser, |effects| {
+            effects.execute_command(browser, tab, session_id, session_name, command)
+        })
     }
 }
 

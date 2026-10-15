@@ -33,6 +33,29 @@ two corrected fixture assertions from product evidence. #183 still requires
 the workstation-wide terminal shutdown operation and failed-ledger, generation,
 escalation and retry qualification. P237 retains #260/#261 ownership.
 
+### 2026-10-11 P237 dashboard and handoff lifecycle
+
+The [implementation ledger](docs/dev/notes/0237-2026-10-14-implementation-ledger.md)
+records source qualification for all seven implementation tickets277through283.
+The compact workspace is the sole source default. The final combined candidate
+`6fc7f26e0` passes the private native continuation workflow in36.259seconds,
+including exact expiry/restart/recreation, original context, peer preservation,
+Properties, Diagnostics and separate authentication/logout. Both cleanup censuses
+are empty; the exact owned cleanup escalation is retained. Public synthetic
+checks also qualify popup observation without stealing peer selection and
+ordinary downloads despite malformed historical launch metadata.
+
+The [bounded review](docs/dev/notes/0237-2026-10-15-bounded-review.md) retains one
+broad review, one remediation pass and the nonblocking #105 history-cost follow-up.
+The ledger preserves subsequent bounded integration repairs, failed attempts and
+the historical accidental provider-authentication incident. Remote View PR441/442
+own canonical provider prerequisites; PR270 owns consumer source delivery and
+implementation-ticket reconciliation. [P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md)
+stays IN_PROGRESS for wider installed/public-provider adoption. Source delivery
+performs no production/development installation, shared-skill publication, external
+ingress, CI or formal release. Retain owned candidate custody and preserve foreign
+worktrees. Rejected layouts and prototype source remain historical.
+
 ### 2026-10-12 P238 workflow MCP
 
 [P238](docs/dev/plans/0238-2026-10-11-workflow-mcp.md) qualifies spec #262 and

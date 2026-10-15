@@ -707,6 +707,30 @@ impl<S> LockedServiceStateRepository<S>
 where
     S: ServiceStateStore,
 {
+    /// Hold the current snapshot against repository commits through a bounded
+    /// external effect. The effect runs once, outside optimistic CAS mutators.
+    /// Callers must not re-enter this repository while the returned guard lives.
+    pub(crate) fn hold_snapshot_for_effect(&self) -> Result<ServiceStateEffectSnapshot, String> {
+        let path = self
+            .store
+            .state_path()
+            .ok_or("service_state_effect_guard_requires_durable_path")?;
+        let deadline = Instant::now() + self.lock_timeout.max(Duration::from_millis(1));
+        let mut guard = acquire_service_state_file_lock_until(
+            path,
+            ServiceStateFileLockMode::Exclusive,
+            deadline,
+            "retirement_effect",
+        )?;
+        let state = self.store.load()?;
+        guard.set_state_summary(&state, None);
+        guard.set_phase("retirement_effect");
+        Ok(ServiceStateEffectSnapshot {
+            state,
+            _guard: guard,
+        })
+    }
+
     pub(crate) fn load_snapshot_with_lock_timeout(
         &self,
         timeout: Duration,
@@ -1878,6 +1902,13 @@ impl ServiceStateFileLockMode {
         }
     }
 }
+
+/// Snapshot and exclusive repository admission guard for a bounded effect.
+pub(crate) struct ServiceStateEffectSnapshot {
+    pub(crate) state: ServiceState,
+    _guard: ServiceStateFileGuard,
+}
+impl agent_browser_service_model::BrowserIdleRetirementGuard for ServiceStateEffectSnapshot {}
 
 struct ServiceStateFileGuard {
     file: File,
@@ -4117,6 +4148,89 @@ mod tests {
             "production_scale_slow_load_receipt fixture_bytes={fixture_bytes} contender_elapsed_ms={}",
             elapsed.as_millis()
         );
+    }
+
+    #[test]
+    fn idle_retirement_publication_helper() {
+        let Some(path) = std::env::var_os("AGENT_BROWSER_TEST_RETIREMENT_PUBLICATION_PATH") else {
+            return;
+        };
+        let repository =
+            LockedServiceStateRepository::new(JsonServiceStateStore::new(PathBuf::from(path)))
+                .with_lock_timeout(Duration::from_millis(50));
+        let result = repository.mutate(|state| {
+            state.viewer_leases.insert(
+                "controller-after-retirement".into(),
+                crate::native::service_model::ViewerLease {
+                    id: "controller-after-retirement".into(),
+                    browser_id: Some("guarded-browser".into()),
+                    viewer_role: "controller".into(),
+                    state: "active".into(),
+                    ..Default::default()
+                },
+            );
+            Ok(())
+        });
+        if std::env::var_os("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED").is_some() {
+            assert!(result
+                .unwrap_err()
+                .starts_with("service_state_lock_timeout:"));
+        } else {
+            result.unwrap();
+        }
+    }
+
+    #[test]
+    fn idle_retirement_guard_excludes_independent_controller_publication_and_releases() {
+        let path = unique_state_path("idle-retirement-publication");
+        let store = JsonServiceStateStore::new(&path);
+        store.save(&ServiceState::default()).unwrap();
+        let repository = LockedServiceStateRepository::new(store.clone());
+        let guarded = repository.hold_snapshot_for_effect().unwrap();
+        let child = |blocked: bool| {
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "native::service_store::tests::idle_retirement_publication_helper",
+                    "--test-threads=1",
+                ])
+                .env("AGENT_BROWSER_TEST_RETIREMENT_PUBLICATION_PATH", &path)
+                .env_remove("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED");
+            if blocked {
+                command.env("AGENT_BROWSER_TEST_RETIREMENT_EXPECT_BLOCKED", "1");
+            }
+            command.output().unwrap()
+        };
+        let blocked = child(true);
+        assert!(
+            blocked.status.success(),
+            "{}",
+            String::from_utf8_lossy(&blocked.stderr)
+        );
+        assert!(!guarded
+            .state
+            .viewer_leases
+            .contains_key("controller-after-retirement"));
+        assert!(!store
+            .load()
+            .unwrap()
+            .viewer_leases
+            .contains_key("controller-after-retirement"));
+        drop(guarded);
+        let admitted = child(false);
+        assert!(
+            admitted.status.success(),
+            "{}",
+            String::from_utf8_lossy(&admitted.stderr)
+        );
+        assert!(repository
+            .load_snapshot()
+            .unwrap()
+            .viewer_leases
+            .contains_key("controller-after-retirement"));
+        assert!(!service_state_lock_holder_path(&path).exists());
+        fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 
     #[test]

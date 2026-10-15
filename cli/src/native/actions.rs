@@ -826,6 +826,16 @@ async fn execute_command_after_navigation_admission(
         cmd.clone()
     };
     let cmd = &bound_command;
+    let _operator_selection = if action == "view_focus"
+        && cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+    {
+        match super::desktop_control_coordinator::begin_service_operator_selection(cmd).await {
+            Ok(guard) => Some(guard),
+            Err(error) => return error_response(&id, &error),
+        }
+    } else {
+        None
+    };
     let native_handle_command =
         !action_skips_browser_launch(action) && cmd.get("serviceTabHandle").is_some();
     if native_handle_command {
@@ -871,7 +881,19 @@ async fn execute_command_after_navigation_admission(
             // A pending JavaScript dialog can block the renderer-backed reads in
             // tab_switch_target_id. The exact already-active target needs no
             // refresh before Page.handleJavaScriptDialog is dispatched.
-            if action != "dialog" || !exact_target_is_active {
+            if matches!(action, "title" | "url") {
+                // Observe the exact authorized target without disrupting the
+                // person on this desktop. Explicit selection still activates.
+                if let Err(error) = manager.bind_observation_target(target_id).await {
+                    return error_response(&id, &error);
+                }
+            } else if action == "view_focus"
+                && cmd.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+            {
+                // The focus handler activates this exact target while holding
+                // its controller-authority fence. Preparation must not activate
+                // it before that fence covers the first visible effect.
+            } else if action != "dialog" || !exact_target_is_active {
                 if let Err(error) = manager.tab_switch_target_id(target_id).await {
                     return error_response(&id, &error);
                 }

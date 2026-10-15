@@ -83,6 +83,73 @@ fn start_ticks(process: &ProcessSample, boot_epoch: &str) -> Option<u64> {
     (boot == boot_epoch).then(|| ticks.parse().ok()).flatten()
 }
 
+/// Identify current descendants for a selected retirement candidate. This is
+/// eligibility evidence only; it does not replace original-operation fencing
+/// or authorize closing a process or deleting a profile.
+pub(super) fn selected_profile_descendants(
+    processes: &[ProcessSample],
+    root_pid: u32,
+    profile_path: &str,
+) -> BTreeSet<u32> {
+    let by_pid = processes
+        .iter()
+        .map(|process| (process.pid, process))
+        .collect::<BTreeMap<_, _>>();
+    if by_pid.len() != processes.len() {
+        return BTreeSet::new();
+    }
+    let Some(root) = by_pid.get(&root_pid).copied() else {
+        return BTreeSet::new();
+    };
+    let Some((boot, _)) = root
+        .start_token
+        .as_deref()
+        .and_then(|token| token.rsplit_once(':'))
+    else {
+        return BTreeSet::new();
+    };
+    if !boot.starts_with("linux:")
+        || start_ticks(root, boot).is_none()
+        || root.executable.is_none()
+        || command_arg_value(&root.command, "--user-data-dir").as_deref() != Some(profile_path)
+    {
+        return BTreeSet::new();
+    }
+    let mut descendants = BTreeSet::new();
+    for process in processes {
+        if process.pid == root_pid {
+            continue;
+        }
+        let mut current = process;
+        let mut seen = BTreeSet::new();
+        while seen.insert(current.pid) {
+            let Some(parent) = current.ppid.and_then(|pid| by_pid.get(&pid)).copied() else {
+                break;
+            };
+            let (Some(child_start), Some(parent_start)) =
+                (start_ticks(current, boot), start_ticks(parent, boot))
+            else {
+                break;
+            };
+            if child_start < parent_start
+                || current.executable != root.executable
+                || parent.executable != root.executable
+                || command_arg_value(&current.command, "--type").is_none()
+                || command_arg_value(&current.command, "--user-data-dir")
+                    .is_some_and(|path| path != profile_path)
+            {
+                break;
+            }
+            if parent.pid == root_pid {
+                descendants.insert(process.pid);
+                break;
+            }
+            current = parent;
+        }
+    }
+    descendants
+}
+
 fn verified_root(
     state: &ServiceState,
     browser_id: &str,

@@ -20,6 +20,8 @@ Wider resource/cleanup acceptance remains open.
 #183; bounded isolated preservation fixture complete. Workstation-wide shutdown
 and failed-transaction reconciliation remain open under #183.
 
+[P237 native desktop dashboard and independent handoff lifetimes](0237-2026-10-11-native-dashboard-handoffs.md) remains IN_PROGRESS for wider installed/public-provider adoption under #261 and #260. All seven source implementation tickets are qualified, including the sole default workspace, native first use, lifecycle/pressure and original-link recovery. The [implementation ledger](../notes/0237-2026-10-14-implementation-ledger.md) records fresh-main reconciliation, final36.259-second native acceptance and empty independent cleanup. PR270 owns consumer source delivery; Remote View PR441/442 supply canonical prerequisites.
+
 [P207 caller-custody tab refresh](0207-2026-10-10-tab-refresh-caller-custody.md) completed the bounded issue 175 source repair; PR 239 owns canonical integration and the plan records the unit-build qualification limit.
 
 [P228 native released acquisition regrowth](0228-2026-10-09-native-released-acquisition.md) is CLOSED: PR 237 integrated and installed twelve-browser pressure acceptance passed on 2026-10-10.

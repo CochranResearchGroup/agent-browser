@@ -252,4 +252,44 @@ await new Promise((resolve) => setImmediate(resolve));
 assert.equal(maximumConcurrentPolls, 1);
 stop();
 
+
+
+// A successful lifecycle write must be visible without waiting out the poll TTL.
+let policyDeadline = 1110;
+let policyReads = 0;
+let holdOldPolicy: (() => void) | undefined;
+let delayPolicy = false;
+const policyCoordinator = new DashboardReadCoordinator({
+  fetch: async (_input, init) => {
+    policyReads += 1;
+    const observed = policyDeadline;
+    if (delayPolicy) await new Promise<void>(resolve => { holdOldPolicy = resolve; });
+    if (policyReads > 1 && !delayPolicy) {
+      assert.equal(new Headers(init?.headers).get("x-agent-browser-revalidate"), "1");
+    }
+    return Response.json({ expiresAtMs: observed });
+  },
+  isVisible: () => true,
+  monotonicNow: () => 1000,
+});
+const policyUrl = "/api/service/status?projection=dashboard-summary";
+assert.equal((await (await policyCoordinator.read(policyUrl, { freshForMs: 10000 })).json()).expiresAtMs, 1110);
+policyDeadline = 2220;
+assert.equal((await (await policyCoordinator.read(policyUrl, { freshForMs: 10000, revalidate: true })).json()).expiresAtMs, 2220,
+  "explicit refresh after a policy write must observe its new authoritative deadline immediately");
+assert.equal(policyReads, 2);
+assert.equal((await (await policyCoordinator.read(policyUrl, { freshForMs: 10000 })).json()).expiresAtMs, 2220,
+  "polling after explicit refresh must retain the refreshed projection");
+
+delayPolicy = true;
+const oldPolicy = policyCoordinator.read(policyUrl, { freshForMs: 10000, revalidate: true });
+policyDeadline = 3330;
+delayPolicy = false;
+const newPolicy = await policyCoordinator.read(policyUrl, { freshForMs: 10000, revalidate: true });
+assert.equal((await newPolicy.json()).expiresAtMs, 3330);
+holdOldPolicy?.();
+await oldPolicy;
+assert.equal((await (await policyCoordinator.read(policyUrl, { freshForMs: 10000 })).json()).expiresAtMs, 3330,
+  "an older flight finishing after refresh must not republish the stale policy");
+
 console.log("dashboard read coordinator tests passed");

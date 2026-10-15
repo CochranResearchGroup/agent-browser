@@ -1046,8 +1046,51 @@ export interface ServiceStateLockDiagnostics {
   };
 }
 
+/** Retained logical link display data, excluding private recovery/provider authority. */
+export interface ServiceManagedHandoff {
+  handoffId: string;
+  handoffUrl: string;
+  sessionId: string;
+  tabId: string;
+  sessionName: string | null;
+  profileId: string | null;
+  browserId: string | null;
+  createdAtMs: number | null;
+  expiresAtMs: number | null;
+  linkState: 'active' | 'expired';
+  targetState: 'reported' | 'expired' | 'ended';
+  taskMetadata: Record<string, unknown> | null;
+  tabLifetime: Record<string, unknown> | null;
+  pendingHuman: { handoffId: string; requestedAtMs: number; expiresAtMs: number | null } | null;
+}
+
+/** Owner-published inventory; reported is not native viewer readiness. */
+export interface ServiceManagedWorkspace {
+  schemaVersion: 'agent-browser.managed-workspace.v1';
+  source: 'managed-owner';
+  /** Absent on older owners; empty means no retained links. */
+  handoffs?: Record<string, ServiceManagedHandoff>;
+  browsers: Record<string, {
+    id: string; profileId: string; pid: number;
+    desktop: { desktop_id: string; generation: number; friendly_route_label: string } | null;
+    activeSessionIds: string[]; state: 'reported' | 'sleeping';
+  }>;
+  sessions: Record<string, {
+    id: string; name: string; profileId: string; browserId: string;
+    createdAtMs: number; lastActivityAtMs: number; expiresAtMs: number; currentTabId: string | null;
+  }>;
+  tabs: Record<string, {
+    id: string; targetId: string; browserId: string; sessionId: string;
+    createdAtMs: number; url: string | null;
+    taskMetadata: Record<string, unknown> | null;
+    lifetime: Record<string, unknown> | null;
+    pendingHuman: Record<string, unknown> | null;
+  }>;
+}
+
 export interface ServiceBrowserRuntimeOperationalStatus {
   schemaVersion: 'agent-browser.runtime-operational-status.v1';
+  workspace?: ServiceManagedWorkspace;
   state: 'available' | 'unavailable';
   failureCode?: string;
   launchAdmission: {
@@ -1061,6 +1104,7 @@ export interface ServiceBrowserRuntimeOperationalStatus {
     hostProcessLimit: number | null;
     browserProcessCount: number | null;
     maximumBrowserProcesses: number;
+    memoryReserveSource?: string;
     reasons: string[];
   };
   storage?: {
@@ -1068,6 +1112,7 @@ export interface ServiceBrowserRuntimeOperationalStatus {
     databaseBytes: number;
     backupState: 'missing' | 'verified' | 'gap';
     backupSha256: string | null;
+    terminalHistory?: { activeLimit: number; archivedSessionCount: number; archivedTabCount: number; retention: 'durable_no_expiry' };
   };
   migration?: {
     importedSourceCount: number;

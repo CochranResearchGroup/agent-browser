@@ -8,6 +8,7 @@ import {
   createMcpStdioClient,
   createSmokeContext,
   incidentSummarySmokeFilterCases,
+  httpJson,
   parseJsonOutput,
   parseMcpToolPayload,
   runCli,
@@ -89,17 +90,23 @@ try {
   assert(initialize.capabilities?.tools, 'MCP tools capability missing');
   notify('notifications/initialized');
 
-  const incidentsResult = await send('tools/call', {
-    name: 'service_incidents',
-    arguments: {
-      summary: true,
-      serviceName,
-      agentName,
-      taskName,
-      limit: 20,
-    },
-  });
-  const incidents = parseMcpToolPayload(incidentsResult, 'MCP service_incidents');
+  await send('tools/call', { name: 'service_incidents', arguments: {} })
+    .then(() => { throw new Error('retired incident tool unexpectedly callable'); }, error => {
+      assert(error.message.includes('Unknown MCP tool'), 'retired incident tool must fail explicitly');
+    });
+  const discovery = parseMcpToolPayload(await send('tools/call', {
+    name: 'browser_discover', arguments: { category: 'diagnostics', operation: 'service_incidents' },
+  }), 'MCP incident discovery');
+  assert(discovery.success === true, 'MCP incident discovery failed');
+  const execution = discovery.data.execution;
+  assert(execution.cli === 'agent-browser service incidents', 'incident CLI discovery drift');
+  assert(execution.api.method === 'GET' && execution.api.route === '/api/service/incidents', 'incident API discovery drift');
+  const stream = parseJsonOutput((await runCli(context, ['--json', '--session', session, 'stream', 'enable'])).stdout, 'private diagnostic transport');
+  assert(stream.success && Number.isInteger(stream.data.port), 'private diagnostic transport unavailable');
+  const port = stream.data.port;
+  const query = new URLSearchParams({ summary: 'true', limit: '20', 'service-name': serviceName,
+    'agent-name': agentName, 'task-name': taskName });
+  const incidents = await httpJson(port, execution.api.method, execution.api.route + '?' + query);
   assert(incidents.success === true, `MCP service_incidents failed: ${JSON.stringify(incidents)}`);
   assertServiceIncidentsResponseSchemaRecord(
     incidents.data,
@@ -110,11 +117,8 @@ try {
   assertIncidentSummarySmokeShape(incidents.data.summary, 'MCP incidents');
 
   for (const filterCase of incidentSummarySmokeFilterCases({ serviceName, agentName, taskName, session })) {
-    const filteredResult = await send('tools/call', {
-      name: 'service_incidents',
-      arguments: filterCase.mcpArguments,
-    });
-    const filtered = parseMcpToolPayload(filteredResult, `MCP service_incidents ${filterCase.label}`);
+    const filtered = await httpJson(port, execution.api.method,
+      execution.api.route + '?' + filterCase.httpQuery);
     assert(filtered.success === true, `MCP ${filterCase.label} failed: ${JSON.stringify(filtered)}`);
     assertServiceIncidentsResponseSchemaRecord(
       filtered.data,
@@ -129,7 +133,7 @@ try {
   }
 
   await cleanup();
-  console.log('Service incident MCP summary smoke passed');
+  console.log('Service incident MCP discovery and supported summary API smoke passed');
 } catch (err) {
   await cleanup();
   console.error(err.stack || err.message);

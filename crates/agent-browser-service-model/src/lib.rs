@@ -3,6 +3,7 @@
 //! This module owns record compatibility and deterministic lifecycle decisions.
 //! Adapters own persistence, browser observation, process control, and transport.
 
+mod browser_idle_retirement;
 mod browser_launch_custody;
 pub use browser_launch_custody::{
     BrowserLaunchCustodyError, BrowserLaunchCustodyRecord, BrowserLaunchCustodyStore,
@@ -47,12 +48,16 @@ mod remote_view_application_mutation;
 mod remote_view_application_records;
 mod remote_view_application_response;
 mod remote_view_consumer;
+mod remote_view_idle_retirement;
+mod remote_view_native_handoff;
 mod remote_view_retention;
 mod remote_view_tab_handoff;
 pub use remote_view_tab_handoff::{
+    remote_view_handoff_resume_intent, remote_view_native_target_digest,
     resolve_remote_view_tab_handoff, retain_remote_view_tab_handoff,
     retain_remote_view_tab_handoff_at, BrowserRetentionPolicy, RemoteViewTabHandoff,
-    RemoteViewTabHandoffTarget, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
+    RemoteViewTabHandoffRecreation, RemoteViewTabHandoffResumeIntent, RemoteViewTabHandoffTarget,
+    RemoteViewTabNativeObservation, RemoteViewTabView, DEFAULT_REMOTE_VIEW_HANDOFF_TTL_MS,
 };
 mod request_provenance;
 mod runtime_owner_projection;
@@ -75,6 +80,11 @@ pub use browser_capability_registry::{
 pub use browser_desktop_selector::{
     select_least_crowded_remote_view_desktop, RemoteViewDesktopCandidate,
     RemoteViewDesktopSelection,
+};
+pub use browser_idle_retirement::{
+    BrowserActivityRecord, BrowserIdleRetirementAdmission, BrowserIdleRetirementCustodyStore,
+    BrowserIdleRetirementEffect, BrowserIdleRetirementEffectAdmission, BrowserIdleRetirementIntent,
+    BrowserIdleRetirementRecord, BrowserIdleRetirementScope, BrowserIdleRetirementStoreError,
 };
 pub use browser_process::{
     BrowserHealth, BrowserHealthObservation, BrowserProcess, BrowserRecordAuthoritySource,
@@ -104,13 +114,14 @@ pub use browser_retirement::{
     BROWSER_RETIREMENT_PLAN_SCHEMA_V1, BROWSER_RETIREMENT_RECEIPT_SCHEMA_V1,
 };
 pub use browser_session_manager::{
-    BrowserHistoryCompactionEvent, BrowserLaunch, BrowserNavigationDailySummary,
-    BrowserNavigationRecord, BrowserProfileIntent, BrowserRecovery, BrowserSessionEffects,
-    BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState, BrowserTabAcquisition,
-    BrowserTabEndReason, BrowserTabSource, CloseBrowserSessionResult, CloseBrowserTabResult,
-    FocusBrowserResult, ManagedBrowserCommandEffects, ManagedBrowserInstance,
-    ManagedBrowserSession, ManagedBrowserTab, ManagedBrowserTabRequest, ManagedDisposableProfile,
-    OpenBrowserSession, OpenBrowserSessionResult, ReapBrowserSessionsResult,
+    BrowserHistoryCompactionEvent, BrowserIdleRetirementGuard, BrowserLaunch,
+    BrowserNavigationDailySummary, BrowserNavigationRecord, BrowserProfileIntent, BrowserRecovery,
+    BrowserSessionEffects, BrowserSessionManager, BrowserSessionManagerConfig, BrowserSessionState,
+    BrowserTabAcquisition, BrowserTabEndReason, BrowserTabLifetime, BrowserTabSource,
+    BrowserTaskMetadata, CloseBrowserSessionResult, CloseBrowserTabResult, FocusBrowserResult,
+    ManagedBrowserCommandEffects, ManagedBrowserInstance, ManagedBrowserSession, ManagedBrowserTab,
+    ManagedBrowserTabRequest, ManagedDisposableProfile, OpenBrowserSession,
+    OpenBrowserSessionResult, PendingHumanTabRetention, ReapBrowserSessionsResult,
     SessionBrowserDisposition, SessionCloseDisposition, SessionEndReason, SessionRecordDisposition,
     TerminalBrowserSession, TerminalBrowserTab, BROWSER_SESSION_STATE_SCHEMA_V1,
 };
@@ -258,6 +269,16 @@ pub use remote_view_consumer::{
     RemoteViewViewerSessionState, RemoteViewViewerSessionStatus, RemoteViewViewingRoute,
     REMOTE_VIEW_FOUNDATION_CONTRACT_VERSION, REMOTE_VIEW_FOUNDATION_SCHEMA_VERSION,
     REMOTE_VIEW_J1_SOURCE_CHECKPOINT, REMOTE_VIEW_J3_SOURCE_CHECKPOINT,
+};
+pub use remote_view_idle_retirement::{
+    RemoteViewIdleRetirementFence, RemoteViewIdleRetirementIntent, RemoteViewIdleRetirementRead,
+    RemoteViewIdleRetirementReceipt, RemoteViewIdleRetirementReceiptState,
+    RemoteViewIdleRetirementState, REMOTE_VIEW_IDLE_RETIREMENT_SOURCE_CHECKPOINT,
+};
+pub use remote_view_native_handoff::{
+    RemoteViewNativeHandoffObservation, RemoteViewNativeHandoffUse, RemoteViewNativeHandoffUseRead,
+    RemoteViewNativeHandoffUseState, RemoteViewNativeObservationClock, RemoteViewNativeUseContext,
+    RemoteViewNativeUseEvidence, REMOTE_VIEW_NATIVE_HANDOFF_SOURCE_CHECKPOINT,
 };
 pub use remote_view_retention::{
     detach_remote_view_presentation, project_remote_view_operator_handoff,

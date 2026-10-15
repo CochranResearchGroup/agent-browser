@@ -2118,14 +2118,55 @@ fn service_request_command_with_state_and_authority(
     let mut command = normalized.command;
     command["id"] = json!(request_id);
     apply_service_request_attribution(&mut command, &normalized.attribution);
-    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true) {
+    if action_hint == "tab_close" && command["operatorClose"] == true {
+        let proof = authenticated_dashboard_user
+            .zip(service_state)
+            .ok_or_else(|| {
+                "operator_tab_close_authority_required: authenticated dashboard required"
+                    .to_string()
+            })
+            .and_then(|(username, state)| {
+                dashboard_auth::issue_operator_tab_close(state, &command, username)
+            })
+            .map_err(|message| {
+                ServiceRequestRejection::record(
+                    "http_service_request",
+                    Some(action_hint),
+                    &request_id,
+                    effective_session,
+                    ServiceRequestIssue::new(
+                        ServiceRequestIssueKind::OperatorTabCloseAuthority,
+                        message,
+                    ),
+                )
+            })?;
+        command["operatorTabCloseProofToken"] = json!(proof);
+        command["clientSubjectId"] = json!(dashboard_principal);
+        command["identityAssurance"] = json!("authenticated-ingress");
+    }
+    let existing_managed_handoff = action_hint == "remote_view_open"
+        && command["browserId"]
+            .as_str()
+            .is_some_and(|id| id.starts_with("browser:"))
+        && command["targetId"].as_str().is_some()
+        && command.get("url").is_none();
+    if command.get("operatorFocus").and_then(Value::as_bool) == Some(true)
+        || existing_managed_handoff
+    {
+        // Preparing an existing native target includes exact focus, not agent
+        // navigation. Sign that bounded subaction using the authenticated actor.
+        let mut focus_command = command.clone();
+        if existing_managed_handoff {
+            focus_command["action"] = json!("view_focus");
+            command["operatorFocus"] = json!(true);
+        }
         let proof = authenticated_dashboard_user
             .zip(service_state)
             .ok_or_else(|| {
                 "operator_focus_authority_required: authenticated dashboard required".to_string()
             })
             .and_then(|(username, state)| {
-                dashboard_auth::issue_operator_focus(state, &command, username)
+                dashboard_auth::issue_operator_focus(state, &focus_command, username)
             })
             .map_err(|message| {
                 ServiceRequestRejection::record(
@@ -5780,6 +5821,10 @@ mod tests {
         assert!(error.contains("requires serviceName, agentName, and taskName"));
     }
 
+    include!("p237_physical_selection.rs");
+    include!("p237_http_selection.rs");
+    include!("p278_tab_close.rs");
+
     #[test]
     fn authenticated_operator_focus_survives_dashboard_proxy_and_daemon_verification() {
         const CHILD: &str = "P160_OPERATOR_FOCUS_TEST_CHILD";
@@ -5838,6 +5883,66 @@ mod tests {
         assert_ne!(command["operatorFocusProofToken"], "caller-forged");
         dashboard_auth::verify_operator_focus(&state, &command).unwrap();
         assert_eq!(serde_json::to_value(&state).unwrap(), original);
+        // The controller proof admits human focus without borrowing the
+        // service caller's child access. Exercise the earlier native binder,
+        // which runs before daemon handle validation in the real dispatcher.
+        use crate::native::service_store::{LockedServiceStateRepository, ServiceStateRepository};
+        let repository = LockedServiceStateRepository::default_json().unwrap();
+        repository
+            .mutate(|snapshot| {
+                *snapshot = state.clone();
+                Ok(())
+            })
+            .unwrap();
+        let durable_before = serde_json::to_value(repository.load_snapshot().unwrap()).unwrap();
+        let mut daemon =
+            crate::native::action_runtime::runtime::DaemonState::new_for_session_with_stream(
+                "session-a",
+                None,
+                None,
+            );
+        daemon.runtime_owner_binding = Some(
+            crate::runtime_owner_transfer::RuntimeOwnerBinding::effect_capable(
+                crate::runtime_owner_transfer::OwnerAuthorityClaim {
+                    owner_id: "fixture-owner".into(),
+                    profile_identity_digest: "0".repeat(64),
+                    owner_generation: 1,
+                    logical_browser_id: "browser-a".into(),
+                    daemon_session_route: "session-a".into(),
+                    process_instance_digest: "1".repeat(64),
+                },
+            ),
+        );
+        let mut wire_command = command.clone();
+        wire_command["connectionInstanceId"] = json!("fixture-native-connection");
+        let bound = crate::native::action_runtime::runtime::bind_native_service_tab_command(&wire_command, &daemon)
+            .expect("authenticated controller focus must reach native handle validation without a service child grant");
+        crate::native::action_runtime::runtime::validate_service_tab_handle_for_daemon(
+            bound["serviceTabHandle"].as_object().unwrap(),
+            &bound,
+            &daemon,
+        )
+        .unwrap();
+        let mut forged = wire_command.clone();
+        forged["operatorFocusProofToken"] = json!("forged");
+        assert!(
+            crate::native::action_runtime::runtime::bind_native_service_tab_command(
+                &forged, &daemon
+            )
+            .is_err()
+        );
+        let mut ordinary = wire_command.clone();
+        ordinary["operatorFocus"] = json!(false);
+        assert!(
+            crate::native::action_runtime::runtime::bind_native_service_tab_command(
+                &ordinary, &daemon
+            )
+            .is_err()
+        );
+        assert_eq!(
+            serde_json::to_value(repository.load_snapshot().unwrap()).unwrap(),
+            durable_before
+        );
         let provenance =
             crate::native::service_request_provenance::capture_service_request_provenance(
                 &command,
@@ -5876,6 +5981,42 @@ mod tests {
             .unwrap()
             .controller_epoch += 1;
         assert!(dashboard_auth::verify_operator_focus(&changed, &command).is_err());
+        // Reassignment can preserve the process and controller epoch. A proof
+        // issued for the old native desktop must not authorize the new one.
+        let mut reassigned = state.clone();
+        reassigned
+            .browsers
+            .get_mut("browser-a")
+            .unwrap()
+            .display_allocation_id = Some("display-b".into());
+        reassigned
+            .remote_view_routes
+            .get_mut("route-a")
+            .unwrap()
+            .display_allocation_id = Some("display-b".into());
+        assert!(
+            dashboard_auth::verify_operator_focus(&reassigned, &command).is_err(),
+            "old desktop focus proof authorized a replacement desktop"
+        );
+    }
+
+    #[test]
+    fn operator_tab_close_requires_authenticated_dashboard_without_accepting_caller_proof() {
+        let body = json!({
+            "action":"tab_close", "browserId":"browser:managed-a", "sessionName":"task-a",
+            "serviceName":"agent-browser-dashboard", "agentName":"operator", "taskName":"Close selected task",
+            "params":{"targetId":"target-a","operatorClose":true,"operatorTabCloseProofToken":"caller-forged-close"}
+        }).to_string();
+        let error = service_request_command_with_state_and_authority(
+            &body, None, None, "task-a", None,
+        ).expect_err("managed tab closure must not admit a caller label or supplied proof as operator authority");
+        let response = error.response();
+        assert_eq!(
+            response["failure"]["code"], "operator_tab_close_authority_required",
+            "{response}"
+        );
+        assert_eq!(response["failure"]["effectState"], "no_effect");
+        assert!(!response.to_string().contains("caller-forged-close"));
     }
 
     #[test]
