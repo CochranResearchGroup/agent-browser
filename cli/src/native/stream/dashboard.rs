@@ -653,6 +653,9 @@ async fn handle_dashboard_connection(mut stream: tokio::net::TcpStream) {
             raw_path,
             &body_str,
             authenticated_dashboard_user,
+            headers
+                .iter()
+                .any(|(name, value)| name == "x-agent-browser-revalidate" && value == "1"),
         )
         .await;
         return;
@@ -801,6 +804,7 @@ async fn handle_service_api_request(
     path: &str,
     body: &str,
     authenticated_dashboard_user: &str,
+    revalidate: bool,
 ) {
     if method == "GET" && split_path_query(path).0 == "/api/service/failures" {
         let limit = split_path_query(path)
@@ -1191,8 +1195,14 @@ async fn handle_service_api_request(
     }
 
     if dashboard_service_status_cacheable(method, path) {
+        let backend_port = dashboard_service_backend_port();
+        if revalidate {
+            if let Some(port) = backend_port {
+                revalidate_dashboard_service_status_cache(port, path).await;
+            }
+        }
         let result = dashboard_service_status_with_transports(
-            dashboard_service_backend_port(),
+            backend_port,
             path,
             |port, owned_path| async move {
                 proxy_dashboard_service_api_request(
@@ -1950,6 +1960,20 @@ fn service_api_handler_backend_response(
 fn dashboard_service_status_cache() -> &'static Mutex<DashboardServiceStatusCache> {
     static CACHE: OnceLock<Mutex<DashboardServiceStatusCache>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(DashboardServiceStatusCache::default()))
+}
+
+/// Explicit operator refresh discards only this backend projection. Removing
+/// an in-flight entry also fences its later completion from republishing it.
+async fn revalidate_dashboard_service_status_cache(port: u16, path: &str) {
+    dashboard_service_status_cache()
+        .lock()
+        .await
+        .entries
+        .remove(&DashboardServiceStatusCacheKey {
+            backend_session: DASHBOARD_SERVICE_BACKEND_SESSION,
+            port,
+            path: path.to_string(),
+        });
 }
 
 /// Persist one authenticated request failure before exposing its occurrence ID.
@@ -4508,6 +4532,220 @@ mod tests {
                 path: "/api/service/status?full-tab-history=false".to_string(),
             }
         );
+    }
+
+    #[tokio::test]
+    async fn dashboard_authenticated_http_refresh_distinguishes_background_no_store() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        assert_ne!(
+            std::env::var("AGENT_BROWSER_TEST_ALLOW_LIVE_HOME")
+                .ok()
+                .as_deref(),
+            Some("1")
+        );
+        struct Scratch(std::path::PathBuf);
+        impl Drop for Scratch {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_dir_all(&self.0);
+            }
+        }
+        async fn exchange(request: String) -> Vec<u8> {
+            let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let task = tokio::spawn(async move {
+                let (stream, _) = listener.accept().await.unwrap();
+                handle_dashboard_connection(stream).await;
+            });
+            let mut stream = tokio::net::TcpStream::connect(address).await.unwrap();
+            stream.write_all(request.as_bytes()).await.unwrap();
+            let mut response = Vec::new();
+            timeout(Duration::from_secs(5), stream.read_to_end(&mut response))
+                .await
+                .unwrap()
+                .unwrap();
+            task.await.unwrap();
+            response
+        }
+        let scratch = Scratch(
+            std::env::temp_dir().join(format!("p280-refresh-{}", uuid::Uuid::new_v4().simple())),
+        );
+        let env = EnvGuard::new(&[
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+        ]);
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_AUTH_DIR",
+            scratch.0.to_str().unwrap(),
+        );
+        env.remove("AGENT_BROWSER_DASHBOARD_AUTH_FILE");
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        env.set(
+            "AGENT_BROWSER_DASHBOARD_BACKEND_PORT",
+            &listener.local_addr().unwrap().port().to_string(),
+        );
+        let deadline = Arc::new(AtomicUsize::new(1110));
+        let reads = Arc::new(AtomicUsize::new(0));
+        let server = {
+            let deadline = deadline.clone();
+            let reads = reads.clone();
+            tokio::spawn(async move {
+                loop {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut request = vec![0; 4096];
+                    stream.read(&mut request).await.unwrap();
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    let body = format!(
+                        "{{\"success\":true,\"data\":{{\"expiresAtMs\":{}}}}}",
+                        deadline.load(Ordering::SeqCst)
+                    );
+                    stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).as_bytes()).await.unwrap();
+                }
+            })
+        };
+        let auth = dashboard_auth::ensure_dashboard_auth_config().unwrap();
+        let credentials = std::fs::read_to_string(auth.bootstrap_credential_file).unwrap();
+        let password = credentials
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("AGENT_BROWSER_DASHBOARD_ADMIN_PASSWORD=\"")
+                    .and_then(|value| value.strip_suffix('"'))
+            })
+            .unwrap();
+        let login = json!({"username":"admin","password":password}).to_string();
+        let response = exchange(format!("POST /api/dashboard-auth/login HTTP/1.1\r\nHost: synthetic.example\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{login}", login.len())).await;
+        assert_eq!(http_response_status(&response), Some(200));
+        let text = String::from_utf8(response).unwrap();
+        let cookie = text
+            .lines()
+            .find_map(|line| {
+                line.strip_prefix("Set-Cookie: ")
+                    .and_then(|value| value.split(';').next())
+            })
+            .unwrap();
+        let request = |marker: &str| {
+            format!("GET /api/service/status?projection=dashboard-summary HTTP/1.1\r\nHost: synthetic.example\r\nCookie: {cookie}\r\nCache-Control: no-cache\r\n{marker}Connection: close\r\n\r\n")
+        };
+        let initial = exchange(request("")).await;
+        assert_eq!(http_response_status(&initial), Some(200));
+        assert!(String::from_utf8_lossy(&initial).contains("1110"));
+        deadline.store(2220, Ordering::SeqCst);
+        assert_eq!(
+            exchange(request("")).await,
+            initial,
+            "browser no-store transport must retain the logical polling cache"
+        );
+        let refreshed = exchange(request("X-Agent-Browser-Revalidate: 1\r\n")).await;
+        assert_eq!(http_response_status(&refreshed), Some(200));
+        assert!(String::from_utf8_lossy(&refreshed).contains("2220"));
+        assert_eq!(exchange(request("")).await, refreshed);
+        assert_eq!(reads.load(Ordering::SeqCst), 2);
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
+    }
+
+    #[tokio::test]
+    async fn dashboard_service_refresh_reloads_policy_and_fences_old_flight() {
+        let _guard = dashboard_status_cache_test_guard().await;
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let deadline = Arc::new(AtomicUsize::new(1110));
+        let reads = Arc::new(AtomicUsize::new(0));
+        let hold_next = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let accepted = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(tokio::sync::Notify::new());
+        let server = {
+            let deadline = deadline.clone();
+            let reads = reads.clone();
+            let hold_next = hold_next.clone();
+            let accepted = accepted.clone();
+            let release = release.clone();
+            tokio::spawn(async move {
+                loop {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let observed = deadline.load(Ordering::SeqCst);
+                    reads.fetch_add(1, Ordering::SeqCst);
+                    let hold = hold_next.swap(false, Ordering::SeqCst);
+                    let accepted = accepted.clone();
+                    let release = release.clone();
+                    tokio::spawn(async move {
+                        let mut request = vec![0; 4096];
+                        stream.read(&mut request).await.unwrap();
+                        if hold {
+                            accepted.notify_one();
+                            tokio::time::timeout(Duration::from_secs(5), release.notified())
+                                .await
+                                .unwrap();
+                        }
+                        let body =
+                            format!("{{\"success\":true,\"data\":{{\"expiresAtMs\":{observed}}}}}");
+                        let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
+                        stream.write_all(response.as_bytes()).await.unwrap();
+                    });
+                }
+            })
+        };
+        let path = "/api/service/status?projection=dashboard-summary";
+        let read =
+            || proxy_dashboard_service_api_request(port, "GET", path, "", Duration::from_secs(5));
+        let first = read().await.unwrap();
+        let resources = proxy_dashboard_service_api_request(
+            port,
+            "GET",
+            "/api/service/resources",
+            "",
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        deadline.store(2220, Ordering::SeqCst);
+        assert_eq!(
+            read().await.unwrap(),
+            first,
+            "polling should retain its bounded cache"
+        );
+        revalidate_dashboard_service_status_cache(port, path).await;
+        let refreshed = read().await.unwrap();
+        assert!(String::from_utf8_lossy(&refreshed).contains("2220"));
+        assert_eq!(
+            proxy_dashboard_service_api_request(
+                port,
+                "GET",
+                "/api/service/resources",
+                "",
+                Duration::from_secs(5)
+            )
+            .await
+            .unwrap(),
+            resources,
+            "refresh must not evict a peer projection"
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 3);
+
+        revalidate_dashboard_service_status_cache(port, path).await;
+        hold_next.store(true, Ordering::SeqCst);
+        let old = tokio::spawn(async move {
+            proxy_dashboard_service_api_request(port, "GET", path, "", Duration::from_secs(5))
+                .await
+                .unwrap()
+        });
+        tokio::time::timeout(Duration::from_secs(5), accepted.notified())
+            .await
+            .unwrap();
+        deadline.store(3330, Ordering::SeqCst);
+        revalidate_dashboard_service_status_cache(port, path).await;
+        let latest = read().await.unwrap();
+        assert!(String::from_utf8_lossy(&latest).contains("3330"));
+        release.notify_one();
+        assert!(String::from_utf8_lossy(&old.await.unwrap()).contains("2220"));
+        assert_eq!(
+            read().await.unwrap(),
+            latest,
+            "late old completion must not replace refreshed policy"
+        );
+        assert_eq!(reads.load(Ordering::SeqCst), 5);
+        server.abort();
+        assert!(server.await.unwrap_err().is_cancelled());
     }
 
     #[test]

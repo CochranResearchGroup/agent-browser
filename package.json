@@ -80,6 +80,7 @@
     "publish:local-dashboard": "node scripts/publish-local-dashboard-runtime.js",
     "test:dashboard-managed-workspace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-managed-workspace.ts",
     "test:compact-native-workspace": "node scripts/test-compact-native-workspace.cjs",
+    "test:native-handoff-policy-refresh": "node scripts/test-native-handoff-policy-refresh.cjs",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",
     "test:cross-seam-interlocks": "node --no-warnings --experimental-strip-types scripts/test-cross-seam-interlocks.js",
     "test:runtime-host-no-launch": "node scripts/smoke-runtime-host-no-launch.js",

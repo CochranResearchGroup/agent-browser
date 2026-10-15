@@ -141,7 +141,7 @@ for (const [label, source] of [
 ]) {
   assert.match(
     source,
-    /fetchSharedServiceStatus\(\)/,
+    /fetchSharedServiceStatus\((?:revalidate)?\)/,
     `${label} must use the shared Service Status flight and freshness window`,
   );
 }
@@ -209,7 +209,6 @@ assert.match(
 for (const [label, source, guard] of [
   ['session synchronization', sessionsStore, 'fetchInFlightRef'],
   ['workspace navigator status', navigator, 'serviceStatusInFlightRef'],
-  ['selected workspace context', selectedWorkspaceContextHook, 'refreshInFlightRef'],
   ['service panel status', servicePanel, 'serviceFetchInFlightRef'],
 ]) {
   assert.match(
@@ -218,6 +217,9 @@ for (const [label, source, guard] of [
     `${label} must not start a new polling cycle while its prior cycle is still in flight`,
   );
 }
+
+// The selected workspace hook shares a promise and queues explicit refresh.
+// test:native-handoff-policy-refresh verifies that scheduling in Chromium.
 
 for (const [label, text] of [
   ['workspace navigator', navigator],
