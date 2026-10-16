@@ -926,3 +926,23 @@ A new immutable candidate is building for full direct native verification.
 The fixture now records positive exact-assignment viewer-disconnect observation
 before its single expiry effect. Closing a page alone is not viewer-inactivity
 proof; live-viewer protection is preserved and the observation wait is bounded.
+
+### Direct authenticated native workflow qualified, 2026-10-16
+
+Candidate `e3bc1dfba12be28655555175737f6559292fd1ded5eead1c3a3818b61a1a137d`,
+from source `0c7a7c9d7f3476cc720550d49e9c17e2f5d30b5a`, passes the complete
+combined native default-workspace workflow with direct bearer authentication and
+no token-inserting connector. The receipt proves native pixels and exact input,
+independent native authentication, Properties/Share, UI policy persistence,
+configured-clock real target expiry, exact owner restart, same opaque link,
+original metadata/profile, preserved two physical peers, recreated Properties,
+diagnostics and logout. Native inactivity was positively observed in one read
+before the single expiry effect. No inactivity guard was bypassed or retried.
+Original and independent cleanup report zero active owned processes/containers;
+the original census also records zero owned networks/volumes. Earlier failures
+remain retained and do not become passes retroactively.
+
+The focused Share-order RED/GREEN and this combined native pass qualify the
+repair batch. Persistent default-provider binding, live ingress and real
+Authelia/public-host acceptance remain unqualified. No production runtime effect
+or full-objective completion is claimed.

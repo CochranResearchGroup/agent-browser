@@ -19,7 +19,7 @@ lanes:
     validation_status: All seven implementation tickets source-qualified; fresh-main P242/P243/P244 joins and public popup-peer/malformed-history checks pass; final native workflow36.259seconds with empty independent cleanup; PR270 owns source delivery; provider PR441/442 canonical
     native_preparation_writer: "P237 owns optional native control-token-file support in the existing HTTP transport, agent_env allowlist, doctor and development publisher; preserve foreign shared-auth helper work and native viewer/callback authentication"
     native_adoption_pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/292
-    native_adoption_validation: "Direct control authentication and development credential retention source gates pass at 6dff82142; candidate caaa3d2dbe4a built; direct native acceptance failed at expiry and once at tunnel authentication; diagnostic work continues; earlier private proof used a token connector; no native instance or ingress applied"
+    native_adoption_validation: "PR292 repair batch passes direct authenticated complete native workflow at candidate e3bc1dfba12b, with two peers preserved and empty independent cleanup; earlier failures retained; persistent default native provider and public Authelia acceptance remain open"
     installed_checkpoint: "Development 0.28.0-f074f7e00313 repairs observed labels and typed close denial; full private native continuation with installed executable and zero independent residue passes; default native provider binding remains absent; full objective stays IN_PROGRESS"
     updated_at: 2026-10-16
   - id: P244
