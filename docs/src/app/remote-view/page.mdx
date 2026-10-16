@@ -679,7 +679,8 @@ and navigates directly to Remote View's native desktop route in the same tab.
 It does not activate the original browser tab, issue or renew an Agent Browser
 viewer grant, select a dashboard workspace, or require another Open desktop click.
 
-When a still-valid link has lost its retained target, the read-only public locator
+When a still-valid link has lost its retained target, its browser process has
+exited, or its physical target observation has changed, the read-only public locator
 redirects to Remote View's native authenticated recovery continuation. The native
 gateway rejects prefetch and non-document requests, authenticates the operator,
 and requests recovery from the browser owner before redirecting to the current

@@ -183,10 +183,12 @@ pub(super) async fn resolve_public_location(id: &str, workspace: bool) -> Result
                 "remote_view_tab_handoff_session_unavailable"
                     | "remote_view_tab_handoff_tab_unavailable"
                     | "remote_view_tab_handoff_browser_unavailable"
+                    | "remote_view_human_use_target_changed"
             ) =>
         {
-            // Validate retained intent afresh without starting its owner. Native
-            // authentication must precede the later recovery effect.
+            // Lost processes and changed physical observations require the
+            // authenticated owner continuation, not a stale desktop or a stuck
+            // link. Validate retained intent without starting its owner here.
             let state =
                 crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
                     .load_session_state()?;

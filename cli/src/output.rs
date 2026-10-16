@@ -6495,6 +6495,7 @@ Link expiry does not close browsers or disconnect native viewers.
 Upgrades preserve legacy link expiry, including perpetual links.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
+An exited browser or changed native target binding uses authenticated recovery on the same link.
 Ordinary automation also recovers retained idle browsers without opening the link first.
 On Linux, exact-profile opens reconcile current process and CDP evidence before
 placement. Stale inventory does not require manual attach or revision repair.

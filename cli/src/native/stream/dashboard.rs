@@ -4198,7 +4198,7 @@ mod tests {
         env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
         let provider_thread = std::thread::spawn(move || {
             use std::io::{Read, Write};
-            for _ in 0..4 {
+            for _ in 0..5 {
                 let (mut stream, _) = provider.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
@@ -4254,7 +4254,87 @@ mod tests {
         assert_eq!(http_response_status(&redirected), Some(303));
         assert!(String::from_utf8_lossy(&redirected)
             .contains(&format!("handoff-observation={}", "a".repeat(64))));
+        // An owner may already have recovered a physical target while the
+        // previous native observation is retained. The same public URL must
+        // select authenticated continuation instead of becoming a permanent 503.
+        let before = store.load_session_state().unwrap();
+        let mut rebound = before.clone();
+        rebound.browsers.get_mut("synthetic-browser").unwrap().pid = std::process::id();
+        let provider_target = fixture["assignmentObservation"]["target"].clone();
+        rebound
+            .remote_view_tab_handoffs
+            .get_mut(&id)
+            .unwrap()
+            .native_observation = Some(
+            serde_json::from_value(json!({
+                "targetDigest":"b".repeat(64),"providerTarget":provider_target,
+                "idempotencyKey":"synthetic-stale-observation",
+                "observation":{
+                    "correlationId":"a".repeat(64),"requestDigest":"c".repeat(64),
+                    "application":"agent-browser","target":provider_target,
+                    "targetDigest":"b".repeat(64),
+                    "clock":{"bootId":"synthetic-boot","elapsedMs":1},
+                    "lifetimeMs":300000,"used":null
+                }
+            }))
+            .unwrap(),
+        );
+        store
+            .compare_and_save_session_state(&before, &rebound)
+            .unwrap();
+        let relays_before = commands.lock().unwrap().len();
+        let response = exchange(format!(
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n"
+        )).await;
+        assert_eq!(
+            http_response_status(&response),
+            Some(303),
+            "a changed native observation must reach authenticated recovery on the same link"
+        );
+        assert!(String::from_utf8_lossy(&response).contains(&format!(
+            "Location: https://synthetic-view.example/handoff/agent-browser/{id}"
+        )));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            relays_before,
+            "stale presentation invoked its owner before native authentication"
+        );
+        assert_eq!(store.load_session_state().unwrap(), rebound);
+        store
+            .compare_and_save_session_state(&rebound, &before)
+            .unwrap();
         provider_thread.join().unwrap();
+        // A retained logical target is not a live browser. The public locator
+        // must select native authentication before recovery, without contacting
+        // the stopped provider or invoking the owner through this public GET.
+        let before = store.load_session_state().unwrap();
+        let mut stale = before.clone();
+        stale.browsers.get_mut("synthetic-browser").unwrap().pid = u32::MAX;
+        store
+            .compare_and_save_session_state(&before, &stale)
+            .unwrap();
+        let relays_before = commands.lock().unwrap().len();
+        let response = exchange(format!(
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n"
+        )).await;
+        assert_eq!(
+            http_response_status(&response),
+            Some(303),
+            "a valid link with an exited browser must reach authenticated native recovery"
+        );
+        assert!(String::from_utf8_lossy(&response).contains(&format!(
+            "Location: https://synthetic-view.example/handoff/agent-browser/{id}"
+        )));
+        assert_eq!(
+            commands.lock().unwrap().len(),
+            relays_before,
+            "public locator invoked recovery before native authentication"
+        );
+        assert_eq!(
+            store.load_session_state().unwrap(),
+            stale,
+            "public locator changed retained browser state"
+        );
         let records = commands.lock().unwrap();
         let acknowledgements = records
             .iter()

@@ -989,3 +989,36 @@ Private activation, rollback, partial acceptance and failure receipts are retain
 outside Git. The full public lifecycle acceptance gate remains open, and P237 is
 still IN_PROGRESS. Deployment approval is resolved; further routine recovery in
 this reviewed effect set does not need renewed permission.
+
+### Retained public link recovery repair, 2026-10-16
+
+A real installed continuation exposed two distinct failures behind a still-valid
+opaque link: a retained logical browser whose process had exited selected a black
+surviving desktop; explicit owner resolution then recovered the browser but left
+a changed native observation binding returning503. WAN TLS negotiation also
+stalls intermittently, while the same certificate-validated HTTPS hostname works
+through the bastion LAN address. The task-only browser resolver used for diagnosis
+changes neither system DNS nor authentication and does not qualify WAN stability.
+
+The public locator now detects positive browser-process absence before selecting
+a native route. A changed physical observation selects the existing native
+recovery continuation. Both paths validate retained link intent without invoking
+the owner or changing state before native authentication; unknown errors retain
+their existing failure behavior. No recovery endpoint, viewer, grant or retry was
+added. Existing expiry/deletion behavior and exact target fences remain intact.
+
+The actual HTTP regression fails503 versus303 for each case before its repair,
+then passes both cases. One intermediate run hit the existing three-second HTTP
+fixture deadline; an unchanged rerun passed, and no deadline was raised. Broader
+checks pass:320 Remote View-focused tests,153 browser-session tests with9 ignored,
+66 dashboard HTTP tests,39 output tests, workspace formatting and strict workspace
+Clippy. These counts overlap and are not a unique combined test count. Handoff
+documentation, durable-handoff, policy-wiring and docs-build gates pass. All five
+user guidance/comment surfaces are updated. This is source qualification; the
+repaired executable has not yet passed installed same-link/native acceptance.
+
+The dedicated native provider's standard private MCP broker is now active against
+its existing control owner, closing the earlier registration-socket doctor gap.
+The complete native doctor passes. Existing client configuration hashes are
+unchanged; no production connector was registered or replaced. Public acceptance
+and the full objective remain open.
