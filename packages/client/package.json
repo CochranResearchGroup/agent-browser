@@ -18,6 +18,10 @@
     "./playbooks": {
       "types": "./src/playbooks.d.ts",
       "import": "./src/playbooks.js"
+    },
+    "./hosted-auth-helper": {
+      "types": "./src/hosted-auth-helper.d.ts",
+      "import": "./src/hosted-auth-helper.js"
     }
   },
   "scripts": {

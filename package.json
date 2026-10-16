@@ -133,7 +133,7 @@
     "test:browser-capability-registry-draft": "node scripts/smoke-browser-capability-registry-draft.js",
     "test:service-client": "pnpm test:p157-contract-oracle && pnpm test:service-client-contract && pnpm test:service-client-types && pnpm test:service-client-exports && pnpm test:service-request-client && pnpm test:service-observability-client && pnpm test:service-client-managed-profile-flow && pnpm test:service-client-example",
     "test:service-client-contract": "node scripts/generate-service-request-client.js --check && node scripts/generate-service-observability-client.js --check",
-    "test:playbook-client": "node scripts/test-login-playbook.js && pnpm exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target es2022 packages/client/src/playbooks.js packages/client/src/login-playbook.js",
+    "test:playbook-client": "node scripts/test-login-playbook.js && node scripts/test-login-playbook-hosted.js && pnpm exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target es2022 packages/client/src/playbooks.js packages/client/src/login-playbook.js",
     "test:service-client-types": "pnpm --dir docs exec tsc --allowJs --checkJs --noEmit --module NodeNext --moduleResolution NodeNext --target ES2022 --types node ../packages/client/src/service-request.js ../packages/client/src/service-observability.js ../scripts/service-status-v1-compatibility-types.ts ../examples/service-client/service-request-trace.mjs ../examples/service-client/managed-profile-flow.mjs ../examples/service-client/post-seeding-probe.mjs ../examples/service-client/broker-bridge.mjs ../examples/service-client/composed-workflow.mjs",
     "test:p157-contract-oracle": "node scripts/test-p157-contract-oracle.js",
     "test:p158-historical-failure-registry": "node scripts/test-p158-historical-failure-registry.js",
@@ -309,7 +309,8 @@
     "test:service-job-naming-live": "node scripts/smoke-service-job-naming.js",
     "test:windows-browser-setup-powershell-live": "bash scripts/smoke-windows-browser-setup-powershell.sh",
     "test:wsl-windows-chromium-profile-live": "bash scripts/smoke-wsl-windows-chromium-profile.sh",
-    "smoke:mcp-supported-client": "node scripts/smoke-mcp-supported-client.js"
+    "smoke:mcp-supported-client": "node scripts/smoke-mcp-supported-client.js",
+    "test:hosted-auth-helper": "node scripts/test-hosted-auth-helper.js"
   },
   "keywords": [
     "browser",
