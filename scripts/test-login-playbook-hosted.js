@@ -60,3 +60,15 @@ const wrongCompany=createLoginPlaybook({browser:{...browser,verifyLogin:async()=
 assert.equal((await wrongCompany.advance(options)).status,'failed','Helper success cannot replace independent company proof');
 assert.equal(starts,1);
 console.log('Hosted wrong receiving/caller/account, no-effect, private hold, lost-ack no-replay and wrong-company checks passed');
+
+request.state='uncertain';request.captureState='held';request.running=false;verified=false;const recoveryCalls=[];
+const recovery=createLoginPlaybook({browser,checkpoints,helper:async operation=>{
+ recoveryCalls.push(operation);if(operation==='inspect_request')return structuredClone(request);
+ assert.equal(operation,'reconcile_authentication','Readback cannot start/repeat private authentication');request.state='authenticated';request.captureState='ready';verified=true;return structuredClone(request);
+}});
+const recovered=await recovery.advance({...options,reconcile:true});assert.equal(recovered.status,'completed');assert.equal(recovered.requestId,request.requestId);assert.deepEqual(recoveryCalls,['inspect_request','reconcile_authentication']);assert.equal(submitted,1);
+const emptyRecovery=createLoginPlaybook({browser,checkpoints:{load:async()=>null,save:async()=>assert.fail('No replacement checkpoint')},helper:async()=>assert.fail('No replacement request')});
+await assert.rejects(emptyRecovery.advance({...options,reconcile:true}),/checkpoint_required_for_reconciliation/);
+request.state='uncertain';request.captureState='held';request.running=true;recoveryCalls.length=0;
+assert.equal((await recovery.advance({...options,reconcile:true})).reasonCode,'helper_running_or_uncertain');assert.deepEqual(recoveryCalls,['inspect_request']);delete request.running;
+console.log('Hosted playbook: explicit same-checkpoint readback cannot create a request or restart running/private input');

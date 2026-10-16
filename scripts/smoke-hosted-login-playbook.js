@@ -16,7 +16,8 @@ import {connectHostedAuthHelper} from '../packages/client/src/hosted-auth-helper
 import {browserFixtureEnvironment} from './hosted-auth-fixture-environment.js';
 
 assert(process.argv.includes('--apply-owned-dummy'),'Explicit owned dummy integration flag required');
-const nativeStaged=process.argv.includes('--native-staged');
+const nativeStaged=process.argv.includes('--native-staged'),reconcileHeld=process.argv.includes('--reconcile-held');
+assert(!reconcileHeld||nativeStaged,'Held reconciliation requires the staged native fixture');
 const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD,chrome=process.env.AGENT_BROWSER_SMOKE_BROWSER_EXECUTABLE;
 assert(binary&&chrome&&isAbsolute(binary)&&isAbsolute(chrome)&&process.env.CODEX_THREAD_ID,'Pin browser/runtime and use an actual ordinary Codex turn');
 const run=promisify(execFile),hash=value=>createHash('sha256').update(value).digest('hex');
@@ -25,7 +26,7 @@ const {connectRemoteView}=await import(pathToFileURL(join(app,'src/remote-view.m
 const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')));
 const context=createSmokeContext({prefix:'p245-hosted-',sessionPrefix:'p245'}),root=context.tempHome;
 console.log(JSON.stringify({fixtureRoot:root}));
-const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
+const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
 const save=(name,value)=>writeFile(join(root,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const until=async(check,message,ms=180000)=>{const deadline=Date.now()+ms;do{const value=await check();if(value)return value;await delay(200);}while(Date.now()<deadline);throw Error(message);};
 const helperUrl='http://127.0.0.1:4781';
@@ -102,7 +103,7 @@ try {
   for(const [key,name] of [['receiver','hosted-login-receiver.js'],['browser','native-receiving-browser.js']]){const bytes=await readFile(new URL('../packages/client/src/'+name,import.meta.url)),path=join(directory,name);await writeFile(path,bytes,{mode:0o400});nativeModules[key]={path,sha256:hash(bytes)};}
   const bytes=await readFile(new URL('./hosted-auth-native-fixture-host.mjs',import.meta.url));fixtureModule=join(root,'native-host.mjs');await writeFile(fixtureModule,bytes,{mode:0o400});receipt.nativeHostSHA256=hash(bytes);receipt.nativeModules=nativeModules;
  }
- await save('host-config.json',{version:1,root,origin,username,password,nativeStaged,nativeModules,installedRoot:app,callerTaskId:process.env.CODEX_THREAD_ID,receivingTarget,processIdentity,desktop,installationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID,smokeUtilities:new URL('./smoke-utils.js',import.meta.url).pathname,browserEnv:context.env});
+ await save('host-config.json',{version:1,root,origin,username,password,nativeStaged,reconcileHeld,nativeModules,installedRoot:app,callerTaskId:process.env.CODEX_THREAD_ID,receivingTarget,processIdentity,desktop,installationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID,smokeUtilities:new URL('./smoke-utils.js',import.meta.url).pathname,browserEnv:context.env});
  const wrapper=join(root,'host-owner.mjs');
  await writeFile(wrapper,`import {createAuthConfig as original} from ${JSON.stringify(pathToFileURL(originalModule).href)};\nimport {createAuthConfig as dummy} from ${JSON.stringify(pathToFileURL(fixtureModule).href)};\nexport async function createAuthConfig(context){const base=await original(context),extra=await dummy(context);return {...base,external:extra.external,accounts:[...base.accounts,...extra.accounts.map(a=>({...a,approvers:base.approvers}))],store:{read:(source,options)=>source==='dummy-fixture'?extra.store.read(source,options):base.store.read(source,options)}};}\n`,{mode:0o600});
  fixtureEnvironment=originalEnvironment.replace(/^CODEX_BOTS_AUTH_MODULE=.*$/m,'CODEX_BOTS_AUTH_MODULE='+wrapper)+'\nCODEX_AUTH_EXTERNAL_FIXTURE_CONFIG='+join(root,'host-config.json')+'\n';
@@ -119,10 +120,19 @@ try {
  await api('/api/auth',{requestId,action:'approve'});
  const started=await playbook.advance(options);assert.equal(started.effectState,'unknown');
  await until(async()=>{try{return await readFile(join(root,'source-entered'));}catch(e){if(e.code!=='ENOENT')throw e;}},'Installed private source not entered');
- const host=JSON.parse(await readFile(join(root,'fixture-host.json'),'utf8'));const held=await fetch(host.observerUrl);assert.equal(held.status,409);assert.equal(JSON.parse(await readFile(join(root,'host-audit.json'),'utf8')).observerDispatches,0);receipt.privateObserverHeld=true;
+ let host=JSON.parse(await readFile(join(root,'fixture-host.json'),'utf8'));const held=await fetch(host.observerUrl);assert.equal(held.status,409);assert.equal(JSON.parse(await readFile(join(root,'host-audit.json'),'utf8')).observerDispatches,0);receipt.privateObserverHeld=true;
  assert.equal((await createLoginPlaybook({browser:software,helper:caller.helper,checkpoints}).advance(options)).reasonCode,'helper_running_or_uncertain');
  await writeFile(join(root,'release-source'),'1',{mode:0o600});sourceRelease=true;
- const summary=await until(async()=>{const x=await caller.helper('inspect_request',{requestId});return !x.running?x:false;},'Installed private auth did not settle');
+ let summary=await until(async()=>{const x=await caller.helper('inspect_request',{requestId});return !x.running?x:false;},'Installed private auth did not settle');
+ if(reconcileHeld){
+  assert.equal(summary.state,'uncertain');assert.equal(summary.captureState,'held');receipt.uncertainBeforeReconciliation=summary;
+  assert.equal((await fetch(host.observerUrl)).status,409);
+  await run('systemctl',['--user','restart','codex-bots.service']);await until(async()=>{try{return (await api('/api/health')).ok;}catch{return false;}},'Held restart not ready',60000);
+  summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.state,'uncertain');assert.equal(summary.captureState,'held');assert(!summary.running);receipt.heldRestartPreserved=true;
+  host=JSON.parse(await readFile(join(root,'fixture-host.json'),'utf8'));assert.equal((await fetch(host.observerUrl)).status,409);
+  summary=await caller.helper('reconcile_authentication',{requestId});assert.equal(summary.requestId,requestId);receipt.independentReconciliationWithoutReplay=true;
+ }
+
  assert.equal(summary.state,'authenticated');assert.equal(summary.captureState,'ready');receipt.outcome=summary;
  const completed=await playbook.advance(options);assert.equal(completed.status,'completed');assert.equal(completed.effectState,'verified');receipt.consumerResult=completed;
  const wrong=await software.verifyLogin({taskId:task.taskId,guideId:'owned',accountRef:'dummy',organizationRef:'wrong-company'});assert.equal(wrong.reasonCode,'organization_mismatch');receipt.independentWrongCompanyRejected=true;

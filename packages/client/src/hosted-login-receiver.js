@@ -17,18 +17,21 @@ const canonicalOrigin=value=>{try{const url=new URL(value);return ['http:','http
  * current native Remote View owner for activation; they must never log values.
  * @param {ReceiverOptions} options
  */
-export function createHostedLoginReceiver({binding,scope,expectedUsername,browser,readPrincipal,readCaptureSafety,awaitMfa,authenticatedOrigins=[],maxTransitions=8}) {
+export function createHostedLoginReceiver({binding,scope,expectedUsername,browser,readPrincipal,readCaptureSafety,readReconciliationSafety,awaitMfa,authenticatedOrigins=[],maxTransitions=8}) {
  if(!binding||binding.provider!=='agent-browser'||targetKeys.some(key=>typeof binding[key]!=='string'||!binding[key])||!scope||scopeKeys.some(key=>typeof scope[key]!=='string'||!scope[key])||!canonicalOrigin(scope.origin)||!Array.isArray(authenticatedOrigins)||authenticatedOrigins.length>8||authenticatedOrigins.some(origin=>!canonicalOrigin(origin))||!expectedUsername||!Number.isInteger(maxTransitions)||maxTransitions<1||maxTransitions>16||[browser?.observe,browser?.fill,browser?.activate,browser?.waitForChange,readPrincipal,readCaptureSafety].some(fn=>typeof fn!=='function'))throw TypeError('hosted_receiver_configuration_required');
  binding=Object.freeze(structuredClone(binding));scope=structuredClone(scope);
  const authenticatedOriginSet=new Set([scope.origin,...authenticatedOrigins]);
  let attempted=false,submitted=false,verified=false;
  /** @param {Scope} requested */
  const sameScope=requested=>scopeKeys.every(key=>requested?.[key]===scope[key])&&requested.capabilities?.length===1&&requested.capabilities[0]==='login';
- /** @param {Scope} requested @param {Guard} guard */
- const observe=async(requested,guard)=>{
+ /** @param {Scope} requested @param {Guard} guard @param {boolean} [independent] */
+ const observe=async(requested,guard,independent=false)=>{
   if(!sameScope(requested))throw refused();await guard();
   const current=await browser.observe(binding);await guard();
   if(targetKeys.some(key=>current.binding?.[key]!==binding[key])||(current.state==='authenticated'?!authenticatedOriginSet.has(current.origin):current.origin!==scope.origin))throw refused();
+  // Readback of an exact owned login/unknown page is negative evidence, not
+  // permission for input. Private application retains its strict state checks.
+  if(independent)return current;
   if(!['identifier_required','password_required','mfa_required','authenticated'].includes(current.state))throw refused();
   if(current.state!=='identifier_required'&&current.accountMatched!==true)throw refused();
   if(current.state==='password_required'&&(current.visiblePassword!==true||current.maskedPassword!==true))throw refused();
@@ -72,6 +75,20 @@ export function createHostedLoginReceiver({binding,scope,expectedUsername,browse
    const proof=await readPrincipal({binding,guard}),after=await observe(requested,guard);
    verified=proof?.authenticated===true&&proof.origin===current.origin&&proof.username===expectedUsername&&after.state==='authenticated'&&after.origin===current.origin;
    return {origin:scope.origin,account:verified?scope.account:null,authenticated:verified};
+  },
+  /** Independent owner readback after human completion or lost acknowledgement.
+   * No prior credential, private input, or remembered local success is reused.
+   * @param {Scope} requested @param {Guard} [guard]
+   */
+  async reconcile(requested,guard=async()=>{}){
+   const current=await observe(requested,guard,true),negative={origin:scope.origin,account:null,authenticated:false,captureSafe:false};
+   if(current.state!=='authenticated'||current.visiblePassword)return negative;
+   const proof=await readPrincipal({binding,guard}),after=await observe(requested,guard,true);
+   if(proof?.authenticated!==true||proof.username!==expectedUsername||proof.origin!==current.origin||after.state!=='authenticated'||after.origin!==current.origin||after.visiblePassword)return negative;
+   const safety=typeof readReconciliationSafety==='function'?await readReconciliationSafety({binding,guard}):{safe:false};
+   const final=await observe(requested,guard,true);
+   if(final.state!=='authenticated'||final.origin!==current.origin||final.visiblePassword)return negative;
+   return {origin:scope.origin,account:scope.account,authenticated:true,captureSafe:safety?.safe===true};
   },
   /** @param {{username:string,password:string}} credential @param {Scope} requested */
   async safeForCapture(credential,requested){

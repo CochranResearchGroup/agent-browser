@@ -12,6 +12,7 @@ export interface ReceiverOptions {
  };
  awaitMfa?(input:{receivingTarget:Binding;scope:Scope;guard:Guard}):Promise<{dispatched:boolean}>;
  readPrincipal(input:{binding:Binding;guard:Guard}):Promise<{authenticated:boolean;origin:string;username:string}>;
+ readReconciliationSafety?(input:{binding:Binding;guard:Guard}):Promise<{safe:boolean}>;
  readCaptureSafety(input:{binding:Binding;credential:{username:string;password:string}}):Promise<{safe:boolean}>;
 }
 /** Trusted hosted-service adapter only; never pass credential values through public client tools. */
@@ -19,5 +20,6 @@ export function createHostedLoginReceiver(options:ReceiverOptions):{
  inspect(scope:Scope,guard?:Guard):Promise<{origin:string;account:string}>;
  apply(credential:{username:string;password:string},scope:Scope,guard:Guard):Promise<void>;
  verify(scope:Scope,guard?:Guard):Promise<{origin:string;account:string|null;authenticated:boolean}>;
+ reconcile(scope:Scope,guard?:Guard):Promise<{origin:string;account:string|null;authenticated:boolean;captureSafe:boolean}>;
  safeForCapture(credential:{username:string;password:string},scope:Scope):Promise<boolean>;
 };

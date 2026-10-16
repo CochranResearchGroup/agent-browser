@@ -87,3 +87,15 @@ const unsafe=await scenario({unsafeCapture:true});assert.equal(unsafe.summary.st
 console.log('Hosted receiver: wrong target/account/hidden password no source read, lost-ack no replay, wrong principal and held native capture passed');
 
 const redirected=await scenario({redirect:true});assert.equal(redirected.summary.state,'authenticated');assert.equal(redirected.summary.captureState,'ready');console.log('Hosted receiver: reviewed authenticated-origin redirect preserves credential-origin scope');
+
+let readbackState='identifier_required',identity='other-user',nativeSafe=false,privateCalls=0;
+const readback=createHostedLoginReceiver({binding,scope,expectedUsername:'owned-user',
+ browser:{async observe(){return {binding:{...binding},origin:scope.origin,state:readbackState,accountMatched:false,visiblePassword:false,maskedPassword:true};},async fill(){privateCalls++;assert.fail();},async activate(){privateCalls++;assert.fail();},async waitForChange(){privateCalls++;assert.fail();}},
+ readPrincipal:async()=>({authenticated:true,origin:scope.origin,username:identity}),readCaptureSafety:async()=>{assert.fail('Reconciliation must not need the old credential');},readReconciliationSafety:async()=>({safe:nativeSafe}),
+});
+assert.equal((await readback.reconcile(scope)).authenticated,false);
+readbackState='unknown';assert.equal((await readback.reconcile(scope)).authenticated,false);
+readbackState='authenticated';assert.equal((await readback.reconcile(scope)).authenticated,false);
+identity='owned-user';const heldReadback=await readback.reconcile(scope);assert.equal(heldReadback.authenticated,true);assert.equal(heldReadback.captureSafe,false);
+nativeSafe=true;const safeReadback=await readback.reconcile(scope);assert.equal(safeReadback.authenticated,true);assert.equal(safeReadback.captureSafe,true);assert.equal(safeReadback.account,scope.account);assert.equal(privateCalls,0);
+console.log('Hosted receiver: independent same-browser reconciliation needs no prior credential or input replay');

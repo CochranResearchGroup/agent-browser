@@ -25,6 +25,8 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
     async advance(options) {
       const {taskId,guideId,accountRef,organizationRef,scope,expiresAt,callerTaskId}=options;
       if(callerTaskId!==undefined && (typeof callerTaskId!=='string' || !callerTaskId))throw Error('login_caller_invalid');
+      if(options.reconcile!==undefined&&typeof options.reconcile!=='boolean')throw Error('login_reconciliation_invalid');
+      if(options.reconcile&&callerTaskId===undefined)throw Error('hosted_caller_required_for_reconciliation');
       const key=`${taskId}/${guideId}`;
       if(busy.has(key))throw Error('login_playbook_busy');
       busy.add(key);
@@ -41,6 +43,7 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         let checkpoint=await checkpoints.load(key);
         let receivingTarget=checkpoint?.receivingTarget;
         if(checkpoint && checkpoint.binding!==binding)throw Error('checkpoint_binding_mismatch');
+        if(!checkpoint&&options.reconcile)throw Error('checkpoint_required_for_reconciliation');
         if(!checkpoint) {
           const observed=await browser.verifyLogin({taskId,guideId,accountRef,organizationRef});
           if(observed.status==='completed' || observed.status==='failed' || observed.status==='adaptation_required')return observed;
@@ -72,6 +75,15 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         if(!matches(summary) || summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
         if(summary.state==='pending')return result('waiting','approval_required','no_effect',checkpoint);
         if(['denied','revoked'].includes(summary.state))return result('failed',`helper_${summary.state}`,checkpoint.attempted?'unknown':'no_effect',checkpoint);
+        if(options.reconcile){
+          if(summary.running||!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain',checkpoint.attempted?'unknown':'no_effect',checkpoint);
+          // Explicit readback only. Never create a replacement request or make
+          // this checkpoint eligible for another private authentication.
+          try{summary=await helper('reconcile_authentication',{requestId:checkpoint.requestId});}
+          catch{return result('waiting','helper_reconciliation_unavailable','unknown',checkpoint);}
+          if(!matches(summary)||summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
+          if(!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain','unknown',checkpoint);
+        }
         if(summary.state==='authenticated') {
           if(summary.captureState!=='ready')return result('waiting','private_capture_held','unknown',checkpoint);
           return await verifyReceiving(checkpoint);

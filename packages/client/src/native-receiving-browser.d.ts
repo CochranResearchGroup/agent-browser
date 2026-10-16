@@ -2,7 +2,7 @@ import type {Binding,Guard,Observation} from './hosted-login-receiver.js';
 export interface Region {x:number;y:number;width:number;height:number}
 export type NativeAction={kind:'click';x:number;y:number;button:number;count:number}|{kind:'key';chord:string}|{kind:'text';method:'keys';text:string};
 export interface NativeObservation extends Observation {
- controls:Record<string,{selector:string;count:number;tag:string|null;type:string|null;visible:boolean;enabled:boolean;hitTarget:boolean;rect:Region|null}>;
+ controls:Record<string,{selector:string;count:number;tag:string|null;type:string|null;visible:boolean;enabled:boolean;hitTarget:boolean;dismissiblePopup?:boolean;rect:Region|null}>;
  viewport:{width:number;height:number;devicePixelRatio:number;focused:boolean;visible:boolean};
  fingerprint?:string;
 }

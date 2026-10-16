@@ -50,16 +50,19 @@ export async function createAuthConfig(context){
   async inputMatches({selector,value,guard}){await guard();return (await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:`(()=>{const es=document.querySelectorAll(${JSON.stringify(selector)});return es.length===1&&es[0].value===${JSON.stringify(value)};})()`}})).result===true;},
  });
  return {...base,external:{...base.external,async createReceiver(){
-  const receiver=createHostedLoginReceiver({binding,scope,expectedUsername:config.username,browser,
-   async readPrincipal(){const principal=(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:"fetch('/whoami').then(r=>r.ok?r.json():null)"}})).result;assert.equal(principal?.username,config.username);assert.equal(principal.origin,config.origin);return {...principal,authenticated:true};},
-   async readCaptureSafety({credential}){
+  const readSafety=async({credential})=>{
     const current=await browser.observe(binding);assert.equal(current.state,'authenticated');
     const clear=(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:`(()=>{const secret=${JSON.stringify(credential.password)};return !document.body.innerText.includes(secret)&&![...document.querySelectorAll('input,textarea')].some(e=>e.value.includes(secret));})()`}})).result;
     const captured=await remote.capture(config.desktop),bytes=Buffer.from(captured.image.data,'base64'),text=await ocr(bytes),normal=text.toLowerCase().replace(/[^a-z0-9]/g,'');
     const safe=clear===true&&normal.includes('owneduser')&&normal.includes('managedauthenticationverified')&&!text.includes(credential.password);await browser.observe(binding);
     await writeFile(join(config.root,'native-safety.json'),JSON.stringify({safe,bytes:bytes.length,sha256:hash(bytes),exactOwner:true,credentialAbsent:!text.includes(credential.password)})+'\n',{mode:0o600});return {safe};
-   },
+  };
+  const receiver=createHostedLoginReceiver({binding,scope,expectedUsername:config.username,browser,
+   async readPrincipal(){const principal=(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:"fetch('/whoami').then(r=>r.ok?r.json():null)"}})).result;assert.equal(principal?.username,config.username);assert.equal(principal.origin,config.origin);return {...principal,authenticated:true};},
+   readCaptureSafety:readSafety,
+   readReconciliationSafety:()=>readSafety({credential:{username:config.username,password:config.password}}),
   });
+  if(config.reconcileHeld)receiver.verify=async()=>{throw Error('Owned fixture lost final verification acknowledgement');};
   const apply=receiver.apply;receiver.apply=async(...args)=>{audit.privateSubmissions++;await save();return apply(...args);};return receiver;
  }}};
 }

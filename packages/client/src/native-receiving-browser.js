@@ -37,8 +37,8 @@ export function createNativeReceivingBrowser({readObservation,inputMatches,remot
  const dispatch=async({binding,observation,control,guard,phase='activate',value=''})=>{
   await guard();const current=await observe(binding);
   if(current.fingerprint!==observation.fingerprint)throw refused();
-  const c=current.controls?.[control],typing=phase!=='activate';
-  if(!c||c.count!==1||c.visible!==true||c.enabled!==true||c.hitTarget!==true||!c.rect||typing&&(c.tag!=='INPUT'||control==='password'&&c.type!=='password'||control!=='password'&&!['text','email','tel','number'].includes(c.type)))throw refused();
+  const c=current.controls?.[control],dismissing=phase==='dismissPopup',typing=phase!=='activate'&&!dismissing;
+  if(!c||c.count!==1||c.visible!==true||c.enabled!==true||(dismissing?c.hitTarget!==false||c.dismissiblePopup!==true:c.hitTarget!==true)||!c.rect||typing&&(c.tag!=='INPUT'||control==='password'&&c.type!=='password'||control!=='password'&&!['text','email','tel','number'].includes(c.type)))throw refused();
   const frame=guards.expectedWindow,rect=c.rect;
   if(![rect.x,rect.y,rect.width,rect.height].every(Number.isFinite)||rect.width<1||rect.height<1)throw refused();
   const region={x:Math.floor(frame.x+rect.x),y:Math.floor(frame.y+frame.height-current.viewport.height+rect.y),width:Math.ceil(rect.width),height:Math.ceil(rect.height)};
@@ -51,7 +51,7 @@ export function createNativeReceivingBrowser({readObservation,inputMatches,remot
   const capture=await remote.captureRegion(desktop,{...guards,region:visualRegion});
   await guard();const after=await observe(binding);if(after.fingerprint!==current.fingerprint)throw refused();
   /** @type {NativeAction[]} */
-  const actions=phase==='type'?[{kind:'text',method:'keys',text:value}]:[{kind:'click',x:Math.floor(region.x+region.width/2),y:Math.floor(region.y+region.height/2),button:1,count:1}];
+  const actions=dismissing?[{kind:'key',chord:'Escape'}]:phase==='type'?[{kind:'text',method:'keys',text:value}]:[{kind:'click',x:Math.floor(region.x+region.width/2),y:Math.floor(region.y+region.height/2),button:1,count:1}];
   if(phase==='clear')actions.push({kind:'key',chord:'ctrl+a'},{kind:'key',chord:'BackSpace'});
   // Mark before dispatch. A timeout or absent acknowledgement is not a retry.
   dispatched.add(actionKey);
@@ -70,7 +70,18 @@ export function createNativeReceivingBrowser({readObservation,inputMatches,remot
    if(current.state!==before.state||current.origin!==before.origin||digest(current.controls[input.control])!==digest(before.controls[input.control])||digest(current.viewport)!==digest(before.viewport)||input.control==='password'&&current.accountMatched!==true)throw refused();
    await dispatch({...input,observation:current,phase:'type'});
   },
-  async activate(input){if(!['identifierSubmit','submit','mfaSubmit'].includes(input.control))throw refused();await dispatch(input);},
+  async activate(input){
+   if(!['identifierSubmit','submit','mfaSubmit'].includes(input.control))throw refused();
+   const before=input.observation,c=before.controls[input.control];
+   if(c?.hitTarget===false&&c.dismissiblePopup===true){
+    // The trusted observer identified a dismissible popup, rather than an
+    // arbitrary obstruction. Escape never clicks through it or submits a form.
+    await dispatch({...input,phase:'dismissPopup'});
+    const current=await observe(input.binding);
+    if(current.state!==before.state||current.origin!==before.origin||current.accountMatched!==before.accountMatched)throw refused();
+    await dispatch({...input,observation:current});
+   }else await dispatch(input);
+  },
   async waitForChange({binding,observation,guard}){
    const end=Date.now()+timeoutMs;
    do{await guard();const current=await observe(binding);if(['identifier_required','password_required','mfa_required','authenticated'].includes(current.state)&&current.state!==observation.state)return;await delay(100);}while(Date.now()<end);

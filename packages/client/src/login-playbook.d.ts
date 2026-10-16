@@ -4,6 +4,8 @@ export interface LoginOptions extends VerifyLoginOptions {
   expiresAt:number;
   /** Attested ordinary Codex work, supplied by the hosted helper adapter. */
   callerTaskId?:string;
+  /** Read back the existing hosted request without creating or repeating input. */
+  reconcile?:boolean;
   /** Explicitly reviewed replacement, checked against fresh same-task evidence. */
   reviewedPlan?:Record<string, unknown>;
   authenticationMethod?:'password'|'extension'|'passkey';
@@ -27,7 +29,7 @@ export interface Dependencies {
     validatePlan(options:VerifyLoginOptions & {plan:Record<string, unknown>}):Promise<RoutineResult & Record<string, any>>;
     listTabs?(taskId:string):Promise<{tabs:Array<{tabId:string}>}>;
     selectTab?(taskId:string,tabId:string):Promise<unknown>};
-  helper(operation:'request_login'|'inspect_request'|'authenticate'|'begin_authentication',args:Record<string, unknown>):Promise<Record<string, any>>;
+  helper(operation:'request_login'|'inspect_request'|'authenticate'|'begin_authentication'|'reconcile_authentication',args:Record<string, unknown>):Promise<Record<string, any>>;
   checkpoints:{load(key:string):Promise<Checkpoint|null>;save(key:string,value:Checkpoint):Promise<void>};
 }
 export function createLoginPlaybook(dependencies:Dependencies): {

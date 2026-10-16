@@ -36,3 +36,18 @@ const uncleared=createNativeReceivingBrowser({desktop,guards,
 const unclearedObservation=await uncleared.observe(binding);
 await assert.rejects(uncleared.fill({binding,observation:unclearedObservation,control:'password',value:'owned-password',guard:async()=>{}}));assert.equal(unclearedDispatches,1);
 console.log('Native receiving browser: missing empty-field proof prevents transmitting private text');
+
+async function popupScenario({lostDismissal=false}={}){
+ let popup=true,dismissals=0,submissions=0;
+ const port=createNativeReceivingBrowser({desktop,guards,
+  async readObservation(){return {binding:{...binding},origin:'https://accounts.example.test',state:'identifier_required',accountMatched:true,visiblePassword:false,maskedPassword:true,viewport:{width:1440,height:813,devicePixelRatio:1,focused:true,visible:true},controls:{identifierSubmit:{selector:'#submit',count:1,tag:'BUTTON',type:'submit',visible:true,enabled:true,hitTarget:!popup,dismissiblePopup:popup,rect:{x:100,y:100,width:200,height:30}}}};},
+  async inputMatches(){assert.fail('Popup dismissal must not inspect credential values');},
+  remote:{async observe(){return {...desktop};},async observation(){return {windows:{windows:[{id:42,active:true,processIdentity:{pid:123,start_token:'456'}}]}};},async captureRegion(_desktop,request){return {region:request.region,capture:{sha256:'popup-visual-proof'}};},async input(_desktop,request){assert.equal(request.expectedVisual.sha256,'popup-visual-proof');if(request.actions[0].kind==='key'){assert.deepEqual(request.actions,[{kind:'key',chord:'Escape'}]);dismissals++;if(lostDismissal)throw Error('Escape acknowledgement lost');popup=false;}else{assert.equal(popup,false);submissions++;}return {delivery:'dispatched'};}},
+ });
+ const observation=await port.observe(binding),input={binding,observation,control:'identifierSubmit',guard:async()=>{}};
+ if(lostDismissal){await assert.rejects(port.activate(input));await assert.rejects(port.activate(input));assert.equal(dismissals,1);assert.equal(submissions,0);}
+ else {await port.activate(input);assert.equal(dismissals,1);assert.equal(submissions,1);}
+}
+await popupScenario();
+await popupScenario({lostDismissal:true});
+console.log('Native receiving browser: recognized popup dismissed once before hit-tested submit; unknown dismissal cannot replay');
