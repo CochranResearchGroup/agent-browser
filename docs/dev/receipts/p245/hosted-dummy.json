@@ -1,0 +1,60 @@
+{
+  "startedAt": "2026-10-16T14:38:33.965Z",
+  "finishedAt": "2026-10-16T14:39:31.498Z",
+  "scope": "Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect",
+  "producer": {
+    "identity": "f83ff980278471674e06fca95d06a69fbbc0a4869a1b613f47731e1759d1806c",
+    "files": 615,
+    "sourceRevision": "40672e0c8e0e3a9b4885a7f6bf65d4abee0c7c2a",
+    "node": "v24.18.0"
+  },
+  "consumerHashes": {
+    "packages/client/src/login-playbook.js": "fe5f06656491eff3a85457179c8d6d7dcc22a9db8ea0036b5caafef4578ca77d",
+    "packages/client/src/hosted-auth-helper.js": "f5057df2bd2f6d217cf66ce3a881d8ac73e5af53d795875de14bfd8f87c44c0a",
+    "packages/client/src/playbooks.js": "7a8bc8d0ba0066582823dc24f7509c8f938af66aa58f4ececcc05e4dd05257e8"
+  },
+  "agent": {
+    "path": "/tmp/p237-native-candidates-20261015/agent-browser-integrated-6fc7f26e0",
+    "sha256": "25b07b1639bc640d770c350a56a4b73d0c4778c9b52574c3ed5329ebfeb0b4d4"
+  },
+  "browser": {
+    "path": "/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp-candidates/stable-153-production-507c6ee3/153.0.8010.36+stealthcdp.8f0f14239da1/chrome-linux/chrome",
+    "sha256": "70bb98cb3aea3dd5dabbd9ebd0420fab93949d7566c119dcd4ab1738947cb078"
+  },
+  "runningHostedService": true,
+  "privateObserverHeld": true,
+  "independentWrongCompanyRejected": true,
+  "nativeSafety": {
+    "safe": true,
+    "bytes": 52068,
+    "sha256": "3938314af233a8110819d9c98229b9960d26c5c2813441ab1e2503f8a969cc53",
+    "exactOwner": true,
+    "credentialAbsent": true
+  },
+  "publicCaptureAfterSafe": {
+    "bytes": 52068,
+    "sha256": "3938314af233a8110819d9c98229b9960d26c5c2813441ab1e2503f8a969cc53"
+  },
+  "completedRestartPreserved": true,
+  "replayRefused": true,
+  "websiteSubmissions": 1,
+  "independentPrincipalReads": 1,
+  "hostAudit": {
+    "sourceReads": 1,
+    "privateSubmissions": 1,
+    "observerDispatches": 1
+  },
+  "peerTabPreserved": true,
+  "passed": true,
+  "cleanup": {
+    "originalConfigAndBotsPreserved": true,
+    "ownedProcessResidue": 0,
+    "peerAssignmentsPreserved": true,
+    "complete": true
+  },
+  "callerIdentitySha256": "91099770b8cadf0820fcb2ae4ce30f8e471ff8e7341146400cb844368cf1e421",
+  "peerAssignmentCount": 2,
+  "diagnosticCredentialHits": 0,
+  "privateReceipt": "/tmp/p245-hosted-lCpxQn/qualification.json",
+  "limitation": "Owned independent dummy; production host original configuration restored. This does not qualify QBO or BILL or real credential sources."
+}
