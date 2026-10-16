@@ -1,0 +1,70 @@
+{
+  "nativeStaged": true,
+  "websiteOraclePreflight": true,
+  "identifierSubmissions": 1,
+  "websiteSubmissions": 1,
+  "independentPrincipalReads": 1,
+  "nativeInputAudit": {
+    "privateSubmissions": 1,
+    "nativeOperationDispatches": 6,
+    "nativeTextDispatches": 2
+  },
+  "canaryJournalScan": {
+    "unitCount": 77,
+    "bytes": 5663,
+    "matches": 0
+  },
+  "nativeSafety": {
+    "safe": true,
+    "bytes": 50976,
+    "sha256": "f816301da42e9e1b577bd5de4212c3c964656ecfe14bea6e98c2077e5e37db91",
+    "exactOwner": true,
+    "credentialAbsent": true
+  },
+  "completedRestartPreserved": true,
+  "replayRefused": true,
+  "cleanup": {
+    "originalConfigAndBotsPreserved": true,
+    "ownedProcessResidue": 0,
+    "peerAssignmentsPreserved": true,
+    "complete": true
+  },
+  "passed": true,
+  "sourceReads": 1,
+  "artifactCanaryScan": {
+    "filesScanned": 135,
+    "matches": 0,
+    "oversizedSkipped": 0,
+    "exclusions": [
+      "protected dummy source config",
+      "browser user-data"
+    ]
+  },
+  "producer": {
+    "identity": "f83ff980278471674e06fca95d06a69fbbc0a4869a1b613f47731e1759d1806c",
+    "sourceRevision": "40672e0c8e0e3a9b4885a7f6bf65d4abee0c7c2a"
+  },
+  "nativeModules": {
+    "receiver": {
+      "sha256": "67a1d1988ade8c4adef7253443117f44433668308e5255f1222fb9db0866c0da"
+    },
+    "browser": {
+      "sha256": "1b1ae2bd0ea495b8211ed6a652d8350ac6dba54b0119748815a71195c4645ffb"
+    }
+  },
+  "nativeHostSHA256": "a9291db66d9a8440058c331b4ba60e9c5bc419cb18837944c4f6e5196459b7df",
+  "scope": "Actual existing installed Bots service with independent identifier-first native dummy; not real QBO/BILL acceptance",
+  "privateEvidence": "Operator-owned native staged qualification receipt",
+  "nativeCli": {
+    "sha256": "25b07b1639bc640d770c350a56a4b73d0c4778c9b52574c3ed5329ebfeb0b4d4",
+    "scope": "Pinned unchanged native candidate, isolated fixture home"
+  },
+  "chromium": {
+    "sha256": "70bb98cb3aea3dd5dabbd9ebd0420fab93949d7566c119dcd4ab1738947cb078"
+  },
+  "consumerHashes": {
+    "packages/client/src/login-playbook.js": "fe5f06656491eff3a85457179c8d6d7dcc22a9db8ea0036b5caafef4578ca77d",
+    "packages/client/src/hosted-auth-helper.js": "f5057df2bd2f6d217cf66ce3a881d8ac73e5af53d795875de14bfd8f87c44c0a",
+    "packages/client/src/playbooks.js": "7a8bc8d0ba0066582823dc24f7509c8f938af66aa58f4ececcc05e4dd05257e8"
+  }
+}
