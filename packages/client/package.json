@@ -26,6 +26,10 @@
     "./hosted-login-receiver": {
       "types": "./src/hosted-login-receiver.d.ts",
       "import": "./src/hosted-login-receiver.js"
+    },
+    "./native-receiving-browser": {
+      "types": "./src/native-receiving-browser.d.ts",
+      "import": "./src/native-receiving-browser.js"
     }
   },
   "scripts": {

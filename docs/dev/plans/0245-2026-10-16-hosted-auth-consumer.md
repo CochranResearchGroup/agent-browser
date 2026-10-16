@@ -24,7 +24,8 @@ Integration branch started from fresh main c911bd358 in reused clean root; forei
 | --- | --- | --- | --- | --- |
 | U1 version2 client | Producer51 source inspected | validated | coordinator, client/login/helper transport/public tests | red/green distinct identity, wrong binding/scope, source no-effect and no-replay |
 | U2 installed helper/dummy | U1 validated | validated | coordinator, host adapter and fixture; private operator config outside repo | normal installed hosted service, independent credential/principal, native privacy, restart/ack and zero residue/peers |
-| U3 QBO | U2 validated; exact owner metadata and grants | running | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
+| U2N native staged dummy | shared receiving sequence and native port source checks passed | pending | coordinator, existing installed-host fixture and native receiving module | new native credential path, identifier-first dummy journey, canary privacy and owned cleanup; original U2 evidence retained for unchanged path |
+| U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | running | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
 | U4 BILL | U3 validated | pending | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
 | U5 docs/review | U1-U4 validated | pending | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 
