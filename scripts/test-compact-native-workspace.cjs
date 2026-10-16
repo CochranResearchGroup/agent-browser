@@ -564,6 +564,51 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob');
     assert.equal(await page.getByRole('dialog', { name: 'Handoffs', exact: true }).count(), 0, 'handoffs must start hidden');
+    // A Share gesture must not overlap an unfinished selection on its desktop.
+    await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
+    await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+    let announceShareSelection;
+    const selecting = new Promise(resolve => { announceShareSelection = resolve; });
+    const selectionReply = new Promise(resolve => { releaseHeldFocus = resolve; });
+    focusHold = { targetId: 'target-bob', started: announceShareSelection, reply: selectionReply };
+    const sharesBeforeSelection = requests.filter(request => request.taskName === 'Share browser task').length;
+    shareHold = new Promise(resolve => { releaseHeldShare = resolve; });
+    await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
+    await selecting;
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
+    const queuedShare = page.getByRole('dialog', { name: 'Handoffs', exact: true });
+    await queuedShare.getByRole('status').filter({ hasText: 'Preparing link…' }).waitFor();
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    assert.equal(requests.filter(request => request.taskName === 'Share browser task').length, sharesBeforeSelection,
+      'Share must wait for the unfinished selection on the same native desktop');
+    const nextShare = page.waitForRequest(request => request.url().endsWith('/api/service/request')
+      && request.postDataJSON().taskName === 'Share browser task');
+    releaseHeldFocus(null); releaseHeldFocus = null;
+    await nextShare;
+    releaseHeldShare(); releaseHeldShare = null; shareHold = null;
+    await queuedShare.getByLabel('Shared handoff URL', { exact: true }).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'bob');
+    await page.keyboard.press('Escape');
+    await queuedShare.waitFor({ state: 'hidden' });
+    // An unrelated desktop's held selection must not delay this Share.
+    let announceForeignSelection;
+    const foreignSelecting = new Promise(resolve => { announceForeignSelection = resolve; });
+    const foreignReply = new Promise(resolve => { releaseHeldFocus = resolve; });
+    focusHold = { targetId: 'target-carol', started: announceForeignSelection, reply: foreignReply };
+    await page.getByRole('button', { name: 'Carol report', exact: true }).click();
+    await foreignSelecting;
+    await actions.click();
+    await page.getByRole('menuitem', { name: 'Share', exact: true }).click();
+    const independentShare = page.getByRole('dialog', { name: 'Handoffs', exact: true });
+    await independentShare.getByLabel('Shared handoff URL', { exact: true }).waitFor({ timeout: 1500 });
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'carol');
+    await page.keyboard.press('Escape');
+    await independentShare.waitFor({ state: 'hidden' });
+    releaseHeldFocus(null); releaseHeldFocus = null;
+    await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Bob invoice', exact: true }).click();
+    await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
     shareFailure = true;
     await actions.click();
     await page.getByRole('menuitem', { name: 'Share', exact: true }).click();

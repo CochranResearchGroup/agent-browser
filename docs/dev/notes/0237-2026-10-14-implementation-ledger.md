@@ -900,3 +900,29 @@ networks or volumes. An independent v2 process/Docker readback is also empty.
 Earlier connector-assisted native success is retained as historical evidence,
 not a pass of the direct authenticated integration. No approval or operator
 configuration lookup is required to continue this diagnosis.
+
+### Same-desktop Share ordering repair, 2026-10-16
+
+Retained HTTP evidence from direct v5/v6 identifies `remote_view_open` timing out
+at the dashboard's ten-second job deadline while selection is in progress. A
+separate diagnostic-only native run measured cold focus at7935ms, subsequent
+handoff at193ms, and concurrent native calls at145/433ms. It intentionally makes
+no full-workspace acceptance claim. This timing does not establish a general
+backend deadlock.
+
+A new rendered regression holds a real component's selection response, then
+clicks Share on that desktop. Before the repair it fails because one Share
+request is sent while selection remains unfinished. Share now uses the existing
+per-desktop coordinator shared with the native viewport. The request deadline
+starts after the older operation finishes. The regression passes; an additional
+held-selection check proves a different desktop does not delay Share. Existing
+selection preservation, exact target, denial and no-automatic-retry checks pass.
+
+Dashboard/docs builds, all39 output tests, strict workspace clippy, format,
+changed-link and handoff documentation checks and the publisher fixture pass.
+The first dashboard build caught closure type narrowing; capturing the validated
+routing fields before queueing fixes it, and the replacement build passes.
+A new immutable candidate is building for full direct native verification.
+The fixture now records positive exact-assignment viewer-disconnect observation
+before its single expiry effect. Closing a page alone is not viewer-inactivity
+proof; live-viewer protection is preserved and the observation wait is bounded.

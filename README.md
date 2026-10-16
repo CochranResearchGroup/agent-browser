@@ -6604,6 +6604,9 @@ authenticates control requests; native viewer authentication and the dedicated
 handoff callback use separate credentials. Development publication retains both
 control and callback token file paths without copying their contents.
 
+Dashboard selection and Share run in order on each native desktop. A selection
+on a different desktop does not delay sharing.
+
 For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
 with the Remote View HTTP origin on a literal loopback address, such as
 `http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured

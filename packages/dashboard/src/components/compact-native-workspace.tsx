@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench } from "lucide-react";
 import { tabDescription } from "@/lib/tab-description";
+import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
@@ -34,20 +35,26 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
   const [shareError, setShareError] = useState<string | null>(null);
   const shareFocus = useRef<HTMLElement | null>(null);
   const shareTab = async (tab: WorkspaceServiceTab, opener: HTMLElement | null) => {
-    if (sharePending.current || !tab.managedTask || !tab.desktopId || !tab.targetId || !tab.browserId || !(tab.ownerSessionId || tab.sessionId)) return;
+    const { desktopId, targetId, browserId } = tab;
+    const sessionName = tab.ownerSessionId || tab.sessionId;
+    if (sharePending.current || !tab.managedTask || !desktopId || !targetId || !browserId || !sessionName) return;
     shareFocus.current = opener;
     sharePending.current = true; setShareBusy(true); setShareError(null); setSharedLink(null); setHandoffsOpen(true);
     try {
-      const handoff = await requestServiceRemoteViewHandoff({
-        baseUrl: window.location.origin, signal: AbortSignal.timeout(15000),
-        browserId: tab.browserId, sessionName: tab.ownerSessionId || tab.sessionId!,
-        displayAllocationId: tab.desktopId, params: { targetId: tab.targetId },
-        serviceName: "agent-browser-dashboard", agentName: "operator", taskName: "Share browser task", jobTimeoutMs: 10000,
+      // Sharing prepares the same native desktop as selection. Preserve gesture
+      // order without spending this request's deadline behind an older focus.
+      await queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", desktopId]), async () => {
+        const handoff = await requestServiceRemoteViewHandoff({
+          baseUrl: window.location.origin, signal: AbortSignal.timeout(15000),
+          browserId, sessionName,
+          displayAllocationId: desktopId, params: { targetId },
+          serviceName: "agent-browser-dashboard", agentName: "operator", taskName: "Share browser task", jobTimeoutMs: 10000,
+        });
+        const url = new URL(handoff.handoffUrl, window.location.origin);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
+            || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
+        setSharedLink({ url: url.toString(), label: tabDescription(tab) });
       });
-      const url = new URL(handoff.handoffUrl, window.location.origin);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
-          || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
-      setSharedLink({ url: url.toString(), label: tabDescription(tab) });
     } catch { setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
     finally { sharePending.current = false; setShareBusy(false); }
   };

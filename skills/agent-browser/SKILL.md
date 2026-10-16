@@ -36,7 +36,7 @@ establish ownership or repair stale internal records before downloading.
 Ordinary continuation reconciles interrupted publication using the current live
 profile browser, preserving the task and authenticated state.
 
-Ordinary task updates do not consult malformed launch history or unchanged peer desktop release fences. Current profile permission can resolve an ambiguous historical owner binding.
+Selection and Share wait their turn on the same native desktop.
 
 Diagnostic and administrative discovery points to supported CLI/API operations.
 Retired lease, recovery, repair and reset MCP tools are unavailable, including
