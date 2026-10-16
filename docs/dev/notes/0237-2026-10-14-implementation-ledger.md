@@ -946,3 +946,46 @@ The focused Share-order RED/GREEN and this combined native pass qualify the
 repair batch. Persistent default-provider binding, live ingress and real
 Authelia/public-host acceptance remain unqualified. No production runtime effect
 or full-objective completion is claimed.
+
+### Installed development checkpoint after PR292, 2026-10-16
+
+PR292 merged at `ced8bf4d0350c4cb0f2d3c468b8fd8df068fcfba`. Development
+generation `0.28.0-e3bc1dfba12b` is installed from the qualified candidate above;
+the intervening integration changes affect only this ledger and lane catalog.
+Development doctor, install doctor and three disposable browser launch/read/close
+cycles pass. Actual browser inspection shows the settled empty compact workspace
+and Development marker. The task browser was signed out and closed; all nine
+recorded owned processes exited. Production identity is unchanged. The live
+browser-runtime workspace contains zero browsers, sessions and tabs; historical
+Service State rows are not counted as live inventory.
+
+The complete direct native workflow uses synthetic local authentication and
+HTTP ingress. It does not qualify public Authelia or persistent default-provider
+adoption. Those remain the explicit next gate. Dedicated provider configuration,
+resource preflight and exact ingress/authentication diffs are prepared privately;
+none of those persistent deployment effects have been applied. P237 and parent
+issue261 remain IN_PROGRESS. Graphiti memory disposition is unavailable because
+the current MCP endpoint is down; no memory write was attempted.
+
+### Authorized persistent native development adoption, 2026-10-16
+
+After explicit user approval, the dedicated native provider was installed and
+activated, the existing development generation bound to its direct authenticated
+control endpoint, and only the reviewed service-specific local/public ingress
+and exact authentication hostname rule applied. Development doctor passes;
+production Agent Browser identity remains outside this operation. Native private
+doctor passes ownership, executable adoption, local desktop, private transport,
+schema, permission and gateway checks. Its separate MCP registration check remains
+unconfigured; no existing production connector was changed.
+
+The public native route redirects unauthenticated requests to Authelia. Actual
+public dashboard and native logins succeed; the compact workspace renders the
+synthetic browser through the native WebSocket viewer. The exact selected durable
+handoff records first human use. This is partial public acceptance: exact input
+readback and sustained connection did not pass. Independent public health and SSH
+probes also time out intermittently, with read-only host evidence showing severe
+resource pressure. No unrelated host process was stopped or service restarted.
+Private activation, rollback, partial acceptance and failure receipts are retained
+outside Git. The full public lifecycle acceptance gate remains open, and P237 is
+still IN_PROGRESS. Deployment approval is resolved; further routine recovery in
+this reviewed effect set does not need renewed permission.
