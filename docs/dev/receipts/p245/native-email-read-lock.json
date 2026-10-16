@@ -1,0 +1,119 @@
+{
+  "startedAt": "2026-10-16T21:25:58.824Z",
+  "nativeStaged": true,
+  "reconcileHeld": true,
+  "untouchedLogin": true,
+  "operatorReadback": {
+    "originalCallerPreserved": true,
+    "originalTargetPreserved": true,
+    "actor": {
+      "role": "approver",
+      "id": "operator"
+    }
+  },
+  "emailIdentifier": true,
+  "scope": "Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect",
+  "driverSHA256": "15232c46aa22a3dcaa2b5cfe952a9bb0b5afa7dabdac0c2cff0f2924f73c8266",
+  "producer": {
+    "identity": "514224920b32e3e4d881795a5b2177cd06984624d15e6b6bd40d4f59e963385c",
+    "files": 615,
+    "sourceRevision": "fed3a5c96f94849873491b345fcb01bc3ef409a2",
+    "node": "v24.18.0"
+  },
+  "consumerHashes": {
+    "packages/client/src/login-playbook.js": "764f9897c44415dce34c28f276032bae9724022cc48edbf25138bac1be303dcd",
+    "packages/client/src/hosted-auth-helper.js": "f5057df2bd2f6d217cf66ce3a881d8ac73e5af53d795875de14bfd8f87c44c0a",
+    "packages/client/src/playbooks.js": "7a8bc8d0ba0066582823dc24f7509c8f938af66aa58f4ececcc05e4dd05257e8"
+  },
+  "agent": {
+    "path": "/tmp/p237-native-candidates-20261015/agent-browser-integrated-6fc7f26e0",
+    "sha256": "25b07b1639bc640d770c350a56a4b73d0c4778c9b52574c3ed5329ebfeb0b4d4"
+  },
+  "browser": {
+    "path": "/home/ecochran76/workspace.local/chromium/artifacts/chromium-stealthcdp-candidates/stable-153-production-507c6ee3/153.0.8010.36+stealthcdp.8f0f14239da1/chrome-linux/chrome",
+    "sha256": "70bb98cb3aea3dd5dabbd9ebd0420fab93949d7566c119dcd4ab1738947cb078"
+  },
+  "originalEnvironmentSHA256": "cbd74bf78753f06d95e6e42d9e0a09f20c5f8fbe6997d95a95b455df7c3a631f",
+  "remoteIdentity": {
+    "configHash": "a005e5b72a8ba7f4c6f15e531c788505aa37b49fcc15b2ad3acd901546031a61",
+    "effectScope": "live_resource",
+    "installationId": "5146a1bafcc4d670f3f717b0aacab691",
+    "schemaVersion": 1
+  },
+  "websiteOraclePreflight": true,
+  "nativeHostSHA256": "05c971f19ead4c0034bfbaa0f0c6995857005ae6fd3528cd3bced64f0a67ad26",
+  "nativeModules": {
+    "receiver": {
+      "path": "/tmp/p245-hosted-iILxPL/native-modules/hosted-login-receiver.js",
+      "sha256": "cde5ad946ed88ab76a37a7492d0ae9f12bdd9de6ec72f5f61e45d2a32541f28b"
+    },
+    "browser": {
+      "path": "/tmp/p245-hosted-iILxPL/native-modules/native-receiving-browser.js",
+      "sha256": "0255025584059c006bbe217753cac7db27568ce75b59b255597782bc96e19f45"
+    }
+  },
+  "runningHostedService": true,
+  "requestId": "91bc275d-74fa-4089-883a-82854d6af49a",
+  "privateObserverHeld": true,
+  "heldRestartPreserved": true,
+  "consumerReadbackMode": true,
+  "independentReconciliationWithoutReplay": true,
+  "independentLoginStillRequired": true,
+  "nativeSafety": {
+    "safe": true,
+    "bytes": 30279,
+    "sha256": "d6cf6fc7bf2dae8ab7a56ff29c363065dec54b0c7b1f5bd517b41999a6d7ac64",
+    "exactOwner": true,
+    "credentialAbsent": true,
+    "knownLoginVerified": true,
+    "protectedInputNotAttempted": true,
+    "checks": {
+      "sameObservation": true,
+      "domClear": true,
+      "nativeLoginHeader": true,
+      "credentialAbsent": true,
+      "untouchedPassword": true,
+      "untouchedFactor": true
+    },
+    "smallTextDiagnostics": {
+      "nativeUser": false,
+      "nativeContinue": false
+    }
+  },
+  "canaryJournalScan": {
+    "unitCount": 77,
+    "bytes": 12045,
+    "matches": 0
+  },
+  "completedRestartPreserved": true,
+  "replayRefused": true,
+  "websiteSubmissions": 0,
+  "independentPrincipalReads": 0,
+  "hostAudit": {
+    "sourceReads": 1,
+    "privateSubmissions": 0,
+    "observerDispatches": 1
+  },
+  "identifierSubmissions": 0,
+  "nativeInputAudit": {
+    "privateSubmissions": 1,
+    "nativeOperationDispatches": 2,
+    "nativeTextDispatches": 1
+  },
+  "protectedInputAudit": {
+    "version": 1,
+    "passwordFills": 0,
+    "mfaFills": 0
+  },
+  "peerTabPreserved": true,
+  "cleanup": {
+    "originalConfigAndBotsPreserved": true,
+    "retainedRequestsPreserved": true,
+    "ownedProcessResidue": 0,
+    "peerAssignmentsPreserved": true,
+    "complete": true
+  },
+  "passed": true,
+  "finishedAt": "2026-10-16T21:29:39.291Z",
+  "fixtureRoot": "/tmp/p245-hosted-iILxPL"
+}
