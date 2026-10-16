@@ -16,7 +16,7 @@ Goal began2026-10-16T14:20:50Z; stop/checkpoint before2000000 cumulative tokens 
 
 ## Current State
 
-Fresh main c911bd358 in reused clean root; other two worktrees clean and preserved. Producer51 closed and version2 installed; actual current native connection is unavailable and external receiver unconfigured. Existing client aliases helper caller task to browser task. First public regression will exercise distinct identities. Metadata researcher located existing owner profile/company metadata, not protected source mappings; absence of a mapping is not absence of credentials. Disk-full prevented first ledger write; qualified rebuildable incremental cache cleanup restored16.45GB, receipt /tmp/issue290-disk-recovery.json, no live compiler/cache references.
+Integration branch started from fresh main c911bd358 in reused clean root; foreign worktrees are preserved. U1 separates native caller from receiving browser task, and U2 passed through the actual installed hosted service. The restored host is healthy; its ordinary external receiver remains unconfigured. U3 has reached the real identifier-first email challenge and established exact nonsecret LastPass record references in private operator evidence. The matching modern record is a passkey; a separate matching password record has an old recovery-path URL and is not yet credential-qualified. No password or verification code has been retrieved or submitted. The installed fresh-form receiver assumes simultaneous username/password controls and a POST form; observed QBO needs multiple states and native activation. These are implementation gaps, not completed real acceptance. Disk recovery and earlier failed receipts remain in note0245.
 
 ## Integration ledger
 
