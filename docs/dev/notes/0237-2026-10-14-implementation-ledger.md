@@ -814,3 +814,135 @@ and in-progress coordination. Private receipts and the 30-story acceptance
 matrix are under /tmp/p237-dashboard-resume-20261016; native fixture receipts are
 under /tmp/p237-installed-native-20261016. No production, public ingress, account,
 shared-skill, CI or formal-release effect is claimed.
+
+
+### Persistent native development preparation, renewed continuation
+
+The operator reactivated the full implement-spec goal after correcting the
+premature request for a configuration locator. Current main Remote View is live;
+its separate older p221 gateway state is not a main-service outage. Discovery of
+origin, pool, credentials and ingress configuration is agent work. The next
+prepared transition uses a dedicated native development instance and existing
+development public origin, leaving the main provider and its assignments intact.
+The native configuration validates and the installer dry-run produces a concrete
+plan with no applied identity or runtime effects. Shared ingress publication and
+existing provider mutations remain separate effects until their exact transition
+is covered by current direction.
+
+A real installed integration gap was found while preparing that transition:
+Remote View control HTTP requires a private bearer, while the Agent Browser
+transport sends none. The native source fixture inserts a token connector, so
+its earlier passing workflow does not prove direct installed control admission.
+The bounded source repair uses a private control-token file with the existing
+HTTP transport, not a new access service or viewer. P237 owns that transport,
+optional native credential setting, its environment allowlist and development
+publisher propagation; native viewer authentication and callback bearer remain
+separate. Tests first target direct authenticated inventory and retained binding
+propagation. No GREEN, new installation or provider effect is claimed yet.
+
+### Direct native authentication repair validation, 2026-10-16
+
+The actual control-service token requirement exposed a gap hidden by the earlier
+private fixture's token-inserting connector. The application transport now reads
+an optional private control token file directly. Development publication retains
+that locator and the distinct native handoff callback locator in generation
+metadata, units and launcher, without copying either secret. Explicit invalid
+files fail before provider requests. The default compact workspace again shows
+its development identity when runtime metadata proves it.
+
+The transport's direct-authentication regression was observed failing before the
+repair. All seven focused transport tests now pass, including unsafe-file
+rejection and existing redirect, no-replay and outcome-unknown behavior. Publisher,
+rendered compact workspace, dashboard and docs builds, handoff documentation,
+policy wiring, service parity, navigator and inspector checks pass. Strict
+workspace clippy, final formatting and all three dotenv tests pass. Candidate
+rebuild and direct native workflow remain pending; these source results do not qualify default native adoption.
+
+A private isolated native-provider configuration validates and produces a
+conflict-free installer dry-run. Exact Cooper inventory, local and bastion diffs
+are prepared outside the product repository. Their route preflight preserves the
+dashboard root and APIs. No provider installation or ingress publication has
+occurred. Read-only bastion SSH timed out during banner exchange, so the matching
+Authelia rule remains unverified. Existing production and foreign providers are
+not repurposed by this preparation.
+
+Read-only bastion inspection subsequently succeeded over its existing Tailscale
+identity and verified host key. The default-development hostname has no matching
+Authelia rule, including no wildcard. A two-line hostname-specific one-factor
+rule diff is now prepared with the source hash. The existing dirty Authelia
+configuration and log remain untouched. The first direct native fixture attempt
+stopped at preflight because the shell selected Python without pidfd support;
+its cleanup completed. The new run uses the fixture-required system Python and
+retains the failed receipt rather than overwriting it.
+
+### Direct native workflow failures retained, 2026-10-16
+
+Source checkpoint `6dff82142cdcd54987350d1590c3041d996fa1b5` is remotely
+published on the P237 branch in draft PR292. The immutable ci candidate SHA-256 is
+`caaa3d2dbe4a5484b1ce64fbdce532e44dbb496f950912a07731d2da15a5eec1`.
+It is not production-promotable. The default installed generation is still
+`0.28.0-f074f7e00313`; its actual live browser runtime workspace is empty. Historical
+Service State rows are not active-work proof.
+
+The direct native v2 run reached real pixels/input, independent native auth,
+Share and policy editing, then its controlled-clock reap returned success with
+no expired tabs. Physical expiry therefore failed. The v3 diagnostic run failed
+earlier with native tunnel code771; its screenshot and DOM preserve the actual
+authentication-failure display. The v4 run reproduced the empty reap result with
+no pending-human hold and an elapsed tab lifetime. Its additional provider
+failure collector had an incorrect wrapped-assignment assumption, recorded as a
+separate diagnostic defect rather than replacing the browser failure. The next
+bounded run corrects that collector. No product cause has yet been asserted.
+
+Private receipts remain outside Git under the task-owned direct-native result
+directories. Cleanup receipts report no active owned processes, containers,
+networks or volumes. An independent v2 process/Docker readback is also empty.
+Earlier connector-assisted native success is retained as historical evidence,
+not a pass of the direct authenticated integration. No approval or operator
+configuration lookup is required to continue this diagnosis.
+
+### Same-desktop Share ordering repair, 2026-10-16
+
+Retained HTTP evidence from direct v5/v6 identifies `remote_view_open` timing out
+at the dashboard's ten-second job deadline while selection is in progress. A
+separate diagnostic-only native run measured cold focus at7935ms, subsequent
+handoff at193ms, and concurrent native calls at145/433ms. It intentionally makes
+no full-workspace acceptance claim. This timing does not establish a general
+backend deadlock.
+
+A new rendered regression holds a real component's selection response, then
+clicks Share on that desktop. Before the repair it fails because one Share
+request is sent while selection remains unfinished. Share now uses the existing
+per-desktop coordinator shared with the native viewport. The request deadline
+starts after the older operation finishes. The regression passes; an additional
+held-selection check proves a different desktop does not delay Share. Existing
+selection preservation, exact target, denial and no-automatic-retry checks pass.
+
+Dashboard/docs builds, all39 output tests, strict workspace clippy, format,
+changed-link and handoff documentation checks and the publisher fixture pass.
+The first dashboard build caught closure type narrowing; capturing the validated
+routing fields before queueing fixes it, and the replacement build passes.
+A new immutable candidate is building for full direct native verification.
+The fixture now records positive exact-assignment viewer-disconnect observation
+before its single expiry effect. Closing a page alone is not viewer-inactivity
+proof; live-viewer protection is preserved and the observation wait is bounded.
+
+### Direct authenticated native workflow qualified, 2026-10-16
+
+Candidate `e3bc1dfba12be28655555175737f6559292fd1ded5eead1c3a3818b61a1a137d`,
+from source `0c7a7c9d7f3476cc720550d49e9c17e2f5d30b5a`, passes the complete
+combined native default-workspace workflow with direct bearer authentication and
+no token-inserting connector. The receipt proves native pixels and exact input,
+independent native authentication, Properties/Share, UI policy persistence,
+configured-clock real target expiry, exact owner restart, same opaque link,
+original metadata/profile, preserved two physical peers, recreated Properties,
+diagnostics and logout. Native inactivity was positively observed in one read
+before the single expiry effect. No inactivity guard was bypassed or retried.
+Original and independent cleanup report zero active owned processes/containers;
+the original census also records zero owned networks/volumes. Earlier failures
+remain retained and do not become passes retroactively.
+
+The focused Share-order RED/GREEN and this combined native pass qualify the
+repair batch. Persistent default-provider binding, live ingress and real
+Authelia/public-host acceptance remain unqualified. No production runtime effect
+or full-objective completion is claimed.

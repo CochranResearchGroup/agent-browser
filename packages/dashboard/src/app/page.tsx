@@ -687,6 +687,17 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   onLogout: () => void;
 }) {
   useSessionsSync();
+  const [runtimeEnvironment, setRuntimeEnvironment] = useState<RuntimeManifest["runtimeEnvironment"]>();
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch("/api/runtime/manifest", { cache: "no-store", signal: AbortSignal.any([controller.signal, AbortSignal.timeout(5000)]) })
+      .then(response => response.ok ? response.json() : null)
+      .then((manifest: RuntimeManifest | null) => {
+        const environment = manifest?.runtimeEnvironment;
+        if (!controller.signal.aborted && (environment === "development" || environment === "production")) setRuntimeEnvironment(environment);
+      }).catch(() => { /* Unknown metadata must not claim a production or development identity. */ });
+    return () => controller.abort();
+  }, []);
   const workspaceViewPreferences = useWorkspaceViewPreferences();
   const selectedWorkspace = useSelectedWorkspaceContext(true, workspaceViewPreferences.snapshot);
   const activePort = useAtomValue(activePortAtom);
@@ -700,7 +711,7 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   const nativeTarget = managedBrowser?.desktop && tab?.browserId === managedBrowser.id && session
     ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
     : null;
-  return <CompactNativeWorkspace nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
+  return <CompactNativeWorkspace runtimeEnvironment={runtimeEnvironment} nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
     handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
     selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
     onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}

@@ -6450,6 +6450,7 @@ close preserves peer tabs; closing the final owned tab also closes its browser.
 If close cannot be confirmed, refresh inventory and inspect permission before
 trying again.
 
+Selection and Share run in order on each native desktop.
 Share prepares the exact existing task through the public handoff helper and
 shows its opaque native link in Handoffs. It preserves the selected peer and
 does not navigate the task. Use the small Handoffs rail control to reopen the
@@ -8017,6 +8018,7 @@ Environment:
   AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS Memory-pressure wait budget, 0 through 60000 (default: 5000)
   AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES Supervisor soft memory threshold (default: 25% RAM; no hard cap)
   AGENT_BROWSER_TERMINAL_HISTORY_LIMIT Recent unreferenced records per kind in active memory (default: 1000)
+  AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE Absolute private owner-only regular token file for native control authentication (16–256 visible ASCII bytes).
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.

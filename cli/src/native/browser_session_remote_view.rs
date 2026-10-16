@@ -38,6 +38,7 @@ pub(super) struct RemoteViewRuntimeContext {
 pub(crate) fn remote_view_settings_present() -> bool {
     [
         "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+        "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
         "AGENT_BROWSER_REMOTE_VIEW_POOL",
         "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
         "AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT",

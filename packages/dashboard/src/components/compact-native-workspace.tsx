@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench } from "lucide-react";
 import { tabDescription } from "@/lib/tab-description";
+import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
@@ -11,6 +12,7 @@ import { NativeHandoffDrawer } from "@/components/native-handoff-drawer";
 import { NativeTabActions } from "@/components/native-tab-actions";
 
 type Props = {
+  runtimeEnvironment?: "production" | "development";
   nodes: readonly WorkspaceNode[];
   handoffs?: readonly ServiceManagedHandoff[];
   tabs: readonly WorkspaceServiceTab[];
@@ -25,7 +27,7 @@ type Props = {
 };
 
 /** Compact inventory and native viewer share one authoritative source snapshot. */
-export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error }: Props) {
+export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error }: Props) {
   const [handoffsOpen, setHandoffsOpen] = useState(false);
   const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -33,20 +35,26 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
   const [shareError, setShareError] = useState<string | null>(null);
   const shareFocus = useRef<HTMLElement | null>(null);
   const shareTab = async (tab: WorkspaceServiceTab, opener: HTMLElement | null) => {
-    if (sharePending.current || !tab.managedTask || !tab.desktopId || !tab.targetId || !tab.browserId || !(tab.ownerSessionId || tab.sessionId)) return;
+    const { desktopId, targetId, browserId } = tab;
+    const sessionName = tab.ownerSessionId || tab.sessionId;
+    if (sharePending.current || !tab.managedTask || !desktopId || !targetId || !browserId || !sessionName) return;
     shareFocus.current = opener;
     sharePending.current = true; setShareBusy(true); setShareError(null); setSharedLink(null); setHandoffsOpen(true);
     try {
-      const handoff = await requestServiceRemoteViewHandoff({
-        baseUrl: window.location.origin, signal: AbortSignal.timeout(15000),
-        browserId: tab.browserId, sessionName: tab.ownerSessionId || tab.sessionId!,
-        displayAllocationId: tab.desktopId, params: { targetId: tab.targetId },
-        serviceName: "agent-browser-dashboard", agentName: "operator", taskName: "Share browser task", jobTimeoutMs: 10000,
+      // Sharing prepares the same native desktop as selection. Preserve gesture
+      // order without spending this request's deadline behind an older focus.
+      await queueWorkspaceFocusRequest(JSON.stringify(["native-desktop", desktopId]), async () => {
+        const handoff = await requestServiceRemoteViewHandoff({
+          baseUrl: window.location.origin, signal: AbortSignal.timeout(15000),
+          browserId, sessionName,
+          displayAllocationId: desktopId, params: { targetId },
+          serviceName: "agent-browser-dashboard", agentName: "operator", taskName: "Share browser task", jobTimeoutMs: 10000,
+        });
+        const url = new URL(handoff.handoffUrl, window.location.origin);
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
+            || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
+        setSharedLink({ url: url.toString(), label: tabDescription(tab) });
       });
-      const url = new URL(handoff.handoffUrl, window.location.origin);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
-          || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
-      setSharedLink({ url: url.toString(), label: tabDescription(tab) });
     } catch { setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
     finally { sharePending.current = false; setShareBusy(false); }
   };
@@ -142,7 +150,7 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
         }} onPointerDown={event => { drag.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (drag.current) saveWidth(drag.current.width + event.clientX - drag.current.x); }} onPointerUp={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} />}
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
-        <header className="native-workspace-toolbar"><span>Agent Browser</span><span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
+        <header className="native-workspace-toolbar"><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
         {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>

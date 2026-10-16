@@ -135,8 +135,9 @@ export function developmentRuntimeDescriptor(env = process.env) {
 
 /** Preserve the reviewed native provider binding across isolated updates. */
 function developmentRemoteViewBinding(env, installRoot) {
-  const names = ['ORIGIN', 'POOL', 'PUBLIC_ORIGIN', 'APPLICATION'];
-  const explicit = names.some((name) => env[`AGENT_BROWSER_REMOTE_VIEW_${name}`] !== undefined);
+  const names = ['ORIGIN', 'POOL', 'PUBLIC_ORIGIN', 'APPLICATION', 'CONTROL_TOKEN_FILE'];
+  const explicit = names.some((name) => env[`AGENT_BROWSER_REMOTE_VIEW_${name}`] !== undefined)
+    || env.AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE !== undefined;
   const retained = readJson(join(installRoot, 'current', 'generation.json'))?.remoteView;
   if (!explicit && !retained) return null;
   const binding = explicit ? {
@@ -144,6 +145,8 @@ function developmentRemoteViewBinding(env, installRoot) {
     pool: env.AGENT_BROWSER_REMOTE_VIEW_POOL,
     publicOrigin: env.AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN,
     application: env.AGENT_BROWSER_REMOTE_VIEW_APPLICATION || 'agent-browser',
+    ...(env.AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE !== undefined ? { controlTokenFile: env.AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE } : {}),
+    ...(env.AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE !== undefined ? { nativeHandoffTokenFile: env.AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE } : {}),
   } : retained;
   let origin;
   let publicOrigin;
@@ -162,6 +165,17 @@ function developmentRemoteViewBinding(env, installRoot) {
       typeof binding.pool !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(binding.pool) ||
       typeof binding.application !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(binding.application)) {
     throw new Error('Native Remote View binding is incomplete or outside the reviewed origin contract');
+  }
+  for (const key of ['controlTokenFile', 'nativeHandoffTokenFile']) {
+    if (binding[key] === undefined) continue;
+    const tokenPath = binding[key];
+    let metadata;
+    try { metadata = lstatSync(tokenPath); } catch { throw new Error('Native Remote View token file must be a readable private regular file'); }
+    if (typeof tokenPath !== 'string' || !isAbsolute(tokenPath) || /[\r\n\0]/.test(tokenPath)
+        || !metadata.isFile() || (metadata.mode & 0o077) !== 0
+        || (typeof process.getuid === 'function' && metadata.uid !== process.getuid())) {
+      throw new Error('Native Remote View token file must be an absolute private regular file owned by the service user');
+    }
   }
   return binding;
 }
@@ -238,6 +252,8 @@ export function renderDevelopmentUnits(descriptor, generationBinary, environment
       `Environment=AGENT_BROWSER_REMOTE_VIEW_POOL=${descriptor.remoteView.pool}`,
       `Environment=AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN=${descriptor.remoteView.publicOrigin}`,
       `Environment=AGENT_BROWSER_REMOTE_VIEW_APPLICATION=${descriptor.remoteView.application}`,
+      ...(descriptor.remoteView.controlTokenFile ? [`Environment=${JSON.stringify(`AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE=${descriptor.remoteView.controlTokenFile}`)}`] : []),
+      ...(descriptor.remoteView.nativeHandoffTokenFile ? [`Environment=${JSON.stringify(`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE=${descriptor.remoteView.nativeHandoffTokenFile}`)}`] : []),
     ] : []),
   ].join('\n');
   return {
@@ -760,7 +776,7 @@ ${descriptor.remoteView ? `export AGENT_BROWSER_REMOTE_VIEW_ORIGIN=${shellQuote(
 export AGENT_BROWSER_REMOTE_VIEW_POOL=${shellQuote(descriptor.remoteView.pool)}
 export AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN=${shellQuote(descriptor.remoteView.publicOrigin)}
 export AGENT_BROWSER_REMOTE_VIEW_APPLICATION=${shellQuote(descriptor.remoteView.application)}
-` : ''}export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
+${descriptor.remoteView.controlTokenFile ? `export AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE=${shellQuote(descriptor.remoteView.controlTokenFile)}\n` : ''}${descriptor.remoteView.nativeHandoffTokenFile ? `export AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE=${shellQuote(descriptor.remoteView.nativeHandoffTokenFile)}\n` : ''}` : ''}export AGENT_BROWSER_PRESENTATION_PROVIDER_INVENTORY_PATH=${shellQuote(descriptor.presentationProvider.inventoryPath)}
 export AGENT_BROWSER_PRESENTATION_WARM_MINIMUM=${descriptor.presentationProvider.warmSlots}
 export AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM=${descriptor.presentationProvider.hardMaxSlots}
 export AGENT_BROWSER_PRESENTATION_HUMAN_RESERVE=1
