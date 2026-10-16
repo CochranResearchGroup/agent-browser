@@ -125,6 +125,10 @@ is unproven unless `noResultsVerified`; preserve partial results and their reaso
 
 ## Read more only when needed
 
+Retained-task recovery rechecks interrupted launch custody in the running host.
+It requires proven process and profile absence, preserves launch history, and
+leaves other profiles' claims unchanged. Continue through the original taskId.
+
 New-process memory pressure uses eligible owner cleanup and a bounded wait;
 continue existing tasks through their taskId. Completed session/tab history is
 bounded in active memory and retained durably. Use `agent-browser runtime history

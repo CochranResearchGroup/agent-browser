@@ -5641,6 +5641,8 @@ The runtime-host unit uses KillMode=process to preserve retained browser and
 display descendants. Browser and route cleanup still require ownership checks.
 Supervisor startup recreates a missing socket directory with private
 permissions before writing its authentication token, including after reboot.
+Retained-task recovery rechecks interrupted launch custody without a host restart.
+Only proven process and profile absence settles occupancy; history is preserved.
 
 Operations:
   (none)               Show current session name

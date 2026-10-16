@@ -188,6 +188,18 @@ pub trait BrowserLaunchCustodyStore {
     ) -> Result<bool, LaunchCustodyStoreError> {
         Ok(false)
     }
+    /// Settle only the occupancy of an exact interrupted launch after the caller
+    /// proves its process and entire retained profile absent. Preserve the claim
+    /// as history; compare the unchanged session baseline and original record.
+    fn reconcile_absent_recovery(
+        &mut self,
+        _claim: &BrowserLaunchCustodyRecord,
+        _expected: &BrowserSessionState,
+        _browser: &crate::ManagedBrowserInstance,
+    ) -> Result<(), LaunchCustodyStoreError> {
+        Err(LaunchCustodyStoreError::Unavailable)
+    }
+
     /// Admit replacement custody for an exact published browser. Implementations
     /// retain prior launch history and reject competing profile claims or release fences.
     fn admit_recovery_launch_intent(

@@ -7049,6 +7049,75 @@ fn ordinary_dead_observed_launch_recovers_after_current_profile_absence() {
 }
 
 #[test]
+fn ordinary_long_lived_host_rechecks_dead_launch_before_recovery() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider::default()));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls.clone());
+    let read =
+        serde_json::json!({"action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":100});
+    let opened = consumer
+        .execute_managed_command("Alice", &read)
+        .unwrap()
+        .unwrap();
+    let identity = opened["browserSession"].clone();
+    let browser_id = identity["browserId"].as_str().unwrap();
+    drop(consumer);
+    let mut store = fixture.store(false);
+    let baseline = store.load_session_state().unwrap();
+    let original = baseline.browsers[browser_id].clone();
+    let intent = BrowserLaunchIntent {
+        intent_id: uuid::Uuid::new_v4().to_string(),
+        profile_id: original.profile_id.clone(),
+        assignment: provider.borrow().assignments[0].clone(),
+    };
+    store
+        .admit_recovery_launch_intent(&intent, &baseline, &original)
+        .unwrap();
+    store
+        .observe_launch_intent(
+            &intent,
+            &BrowserLaunch {
+                browser_id: original.id.clone(),
+                pid: 91,
+                cdp_endpoint: "ws://127.0.0.1:9222/devtools/browser/synthetic".into(),
+                desktop: original.desktop.clone(),
+                process_identity: None,
+            },
+        )
+        .unwrap();
+    drop(store);
+    // The host was already running when the old launch was still unresolved.
+    let mut resumed = host_mode(
+        &fixture,
+        provider.clone(),
+        calls.clone(),
+        Mode::IdleRecovery,
+    );
+    std::fs::write(
+        fixture.root.join("idle-process-absent"),
+        "whole profile absent",
+    )
+    .unwrap();
+    let result = resumed
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"get_url", "runtimeProfile":"profile-a", "activityAtMs":101
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(result["success"], true, "{result}");
+    assert_eq!(result["browserSession"]["sessionId"], identity["sessionId"]);
+    assert_eq!(
+        calls.get(),
+        2,
+        "exactly one replacement after proven absence"
+    );
+}
+
+#[test]
 fn ordinary_live_profile_ignores_mismatched_historical_launch_observation() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));

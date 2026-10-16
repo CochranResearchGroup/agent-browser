@@ -590,6 +590,28 @@ impl<
         self.effects
             .prove_recovery_absence(browser, profile)
             .map_err(|_| "browser_session_recovery_absence_unproven")?;
+        // Startup may have observed this profile live. Recheck its interrupted
+        // launches when absence becomes provable in a long-lived host, before
+        // reserving a replacement. No other profile's custody is changed.
+        let expected = self.expected.as_ref().expect("qualified baseline");
+        for claim in self
+            .store
+            .unpublished_launch_records()
+            .map_err(|_| "browser_session_recovery_readback_required")?
+            .into_iter()
+            .filter(|claim| claim.intent.profile_id == profile.id)
+        {
+            let mut observed = browser.clone();
+            if let Some(pid) = claim.observed_pid {
+                observed.pid = pid;
+            }
+            self.effects
+                .prove_recovery_absence(&observed, profile)
+                .map_err(|_| "browser_session_recovery_absence_unproven")?;
+            self.store
+                .reconcile_absent_recovery(&claim, expected, browser)
+                .map_err(|_| "browser_session_recovery_readback_required")?;
+        }
         let borrowed = self
             .expected
             .as_ref()

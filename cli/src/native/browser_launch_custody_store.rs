@@ -338,6 +338,36 @@ impl BrowserLaunchCustodyStore for BrowserSessionSqliteStore {
     ) -> Result<LaunchCustodyAdmission, LaunchCustodyStoreError> {
         self.admit_launch_with_recovery(intent, expected, Some(browser))
     }
+    /// Called only after the runtime proves the exact retained profile absent.
+    /// Preserve the claim as history while retiring its occupancy.
+    fn reconcile_absent_recovery(
+        &mut self,
+        claim: &BrowserLaunchCustodyRecord,
+        expected: &BrowserSessionState,
+        browser: &agent_browser_service_model::ManagedBrowserInstance,
+    ) -> Result<(), LaunchCustodyStoreError> {
+        use LaunchCustodyStoreError as Error;
+        let transaction = self
+            .remote_view_mutation_connection()
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(|_| Error::Unavailable)?;
+        let state = current(&transaction)?;
+        let mut records = ledger(&transaction)?;
+        if state != *expected
+            || state.browsers.get(&browser.id) != Some(browser)
+            || claim.published
+            || claim.intent.profile_id != browser.profile_id
+            || records.records.get(&claim.intent.intent_id) != Some(claim)
+        {
+            return Err(Error::Conflict);
+        }
+        records
+            .reconciled_absent
+            .insert(claim.intent.intent_id.clone());
+        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
+        transaction.commit().map_err(|_| Error::Unavailable)
+    }
+
     fn observe_launch_intent(
         &mut self,
         intent: &BrowserLaunchIntent,
@@ -1495,36 +1525,6 @@ mod tests {
 }
 
 impl BrowserSessionSqliteStore {
-    /// Called only after the runtime proves the exact retained profile absent.
-    /// Preserve the claim as history while retiring its occupancy.
-    pub(super) fn reconcile_absent_recovery(
-        &mut self,
-        claim: &BrowserLaunchCustodyRecord,
-        expected: &BrowserSessionState,
-        browser: &agent_browser_service_model::ManagedBrowserInstance,
-    ) -> Result<(), LaunchCustodyStoreError> {
-        use LaunchCustodyStoreError as Error;
-        let transaction = self
-            .remote_view_mutation_connection()
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(|_| Error::Unavailable)?;
-        let state = current(&transaction)?;
-        let mut records = ledger(&transaction)?;
-        if state != *expected
-            || state.browsers.get(&browser.id) != Some(browser)
-            || claim.published
-            || claim.intent.profile_id != browser.profile_id
-            || records.records.get(&claim.intent.intent_id) != Some(claim)
-        {
-            return Err(Error::Conflict);
-        }
-        records
-            .reconciled_absent
-            .insert(claim.intent.intent_id.clone());
-        save_document(&transaction, DOCUMENT, SCHEMA, &records).map_err(|_| Error::Unavailable)?;
-        transaction.commit().map_err(|_| Error::Unavailable)
-    }
-
     fn admit_launch_with_recovery(
         &mut self,
         intent: &BrowserLaunchIntent,

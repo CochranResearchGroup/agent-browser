@@ -57,6 +57,8 @@ The handoff URL resolves the current owned desktop and redirects to native Remot
 
 After human assistance, call `browser_continue` with the same `taskId`. It returns the task's current profile, browser, tab and URL without navigating again. Continue ordinary page actions with that task ID.
 
+Retained-task recovery rechecks interrupted launch custody when the host is already running. Only proven process and profile absence settles that launch's occupancy; its history remains intact, and unproven absence still blocks replacement.
+
 The default MCP catalog contains 12 workflow tools: `browser_open`, `browser_navigate`,
 `browser_snapshot`, `browser_click`, `browser_fill`, `browser_screenshot`, `browser_tab`,
 `browser_handoff`, `browser_continue`, `browser_close`, `browser_command` and `browser_discover`.
