@@ -72,3 +72,9 @@ await assert.rejects(emptyRecovery.advance({...options,reconcile:true}),/checkpo
 request.state='uncertain';request.captureState='held';request.running=true;recoveryCalls.length=0;
 assert.equal((await recovery.advance({...options,reconcile:true})).reasonCode,'helper_running_or_uncertain');assert.deepEqual(recoveryCalls,['inspect_request']);delete request.running;
 console.log('Hosted playbook: explicit same-checkpoint readback cannot create a request or restart running/private input');
+
+request.state='released';request.captureState='ready';
+const releasedCalls=[];
+const releasedLogin=createLoginPlaybook({browser,checkpoints,helper:async operation=>{releasedCalls.push(operation);assert.equal(operation,'inspect_request');return structuredClone(request);}});
+const releasedResult=await releasedLogin.advance({...options,reconcile:true});assert.equal(releasedResult.status,'failed');assert.equal(releasedResult.reasonCode,'helper_attempt_released');assert.equal(releasedResult.requestId,request.requestId);assert.deepEqual(releasedCalls,['inspect_request']);
+console.log('Hosted playbook: retired clean attempt remains failed and cannot create or replay authentication');

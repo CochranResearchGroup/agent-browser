@@ -82,10 +82,16 @@ export function createHostedLoginReceiver({binding,scope,expectedUsername,browse
    */
   async reconcile(requested,guard=async()=>{}){
    const current=await observe(requested,guard,true),negative={origin:scope.origin,account:null,authenticated:false,captureSafe:false};
-   if(current.state!=='authenticated'||current.visiblePassword)return negative;
+   if(current.state!=='authenticated'){
+    const safety=typeof readReconciliationSafety==='function'?await readReconciliationSafety({binding,guard,authenticated:false}):{safe:false};
+    const after=await observe(requested,guard,true);
+    if(after.state!==current.state||after.origin!==current.origin||safety?.safe!==true||safety.protectedInputNotAttempted!==true||safety.receivingLoginVerified!==true)return negative;
+    return {...negative,account:scope.account,captureSafe:true,protectedInputNotAttempted:true,receivingLoginVerified:true};
+   }
+   if(current.visiblePassword)return negative;
    const proof=await readPrincipal({binding,guard}),after=await observe(requested,guard,true);
    if(proof?.authenticated!==true||proof.username!==expectedUsername||proof.origin!==current.origin||after.state!=='authenticated'||after.origin!==current.origin||after.visiblePassword)return negative;
-   const safety=typeof readReconciliationSafety==='function'?await readReconciliationSafety({binding,guard}):{safe:false};
+   const safety=typeof readReconciliationSafety==='function'?await readReconciliationSafety({binding,guard,authenticated:true}):{safe:false};
    const final=await observe(requested,guard,true);
    if(final.state!=='authenticated'||final.origin!==current.origin||final.visiblePassword)return negative;
    return {origin:scope.origin,account:scope.account,authenticated:true,captureSafe:safety?.safe===true};

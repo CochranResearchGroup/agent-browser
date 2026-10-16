@@ -130,7 +130,8 @@ try {
   await run('systemctl',['--user','restart','codex-bots.service']);await until(async()=>{try{return (await api('/api/health')).ok;}catch{return false;}},'Held restart not ready',60000);
   summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.state,'uncertain');assert.equal(summary.captureState,'held');assert(!summary.running);receipt.heldRestartPreserved=true;
   host=JSON.parse(await readFile(join(root,'fixture-host.json'),'utf8'));assert.equal((await fetch(host.observerUrl)).status,409);
-  summary=await caller.helper('reconcile_authentication',{requestId});assert.equal(summary.requestId,requestId);receipt.independentReconciliationWithoutReplay=true;
+  const readback=await playbook.advance({...options,reconcile:true});assert.equal(readback.status,'completed');assert.equal(readback.requestId,requestId);receipt.consumerReadbackMode=true;
+  summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.requestId,requestId);receipt.independentReconciliationWithoutReplay=true;
  }
 
  assert.equal(summary.state,'authenticated');assert.equal(summary.captureState,'ready');receipt.outcome=summary;

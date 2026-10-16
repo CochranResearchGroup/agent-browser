@@ -7,6 +7,8 @@
  * Compose the supported auth-helper operations with existing-task SiteGuide
  * verification. The trusted helper owns receiving input and capture privacy.
  * Checkpoints contain metadata only and must be durable before authentication.
+ * Explicit reconcile mode reads back an existing hosted request without creating
+ * a replacement or replaying private input; company verification remains fresh.
  * @param {Dependencies} dependencies
  */
 export function createLoginPlaybook({browser,helper,checkpoints}) {
@@ -75,6 +77,7 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
         if(!matches(summary) || summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
         if(summary.state==='pending')return result('waiting','approval_required','no_effect',checkpoint);
         if(['denied','revoked'].includes(summary.state))return result('failed',`helper_${summary.state}`,checkpoint.attempted?'unknown':'no_effect',checkpoint);
+        if(summary.state==='released')return result('failed','helper_attempt_released',checkpoint.attempted?'unknown':'no_effect',checkpoint);
         if(options.reconcile){
           if(summary.running||!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain',checkpoint.attempted?'unknown':'no_effect',checkpoint);
           // Explicit readback only. Never create a replacement request or make
@@ -82,6 +85,7 @@ export function createLoginPlaybook({browser,helper,checkpoints}) {
           try{summary=await helper('reconcile_authentication',{requestId:checkpoint.requestId});}
           catch{return result('waiting','helper_reconciliation_unavailable','unknown',checkpoint);}
           if(!matches(summary)||summary.requestId!==checkpoint.requestId)throw Error('helper_binding_mismatch');
+          if(summary.state==='released')return result('failed','helper_attempt_released','unknown',checkpoint);
           if(!['uncertain','authenticated'].includes(summary.state))return result('waiting','helper_running_or_uncertain','unknown',checkpoint);
         }
         if(summary.state==='authenticated') {

@@ -27,9 +27,13 @@ Integration branch started from fresh main c911bd358 in reused clean root; forei
 | U2N native staged dummy | shared receiving sequence and native port source checks passed | validated | coordinator, existing installed-host fixture and native receiving module | installed native identifier/password journey, independent company, native safety, canary scans, restart/no-replay and zero owned residue; final receipt native-staged-dummy.json |
 | U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | running | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
 | U4 BILL | U3 validated | pending | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
-| U5 docs/review | U1-U4 validated | pending | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
+| U5 docs/review | docs after U1/U2N; final review after U3/U4 | running | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 
 Note0245 records red/green commands, failed receipts, exact tip/result SHA and runtime handles. Ready means blockers validated on this branch, not tracker closure or worker assertion. Required missing/false/unsafe evidence and real-provider limitations remain incomplete. No new ticket graph or second backlog; these units deliver the existing bounded issue.
+
+## Recovery extension and independent documentation
+
+Public consumer-mode native reconciliation now passes with the frozen hashes in consumer-native-reconciliation.json. Five-surface source guidance and relevant quality/docs gates pass; no shared-skill or Agent Browser CLI publication is claimed. Documentation can progress independently while final review still waits for actual U3/U4. The original real request remains held, no password/factor attempt. Producer Plan0010/PR56 adds source-qualified clean-failure retirement from durable untouched-input plus independent known-login/native proof. That extension still requires canonical installation and its own native negative fixture before any actual release or deliberately selected bounded new attempt. Original checkpoints/grants/history remain preserved; no replay of a retired or unresolved request and no new auth extraction. Goal limits and full acceptance are unchanged.
 
 ## Seams and validation
 

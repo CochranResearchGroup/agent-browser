@@ -77,26 +77,54 @@ The supported software adapter composes existing verification and shared helper
 operations without moving credentials into the client:
 
 ```js
+import {connectHostedAuthHelper} from '@agent-browser/client/hosted-auth-helper';
 import {createLoginPlaybook} from '@agent-browser/client/login-playbook';
+const caller = await connectHostedAuthHelper();
+const {accounts} = await caller.helper('list_accounts', {});
+// Select scope from an exact configured account/source/origin mapping.
+// accounts describes configured scopes; it does not prove vault readiness.
 const login = createLoginPlaybook({
   browser: playbooks,
-  helper: callTrustedAuthHelper,
+  helper: caller.helper,
   checkpoints: durableMetadataStore,
 });
-const result = await login.advance({
+const options = {
   taskId, guideId, accountRef, organizationRef,
-  scope: {person, tenant, account, origin, source, capabilities: ['login']},
+  callerTaskId: caller.callerTaskId,
+  scope, // {person, tenant, account, origin, source, capabilities: ['login']}
   expiresAt,
-});
+};
+const result = await login.advance(options);
 ```
 
-`helper` calls the shared producer's request_login, inspect_request and
-authenticate operations and returns their sanitized structured summary. Its
-trusted receiving configuration must bind this exact live task and page.
+Discovery verifies the installed producer candidate, loads its supported SDK and
+keeps bearer material inside that private transport. The ordinary caller is the
+currently attested Codex work/thread, with no Bots roster entry or TUI required.
+Its `callerTaskId` is separate from the receiving browser `taskId`. Version2 freezes
+the exact receiving provider/task/profile/browser/tab, while the summary's legacy
+`taskId` identifies the caller. Preserve both identities rather than aliasing them.
+Account/source references come from configured logical metadata and the existing
+source owner; do not guess them from a browser profile or request a password in
+model-visible conversation. No standalone auth service is created.
+
+`helper` uses request_login, inspect_request and begin_authentication for ordinary
+hosted callers; legacy callbacks retain authenticate. Both return sanitized
+structured summaries. The trusted receiving configuration positively verifies the
+original caller/receiving association and rechecks exact native ownership around
+private effects. Shared hosted-login-receiver and native-receiving-browser ports
+are trusted-host modules, not credential APIs for agents. They sequence actual
+identifier/password states and configured private MFA callbacks; check visible,
+masked, account-bound controls; use native Remote View process/window/visual
+fences; and prove empty-field and exact-value readback privately. A recognized
+popup may receive one guarded Escape before a fresh hit-tested submit. Unknown
+Escape or submission acknowledgement permits no replay. Qualify every real MFA,
+passkey and password-manager path separately; no resend, enrollment or password
+saving is implied.
+
 The store implements asynchronous load(key) and save(key, checkpoint); save
 must durably complete before returning. Checkpoints contain scope, task/page
 binding and request metadata, never credential or challenge values. Preserve
-the same inputs, including expiresAt, when resuming a checkpoint.
+the same inputs, including expiresAt and callerTaskId, when resuming.
 
 `approval_required` waits for the shared helper's approved request. After a
 submission attempt, each advance inspects that request. A missing response,
@@ -113,10 +141,47 @@ The current producer intentionally does not disclose whether the source was
 locked, absent or otherwise unavailable. Exact lock-state detection remains a
 producer capability gap; the client does not infer it from a failed login.
 
+### Read back after human completion
+
+Keep the original browser and helper request. After independent human/browser
+completion, use the same options and checkpoint:
+
+```js
+const continued = await login.advance({...options, reconcile: true});
+```
+
+This mode calls the existing producer's reconcile_authentication. It neither
+creates a replacement request nor retrieves credentials, starts authentication
+or repeats private input. Running work is inspected, not restarted. A missing
+checkpoint is an error; unsupported owner readback returns
+helper_reconciliation_unavailable. Original scope, caller and receiving tuple
+remain checked. The mode does not renew an expired or revoked grant.
+
+The trusted receiver independently observes the current application principal;
+its reconciliation-specific native safety callback must also qualify current
+capture readiness. An expected saved email on a login chooser is insufficient.
+Missing/false safety stays held even when the principal is authenticated. An
+exact owned login or unknown page returns negative readback without private input.
+Once the helper is authenticated and capture ready, the same playbook still
+requires fresh independent SiteGuide account/company evidence. QBO browser
+identity does not establish OAuth/API readiness. Never reset a checkpoint,
+replace a request or edit helper state to bypass a held outcome.
+
+A trusted owner can retire a failed login-only request when durable before-effect
+markers prove no protected password/factor attempt and fresh known-login DOM and
+native evidence prove clean capture. Timeout/current page alone is insufficient.
+The helper keeps request/caller/target/expiry/input history, including unknown
+earlier identifier effects, and returns released without authentication. The
+playbook returns failed with helper_attempt_released and cannot replay that grant.
+Preserve the original checkpoint. A task controller may deliberately select a
+separate operation under its task authority after this confirmed failure; it must
+not silently reset the checkpoint or retry an unresolved held attempt.
+
 Configure privacy at the producer and every observer before using private
-input. The current synthetic qualification uses actual helper source and a
-dummy credential, guarded client reads, no viewer/recorders/watches, and human
-MFA simulation. Remote View currently lacks a provider-wide privacy hold; the
+input. The installed independent native dummy qualifies the existing hosted helper,
+private identifier/password input, guarded reads, native DOM/OCR safety,
+uncertain-request restart and independent reconciliation. Controlled MFA
+qualification remains separate from real-provider MFA. Remote View currently lacks a provider-wide privacy hold; the
 adapter does not claim suppression of independent captures or viewer streams.
 Task tab listing observes live opener chains through the existing browser owner.
 After helper capture is ready, the adapter checks newly attributed task tabs for
@@ -124,8 +189,9 @@ the intended receiving account/company. One match becomes the continued task
 page; multiple matches require adaptation. Existing peer and pre-login tabs are
 excluded. This supports attributable site/password-manager popups. Extension
 tabs with no attributable opener require a producer target-binding capability;
-the system never guesses ownership from a URL. Real LastPass, automated MFA and
-installed helper readiness retain their separate qualification requirements.
+the system never guesses ownership from a URL. Real account/source mappings, completed website/company authentication,
+password-manager/passkey behavior and automated MFA require their own current
+qualification; dummy acceptance cannot replace those outcomes.
 
 ## QBO uses the same contract
 
