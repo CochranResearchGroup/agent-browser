@@ -7227,7 +7227,8 @@ Workflow:
   The receiving browser task/profile/browser/tab is frozen separately; select configured account/source refs.
   Login playbook reconcile:true reads back the same checkpoint without new credentials or input replay.
   Independent principal/native safety releases capture; SiteGuide company verification still follows.
-  Verified untouched failed login may retire as helper_attempt_released; its history stays and cannot replay.
+  Verified clean failed login may retire as helper_attempt_released; attempted/unknown history stays.
+  Trusted untouched-input or independently empty protected-field proof needs native safety; no replay.
   browser_tab list observes owned popup children; login continuation verifies new destinations.
   BILL and QBO starter SiteGuides share routines; reviewed controls configure private receiving.
   prepare_login freezes controls; validate_plan rejects changed or stale evidence before input.

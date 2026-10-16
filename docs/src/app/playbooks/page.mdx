@@ -94,9 +94,11 @@ SiteGuide step after helper capture is ready.
 
 A failed login-only request may retire with helper_attempt_released only when
 its trusted owner proves from durable before-effect records that no protected
-input was attempted, and independently verifies a current clean login/native
-capture. Timeout or page state alone is insufficient. The old request, target,
-expiry and input history remain; earlier identifier effects are still unknown.
+input was attempted, or independently proves every current protected field empty,
+and independently verifies a current clean login/native capture. Current safety
+does not erase a recorded password/factor attempt. Readback cannot clear fields
+or fetch another credential/factor. Timeout or page state alone is insufficient.
+The old request, target, expiry and input history remain; earlier effects stay unknown.
 The playbook reports failed and cannot replay that grant. Preserve its checkpoint;
 a subsequent operation is separately selected under the task's authority.
 

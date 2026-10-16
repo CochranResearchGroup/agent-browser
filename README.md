@@ -909,8 +909,10 @@ retrieve credentials or repeat private input. Independent current principal and
 native safety proof must release capture before the SiteGuide verifies company.
 Missing safety stays held; expiry and revocation are not renewed. A failed login
 can retire as `helper_attempt_released` only with trusted durable evidence that
-protected input was never attempted plus fresh clean-login/native safety. Keep
-its checkpoint and unknown identifier history; the playbook sends no further
+protected input was never attempted, or independent proof that every current
+protected field is empty, plus fresh clean-login/native safety. The latter never
+erases a recorded password/factor attempt. Keep
+its checkpoint and unknown input history; the playbook sends no further
 input. A subsequent operation is a separately selected attempt under its task
 authority. The default Agent Browser MCP catalog is unchanged.
 

@@ -62,7 +62,14 @@ export async function createAuthConfig(context){
   }
   return fill(input);
  };
- browser.activate=async input=>{if(config.untouchedLogin&&input.control==='identifierSubmit')throw Error('Owned pre-protected-input submit obstruction');return activate(input);};
+ browser.activate=async input=>{
+  if(config.untouchedLogin&&input.control==='identifierSubmit')throw Error('Owned pre-protected-input submit obstruction');
+  if(config.postAttemptClean&&input.control==='submit'){
+   for(let n=0;n<30;n++){if((await browser.observe(binding)).state==='identifier_required')throw Error('Owned post-protected-input submit obstruction');await new Promise(resolve=>setTimeout(resolve,100));}
+   throw Error('Owned clean-login transition was not observed');
+  }
+  return activate(input);
+ };
  return {...base,external:{...base.external,async createReceiver(){
   const readSafety=async({credential})=>{
     const current=await browser.observe(binding);assert.equal(current.state,'authenticated');
@@ -76,16 +83,16 @@ export async function createAuthConfig(context){
    readCaptureSafety:readSafety,
    async readReconciliationSafety({authenticated,guard}){
     if(authenticated)return readSafety({credential:{username:config.username,password:config.password}});
-    if(!config.untouchedLogin||protectedAudit.passwordFills!==0||protectedAudit.mfaFills!==0)return {safe:false};
+    if(!(config.untouchedLogin&&protectedAudit.passwordFills===0&&protectedAudit.mfaFills===0||config.postAttemptClean&&protectedAudit.passwordFills===1&&protectedAudit.mfaFills===0))return {safe:false};
     await guard();const before=await browser.observe(binding);if(before.state!=='identifier_required'||!before.accountMatched)return {safe:false};
     const clear=async()=>(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:`(()=>{const secret=${JSON.stringify(config.password)};return !document.body.innerText.includes(secret)&&![...document.querySelectorAll('input,textarea')].some(e=>e.value.includes(secret))&&!document.querySelector('input[type=password]')?.value;})()`}})).result===true;
     if(!await clear())return {safe:false};
     const captured=await remote.capture(config.desktop),bytes=Buffer.from(captured.image.data,'base64'),text=await ocr(bytes),normal=text.toLowerCase().replace(/[^a-z0-9]/g,'');
     await guard();const after=await browser.observe(binding),currentAudit=await loadProtectedInputAudit(config.root);
-    const checks={sameObservation:after.fingerprint===before.fingerprint,domClear:await clear(),nativeLoginHeader:normal.includes('ownednativeidentifierlogin'),credentialAbsent:!text.includes(config.password),untouchedPassword:currentAudit.passwordFills===0,untouchedFactor:currentAudit.mfaFills===0};
+    const checks={sameObservation:after.fingerprint===before.fingerprint,domClear:await clear(),nativeLoginHeader:normal.includes('ownednativeidentifierlogin'),credentialAbsent:!text.includes(config.password),passwordAuditStable:currentAudit.passwordFills===protectedAudit.passwordFills,factorAuditStable:currentAudit.mfaFills===protectedAudit.mfaFills};
     const safe=Object.values(checks).every(Boolean);
-    await writeFile(join(config.root,'native-safety.json'),JSON.stringify({safe,bytes:bytes.length,sha256:hash(bytes),exactOwner:true,credentialAbsent:!text.includes(config.password),knownLoginVerified:safe,protectedInputNotAttempted:safe,checks,smallTextDiagnostics:{nativeUser:normal.includes('owneduser'),nativeContinue:normal.includes('continue')}})+'\n',{mode:0o600});
-    return {safe,protectedInputNotAttempted:safe,receivingLoginVerified:safe};
+    await writeFile(join(config.root,'native-safety.json'),JSON.stringify({safe,bytes:bytes.length,sha256:hash(bytes),exactOwner:true,credentialAbsent:!text.includes(config.password),knownLoginVerified:safe,protectedInputNotAttempted:safe&&config.untouchedLogin,receivingProtectedFieldsEmpty:safe&&config.postAttemptClean,checks,smallTextDiagnostics:{nativeUser:normal.includes('owneduser'),nativeContinue:normal.includes('continue')}})+'\n',{mode:0o600});
+    return {safe,protectedInputNotAttempted:safe&&config.untouchedLogin,receivingProtectedFieldsEmpty:safe&&config.postAttemptClean,receivingLoginVerified:safe};
    },
   });
   if(config.reconcileHeld)receiver.verify=async()=>{throw Error('Owned fixture lost final verification acknowledgement');};

@@ -78,6 +78,7 @@ export function createHostedLoginReceiver({binding,scope,expectedUsername,browse
   },
   /** Independent owner readback after human completion or lost acknowledgement.
    * No prior credential, private input, or remembered local success is reused.
+   * Trusted current protected-field emptiness is distinct from untouched history.
    * @param {Scope} requested @param {Guard} [guard]
    */
   async reconcile(requested,guard=async()=>{}){
@@ -85,8 +86,8 @@ export function createHostedLoginReceiver({binding,scope,expectedUsername,browse
    if(current.state!=='authenticated'){
     const safety=typeof readReconciliationSafety==='function'?await readReconciliationSafety({binding,guard,authenticated:false}):{safe:false};
     const after=await observe(requested,guard,true);
-    if(after.state!==current.state||after.origin!==current.origin||safety?.safe!==true||safety.protectedInputNotAttempted!==true||safety.receivingLoginVerified!==true)return negative;
-    return {...negative,account:scope.account,captureSafe:true,protectedInputNotAttempted:true,receivingLoginVerified:true};
+    if(after.state!==current.state||after.origin!==current.origin||safety?.safe!==true||(safety.protectedInputNotAttempted!==true&&safety.receivingProtectedFieldsEmpty!==true)||safety.receivingLoginVerified!==true)return negative;
+    return {...negative,account:scope.account,captureSafe:true,...(safety.protectedInputNotAttempted===true?{protectedInputNotAttempted:true}:{}),...(safety.receivingProtectedFieldsEmpty===true?{receivingProtectedFieldsEmpty:true}:{}),receivingLoginVerified:true};
    }
    if(current.visiblePassword)return negative;
    const proof=await readPrincipal({binding,guard}),after=await observe(requested,guard,true);

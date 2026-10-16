@@ -19,8 +19,10 @@ assert(process.argv.includes('--apply-owned-dummy'),'Explicit owned dummy integr
 const nativeStaged=process.argv.includes('--native-staged'),reconcileHeld=process.argv.includes('--reconcile-held'),untouchedLogin=process.argv.includes('--untouched-login');
 const operatorReadback=process.argv.includes('--operator-readback');
 const emailIdentifier=process.argv.includes('--email-identifier');
+const postAttemptClean=process.argv.includes('--post-attempt-clean'),cleanFailure=untouchedLogin||postAttemptClean;
+assert(!postAttemptClean||nativeStaged&&reconcileHeld&&!untouchedLogin,'Post-attempt clean proof requires a separate native staged held fixture');
 assert(!emailIdentifier||nativeStaged,'Email identifier qualification requires native input');
-assert(!operatorReadback||untouchedLogin,'Operator readback is limited to the native untouched-login fixture');
+assert(!operatorReadback||cleanFailure,'Operator readback requires a native clean failed-login fixture');
 assert(!reconcileHeld||nativeStaged,'Held reconciliation requires the staged native fixture');
 assert(!untouchedLogin||nativeStaged&&reconcileHeld,'Untouched login requires native staged held reconciliation');
 const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD,chrome=process.env.AGENT_BROWSER_SMOKE_BROWSER_EXECUTABLE;
@@ -31,7 +33,7 @@ const {connectRemoteView}=await import(pathToFileURL(join(app,'src/remote-view.m
 const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')));
 const context=createSmokeContext({prefix:'p245-hosted-',sessionPrefix:'p245'}),root=context.tempHome;
 console.log(JSON.stringify({fixtureRoot:root}));
-const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,operatorReadback,emailIdentifier,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
+const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,operatorReadback,emailIdentifier,postAttemptClean,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
 const save=(name,value)=>writeFile(join(root,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const until=async(check,message,ms=180000)=>{const deadline=Date.now()+ms;do{const value=await check();if(value)return value;await delay(200);}while(Date.now()<deadline);throw Error(message);};
 const helperUrl='http://127.0.0.1:4781';
@@ -69,7 +71,7 @@ try {
    identifierSubmissions++;const fields=new URLSearchParams(body);if(fields.get('username')!==username){res.statusCode=403;return res.end('Refused');}
    identifiedUsername=fields.get('username');res.statusCode=303;res.setHeader('Set-Cookie',`stage=${stageCookie}; HttpOnly; SameSite=Strict; Path=/`);res.setHeader('Location','/password');return res.end();
   }
-  if(nativeStaged&&req.url==='/password'&&req.method==='GET'&&req.headers.cookie===`stage=${stageCookie}`&&identifiedUsername===username)return res.end(`<title>Managed password fixture</title><p id="account">${username}</p><form data-auth-account="dummy" method="post" action="/login"><input name="password" type="password"><button id="password-submit">Login</button></form>`);
+  if(nativeStaged&&req.url==='/password'&&req.method==='GET'&&req.headers.cookie===`stage=${stageCookie}`&&identifiedUsername===username)return res.end(`<title>Managed password fixture</title><p id="account">${username}</p><form data-auth-account="dummy" method="post" action="/login"><input name="password" type="password"><button id="password-submit">Login</button></form>${postAttemptClean?`<script>let resetScheduled=false;document.querySelector("input[name=password]").addEventListener("input",()=>{if(resetScheduled)return;resetScheduled=true;setTimeout(()=>{document.body.innerHTML=${JSON.stringify('<h1>Owned native identifier login</h1><form data-auth-account="dummy" method="post" action="/identify"><input name="username" value="'+username+'"><button id="identifier-submit">Continue</button></form>')};history.replaceState(null,"","/login");},400);});</script>`:""}`);
   if(req.url==='/login'&&req.method==='GET')return res.end('<title>Managed auth fixture</title><form data-auth-account="dummy" method="post" action="/login"><input name="username"><input name="password" type="password"><button>Login</button></form>');
   if(req.url==='/login'&&req.method==='POST'){
    let body='';for await(const bytes of req){body+=bytes;if(body.length>4096){res.statusCode=413;return res.end('Refused');}}
@@ -110,7 +112,7 @@ try {
   for(const [key,name] of [['receiver','hosted-login-receiver.js'],['browser','native-receiving-browser.js']]){const bytes=await readFile(new URL('../packages/client/src/'+name,import.meta.url)),path=join(directory,name);await writeFile(path,bytes,{mode:0o400});nativeModules[key]={path,sha256:hash(bytes)};}
   const bytes=await readFile(new URL('./hosted-auth-native-fixture-host.mjs',import.meta.url));fixtureModule=join(root,'native-host.mjs');await writeFile(fixtureModule,bytes,{mode:0o400});receipt.nativeHostSHA256=hash(bytes);receipt.nativeModules=nativeModules;
  }
- await save('host-config.json',{version:1,root,origin,username,password,nativeStaged,reconcileHeld,untouchedLogin,nativeModules,installedRoot:app,callerTaskId:process.env.CODEX_THREAD_ID,receivingTarget,processIdentity,desktop,installationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID,smokeUtilities:new URL('./smoke-utils.js',import.meta.url).pathname,browserEnv:context.env});
+ await save('host-config.json',{version:1,root,origin,username,password,nativeStaged,reconcileHeld,untouchedLogin,postAttemptClean,nativeModules,installedRoot:app,callerTaskId:process.env.CODEX_THREAD_ID,receivingTarget,processIdentity,desktop,installationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID,smokeUtilities:new URL('./smoke-utils.js',import.meta.url).pathname,browserEnv:context.env});
  const wrapper=join(root,'host-owner.mjs');
  await writeFile(wrapper,`import {writeFile} from 'node:fs/promises';\nimport {createAuthConfig as original} from ${JSON.stringify(pathToFileURL(originalModule).href)};\nimport {createAuthConfig as dummy} from ${JSON.stringify(pathToFileURL(fixtureModule).href)};\nexport async function createAuthConfig(context){const base=await original(context),extra=await dummy(context);await writeFile(${JSON.stringify(join(root,'operator-owner.json'))},JSON.stringify({root:base.root,approver:base.operatorApprover}),{mode:0o600});return {...base,external:extra.external,accounts:[...base.accounts,...extra.accounts.map(a=>({...a,approvers:base.approvers}))],store:{read:(source,options)=>source==='dummy-fixture'?extra.store.read(source,options):base.store.read(source,options)}};}\n`,{mode:0o600});
  fixtureEnvironment=originalEnvironment.replace(/^CODEX_BOTS_AUTH_MODULE=.*$/m,'CODEX_BOTS_AUTH_MODULE='+wrapper)+'\nCODEX_AUTH_EXTERNAL_FIXTURE_CONFIG='+join(root,'host-config.json')+'\n';
@@ -151,12 +153,12 @@ try {
    assert.equal(result.state,'released');assert.equal(result.captureState,'ready');
    receipt.operatorReadback={originalCallerPreserved:true,originalTargetPreserved:true,actor:result.lastReconciliation.actor};
   }
-  const readback=await playbook.advance(operatorReadback?options:{...options,reconcile:true});assert.equal(readback.status,untouchedLogin?'failed':'completed');if(untouchedLogin)assert.equal(readback.reasonCode,'helper_attempt_released');assert.equal(readback.requestId,requestId);receipt.consumerReadbackMode=true;
+  const readback=await playbook.advance(operatorReadback?options:{...options,reconcile:true});assert.equal(readback.status,cleanFailure?'failed':'completed');if(cleanFailure)assert.equal(readback.reasonCode,'helper_attempt_released');assert.equal(readback.requestId,requestId);receipt.consumerReadbackMode=true;
   summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.requestId,requestId);receipt.independentReconciliationWithoutReplay=true;
  }
 
- assert.equal(summary.state,untouchedLogin?'released':'authenticated');assert.equal(summary.captureState,'ready');receipt.outcome=summary;
- if(untouchedLogin){
+ assert.equal(summary.state,cleanFailure?'released':'authenticated');assert.equal(summary.captureState,'ready');receipt.outcome=summary;
+ if(cleanFailure){
   const retired=await playbook.advance(options);assert.equal(retired.status,'failed');assert.equal(retired.reasonCode,'helper_attempt_released');receipt.consumerResult=retired;
   const negative=await software.verifyLogin({taskId:task.taskId,guideId:'owned',accountRef:'dummy',organizationRef:'owned-company'});assert.equal(negative.status,'waiting');assert.equal(negative.reasonCode,'identifier_required');receipt.independentLoginStillRequired=true;
  }else{
@@ -172,10 +174,10 @@ try {
   receipt.canaryJournalScan={unitCount:units.length+1,bytes:Buffer.byteLength(journal.stdout),matches:journal.stdout.includes(password)?1:0};assert.equal(receipt.canaryJournalScan.matches,0);
  }
  await run('systemctl',['--user','restart','codex-bots.service']);await until(async()=>{try{return (await api('/api/health')).ok;}catch{return false;}},'Installed restart not ready',60000);
- const resumed=await createLoginPlaybook({browser:software,helper:caller.helper,checkpoints}).advance(options);assert.equal(resumed.status,untouchedLogin?'failed':'completed');assert.equal(resumed.requestId,requestId);receipt.completedRestartPreserved=true;
+ const resumed=await createLoginPlaybook({browser:software,helper:caller.helper,checkpoints}).advance(options);assert.equal(resumed.status,cleanFailure?'failed':'completed');assert.equal(resumed.requestId,requestId);receipt.completedRestartPreserved=true;
  await assert.rejects(caller.helper('begin_authentication',{requestId}));receipt.replayRefused=true;
- assert.equal(submissions,untouchedLogin?0:1);if(!untouchedLogin)assert(principalReads>0);receipt.websiteSubmissions=submissions;receipt.independentPrincipalReads=principalReads;receipt.hostAudit=JSON.parse(await readFile(join(root,'host-audit.json'),'utf8'));assert.equal(receipt.hostAudit.sourceReads,1);
- if(nativeStaged){assert.equal(identifierSubmissions,untouchedLogin?0:1);receipt.identifierSubmissions=identifierSubmissions;receipt.nativeInputAudit=JSON.parse(await readFile(join(root,'native-input-audit.json'),'utf8'));assert.equal(receipt.nativeInputAudit.privateSubmissions,1);assert.equal(receipt.nativeInputAudit.nativeTextDispatches,untouchedLogin?1:2);assert.equal(receipt.nativeInputAudit.nativeOperationDispatches,untouchedLogin?2:6);receipt.protectedInputAudit=JSON.parse(await readFile(join(root,'protected-input-audit.json'),'utf8'));assert.equal(receipt.protectedInputAudit.passwordFills,untouchedLogin?0:1);assert.equal(receipt.protectedInputAudit.mfaFills,0);}
+ assert.equal(submissions,cleanFailure?0:1);if(!cleanFailure)assert(principalReads>0);receipt.websiteSubmissions=submissions;receipt.independentPrincipalReads=principalReads;receipt.hostAudit=JSON.parse(await readFile(join(root,'host-audit.json'),'utf8'));assert.equal(receipt.hostAudit.sourceReads,1);
+ if(nativeStaged){assert.equal(identifierSubmissions,untouchedLogin?0:1);receipt.identifierSubmissions=identifierSubmissions;receipt.nativeInputAudit=JSON.parse(await readFile(join(root,'native-input-audit.json'),'utf8'));assert.equal(receipt.nativeInputAudit.privateSubmissions,1);assert.equal(receipt.nativeInputAudit.nativeTextDispatches,untouchedLogin?1:2);assert.equal(receipt.nativeInputAudit.nativeOperationDispatches,untouchedLogin?2:postAttemptClean?5:6);receipt.protectedInputAudit=JSON.parse(await readFile(join(root,'protected-input-audit.json'),'utf8'));assert.equal(receipt.protectedInputAudit.passwordFills,untouchedLogin?0:1);assert.equal(receipt.protectedInputAudit.mfaFills,0);}
  else assert.equal(receipt.hostAudit.privateSubmissions,1);
  assert(JSON.stringify(await call('browser_snapshot',{taskId:peer.taskId})).includes('Peer work preserved'));receipt.peerTabPreserved=true;passed=true;
 } catch(error) {receipt.failure='Inspect private failure artifact';await writeFile(join(root,'private-failure.txt'),String(error.stack),{mode:0o600});}
