@@ -31,7 +31,7 @@ export function managedWorkspaceSources(workspace?: ServiceManagedWorkspace): {
       managedTask: true,
       id: tab.id, browserId: tab.browserId, targetId: tab.targetId,
       sessionId: tab.sessionId, ownerSessionId: workspace.sessions[tab.sessionId]?.name ?? null,
-      lifecycle: 'ready', url: tab.url, title: null, taskLabel: text(tab.taskMetadata?.taskName),
+      lifecycle: 'ready', url: tab.url, title: text(tab.title), taskLabel: text(tab.taskMetadata?.taskName),
       taskMetadata: tab.taskMetadata,
       profileId: workspace.browsers[tab.browserId]?.profileId ?? null,
       desktopId: workspace.browsers[tab.browserId]?.desktop?.desktop_id ?? null,

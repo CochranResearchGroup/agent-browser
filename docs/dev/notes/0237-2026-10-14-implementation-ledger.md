@@ -732,3 +732,85 @@ The combined actual native default workflow at `/tmp/p283-real-native-integrated
 `/tmp/p237-pr-delivery-20261015/integrated-native-qualified.json` binds candidate and provider manifests, plan/preflight, browser/native receipts, both cleanup censuses, retained escalation and screenshots by SHA256. Plan digest ise3d303a1f21856c1988f629b9aad50f2e80dc3ef964a7f3258dca64b98a80839. The approved two-profile/two-desktop/one-viewer and180/780-second limits are unchanged. Provider and fixture source79cad116a0166d89f72fe89b1079abc6ec30c391 is already canonical through Remote View PR441 and442. Public ingress/authentication remain private/synthetic; installed or external-provider acceptance is not claimed.
 
 PR270 owns source delivery and the seven implementation-ticket dispositions. No second broad review was run. The original accepted nonblocking retirement-history performance follow-up remains P237/#105. Preserve all prior failed receipts, invocation errors, infrastructure EAGAIN and the historical legacy provider-authentication incident. Source publication does not update production/development runtimes, shared skills, real accounts, external ingress, CI or formal releases. Retain both clean owned worktrees and immutable candidates for attributable follow-up; no worktree removal is included. Memory disposition unavailable: prior Graphiti delivery failure remains unrepaired and no new write or delivery retry is attempted.
+
+
+## Renewed full-dashboard installed acceptance, 2026-10-16
+
+The operator resumed implement-spec with 2,000,000 tokens or six active hours.
+The governing objective remains the complete issue261 approved synthesized
+specification and P237 version 2, including its 30 user stories. A tab-label
+repair is a subordinate defect, not a replacement outcome. Current owned branch
+platform/native-dashboard-261 fast-forwards cleanly to fetched main c911bd358;
+foreign auth/shared-helper-290 and resource-bounds-105 checkouts are preserved.
+
+Source delivery and seven tickets remain qualified by their retained receipts.
+Fresh development status confirms generation 0.28.0-25b07b1639bc and active host,
+backend and dashboard units, with presentation provider unconfigured. This does
+not prove native installed acceptance. Remaining installed gates cover readable
+inventory/Properties, exact native selection and peer preservation, authenticated
+Share/viewing/first use, independent policy management/revocation, same-link
+recovery/restart, close confirmation, refresh continuity and scoped cleanup.
+Existing public/private source receipts remain scoped evidence, not substitutes
+for the installed workflow. Production, external ingress and CI are unchanged.
+
+First bounded repair loop adds the missing observed-title/data-URL regression
+to existing adapter and rendered workspace checks. No GREEN or installation of
+a repair is claimed at this checkpoint. The previous observer-loading claim
+remains withdrawn and the close-confirmation contradiction remains unresolved.
+
+
+### Installed repair and full native continuation evidence
+
+The adapter and rendered workspace regressions went RED on the exact missing
+observed title / HTML payload symptom, then GREEN after repair. Service Status
+now observes live page title and URL through a bounded read-only browser-target
+query, joins only exact owner browser/session/target identities, and releases
+SQLite before network reads. Unknown/unavailable targets retain readable fallback
+descriptions. Supplied task labels remain distinct from observed page titles.
+The original URL remains available in Properties and Copy URL. A focused repair
+review checked exact joins, no page activation, bounded failure, optional-client
+compatibility and typed close recourse; the prior broad-review limit is retained.
+
+The real installed Close Tab result is a typed profile-policy denial with
+no_effect and missing tab_close_any. Its previous generic confirmation error was
+misleading. The rendered regression now proves explicit no-effect permission
+feedback, private-detail suppression, disabled replay and retained target state.
+No profile permissions were changed. Unknown outcomes still require readback.
+
+Affected Rust validation passes: 13 storage/observation tests, 22 status-projection
+tests, 52 control-plane tests and 39 output tests. Workspace format and strict
+Clippy, client contracts, workspace node/context/chat/console consumers, rendered
+compact workspace, policy wiring, API/MCP parity, docs builds, changed links and
+handoff documentation pass. Initial Send-lifetime compilation failure and a
+Clippy boolean simplification failure are retained in private receipts. A skill
+addition exceeded the existing 10 KB guard; the concise final pointer passes it.
+No CI workflow was enabled or dispatched.
+
+The ordinary unsealed ci candidate has SHA256
+f074f7e00313b0b356619f2c16100ec9c6b2cbbb590518e085c00fa26c5cce5a.
+It was built from baseline c911bd358 plus the captured formatted repair inputs,
+then installed as development generation 0.28.0-f074f7e00313. Development doctor
+and all three launch/read/close/residue cycles pass with production unchanged.
+Actual dev-browser inspection confirms title and Properties plus the explicit
+close denial. A live title change is reflected by status without changing the
+visible peer tab. The earlier disposable task naturally expired during checks;
+its logical record was closed and a fresh synthetic task supplied the live proof.
+A readback harness initially exceeded Node's default output buffer; its corrected
+bounded capture passes and does not change the product.
+
+The installed executable also passes the complete native default continuation
+workflow in a disposable provider fixture: native pixels/input, independent
+viewer authentication, policy edit, expiry, exact owner restart, same opaque link,
+original metadata/profile, two physical peers, refreshed Properties, Diagnostics
+and dashboard logout. The task-local fixture adapts rail selectors to observed
+page titles while retaining supplied-label assertions in Properties and handoff
+rows. Provider production source is unchanged. Original and fresh independent
+process/cgroup/Docker censuses are empty; one exact fixture cleanup escalation
+is retained. Authentication and ingress are synthetic/local. This proves the
+installed executable in that private composition, not native provider adoption
+by the default development services. That binding is still absent. The complete
+P237 objective remains IN_PROGRESS, and issue261 remains open with current owner
+and in-progress coordination. Private receipts and the 30-story acceptance
+matrix are under /tmp/p237-dashboard-resume-20261016; native fixture receipts are
+under /tmp/p237-installed-native-20261016. No production, public ingress, account,
+shared-skill, CI or formal-release effect is claimed.

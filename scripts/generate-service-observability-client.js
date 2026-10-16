@@ -1082,6 +1082,8 @@ export interface ServiceManagedWorkspace {
   tabs: Record<string, {
     id: string; targetId: string; browserId: string; sessionId: string;
     createdAtMs: number; url: string | null;
+    /** Live exact-target observation; absent on older owners or unavailable targets. */
+    title?: string | null;
     taskMetadata: Record<string, unknown> | null;
     lifetime: Record<string, unknown> | null;
     pendingHuman: Record<string, unknown> | null;

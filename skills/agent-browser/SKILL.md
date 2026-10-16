@@ -6,6 +6,8 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+Rail labels use live titles or document labels.
+
 ## MCP task workflow
 
 Use `browser_open` with `{ "profile": "editorial", "profileMode": "persistent", "taskKey": "editing", "url": "https://example.com" }`. It creates or reuses the profile and returns `data.taskId`, `profileId`, `browserId`, `tabId`, and `url` in the MCP text payload. Pass `taskId` to subsequent page actions. Replay the same `taskKey` to return its current page and preserve edits without navigating again; use distinct keys for independent tasks. End only your task with `browser_close({ "taskId": "<returned-task-id>" })`.

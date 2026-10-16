@@ -6115,6 +6115,9 @@ resizable rail groups browsers and tabs; selecting a task opens its owned deskto
 through native Remote View authentication. The tab menu provides Properties,
 Copy URL, Share and scoped Close Tab. Handoffs opens retained links and their
 independent policies on demand.
+Tab descriptions use live page titles, then supplied task labels. Opaque data
+URLs use readable document labels; Properties and Copy URL keep the original URL.
+Inventory reads do not select tabs.
 Diagnostics at /service retains Service inspection, Selection, Activity, Chat,
 Console, Network, Storage, Extensions and runtime health. /activity opens its
 Activity tool. Viewing controls return to the same browser workspace.

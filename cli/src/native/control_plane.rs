@@ -363,7 +363,7 @@ impl ControlPlaneHandle {
             service_state_projection,
         )
         .await;
-        service_status_result_envelope(id, result)
+        service_status_result_envelope(id, result).await
     }
 
     fn status_snapshot(&self, waiting_profile_lease_job_count: usize) -> ControlPlaneSnapshot {
@@ -670,7 +670,7 @@ fn persist_profile_connection_disconnected_in_repository<
         .map(|changed| changed.unwrap_or(0))
 }
 
-pub(crate) fn service_status_result_envelope(
+pub(crate) async fn service_status_result_envelope(
     id: &str,
     result: Result<
         super::service_status_projection::ServiceStatusResponse,
@@ -681,7 +681,7 @@ pub(crate) fn service_status_result_envelope(
         Ok(data) => {
             let mut data =
                 serde_json::to_value(data).expect("service status response is serializable");
-            data["browserRuntime"] = super::browser_session_store::BrowserSessionSqliteStore::default_operational_status_read_only();
+            data["browserRuntime"] = super::browser_session_store::BrowserSessionSqliteStore::default_observed_operational_status().await;
             json!({ "id": id, "success": true, "data": data })
         }
         Err(error) => json!({ "id": id, "success": false, "error": error.to_string() }),

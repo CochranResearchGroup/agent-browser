@@ -1249,7 +1249,7 @@ pub(crate) mod action_commands {
             .await
             .map_err(|error| error.to_string())?;
         let mut response = serde_json::to_value(response).map_err(|error| error.to_string())?;
-        response["browserRuntime"] = super::super::browser_session_store::BrowserSessionSqliteStore::default_operational_status_read_only();
+        response["browserRuntime"] = super::super::browser_session_store::BrowserSessionSqliteStore::default_observed_operational_status().await;
         Ok(response)
     }
 
