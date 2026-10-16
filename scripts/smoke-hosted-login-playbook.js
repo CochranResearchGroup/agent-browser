@@ -18,6 +18,8 @@ import {browserFixtureEnvironment} from './hosted-auth-fixture-environment.js';
 assert(process.argv.includes('--apply-owned-dummy'),'Explicit owned dummy integration flag required');
 const nativeStaged=process.argv.includes('--native-staged'),reconcileHeld=process.argv.includes('--reconcile-held'),untouchedLogin=process.argv.includes('--untouched-login');
 const operatorReadback=process.argv.includes('--operator-readback');
+const emailIdentifier=process.argv.includes('--email-identifier');
+assert(!emailIdentifier||nativeStaged,'Email identifier qualification requires native input');
 assert(!operatorReadback||untouchedLogin,'Operator readback is limited to the native untouched-login fixture');
 assert(!reconcileHeld||nativeStaged,'Held reconciliation requires the staged native fixture');
 assert(!untouchedLogin||nativeStaged&&reconcileHeld,'Untouched login requires native staged held reconciliation');
@@ -29,7 +31,7 @@ const {connectRemoteView}=await import(pathToFileURL(join(app,'src/remote-view.m
 const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')));
 const context=createSmokeContext({prefix:'p245-hosted-',sessionPrefix:'p245'}),root=context.tempHome;
 console.log(JSON.stringify({fixtureRoot:root}));
-const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,operatorReadback,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
+const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,operatorReadback,emailIdentifier,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
 const save=(name,value)=>writeFile(join(root,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const until=async(check,message,ms=180000)=>{const deadline=Date.now()+ms;do{const value=await check();if(value)return value;await delay(200);}while(Date.now()<deadline);throw Error(message);};
 const helperUrl='http://127.0.0.1:4781';
@@ -37,7 +39,7 @@ async function api(path,input){const response=await fetch(helperUrl+path,input==
 const environmentFile=join(homedir(),'.config/codex-bots/runtime.env');
 let originalEnvironment,fixtureEnvironment,changed=false,remote,desktop,client,task,peer,caller,requestId,passed=false,website,sourceRelease=false;
 let submissions=0,principalReads=0,identifierSubmissions=0,identifiedUsername='';
-const password='dummy-'+randomBytes(24).toString('hex'),username='owned-user',passwordHash=hash(password),cookie=randomBytes(24).toString('hex');
+const password='dummy-'+randomBytes(24).toString('hex'),username=emailIdentifier?'owned-user@example.test':'owned-user',passwordHash=hash(password),cookie=randomBytes(24).toString('hex');
 const stageCookie=randomBytes(24).toString('hex');
 const processes=async()=>{const out=[];for(const pid of await readdir('/proc')){if(!/^\d+$/.test(pid)||Number(pid)===process.pid)continue;try{const env=(await readFile(`/proc/${pid}/environ`,'utf8')).split('\0'),args=await readFile(`/proc/${pid}/cmdline`,'utf8');if(!env.includes(`AGENT_BROWSER_HOME=${context.agentHome}`)&&!args.includes(root))continue;out.push({pid:Number(pid),executable:await realpath(`/proc/${pid}/exe`),startToken:(await readFile(`/proc/${pid}/stat`,'utf8')).split(')').at(-1).trim().split(/\s+/)[19],browser:args.includes('--user-data-dir')&&!args.includes('--type=')});}catch(error){if(!['ENOENT','ESRCH','EACCES'].includes(error.code))throw error;}}return out;};
 async function call(name,args){const reply=await client.send('tools/call',{name,arguments:args});const envelope=JSON.parse(reply.content.find(c=>c.type==='text').text);assert.equal(envelope.success,true,'Owned browser request failed');return envelope.data;}
@@ -67,7 +69,7 @@ try {
    identifierSubmissions++;const fields=new URLSearchParams(body);if(fields.get('username')!==username){res.statusCode=403;return res.end('Refused');}
    identifiedUsername=fields.get('username');res.statusCode=303;res.setHeader('Set-Cookie',`stage=${stageCookie}; HttpOnly; SameSite=Strict; Path=/`);res.setHeader('Location','/password');return res.end();
   }
-  if(nativeStaged&&req.url==='/password'&&req.method==='GET'&&req.headers.cookie===`stage=${stageCookie}`&&identifiedUsername===username)return res.end('<title>Managed password fixture</title><p id="account">owned-user</p><form data-auth-account="dummy" method="post" action="/login"><input name="password" type="password"><button id="password-submit">Login</button></form>');
+  if(nativeStaged&&req.url==='/password'&&req.method==='GET'&&req.headers.cookie===`stage=${stageCookie}`&&identifiedUsername===username)return res.end(`<title>Managed password fixture</title><p id="account">${username}</p><form data-auth-account="dummy" method="post" action="/login"><input name="password" type="password"><button id="password-submit">Login</button></form>`);
   if(req.url==='/login'&&req.method==='GET')return res.end('<title>Managed auth fixture</title><form data-auth-account="dummy" method="post" action="/login"><input name="username"><input name="password" type="password"><button>Login</button></form>');
   if(req.url==='/login'&&req.method==='POST'){
    let body='';for await(const bytes of req){body+=bytes;if(body.length>4096){res.statusCode=413;return res.end('Refused');}}
