@@ -1,7 +1,7 @@
 /** Installed-host consumer acceptance. Only explicit dummy scope; real accounts are preserved. */
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {readFile,writeFile,rename,mkdir,realpath,readdir,stat} from 'node:fs/promises';
+import {readFile,writeFile,rename,mkdir,realpath,readdir,stat,lstat} from 'node:fs/promises';
 import {join,isAbsolute} from 'node:path';
 import {homedir} from 'node:os';
 import {pathToFileURL} from 'node:url';
@@ -17,6 +17,8 @@ import {browserFixtureEnvironment} from './hosted-auth-fixture-environment.js';
 
 assert(process.argv.includes('--apply-owned-dummy'),'Explicit owned dummy integration flag required');
 const nativeStaged=process.argv.includes('--native-staged'),reconcileHeld=process.argv.includes('--reconcile-held'),untouchedLogin=process.argv.includes('--untouched-login');
+const operatorReadback=process.argv.includes('--operator-readback');
+assert(!operatorReadback||untouchedLogin,'Operator readback is limited to the native untouched-login fixture');
 assert(!reconcileHeld||nativeStaged,'Held reconciliation requires the staged native fixture');
 assert(!untouchedLogin||nativeStaged&&reconcileHeld,'Untouched login requires native staged held reconciliation');
 const binary=process.env.AGENT_BROWSER_SMOKE_AGENT_BROWSER_CMD,chrome=process.env.AGENT_BROWSER_SMOKE_BROWSER_EXECUTABLE;
@@ -27,7 +29,7 @@ const {connectRemoteView}=await import(pathToFileURL(join(app,'src/remote-view.m
 const {verifyCandidate}=await import(pathToFileURL(join(app,'scripts/verify-installation-candidate.mjs')));
 const context=createSmokeContext({prefix:'p245-hosted-',sessionPrefix:'p245'}),root=context.tempHome;
 console.log(JSON.stringify({fixtureRoot:root}));
-const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
+const receipt={fixtureRoot:root,startedAt:new Date().toISOString(),nativeStaged,reconcileHeld,untouchedLogin,operatorReadback,scope:'Actual installed existing host plus independent dummy website and consumer playbook; no real source or account effect'};
 const save=(name,value)=>writeFile(join(root,name),JSON.stringify(value,null,2)+'\n',{mode:0o600});
 const until=async(check,message,ms=180000)=>{const deadline=Date.now()+ms;do{const value=await check();if(value)return value;await delay(200);}while(Date.now()<deadline);throw Error(message);};
 const helperUrl='http://127.0.0.1:4781';
@@ -45,7 +47,7 @@ try {
  originalEnvironment=await readFile(environmentFile,'utf8');assert(!originalEnvironment.includes('CODEX_AUTH_EXTERNAL_FIXTURE_CONFIG='),'Another fixture owns host configuration');
  const env=Object.fromEntries(originalEnvironment.split('\n').filter(line=>line&&!line.startsWith('#')&&line.includes('=')).map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];}));
  assert(isAbsolute(env.CODEX_BOTS_AUTH_MODULE));const originalModule=await realpath(env.CODEX_BOTS_AUTH_MODULE);receipt.originalEnvironmentSHA256=hash(originalEnvironment);
- receipt.beforeBots=await api('/api/bots');const auth=await api('/api/auth');assert(!auth.requests.some(r=>r.running),'Do not interrupt active private authentication');
+ receipt.beforeHealth=await api('/api/health');receipt.beforeBots=await api('/api/bots');const auth=await api('/api/auth');assert(!auth.requests.some(r=>r.running),'Do not interrupt active private authentication');
  const health=await api('/api/health').catch(()=>null);if(health)assert(!health.capabilities.externalAuthConfigured,'Existing external integration needs separate custody');
  remote=await connectRemoteView({expectedInstallationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID});receipt.remoteIdentity=remote.identity;
  receipt.peerBaseline=(await remote.inventory()).assignments.filter(a=>a.state==='active').map(({assignmentId,desktopId,generation})=>({assignmentId,desktopId,generation}));
@@ -107,7 +109,7 @@ try {
  }
  await save('host-config.json',{version:1,root,origin,username,password,nativeStaged,reconcileHeld,untouchedLogin,nativeModules,installedRoot:app,callerTaskId:process.env.CODEX_THREAD_ID,receivingTarget,processIdentity,desktop,installationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID,smokeUtilities:new URL('./smoke-utils.js',import.meta.url).pathname,browserEnv:context.env});
  const wrapper=join(root,'host-owner.mjs');
- await writeFile(wrapper,`import {createAuthConfig as original} from ${JSON.stringify(pathToFileURL(originalModule).href)};\nimport {createAuthConfig as dummy} from ${JSON.stringify(pathToFileURL(fixtureModule).href)};\nexport async function createAuthConfig(context){const base=await original(context),extra=await dummy(context);return {...base,external:extra.external,accounts:[...base.accounts,...extra.accounts.map(a=>({...a,approvers:base.approvers}))],store:{read:(source,options)=>source==='dummy-fixture'?extra.store.read(source,options):base.store.read(source,options)}};}\n`,{mode:0o600});
+ await writeFile(wrapper,`import {writeFile} from 'node:fs/promises';\nimport {createAuthConfig as original} from ${JSON.stringify(pathToFileURL(originalModule).href)};\nimport {createAuthConfig as dummy} from ${JSON.stringify(pathToFileURL(fixtureModule).href)};\nexport async function createAuthConfig(context){const base=await original(context),extra=await dummy(context);await writeFile(${JSON.stringify(join(root,'operator-owner.json'))},JSON.stringify({root:base.root,approver:base.operatorApprover}),{mode:0o600});return {...base,external:extra.external,accounts:[...base.accounts,...extra.accounts.map(a=>({...a,approvers:base.approvers}))],store:{read:(source,options)=>source==='dummy-fixture'?extra.store.read(source,options):base.store.read(source,options)}};}\n`,{mode:0o600});
  fixtureEnvironment=originalEnvironment.replace(/^CODEX_BOTS_AUTH_MODULE=.*$/m,'CODEX_BOTS_AUTH_MODULE='+wrapper)+'\nCODEX_AUTH_EXTERNAL_FIXTURE_CONFIG='+join(root,'host-config.json')+'\n';
  assert.equal(await readFile(environmentFile,'utf8'),originalEnvironment,'Owner configuration changed before effects');
  await writeFile(environmentFile+'.p245-next',fixtureEnvironment,{mode:0o600});await rename(environmentFile+'.p245-next',environmentFile);changed=true;
@@ -132,7 +134,21 @@ try {
   await run('systemctl',['--user','restart','codex-bots.service']);await until(async()=>{try{return (await api('/api/health')).ok;}catch{return false;}},'Held restart not ready',60000);
   summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.state,'uncertain');assert.equal(summary.captureState,'held');assert(!summary.running);receipt.heldRestartPreserved=true;
   host=JSON.parse(await readFile(join(root,'fixture-host.json'),'utf8'));assert.equal((await fetch(host.observerUrl)).status,409);
-  const readback=await playbook.advance({...options,reconcile:true});assert.equal(readback.status,untouchedLogin?'failed':'completed');if(untouchedLogin)assert.equal(readback.reasonCode,'helper_attempt_released');assert.equal(readback.requestId,requestId);receipt.consumerReadbackMode=true;
+  if(operatorReadback){
+   // The private locator follows the broker's stable principal-file contract.
+   // Neither the connection nor its bearer enters receipts or stdout.
+   const owner=JSON.parse(await readFile(join(root,'operator-owner.json'),'utf8'));
+   assert(isAbsolute(owner.root)&&typeof owner.approver==='string');
+   const locator=join(owner.root,'connection-'+hash(JSON.stringify(['approver',owner.approver,null]))+'.json');
+   const metadata=await lstat(locator);assert(metadata.isFile()&&metadata.uid===process.getuid()&&!(metadata.mode&0o077));
+   const {callAuthBroker}=await import(pathToFileURL(join(app,'src/auth-broker.mjs')));
+   const result=await callAuthBroker(JSON.parse(await readFile(locator,'utf8')),'reconcile_authentication',{requestId});
+   assert.equal(result.requestId,requestId);assert.equal(result.taskId,caller.callerTaskId);assert.deepEqual(result.receivingTarget,receivingTarget);
+   assert.deepEqual(result.lastReconciliation.actor,{role:'approver',id:owner.approver});
+   assert.equal(result.state,'released');assert.equal(result.captureState,'ready');
+   receipt.operatorReadback={originalCallerPreserved:true,originalTargetPreserved:true,actor:result.lastReconciliation.actor};
+  }
+  const readback=await playbook.advance(operatorReadback?options:{...options,reconcile:true});assert.equal(readback.status,untouchedLogin?'failed':'completed');if(untouchedLogin)assert.equal(readback.reasonCode,'helper_attempt_released');assert.equal(readback.requestId,requestId);receipt.consumerReadbackMode=true;
   summary=await caller.helper('inspect_request',{requestId});assert.equal(summary.requestId,requestId);receipt.independentReconciliationWithoutReplay=true;
  }
 
@@ -168,7 +184,7 @@ finally {
    if(!sourceRelease)await writeFile(join(root,'release-source'),'1',{mode:0o600});
    assert.equal(await readFile(environmentFile,'utf8'),fixtureEnvironment,'Do not overwrite changed foreign configuration');
    await writeFile(environmentFile+'.p245-restore',originalEnvironment,{mode:0o600});await rename(environmentFile+'.p245-restore',environmentFile);await run('systemctl',['--user','restart','codex-bots.service']);
-   await until(async()=>{try{const h=await api('/api/health');return h.ok&&!h.capabilities.externalAuthConfigured;}catch{return false;}},'Original hosted config not ready',60000);
+   await until(async()=>{try{const h=await api('/api/health');return h.ok&&h.capabilities.externalAuthConfigured===receipt.beforeHealth.capabilities.externalAuthConfigured&&h.build.identity===receipt.producer.identity;}catch{return false;}},'Original hosted config not ready',60000);
    assert.equal(await readFile(environmentFile,'utf8'),originalEnvironment);assert.deepEqual(await api('/api/bots'),receipt.beforeBots);cleanup.originalConfigAndBotsPreserved=true;
   }
   if(peer)await call('browser_close',{taskId:peer.taskId});if(task)await call('browser_close',{taskId:task.taskId});client?.close();
