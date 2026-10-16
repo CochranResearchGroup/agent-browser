@@ -22,6 +22,10 @@
     "./hosted-auth-helper": {
       "types": "./src/hosted-auth-helper.d.ts",
       "import": "./src/hosted-auth-helper.js"
+    },
+    "./hosted-login-receiver": {
+      "types": "./src/hosted-login-receiver.d.ts",
+      "import": "./src/hosted-login-receiver.js"
     }
   },
   "scripts": {
