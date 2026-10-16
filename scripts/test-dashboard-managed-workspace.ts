@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { tabDescription } from '../packages/dashboard/src/lib/tab-description.ts';
 import { managedWorkspaceSources } from '../packages/dashboard/src/lib/managed-workspace.ts';
 
 const sources = managedWorkspaceSources({
@@ -22,4 +23,20 @@ assert.equal(sources.tabs[0].desktopId, 'desktop-a');
 assert.equal(sources.tabs[0].inventoryState, 'reported', 'owner inventory must not imply native viewer readiness');
 assert.equal(sources.sessions[0].agentName, 'Supplied label');
 assert.deepEqual(managedWorkspaceSources(undefined), { browsers: [], sessions: [], tabs: [] });
+const titled = managedWorkspaceSources({
+  schemaVersion: 'agent-browser.managed-workspace.v1', source: 'managed-owner',
+  browsers: {}, sessions: {}, tabs: {
+    t: { id: 't', targetId: 'native-target', browserId: 'b', sessionId: 's', createdAtMs: 100,
+      url: 'data:text/html,<title>P237 installed dev inspection</title>',
+      title: 'P237 installed dev inspection', taskMetadata: null, lifetime: null, pendingHuman: null },
+  },
+});
+assert.equal(titled.tabs[0].title, 'P237 installed dev inspection', 'preserve the owner-observed title instead of exposing HTML as a tab description');
+assert.equal(tabDescription(titled.tabs[0]), 'P237 installed dev inspection');
+assert.equal(tabDescription({url:'data:text/html,<title>Untrusted</title>'}), 'HTML document');
+assert.equal(tabDescription({url:'data:application/pdf;base64,private-payload'}), 'Data document');
+assert.equal(tabDescription({url:'blob:https://example.test/private-id'}), 'Browser document');
+assert.equal(tabDescription({taskLabel:'Review task',url:'data:text/html,code'}), 'Review task');
+assert.equal(tabDescription({title:'Observed title',taskLabel:'Supplied task'}), 'Observed title');
+assert.equal(tabDescription({}), 'Untitled tab');
 console.log('Managed owner inventory dashboard adapter checks passed');

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench } from "lucide-react";
+import { tabDescription } from "@/lib/tab-description";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
 import { writeDashboardWorkspaceUrlSelection } from "@/lib/workspace-url-selection";
 import type { ServiceManagedHandoff } from "@agent-browser/client/service-observability";
@@ -45,7 +46,7 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
       const url = new URL(handoff.handoffUrl, window.location.origin);
       if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash
           || !/^\/remote-view\/[A-Za-z0-9_-]+$/.test(url.pathname)) throw new Error('invalid_handoff_url');
-      setSharedLink({ url: url.toString(), label: tab.title || tab.taskLabel || "Browser task" });
+      setSharedLink({ url: url.toString(), label: tabDescription(tab) });
     } catch { setShareError("Could not prepare this link. Refresh browsers and check access before trying again."); }
     finally { sharePending.current = false; setShareBusy(false); }
   };
@@ -128,7 +129,7 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
                 <button type="button" className="native-workspace-browser" aria-expanded={open} onClick={() => setClosedGroups(current => {
                   const next = new Set(current); if (next.has(node.id)) next.delete(node.id); else next.add(node.id); return next;
                 })}><ChevronDown size={12} style={{ transform: open ? undefined : "rotate(-90deg)" }} /><Monitor size={13} /><span>{node.label}<small>{node.profileId ?? "Unknown profile"}</small></span><small>{browserTabs.length}</small></button>
-                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tab.title || tab.taskLabel || tab.url || "Untitled tab"} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tab.title || tab.taskLabel || tab.url || "Untitled tab"}</span></button></NativeTabActions>)}
+                {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tabDescription(tab)} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tabDescription(tab)}</span></button></NativeTabActions>)}
               </section>;
             })}
             {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}

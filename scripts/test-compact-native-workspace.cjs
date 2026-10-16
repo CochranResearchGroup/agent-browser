@@ -67,7 +67,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       }
       if (body.action === "tab_close") {
         if (closeHold) await closeHold;
-        if (closeDenied) return route.fulfill({ status: 403, json: { success: false, error: "SYNTHETIC-PRIVATE-CLOSE-DETAIL", failure: { code: "operator_tab_close_profile_policy_denied" } } });
+        if (closeDenied) return route.fulfill({ status: 403, json: { success: false, error: "SYNTHETIC-PRIVATE-CLOSE-DETAIL", failure: { code: "operator_tab_close_profile_policy_denied", effectState: "no_effect", retryDisposition: "inspect_before_retry", recommendedAction: "inspect_operator_tab_close_authority", reuseAllowed: false, missingPermission: "tab_close_any" } } });
         const tabId = { 'target-alice': 'alice', 'target-bob': 'bob', 'target-carol': 'carol' }[body.params.targetId];
         await page.evaluate(id => {
           const closed = JSON.parse(sessionStorage.getItem('fixture-closed-tabs') || '[]');
@@ -106,6 +106,10 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     const errors = []; page.on('pageerror', e => errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.getByRole('button', { name: 'Bob invoice', exact: true }).waitFor();
+    const dataTab = page.locator('.native-workspace-tab').filter({ hasText: 'PRIVATE-HTML-CANARY' });
+    assert.equal(await dataTab.count(), 0, 'HTML data payload must not become a visible tab description');
+    await page.getByRole('button', { name: 'HTML document', exact: true }).waitFor({ timeout: 1500 });
+    await page.getByRole('button', { name: 'Tab actions for HTML document', exact: true }).waitFor({ timeout: 1500 });
     const drawerTrigger = page.getByRole('button', { name: 'Handoffs', exact: true });
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await drawerTrigger.focus(); await page.keyboard.press('Enter');
@@ -597,7 +601,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await actions.click();
     await page.getByRole('menuitem', { name: 'Close Tab', exact: true }).click();
     await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).click();
-    await closeDialog.getByText('Close could not be confirmed. Refresh browsers and check close permission before trying again.', { exact: true }).waitFor();
+    await closeDialog.getByText('This profile does not allow you to close this tab. No tab was closed. Ask the profile owner to review close permission.', { exact: true }).waitFor();
     assert.equal((await closeDialog.innerText()).includes('SYNTHETIC-PRIVATE-CLOSE-DETAIL'), false);
     assert.equal(await closeDialog.getByRole('button', { name: 'Close tab', exact: true }).isDisabled(), true);
     assert.equal(await page.locator('button.native-workspace-tab[aria-label="Alice invoice"]').count(), 1);

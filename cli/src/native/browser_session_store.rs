@@ -26,6 +26,8 @@ use super::service_store::default_service_state_path;
 
 #[path = "browser_terminal_history.rs"]
 mod terminal_history;
+#[path = "browser_workspace_observation.rs"]
+mod workspace_observation;
 
 const BROWSER_SESSION_STATE_FILENAME: &str = "browser-session-state.json";
 const BROWSER_PROFILE_CATALOG_FILENAME: &str = "browser-profile-catalog.json";
@@ -163,6 +165,20 @@ impl BrowserSessionSqliteStore {
             Ok(path) => Self::operational_status_read_only(&path),
             Err(error) => unavailable_operational_status(Path::new("."), &error),
         }
+    }
+
+    /// Service inventory adds bounded live title/URL reads after releasing SQLite.
+    /// Install doctor keeps its purely local read-only aggregate.
+    pub(crate) async fn default_observed_operational_status() -> serde_json::Value {
+        let mut status = Self::default_operational_status_read_only();
+        let state = Self::default_sqlite_path()
+            .ok()
+            .and_then(|path| Self::open_read_only(&path).ok())
+            .and_then(|store| store.load_session_state().ok());
+        if let Some(state) = state {
+            workspace_observation::enrich(state, &mut status).await;
+        }
+        status
     }
 
     fn operational_status_read_only(path: &Path) -> serde_json::Value {

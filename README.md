@@ -2945,6 +2945,7 @@ to the owned task; diagnostic visibility does not grant browser ownership.
 The workspace and optional Diagnostics provide:
 
 - **Browser workspace** — the default compact, collapsible and resizable browser/tab rail. Tab selection opens the exact owned native desktop; Properties preserves supplied context and current identity, Share prepares its opaque link, and Handoffs manages retained records on demand.
+- **Tab descriptions** — Tab descriptions use live observed page titles when available, then supplied task labels. Opaque data URLs use readable document labels; Properties and Copy URL retain the original URL. Inventory reads do not select tabs.
 - **Native desktop** — Remote View owns rendering, viewer authentication and desktop controls. The same opaque handoff URL supports standalone human assistance and continuation. Existing compatible daemon streams remain available for their tasks.
 - **Service diagnostics** — inspect browser, profile, session, tab, job, incident and event records, with trace context, ownership evidence and guarded record actions. View controls return to the single browser workspace; native Remote View owns desktop viewing and control.
 - **Activity feed** — chronological command/result stream with timing and expandable details
