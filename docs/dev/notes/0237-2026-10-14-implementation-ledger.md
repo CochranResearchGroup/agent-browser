@@ -874,3 +874,29 @@ configuration and log remain untouched. The first direct native fixture attempt
 stopped at preflight because the shell selected Python without pidfd support;
 its cleanup completed. The new run uses the fixture-required system Python and
 retains the failed receipt rather than overwriting it.
+
+### Direct native workflow failures retained, 2026-10-16
+
+Source checkpoint `6dff82142cdcd54987350d1590c3041d996fa1b5` is remotely
+published on the P237 branch in draft PR292. The immutable ci candidate SHA-256 is
+`caaa3d2dbe4a5484b1ce64fbdce532e44dbb496f950912a07731d2da15a5eec1`.
+It is not production-promotable. The default installed generation is still
+`0.28.0-f074f7e00313`; its actual live browser runtime workspace is empty. Historical
+Service State rows are not active-work proof.
+
+The direct native v2 run reached real pixels/input, independent native auth,
+Share and policy editing, then its controlled-clock reap returned success with
+no expired tabs. Physical expiry therefore failed. The v3 diagnostic run failed
+earlier with native tunnel code771; its screenshot and DOM preserve the actual
+authentication-failure display. The v4 run reproduced the empty reap result with
+no pending-human hold and an elapsed tab lifetime. Its additional provider
+failure collector had an incorrect wrapped-assignment assumption, recorded as a
+separate diagnostic defect rather than replacing the browser failure. The next
+bounded run corrects that collector. No product cause has yet been asserted.
+
+Private receipts remain outside Git under the task-owned direct-native result
+directories. Cleanup receipts report no active owned processes, containers,
+networks or volumes. An independent v2 process/Docker readback is also empty.
+Earlier connector-assisted native success is retained as historical evidence,
+not a pass of the direct authenticated integration. No approval or operator
+configuration lookup is required to continue this diagnosis.
