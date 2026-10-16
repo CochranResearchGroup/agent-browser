@@ -48,7 +48,8 @@ try {
  const env=Object.fromEntries(originalEnvironment.split('\n').filter(line=>line&&!line.startsWith('#')&&line.includes('=')).map(line=>{const i=line.indexOf('=');return [line.slice(0,i),line.slice(i+1)];}));
  assert(isAbsolute(env.CODEX_BOTS_AUTH_MODULE));const originalModule=await realpath(env.CODEX_BOTS_AUTH_MODULE);receipt.originalEnvironmentSHA256=hash(originalEnvironment);
  receipt.beforeHealth=await api('/api/health');receipt.beforeBots=await api('/api/bots');const auth=await api('/api/auth');assert(!auth.requests.some(r=>r.running),'Do not interrupt active private authentication');
- const health=await api('/api/health').catch(()=>null);if(health)assert(!health.capabilities.externalAuthConfigured,'Existing external integration needs separate custody');
+ const health=await api('/api/health').catch(()=>null);if(health)assert(!health.capabilities.externalAuthConfigured||operatorReadback,'Existing external integration needs explicit operator-readback custody');
+ receipt.retainedRequests=auth.requests.map(({requestId,state,captureState,running})=>({requestId,state,captureState,running}));
  remote=await connectRemoteView({expectedInstallationId:env.CODEX_BOTS_REMOTE_VIEW_INSTALLATION_ID});receipt.remoteIdentity=remote.identity;
  receipt.peerBaseline=(await remote.inventory()).assignments.filter(a=>a.state==='active').map(({assignmentId,desktopId,generation})=>({assignmentId,desktopId,generation}));
  desktop=await remote.acquire({botId:'p245-owned-dummy',idempotencyKey:'p245-'+randomBytes(16).toString('hex')});desktop={...desktop,...await remote.observe(desktop)};
@@ -186,6 +187,7 @@ finally {
    await writeFile(environmentFile+'.p245-restore',originalEnvironment,{mode:0o600});await rename(environmentFile+'.p245-restore',environmentFile);await run('systemctl',['--user','restart','codex-bots.service']);
    await until(async()=>{try{const h=await api('/api/health');return h.ok&&h.capabilities.externalAuthConfigured===receipt.beforeHealth.capabilities.externalAuthConfigured&&h.build.identity===receipt.producer.identity;}catch{return false;}},'Original hosted config not ready',60000);
    assert.equal(await readFile(environmentFile,'utf8'),originalEnvironment);assert.deepEqual(await api('/api/bots'),receipt.beforeBots);cleanup.originalConfigAndBotsPreserved=true;
+   const retained=(await api('/api/auth')).requests;for(const before of receipt.retainedRequests){const after=retained.find(r=>r.requestId===before.requestId);assert(after);for(const key of ['state','captureState','running'])assert.equal(after[key],before[key]);}cleanup.retainedRequestsPreserved=true;
   }
   if(peer)await call('browser_close',{taskId:peer.taskId});if(task)await call('browser_close',{taskId:task.taskId});client?.close();
   try{const pid=Number(await readFile(join(context.socketDir,'runtime-host.pid'),'utf8')),row=(await processes()).find(p=>p.pid===pid);if(row){assert.equal(row.executable,receipt.agent.path);process.kill(pid,'SIGTERM');}}catch(error){if(error.code!=='ENOENT')throw error;}

@@ -38,7 +38,7 @@ export async function createAuthConfig(context){
  const client=createMcpStdioClient({context:{env:config.browserEnv},args:['mcp','serve'],onFatal:()=>{}});
  await client.send('initialize',{protocolVersion:'2025-06-18',capabilities:{},clientInfo:{name:'native-staged-private-receiver',version:'1'}});client.notify('notifications/initialized');
  process.once('SIGTERM',()=>{client.close();remote.close();});
- const call=async(name,args)=>{const reply=await client.send('tools/call',{name,arguments:args});const envelope=JSON.parse(reply.content.find(c=>c.type==='text').text);assert.equal(envelope.success,true,'Native fixture private browser operation failed');return envelope.data;};
+ const call=async(name,args)=>{const reply=await client.send('tools/call',{name,arguments:args});const envelope=JSON.parse(reply.content.find(c=>c.type==='text').text);if(!envelope.success)await writeFile(join(config.root,'native-call-failure.json'),JSON.stringify({name,code:envelope.error?.code??'browser_request_failed'}),{mode:0o600});assert.equal(envelope.success,true,'Native fixture private browser operation failed');return envelope.data;};
  const binding=structuredClone(config.receivingTarget),scope=structuredClone(base.accounts[0]);delete scope.callers;delete scope.approvers;
  const audit=await loadNativeFixtureAudit(config.root),protectedAudit=await loadProtectedInputAudit(config.root);
  const save=()=>writeFile(join(config.root,'native-input-audit.json'),JSON.stringify(audit)+'\n',{mode:0o600});await save();
@@ -51,7 +51,7 @@ export async function createAuthConfig(context){
   const accountMatched=authenticated?document.querySelector('#application')?.getAttribute('data-account')==='dummy':state==='password_required'?document.querySelector('#account')?.textContent===${JSON.stringify(config.username)}:document.querySelector('input[name=username]')?.value===${JSON.stringify(config.username)};
   return {origin:location.origin,state,accountMatched,visiblePassword:controls.password.visible,maskedPassword:!controls.password.count||controls.password.type==='password',controls,viewport:{width:innerWidth,height:innerHeight,devicePixelRatio,focused:document.hasFocus(),visible:document.visibilityState==='visible'}};})()`;
  const browser=createNativeReceivingBrowser({remote:native,desktop:config.desktop,guards,
-  async readObservation(){const current=await call('browser_continue',{taskId:binding.taskId});for(const key of ['taskId','profileId','browserId','tabId'])assert.equal(current[key],binding[key]);return {...(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:observeScript}})).result,binding:{...binding}};},
+  async readObservation(){const current=await call('browser_continue',{taskId:binding.taskId});for(const key of ['taskId','profileId','browserId','tabId'])assert.equal(current[key],binding[key]);const observation={...(await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:observeScript}})).result,binding:{...binding}};await writeFile(join(config.root,'native-observation.json'),JSON.stringify(observation),{mode:0o600});return observation;},
   async inputMatches({selector,value,guard}){await guard();return (await call('browser_command',{taskId:binding.taskId,action:'evaluate',params:{script:`(()=>{const es=document.querySelectorAll(${JSON.stringify(selector)});return es.length===1&&es[0].value===${JSON.stringify(value)};})()`}})).result===true;},
  });
  const fill=browser.fill,activate=browser.activate;
@@ -89,6 +89,6 @@ export async function createAuthConfig(context){
    },
   });
   if(config.reconcileHeld)receiver.verify=async()=>{throw Error('Owned fixture lost final verification acknowledgement');};
-  const apply=receiver.apply;receiver.apply=async(...args)=>{audit.privateSubmissions++;await save();return apply(...args);};return receiver;
+  const apply=receiver.apply;receiver.apply=async(...args)=>{audit.privateSubmissions++;await save();try{return await apply(...args);}catch(error){await writeFile(join(config.root,'native-apply-failure.json'),JSON.stringify({code:error.code??'fixture_assertion_failed',name:error.name,message:String(error.message).slice(0,1000)}),{mode:0o600});throw error;}};return receiver;
  }}};
 }
