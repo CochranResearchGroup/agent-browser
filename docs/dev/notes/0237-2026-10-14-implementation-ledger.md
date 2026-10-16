@@ -1022,3 +1022,42 @@ its existing control owner, closing the earlier registration-socket doctor gap.
 The complete native doctor passes. Existing client configuration hashes are
 unchanged; no production connector was registered or replaced. Public acceptance
 and the full objective remain open.
+
+### Installed retained-link recovery and native input, 2026-10-16
+
+Repair source `a2f88c23e` is installed only in development as generation
+`0.28.0-e3d61a60462b`. Both development doctors, three disposable launch cycles
+and production-identity preservation pass. The dedicated native provider doctor
+also passes with its private MCP broker. No production connector changed.
+
+The original opaque link reaches the authenticated native desktop without an
+agent-side resolve. A unique marker typed through that viewer reads back exactly
+from the addressed task. After a positively identified disposable browser process
+is terminated through its pidfd, reopening the same link recovers a new browser
+process and the retained task. A second unique native-input marker reads back
+exactly. Link creation and expiry, profile, logical tab and first-use metadata are
+unchanged; the peer browser record is unchanged. Lost in-memory input is not
+restored, matching the recovery contract.
+
+The first post-fault navigation returned503; retrying the same original link
+succeeded. Independent WAN and LAN authorization probes also time out
+intermittently, and read-only bastion observations show recurring host pressure.
+No timeout, TLS, DNS, authorization or host workload configuration was changed.
+These results qualify actual installed recovery and exact native input, while
+connection reliability and the remaining full public/dashboard acceptance stay
+open. Private receipts and synthetic screenshots remain outside Git. P237 remains
+IN_PROGRESS and PR293 remains draft pending the complete installed acceptance.
+
+Further installed acceptance passes through the public dashboard and native
+viewer. Selection embeds the actual native desktop, Properties retains supplied
+context and unknown absent provenance, and Share returns the original link.
+Saving a perpetual link and a separate20-second tab inactivity policy produces
+independent retained fields. With the viewer disconnected, the target later
+expires and its browser exits while the link stays active. Reopening that same
+link recreates the task and exact native input reads back successfully. The
+observations do not establish precise deadline timing. Dashboard logout then
+reports authenticated false while the native link still opens and accepts exact
+input. Restarting only the development runtime host also preserves the policies
+and first-use metadata and permits same-link native input afterward. The
+remaining acceptance matrix and intermittent authorization failures are still
+open; these successful cases do not erase earlier503 attempts.
