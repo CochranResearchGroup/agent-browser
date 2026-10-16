@@ -96,7 +96,7 @@ function Fixture() {
     return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, update);
   }, []);
   const selectedTab = availableTabs.find(tab => tab.id === selection.tabId);
-  return <CompactNativeWorkspace nodes={nodes as any} handoffs={availableHandoffs as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
+  return <CompactNativeWorkspace runtimeEnvironment="development" nodes={nodes as any} handoffs={availableHandoffs as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
     <NativeTaskViewport hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab ? {
       browserId: selection.browserId!, sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
       displayAllocationId: selection.browserId === "carol-browser" ? "desktop-b" : "desktop-a",

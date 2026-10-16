@@ -11,6 +11,7 @@ import { NativeHandoffDrawer } from "@/components/native-handoff-drawer";
 import { NativeTabActions } from "@/components/native-tab-actions";
 
 type Props = {
+  runtimeEnvironment?: "production" | "development";
   nodes: readonly WorkspaceNode[];
   handoffs?: readonly ServiceManagedHandoff[];
   tabs: readonly WorkspaceServiceTab[];
@@ -25,7 +26,7 @@ type Props = {
 };
 
 /** Compact inventory and native viewer share one authoritative source snapshot. */
-export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error }: Props) {
+export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handoffs, selection, userLabel, diagnosticsHref = "/service", onLogout, onRefresh, children, loading, error }: Props) {
   const [handoffsOpen, setHandoffsOpen] = useState(false);
   const [sharedLink, setSharedLink] = useState<{ url: string; label: string } | null>(null);
   const [shareBusy, setShareBusy] = useState(false);
@@ -142,7 +143,7 @@ export function CompactNativeWorkspace({ nodes, tabs, handoffs, selection, userL
         }} onPointerDown={event => { drag.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (drag.current) saveWidth(drag.current.width + event.clientX - drag.current.x); }} onPointerUp={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} />}
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
-        <header className="native-workspace-toolbar"><span>Agent Browser</span><span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
+        <header className="native-workspace-toolbar"><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
         {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>

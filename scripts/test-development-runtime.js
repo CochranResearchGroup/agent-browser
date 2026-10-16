@@ -5,6 +5,7 @@ import { readCandidateBuildSource } from './candidate-build.js';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -403,7 +404,13 @@ try {
   assert.equal(generationManifest.installDoctor.dashboardPort, descriptor.dashboardPort);
   assert.equal(generationManifest.installDoctor.commandSha256,
     createHash('sha256').update(readFileSync(descriptor.executable)).digest('hex'));
+  const controlTokenFile = join(fixture, 'native-control.token');
+  writeFileSync(controlTokenFile, 'test-development-control-token-1234567890', { mode: 0o600 });
+  const nativeHandoffTokenFile = join(fixture, 'native-handoff.token');
+  writeFileSync(nativeHandoffTokenFile, 'test-development-handoff-token-1234567890', { mode: 0o600 });
   const nativeEnv = { ...env,
+    AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE: nativeHandoffTokenFile,
+    AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE: controlTokenFile,
     AGENT_BROWSER_REMOTE_VIEW_ORIGIN: 'http://127.0.0.1:19103',
     AGENT_BROWSER_REMOTE_VIEW_POOL: 'fixture',
     AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN: 'https://view.example.com',
@@ -411,11 +418,30 @@ try {
   const nativeDescriptor = developmentRuntimeDescriptor(nativeEnv);
   assert.equal(nativeDescriptor.remoteView.application, 'agent-browser');
   assert.equal(nativeDescriptor.remoteView.pool, 'fixture');
+  assert.equal(nativeDescriptor.remoteView.controlTokenFile, controlTokenFile);
+  assert.equal(nativeDescriptor.remoteView.nativeHandoffTokenFile, nativeHandoffTokenFile);
+  assert(!JSON.stringify(nativeDescriptor.remoteView).includes('test-development-control-token-1234567890'), 'generation metadata must retain only the private token locator');
   const nativeLauncher = renderDevelopmentLauncher(nativeDescriptor, installed.generation.binary);
   assert(nativeLauncher.includes("export AGENT_BROWSER_REMOTE_VIEW_POOL='fixture'"));
+  assert(nativeLauncher.includes(`export AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE='${controlTokenFile}'`));
+  assert(nativeLauncher.includes(`export AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE='${nativeHandoffTokenFile}'`));
+  assert(Object.values(renderDevelopmentUnits(nativeDescriptor, installed.generation.binary))
+    .every(unit => unit.includes(`AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE=${nativeHandoffTokenFile}`)));
+  assert(Object.values(renderDevelopmentUnits(nativeDescriptor, installed.generation.binary))
+    .every(unit => unit.includes(`AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE=${controlTokenFile}`)));
   assert(nativeLauncher.includes(`export AGENT_BROWSER_DASHBOARD_PORT=${descriptor.dashboardPort}`));
   assert(Object.values(renderDevelopmentUnits(nativeDescriptor, installed.generation.binary))
     .every((unit) => unit.includes('AGENT_BROWSER_REMOTE_VIEW_POOL=fixture')));
+  for (const key of ['AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE', 'AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE']) {
+    assert.throws(() => developmentRuntimeDescriptor({ ...nativeEnv, [key]: 'relative.token' }), /token file/);
+    const symlink = join(fixture, `${key}.link`);
+    symlinkSync(controlTokenFile, symlink);
+    assert.throws(() => developmentRuntimeDescriptor({ ...nativeEnv, [key]: symlink }), /token file/);
+    const publicFile = join(fixture, `${key}.public`);
+    writeFileSync(publicFile, 'synthetic-private-token-1234567890', { mode: 0o644 });
+    chmodSync(publicFile, 0o644);
+    assert.throws(() => developmentRuntimeDescriptor({ ...nativeEnv, [key]: publicFile }), /token file/);
+  }
   const retainedManifestPath = join(installed.generation.path, 'generation.json');
   writeFileSync(retainedManifestPath, JSON.stringify({ ...generationManifest,
     remoteView: nativeDescriptor.remoteView }));
@@ -580,11 +606,11 @@ try {
 
   const manifestSource = readFileSync('cli/src/native/stream/http.rs', 'utf8');
   const pageSource = readFileSync('packages/dashboard/src/app/page.tsx', 'utf8');
-  const shellSource = readFileSync('packages/dashboard/src/components/app-shell.tsx', 'utf8');
+  const shellSource = readFileSync('packages/dashboard/src/components/compact-native-workspace.tsx', 'utf8');
   assert.match(manifestSource, /"runtimeEnvironment": runtime_environment_label/);
-  assert.match(pageSource, /runtimeEnvironment: runtimeManifest\.manifest\?\.runtimeEnvironment/);
+  assert.match(pageSource, /<CompactNativeWorkspace runtimeEnvironment=\{runtimeEnvironment\}/);
   assert.match(shellSource, /data-runtime-environment=\{runtimeEnvironment\}/);
-  assert.match(shellSource, /"Development" : "Service Lab"/);
+  assert.match(shellSource, /runtimeEnvironment === "development"[\s\S]*Development<\/span>/);
   const productionBefore = {
     selectedGeneration: '/production/generation-a',
     processes: [{ pid: 10, startToken: '100', executable: '/production/generation-a/bin/agent-browser' }],

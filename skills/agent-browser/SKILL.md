@@ -6,7 +6,7 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
-Rail labels use live titles or document labels.
+Token-protected native control uses `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE`, an absolute private owner-only regular file. See Remote View setup.
 
 ## MCP task workflow
 
@@ -16,7 +16,7 @@ Use `profileMode: "existing"` to require an existing profile. Use `profileMode: 
 
 For human assistance, call `browser_handoff({ "taskId": "<returned-task-id>" })` and give the person its complete `data.handoffUrl`. Require `operatorVisible.state=ready`. Continue page actions with the same task ID afterward. If `remote_view_public_origin_missing` is returned, report the server configuration guidance; the operator configures `AGENT_BROWSER_PUBLIC_ORIGIN` for the Agent Browser service. Task callers do not assemble provider URLs.
 
-The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Readiness alone does not record human use; the owner requires native display confirmation. Keep using the same opaque URL while the owner maintains pending handoff context.
+The handoff URL resolves the current owned desktop and redirects to native Remote View authentication without a Dashboard login. The public locator remains read-only. A valid link whose target expired continues through native authentication to browser-owner recovery when the private gateway callback is configured. Keep the same opaque URL; missing callback configuration reports unavailability. Human use requires native display confirmation. Reuse the opaque URL.
 
 When the person finishes, call `browser_continue({ "taskId": "<same-task-id>" })` to read the current task identity and URL, then continue page actions. This preserves the current page and edits; it is separate from CLI executable-transfer handoff.
 

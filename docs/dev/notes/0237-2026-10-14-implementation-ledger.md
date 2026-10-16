@@ -814,3 +814,63 @@ and in-progress coordination. Private receipts and the 30-story acceptance
 matrix are under /tmp/p237-dashboard-resume-20261016; native fixture receipts are
 under /tmp/p237-installed-native-20261016. No production, public ingress, account,
 shared-skill, CI or formal-release effect is claimed.
+
+
+### Persistent native development preparation, renewed continuation
+
+The operator reactivated the full implement-spec goal after correcting the
+premature request for a configuration locator. Current main Remote View is live;
+its separate older p221 gateway state is not a main-service outage. Discovery of
+origin, pool, credentials and ingress configuration is agent work. The next
+prepared transition uses a dedicated native development instance and existing
+development public origin, leaving the main provider and its assignments intact.
+The native configuration validates and the installer dry-run produces a concrete
+plan with no applied identity or runtime effects. Shared ingress publication and
+existing provider mutations remain separate effects until their exact transition
+is covered by current direction.
+
+A real installed integration gap was found while preparing that transition:
+Remote View control HTTP requires a private bearer, while the Agent Browser
+transport sends none. The native source fixture inserts a token connector, so
+its earlier passing workflow does not prove direct installed control admission.
+The bounded source repair uses a private control-token file with the existing
+HTTP transport, not a new access service or viewer. P237 owns that transport,
+optional native credential setting, its environment allowlist and development
+publisher propagation; native viewer authentication and callback bearer remain
+separate. Tests first target direct authenticated inventory and retained binding
+propagation. No GREEN, new installation or provider effect is claimed yet.
+
+### Direct native authentication repair validation, 2026-10-16
+
+The actual control-service token requirement exposed a gap hidden by the earlier
+private fixture's token-inserting connector. The application transport now reads
+an optional private control token file directly. Development publication retains
+that locator and the distinct native handoff callback locator in generation
+metadata, units and launcher, without copying either secret. Explicit invalid
+files fail before provider requests. The default compact workspace again shows
+its development identity when runtime metadata proves it.
+
+The transport's direct-authentication regression was observed failing before the
+repair. All seven focused transport tests now pass, including unsafe-file
+rejection and existing redirect, no-replay and outcome-unknown behavior. Publisher,
+rendered compact workspace, dashboard and docs builds, handoff documentation,
+policy wiring, service parity, navigator and inspector checks pass. Strict
+workspace clippy, final formatting and all three dotenv tests pass. Candidate
+rebuild and direct native workflow remain pending; these source results do not qualify default native adoption.
+
+A private isolated native-provider configuration validates and produces a
+conflict-free installer dry-run. Exact Cooper inventory, local and bastion diffs
+are prepared outside the product repository. Their route preflight preserves the
+dashboard root and APIs. No provider installation or ingress publication has
+occurred. Read-only bastion SSH timed out during banner exchange, so the matching
+Authelia rule remains unverified. Existing production and foreign providers are
+not repurposed by this preparation.
+
+Read-only bastion inspection subsequently succeeded over its existing Tailscale
+identity and verified host key. The default-development hostname has no matching
+Authelia rule, including no wildcard. A two-line hostname-specific one-factor
+rule diff is now prepared with the source hash. The existing dirty Authelia
+configuration and log remain untouched. The first direct native fixture attempt
+stopped at preflight because the shell selected Python without pidfd support;
+its cleanup completed. The new run uses the fixture-required system Python and
+retains the failed receipt rather than overwriting it.

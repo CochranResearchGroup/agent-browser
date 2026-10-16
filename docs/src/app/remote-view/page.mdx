@@ -574,6 +574,14 @@ Missing, inactive, ambiguous or stale window evidence prevents focus qualificati
 `remote_view_focus_owned_window_unproven` identifies missing owned foreground proof.
 This window check does not establish viewer connectivity or operator readiness.
 
+For a token-protected control service, set `AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE`
+to its absolute private token file. The file must be regular, owned by the service
+user, have no group or other permissions, and contain 16 to 256 visible ASCII
+characters with at most one trailing newline. Symlinks are rejected. This bearer
+authenticates control requests; native viewer authentication and the dedicated
+handoff callback use separate credentials. Development publication retains both
+control and callback token file paths without copying their contents.
+
 For ordinary managed browser sessions, configure `AGENT_BROWSER_REMOTE_VIEW_ORIGIN`
 with the Remote View HTTP origin on a literal loopback address, such as
 `http://127.0.0.1:9000`, and `AGENT_BROWSER_REMOTE_VIEW_POOL` with its configured

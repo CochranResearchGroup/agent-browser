@@ -6,6 +6,7 @@ use std::path::PathBuf;
 const DEFAULT_ENV_FILE: &str = ".agent-browser/.env";
 const KNOWN_VARS: &[&str] = &[
     "AGENT_BROWSER_DASHBOARD_AUTH_FILE",
+    "AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE",
     "AGENT_BROWSER_KEYCHAIN_PASSWORD",
     "AGENT_BROWSER_PROFILE_LEASE_MODE",
     "AGENT_BROWSER_PRESENTATION_HARD_MAXIMUM",
@@ -20,6 +21,7 @@ const KNOWN_VARS: &[&str] = &[
     // Keep partial native bindings visible to fail-closed provider validation.
     "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
     "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+    "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
     "AGENT_BROWSER_REMOTE_VIEW_POOL",
     "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
     "AGENT_BROWSER_REMOTE_VIEW_EXTERNAL_URL",
@@ -173,6 +175,14 @@ mod tests {
         let bindings = [
             ("AGENT_BROWSER_REMOTE_VIEW_ORIGIN", "http://127.0.0.1:19096"),
             ("AGENT_BROWSER_REMOTE_VIEW_POOL", "main"),
+            (
+                "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+                "/private/control.token",
+            ),
+            (
+                "AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE",
+                "/private/handoff.token",
+            ),
             ("AGENT_BROWSER_REMOTE_VIEW_APPLICATION", "agent-browser"),
             (
                 "AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN",
