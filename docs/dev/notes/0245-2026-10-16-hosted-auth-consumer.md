@@ -240,3 +240,20 @@ actual QBO safety evidence. Producer broader validation and exact candidate
 qualification remain separate; real request724e55df stays held with nonzero
 MFA attempt, no resend or replay. QBO principal/company, BILL and final review
 remain incomplete.
+
+The producer auth plan is now0012 because canonical recovery owns0011. Recovery
+PR64/65 advanced main tod4d24d1 and independently replaced the installed helper
+withadf826f9. This lane preserved those changes through merge4643858 and published
+PR66 at6146377. Fresh candidatedac7d1f3 passes integrity/relocation/tamper and
+private startup/stop checks with zero bot turns. Canonical auth/protocol/recovery/
+chat validation passes224tests/20opt-in skips/0fail and exits cleanly. Earlier
+broad failures and chat stall remain retained; canonical and current isolated
+chat each pass12tests. No new helper or Remote View installation was performed.
+
+At22:40:47Z the supported operator API proves original request724e55df remains
+uncertain/running=false/effect unknown/capture held, with original target/expiry.
+Exact current profile browser census is zero; the supported metadata call timed
+out and supplies no safety proof. No driver, credential retrieval, resend,
+protected input, capture release or new auth request followed. Remote View PR444
+and producer PR66 are concrete pending effect questions. Source checkpoints
+remain available for review; actual QBO/BILL acceptance is still open.

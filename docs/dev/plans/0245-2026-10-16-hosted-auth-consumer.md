@@ -20,7 +20,7 @@ Renewed U3 diagnosis uses the existing public continuation and native owner seam
 
 ## Current State
 
-U1, U2 and U2N retain their qualified boundaries. Producer PR63 is installed as candidate51422492/sourcefed3a5c after explicit user merge/install authorization. All188packaged source inputs match canonicalfb3ae0a; sealed bytes were reused. PR62 designated-approver recovery and PR63 bounded pure-read settlement both pass independent installed native qualification, including the email-shaped identifier, held restart, clean failed-login release, no replay and exact peer/configuration cleanup. Native input effects are never retried. Source suites and candidate smoke remain bounded to their recorded identities.
+U1, U2 and U2N retain their qualified boundaries. Producer PR63 was installed and qualified as candidate51422492/sourcefed3a5c after explicit user authorization. Another lane subsequently installed canonical recovery PR64/65 as generationadf826f9; fresh operator readback preserves the original uncertain/held request and expiry. All188packaged source inputs match canonicalfb3ae0a; sealed bytes were reused. PR62 designated-approver recovery and PR63 bounded pure-read settlement both pass independent installed native qualification, including the email-shaped identifier, held restart, clean failed-login release, no replay and exact peer/configuration cleanup. Native input effects are never retried. Source suites and candidate smoke remain bounded to their recorded identities.
 
 The first three actual QBO requests are released/capture-ready through supported independent native proof. Lost broker replies were resolved by fresh request readback without repeating them. All original request/controller bytes, consumed one-attempt limits and logical receiving identities remain preserved. Current-caller request724e55df is terminal uncertain/capture-held after its first actual MFA fill attempt. Durable audit4/4/4/0/1/0 preserves that attempted effect; there was no MFA submit. Native failure desktop_interaction_failed contains operationLockRefused=true. Supported mail lookup completed, with factor contents retained privately. Empty current controls do not erase the attempt or qualify the untouched-login retirement contract. No replay, resend, host restart or successor followed. A bounded Remote View lock census identifies healthy supervisors holding the global writer; isolated companion Plan0127 is testing a read-only healthy monitor path while preserving PR439 ownership and all native peers. No Remote View production change is claimed.
 
@@ -53,9 +53,26 @@ One integration branch in the existing clean root, no new worktree. Coordinator 
 
 ## Bounded post-attempt safety packet
 
-Producer Plan0011 adds trusted current protected-field emptiness as a distinct
+Producer Plan0012 adds trusted current protected-field emptiness as a distinct
 negative proof, preserving attempted/unknown effects and no replay. Qualify SDK
 forwarding with a failing test first, then one repair and all affected source
 gates plus five documentation surfaces. No real readback or installation follows
 from source qualification. Independent installed native synthetic proof must
 precede actual held-request retirement. This does not expand the issue objective.
+
+## Pending shared-runtime checkpoint
+
+Remote View PR444 head0c4a755 and source-bound binaryc8f69f03 are qualified at
+their source/bundle boundaries; preflight verifies16general ready desktops,
+64native identities and16monitors. Producer PR66 head6146377 retains canonical
+recovery, with candidatedac7d1f3/source4643858. Its combined affected lane passes
+224tests/20opt-in skips and candidate smoke starts zero bot turns, verifies
+relocation/tamper refusal and stops its owned main. Broader prior failures/stall
+remain recorded, not represented as a full-suite pass. Both additional shared
+runtime effect questions are pending; no new installation followed.
+
+Current exact QBO profile process census is zero; same-target metadata readback
+timed out. Fresh operator inspection still reports running=false, unknown
+effects and held capture with original target/expiry. Neither observation
+qualifies clean retirement. Preserve the MFA attempt and all controllers; no
+resend, replay or new auth request. U3, U4 and final U5 remain open.
