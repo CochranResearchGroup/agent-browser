@@ -1061,3 +1061,79 @@ input. Restarting only the development runtime host also preserves the policies
 and first-use metadata and permits same-link native input afterward. The
 remaining acceptance matrix and intermittent authorization failures are still
 open; these successful cases do not erase earlier503 attempts.
+
+### Public normal-DNS composition and scoped cleanup, 2026-10-16
+
+The installed public dashboard additionally passes exact Alpha selection, rapid
+Alpha/Beta switching with Beta last, and selection/viewer restoration on full
+refresh. Independent CDP reads do not activate targets: Beta is visible and
+receives the native input marker; Alpha remains hidden with its original value.
+Keyboard rail resizing, collapse/show, search, mobile rows, reduced motion,
+Escape and focus restoration pass on the installed assets. A390px viewport has
+no document overflow. A sign-in-required selection is correctly actionable;
+re-authentication uses existing Remote View authentication.
+
+A separate synthetic task demonstrates finite link expiry returning HTTP410
+while its task stays live and readable. Dashboard deletion then returns HTTP404
+without closing that task. Close Tab presents the application confirmation;
+cancellation preserves work and denied profile permission reports no effect.
+The owning agent closes that task through its existing authority. Closing Beta
+in the two-tab task preserves Alpha and its input; closing the remaining task
+exits only its owned browser.
+
+The temporary LAN-mapped browser is closed with zero surviving captured
+processes. A fresh task-owned browser reuses the private profile with normal DNS
+and certificate validation. Public native input and the composed public dashboard
+pass without the resolver override. The installed MCP server initializes over
+stdio and reads the existing session resource; its task process exits. Final
+cleanup closes the owned viewer and managed tasks, with no captured viewer or
+exact synthetic-profile process matches and no active P237 sessions. The shared
+browser daemon and permanent development services remain intact. Synthetic
+retained handoff history is preserved, including the demonstrated perpetual
+link; production and foreign resources are unchanged.
+
+Ingress source custody is reconciled in a separate Cooper checkout from its
+canonical CochranResearchGroup main94e4d1d, preserving the foreign operational
+checkout. The exact reviewed inventory hunks and generated owned local entries
+match the applied deployment; the generated bastion artifact is byte-identical.
+Inventory validation and rendering pass. Current local and public dashboard
+roots return200; unauthenticated public native access redirects302 to Authelia.
+This source reconciliation adds no deployment effect. Private receipts remain
+outside Git. The all-story acceptance reconciliation and canonical PR integration
+are the remaining closeout steps.
+
+
+### Addressed-link focus gap found during acceptance audit
+
+The dashboard selects Alpha correctly, but the same existing Alpha opaque link
+can show Beta after an intervening command selected Beta. The final acceptance
+map is provisional for addressed-link selection and first-use binding. The
+proposed completion metadata was not committed or integrated and is withdrawn
+pending a controlled reproduction and repair. Cooper PR13 remains valid canonical
+ingress source; P237 and #261 remain IN_PROGRESS.
+
+### Addressed-link authenticated selection source GREEN
+
+The actual HTTP regression fails because a live document link redirects directly
+to the desktop rather than the authenticated addressed-target continuation.
+Top-level opaque navigation now validates retained intent and reaches the existing
+native authentication before owner preparation and focus. The public GET stays
+read-only; the dashboard's prepared iframe renderer path is unchanged. This also
+prepares an ordinary headless task for native viewing instead of selecting a
+black desktop. No endpoint, viewer, grant or producer feature is added.
+
+The regression passes, including positive iframe routing and unchanged public
+state/owner relay counts, plus the existing stale-process/observation guards on
+the iframe path. All320 Remote View-focused,66 dashboard HTTP and39 output tests
+pass, with workspace formatting and strict Clippy. Unchanged browser-session
+qualification from the preceding source repair is retained. Handoff guidance,
+durable-handoff, policy wiring and docs build pass. The initially mistyped
+package-script invocation is setup failure only; the correctly named existing
+durable-handoff gate passes. The new executable still requires installed native
+addressed-link selection/input qualification before the full outcome can close.
+
+Cooper PR13 is canonical and its clean auxiliary checkout has completed the
+repository-scoped worktree closeout operation. Fresh path and worktree-inventory
+readback confirm removal; no candidate pins existed. The foreign operational
+checkout remains preserved, including its applied ingress files until its owner
+reconciles canonical main.

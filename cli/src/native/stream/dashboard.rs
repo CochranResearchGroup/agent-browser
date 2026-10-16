@@ -4198,7 +4198,7 @@ mod tests {
         env.remove("AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT");
         let provider_thread = std::thread::spawn(move || {
             use std::io::{Read, Write};
-            for _ in 0..5 {
+            for _ in 0..6 {
                 let (mut stream, _) = provider.accept().unwrap();
                 stream
                     .set_read_timeout(Some(Duration::from_secs(5)))
@@ -4254,6 +4254,42 @@ mod tests {
         assert_eq!(http_response_status(&redirected), Some(303));
         assert!(String::from_utf8_lossy(&redirected)
             .contains(&format!("handoff-observation={}", "a".repeat(64))));
+        // A live owned browser can have another tab selected. Its public
+        // document link must reach native authentication before owner focus,
+        // rather than reuse the desktop's current foreground tab.
+        let baseline = store.load_session_state().unwrap();
+        let mut live = baseline.clone();
+        live.browsers.get_mut("synthetic-browser").unwrap().pid = std::process::id();
+        store
+            .compare_and_save_session_state(&baseline, &live)
+            .unwrap();
+        let relays_before = commands.lock().unwrap().len();
+        let document = exchange(format!(
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n"
+        )).await;
+        assert_eq!(http_response_status(&document), Some(303));
+        assert!(
+            String::from_utf8_lossy(&document).contains(&format!(
+                "Location: https://synthetic-view.example/handoff/agent-browser/{id}"
+            )),
+            "a live tab link bypassed authenticated addressed-target selection: {}",
+            String::from_utf8_lossy(&document)
+        );
+        assert_eq!(commands.lock().unwrap().len(), relays_before);
+        assert_eq!(store.load_session_state().unwrap(), live);
+        // Dashboard selection already owns focus. Keep its existing native
+        // workspace renderer path without another public owner mutation.
+        let embedded = exchange(format!(
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Dest: iframe\r\nConnection: close\r\n\r\n"
+        )).await;
+        assert_eq!(http_response_status(&embedded), Some(303));
+        assert!(String::from_utf8_lossy(&embedded)
+            .contains("Location: https://synthetic-view.example/1?workspace=true"));
+        assert_eq!(commands.lock().unwrap().len(), relays_before);
+        assert_eq!(store.load_session_state().unwrap(), live);
+        store
+            .compare_and_save_session_state(&live, &baseline)
+            .unwrap();
         // An owner may already have recovered a physical target while the
         // previous native observation is retained. The same public URL must
         // select authenticated continuation instead of becoming a permanent 503.
@@ -4284,7 +4320,7 @@ mod tests {
             .unwrap();
         let relays_before = commands.lock().unwrap().len();
         let response = exchange(format!(
-            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n"
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: iframe\r\nConnection: close\r\n\r\n"
         )).await;
         assert_eq!(
             http_response_status(&response),
@@ -4315,7 +4351,7 @@ mod tests {
             .unwrap();
         let relays_before = commands.lock().unwrap().len();
         let response = exchange(format!(
-            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: document\r\nConnection: close\r\n\r\n"
+            "GET /remote-view/{id} HTTP/1.1\r\nHost: synthetic.example\r\nSec-Fetch-Mode: navigate\r\nSec-Fetch-Dest: iframe\r\nConnection: close\r\n\r\n"
         )).await;
         assert_eq!(
             http_response_status(&response),

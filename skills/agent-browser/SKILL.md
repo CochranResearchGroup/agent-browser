@@ -54,7 +54,7 @@ Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its
 existing authentication; dashboard logout remains separate.
-An exited browser or changed native target recovers through native authentication on the same link.
+Opening the same handoff selects its addressed tab through native authentication.
 
 ## Sharing a profile between tasks
 

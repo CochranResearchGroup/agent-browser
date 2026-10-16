@@ -675,19 +675,20 @@ Configure the runtime host and dashboard processes with the same reviewed
 `AGENT_BROWSER_REMOTE_VIEW_PUBLIC_ORIGIN`. The public origin must be Remote View's
 external HTTPS origin. Opening the durable handoff authenticates the operator,
 checks the desktop's current Agent Browser assignment and lifecycle generation,
-and navigates directly to Remote View's native desktop route in the same tab.
-It does not activate the original browser tab, issue or renew an Agent Browser
-viewer grant, select a dashboard workspace, or require another Open desktop click.
+and enters Remote View's existing authenticated continuation in the same tab.
+The public locator remains read-only. After native authentication the browser
+owner prepares and selects the addressed tab, even when a live browser currently
+shows another tab. It does not issue or renew an Agent Browser viewer grant,
+select a dashboard workspace, or require another Open desktop click. Prepared
+dashboard iframes retain the existing same-origin native workspace renderer.
 
-When a still-valid link has lost its retained target, its browser process has
-exited, or its physical target observation has changed, the read-only public locator
-redirects to Remote View's native authenticated recovery continuation. The native
-gateway rejects prefetch and non-document requests, authenticates the operator,
-and requests recovery from the browser owner before redirecting to the current
-native viewer. Keep the same opaque link. Recovery restores the retained task URL;
+The native gateway rejects prefetch and non-document continuation requests,
+authenticates the operator, and requests addressed-task preparation or recovery
+from the browser owner before redirecting to the current native viewer. This
+also handles a lost retained target, exited browser or changed physical binding. Keep the same opaque link. Recovery restores the retained task URL;
 it does not restore lost in-memory page state or record successful human use.
 
-For this optional private integration, configure
+Native handoff continuation requires this private integration. Configure
 `AGENT_BROWSER_NATIVE_HANDOFF_TOKEN_FILE` on the Agent Browser dashboard process
 and `REMOTE_VIEW_AGENT_BROWSER_HANDOFF_TOKEN_FILE` on the Remote View gateway to
 reference the same dedicated private bearer file. Use an absolute regular file
@@ -749,7 +750,7 @@ Software callers delete a link through `service_remote_view_handoff_resolve` wit
 
 The owner operation `service_remote_view_handoff_resolve` with `params.handoffOperation="prepare_human"` and `params.pendingHumanRetentionMs` records a pending-human hold on the addressed tab. A positive value sets a maximum duration; 0 holds without an automatic deadline. `inspect` reports `pendingHuman` separately from link expiry and tab inactivity. The hold survives restart and does not navigate or open a viewer. The browser owner reads successful-use evidence through the private native provider transport, joined to the retained handoff, exact tab/target and current lifecycle/viewing generations. Caller-supplied `humanUseEvidence` is rejected. Pending, expired or failed native viewing preserves the hold. Qualified use and exact native focus release the hold and resume tab inactivity. Ordinary agent readiness resolution leaves the hold intact. Native `remote_view_open` automatically prepares this hold after successful browser work. Software managed commands can request it with `humanHandoff=true`. `pendingHumanRetentionMs` overrides `AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS`; the default 0 holds until use with no automatic deadline. Ordinary agent work does not prepare a human hold. Invalid configuration and overflowing pending deadlines are rejected before browser effects. Authenticated document navigation registers a continuation and redirects to the existing native viewer, including dashboard redirects that lose transient user activation. Registration does not require a fresh click on the API URL. The redirect and readiness do not acknowledge use; private owner polling consumes only provider-qualified use. Registration survives owner restart; replay preserves the first-use timestamp. Prefetches, background requests and missing navigation context retain the hold. This uses existing authentication and adds no operator confirmation step. Real browser/HTTP deployment acceptance remains pending.
 
-Native human handoff production prepares private observation context alongside the pending-human hold. The public opaque link reads the current binding and redirects into native Remote View authentication without a Dashboard login, browser recovery or focus effect. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention. This source behavior still requires final native public workflow qualification.
+Native human handoff production prepares private observation context alongside the pending-human hold. The top-level public opaque link validates retained intent without effects; after existing native authentication, the owner prepares and selects the addressed task without a Dashboard login. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention. This source behavior still requires final native public workflow qualification.
 
 
 
