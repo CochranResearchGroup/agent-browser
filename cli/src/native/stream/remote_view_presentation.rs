@@ -160,7 +160,21 @@ pub(super) fn native_resume_operator(
     Ok(operator.to_owned())
 }
 
-/// Read the current owned route without launching, recovering or focusing a browser.
+fn native_continuation_location(origin: &url::Url, id: &str) -> Result<String, String> {
+    let state = crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
+        .load_session_state()?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "remote_view_clock_invalid")?
+        .as_millis() as u64;
+    agent_browser_service_model::remote_view_handoff_resume_intent(&state, id, now_ms)?;
+    origin
+        .join(&format!("/handoff/agent-browser/{id}"))
+        .map(|url| url.to_string())
+        .map_err(|_| "remote_view_presentation_path_invalid".into())
+}
+
+/// Validate the public link without launching, recovering or focusing a browser.
 /// The destination's native Remote View authentication protects desktop access.
 /// Resolve without effects. Embedded callers use Remote View's existing
 /// same-origin workspace mode; this never grants access or weakens its CSP.
@@ -169,6 +183,13 @@ pub(super) async fn resolve_public_location(id: &str, workspace: bool) -> Result
         .map_err(|_| "remote_view_public_origin_missing")?;
     let origin = public_origin(&configured)?;
     let id = id.to_string();
+    if !workspace {
+        // A live browser may show a different tab, or exit while native login
+        // is pending. Select the addressed target only after native auth.
+        return tokio::task::spawn_blocking(move || native_continuation_location(&origin, &id))
+            .await
+            .map_err(|_| "remote_view_presentation_join_failed")?;
+    }
     let handoff = id.clone();
     let presentation = tokio::task::spawn_blocking(move || {
         crate::native::browser_session_remote_view::resolve_handoff_desktop_presentation(&handoff)
@@ -183,22 +204,13 @@ pub(super) async fn resolve_public_location(id: &str, workspace: bool) -> Result
                 "remote_view_tab_handoff_session_unavailable"
                     | "remote_view_tab_handoff_tab_unavailable"
                     | "remote_view_tab_handoff_browser_unavailable"
+                    | "remote_view_human_use_target_changed"
             ) =>
         {
-            // Validate retained intent afresh without starting its owner. Native
-            // authentication must precede the later recovery effect.
-            let state =
-                crate::native::browser_session_store::BrowserSessionSqliteStore::default_sqlite()?
-                    .load_session_state()?;
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map_err(|_| "remote_view_clock_invalid")?
-                .as_millis() as u64;
-            agent_browser_service_model::remote_view_handoff_resume_intent(&state, &id, now_ms)?;
-            return origin
-                .join(&format!("/handoff/agent-browser/{id}"))
-                .map(|url| url.to_string())
-                .map_err(|_| "remote_view_presentation_path_invalid".into());
+            // Lost processes and changed physical observations require the
+            // authenticated owner continuation, not a stale desktop or a stuck
+            // link. Validate retained intent without starting its owner here.
+            return native_continuation_location(&origin, &id);
         }
         Err(reason) => return Err(reason),
     };
@@ -273,7 +285,8 @@ pub(super) fn human_use_registration(
 }
 
 /// Restore the retained browser through its owner before redirecting to the native desktop.
-/// Existing dashboard authentication applies; no temporary viewer grant is issued.
+/// Native authenticated callbacks and the existing dashboard compatibility API
+/// share this owner path; no temporary viewer grant is issued.
 pub(super) async fn resolve_location(
     id: &str,
     operator: Option<&str>,

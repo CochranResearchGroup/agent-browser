@@ -946,3 +946,238 @@ The focused Share-order RED/GREEN and this combined native pass qualify the
 repair batch. Persistent default-provider binding, live ingress and real
 Authelia/public-host acceptance remain unqualified. No production runtime effect
 or full-objective completion is claimed.
+
+### Installed development checkpoint after PR292, 2026-10-16
+
+PR292 merged at `ced8bf4d0350c4cb0f2d3c468b8fd8df068fcfba`. Development
+generation `0.28.0-e3bc1dfba12b` is installed from the qualified candidate above;
+the intervening integration changes affect only this ledger and lane catalog.
+Development doctor, install doctor and three disposable browser launch/read/close
+cycles pass. Actual browser inspection shows the settled empty compact workspace
+and Development marker. The task browser was signed out and closed; all nine
+recorded owned processes exited. Production identity is unchanged. The live
+browser-runtime workspace contains zero browsers, sessions and tabs; historical
+Service State rows are not counted as live inventory.
+
+The complete direct native workflow uses synthetic local authentication and
+HTTP ingress. It does not qualify public Authelia or persistent default-provider
+adoption. Those remain the explicit next gate. Dedicated provider configuration,
+resource preflight and exact ingress/authentication diffs are prepared privately;
+none of those persistent deployment effects have been applied. P237 and parent
+issue261 remain IN_PROGRESS. Graphiti memory disposition is unavailable because
+the current MCP endpoint is down; no memory write was attempted.
+
+### Authorized persistent native development adoption, 2026-10-16
+
+After explicit user approval, the dedicated native provider was installed and
+activated, the existing development generation bound to its direct authenticated
+control endpoint, and only the reviewed service-specific local/public ingress
+and exact authentication hostname rule applied. Development doctor passes;
+production Agent Browser identity remains outside this operation. Native private
+doctor passes ownership, executable adoption, local desktop, private transport,
+schema, permission and gateway checks. Its separate MCP registration check remains
+unconfigured; no existing production connector was changed.
+
+The public native route redirects unauthenticated requests to Authelia. Actual
+public dashboard and native logins succeed; the compact workspace renders the
+synthetic browser through the native WebSocket viewer. The exact selected durable
+handoff records first human use. This is partial public acceptance: exact input
+readback and sustained connection did not pass. Independent public health and SSH
+probes also time out intermittently, with read-only host evidence showing severe
+resource pressure. No unrelated host process was stopped or service restarted.
+Private activation, rollback, partial acceptance and failure receipts are retained
+outside Git. The full public lifecycle acceptance gate remains open, and P237 is
+still IN_PROGRESS. Deployment approval is resolved; further routine recovery in
+this reviewed effect set does not need renewed permission.
+
+### Retained public link recovery repair, 2026-10-16
+
+A real installed continuation exposed two distinct failures behind a still-valid
+opaque link: a retained logical browser whose process had exited selected a black
+surviving desktop; explicit owner resolution then recovered the browser but left
+a changed native observation binding returning503. WAN TLS negotiation also
+stalls intermittently, while the same certificate-validated HTTPS hostname works
+through the bastion LAN address. The task-only browser resolver used for diagnosis
+changes neither system DNS nor authentication and does not qualify WAN stability.
+
+The public locator now detects positive browser-process absence before selecting
+a native route. A changed physical observation selects the existing native
+recovery continuation. Both paths validate retained link intent without invoking
+the owner or changing state before native authentication; unknown errors retain
+their existing failure behavior. No recovery endpoint, viewer, grant or retry was
+added. Existing expiry/deletion behavior and exact target fences remain intact.
+
+The actual HTTP regression fails503 versus303 for each case before its repair,
+then passes both cases. One intermediate run hit the existing three-second HTTP
+fixture deadline; an unchanged rerun passed, and no deadline was raised. Broader
+checks pass:320 Remote View-focused tests,153 browser-session tests with9 ignored,
+66 dashboard HTTP tests,39 output tests, workspace formatting and strict workspace
+Clippy. These counts overlap and are not a unique combined test count. Handoff
+documentation, durable-handoff, policy-wiring and docs-build gates pass. All five
+user guidance/comment surfaces are updated. This is source qualification; the
+repaired executable has not yet passed installed same-link/native acceptance.
+
+The dedicated native provider's standard private MCP broker is now active against
+its existing control owner, closing the earlier registration-socket doctor gap.
+The complete native doctor passes. Existing client configuration hashes are
+unchanged; no production connector was registered or replaced. Public acceptance
+and the full objective remain open.
+
+### Installed retained-link recovery and native input, 2026-10-16
+
+Repair source `a2f88c23e` is installed only in development as generation
+`0.28.0-e3d61a60462b`. Both development doctors, three disposable launch cycles
+and production-identity preservation pass. The dedicated native provider doctor
+also passes with its private MCP broker. No production connector changed.
+
+The original opaque link reaches the authenticated native desktop without an
+agent-side resolve. A unique marker typed through that viewer reads back exactly
+from the addressed task. After a positively identified disposable browser process
+is terminated through its pidfd, reopening the same link recovers a new browser
+process and the retained task. A second unique native-input marker reads back
+exactly. Link creation and expiry, profile, logical tab and first-use metadata are
+unchanged; the peer browser record is unchanged. Lost in-memory input is not
+restored, matching the recovery contract.
+
+The first post-fault navigation returned503; retrying the same original link
+succeeded. Independent WAN and LAN authorization probes also time out
+intermittently, and read-only bastion observations show recurring host pressure.
+No timeout, TLS, DNS, authorization or host workload configuration was changed.
+These results qualify actual installed recovery and exact native input, while
+connection reliability and the remaining full public/dashboard acceptance stay
+open. Private receipts and synthetic screenshots remain outside Git. P237 remains
+IN_PROGRESS and PR293 remains draft pending the complete installed acceptance.
+
+Further installed acceptance passes through the public dashboard and native
+viewer. Selection embeds the actual native desktop, Properties retains supplied
+context and unknown absent provenance, and Share returns the original link.
+Saving a perpetual link and a separate20-second tab inactivity policy produces
+independent retained fields. With the viewer disconnected, the target later
+expires and its browser exits while the link stays active. Reopening that same
+link recreates the task and exact native input reads back successfully. The
+observations do not establish precise deadline timing. Dashboard logout then
+reports authenticated false while the native link still opens and accepts exact
+input. Restarting only the development runtime host also preserves the policies
+and first-use metadata and permits same-link native input afterward. The
+remaining acceptance matrix and intermittent authorization failures are still
+open; these successful cases do not erase earlier503 attempts.
+
+### Public normal-DNS composition and scoped cleanup, 2026-10-16
+
+The installed public dashboard additionally passes exact Alpha selection, rapid
+Alpha/Beta switching with Beta last, and selection/viewer restoration on full
+refresh. Independent CDP reads do not activate targets: Beta is visible and
+receives the native input marker; Alpha remains hidden with its original value.
+Keyboard rail resizing, collapse/show, search, mobile rows, reduced motion,
+Escape and focus restoration pass on the installed assets. A390px viewport has
+no document overflow. A sign-in-required selection is correctly actionable;
+re-authentication uses existing Remote View authentication.
+
+A separate synthetic task demonstrates finite link expiry returning HTTP410
+while its task stays live and readable. Dashboard deletion then returns HTTP404
+without closing that task. Close Tab presents the application confirmation;
+cancellation preserves work and denied profile permission reports no effect.
+The owning agent closes that task through its existing authority. Closing Beta
+in the two-tab task preserves Alpha and its input; closing the remaining task
+exits only its owned browser.
+
+The temporary LAN-mapped browser is closed with zero surviving captured
+processes. A fresh task-owned browser reuses the private profile with normal DNS
+and certificate validation. Public native input and the composed public dashboard
+pass without the resolver override. The installed MCP server initializes over
+stdio and reads the existing session resource; its task process exits. Final
+cleanup closes the owned viewer and managed tasks, with no captured viewer or
+exact synthetic-profile process matches and no active P237 sessions. The shared
+browser daemon and permanent development services remain intact. Synthetic
+retained handoff history is preserved, including the demonstrated perpetual
+link; production and foreign resources are unchanged.
+
+Ingress source custody is reconciled in a separate Cooper checkout from its
+canonical CochranResearchGroup main94e4d1d, preserving the foreign operational
+checkout. The exact reviewed inventory hunks and generated owned local entries
+match the applied deployment; the generated bastion artifact is byte-identical.
+Inventory validation and rendering pass. Current local and public dashboard
+roots return200; unauthenticated public native access redirects302 to Authelia.
+This source reconciliation adds no deployment effect. Private receipts remain
+outside Git. The all-story acceptance reconciliation and canonical PR integration
+are the remaining closeout steps.
+
+
+### Addressed-link focus gap found during acceptance audit
+
+The dashboard selects Alpha correctly, but the same existing Alpha opaque link
+can show Beta after an intervening command selected Beta. The final acceptance
+map is provisional for addressed-link selection and first-use binding. The
+proposed completion metadata was not committed or integrated and is withdrawn
+pending a controlled reproduction and repair. Cooper PR13 remains valid canonical
+ingress source; P237 and #261 remain IN_PROGRESS.
+
+### Addressed-link authenticated selection source GREEN
+
+The actual HTTP regression fails because a live document link redirects directly
+to the desktop rather than the authenticated addressed-target continuation.
+Top-level opaque navigation now validates retained intent and reaches the existing
+native authentication before owner preparation and focus. The public GET stays
+read-only; the dashboard's prepared iframe renderer path is unchanged. This also
+prepares an ordinary headless task for native viewing instead of selecting a
+black desktop. No endpoint, viewer, grant or producer feature is added.
+
+The regression passes, including positive iframe routing and unchanged public
+state/owner relay counts, plus the existing stale-process/observation guards on
+the iframe path. All320 Remote View-focused,66 dashboard HTTP and39 output tests
+pass, with workspace formatting and strict Clippy. Unchanged browser-session
+qualification from the preceding source repair is retained. Handoff guidance,
+durable-handoff, policy wiring and docs build pass. The initially mistyped
+package-script invocation is setup failure only; the correctly named existing
+durable-handoff gate passes. The new executable still requires installed native
+addressed-link selection/input qualification before the full outcome can close.
+
+Cooper PR13 is canonical and its clean auxiliary checkout has completed the
+repository-scoped worktree closeout operation. Fresh path and worktree-inventory
+readback confirm removal; no candidate pins existed. The foreign operational
+checkout remains preserved, including its applied ingress files until its owner
+reconciles canonical main.
+
+### Native resume response-budget gap isolated
+
+Candidate e44e9f2ba is installed in development as0.28.0-b138f0592012. Both
+doctors, development-only skill sync and three launch cycles pass; production
+identity is unchanged. A new actual native continuation still returns503.
+Socket observation proves authorization reaches the private owner callback, and
+the callback returns a typed502 mutation_outcome_unknown: stable ingress accepts
+the request but stops waiting for its first response after two seconds. Owner
+selection continues and commits Alpha; successful use stays unrecorded because
+no qualified viewer frame follows. This specific failure is not an authorization
+denial. Independent earlier WAN/LAN timeouts remain separate observations.
+
+A positively identified dedicated gateway restart tests the retained-connection
+hypothesis and does not change the failure. Only that development unit restarts;
+its producer binary/configuration remain unchanged. The diagnostic owner request
+is effectful and is not counted as a passing user workflow. Its unknown outcome
+is inspected before further recovery effects.
+
+A real TCP ingress regression reproduces the exact502 against a delayed valid
+native-resume POST. The narrow classification now gives that path the existing
+bounded native-handoff preparation budget. Its GREEN checks a completed response,
+no fallback replay, and preservation of the ordinary short budget and unknown
+outcome for a malformed nested path. Backend capability authentication and all
+other request classes remain unchanged. Surrounding ingress and quality gates,
+then a newly pinned development candidate and actual native input, remain the
+required sequence before full completion.
+
+The corrected native-resume budget passes all38 surrounding ingress tests and39
+output tests, formatting and strict workspace Clippy. Handoff guidance,
+durable-handoff, policy wiring and docs build pass. The prior320 Remote View,
+66 dashboard HTTP and153 browser-session checks remain applicable to their
+unchanged source. The running development ingress executable was independently
+read back as the installed b138f0592012 binary, confirming the new predicate must
+be published to that service rather than only to its backend. A final pinned
+candidate and real same-link native selection/input remain pending.
+
+## Final installed acceptance, 2026-10-16
+
+The final candidate from8bae9a0bf is installed as0.28.0-91e0a643b9e0, SHA25691e0a643b9e010f62c08cc65b36a2c4916860857e4d5bc43eb38e2047e9eb02d. Independent executable readback confirms stable ingress uses it. Development doctor, install doctor, development-only skill sync and three disposable launch cycles pass; production remains unchanged. The exact private resume response-budget repair passes38 ingress and39 output tests, strict workspace Clippy/format, handoff guidance, durable-handoff, policy wiring and docs build. Unchanged320 Remote View,66 HTTP and153 browser-session checks remain applicable.
+
+Normal-DNS/TLS public native acceptance now opens the original Alpha link, types its marker, opens the original Beta link, types its separate marker, and reopens the original Alpha link. Independent non-activating reads confirm exact tab selection and preserved separate input. Agent-only activity leaves first use absent; actual native viewing populates it without changing original handoff creation, expiry or profile. The dashboard embeds the connected Alpha native frame. No CLI resolve/private diagnostic participates in this final oracle.
+
+The [30-story acceptance map](0237-2026-10-16-installed-acceptance.md) reconciles fresh and retained evidence, earlier failures and availability limitations. After exact owner close, remaining peer input is preserved before final browser closure. Fresh captured PID/birth and exact profile102–106 census is empty; the temporary viewer unit stops. Shared automation and persistent development/native services remain. The Cooper auxiliary completed governed closeout; foreign checkouts remain preserved. P237 is complete within approved scope; canonical final integration is PR293. Production, CI, formal release and wider programs remain separate.

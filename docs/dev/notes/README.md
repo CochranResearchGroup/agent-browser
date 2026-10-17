@@ -99,6 +99,8 @@ reuse after those contracts are frozen.
 
 ## PL-PLATFORM | Architecture and Infrastructure
 
+- [P237 installed dashboard acceptance](0237-2026-10-16-installed-acceptance.md)
+
 - [Compact workspace operator correction and revised prototype](0237-2026-10-14-compact-workspace-review.md)
 
 - [Native physical selection tracer](0237-2026-10-12-native-selection-proof.md)

@@ -3,12 +3,16 @@
 Product lane: PL-PLATFORM
 Work items: #261, #260
 Branch: platform/native-dashboard-261
-State: IN_PROGRESS
+State: COMPLETED
 Version: 2
 Lane: P237
 Baseline: 3e5a38679d28ac8a20439e29004ea1315475ef8e
 
-## Current source delivery, 2026-10-15
+## Current acceptance, 2026-10-16
+
+All 30 approved v2 stories are qualified in the [installed acceptance map](../notes/0237-2026-10-16-installed-acceptance.md). Development generation `0.28.0-91e0a643b9e0` passes actual public authentication, addressed native selection/input, original-link process-loss and expiry recovery, independent dashboard logout, runtime restart, compact UI and exact cleanup. PR293 owns the final public continuation and private-ingress repairs; Cooper PR13 and Remote View PR441/442 own canonical prerequisites. Production, formal release, CI and the wider #260/#105/#68 programs remain separate. Earlier pending entries below preserve historical evidence and are superseded only within this completed P237 scope.
+
+## Historical source delivery, 2026-10-15
 
 All seven approved implementation tickets are source-qualified through the implementation ledger and bounded review. The final combined candidate6fc7f26e0 passes the complete private native workflow in36.259seconds with original and independent empty cleanup. Fresh-main integration preserves P242 popup attribution and non-activating peer selection, P243/P244 ordinary-use availability, and P237 exact lifecycle custody. Remote View prerequisites are canonical through PR441 and442; PR270 owns consumer source delivery and ticket reconciliation. One nonblocking resource-history follow-up remains under P237/#105. Plan state stays IN_PROGRESS for wider installed/public-provider adoption. Source delivery does not imply installation, shared-skill publication, external ingress, CI or formal release. Earlier pending states below are historical evidence; use this checkpoint and the ledger for current execution.
 

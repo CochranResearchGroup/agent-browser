@@ -54,6 +54,7 @@ Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its
 existing authentication; dashboard logout remains separate.
+Same-link native auth selects the addressed tab and waits for owner preparation without replay.
 
 ## Sharing a profile between tasks
 
