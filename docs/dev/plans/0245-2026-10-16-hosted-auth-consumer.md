@@ -106,3 +106,21 @@ with the prior two-million-token ceiling also retained. Historical counters
 remain preserved; fresh goal accounting is checked separately. Both prepared
 upgrade approvals persist. Refresh runtime custody and source closure before
 sequential effects; native post-attempt dummy proof still precedes real QBO.
+
+
+## Installed post-attempt native qualification
+
+Owned native fixture /tmp/p245-hosted-lvIA8d passes against installed producer
+dac7d1f3 and Remote Viewc8f69f03. Curated receipt
+docs/dev/receipts/p245/native-post-attempt-clean.json retains source/runtime
+hashes and independent proof. One password fill, zero factor fills, five native
+operations/two text deliveries, one identifier submission and zero password
+website submissions are preserved. Website-driven clearing produces current
+empty protected fields; readback never claims untouched input. Native known
+login/OCR/canary checks pass. Supported operator reconciliation releases the
+original dummy request while retaining original caller/target and approver
+attribution. Restart/no-replay checks pass, original environment/bots/retained
+requests and peer assignments remain preserved, owned process residue is zero.
+The real request724e55df remains held. Actual QBO continuation is being read
+once after this qualification, without login input, replay or new challenge.
+QBO principal/company and BILL remain incomplete.

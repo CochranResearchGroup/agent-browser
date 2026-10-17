@@ -323,3 +323,27 @@ held request724e55df unchanged. Private preimage/receipt names include
 post-attempt-install-20261017; no consumed installer was rerun. Independent
 post-attempt native fixture is now running, not yet accepted. Neither upgrade
 qualifies actual QBO or BILL.
+
+
+Post-adoption bounded installation-writer census observes8/50held samples and
+zero supervisor owners, compared with prior50/50held and14supervisor owners
+among15owners. This demonstrates reduced monitor contention, not complete
+absence of ordinary writer use or actual-provider authentication acceptance.
+
+
+## Installed post-attempt native qualification
+
+Owned native fixture /tmp/p245-hosted-lvIA8d passes against installed producer
+dac7d1f3 and Remote Viewc8f69f03. Curated receipt
+docs/dev/receipts/p245/native-post-attempt-clean.json retains source/runtime
+hashes and independent proof. One password fill, zero factor fills, five native
+operations/two text deliveries, one identifier submission and zero password
+website submissions are preserved. Website-driven clearing produces current
+empty protected fields; readback never claims untouched input. Native known
+login/OCR/canary checks pass. Supported operator reconciliation releases the
+original dummy request while retaining original caller/target and approver
+attribution. Restart/no-replay checks pass, original environment/bots/retained
+requests and peer assignments remain preserved, owned process residue is zero.
+The real request724e55df remains held. Actual QBO continuation is being read
+once after this qualification, without login input, replay or new challenge.
+QBO principal/company and BILL remain incomplete.
