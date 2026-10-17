@@ -9,12 +9,12 @@ lanes:
     target: main
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#299]
-    plan_state: OPEN
+    plan_state: COMPLETED
     custody_state: ACTIVE_WORKTREE
     dependencies: []
     overlaps: [P246, P240]
     reconciled_overlaps: ["P247 owns planning auditor, fixtures and its own documentation entries; preserve P246 runner and P240 resource surfaces and foreign checkouts"]
-    validation_status: Implementation pending
+    validation_status: 67 auditor tests, selected P245/P247, corrected legacy audit, policy wiring, docs build and changed links pass; initial failed batch retained
     updated_at: 2026-10-17
 
   - id: P245

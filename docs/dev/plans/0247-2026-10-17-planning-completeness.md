@@ -1,6 +1,7 @@
 # Plan 0247: Selected planning completeness
 
-Status: OPEN
+Status: COMPLETED
+Lane: P247
 Product lane: PL-BUGFIX
 Work item: CochranResearchGroup/agent-browser#299
 Owner: ecochran76
@@ -9,8 +10,9 @@ Base: 0cf8e5bc8d057eb8b5856dcfceb856bf6b19c1a3
 
 ## Current State
 
-The active audit passes while excluding current Status: COMPLETED plans. Existing
-Git custody and archival audits do not check plan/note discoverability.
+Selected-lane completeness is implemented and qualified. All 67 auditor tests,
+selected P245/P247 checks, policy wiring, docs build and changed links pass.
+Canonical integration is pending; no runtime effects.
 
 ## Outcome and scope
 
