@@ -186,6 +186,9 @@ fn browser_presence(
         {
             "live"
         }
+        Some(Some(windows)) if windows.windows.iter().any(|window| window.pid.is_none()) => {
+            "unknown"
+        }
         Some(_) => "absent",
         None => "unknown",
     }
@@ -429,6 +432,13 @@ mod tests {
             browser_presence(&browser, &observed, &native),
             "absent",
             "a peer browser window cannot satisfy this browser's identity"
+        );
+        windows.windows[0].pid = None;
+        native.insert(key.clone(), Some(windows.clone()));
+        assert_eq!(
+            browser_presence(&browser, &observed, &native),
+            "unknown",
+            "a window without process attribution cannot prove browser absence"
         );
         windows.windows[0].pid = Some(43);
         native.insert(key.clone(), Some(windows.clone()));

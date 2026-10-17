@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [PR302 complete dashboard review](2026-10-17-pr302-review.md)
+
 - [Rail speed and accuracy audit](2026-10-17-rail-audit.md)
 
 - [Dashboard handoff list and desktop availability](2026-10-17-dashboard-handoff-polish.md)
