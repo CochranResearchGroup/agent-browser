@@ -14,8 +14,8 @@ lanes:
     dependencies: [ecochran76/grok-bots#51]
     overlaps: [P242, P237]
     reconciled_overlaps: ["P242/P237 source integrated; P245 owns login/helper consumption and site verification; preserve foreign checkouts"]
-    validation_status: Installed producer/native independent dummy and actual QBO then BILL account/company qualified; final bounded Standards and Spec review pending
-    limitations: ["QBO numeric realm ID and API readiness not live-proven", "BILL MFA not exercised", "Final review and canonical publication pending"]
+    validation_status: Installed independent native and actual QBO/BILL account-company qualified; 16-check integration batch passed and one bounded Standards finding remediated
+    limitations: ["QBO numeric realm ID and API readiness not live-proven", "BILL MFA not exercised", "Canonical publication pending"]
     updated_at: 2026-10-17
 
   - id: P246

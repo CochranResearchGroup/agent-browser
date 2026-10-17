@@ -1,6 +1,6 @@
 # Agent Browser Notes Index
 
-Updated: 2026-09-28
+Updated: 2026-10-17
 
 This index consolidates reusable and actionable note families without moving,
 renaming, rewriting, or deleting historical evidence. There are more than 250
@@ -50,6 +50,8 @@ bugfix lane retains the reproducer and regression evidence.
 
 ## PL-AUTH | Credentials and Authentication
 
+- [Existing-host QBO and BILL accepted evidence](0245-2026-10-16-hosted-auth-consumer.md)
+
 - [Passkey and two-factor fieldwork](0110-f1-2026-08-23-passkey-and-two-factor-authentication-fieldwork.md)
 - [CDP-free Google seeding gap](0135-2026-08-28-cdp-free-google-dashboard-seeding-gap-handoff.md)
 - [Authentication Run source acceptance](0138-2026-08-29-authentication-run-provider-free-source-acceptance.md)
@@ -60,7 +62,8 @@ bugfix lane retains the reproducer and regression evidence.
 - [Public Authentication Run custody](0163-2026-09-10-public-authentication-run-custody.md)
 - [Unattended authentication handoff](2026-08-29-books-receipts-unattended-authentication-handoff.md)
 
-The open product gap is deterministic identifier entry, credential submission,
+P245 qualifies the bounded existing-profile QBO/BILL hosted-helper journeys.
+Broader Authentication Run product work still includes deterministic identifier entry, credential submission,
 password-manager policy, second-factor handling, and exact-account verification
 through one resume-safe Authentication Run. Profile repair and reset remain
 platform dependencies even when an authentication reset is the selected action.

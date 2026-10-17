@@ -34,11 +34,15 @@ actual-bill-installed-helper.json. No BILL MFA is requested or dispatched.
 The installed prefilled-identifier dummy passes with fewer native operations,
 restart/no-replay and zero owned residue. Its two regressions prove exact current
 identifier preservation and refusal after unknown prior native delivery. All
-nine acceptance evidence items are now assembled. U5 final bounded independent
-Standards and Spec axes, final validation and canonical publication remain open.
+nine acceptance evidence items are assembled. The final 16-check integration
+batch passes; one bounded Standards discoverability finding is remediated and
+Spec has no accepted defect. Canonical publication remains the next delivery
+step. No additional provider exercise is required.
 Producer docs PR69 closes Plan0012 at646b681; Remote View docs PR446 closes its
 Plan0127 at its own installed/adoption boundary. Their wider doctor/suite limits
 are retained. Earlier checkpoints below preserve diagnostic history.
+
+## Historical state checkpoints
 
 U1, U2 and U2N retain their qualified boundaries. After explicit upgrade
 approval and allocation renewal, Remote View PR444/canonical47cab3e is installed
@@ -91,7 +95,7 @@ corrected process-census limitations. Delivery remains bounded by the explicit
 | U2N native staged dummy | shared receiving sequence and native port source checks passed | validated | coordinator, existing installed-host fixture and native receiving module | installed native identifier/password journey, independent company, native safety, canary scans, restart/no-replay and zero owned residue; final receipt native-staged-dummy.json |
 | U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | validated | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
 | U4 BILL | U3 validated | validated | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
-| U5 docs/review | docs after U1/U2N; final review after U3/U4 | running | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
+| U5 docs/review | docs after U1/U2N; final review after U3/U4 | validated | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 
 Note0245 records red/green commands, failed receipts, exact tip/result SHA and runtime handles. Ready means blockers validated on this branch, not tracker closure or worker assertion. Required missing/false/unsafe evidence and real-provider limitations remain incomplete. No new ticket graph or second backlog; these units deliver the existing bounded issue.
 
@@ -116,7 +120,7 @@ gates plus five documentation surfaces. No real readback or installation follows
 from source qualification. Independent installed native synthetic proof must
 precede actual held-request retirement. This does not expand the issue objective.
 
-## Pending shared-runtime checkpoint
+## Historical shared-runtime checkpoint
 
 Remote View PR444 head0c4a755 and source-bound binaryc8f69f03 are qualified at
 their source/bundle boundaries; preflight verifies16general ready desktops,

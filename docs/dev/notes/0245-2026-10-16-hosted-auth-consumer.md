@@ -1,5 +1,31 @@
 # Issue290 execution evidence
 
+Product lane: PL-AUTH
+Disposition: accepted-evidence
+Owning plan or work item: [Plan 0245](../plans/0245-2026-10-16-hosted-auth-consumer.md), issue #290
+Related lanes: P237, P242
+
+## Current accepted boundary
+
+Installed helper discovery, independent native dummy qualification and actual
+existing-profile QBO then BILL account/company verification pass. QBO proves
+company display name, not a live numeric realm ID or API readiness. BILL uses
+one password fill/submit in its accepted request and exercises no MFA. Current
+source, installed identities and nine acceptance items are in
+[the acceptance map](../receipts/p245/issue-290-acceptance.json). Both original
+accepted requests are authenticated/capture ready; earlier failed requests,
+controllers, expiry and unknown effects remain preserved.
+
+The final 16-check integration batch passes at source26180eb75 against main
+e9507f652. One Standards discoverability finding is repaired below; Spec has no
+accepted defect. Canonical PR integration and final shared-guidance publication
+remain next. No formal release or Agent Browser production replacement follows.
+The renewed allocation remains safety08:07:48Z/hard08:22:48Z on2026-10-17, with
+cumulative-token history and the explicit two-million-token renewed allowance
+preserved by the private allocation ledger. Do not restart login or reset bounds.
+
+## Historical execution evidence
+
 Plan0245, base c911bd358. Full scope is installed dummy then actual QBO and BILL, no synthetic substitute. Current producer identity f83ff980278471674e06fca95d06a69fbbc0a4869a1b613f47731e1759d1806c/source40672e0, health native disconnected, externalAuthConfigured=false. Yesterday successful installation is not current runtime readiness.
 
 Disk-full prevented initial here-doc/ledger creation and git status index refresh. Read-only inventory: root zero user-available space, debug incremental16GB. Qualified only cli/target/debug/incremental under its Cargo build lock: zero cargo/rustc, zero mapped/open references, last modification older than1hour, no nested mount. Removed107 generated cache entries; measured16454598656bytes available afterward. Sources, dependencies, binaries, installed copies, evidence and private stores preserved. Rebuild cost is future incremental recompilation. Exact receipt /tmp/issue290-disk-recovery.json. First claim comment failed because its file could not be created; do not claim it published.
@@ -538,3 +564,60 @@ closing Plan0012 at its installed contract boundary. A mistyped expected head
 hash first made the merge guard reject without effect; the verified published
 head then merged. Source/install bytes are unchanged. The actual consumer source
 and native receipts above remain the acceptance authority.
+
+
+## Final review and retrospective
+
+One discovery cycle reviews git diff
+e9507f65224c478950a144f16f0d962f94c81186...26180eb75600b1bd47183808a089b21b71df0ffe.
+Both axes run separately in the primary context; no delegation is used. The
+frozen issue290 body supplies the nine requirements. AGENTS.md, CONTEXT.md,
+policies0042/0043/0044/0054, the notes index contract and the code-review skill's
+smell baseline supply Standards. No CODING_STANDARDS.md or CONTRIBUTING file
+exists in this checkout. Mechanical checks stay in the 16-check result receipt.
+
+## Standards
+
+S1, blocking at discovery, now remediated: Plan0245 and its accepted evidence
+were absent from the plan/note startup indexes, ROADMAP and RUNBOOK; the note
+began with stale installed state. Policy0043 requires active-plan wiring and a
+compact current execution entry; the notes index requires lane/disposition/owner
+metadata. The bounded repair adds those links and a current evidence header,
+keeps RUNBOOK under200lines, and preserves historical records and foreign lanes.
+No behavioral source change follows from review. No additional hard violation
+or accepted smell remains. Changed-link/policy checks verify the remediation;
+passed code/native/actual-provider evidence is retained by unchanged source hash.
+
+## Spec
+
+Zero accepted defects. The nine-item map links installed discovery, distinct
+caller/receiving binding, real QBO then BILL, owner-qualified source metadata,
+negative/interruption regressions, same-request return, independent dummy-first
+qualification and source/install/native/cleanup documentation. Exact private
+account/company values and credential source references remain outside product
+files. The map distinguishes configured source, helper authentication, current
+capture safety and public intended-company verification. QBO realm/API and
+BILL-MFA limits remain explicit. Canonical publication is the remaining delivery
+step, not an extra authentication or provider exercise.
+
+Review summary: Standards1accepted (discoverability, remediated); Spec0accepted;
+remaining blocking findings0. Review discovery cycles1; bounded remediation1.
+
+## Retrospective
+
+The controlled-prefill native regression and its unknown-delivery negative
+caught unnecessary identifier replacement and a possible equality shortcut over
+an unknown result. Both now have deterministic port tests and an installed
+prefilled dummy proof before actual BILL continuation. No broader root cause is
+claimed for the original unknown clear acknowledgement.
+
+The catalog helper's missing Python YAML package was followed by later shell
+commands, so the shell status hid the earlier failure. The already-available
+validation:run command is the existing guardrail for independent checks; the
+corrected merge and final integration use its per-check receipts. No new global
+instruction or duplicate validation tool is needed. A mistyped merge head hash
+was separately refused by GitHub's existing exact-head guard; use returned hashes
+rather than manually constructing them. These are observed invocation defects,
+not missing checks or permission failures. The reviewed interval is the supplied
+handoff plus this visible continuation and its exact retained source/test logs;
+no claim is made about unobserved sessions.

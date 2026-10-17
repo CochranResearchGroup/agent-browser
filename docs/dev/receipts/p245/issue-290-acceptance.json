@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "workItem": "CochranResearchGroup/agent-browser#290",
   "productLane": "PL-AUTH",
-  "evidenceBoundary": "All nine requested workflow evidence items qualified; final review and canonical publication pending",
+  "evidenceBoundary": "All nine workflow evidence items and final bounded review qualified; canonical publication pending",
   "requirements": [
     {
       "id": "installed_discovery",
@@ -106,7 +106,13 @@
     "Existing actual profiles remain open for user continuation; zero-owned-residue applies to disposable fixtures",
     "No formal release or Agent Browser production binary replacement claimed"
   ],
-  "standardsReview": "pending",
-  "specReview": "pending",
-  "canonicalPublication": "pending"
+  "standardsReview": "one accepted discoverability finding, remediated",
+  "specReview": "no accepted defects",
+  "canonicalPublication": "pending",
+  "reviewDiscoveryCycles": 1,
+  "boundedRemediationCycles": 1,
+  "frozenReviewBase": "e9507f65224c478950a144f16f0d962f94c81186",
+  "frozenReviewHead": "26180eb75600b1bd47183808a089b21b71df0ffe",
+  "reviewArtifact": "docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective",
+  "finalValidation": "docs/dev/receipts/p245/final-validation.json"
 }

@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "tier": "focused integration plus documented installed/native/actual-provider evidence",
+  "source": {
+    "head": "26180eb75600b1bd47183808a089b21b71df0ffe",
+    "dirty": false
+  },
+  "base": "e9507f65224c478950a144f16f0d962f94c81186",
+  "state": "success",
+  "startedAt": "2026-10-17T03:51:32.769Z",
+  "finishedAt": "2026-10-17T03:55:06.201Z",
+  "checkCount": 16,
+  "checks": [
+    {
+      "id": "patch",
+      "command": "git",
+      "args": [
+        "diff",
+        "--check",
+        "e9507f65224c478950a144f16f0d962f94c81186...HEAD"
+      ],
+      "state": "success",
+      "durationMs": 39,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "changed-doc-links",
+      "command": "node",
+      "args": [
+        "scripts/check-documentation-links.js",
+        "--base",
+        "e9507f65224c478950a144f16f0d962f94c81186"
+      ],
+      "state": "success",
+      "durationMs": 138,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "policy",
+      "command": "pnpm",
+      "args": [
+        "test:policy-wiring"
+      ],
+      "state": "success",
+      "durationMs": 748,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "hosted-helper",
+      "command": "pnpm",
+      "args": [
+        "test:hosted-auth-helper"
+      ],
+      "state": "success",
+      "durationMs": 2112,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "hosted-receiver",
+      "command": "pnpm",
+      "args": [
+        "test:hosted-login-receiver"
+      ],
+      "state": "success",
+      "durationMs": 2076,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "native-port",
+      "command": "pnpm",
+      "args": [
+        "test:native-receiving-browser"
+      ],
+      "state": "success",
+      "durationMs": 2030,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "playbook",
+      "command": "pnpm",
+      "args": [
+        "test:playbook-client"
+      ],
+      "state": "success",
+      "durationMs": 2174,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "fixture-guards",
+      "command": "pnpm",
+      "args": [
+        "test:hosted-auth-fixtures"
+      ],
+      "state": "success",
+      "durationMs": 684,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "service-client",
+      "command": "pnpm",
+      "args": [
+        "test:service-client"
+      ],
+      "state": "success",
+      "durationMs": 7711,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "handoff-docs",
+      "command": "pnpm",
+      "args": [
+        "test:remote-view-handoff-docs"
+      ],
+      "state": "success",
+      "durationMs": 354,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "validation-selection",
+      "command": "pnpm",
+      "args": [
+        "test:validation-selection"
+      ],
+      "state": "success",
+      "durationMs": 1477,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "rust-fmt",
+      "command": "scripts/ci/cargo-safe.sh",
+      "args": [
+        "fmt",
+        "--all",
+        "--manifest-path",
+        "Cargo.toml",
+        "--",
+        "--check"
+      ],
+      "state": "success",
+      "durationMs": 5783,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "strict-clippy",
+      "command": "scripts/ci/cargo-safe.sh",
+      "args": [
+        "clippy",
+        "--workspace",
+        "--manifest-path",
+        "Cargo.toml",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "state": "success",
+      "durationMs": 30113,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "ordinary-recovery",
+      "command": "scripts/ci/rust-tests.sh",
+      "args": [
+        "--focused",
+        "ordinary_"
+      ],
+      "state": "success",
+      "durationMs": 152417,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "service-model",
+      "command": "scripts/ci/cargo-safe.sh",
+      "args": [
+        "test",
+        "-p",
+        "agent-browser-service-model",
+        "--manifest-path",
+        "Cargo.toml",
+        "--",
+        "--test-threads=1"
+      ],
+      "state": "success",
+      "durationMs": 3366,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    },
+    {
+      "id": "docs-build",
+      "command": "pnpm",
+      "args": [
+        "--dir",
+        "docs",
+        "build"
+      ],
+      "state": "success",
+      "durationMs": 14863,
+      "exitCode": 0,
+      "signal": null,
+      "errorCode": null
+    }
+  ],
+  "privateResultDirectory": "/tmp/p245-final-integration-results-20261017",
+  "documentationRemediation": {
+    "state": "success",
+    "checkCount": 3,
+    "behavioralSourceUnchanged": true,
+    "privateResultDirectory": "/tmp/p245-review-remediation-results-20261017"
+  },
+  "retainedEvidence": {
+    "nativePortSHA256": "a86c56943f1486c5139fe991f81fe1a41d046a0adab520d624fd30e46ba86308",
+    "actualQbo": "docs/dev/receipts/p245/actual-qbo-installed-helper.json",
+    "actualBill": "docs/dev/receipts/p245/actual-bill-installed-helper.json",
+    "nativePrefilledDummy": "docs/dev/receipts/p245/native-prefilled-identifier.json"
+  },
+  "exclusions": [
+    "Not a comprehensive Rust run or platform matrix",
+    "No CI dispatch or re-enable",
+    "No repeated actual login after qualification",
+    "Workstation installer suites excluded: output.rs changes are help text, not installer behavior",
+    "Shared skill publication remains a separate final effect"
+  ]
+}
