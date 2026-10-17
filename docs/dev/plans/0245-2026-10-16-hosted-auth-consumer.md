@@ -20,11 +20,41 @@ Renewed U3 diagnosis uses the existing public continuation and native owner seam
 
 ## Current State
 
-U1, U2 and U2N retain their qualified boundaries. Producer PR63 was installed and qualified as candidate51422492/sourcefed3a5c after explicit user authorization. Another lane subsequently installed canonical recovery PR64/65 as generationadf826f9; fresh operator readback preserves the original uncertain/held request and expiry. All188packaged source inputs match canonicalfb3ae0a; sealed bytes were reused. PR62 designated-approver recovery and PR63 bounded pure-read settlement both pass independent installed native qualification, including the email-shaped identifier, held restart, clean failed-login release, no replay and exact peer/configuration cleanup. Native input effects are never retried. Source suites and candidate smoke remain bounded to their recorded identities.
+U1, U2 and U2N retain their qualified boundaries. After explicit upgrade
+approval and allocation renewal, Remote View PR444/canonical47cab3e is installed
+and adopted as sealed binaryc8f69f03/source41cf66d. All native process records
+and desktop generations are preserved; registered MCP capture succeeds. Doctor
+still fails pre-existing stopped-slot8 native/audio probes and lacks public
+viewer evidence. Producer PR66/canonicald399f5a is installed as candidatedac7d1f3,
+retaining recovery PR64/65. Its exact203packaged-input closure and original
+configuration, bot/request and audit preservation verify.
 
-The first three actual QBO requests are released/capture-ready through supported independent native proof. Lost broker replies were resolved by fresh request readback without repeating them. All original request/controller bytes, consumed one-attempt limits and logical receiving identities remain preserved. Current-caller request724e55df is terminal uncertain/capture-held after its first actual MFA fill attempt. Durable audit4/4/4/0/1/0 preserves that attempted effect; there was no MFA submit. Native failure desktop_interaction_failed contains operationLockRefused=true. Supported mail lookup completed, with factor contents retained privately. Empty current controls do not erase the attempt or qualify the untouched-login retirement contract. No replay, resend, host restart or successor followed. A bounded Remote View lock census identifies healthy supervisors holding the global writer; isolated companion Plan0127 is testing a read-only healthy monitor path while preserving PR439 ownership and all native peers. No Remote View production change is claimed.
+Installed native post-attempt dummy qualification passes in
+native-post-attempt-clean.json: actual password fill followed by website-driven
+clearing, distinct current-empty proof, supported same-request release,
+restart/no-replay, canary checks and zero owned residue with peers preserved.
+Actual original request724e55df then releases capture through supported
+approver readback with zero source retrieval/private input. Its original
+expiry, target, unknown effect and recorded MFA attempt remain preserved.
+Audit4/4/4/0/1/0 is unchanged through that retirement. All four predecessor
+controllers remain consumed and retained.
 
-Source checkpoint b31ca1dc9 repairs interrupted launch readback in a long-lived host, with22ordinary tests and356model tests/doctests plus quality/docs gates; it is not installed. One same-generation native host restart and supported continuation restored logical task continuity. Current physical owners are reverified rather than reusing old bindings. Earlier zero-match process censuses missed flattened argv; note0245 preserves that correction and every failed native predecessor. U3 QBO account/company, U4 BILL and final U5 whole-issue review/publication remain incomplete.
+One separately bounded successor4 is selected after these qualified repairs,
+with its own controller/maxAttempts1 and original logical receiving tuple.
+Nonsecret account-chooser selection initially failed an overly strict empty
+identifier check; independent readback proves the prefilled expected account
+and clear protected controls. No second click was sent. The new configuration
+preserves source references and current native owner. Actual QBO principal/
+company, BILL and final whole-issue review remain incomplete. New source reads
+and private effects belong only to that separately recorded request, never a
+replay of a released or unresolved predecessor.
+
+Long-lived-host repairb31ca1dc9 remains source-only. Supported continuation now
+succeeds on the retained original task with the same logical tuple. Current
+native ownership is independently rebound and verified rather than accepting
+an old physical process identity. Note0245 preserves all prior failures and
+corrected process-census limitations. Delivery remains bounded by the explicit
+02:22:48Z renewal, safety checkpoint08:07:48Z and hard checkpoint08:22:48Z.
 
 ## Integration ledger
 
@@ -33,7 +63,7 @@ Source checkpoint b31ca1dc9 repairs interrupted launch readback in a long-lived 
 | U1 version2 client | Producer51 source inspected | validated | coordinator, client/login/helper transport/public tests | red/green distinct identity, wrong binding/scope, source no-effect and no-replay |
 | U2 installed helper/dummy | U1 validated | validated | coordinator, host adapter and fixture; private operator config outside repo | normal installed hosted service, independent credential/principal, native privacy, restart/ack and zero residue/peers |
 | U2N native staged dummy | shared receiving sequence and native port source checks passed | validated | coordinator, existing installed-host fixture and native receiving module | installed native identifier/password journey, independent company, native safety, canary scans, restart/no-replay and zero owned residue; final receipt native-staged-dummy.json |
-| U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | held | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
+| U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | running | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
 | U4 BILL | U3 validated | pending | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
 | U5 docs/review | docs after U1/U2N; final review after U3/U4 | running | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 

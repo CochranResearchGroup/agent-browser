@@ -347,3 +347,37 @@ requests and peer assignments remain preserved, owned process residue is zero.
 The real request724e55df remains held. Actual QBO continuation is being read
 once after this qualification, without login input, replay or new challenge.
 QBO principal/company and BILL remain incomplete.
+
+
+## Actual post-attempt release and bounded successor4
+
+After installed dummy qualification, original-task continuation succeeds on the
+same full logical tuple at Intuit sign-in. Current exact profile census finds
+one main process; native association verifies a changed active full1440by900
+window/process on the same assignment. Known-login metadata proves expected
+account context, no password/MFA/popup or populated protected controls. Private
+post-attempt readback adapter uses the current frozen receiver, installed
+producer and exact request724e55df/audit4/4/4/0/1/0. Its pure probe verifies same
+login/request, native Intuit sign-in, full window, unchanged audit and no native
+six-digit factor, with zero source reads/private inputs. Initial staging put
+config in a child directory and failed to locate the original audit; corrected
+config stays at its owning root. This was a probe setup failure, not an auth
+request or successful safety result. Original modules/configs remain retained.
+
+New distinct host activation preserves every request, bot binding and audit.
+One supported designated-approver reconciliation releases original724e55df
+capture while retaining unknown effects, inputAttemptedAt, original expiry and
+target. No source/factor retrieval or private input occurred. Private receipts:
+post-attempt-readback-20261017/{probe-result,activation,reconciliation}.json.
+The negative proof is current protected-field emptiness, never untouched input.
+
+Successor4 is separately bounded to one request/attempt after actual qualified
+monitor and readback repairs. Prior consumed controllers and request histories
+remain retained. The nonsecret chooser click reached an identifier form but
+its first verification demanded an empty value and failed; independent current
+readback proves the prefilled expected account context and no sensitive values.
+No second click or private effect was sent for that verification correction.
+New controller/config and activation receipts use successor4 names, preserve
+exact original source refs, actual caller identity and full logical target, and
+rebind only independently verified physical ownership. The one-request driver
+is running; actual QBO principal/company and BILL remain incomplete.
