@@ -26,6 +26,8 @@ Prioritize less plumbing, useful continuity, seamless human assistance, predicta
 
 The four-profile governance MCP policy pilot landed through PR #206. Use its compact cited packets and freshness checks instead of bulk policy ingestion.
 
+[P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) repairs selected planning discoverability checks under #299.
+
 ## Historical material
 
 [Legacy planning archive](docs/history/2026-10-05-legacy-planning/README.md) preserves earlier roadmaps, runbooks, plans, identifiers, and evidence. It is reference-only and does not define current direction. Archival does not close unrelated issues or PRs. Do not reinstate old requirements from an archived OPEN state.

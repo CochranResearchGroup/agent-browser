@@ -5,6 +5,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import argparse
+import importlib.util
 import json
 import re
 from pathlib import Path
@@ -359,6 +360,99 @@ def audit_repo(
     return report
 
 
+def audit_selected_lanes(root: Path, lane_ids: tuple[str, ...]) -> dict:
+    """Audit explicit current documentation targets, independently of Git custody.
+
+    Active and COMPLETED outcomes retain startup/evidence discoverability.
+    CLOSED/CANCELLED outcomes need only their catalog and plan identity; they
+    carry no requirement for current execution links. This opt-in check does
+    not change the legacy active-only audit or apply its accepted baseline.
+    """
+    spec = importlib.util.spec_from_file_location(
+        "planning_lane_catalog", Path(__file__).with_name("audit_active_lanes.py")
+    )
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    problems: list[str] = []
+    checked: list[str] = []
+    try:
+        catalog = module.parse_catalog((root / "docs/dev/active-lanes.yaml").read_text())
+    except (OSError, module.CatalogSyntaxError) as exc:
+        return {"ok": False, "problems": [f"unreadable lane catalog: {exc}"], "lanes": []}
+    if catalog.get("schema_version") != 1:
+        problems.append("catalog schema_version must be 1")
+    for lane_id in dict.fromkeys(lane_ids):
+        matches = [lane for lane in catalog["lanes"] if lane.get("id") == lane_id]
+        if len(matches) != 1:
+            problems.append(f"{lane_id}: expected exactly one catalog entry")
+            continue
+        lane = matches[0]
+        checked.append(lane_id)
+        plan_value = lane.get("plan")
+        if not isinstance(plan_value, str) or not plan_value:
+            problems.append(f"{lane_id}: missing plan locator")
+            continue
+        plan = (root / plan_value).resolve()
+        if not plan.is_relative_to(root.resolve()) or not plan.is_file():
+            problems.append(f"{lane_id}: selected plan missing or outside repository")
+            continue
+        header = plan_header(read_text(plan))
+        state_match = re.search(r"(?im)^(?:Status|State):[ \t]*`?([A-Z]+)`?[ \t]*$", header)
+        state = state_match[1].upper() if state_match else None
+        if state not in {"PLANNED", "OPEN", "BLOCKED", "COMPLETED", "CLOSED", "CANCELLED"}:
+            problems.append(f"{lane_id}: missing or invalid plan status")
+        if state != lane.get("plan_state"):
+            problems.append(f"{lane_id}: plan status does not match catalog")
+        for key, field in (("Product lane", "product_lane"), ("Owner", "accountable_owner")):
+            match = re.search(rf"(?im)^{key}:[ \t]*([^\n]+)$", header)
+            expected = lane.get(field)
+            if not isinstance(expected, str) or not expected.strip():
+                problems.append(f"{lane_id}: missing catalog {field}")
+            elif not match or match[1].strip().strip("`") != expected:
+                problems.append(f"{lane_id}: plan {key} does not match catalog {field}")
+        if state not in {"PLANNED", "OPEN", "BLOCKED", "COMPLETED"}:
+            continue
+        for index in (root / "ROADMAP.md", root / "RUNBOOK.md", plan.parent / "README.md"):
+            if plan not in markdown_targets(index):
+                problems.append(f"{lane_id}: plan not linked in {index.relative_to(root)}")
+        notes_dir = root / "docs/dev/notes"
+        notes = sorted(notes_dir.glob(plan.name.split("-", 1)[0] + "-*.md"))
+        if state == "COMPLETED" and not notes:
+            problems.append(f"{lane_id}: completed plan has no corresponding evidence note")
+        for note in notes:
+            if note.resolve() not in markdown_targets(notes_dir / "README.md"):
+                problems.append(f"{lane_id}: note not linked in docs/dev/notes/README.md: {note.name}")
+            note_header = plan_header(read_text(note))
+            fields = {}
+            for key in ("Product lane", "Disposition", "Owning plan or work item"):
+                match = re.search(rf"(?im)^{key}:[ \t]*([^\n]+)$", note_header)
+                fields[key] = match[1].strip() if match else ""
+                if not fields[key]:
+                    problems.append(f"{lane_id}: note missing {key}: {note.name}")
+            if fields["Product lane"] != lane.get("product_lane"):
+                problems.append(f"{lane_id}: note product lane mismatch: {note.name}")
+            if fields["Disposition"] not in {"active-input", "accepted-evidence", "deferred", "superseded", "historical"}:
+                problems.append(f"{lane_id}: note invalid disposition: {note.name}")
+            owner = fields["Owning plan or work item"]
+            items = lane.get("work_items", [])
+            owns_plan = plan in markdown_targets(note, owner)
+            owns_item = any(isinstance(item, str) and re.search(r"(?<![\w/])" + re.escape(item) + r"(?![\w])", owner) for item in items) if isinstance(items, list) else False
+            if not owns_plan and not owns_item:
+                problems.append(f"{lane_id}: note owner does not identify selected plan or work item: {note.name}")
+    return {"ok": not problems, "problems": problems, "lanes": checked}
+
+
+def markdown_targets(path: Path, text: str | None = None) -> set[Path]:
+    """Resolve local inline Markdown links, excluding prose-only filenames."""
+    targets = set()
+    for match in re.finditer(r"!?\[[^\]]*\]\(\s*(<[^>]+>|[^\s)]+)", read_text(path) if text is None else text):
+        target = match[1].strip("<>").split("#", 1)[0]
+        if target and not re.match(r"[a-zA-Z][a-zA-Z0-9+.-]*:", target):
+            targets.add((path.parent / target).resolve())
+    return targets
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repo-root", required=True)
@@ -366,20 +460,28 @@ def main() -> int:
     parser.add_argument("--goal-only", action="store_true")
     parser.add_argument("--active-only", action="store_true")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument("--lane", action="append", help="Check documentation completeness for an exact catalog lane; repeatable")
     parser.add_argument("--roadmap-path")
     parser.add_argument("--runbook-path")
     parser.add_argument("--plans-dir")
     args = parser.parse_args()
 
+    if args.lane and (args.goal_only or args.active_only or args.force or args.roadmap_path or args.runbook_path or args.plans_dir):
+        parser.error("--lane cannot be combined with legacy audit scope/path options")
     root = Path(args.repo_root).resolve()
-    report = audit_goal_execution_contract(root) if args.goal_only else audit_repo(
-        root,
-        roadmap_path=args.roadmap_path,
-        runbook_path=args.runbook_path,
-        plans_dir_path=args.plans_dir,
-        active_only=args.active_only,
-        force=args.force,
-    )
+    if args.lane:
+        report = audit_selected_lanes(root, tuple(args.lane))
+    elif args.goal_only:
+        report = audit_goal_execution_contract(root)
+    else:
+        report = audit_repo(
+            root,
+            roadmap_path=args.roadmap_path,
+            runbook_path=args.runbook_path,
+            plans_dir_path=args.plans_dir,
+            active_only=args.active_only,
+            force=args.force,
+        )
     if args.json:
         print(json.dumps(report, indent=2, sort_keys=True))
     else:

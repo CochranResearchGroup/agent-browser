@@ -405,3 +405,96 @@ class PlanningContractAuditTests(unittest.TestCase):
 
         self.assertFalse(report["ok"])
         self.assertTrue(any("RUNBOOK.md has Turn headings" in item for item in report["problems"]))
+
+
+class SelectedLaneCompletenessTests(unittest.TestCase):
+    def setUp(self):
+        self.audit = load_audit_module()
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.plan = 'docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md'
+        self.note = 'docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md'
+        files = {
+            'docs/dev/active-lanes.yaml': f'''schema_version: 1
+lanes:
+  - id: P245
+    plan: {self.plan}
+    product_lane: PL-AUTH
+    accountable_owner: owner
+    plan_state: COMPLETED
+''',
+            self.plan: 'Status: COMPLETED\nProduct lane: PL-AUTH\nOwner: owner\n\n## Outcome\nAccepted.\n',
+            self.note: 'Product lane: PL-AUTH\nDisposition: accepted-evidence\nOwning plan or work item: [Plan](../plans/0245-2026-10-16-hosted-auth-consumer.md)\n',
+            'docs/dev/plans/README.md': '[Plan](0245-2026-10-16-hosted-auth-consumer.md)',
+            'docs/dev/notes/README.md': '[Evidence](0245-2026-10-16-hosted-auth-consumer.md)',
+            'ROADMAP.md': f'[Plan]({self.plan})',
+            'RUNBOOK.md': f'[Plan]({self.plan})',
+        }
+        for name, body in files.items():
+            path = self.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(body)
+
+    def test_completed_lane_passes_and_missing_startup_link_fails(self):
+        report = self.audit.audit_selected_lanes(self.root, ('P245',))
+        self.assertTrue(report['ok'], report['problems'])
+        (self.root / 'docs/dev/plans/README.md').write_text('# Empty index\n')
+        report = self.audit.audit_selected_lanes(self.root, ('P245',))
+        self.assertFalse(report['ok'])
+        self.assertTrue(any('plans/README.md' in p for p in report['problems']))
+
+    def test_note_ownership_and_catalog_owner_omissions_fail(self):
+        for path, old, new, signal in (
+            ('docs/dev/active-lanes.yaml', '    accountable_owner: owner\n', '', 'catalog accountable_owner'),
+            (self.note, 'Owning plan or work item:', 'Unrecognized:', 'note missing Owning plan'),
+            ('docs/dev/notes/README.md', '[Evidence]', 'Evidence only ', 'note not linked'),
+        ):
+            with self.subTest(path=path):
+                target = self.root / path
+                original = target.read_text()
+                target.write_text(original.replace(old, new))
+                report = self.audit.audit_selected_lanes(self.root, ('P245',))
+                self.assertFalse(report['ok'])
+                self.assertTrue(any(signal in p for p in report['problems']), report)
+                target.write_text(original)
+
+    def test_closed_lane_needs_no_current_links_but_unknown_lane_fails(self):
+        for path in ('docs/dev/active-lanes.yaml', self.plan):
+            target = self.root / path
+            target.write_text(target.read_text().replace('COMPLETED', 'CLOSED'))
+        for path in ('ROADMAP.md', 'RUNBOOK.md', 'docs/dev/plans/README.md', self.note):
+            (self.root / path).unlink()
+        self.assertTrue(self.audit.audit_selected_lanes(self.root, ('P245',))['ok'])
+        self.assertFalse(self.audit.audit_selected_lanes(self.root, ('P999',))['ok'])
+
+    def test_status_mismatch_and_missing_completed_evidence_fail(self):
+        target = self.root / self.plan
+        target.write_text(target.read_text().replace('COMPLETED', 'OPEN'))
+        report = self.audit.audit_selected_lanes(self.root, ('P245',))
+        self.assertTrue(any('status does not match' in p for p in report['problems']))
+        target.write_text(target.read_text().replace('OPEN', 'COMPLETED'))
+        (self.root / self.note).unlink()
+        report = self.audit.audit_selected_lanes(self.root, ('P245',))
+        self.assertTrue(any('no corresponding evidence note' in p for p in report['problems']))
+
+    def test_body_metadata_and_prose_filename_do_not_satisfy_contract(self):
+        target = self.root / self.note
+        target.write_text('## History\n' + target.read_text())
+        (self.root / 'ROADMAP.md').write_text(self.plan)
+        report = self.audit.audit_selected_lanes(self.root, ('P245',))
+        self.assertFalse(report['ok'])
+        self.assertTrue(any('note missing Product lane' in p for p in report['problems']))
+        self.assertTrue(any('ROADMAP.md' in p for p in report['problems']))
+
+    def test_cli_reports_failure_for_a_missing_link(self):
+        import subprocess
+        import sys
+        command = [sys.executable, str(AUDIT_PATH), '--repo-root', str(self.root), '--lane', 'P245', '--json']
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(json.loads(result.stdout)['ok'])
+        (self.root / 'RUNBOOK.md').write_text('# No plan link\n')
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(json.loads(result.stdout)['ok'])
