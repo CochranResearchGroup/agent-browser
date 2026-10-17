@@ -35,7 +35,7 @@ assert.match(streamStore, /export function useStreamSync\(port: number, enabled 
 assert.match(streamStore, /if \(!enabled\) return;[\s\S]*new WebSocket\(dashboardStreamWebSocketUrl\(port\)\)/);
 assert.match(
   dashboardPage,
-  /useStreamSync\(activePort, Boolean\(selectedWorkspace\.context\.node\) && !managedBrowser && !readWorkspaceViewportRoute\(\)\)/,
+  /useStreamSync\(activePort, Boolean\(selectedWorkspace\.context\.node\) && !viewport\.useNativeViewport && !readWorkspaceViewportRoute\(\)\)/,
   'durable RDP and snapshot handoffs must not also start the legacy CDP stream socket',
 );
 

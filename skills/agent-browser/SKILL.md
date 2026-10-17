@@ -48,13 +48,25 @@ Return, store, and reopen only `handoffUrl` at `/remote-view/<handoff-id>`. Neve
 
 Open the dashboard root `/` or `/browsers` for the native browser workspace.
 Select the owned tab, inspect Properties or Share its durable link, and use
-Handoffs for retained records and independent policies. Refresh retains the
-requested identity. Diagnostics at `/service` keeps Service inspection,
+Handoffs for retained records and independent policies. Sort the drawer by task,
+creation or link expiry. Inactive links are amber and hidden by default behind
+Show inactive; target expiry does not imply link expiry. Icon controls have hover
+help. Managed ownership alone does not prove a native desktop is available.
+The rail requires fresh matching native-window, browser-process and tab evidence
+for managed desktop tasks. Empty desktops and unverified/ended tabs stay out of
+live navigation; retained handoffs remain available. The rail polls every three
+seconds after completion; diagnostics do not block it and stale evidence expires
+independently after 30 seconds. Native window reads refresh in one background
+worker; initial reads can remain unverified until completion. Cached results retain
+their elapsed age, and a failed refresh cannot establish presence or renew tab
+lifetime. Search uses displayed labels and navigable URLs,
+not embedded document payloads. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
 Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job
 query fields remain supported for diagnostic links. Native Remote View uses its
 existing authentication; dashboard logout remains separate.
 Same-link native auth selects the addressed tab and waits for owner preparation without replay.
+Current handoff presentation ignores released desktop-assignment history. It still requires one active assignment for the exact desktop generation and an exact match to published browser custody; multiple active assignments or a mismatch remain unavailable.
 
 ## Sharing a profile between tasks
 
@@ -63,6 +75,8 @@ Use one named session and tab per task. When tasks deliberately need the same lo
 Tab-targeted automation can run without either tab being physically visible. Serialize foreground desktop clicks, keyboard input and human control. Separate tabs share cookies, login/logout state and persistent site storage: coordinate account switches, logout and conflicting application changes. Choose separate profiles when independent state is required.
 
 Close only the task's session. Closing one session must preserve its peers; the final session releases the browser. Do not delete the shared profile to clean up a task. If a site requires foreground execution, serialize that part of the workflow.
+
+A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains.
 
 Disposable quota retirement remains under development. Its admission includes verified child processes of the selected browser; unrelated or unverified processes using the profile still defer retirement. Retain pending-human, viewer, controller, operation and peer protections.
 

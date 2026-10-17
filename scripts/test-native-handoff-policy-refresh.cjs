@@ -43,13 +43,13 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     page.on('pageerror', error => errors.push(error.message));
     const expiry = page.getByLabel('Reported expiry');
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.waitForFunction(() => document.querySelector('output')?.textContent === '1110');
+    await page.waitForFunction(() => document.querySelector('[aria-label="Reported expiry"]')?.textContent === '1110');
     assert.equal(reads.length, 1);
     assert.equal(reads[0]['x-agent-browser-revalidate'], undefined, 'ordinary initial polling retains shared cache policy');
     deadline = 2220;
     await page.getByRole('button', { name: 'Refresh handoffs' }).click();
-    await page.waitForFunction(() => document.querySelector('output')?.textContent === '2220');
-    assert.equal(reads.length, 2, 'explicit refresh cannot reuse the warm ten-second snapshot');
+    await page.waitForFunction(() => document.querySelector('[aria-label="Reported expiry"]')?.textContent === '2220');
+    assert.equal(reads.length, 2, 'explicit refresh cannot reuse the warm summary snapshot');
     assert.equal(reads[1]['x-agent-browser-revalidate'], '1');
     assert.equal(await expiry.innerText(), '2220');
 
@@ -65,7 +65,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     assert.equal(reads.length, 3, 'manual refresh waits for the earlier poll rather than racing its publication');
     hold = null;
     release(); release = null;
-    await page.waitForFunction(() => document.querySelector('output')?.textContent === '4440');
+    await page.waitForFunction(() => document.querySelector('[aria-label="Reported expiry"]')?.textContent === '4440');
     assert.equal(reads.length, 4, 'a refresh requested during a poll must run after it settles');
     assert.equal(reads[3]['x-agent-browser-revalidate'], '1');
     assert.deepEqual(errors, []);

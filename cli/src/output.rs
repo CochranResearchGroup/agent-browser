@@ -6420,12 +6420,16 @@ Deletion preserves the tab, browser, session and pending-human hold across resta
 Closing the last live tab closes its owned browser and retains handoff records.
 Automatic expiry retires unprotected empty peers without creating replacement tabs.
 Active viewers defer retirement; shared browsers remain outside process custody.
+Handoff presentation ignores released assignment history, but requires one active
+assignment for the exact desktop generation matching published browser custody.
 Software prepare_human with pendingHumanRetentionMs records a separate unused-tab hold.
 Positive values set its maximum duration; 0 sets no automatic deadline.
 Authenticated navigation registers a continuation with the native viewer. Redirects
 and readiness preserve the hold. Only a delivered native display frame acknowledged
 by its authenticated connection, joined to the exact current target, establishes use.
 Private owner polling consumes qualified use; prefetch/background requests retain the hold.
+Failed native observations preserve the hold. Eligible TTL cleanup still commits before
+the observation error is reported; read current owner state after a failed reaper reply.
 Native remote_view_open prepares the human hold automatically. Configure its maximum
 with pendingHumanRetentionMs or AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS (default 0).
 Invalid or overflowing pending deadlines are rejected before browser effects.
@@ -6462,6 +6466,25 @@ Handoffs lists retained owner records even after target expiry, with supplied
 origin, creation/use status and separate link/tab policies. Inspect shows task
 context; Copy and Open reuse the opaque link. A failed refresh retains the last
 reported records. Unavailable inventory is distinct from an empty list.
+The drawer expands on wide screens. Sort by task name, creation time or link
+expiry using the column controls. Inactive links are amber and hidden until
+Show inactive is enabled; an expired task can still have an active link.
+Icon controls expose hover help. A task without a native desktop uses its
+available browser stream; otherwise it reports desktop availability separately
+from a missing tab.
+The rail joins Remote View application windows with live browser process and
+exact tab observations. Empty desktops, ended tabs and unverified managed records
+are excluded. Failed or stale observations preserve selection and retained links;
+a later successful refresh can restore the same tab without recreating it.
+The live rail polls three seconds after each completed read, with a two-second
+summary cache. Slow diagnostics do not delay it. Observation freshness expires
+independently after 30 seconds using elapsed time, even if the next read stalls.
+Search matches displayed tab labels and URLs, excluding embedded document payloads.
+Native window reads refresh in one background worker. Initial reads can remain
+unverified until it completes; cached samples retain their elapsed age and failed
+refreshes do not establish presence. These observations never renew tab lifetime.
+
+
 
 Policies opens link lifetime controls for a retained record. Choose Perpetual or
 a finite duration in seconds; the finite window starts when saved. This leaves

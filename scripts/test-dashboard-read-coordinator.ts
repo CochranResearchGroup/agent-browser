@@ -292,4 +292,15 @@ await oldPolicy;
 assert.equal((await (await policyCoordinator.read(policyUrl, { freshForMs: 10000 })).json()).expiresAtMs, 3330,
   "an older flight finishing after refresh must not republish the stale policy");
 
+let timedReads = 0;
+const timed = new DashboardReadCoordinator({ requestTimeoutMs: 20, fetch: async (_input, init) => {
+  timedReads++;
+  if (timedReads > 1) return new Response('recovered');
+  return new Promise((_resolve, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason), {once:true}));
+} });
+// AbortSignal.timeout is unref'd in Node; keep the test process alive explicitly.
+const keepAlive = setTimeout(() => {}, 1000);
+await assert.rejects(timed.read('/held'));
+clearTimeout(keepAlive);
+assert.equal(await (await timed.read('/held')).text(), 'recovered', 'a timed-out flight cannot pin all later reads');
 console.log("dashboard read coordinator tests passed");

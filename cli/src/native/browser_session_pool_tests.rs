@@ -1618,6 +1618,80 @@ fn ordinary_profile_selector_conflict_precedes_allocation_and_default_is_disposa
 }
 
 #[test]
+fn native_handoff_assignment_history_preserves_exact_target_and_rejects_active_ambiguity() {
+    for history_count in [1, 3] {
+        let fixture = Fixture::new();
+        let provider = Rc::new(RefCell::new(Provider::default()));
+        let calls = Rc::new(Cell::new(0));
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let opened = consumer.execute_managed_command("Alice", &serde_json::json!({
+        "action":"navigate", "url":"https://synthetic.example/history", "profileId":"profile-a", "activityAtMs":100,
+    })).unwrap().unwrap();
+        let id = opened["browserSession"]["handoffId"].as_str().unwrap();
+        let browser_id = opened["browserSession"]["browserId"].as_str().unwrap();
+        provider.borrow_mut().window_pid = Some(consumer.state().browsers[browser_id].pid);
+        let active = provider.borrow().assignments[0].clone();
+        for index in 0..history_count {
+            let mut released = active.clone();
+            released.assignment_id = format!("released-history-{index}");
+            released.state = RemoteViewAssignmentState::Released;
+            provider.borrow_mut().assignments.push(released);
+        }
+        drop(consumer);
+        let mut consumer = host(&fixture, provider.clone(), calls.clone());
+        let issued = consumer
+            .resolve_tab_handoff_view(id, 2000)
+            .expect("released history must not obscure the active assignment");
+        let command = serde_json::json!({
+            "action":"service_remote_view_handoff_resolve", "handoffId":id,
+            "nativeDesktop":true, "activityAtMs":2001,
+        });
+        let response = consumer.handle_command(&command);
+        assert_eq!(response["success"], true, "{response}");
+        assert_eq!(response["data"]["operatorVisible"]["state"], "ready");
+        assert_eq!(
+            response["data"]["targetId"],
+            opened["browserSession"]["targetId"]
+        );
+        assert_eq!(
+            provider.borrow().view_requests.len(),
+            1,
+            "native resolution adds no grant after compatibility issuance"
+        );
+        assert_eq!(calls.get(), 1);
+        assert_eq!(consumer.state().navigation_history.len(), 1);
+
+        let baseline = fixture.store(false).load_session_state().unwrap();
+        // A second active assignment is genuine ambiguity, even if custody names one.
+        let mut competing = active.clone();
+        competing.assignment_id = "competing-active".into();
+        provider.borrow_mut().assignments.push(competing);
+        assert_eq!(
+            consumer.resolve_tab_handoff_view(id, 2001).unwrap_err(),
+            "remote_view_tab_view_assignment_unavailable"
+        );
+        assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
+        provider.borrow_mut().assignments.pop();
+        provider.borrow_mut().assignments[0].state = RemoteViewAssignmentState::Released;
+        assert_eq!(
+            consumer.resolve_tab_handoff_view(id, 2001).unwrap_err(),
+            "remote_view_tab_view_assignment_unavailable"
+        );
+        assert_eq!(fixture.store(false).load_session_state().unwrap(), baseline);
+        provider.borrow_mut().assignments[0] = active;
+        assert_eq!(consumer.resolve_tab_handoff_view(id, 2001).unwrap(), issued);
+        let recovered = consumer.handle_command(&command);
+        assert_eq!(recovered["success"], true, "{recovered}");
+        assert_eq!(
+            recovered["data"]["targetId"],
+            opened["browserSession"]["targetId"]
+        );
+        assert_eq!(provider.borrow().view_requests.len(), 1);
+        assert_eq!(calls.get(), 1);
+    }
+}
+
+#[test]
 fn native_handoff_resolution_survives_restart_without_viewer_grants_or_navigation_replay() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider::default()));
@@ -4831,6 +4905,59 @@ fn pool_demand_regrows_after_exact_native_release_without_local_release_receipt(
         "remote_view_pool_acquisition_readback_required"
     );
     assert_eq!(provider.borrow().acquisitions.len(), 2);
+}
+
+#[test]
+fn reaper_observation_failure_does_not_starve_unrelated_expiry() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        window_pid: Some(43),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls);
+    let held = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/held",
+                "profileId":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let id = held["browserSession"]["handoffId"].as_str().unwrap();
+    let held_tab = held["browserSession"]["tabId"].as_str().unwrap();
+    let prepared = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"prepare_human", "pendingHumanRetentionMs":0, "activityAtMs":100
+    }));
+    assert_eq!(prepared["success"], true, "{prepared}");
+    let peer = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/expired",
+                "profileId":"profile-b", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let configured = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":peer["browserSession"]["handoffId"],
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":100
+    }));
+    assert_eq!(configured["success"], true, "{configured}");
+    provider.borrow_mut().lose_native_registration_reply = true;
+    let error = consumer
+        .reap(130)
+        .expect_err("provider failure must remain observable");
+    assert_eq!(error, "remote_view_native_registration_unavailable");
+    assert!(consumer.state().pending_human_tabs.contains_key(held_tab));
+    let durable = fixture.store(false).load_session_state().unwrap();
+    assert!(!durable
+        .sessions
+        .contains_key(peer["browserSession"]["sessionId"].as_str().unwrap()));
 }
 
 #[test]

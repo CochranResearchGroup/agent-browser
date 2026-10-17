@@ -12,7 +12,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
   // Use the existing TSX harness and the real workspace CSS below.
   await buildWorkspaceViewportFixture(root, path.join(root, 'scripts/fixtures/compact-native-workspace.tsx'), artifacts);
   const server = http.createServer((req, res) => {
-    res.setHeader('Content-Type', req.url === '/bundle.js' ? 'application/javascript' : req.url === '/native.css' ? 'text/css' : 'text/html');
+    res.setHeader('Content-Type', req.url === '/bundle.js' ? 'application/javascript' : req.url === '/native.css' ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8');
     if (req.url === '/native.css') return res.end('body { margin: 0; } button,input { font: inherit; color: inherit; border: 0; background: transparent; } ' + fs.readFileSync(path.join(root, 'packages/dashboard/src/app/globals.css'), 'utf8').split('/* Native workspace keeps navigation compact and the desktop unobstructed. */')[1]);
     res.end(req.url === '/bundle.js' ? fs.readFileSync(path.join(artifacts, 'bundle.js')) : '<link rel="stylesheet" href="/native.css"><div id="root"></div><script src="/bundle.js"></script>');
   });
@@ -129,6 +129,42 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
       'desktop drawer must anchor alongside the browser rail');
     await page.emulateMedia({ reducedMotion: 'reduce' });
 
+    for (const name of ['Refresh browsers', 'Sign out']) assert.equal(await page.getByRole('button', { name, exact: true, includeHidden: true }).getAttribute('title'), name);
+    const beforeListControls = requests.length;
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-handoffs-records', { detail: [
+      { handoffId: 'zeta', handoffUrl: '/remote-view/zeta', taskMetadata: { taskName: 'Zeta' }, createdAtMs: 3000, expiresAtMs: null, linkState: 'active', targetState: 'expired' },
+      { handoffId: 'alpha', handoffUrl: '/remote-view/alpha', taskMetadata: { taskName: 'Alpha' }, createdAtMs: 1000, expiresAtMs: 9000, linkState: 'active', targetState: 'reported' },
+      { handoffId: 'inactive', handoffUrl: '/remote-view/inactive', taskMetadata: { taskName: 'Inactive' }, createdAtMs: 2000, expiresAtMs: 4000, linkState: 'expired', targetState: 'reported' },
+    ] })));
+    const taskNames = () => retainedDrawer.locator('tbody > tr > td > strong').allTextContents();
+    assert.deepEqual(await taskNames(), ['Zeta', 'Alpha']);
+    const taskSort = retainedDrawer.getByRole('button', { name: 'Sort by task name, ascending', exact: true });
+    assert.equal(await taskSort.locator('svg').count(), 1);
+    await taskSort.click();
+    assert.deepEqual(await taskNames(), ['Alpha', 'Zeta']);
+    assert.equal(await retainedDrawer.locator('th[aria-sort="ascending"]').innerText(), 'Task and origin');
+    await retainedDrawer.getByRole('button', { name: 'Sort by task name, descending', exact: true }).click();
+    assert.deepEqual(await taskNames(), ['Zeta', 'Alpha']);
+    await retainedDrawer.getByRole('checkbox', { name: 'Show inactive (1)', exact: true }).check();
+    assert.deepEqual(await taskNames(), ['Zeta', 'Inactive', 'Alpha']);
+    const inactiveRow = retainedDrawer.getByRole('row').filter({ hasText: 'Inactive' });
+    await inactiveRow.getByText('Link status: expired (inactive)', { exact: true }).waitFor();
+    assert.equal(await inactiveRow.getByRole('link', { name: 'Open', exact: true }).count(), 0);
+    assert.notEqual(await inactiveRow.locator('.native-handoff-inactive').evaluate(node => getComputedStyle(node).color), await retainedDrawer.evaluate(node => getComputedStyle(node).color));
+    await page.screenshot({ path: path.join(artifacts, 'handoff-list-inactive.png') });
+    await retainedDrawer.getByRole('button', { name: 'Sort by creation time, ascending', exact: true }).click();
+    assert.deepEqual(await taskNames(), ['Alpha', 'Inactive', 'Zeta']);
+    await retainedDrawer.getByRole('button', { name: 'Sort by link expiry, ascending', exact: true }).click();
+    assert.deepEqual(await taskNames(), ['Inactive', 'Alpha', 'Zeta']);
+    await retainedDrawer.getByRole('checkbox', { name: 'Show inactive (1)', exact: true }).uncheck();
+    assert.deepEqual(await taskNames(), ['Alpha', 'Zeta'], 'expired targets with active links must remain visible');
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    assert.ok((await retainedDrawer.boundingBox()).width > 1000, 'wide screens should provide a wider drawer');
+    await page.screenshot({ path: path.join(artifacts, 'handoff-list-wide.png') });
+    await page.setViewportSize({ width: 1280, height: 720 });
+    assert.equal(requests.length, beforeListControls, 'sort and filter must not issue or select handoffs');
+    await retainedDrawer.getByRole('button', { name: 'Refresh handoffs', exact: true }).click();
+
     const retainedRow = retainedDrawer.getByRole('row').filter({ hasText: 'Retained review' });
     await retainedRow.waitFor({ timeout: 1500 });
     for (const control of [retainedRow.getByRole('link', { name: 'Open', exact: true }),
@@ -144,6 +180,7 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await retainedRow.getByText('Tab: 30 s inactivity', { exact: true }).waitFor();
     assert.match(await retainedRow.getByRole('link', { name: 'Open', exact: true }).getAttribute('href'), /^\/remote-view\/retained-old$/);
     await page.setViewportSize({ width: 390, height: 760 });
+    assert.equal(await retainedDrawer.getByRole('button', { name: /Sort by link expiry/ }).isVisible(), true, 'sorting must remain visible on narrow screens');
     const retainedBounds = await retainedDrawer.boundingBox();
     assert.ok(retainedBounds.x >= 0 && retainedBounds.x + retainedBounds.width <= 390, 'drawer must fit the narrow viewport');
     assert.equal(await retainedDrawer.evaluate(node => node.scrollWidth <= node.clientWidth), true, 'retained rows must not hide actions in horizontal overflow');
@@ -754,6 +791,53 @@ const { buildWorkspaceViewportFixture } = require('./lib/workspace-viewport-brow
     await page.getByRole('button', { name: 'Handoffs', exact: true }).press('Enter');
     await page.getByRole('dialog', { name: 'Handoffs', exact: true }).getByRole('status').filter({ hasText: 'No retained handoffs.' }).waitFor();
     assert.deepEqual(errors, []);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => sessionStorage.removeItem('fixture-closed-tabs'));
+    await page.reload();
+    await page.getByRole('button', { name: 'Alice invoice', exact: true }).click();
+    await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: /Empty native desktop/ }).count(), 0, 'empty native desktops must never become browser groups');
+    const beforePresence = requests.length;
+    const selectedBeforePresence = page.url();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-presence', { detail: 'absent' })));
+    await page.getByRole('button', { name: 'Alice invoice', exact: true }).waitFor({ state: 'hidden' });
+    assert.equal(await page.getByRole('button', { name: /Research shared-profile/ }).count(), 0, 'browser with no live tabs must leave the rail');
+    await page.getByRole('alert').filter({ hasText: 'This task is not currently available.' }).waitFor();
+    await page.screenshot({ path: path.join(artifacts, 'rail-browser-absent.png') });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-presence', { detail: 'unknown' })));
+    assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).count(), 0);
+    await page.getByRole('alert').filter({ hasText: 'This task could not be verified as live.' }).waitFor();
+    assert.equal(requests.length, beforePresence, 'unverified or absent inventory must issue no native selection or handoff request');
+    await page.screenshot({ path: path.join(artifacts, 'rail-browser-unverified.png') });
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-presence', { detail: 'live' })));
+    await page.getByRole('button', { name: 'Alice invoice', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).getAttribute('aria-current'), 'page');
+    assert.equal(page.url(), selectedBeforePresence, 'presence changes must preserve the exact requested identity');
+    await page.frameLocator('iframe[title="Native Remote View desktop"]').getByText('Synthetic native viewer transport', { exact: true }).waitFor();
+    assert.deepEqual(requests.slice(beforePresence).map(request => [request.action, request.params.targetId]), [['view_focus', 'target-alice'], ['remote_view_open', 'target-alice']], 'restored presentation may prepare only the exact selected existing task');
+    await page.screenshot({ path: path.join(artifacts, 'rail-browser-restored.png') });
+    const beforeUnavailable = requests.length;
+    await page.evaluate(() => window.dispatchEvent(new Event('fixture-desktop-unavailable')));
+    await page.getByRole('alert').filter({ hasText: 'This browser has no native desktop to display.' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Alice invoice', exact: true }).count(), 1, 'an unavailable desktop does not erase the retained tab');
+    assert.equal(requests.length, beforeUnavailable, 'unavailable desktop must not reopen or select a different task');
+    await page.screenshot({ path: path.join(artifacts, 'workspace-desktop-unavailable.png') });
+    await page.setViewportSize({width:1280,height:720});
+    const mountStart = performance.now();
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('fixture-scale', {detail:200})));
+    await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 200);
+    const mount200Ms = performance.now() - mountStart;
+    const searches = [];
+    for (const index of [199, 123, 85, 67, 12]) {
+      await page.getByRole('searchbox').fill('');
+      await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 200);
+      const started = performance.now();
+      await page.getByRole('searchbox').fill(`Scale ${String(index).padStart(4, '0')}`);
+      await page.waitForFunction(() => document.querySelectorAll('.native-workspace-tab').length === 1);
+      assert.equal(await page.locator('.native-workspace-tab').getAttribute('aria-label'), `Scale ${String(index).padStart(4, '0')}`);
+      searches.push(performance.now() - started);
+    }
+    fs.writeFileSync(path.join(artifacts,'rail-render-timing.json'),JSON.stringify({tabs:200,mount200Ms,searchRoundTripMs:searches,note:'actual Chromium component; timing includes automation transport'},null,2));
     console.log(JSON.stringify({ success: true, artifacts, seam: 'actual compact component in Chromium; synthetic inventory and viewer boundary' }));
   } finally {
     releaseHeldFocus?.(null);

@@ -81,6 +81,8 @@
     "audit:route-handoff": "node scripts/audit-route-handoff.js",
     "publish:local-dashboard": "node scripts/publish-local-dashboard-runtime.js",
     "test:dashboard-managed-workspace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-managed-workspace.ts",
+    "test:rail-observation-refresh": "node scripts/test-rail-observation-refresh.cjs",
+    "test:native-rail": "node --no-warnings --experimental-strip-types scripts/test-native-rail.ts",
     "test:compact-native-workspace": "node scripts/test-compact-native-workspace.cjs",
     "test:native-handoff-policy-refresh": "node scripts/test-native-handoff-policy-refresh.cjs",
     "test:dashboard-trace": "node --no-warnings --experimental-strip-types scripts/test-dashboard-service-trace.js",

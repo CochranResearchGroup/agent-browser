@@ -6,13 +6,14 @@ import { NativeTaskViewport } from "@/components/native-task-viewport";
 import { CompactNativeWorkspace } from "@/components/compact-native-workspace";
 
 const nodes = [
+  { id: "empty-desktop", browserId: "empty-browser", label: "Empty native desktop", live: true, relatedIds: { serviceSessionIds: [] } },
   { id: "browser:alice-browser", browserId: "alice-browser", label: "Research", profileId: "shared-profile", live: true, relatedIds: { serviceSessionIds: ["alice-session"] } },
   { id: "browser:carol-browser", browserId: "carol-browser", label: "Analysis", profileId: "independent-profile", live: true, relatedIds: { serviceSessionIds: ["carol-session"] } },
 ];
 const tabs = [
   { id: "data-page", browserId: "carol-browser", sessionId: "data-session", targetId: "data-target", title: null, url: "data:text/html,<title>PRIVATE-HTML-CANARY</title>", lifecycle: "active" },
-  { id: "alice", managedTask: true, browserId: "alice-browser", sessionId: "alice-session", targetId: "target-alice", profileId: "shared-profile", desktopId: "desktop-a", taskMetadata: { attribution: "supplied", serviceName: "Synthetic billing", agentName: "Ada worker", humanName: "Review operator", originKind: "agent", taskName: "Review invoice", purpose: "Check supplied invoice totals", createdAtMs: 1000, jobId: "job-review", requestId: "request-review" }, title: "Alice invoice", url: "https://example.test/alice", lifecycle: "active" },
-  { id: "bob", managedTask: true, browserId: "alice-browser", sessionId: "bob-session", targetId: "target-bob", title: "Bob invoice", url: "https://example.test/bob", lifecycle: "active" },
+  { id: "alice", managedTask: true, presence: { state: "live" as const }, browserId: "alice-browser", sessionId: "alice-session", targetId: "target-alice", profileId: "shared-profile", desktopId: "desktop-a", taskMetadata: { attribution: "supplied", serviceName: "Synthetic billing", agentName: "Ada worker", humanName: "Review operator", originKind: "agent", taskName: "Review invoice", purpose: "Check supplied invoice totals", createdAtMs: 1000, jobId: "job-review", requestId: "request-review" }, title: "Alice invoice", url: "https://example.test/alice", lifecycle: "active" },
+  { id: "bob", managedTask: true, presence: { state: "live" as const }, browserId: "alice-browser", sessionId: "bob-session", targetId: "target-bob", title: "Bob invoice", url: "https://example.test/bob", lifecycle: "active" },
   { id: "carol", browserId: "carol-browser", sessionId: "carol-session", targetId: "target-carol", title: "Carol report", url: "https://example.test/carol", lifecycle: "active" },
   { id: "closed", browserId: "alice-browser", targetId: "target-closed", title: "Closed invoice", lifecycle: "closed" },
 ];
@@ -32,6 +33,7 @@ function Fixture() {
   const [selection, setSelection] = useState(() => readDashboardWorkspaceUrlSelection());
   const [availableTabs, setAvailableTabs] = useState(fixtureTabs);
   const [refreshing, setRefreshing] = useState(false);
+  const [desktopUnavailable, setDesktopUnavailable] = useState(false);
   const [availableHandoffs, setAvailableHandoffs] = useState<typeof handoffs | undefined>(fixtureHandoffs);
   const failHandoffRefresh = useRef(false);
   const pauseRefresh = useRef(false);
@@ -46,6 +48,8 @@ function Fixture() {
     } finally { setRefreshing(false); }
   };
   useEffect(() => {
+    const replace = (event: Event) => setAvailableHandoffs((event as CustomEvent).detail);
+    window.addEventListener("fixture-handoffs-records", replace);
     const empty = () => setAvailableHandoffs([]);
     const unavailable = () => setAvailableHandoffs(undefined);
     const fail = () => { failHandoffRefresh.current = true; };
@@ -65,6 +69,7 @@ function Fixture() {
     window.addEventListener("fixture-handoffs-used", used);
     window.addEventListener("fixture-handoffs-repair", repair);
     return () => {
+      window.removeEventListener("fixture-handoffs-records", replace);
       window.removeEventListener("fixture-handoffs-empty", empty);
       window.removeEventListener("fixture-handoffs-unavailable", unavailable);
       window.removeEventListener("fixture-handoffs-fail", fail);
@@ -77,6 +82,18 @@ function Fixture() {
     };
   }, []);
   useEffect(() => {
+    const scale = (event: Event) => {
+      const count = Math.min(1000, Math.max(0, Number((event as CustomEvent).detail)));
+      setAvailableTabs(Array.from({length: count}, (_, index) => ({...tabs[1], id: `scale-${index}`, targetId: `scale-target-${index}`, title: `Scale ${String(index).padStart(4, '0')}`})));
+    };
+    window.addEventListener("fixture-scale", scale);
+    const presence = (event: Event) => {
+      const state = (event as CustomEvent).detail;
+      setAvailableTabs(current => current.map(tab => tab.managedTask ? { ...tab, presence: { state } } : tab));
+    };
+    window.addEventListener("fixture-presence", presence);
+    const withoutDesktop = () => setDesktopUnavailable(true);
+    window.addEventListener("fixture-desktop-unavailable", withoutDesktop);
     const removeSelected = () => setAvailableTabs(current => current.filter(tab => tab.id !== readDashboardWorkspaceUrlSelection().tabId));
     const pause = () => { pauseRefresh.current = true; };
     const finish = () => { pauseRefresh.current = false; releaseRefresh.current?.(); releaseRefresh.current = null; };
@@ -84,6 +101,9 @@ function Fixture() {
     window.addEventListener("fixture-pause-refresh", pause);
     window.addEventListener("fixture-finish-refresh", finish);
     return () => {
+      window.removeEventListener("fixture-scale", scale);
+      window.removeEventListener("fixture-presence", presence);
+      window.removeEventListener("fixture-desktop-unavailable", withoutDesktop);
       window.removeEventListener("fixture-remove-selected-tab", removeSelected);
       window.removeEventListener("fixture-pause-refresh", pause);
       window.removeEventListener("fixture-finish-refresh", finish);
@@ -96,8 +116,9 @@ function Fixture() {
     return () => window.removeEventListener(DASHBOARD_WORKSPACE_SELECTION_EVENT, update);
   }, []);
   const selectedTab = availableTabs.find(tab => tab.id === selection.tabId);
+  const selectedPresence = selectedTab?.managedTask && selectedTab.presence?.state !== "live" ? selectedTab.presence?.state ?? "unknown" : null;
   return <CompactNativeWorkspace runtimeEnvironment="development" nodes={nodes as any} handoffs={availableHandoffs as any} tabs={availableTabs} selection={selection} userLabel="Synthetic operator" onLogout={() => {}} onRefresh={refresh}>
-    <NativeTaskViewport hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab ? {
+    <NativeTaskViewport presenceUnavailable={selectedPresence as "absent" | "unknown" | null} desktopUnavailable={desktopUnavailable} hasSelection={Boolean(selection.tabId)} loading={refreshing} onRefresh={refresh} target={selectedTab && !desktopUnavailable && !selectedPresence ? {
       browserId: selection.browserId!, sessionName: selection.sessionId!, targetId: `target-${selection.tabId}`,
       displayAllocationId: selection.browserId === "carol-browser" ? "desktop-b" : "desktop-a",
     } : null} />

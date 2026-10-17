@@ -1,5 +1,6 @@
 "use client";
 
+import { managedWorkspaceViewport } from "@/lib/managed-workspace";
 import { type FormEvent, useCallback, useEffect, useState } from "react";
 import { useAtomValue } from "jotai/react";
 import { activePortAtom } from "@/store/sessions";
@@ -704,19 +705,15 @@ function NativeBrowserWorkspace({ user, onLogout }: {
   const inventory = selectedWorkspace.managedWorkspace;
   const browserId = selectedWorkspace.context.selection.browserId;
   const tabId = selectedWorkspace.context.selection.tabId?.replace(/^target:/, "");
-  const managedBrowser = browserId ? inventory?.browsers[browserId] : null;
-  const tab = tabId ? inventory?.tabs[tabId] : null;
-  const session = tab ? inventory?.sessions[tab.sessionId] : null;
-  useStreamSync(activePort, Boolean(selectedWorkspace.context.node) && !managedBrowser && !readWorkspaceViewportRoute());
-  const nativeTarget = managedBrowser?.desktop && tab?.browserId === managedBrowser.id && session
-    ? { browserId: managedBrowser.id, sessionName: session.name, targetId: tab.targetId, displayAllocationId: managedBrowser.desktop.desktop_id }
-    : null;
+  const viewport = managedWorkspaceViewport(inventory, browserId, tabId ?? null,
+    selectedWorkspace.projection.selected?.browser.id === browserId && selectedWorkspace.projection.selected.canView, selectedWorkspace.presenceCurrent);
+  useStreamSync(activePort, Boolean(selectedWorkspace.context.node) && !viewport.useNativeViewport && !readWorkspaceViewportRoute());
   return <CompactNativeWorkspace runtimeEnvironment={runtimeEnvironment} nodes={selectedWorkspace.nodes} tabs={selectedWorkspace.tabs}
     handoffs={inventory?.handoffs ? Object.values(inventory.handoffs) : undefined}
     selection={selectedWorkspace.context.selection} userLabel={user.displayName || user.username}
     onLogout={onLogout} onRefresh={selectedWorkspace.refresh} loading={selectedWorkspace.loading} error={selectedWorkspace.error}
     diagnosticsHref={dashboardSectionUrl("service")}>
-    {managedBrowser || (!browserId && !tabId) ? <NativeTaskViewport target={nativeTarget} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
+    {viewport.useNativeViewport ? <NativeTaskViewport target={viewport.target} desktopUnavailable={viewport.desktopUnavailable} presenceUnavailable={viewport.presenceUnavailable} hasSelection={Boolean(tabId)} loading={selectedWorkspace.loading} onRefresh={selectedWorkspace.refresh} /> : <WorkspaceRemoteViewport fallback={<Viewport />} selectedWorkspaceContext={selectedWorkspace.context}
       projection={selectedWorkspace.projection} onRefresh={selectedWorkspace.refresh} onSelectStream={workspaceViewPreferences.write} />}
   </CompactNativeWorkspace>;
 }

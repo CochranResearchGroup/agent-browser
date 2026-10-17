@@ -22,6 +22,18 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+- [Combined dashboard production upgrade](2026-10-17-pr302-production-upgrade.md)
+
+- [Rail native observation diagnosis](2026-10-17-rail-native-observation-diagnosis.md)
+
+- [Native handoff assignment history repair](2026-10-17-native-handoff-assignment-history.md)
+
+- [PR302 complete dashboard review](2026-10-17-pr302-review.md)
+
+- [Rail speed and accuracy audit](2026-10-17-rail-audit.md)
+
+- [Dashboard handoff list and desktop availability](2026-10-17-dashboard-handoff-polish.md)
+
 [P247 planning completeness evidence](0247-2026-10-17-planning-completeness.md) records selected-lane omission fixtures and validation for #299.
 
 - [Ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md)

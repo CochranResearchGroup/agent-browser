@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronDown, LogOut, Monitor, PanelLeftClose, PanelLeftOpen, RefreshCw, Search, Link2, Wrench } from "lucide-react";
+import { buildNativeRailGroups } from "@/lib/native-rail";
 import { tabDescription } from "@/lib/tab-description";
 import { queueWorkspaceFocusRequest } from "@/lib/workspace-focus-request";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
@@ -112,19 +113,14 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
     // writeDashboardWorkspaceUrlSelection dispatches the canonical selection event.
   };
   const search = query.trim().toLowerCase();
-  const browsers = [...new Map(nodes.filter(node => node.live && node.browserId).map(node => [node.browserId, node])).values()];
-  const groups = browsers.map(node => {
-    const browserTabs = tabs.filter(tab => tab.browserId === node.browserId && tab.lifecycle !== "closed" && tab.lifecycle !== "expired" && !closedTabs.has(tab.id));
-    const browserMatches = `${node.label} ${node.profileId ?? ""}`.toLowerCase().includes(search);
-    return { node, browserTabs, visibleTabs: browserTabs.filter(tab => !search || browserMatches || `${tab.title ?? ""} ${tab.taskLabel ?? ""} ${tab.url ?? ""}`.toLowerCase().includes(search)), browserMatches };
-  }).filter(group => !search || group.browserMatches || group.visibleTabs.length);
+  const { groups, browserCount, unverifiedTabs } = useMemo(() => buildNativeRailGroups(nodes, tabs, closedTabs, query), [nodes, tabs, closedTabs, query]);
   return (
     <main ref={root} className="native-workspace" style={{ gridTemplateColumns: collapsed ? "40px minmax(0, 1fr)" : `${width}px minmax(0, 1fr)` }}>
       <aside className="native-workspace-rail" aria-label="Browsers and tabs">
         <button type="button" aria-label="Handoffs" title="Handoffs" onClick={event => { shareFocus.current = event.currentTarget; setHandoffsOpen(true); }}><Link2 size={15} /></button>
         <div className="native-workspace-rail-header">
           {!collapsed && <span>Browsers</span>}
-          <button type="button" aria-label={collapsed ? "Show browser rail" : "Collapse browser rail"} onClick={toggleRail}>
+          <button type="button" aria-label={collapsed ? "Show browser rail" : "Collapse browser rail"} title={collapsed ? "Show browser rail" : "Collapse browser rail"} onClick={toggleRail}>
             {collapsed ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
           </button>
         </div>
@@ -140,8 +136,8 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
                 {open && visibleTabs.map(tab => <NativeTabActions key={tab.id} node={node} tab={tab} shareBusy={shareBusy} onShare={opener => void shareTab(tab, opener)} onClosed={() => tabClosed(tab)}><button type="button" className="native-workspace-tab" aria-label={tabDescription(tab)} aria-current={selection.browserId === node.browserId && selection.tabId === tab.id ? "page" : undefined} onClick={() => selectTab(node, tab)} title={tab.url ?? undefined}><span>{tabDescription(tab)}</span></button></NativeTabActions>)}
               </section>;
             })}
-            {search && browsers.length > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
-            {!browsers.length && <p className="native-workspace-empty">{loading ? "Loading browsers…" : "No active browsers"}</p>}
+            {search && browserCount > 0 && !groups.length && <p role="status" className="native-workspace-empty">No matching browsers or tabs</p>}
+            {!groups.length && !search && <p className="native-workspace-empty">{loading ? "Loading browsers…" : unverifiedTabs ? "Browser presence could not be verified. Refresh browsers to check again." : "No active browsers"}</p>}
           </nav>
         </>}
         {!collapsed && <div role="separator" tabIndex={0} aria-label="Browser rail width" aria-orientation="vertical" aria-valuemin={180} aria-valuemax={400} aria-valuenow={width} className="native-workspace-resize" onKeyDown={event => {
@@ -150,7 +146,7 @@ export function CompactNativeWorkspace({ runtimeEnvironment, nodes, tabs, handof
         }} onPointerDown={event => { drag.current = { x: event.clientX, width }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { if (drag.current) saveWidth(drag.current.width + event.clientX - drag.current.x); }} onPointerUp={() => { drag.current = null; }} onLostPointerCapture={() => { drag.current = null; }} />}
       </aside>
       <section className="native-workspace-main" aria-label="Browser workspace">
-        <header className="native-workspace-toolbar"><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
+        <header className="native-workspace-toolbar"><span>Agent Browser</span>{runtimeEnvironment === "development" && <span data-runtime-environment={runtimeEnvironment}>Development</span>}<span className="native-workspace-user">{userLabel}</span><a className="native-workspace-diagnostics" href={diagnosticsHref} aria-label="Diagnostics" title="Diagnostics"><Wrench size={14} /></a><button type="button" aria-label="Refresh browsers" title="Refresh browsers" onClick={() => void onRefresh()}><RefreshCw size={14} /></button><button type="button" aria-label="Sign out" title="Sign out" onClick={onLogout}><LogOut size={14} /></button></header>
         {closeRefreshError && <div role="alert" className="native-workspace-error">{closeRefreshError}</div>}
         {error && <div role="alert" className="native-workspace-error">{error} <button type="button" onClick={() => void onRefresh()}>Retry</button></div>}
         <div className="native-workspace-desktop">{selection.tabId && closedTabs.has(selection.tabId) ? <p role="status" className="native-task-message">The selected tab was closed. Select another tab to continue.</p> : children}</div>

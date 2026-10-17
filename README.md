@@ -816,6 +816,25 @@ Handoffs lists retained owner records even after target expiry, with supplied
 origin, creation/use status and separate link/tab policies. Inspect shows task
 context; Copy and Open reuse the opaque link. A failed refresh retains the last
 reported records. Unavailable inventory is distinct from an empty list.
+The drawer expands on wide screens. Sort by task name, creation time or link
+expiry using the column controls. Inactive links are amber and hidden until
+Show inactive is enabled; an expired task can still have an active link.
+Icon controls expose hover help. A task without a native desktop uses its
+available browser stream; otherwise it reports desktop availability separately
+from a missing tab.
+The rail joins Remote View application windows with live browser process and
+exact tab observations. Empty desktops, ended tabs and unverified managed records
+are excluded. Failed or stale observations preserve selection and retained links;
+a later successful refresh can restore the same tab without recreating it.
+The live rail polls three seconds after each completed read, with a two-second
+summary cache. Slow diagnostics do not delay it. Observation freshness expires
+independently after 30 seconds using elapsed time, even if the next read stalls.
+Search matches displayed tab labels and URLs, excluding embedded document payloads.
+Native window reads refresh in one background worker. Initial reads can remain
+unverified until it completes; cached samples retain their elapsed age and failed
+refreshes do not establish presence. These observations never renew tab lifetime.
+
+
 
 Policies opens link lifetime controls for a retained record. Choose Perpetual or
 a finite duration in seconds; the finite window starts when saved. This leaves
@@ -6808,7 +6827,7 @@ Software callers delete a link through `service_remote_view_handoff_resolve` wit
 
 The owner operation `service_remote_view_handoff_resolve` with `params.handoffOperation="prepare_human"` and `params.pendingHumanRetentionMs` records a pending-human hold on the addressed tab. A positive value sets a maximum duration; 0 holds without an automatic deadline. `inspect` reports `pendingHuman` separately from link expiry and tab inactivity. The hold survives restart and does not navigate or open a viewer. The browser owner reads successful-use evidence through the private native provider transport, joined to the retained handoff, exact tab/target and current lifecycle/viewing generations. Caller-supplied `humanUseEvidence` is rejected. Pending, expired or failed native viewing preserves the hold. Qualified use and exact native focus release the hold and resume tab inactivity. Ordinary agent readiness resolution leaves the hold intact. Native `remote_view_open` automatically prepares this hold after successful browser work. Software managed commands can request it with `humanHandoff=true`. `pendingHumanRetentionMs` overrides `AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS`; the default 0 holds until use with no automatic deadline. Ordinary agent work does not prepare a human hold. Invalid configuration and overflowing pending deadlines are rejected before browser effects. Authenticated document navigation registers a continuation and redirects to the existing native viewer, including dashboard redirects that lose transient user activation. Registration does not require a fresh click on the API URL. The redirect and readiness do not acknowledge use; private owner polling consumes only provider-qualified use. Registration survives owner restart; replay preserves the first-use timestamp. Prefetches, background requests and missing navigation context retain the hold. This uses existing authentication and adds no operator confirmation step.
 
-Native human handoff production prepares private observation context alongside the pending-human hold. A top-level opaque link validates retained intent and enters the existing native Remote View authenticated continuation without a Dashboard login. The public GET remains read-only; after native authentication, the browser owner prepares and selects the addressed tab before the native viewer opens. This also handles a live browser showing another tab, an exited process, or a changed physical observation through the same link. Prepared dashboard iframes retain the existing same-origin native workspace path. The private continuation uses the existing bounded native-handoff response budget at stable ingress; a delivered POST is not replayed to a fallback backend. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention.
+Native human handoff production prepares private observation context alongside the pending-human hold. A top-level opaque link validates retained intent and enters the existing native Remote View authenticated continuation without a Dashboard login. The public GET remains read-only; after native authentication, the browser owner prepares and selects the addressed tab before the native viewer opens. This also handles a live browser showing another tab, an exited process, or a changed physical observation through the same link. Prepared dashboard iframes retain the existing same-origin native workspace path. The private continuation uses the existing bounded native-handoff response budget at stable ingress; a delivered POST is not replayed to a fallback backend. The owner reaper refreshes short-lived observations while human use is pending; it does not extend the link or hold deadline. Current handoff presentation ignores released desktop-assignment history. It still requires one active assignment for the exact desktop generation and an exact match to published browser custody; multiple active assignments or a mismatch remain unavailable. A failed native handoff observation does not acknowledge human use or renew retention. Eligible TTL cleanup still runs under its existing activity and publication checks before the owner reports the observation error. A failed reaper response can therefore follow committed cleanup; read current owner state before deciding what remains. A stale or expired observation is not successful use. Only provider-qualified native display confirmation and the exact browser-owner join record first use and release retention.
 
 
 

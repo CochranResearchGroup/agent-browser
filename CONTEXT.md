@@ -352,3 +352,8 @@ on demand through a small SVG control in the rail, opening the operator-approved
 content-sized animated drawer;
 the handoff table does not permanently occupy the desktop. This supersedes
 the original A/B/C table-placement proposals.
+
+**Workspace presence sample**: Read-only descriptive browser, target and native
+window evidence. Native provider reads run in one background worker. A cached
+sample retains its original identity and elapsed age; serving it does not renew
+confidence, tab lifetime or viewing authority. Unknown evidence stays unknown.

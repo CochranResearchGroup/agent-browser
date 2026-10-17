@@ -1380,6 +1380,8 @@ fn remote_view_tab_assignment<T: RemoteViewApplicationTransport>(
         .filter(|assignment| {
             assignment.desktop_id == desktop.desktop_id
                 && assignment.generation == desktop.generation
+                // Released history cannot provide current presentation custody.
+                && assignment.state == RemoteViewAssignmentState::Active
         })
         .collect::<Vec<_>>();
     let assignment = match matching.as_slice() {
