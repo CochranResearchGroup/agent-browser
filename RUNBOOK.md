@@ -33,28 +33,19 @@ two corrected fixture assertions from product evidence. #183 still requires
 the workstation-wide terminal shutdown operation and failed-ledger, generation,
 escalation and retry qualification. P237 retains #260/#261 ownership.
 
-### 2026-10-11 P237 dashboard and handoff lifecycle
+### 2026-10-16 P237 dashboard and handoff lifecycle complete
 
-The [implementation ledger](docs/dev/notes/0237-2026-10-14-implementation-ledger.md)
-records source qualification for all seven implementation tickets277through283.
-The compact workspace is the sole source default. The final combined candidate
-`6fc7f26e0` passes the private native continuation workflow in36.259seconds,
-including exact expiry/restart/recreation, original context, peer preservation,
-Properties, Diagnostics and separate authentication/logout. Both cleanup censuses
-are empty; the exact owned cleanup escalation is retained. Public synthetic
-checks also qualify popup observation without stealing peer selection and
-ordinary downloads despite malformed historical launch metadata.
-
-The [bounded review](docs/dev/notes/0237-2026-10-15-bounded-review.md) retains one
-broad review, one remediation pass and the nonblocking #105 history-cost follow-up.
-The ledger preserves subsequent bounded integration repairs, failed attempts and
-the historical accidental provider-authentication incident. Remote View PR441/442
-own canonical provider prerequisites; PR270 owns consumer source delivery and
-implementation-ticket reconciliation. [P237](docs/dev/plans/0237-2026-10-11-native-dashboard-handoffs.md)
-stays IN_PROGRESS for wider installed/public-provider adoption. Source delivery
-performs no production/development installation, shared-skill publication, external
-ingress, CI or formal release. Retain owned candidate custody and preserve foreign
-worktrees. Rejected layouts and prototype source remain historical.
+The [installed acceptance map](docs/dev/notes/0237-2026-10-16-installed-acceptance.md)
+qualifies all 30 approved v2 stories. Development `0.28.0-91e0a643b9e0` passes
+public authentication, exact original Alpha/Beta/Alpha native selection and input,
+same-link process-loss/expiry recovery, independent dashboard logout, restart,
+compact UI and exact empty task/viewer cleanup. Both doctors and three launch
+cycles pass. The ledger retains failed attempts and bounded validation reuse.
+PR293 owns final retained-link and private-resume response-budget repairs;
+PR270/292, Remote View PR441/442 and Cooper PR13 own canonical dependencies.
+The clean primary retains candidate/review custody; the Cooper auxiliary is closed.
+Production, shared client configuration, CI and formal release remain unchanged.
+Wider #260/#105/#68 work and workstation-wide stress remain separate.
 
 ### 2026-10-12 P238 workflow MCP
 

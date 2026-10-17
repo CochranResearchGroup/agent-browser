@@ -1173,3 +1173,11 @@ unchanged source. The running development ingress executable was independently
 read back as the installed b138f0592012 binary, confirming the new predicate must
 be published to that service rather than only to its backend. A final pinned
 candidate and real same-link native selection/input remain pending.
+
+## Final installed acceptance, 2026-10-16
+
+The final candidate from8bae9a0bf is installed as0.28.0-91e0a643b9e0, SHA25691e0a643b9e010f62c08cc65b36a2c4916860857e4d5bc43eb38e2047e9eb02d. Independent executable readback confirms stable ingress uses it. Development doctor, install doctor, development-only skill sync and three disposable launch cycles pass; production remains unchanged. The exact private resume response-budget repair passes38 ingress and39 output tests, strict workspace Clippy/format, handoff guidance, durable-handoff, policy wiring and docs build. Unchanged320 Remote View,66 HTTP and153 browser-session checks remain applicable.
+
+Normal-DNS/TLS public native acceptance now opens the original Alpha link, types its marker, opens the original Beta link, types its separate marker, and reopens the original Alpha link. Independent non-activating reads confirm exact tab selection and preserved separate input. Agent-only activity leaves first use absent; actual native viewing populates it without changing original handoff creation, expiry or profile. The dashboard embeds the connected Alpha native frame. No CLI resolve/private diagnostic participates in this final oracle.
+
+The [30-story acceptance map](0237-2026-10-16-installed-acceptance.md) reconciles fresh and retained evidence, earlier failures and availability limitations. After exact owner close, remaining peer input is preserved before final browser closure. Fresh captured PID/birth and exact profile102–106 census is empty; the temporary viewer unit stops. Shared automation and persistent development/native services remain. The Cooper auxiliary completed governed closeout; foreign checkouts remain preserved. P237 is complete within approved scope; canonical final integration is PR293. Production, CI, formal release and wider programs remain separate.
