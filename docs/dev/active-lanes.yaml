@@ -9,13 +9,14 @@ lanes:
     accountable_owner: ecochran76
     work_items: [CochranResearchGroup/agent-browser#301]
     plan_state: IN_PROGRESS
-    custody_state: PR_OPEN
+    custody_state: INTEGRATED
     pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/302
+    integration_receipt: https://github.com/CochranResearchGroup/agent-browser/pull/302
     dependencies: []
     overlaps: [P237, P240]
     reconciled_overlaps: ["P237 integrated; existing dashboard primary reused with installed candidate pins retained; P240 foreign resource checkout preserved. UX301 owns observed workspace presence, bounded Remote View reads, generated display types, rail/viewer consumers and guidance. P240 TTL and cleanup remain unchanged."]
-    shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. No production effects. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
-    validation_status: Native assignment and rail timing repairs pass source gates; source 71aee8e26 ordinary development 1d085fb275be passes eventual live convergence, Alpha-Beta-Alpha native input, both doctors and three launch cycles with zero owned residue; whole summary latency remains about 3s; final-source production-shaped build and production promotion unperformed
+    shared_source_coordination: "User-authorized follow-up owns handoff-observation versus TTL reaper isolation, plus current-active assignment selection in remote_view_session_effects.rs and host pool fixtures. P240 is completed with a clean retained checkout; its archive, quota and resource policies remain authoritative and unchanged. The diagnostic slice had no production effects; the later explicit upgrade is recorded below. UX301 also owns the read-only single-flight native observation worker and additive sample-age projection; provider APIs and lifecycle policy remain unchanged."
+    validation_status: PR302 integrated; sealed source c134b56c1 binary 186b5640bb5f passes exact development native rail/input, doctors and three launch cycles; production transaction upgrade-30a272ee accepted with matching installed and live runtime-host checksums, doctor passing and protected profiles/handoffs retained; wider summary latency remains about 3s
     updated_at: 2026-10-17
 
   - id: P247
