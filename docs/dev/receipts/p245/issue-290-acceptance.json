@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "workItem": "CochranResearchGroup/agent-browser#290",
   "productLane": "PL-AUTH",
-  "evidenceBoundary": "All nine workflow evidence items and final bounded review qualified; canonical publication pending",
+  "evidenceBoundary": "All nine bounded workflow outcomes accepted, final review remediated, canonical source and scoped shared-auth guidance published",
   "requirements": [
     {
       "id": "installed_discovery",
@@ -108,11 +108,35 @@
   ],
   "standardsReview": "one accepted discoverability finding, remediated",
   "specReview": "no accepted defects",
-  "canonicalPublication": "pending",
+  "canonicalPublication": {
+    "state": "merged",
+    "pr": 297,
+    "mergeCommit": "c27f04a3117bca17adc7b33994d38ab80341067f"
+  },
   "reviewDiscoveryCycles": 1,
   "boundedRemediationCycles": 1,
   "frozenReviewBase": "e9507f65224c478950a144f16f0d962f94c81186",
   "frozenReviewHead": "26180eb75600b1bd47183808a089b21b71df0ffe",
   "reviewArtifact": "docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective",
-  "finalValidation": "docs/dev/receipts/p245/final-validation.json"
+  "finalValidation": "docs/dev/receipts/p245/final-validation.json",
+  "sharedAuthGuidancePublication": "docs/dev/receipts/p245/shared-auth-guidance-publication.json",
+  "memoryDisposition": {
+    "state": "queued",
+    "jobId": "534d1007-8136-434a-8ea8-ecebcb855437",
+    "groupId": "agent_browser_main",
+    "queueAcceptanceOnly": true,
+    "persistenceOrRetrievalProven": false,
+    "privateReceipt": "/tmp/p245-issue290-final-memory-20261017.json"
+  },
+  "finalRuntimeReadback": {
+    "bothRequestsAuthenticated": true,
+    "bothCaptureReady": true,
+    "activeAuthRequests": 0,
+    "originalTargetsAndAuditsPreserved": true,
+    "sourceReads": 0,
+    "privateInputs": 0,
+    "productionAgentBrowserBinaryUnchanged": true,
+    "ownedNativeFixtureProcessResidue": 0
+  },
+  "wholeIssueAccepted": true
 }

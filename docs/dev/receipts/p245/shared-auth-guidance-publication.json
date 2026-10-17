@@ -1,0 +1,24 @@
+{
+  "qualification": "Accepted hosted-auth guidance published from canonical source",
+  "sourcePr": 297,
+  "sourceRevision": "c27f04a3117bca17adc7b33994d38ab80341067f",
+  "publishedAt": "2026-10-17T04:03:59.705469+00:00",
+  "publishedFileCount": 2,
+  "scope": "SiteGuide routines section and P245 routine-reference changes only",
+  "unrelatedInstalledSkillBytesPreserved": true,
+  "fullSkillSynchronizationClaimed": false,
+  "sourceOnlyCliRecoveryGuidanceExcluded": true,
+  "preimagesAndCompareBeforeWritePreserved": true,
+  "postWriteHashes": [
+    {
+      "file": "SKILL.md",
+      "sha256": "4c48f509ac20148b7fbcb077133f89ba852bc817a8b22b795f32d2fdaaf0ac85"
+    },
+    {
+      "file": "references/playbooks.md",
+      "sha256": "c078f54dddd6fece2a9f4138b6cb918638075270ea87da15ffb4cf548d4063af"
+    }
+  ],
+  "runtimeEffects": 0,
+  "newAuthOperations": 0
+}

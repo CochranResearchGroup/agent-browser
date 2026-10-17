@@ -18,8 +18,9 @@ controllers, expiry and unknown effects remain preserved.
 
 The final 16-check integration batch passes at source26180eb75 against main
 e9507f652. One Standards discoverability finding is repaired below; Spec has no
-accepted defect. Canonical PR integration and final shared-guidance publication
-remain next. No formal release or Agent Browser production replacement follows.
+accepted defect. Canonical PR297 is merged as c27f04a31 and accepted shared-auth
+guidance is published in two scoped files. All nine bounded outcomes are
+accepted. No formal release or Agent Browser production replacement follows.
 The renewed allocation remains safety08:07:48Z/hard08:22:48Z on2026-10-17, with
 cumulative-token history and the explicit two-million-token renewed allowance
 preserved by the private allocation ledger. Do not restart login or reset bounds.
@@ -621,3 +622,40 @@ rather than manually constructing them. These are observed invocation defects,
 not missing checks or permission failures. The reviewed interval is the supplied
 handoff plus this visible continuation and its exact retained source/test logs;
 no claim is made about unobserved sessions.
+
+
+## Canonical and installed closeout
+
+PR297 merges the accepted source as
+c27f04a3117bca17adc7b33994d38ab80341067f. Scoped shared-auth guidance publication
+preserves exact preimages and unrelated installed skill bytes. Only the accepted
+SiteGuide auth section and routine reference change; source-only CLI recovery
+guidance and unrelated main-line skill changes are excluded. The curated
+shared-auth-guidance-publication.json records canonical lineage and hashes.
+
+Final trusted read-only health/request inspection verifies producer generation
+dac7d1f3, both original accepted requests authenticated/capture ready/effect
+verified, original caller/full target/audits preserved and zero running auth
+requests. No source retrieval or private input occurs. Fresh OS readback proves
+both native fixture roots have zero owned residue. The production Agent Browser
+host remainsPID47664 with unchanged executableSHA2564ff52ba0728a01931039893cc91aaa25a86a328a42d6f976c9c145a2fee6537c.
+Existing actual profiles and unrelated process/source/candidate custody remain
+preserved. No global doctor, complete producer suite, platform matrix, formal
+release or additional production Agent Browser behavior is claimed.
+
+Memory disposition: queued. Exact reconciliation first proves the older related
+upgrade write absent and safe to retry; the new atomic accepted-auth outcome is
+queued in agent_browser_main asjob534d1007-8136-434a-8ea8-ecebcb855437.
+Receipt /tmp/p245-issue290-final-memory-20261017.json records queue acceptance
+only, not extraction completion, grouped visibility or retrieval proof. Prior
+unavailable receipts remain historical. No further queue polling or blind retry
+is needed. This closes the bounded Plan0245 outcome; later broader auth work
+requires its own task rather than resuming failed controllers.
+
+
+The final documentation-only closeout checker first failed because its multiline
+regular expression stopped at the first P245 line rather than the complete lane
+block. The per-check runner correctly kept that batch failed despite policy
+success. A corrected exact-span comparison proves every foreign lane byte
+unchanged; the corrected closeout batch passes. This is a retained checker/setup
+failure, with no application, native, provider or acceptance change.

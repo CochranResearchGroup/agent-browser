@@ -14,7 +14,7 @@ existing tooling/selector gates passing; browser/runtime behavior is unchanged.
 
 ### 2026-10-17 P245 hosted QBO and BILL
 
-[P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) qualifies all [nine evidence items](docs/dev/receipts/p245/issue-290-acceptance.json), actual QBO/BILL account/company and exact native cleanup. The [review and history](docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective) retain one remediated Standards finding, no Spec defect and the renewed effort bound. Next: canonical PR and shared-guidance publication; no more login/provider work or production Agent Browser replacement.
+[P245](docs/dev/plans/0245-2026-10-16-hosted-auth-consumer.md) completes all [nine bounded outcomes](docs/dev/receipts/p245/issue-290-acceptance.json): actual QBO/BILL account/company, native safety and zero owned residue. PR297 is canonical; scoped shared-auth guidance is published. The [review/history](docs/dev/notes/0245-2026-10-16-hosted-auth-consumer.md#final-review-and-retrospective) retain 16 passed checks, one remediated Standards finding, no Spec defect and the renewed effort bound. No further #290 login/provider work is required; production Agent Browser is unchanged. Memory: queued, not persistence proof.
 
 ### 2026-10-14 P244 ordinary denial isolation
 
