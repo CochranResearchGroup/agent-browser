@@ -60,5 +60,61 @@ the earlier installed build, consistent with the direct native path above. Each
 exact synthetic task was explicitly closed. An HTTP preparation probe stopped at
 400 before qualification and is not accepted as native-operation proof.
 
-Updated candidate build and exact development/native workflow results are pending.
-The earlier sealed candidate remains retained and is not the repaired executable.
+## Updated candidate and installed qualification
+
+Clean source `7f9cff6e06facb75c3662bb92f15f33485797214` produced sealed
+candidate `candidate-abe6e80e41677b6f-7b46a43fffe577e2`, binary SHA256
+`7b46a43fffe577e209c99fa079ae801abbca052f8f746381a922f936b42a53fd`.
+An independent fresh process returned `reused_sealed`, and the exact executable
+reports version 0.28.0. The earlier candidate remains retained.
+
+Only default development was updated to generation `0.28.0-7b46a43fffe5`.
+The publisher asserted production unchanged. Development doctor passes, and the
+actual required native provider doctor passes. Native provider executable SHA256
+`8f73d0ded3042a43546f1043caaac5a5e38c54c051efc4ce2d1db07e4151f613`
+is unchanged from the previously accepted native viewer implementation.
+Provider configuration, ingress and account authentication were not changed.
+The mandatory development browser-launch smoke passes all three disposable
+open/read/close/residue cycles after the native fixture has closed.
+
+The actual development inventory's twelve released assignments are from older
+generations. It does not reproduce the same-generation issuance collision. The
+host/SQLite regression supplies that exact RED/GREEN; direct native preparation
+already worked on the earlier installed build with this actual inventory.
+
+Two task-owned synthetic pages share one browser. Actual native preparation
+passes. Authenticated local dashboard focus switches Alpha, Beta, then Alpha;
+independent CDP reads prove selected visibility and peer hiding. Native X11
+keyboard input reaches each selected page, and both values survive switching.
+Closing Alpha preserves Beta's value. Both exact tasks close successfully;
+captured PID/start identities and profile-specific process census show no residue.
+These are actual owner/provider/X11 observations, not fresh public authenticated
+viewer or WebSocket-frame acceptance. Synthetic screenshots and raw receipts are
+private until curated publication.
+
+## Blocking rail qualification finding
+
+Combined acceptance fails. The initial immediate presence check and three fresh
+owner observations all report `unknown` for the demonstrably live browser and
+both tabs. A separate selection/input run preserves that failure explicitly as
+`railPresenceLive: false`; its native success does not override the rail failure.
+
+A diagnostic run measures the actual provider inventory at 1024 ms and native
+windows at 1430 ms, with exact browser PID in both CDP process information and
+the provider window. Assignment observation takes 1.3 ms. The collector gives
+each provider HTTP request only 100 ms and stops admitting desktops after
+450 ms. The actual provider cannot meet those bounds, explaining omitted native
+results and unknown presence. This is a source-to-provider timing mismatch,
+not missing browser lifetime accounting and not an authentication failure.
+
+No production installation or overall acceptance is qualified. The one permitted
+qualification build is consumed. The next source repair should decouple bounded
+native observation from dashboard request latency, retain single-flight work and
+fair desktop scheduling, and attach the actual observation age to cached results.
+Expired, failed, ambiguous or not-yet-completed evidence must remain unknown;
+positive absence must still require a successful exact read. Do not merely raise
+the synchronous timeout or relabel unknown as live. Regression acceptance must
+include a provider taking longer than 100 ms, a fast dashboard response, eventual
+live convergence, stale-result expiry, failure invalidation and no observation
+effects. Rebuild and repeat combined development acceptance after that repair.
+
