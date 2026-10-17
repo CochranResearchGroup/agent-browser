@@ -24,3 +24,36 @@ Only a terminal receipt with `state: "success"`, every check successful, and a s
 Use direct executables and argument arrays, not a shell string with multiple checks. The runner cannot detect a failure hidden inside a caller-supplied shell or tool. Put dependent steps in their existing fail-fast runner rather than treating them as independent checks here. This command executes trusted caller-selected checks; it does not select sufficient validation or authorize their effects. Keep credentials out of plans/arguments and inspect logs before sharing. Nothing here activates CI or installs a runtime.
 
 The existing Rust compartment runner and presubmit verifier retain their own failure semantics. `pnpm test:repository-tooling` includes the local runner's actual CLI regressions. Validate this tooling with `pnpm test:validation-runner` and, after selector/wiring changes, `pnpm test:validation-selection`.
+
+## Selected planning completeness
+
+For a current packet or retained completed outcome, check exact catalog lanes:
+
+```bash
+python3 .codex/skills/repo-policy-selector/scripts/audit_planning_contract.py \
+  --repo-root . --lane P245 --lane P247 --json
+```
+
+This opt-in mode joins each selected catalog record to its on-disk plan header,
+accountable owner and product lane. PLANNED, OPEN, BLOCKED and COMPLETED plans
+must have actual Markdown links from ROADMAP, RUNBOOK and the plan index.
+Corresponding notes use the plan's serial filename prefix; each must be linked
+from the notes index and declare product lane, disposition and an owning plan
+link or exact work-item locator. COMPLETED outcomes need at least one evidence
+note. CLOSED and CANCELLED records retain identity checks without current
+execution-link requirements. Completion never grants execution authority.
+
+Unknown or duplicate selections in the catalog, missing artifacts and mismatched
+metadata fail with exit code 1. Repeated lane arguments are deduplicated. Scope
+and path overrides for legacy audit modes cannot be combined with this mode.
+The existing active-only audit and its baseline remain separate, as does the
+Git custody auditor. This check supports inline local Markdown links, not
+reference-style links or semantic equivalence of narrative evidence. It does
+not verify forge state or runtime health and is not automatically invoked by CI.
+
+Run its disposable omission and CLI fixtures with:
+
+```bash
+python3 -m unittest discover \
+  -s .codex/skills/repo-policy-selector/tests -p test_audit_planning_contract.py
+```

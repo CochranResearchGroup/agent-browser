@@ -22,6 +22,8 @@ integration by itself.
 
 ## PL-BUGFIX | Current Defect Evidence
 
+[P247 planning completeness evidence](0247-2026-10-17-planning-completeness.md) records selected-lane omission fixtures and validation for #299.
+
 - [Ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md)
 
 - [Ordinary browser availability repair](0243-2026-10-14-ordinary-browser-availability.md)

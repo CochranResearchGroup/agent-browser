@@ -1,6 +1,22 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P247
+    product_lane: PL-BUGFIX
+    objective: Check selected plan and evidence discoverability
+    plan: docs/dev/plans/0247-2026-10-17-planning-completeness.md
+    branch: fix/planning-completeness
+    target: main
+    accountable_owner: ecochran76
+    work_items: [CochranResearchGroup/agent-browser#299]
+    plan_state: OPEN
+    custody_state: ACTIVE_WORKTREE
+    dependencies: []
+    overlaps: [P246, P240]
+    reconciled_overlaps: ["P247 owns planning auditor, fixtures and its own documentation entries; preserve P246 runner and P240 resource surfaces and foreign checkouts"]
+    validation_status: Implementation pending
+    updated_at: 2026-10-17
+
   - id: P245
     product_lane: PL-AUTH
     objective: Complete hosted-helper login and company verification for QBO then BILL

@@ -197,3 +197,7 @@ greens and zero fixture-owned residue. Preserve the linker resource failure and
 four-job retry. Production remains on its earlier generation; original manual
 service-recovery build/presentation symptoms and real-account/native-provider
 acceptance are unverified. P237's separate dirty lifecycle/UI work is preserved.
+
+### 2026-10-17 P247 selected planning completeness
+
+[P247](docs/dev/plans/0247-2026-10-17-planning-completeness.md) adds bounded selected-lane documentation checks; validation is pending.
