@@ -1,6 +1,23 @@
 schema_version: 1
 work_item_tracking: required
 lanes:
+  - id: P246
+    product_lane: PL-PLATFORM
+    objective: Preserve independent local check results and fail false-green batches
+    plan: docs/dev/plans/0246-2026-10-16-local-check-results.md
+    plan_ref: refs/heads/platform/check-results-295
+    branch: platform/check-results-295
+    target: main
+    plan_state: COMPLETED
+    plan_version: 1
+    custody_state: ACTIVE_WORKTREE
+    work_items: [CochranResearchGroup/agent-browser#295]
+    dependencies: []
+    overlaps: [P237, P240, P245]
+    reconciled_overlaps: ["Reuses clean former P237 primary; preserves candidate custody and original branch; owns only local runner/test/package wiring and its developer guidance, not P245 login or P240 resource code"]
+    validation_status: Seven CLI regressions, repository tooling, validation-selection, corrected policy wiring, patch and documentation links pass; mixed real batch stays failed after later success
+    updated_at: 2026-10-16
+
   - id: P237
     product_lane: PL-PLATFORM
     objective: Replace operator dashboard with native browser-tab workspace and independent handoff lifetimes
@@ -10,7 +27,7 @@ lanes:
     target: main
     plan_state: COMPLETED
     plan_version: 2
-    custody_state: ACTIVE_WORKTREE
+    custody_state: INTEGRATED
     work_items: [CochranResearchGroup/agent-browser#261, CochranResearchGroup/agent-browser#260]
     dependencies: [P238, P240]
     overlaps: [P232, P238, P240, CochranResearchGroup/agent-browser#68, CochranResearchGroup/agent-browser#105]
@@ -20,7 +37,7 @@ lanes:
     native_preparation_writer: "P237 owns optional native control-token-file support in the existing HTTP transport, agent_env allowlist, doctor and development publisher; preserve foreign shared-auth helper work and native viewer/callback authentication. P237 is primary writer for the public retained-link process/observation recovery selector, authenticated top-level addressed-tab continuation, the exact private-resume response-budget predicate in dashboard_ingress and their HTTP regressions. P245 (#290) owns hosted-helper/login consumption; preserve its foreign checkout and its README/output/skill login sections, and reconcile those shared guidance regions against fresh main before integration"
     native_adoption_pull_request: https://github.com/CochranResearchGroup/agent-browser/pull/293
     native_adoption_validation: "Actual public native authentication, original Alpha/Beta/Alpha selection and input, process-loss and expiry recovery, independent logout, restart and compact UI pass; earlier failures retained"
-    installed_checkpoint: "Development 0.28.0-91e0a643b9e0 from 8bae9a0bf installed; stable ingress executable verified; both doctors and three launch cycles pass; final public native oracle and exact cleanup pass; production unchanged; clean primary retained for candidate/review custody"
+    installed_checkpoint: "Development 0.28.0-91e0a643b9e0 from 8bae9a0bf installed; stable ingress executable verified; both doctors and three launch cycles pass; final public native oracle and exact cleanup pass; production unchanged; candidate artifacts and original branch retained; clean primary reassigned to P246 for #295"
     updated_at: 2026-10-16
   - id: P244
     product_lane: PL-BUGFIX

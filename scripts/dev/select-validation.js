@@ -230,7 +230,7 @@ function selectRecommendations(files, base) {
   }
 
   if (files.some(isRepositoryToolingSurface)) {
-    add('pnpm test:repository-tooling', 'candidate build or worktree closeout tooling changed');
+    add('pnpm test:repository-tooling', 'candidate, worktree closeout or local validation tooling changed');
   }
 
   if (files.some(isServiceAttributionNoLaunchSurface)) {
@@ -484,6 +484,8 @@ function isServiceClientSurface(file) {
 
 function isRepositoryToolingSurface(file) {
   return (
+    file === 'scripts/dev/run-validation.js' ||
+    file === 'scripts/test-validation-runner.js' ||
     file === 'scripts/candidate-build.js' ||
     file.startsWith('scripts/lib/candidate-build-') ||
     file.startsWith('scripts/test-candidate-build-') ||

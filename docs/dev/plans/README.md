@@ -1,5 +1,7 @@
 # Active plan index
 
+[P246: reliable local check results](0246-2026-10-16-local-check-results.md), #295; completed bounded check-result collection, actual CLI regression and existing tooling/selector qualification.
+
 [P244: ordinary denial isolation](0244-2026-10-14-ordinary-denial-isolation.md),
 #288; completed bounded historical-metadata repair and isolated public qualification.
 PR289 owns integration; production publication remains separate.
