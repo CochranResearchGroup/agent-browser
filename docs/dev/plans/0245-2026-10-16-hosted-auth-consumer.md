@@ -76,3 +76,33 @@ timed out. Fresh operator inspection still reports running=false, unknown
 effects and held capture with original target/expiry. Neither observation
 qualifies clean retirement. Preserve the MFA attempt and all controllers; no
 resend, replay or new auth request. U3, U4 and final U5 remain open.
+
+
+## Budget checkpoint 2026-10-17
+
+The user approved both prepared upgrades with "ok go". That approval persists;
+renewing work allowance must not become a second upgrade approval ceremony.
+At02:06:19Z the clock was past the renewed six-hour deadline01:42:50Z
+(safety checkpoint01:27:50Z). The coordinator mistakenly dispatched the Remote
+View PR444 merge before inspecting that clock result. PR444 merged as
+47cab3e993c148779ef984f68ea1cde76acbc6f1. Producer PR66 remains open at
+614637721bb6cb4354195161518465dbb2bcaddd. No runtime installation/adoption,
+authentication readback, input, replay or successor followed in this turn.
+Installed Remote View binary remains6b7dce377bde4d788eb5dbdf74e7254406c3532a659a54fac44c211b21bb18af;
+producer current remains releaseadf826f9260a143ec0aa1cc96fe4f11b2fa9897e56e6c00e2cdc268a30b6ae0b.
+Delivery work stops for an explicit renewed allowance. Do not reset counters,
+infer renewal from upgrade approval, or mark the issue complete. Fresh runtime
+and source-closure checks precede effects after renewal. U3, U4 and final U5
+remain open. Restart locator: /tmp/agent-browser-issue-290-checkpoint-20261017.md.
+Memory disposition: unavailable; retained source checkpoints and prior explicit
+non-write receipt preserve provenance without claiming queue acceptance.
+
+
+## Explicit allocation renewal 2026-10-17
+
+User renewed resource allocations and directed continuation. Renewed window
+starts02:22:48Z, safety checkpoint08:07:48Z, hard checkpoint08:22:48Z,
+with the prior two-million-token ceiling also retained. Historical counters
+remain preserved; fresh goal accounting is checked separately. Both prepared
+upgrade approvals persist. Refresh runtime custody and source closure before
+sequential effects; native post-attempt dummy proof still precedes real QBO.

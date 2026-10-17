@@ -257,3 +257,69 @@ out and supplies no safety proof. No driver, credential retrieval, resend,
 protected input, capture release or new auth request followed. Remote View PR444
 and producer PR66 are concrete pending effect questions. Source checkpoints
 remain available for review; actual QBO/BILL acceptance is still open.
+
+
+## Budget checkpoint 2026-10-17
+
+The user approved both prepared upgrades with "ok go". That approval persists;
+renewing work allowance must not become a second upgrade approval ceremony.
+At02:06:19Z the clock was past the renewed six-hour deadline01:42:50Z
+(safety checkpoint01:27:50Z). The coordinator mistakenly dispatched the Remote
+View PR444 merge before inspecting that clock result. PR444 merged as
+47cab3e993c148779ef984f68ea1cde76acbc6f1. Producer PR66 remains open at
+614637721bb6cb4354195161518465dbb2bcaddd. No runtime installation/adoption,
+authentication readback, input, replay or successor followed in this turn.
+Installed Remote View binary remains6b7dce377bde4d788eb5dbdf74e7254406c3532a659a54fac44c211b21bb18af;
+producer current remains releaseadf826f9260a143ec0aa1cc96fe4f11b2fa9897e56e6c00e2cdc268a30b6ae0b.
+Delivery work stops for an explicit renewed allowance. Do not reset counters,
+infer renewal from upgrade approval, or mark the issue complete. Fresh runtime
+and source-closure checks precede effects after renewal. U3, U4 and final U5
+remain open. Restart locator: /tmp/agent-browser-issue-290-checkpoint-20261017.md.
+Memory disposition: unavailable; retained source checkpoints and prior explicit
+non-write receipt preserve provenance without claiming queue acceptance.
+
+
+## Explicit allocation renewal 2026-10-17
+
+User renewed resource allocations and directed continuation. Renewed window
+starts02:22:48Z, safety checkpoint08:07:48Z, hard checkpoint08:22:48Z,
+with the prior two-million-token ceiling also retained. Historical counters
+remain preserved; fresh goal accounting is checked separately. Both prepared
+upgrade approvals persist. Refresh runtime custody and source closure before
+sequential effects; native post-attempt dummy proof still precedes real QBO.
+
+
+## Approved runtime upgrades 2026-10-17
+
+Following explicit allowance renewal, Remote View merged PR444 canonical47cab3e
+was proved input-equivalent to sealed source41cf66d. Bundle payload hashes
+verified. The default config contains unapplied foreign consumer changes, so
+installation explicitly used the unchanged installed effective config with
+hasha005e5b7 and installation5146a1ba. Fresh preview had zero conflicts and
+interruptions; the default-config conflict was retained without applying it.
+Fresh baseline had14ready desktops/56native process identities/14monitors.
+Supported install then adoption operation65dfff9fa1246-269abdd2377bb36bfa33fd5e22e7aece
+completed with no pending reconciliation, binaryc8f69f03. All slot generations,
+desired states and native process records stayed unchanged; their process births
+verify. The broad application snapshot included browser subprocesses and shell
+argument false positives, so its count123 is not a browser-root census. It
+verified120browser process births; one prior browser subprocess was absent,
+with no cause inferred. Do not claim every application survived from that
+snapshot. Registered MCP capability discovery succeeds, and slot1 generation30
+real capture succeeds (1440by900,598169bytes). Doctor verifies all executable
+adoptions but is not an overall pass: already-stopped slot8 native/audio probes
+fail and public/authenticated viewer checks remain unknown. No native slot
+start/stop or public ingress change was performed. Private receipts are under
+/tmp/p245-rv-adoption-20261017/.
+
+Producer PR66 merged asd399f5a4181447160eeaac3693170d39c596eb74. Fresh
+canonical closure verifies203packaged source inputs including file modes,
+lockfile and builder against candidatedac7d1f3/source4643858. New distinct
+installer /tmp/p245-install-post-attempt-20261017.mjs preserves currentadf826f9
+preimage, original active environment, all request projections, bot bindings and
+actual audit counters. Supported service stop/symlink/start completes with
+installed_preserving_real_configuration, correct health identity and original
+held request724e55df unchanged. Private preimage/receipt names include
+post-attempt-install-20261017; no consumed installer was rerun. Independent
+post-attempt native fixture is now running, not yet accepted. Neither upgrade
+qualifies actual QBO or BILL.
