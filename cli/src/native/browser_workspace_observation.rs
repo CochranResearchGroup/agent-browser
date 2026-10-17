@@ -96,28 +96,32 @@ pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
         .collect::<BTreeMap<_, _>>()
         .into_values()
         .collect::<Vec<_>>();
-    let native = tokio::task::spawn_blocking(move || {
-        if desktops.is_empty() {
-            return BTreeMap::new();
-        }
-        super::super::browser_session_remote_view::observe_workspace_desktops(&desktops)
-    });
+    let native_started = std::time::Instant::now();
+    let mut native =
+        super::super::browser_session_remote_view::observe_workspace_desktops(&desktops);
     static CURSOR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
     let offset = CURSOR.fetch_add(4, std::sync::atomic::Ordering::Relaxed);
-    let collect = collect_browsers(browsers, offset);
-    let (observed, native) = tokio::join!(collect, native);
+    let observed = collect_browsers(browsers, offset).await;
     // Move past the completed batch, rather than advancing only four slots
     // when a healthy large inventory fits many more probes into the budget.
     CURSOR.fetch_add(
         observed.len().saturating_sub(4),
         std::sync::atomic::Ordering::Relaxed,
     );
-    let native = native.unwrap_or_default();
+    native.age_ms = native
+        .age_ms
+        .saturating_add(native_started.elapsed().as_millis() as u64);
+    if native.age_ms >= 30_000 {
+        native.windows.clear();
+    }
     if let Some(workspace) = status.get_mut("workspace") {
-        workspace["observedAtMs"] = json!(std::time::SystemTime::now()
+        let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|time| time.as_millis() as u64)
-            .unwrap_or_default());
+            .unwrap_or_default();
+        workspace["observedAtMs"] =
+            json!(native.observed_at_ms.map_or(now_ms, |at| at.min(now_ms)));
+        workspace["observationAgeMs"] = json!(native.age_ms);
     }
     for browser in state.browsers.values() {
         let sleeping = state.idle_closed_browsers.contains_key(&browser.id);
@@ -125,7 +129,7 @@ pub(super) async fn enrich(state: BrowserSessionState, status: &mut Value) {
         let presence = if sleeping {
             "absent"
         } else {
-            browser_presence(browser, observation, &native)
+            browser_presence(browser, observation, &native.windows)
         };
         publish(&state, browser, observation, presence, status);
     }

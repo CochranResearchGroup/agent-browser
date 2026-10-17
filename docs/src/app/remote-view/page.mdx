@@ -623,6 +623,12 @@ cooldown and `minimum_reserved = 1`; resumed use resets eligibility.
 
 On Linux, opening an explicit profile first reconciles its current browser from physical profile, process and CDP evidence. Missing or stale inventory is repaired during acquisition. Each task gets its own tab, and closing a task preserves peer tabs and browsers whose lifecycle it does not own. Retained local-browser sessions with a free profile can resume on a native Remote View desktop while keeping their logical session identity. Desktop identity comes from current native window evidence.
 
+Native window observation refreshes in one background worker, so dashboard
+requests do not wait for provider I/O. An initial read can remain unverified until
+the worker completes. Cached results carry their original sample identity and
+elapsed age; failed, changed-generation or expired evidence cannot establish
+presence. Observation does not renew tab lifetime or grant viewing authority.
+
 With Remote View configured, an ordinary `open` request admits a managed session
 automatically. Socket and queued ordinary browser commands use the same managed
 session owner. Queued commands preserve explicit profile selectors and apply

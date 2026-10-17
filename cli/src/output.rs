@@ -6480,6 +6480,9 @@ The live rail polls three seconds after each completed read, with a two-second
 summary cache. Slow diagnostics do not delay it. Observation freshness expires
 independently after 30 seconds using elapsed time, even if the next read stalls.
 Search matches displayed tab labels and URLs, excluding embedded document payloads.
+Native window reads refresh in one background worker. Initial reads can remain
+unverified until it completes; cached samples retain their elapsed age and failed
+refreshes do not establish presence. These observations never renew tab lifetime.
 
 
 

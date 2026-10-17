@@ -23,7 +23,7 @@ const {buildWorkspaceViewportFixture} = require('./lib/workspace-viewport-browse
       statusReads++;
       if(held){notifyHeld();await new Promise(resolve=>releases.push(resolve));}
       return res.end(JSON.stringify({success:true,data:{service_state:{browsers:{},sessions:{},tabs:{},jobs:{}},browserRuntime:{workspace:{
-        schemaVersion:'agent-browser.managed-workspace.v1',source:'managed-owner',observedAtMs:token,
+        schemaVersion:'agent-browser.managed-workspace.v1',source:'managed-owner',observedAtMs:token,observationAgeMs:27000,
         browsers:{b:{id:'b',profileId:'p',pid:42,desktop:null,activeSessionIds:['s'],state:'reported',presence:{state:'live'}}},
         sessions:{s:{id:'s',name:'task',profileId:'p',browserId:'b'}},
         tabs:{t:{id:'t',targetId:'target',browserId:'b',sessionId:'s',presence:{state:'live'}}}
@@ -53,6 +53,7 @@ const {buildWorkspaceViewportFixture} = require('./lib/workspace-viewport-browse
     await page.waitForFunction(()=>document.querySelector('[role="status"]')?.textContent==='Loading');
     await heldAccepted;
     assert.equal(statusReads,2,'three-second rail poll must not reuse the old ten-second document cache');
+    assert.equal(await page.getByLabel('Presence current').innerText(),'false','a 27-second-old native sample must expire after three seconds, not receive another 30-second lease');
     await page.clock.runFor(28000);
     await page.waitForFunction(()=>document.querySelector('[aria-label="Live tab count"]')?.textContent==='0');
     assert.equal(await page.getByLabel('Presence current').innerText(),'false','a held request must not keep a stale live observation forever');

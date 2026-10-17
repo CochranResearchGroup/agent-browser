@@ -35,6 +35,7 @@
               "const": "managed-owner"
             },
             "observedAtMs": { "type": "integer", "minimum": 0 },
+            "observationAgeMs": { "type": "integer", "minimum": 0 },
             "handoffs": {
               "type": "object",
               "description": "Retained logical links include ended targets. Display-only fields exclude issued views, provider routes, private resume capsules and native correlations.",

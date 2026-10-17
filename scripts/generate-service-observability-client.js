@@ -1076,6 +1076,7 @@ export interface ServiceManagedWorkspace {
   source: 'managed-owner';
   /** Time of bounded live observations; absent or stale means unverified. */
   observedAtMs?: number;
+  observationAgeMs?: number;
   /** Absent on older owners; empty means no retained links. */
   handoffs?: Record<string, ServiceManagedHandoff>;
   browsers: Record<string, {

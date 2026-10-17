@@ -56,7 +56,10 @@ The rail requires fresh matching native-window, browser-process and tab evidence
 for managed desktop tasks. Empty desktops and unverified/ended tabs stay out of
 live navigation; retained handoffs remain available. The rail polls every three
 seconds after completion; diagnostics do not block it and stale evidence expires
-independently after 30 seconds. Search uses displayed labels and navigable URLs,
+independently after 30 seconds. Native window reads refresh in one background
+worker; initial reads can remain unverified until completion. Cached results retain
+their elapsed age, and a failed refresh cannot establish presence or renew tab
+lifetime. Search uses displayed labels and navigable URLs,
 not embedded document payloads. Refresh retains the requested identity. Diagnostics at `/service` keeps Service inspection,
 Selection, Activity, Chat, Console, Network, Storage and Extensions optional.
 `?view=service:<name>` and the selected workspace/browser/session/tab/profile/job

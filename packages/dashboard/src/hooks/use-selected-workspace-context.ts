@@ -128,8 +128,14 @@ export function useSelectedWorkspaceContext(
         const json = (await statusResponse.json()) as ApiResponse<ServiceStatusData>;
         if (!json.success) throw new Error(json.error || "Service status unavailable");
         const token = json.data?.browserRuntime?.workspace?.observedAtMs;
-        if (typeof token !== "number" || !Number.isFinite(token) || token < 0) observation.current.token = null;
-        else if (token !== observation.current.token) observation.current = { token, firstSeen: performance.now() };
+        const age = json.data?.browserRuntime?.workspace?.observationAgeMs ?? 0;
+        if (typeof token !== "number" || !Number.isFinite(token) || token < 0
+          || typeof age !== "number" || !Number.isFinite(age) || age < 0) observation.current.token = null;
+        else {
+          const firstSeen = performance.now() - age;
+          if (token !== observation.current.token) observation.current = { token, firstSeen };
+          else observation.current.firstSeen = Math.min(observation.current.firstSeen, firstSeen);
+        }
         setServiceStatus(json.data ?? null);
         setError(null);
         setRefreshedAt(Date.now());
