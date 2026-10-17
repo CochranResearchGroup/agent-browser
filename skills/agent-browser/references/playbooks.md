@@ -117,7 +117,9 @@ identifier/password states and configured private MFA callbacks; check visible,
 masked, account-bound controls; use native Remote View process/window/visual
 fences; and prove empty-field and exact-value readback privately. A recognized
 popup may receive one guarded Escape before a fresh hit-tested submit. Unknown
-Escape or submission acknowledgement permits no replay. Qualify every real MFA,
+Escape or submission acknowledgement permits no replay. A current exact
+identifier match needs no clear/retype under unchanged native/control guards;
+unknown prior delivery cannot become equality success. Qualify every real MFA,
 passkey and password-manager path separately; no resend, enrollment or password
 saving is implied.
 
@@ -281,3 +283,22 @@ success and emptiness, check one malformed/blocked variant, propose a reviewed
 guide version and run the public routine in the original task. The executable
 example is scripts/siteguide-retrieval-fixture.js. This delivery runs no live
 social-site request and migrates no downstream repository.
+
+
+## Qualified existing-profile boundaries
+
+Plan 0245 and its curated actual QBO/BILL receipts record installed-helper web
+acceptance with independent intended account/company verification. QBO company
+evidence is exact display-name matching; it does not prove a numeric realm ID or
+OAuth/API readiness. BILL qualifies the current protected profile UI after an
+observed same-task Settings continuation. Login origin, authenticated application
+origin and stored source-record origin may differ; qualify each from its owner
+and current UI rather than broadening an allow-list to bypass a hold.
+
+Starter guides remain templates. Derive unique visible account/company selectors
+from current protected UI and compare the exact requested nonsecret references.
+Keep the original authentication checkpoint and source mapping; a separate
+verification-only guide/routine can qualify the already authenticated session
+without starting another helper operation. Native privacy still requires the
+trusted receiving owner's current proof. A configured source, account name,
+company text alone, previous success or a saved session is not that proof.

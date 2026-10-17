@@ -14,9 +14,9 @@ lanes:
     dependencies: [ecochran76/grok-bots#51]
     overlaps: [P242, P237]
     reconciled_overlaps: ["P242/P237 source integrated; P245 owns login/helper consumption and site verification; preserve foreign checkouts"]
-    validation_status: Producer version2 inspected; distinct-task red/green next; installed adapter and real workflows unqualified
-    limitations: ["No real acceptance claim", "Installed native connection unavailable and external receiver unconfigured"]
-    updated_at: 2026-10-16
+    validation_status: Installed producer/native independent dummy and actual QBO then BILL account/company qualified; final bounded Standards and Spec review pending
+    limitations: ["QBO numeric realm ID and API readiness not live-proven", "BILL MFA not exercised", "Final review and canonical publication pending"]
+    updated_at: 2026-10-17
   - id: P237
     product_lane: PL-PLATFORM
     objective: Replace operator dashboard with native browser-tab workspace and independent handoff lifetimes

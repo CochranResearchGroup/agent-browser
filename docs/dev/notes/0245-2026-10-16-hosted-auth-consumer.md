@@ -493,3 +493,48 @@ Website-driven protected clearing, independent native safety, same-request
 release, restart/no-replay and canary checks pass. Original configuration, bots,
 retained requests and peers are preserved; owned process residue is zero. Actual
 BILL remains held pending its own independent current-clean-login proof.
+
+
+## Actual BILL accepted, final issue review pending
+
+The first identifier-only request releases through exact current-clean native
+proof with original target/expiry, consumed checkpoint and unknown effects
+preserved. Full-frame Continue OCR first fails; a separate immutable candidate
+uses the exact current native button region and strict OCR label matching.
+That proof passes with zero source/input and no grant renewal. Qualified source
+commit ed3342f27 and installed independent prefilled dummy precede successor2.
+
+Successor2 uses the same generic LastPass owner store/runner and shared hosted
+receiver/native port. Exact current identifier equality avoids clear/retype;
+one actual password fill and one submit reach the protected BILL home page.
+Its unmodelled origin correctly stays held. One observed nonsecret Settings
+link continues the same full target to the exact stored live-record origin.
+Settled protected profile UI has unique exact account email and company header
+matches plus a visible profile marker. No accounting, password-save, enrollment,
+MFA, resend or additional source request occurs during that continuation.
+
+The site policy is qualified dynamically without restarting the host or losing
+its in-process credential safety cache. Supported same-request approver
+readback checks exact principal/company and credential-aware full-window native
+safety. All checks pass: DOM clear, no protected controls visible, actual password
+absent from native OCR, no six-digit factor and exact current native owner.
+The request becomes authenticated/capture ready/effect verified, with original
+expiry/caller/target and audit preserved. Total actual BILL history: source2,
+completed2, identifier intents2, password fill1, MFA0. The successful request
+adds source1/identifier intent1/password1; the retired predecessor stays intact.
+
+A separate private verified SiteGuide uses the actual protected profile fields.
+Public correct-account/company verification completes, wrong account/company
+references refuse, and the structured login routine completes without helper
+operations, source reads, input or rebinding the original authentication
+checkpoint. Curated proof: docs/dev/receipts/p245/actual-bill-installed-helper.json.
+BILL MFA is not exercised. QBO remains accepted at company display-name level,
+with no live numeric realm-ID claim. Final U5 Standards/Spec review and canonical
+publication remain pending; no formal release or production Agent Browser
+replacement is inferred.
+
+Producer documentation PR69 is merged as646b68110eaa62cf6dc220bb5f6c25dab02fc067,
+closing Plan0012 at its installed contract boundary. A mistyped expected head
+hash first made the merge guard reject without effect; the verified published
+head then merged. Source/install bytes are unchanged. The actual consumer source
+and native receipts above remain the acceptance authority.

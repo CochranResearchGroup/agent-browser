@@ -17,6 +17,19 @@ agent, or a combination of both can choose the next routine.
 **Automation skill**: Guidance for choosing routines and adapting to unexpected
 website states using the same SiteGuide and routine contracts as software.
 
+**Hosted caller identity**: The ordinary attested work/thread requesting an
+existing hosted authentication helper operation. It is distinct from the
+receiving browser task and requires no Bots roster enrollment.
+
+**Receiving browser binding**: The frozen provider, task, profile, browser and
+tab tuple where a hosted authentication request may act. The same request
+preserves that binding across interruption and independent readback.
+
+**Current protected-field emptiness**: Trusted current evidence that protected
+controls are empty, combined with independently verified clean-login/native
+safety. It may release capture after a failed attempt, but never erases input
+history, proves authentication, renews expiry or authorizes replay.
+
 **Host memory reserve**: Available memory kept for other work and recovery when
 admitting a new browser process. Reusing an existing browser does not allocate a
 second process. Pressure handling preserves current work.

@@ -20,6 +20,26 @@ Renewed U3 diagnosis uses the existing public continuation and native owner seam
 
 ## Current State
 
+Both actual QBO and BILL existing-profile journeys are qualified. QBO verifies
+its exact intended account and company display name; numeric realm ID is not
+live-observed. BILL completes one password fill/submit in successor2, then
+continues on the same full target through its observed Settings link to the
+stored live-record origin. Exact protected account/company UI and credential-aware
+native safety authenticate that same request with capture ready and effect
+verified. Original expiry/history remain preserved. Public routines complete,
+wrong account/company references refuse, and verification retrieves no source or
+private input. See actual-qbo-installed-helper.json and
+actual-bill-installed-helper.json. No BILL MFA is requested or dispatched.
+
+The installed prefilled-identifier dummy passes with fewer native operations,
+restart/no-replay and zero owned residue. Its two regressions prove exact current
+identifier preservation and refusal after unknown prior native delivery. All
+nine acceptance evidence items are now assembled. U5 final bounded independent
+Standards and Spec axes, final validation and canonical publication remain open.
+Producer docs PR69 closes Plan0012 at646b681; Remote View docs PR446 closes its
+Plan0127 at its own installed/adoption boundary. Their wider doctor/suite limits
+are retained. Earlier checkpoints below preserve diagnostic history.
+
 U1, U2 and U2N retain their qualified boundaries. After explicit upgrade
 approval and allocation renewal, Remote View PR444/canonical47cab3e is installed
 and adopted as sealed binaryc8f69f03/source41cf66d. All native process records
@@ -70,7 +90,7 @@ corrected process-census limitations. Delivery remains bounded by the explicit
 | U2 installed helper/dummy | U1 validated | validated | coordinator, host adapter and fixture; private operator config outside repo | normal installed hosted service, independent credential/principal, native privacy, restart/ack and zero residue/peers |
 | U2N native staged dummy | shared receiving sequence and native port source checks passed | validated | coordinator, existing installed-host fixture and native receiving module | installed native identifier/password journey, independent company, native safety, canary scans, restart/no-replay and zero owned residue; final receipt native-staged-dummy.json |
 | U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | validated | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
-| U4 BILL | U3 validated | running | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
+| U4 BILL | U3 validated | validated | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
 | U5 docs/review | docs after U1/U2N; final review after U3/U4 | running | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 
 Note0245 records red/green commands, failed receipts, exact tip/result SHA and runtime handles. Ready means blockers validated on this branch, not tracker closure or worker assertion. Required missing/false/unsafe evidence and real-provider limitations remain incomplete. No new ticket graph or second backlog; these units deliver the existing bounded issue.
