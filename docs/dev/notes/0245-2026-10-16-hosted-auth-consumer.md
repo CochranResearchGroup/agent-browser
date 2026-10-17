@@ -381,3 +381,61 @@ New controller/config and activation receipts use successor4 names, preserve
 exact original source refs, actual caller identity and full logical target, and
 rebind only independently verified physical ownership. The one-request driver
 is running; actual QBO principal/company and BILL remain incomplete.
+
+
+## Actual QBO acceptance after same-request account choice
+
+Successor4 reached MFA fill and submit with no operation-lock refusal, then
+settled uncertain/held because the site presented an unmodelled account-choice
+state. Current metadata proves no populated password/factor. One unique choice
+matching the established account was selected on the same task/request, with
+zero new source/factor reads or protected input. It reached the QBO application.
+The public profile menu then exposes an exact protected account h2 and the
+company heading matches the established company metadata. Nonsecret profile
+menu opening and supported same-task tab selection are separately recorded.
+No second auth request, code resend or factor replay followed.
+
+Private readback wiring initially pinned predecessor724e55df in its current
+request lookup. New current-auth-readback candidates correct exact current
+request selection while retaining caller/scope/full receiving checks. A probe
+first failed on native account recognition despite protected DOM proof. Full
+frame and unscaled small-line OCR misses are preserved; strict exact account
+recognition is retained through a native region capture and deterministic3x
+OCR preprocessing, not threshold relaxation or generative image changes. Raw
+region/full-frame hashes remain bound. A sealed candidate write was refused;
+new v2/v3 paths preserve earlier bytes. Unsupported generic bringtofront was
+refused; supported browser_tab select addresses the retained tab. An additional
+pure probe after a shell setup failure also refused native safety, without
+source/private effects. No failed probe is counted as acceptance.
+
+Qualified v3 probe verifies protected principal, intended company, focused/hit
+account UI, exact native owner/full window, strict native account OCR and factor
+absence with the unchanged5/5/5/0/2/1audit. Actual password input remains zero,
+so readback needs no expired in-process credential cache or source retrieval.
+The host prefers already-qualified protected application account UI before
+navigating a separate probe tab. New distinct activation preserves all bot and
+request projections and audit counters. Supported designated-approver readback
+then authenticates original successor4 with capture ready/effect verified and
+original expiry/caller/target preserved. Readback adds zero source/private input.
+Private receipts: current-auth-readback-v3-20261017/{probe-result,activation,
+reconciliation}.json and current-auth-native-safety-20261017.json.
+
+Independent private SiteGuideqbo-verified-session-v3 uses actual protected
+account and company selectors. The original realm-bound auth checkpoint and
+placeholder guide are retained; a separate verification-only routine uses the
+actual company display reference after matching established owner metadata.
+The first public verification passed an overbroad argument object and was
+refused; exact verification arguments pass. Public correct account/company
+completes, wrong account/company are refused, and the ordinary composed login
+routine completes without calling the helper or writing a new checkpoint.
+This verifies the intended company display name; numeric realm ID is not
+observed in live page metadata and is not claimed. Curated technical proof is
+docs/dev/receipts/p245/actual-qbo-installed-helper.json; private final receipt
+is qbo-successor-4-final-acceptance.json. U4 actual BILL and final whole-issue
+acceptance/review remain open.
+
+One early terminal classifier emitted nonsecret account labels because its
+generated-script email regex was escaped incorrectly. That private log is
+retained mode0600. Subsequent classifiers redact before output and test the
+redactor against a synthetic email/code string. No password or MFA value was
+printed. This is a diagnostic-output defect, not a successful privacy guard.

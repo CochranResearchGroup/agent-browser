@@ -39,15 +39,21 @@ expiry, target, unknown effect and recorded MFA attempt remain preserved.
 Audit4/4/4/0/1/0 is unchanged through that retirement. All four predecessor
 controllers remain consumed and retained.
 
-One separately bounded successor4 is selected after these qualified repairs,
-with its own controller/maxAttempts1 and original logical receiving tuple.
-Nonsecret account-chooser selection initially failed an overly strict empty
-identifier check; independent readback proves the prefilled expected account
-and clear protected controls. No second click was sent. The new configuration
-preserves source references and current native owner. Actual QBO principal/
-company, BILL and final whole-issue review remain incomplete. New source reads
-and private effects belong only to that separately recorded request, never a
-replay of a released or unresolved predecessor.
+Bounded successor4 now completes actual QBO qualification in
+actual-qbo-installed-helper.json. The same request is authenticated, capture
+ready and effect verified after source-read/MFA work and one nonsecret exact
+account-choice continuation. Readback preserves original expiry/caller/target
+and retrieves no source or factor. Exact protected account UI and intended
+company header independently match through a current private SiteGuide; public
+wrong-account/wrong-company checks refuse and a verification-only public login
+routine completes with zero new helper operations. Original realm-bound auth
+checkpoint stays unchanged. Company evidence is exact known display-name
+matching; numeric realm ID is not independently observed and is not claimed.
+Native full-frame and regional proof pass, including exact account OCR using
+unchanged raw native pixels with deterministic3x single-line preprocessing,
+zero actual password dispatch and no visible six-digit factor. Prior failed
+native proofs are retained. U3 is validated at these stated boundaries; U4 BILL
+metadata discovery has started, with no BILL credential read or input yet.
 
 Long-lived-host repairb31ca1dc9 remains source-only. Supported continuation now
 succeeds on the retained original task with the same logical tuple. Current
@@ -63,8 +69,8 @@ corrected process-census limitations. Delivery remains bounded by the explicit
 | U1 version2 client | Producer51 source inspected | validated | coordinator, client/login/helper transport/public tests | red/green distinct identity, wrong binding/scope, source no-effect and no-replay |
 | U2 installed helper/dummy | U1 validated | validated | coordinator, host adapter and fixture; private operator config outside repo | normal installed hosted service, independent credential/principal, native privacy, restart/ack and zero residue/peers |
 | U2N native staged dummy | shared receiving sequence and native port source checks passed | validated | coordinator, existing installed-host fixture and native receiving module | installed native identifier/password journey, independent company, native safety, canary scans, restart/no-replay and zero owned residue; final receipt native-staged-dummy.json |
-| U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | running | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
-| U4 BILL | U3 validated | pending | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
+| U3 QBO | U2 validated; U2N before protected input; exact owner metadata and grants | validated | coordinator, QBO SiteGuide/routine/receiving mapping | existing profile, identifier/password, authorized MFA/native human return, intended company |
+| U4 BILL | U3 validated | running | coordinator, BILL SiteGuide consuming same adapter | existing account/company and actual provider result, no credential duplication |
 | U5 docs/review | docs after U1/U2N; final review after U3/U4 | running | coordinator, help/skill/docs, frozen integration diff | selected checks, one Standards/Spec review and one bounded remediation, full acceptance audit |
 
 Note0245 records red/green commands, failed receipts, exact tip/result SHA and runtime handles. Ready means blockers validated on this branch, not tracker closure or worker assertion. Required missing/false/unsafe evidence and real-provider limitations remain incomplete. No new ticket graph or second backlog; these units deliver the existing bounded issue.
