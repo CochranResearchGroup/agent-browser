@@ -1,7 +1,7 @@
 # Native handoff current-assignment repair
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: [issue 301](https://github.com/CochranResearchGroup/agent-browser/issues/301)
 Related lanes: P237, P240
 
@@ -117,3 +117,11 @@ the synchronous timeout or relabel unknown as live. Regression acceptance must
 include a provider taking longer than 100 ms, a fast dashboard response, eventual
 live convergence, stale-result expiry, failure invalidation and no observation
 effects. Rebuild and repeat combined development acceptance after that repair.
+
+## Subsequent rail repair
+
+The [bounded diagnosis](2026-10-17-rail-native-observation-diagnosis.md) qualifies
+source `71aee8e26` and ordinary development generation `1d085fb275be` against the original
+live failure and full native selection/input workflow. This resolves the unknown
+presence blocker recorded above. The earlier sealed candidate `7b46` predates that
+repair; production-shaped rebuilding and production promotion remain unperformed.

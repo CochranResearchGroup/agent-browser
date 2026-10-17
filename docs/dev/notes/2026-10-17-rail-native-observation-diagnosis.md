@@ -1,7 +1,7 @@
 # Rail native observation diagnosis
 
 Product lane: PL-BUGFIX
-Disposition: active-input
+Disposition: accepted-evidence
 Owning plan or work item: [issue 301](https://github.com/CochranResearchGroup/agent-browser/issues/301), UX301 / PR302
 Related lanes: P237, P240
 
@@ -69,11 +69,53 @@ A second real-browser regression fails when a 27-second-old sample is granted a
 new thirty-second confidence window. The additive observationAgeMs field now
 carries elapsed sample age; the hook subtracts that age from its monotonic
 confidence window without trusting client wall time. Repeated same-token reads
-cannot extend the window. The browser regression passes with client year2040,
+cannot extend the window. The browser regression passes with client year 2040,
 stalled reads, held diagnostics and exact process cleanup. Final extended Rust,
-client/schema/UI and quality checks remain pending.
+client/schema/UI and quality checks pass.
 
 The source checkpoint may precede final validation, explicitly preserving that
 pending state. One ordinary CI-profile development candidate may be built for
 synthetic replay if the remaining cumulative allowance permits; this is not a
 second production-shaped qualification build or production promotion.
+
+## Final source and installed replay
+
+Clean source `71aee8e26` passes ten focused workspace Rust tests, format and strict
+workspace Clippy. The ten-check browser/client/schema/UI/guidance/policy/build
+batch passes. Both earlier REDs remain retained: delayed native HTTP blocks for
+104.9 ms, and the real-browser age test incorrectly renews old confidence before
+the respective repairs. No temporary production instrumentation was introduced;
+private probes remain clearly separated debug artifacts under the private tmp
+qualification directory.
+
+The ordinary CI-profile build completes in 5 minutes 40 seconds. Executable SHA256
+`1d085fb275be41b8c983e95215fb40a3b6ef4cbe73b72e15bb5e3bde89ce5365`
+is installed only as development generation `0.28.0-1d085fb275be`. The build ran
+from clean source `71aee8e26` with no intervening source edit; checksum and version
+were independently read before publication. Unlike a sealed production-shaped
+candidate, this generation does not embed a source/candidate manifest. Its source
+association is established by the clean build invocation and retained receipts,
+not inferred from generation metadata. Earlier sealed candidates remain retained.
+
+The same eventual-convergence live loop fails on old development with unknown
+presence on every read, then passes on the updated executable: unknown/live/live
+for both browser and tab. Response durations are 3234, 2911 and 2896 ms, and published
+sample ages are 3, 2914 and 2902 ms. Exact task cleanup leaves no owned processes. Initial
+pending is accepted; repeated failure to converge remains a failure. The original
+unminimized two-task native workflow also passes railPresenceLive, exact native
+preparation, Alpha/Beta/Alpha selection, native input and independent CDP value/
+visibility readback. Both tasks close with zero captured or profile process residue.
+
+Development doctor, the actual required native provider doctor and all three
+post-publication browser launch/close/residue cycles pass. A fresh owner read shows
+zero browsers, sessions and tabs. The publisher asserted production unchanged;
+provider configuration and executable are unchanged. There is no new public
+account authentication or native viewer-frame acceptance claim.
+
+The unknown-presence blocker is repaired and qualified in development. Whole
+summary requests still take approximately 2.9 to 3.2 seconds; this receipt does not
+claim that the wider Service projection is now fast. Native observation no longer
+holds those requests, and sample confidence is age-aware. A production-shaped
+build of this final source, production promotion and further summary latency
+reduction remain separate unperformed work. The previous `7b46` sealed candidate
+predates this repair and cannot qualify it.
