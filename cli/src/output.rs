@@ -6426,6 +6426,8 @@ Authenticated navigation registers a continuation with the native viewer. Redire
 and readiness preserve the hold. Only a delivered native display frame acknowledged
 by its authenticated connection, joined to the exact current target, establishes use.
 Private owner polling consumes qualified use; prefetch/background requests retain the hold.
+Failed native observations preserve the hold. Eligible TTL cleanup still commits before
+the observation error is reported; read current owner state after a failed reaper reply.
 Native remote_view_open prepares the human hold automatically. Configure its maximum
 with pendingHumanRetentionMs or AGENT_BROWSER_PENDING_HUMAN_RETENTION_MS (default 0).
 Invalid or overflowing pending deadlines are rejected before browser effects.

@@ -4834,6 +4834,59 @@ fn pool_demand_regrows_after_exact_native_release_without_local_release_receipt(
 }
 
 #[test]
+fn reaper_observation_failure_does_not_starve_unrelated_expiry() {
+    let fixture = Fixture::new();
+    let provider = Rc::new(RefCell::new(Provider {
+        window_pid: Some(43),
+        ..Provider::default()
+    }));
+    let calls = Rc::new(Cell::new(0));
+    let mut consumer = host(&fixture, provider.clone(), calls);
+    let held = consumer
+        .execute_managed_command(
+            "Alice",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/held",
+                "profileId":"profile-a", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let id = held["browserSession"]["handoffId"].as_str().unwrap();
+    let held_tab = held["browserSession"]["tabId"].as_str().unwrap();
+    let prepared = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":id,
+        "handoffOperation":"prepare_human", "pendingHumanRetentionMs":0, "activityAtMs":100
+    }));
+    assert_eq!(prepared["success"], true, "{prepared}");
+    let peer = consumer
+        .execute_managed_command(
+            "Bob",
+            &serde_json::json!({
+                "action":"navigate", "url":"https://synthetic.example/expired",
+                "profileId":"profile-b", "activityAtMs":100
+            }),
+        )
+        .unwrap()
+        .unwrap();
+    let configured = consumer.handle_command(&serde_json::json!({
+        "action":"service_remote_view_handoff_resolve", "handoffId":peer["browserSession"]["handoffId"],
+        "handoffOperation":"set_tab_lifetime", "tabInactivityMs":30, "activityAtMs":100
+    }));
+    assert_eq!(configured["success"], true, "{configured}");
+    provider.borrow_mut().lose_native_registration_reply = true;
+    let error = consumer
+        .reap(130)
+        .expect_err("provider failure must remain observable");
+    assert_eq!(error, "remote_view_native_registration_unavailable");
+    assert!(consumer.state().pending_human_tabs.contains_key(held_tab));
+    let durable = fixture.store(false).load_session_state().unwrap();
+    assert!(!durable
+        .sessions
+        .contains_key(peer["browserSession"]["sessionId"].as_str().unwrap()));
+}
+
+#[test]
 fn native_use_owner_reconciles_registration_restart_generation_and_publication_conflict() {
     let fixture = Fixture::new();
     let provider = Rc::new(RefCell::new(Provider {

@@ -1201,20 +1201,29 @@ impl<P: BrowserSessionPersistence, E: BrowserSessionEffects> BrowserSessionHost<
             })
             .map(|link| link.id.clone())
             .collect::<Vec<_>>();
+        let mut observation_error = None;
         if !candidates.is_empty() {
             let id = &candidates[self.native_use_cursor % candidates.len()];
             self.native_use_cursor = self.native_use_cursor.wrapping_add(1);
             let id = id.clone();
             match self.prepare_native_handoff_observation(&id, now_ms) {
                 Ok(_) => {
-                    self.consume_native_handoff_use(&id, now_ms)?;
+                    if let Err(reason) = self.consume_native_handoff_use(&id, now_ms) {
+                        observation_error = Some(reason);
+                    }
                 }
                 Err(reason) if reason == "remote_view_native_observation_unsupported" => {}
-                Err(reason) => return Err(reason),
+                Err(reason) => observation_error = Some(reason),
             }
         }
         let result = self.manager()?.reap(now_ms)?;
         self.commit_state()?;
+        // A provider observation failure must remain visible, but cannot
+        // starve unrelated eligible expiry. Existing manager/publication fences
+        // still reject conflicting state before any cleanup is published.
+        if let Some(reason) = observation_error {
+            return Err(reason);
+        }
         Ok(result)
     }
 

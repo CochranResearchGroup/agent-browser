@@ -88,3 +88,59 @@ handshake repair those harness defects. The passing batch does not erase them.
 No production binary, provider configuration, private task, handoff authority or
 TTL cleanup policy was changed. The earlier native handoff issuance assignment
 history defect remains a separate repair.
+
+
+## Owner accounting follow-up
+
+The user subsequently authorized diagnosis of internal TTL/reaper accounting.
+This follow-up remains PL-BUGFIX under issue 301 and PR302. It owns only
+handoff-observation error isolation in the session-host adapter and its actual
+host/SQLite regression; P240 resource, quota and archive policies remain unchanged.
+The effort ceiling is 45 minutes with two repair/review cycles, including validation.
+
+An expired heartbeat is not sufficient evidence of incorrect retained accounting:
+a valid handoff deliberately protects logical session identity. Physical presence,
+logical retention, tab inactivity, pending-human protection and the rail's
+30-second observation confidence window remain distinct. The original private
+task's exact retention/cleanup cause has not been established by this fixture.
+
+A separate defect is reproduced: the host refreshed one native handoff before
+calling its TTL manager, and a provider error returned before any eligible cleanup.
+The minimized regression uses two ordinary synthetic tasks, a pending-human hold
+on one, explicit 30 ms tab inactivity on the peer, a lost native registration reply
+and an exact SQLite read after reap at 130 ms. On unchanged source, the expired
+peer remains in durable working state. With the repair, it is removed, the hold
+remains and the original registration error is still returned. Existing manager
+activity/readback and publication fences remain in force; a cleanup failure still
+prevents a successful cleanup claim. No TTL values or retention eligibility change.
+
+The initial fixture had an unsupported session name, corrected before product
+attribution. A broader assignment-read failure also prevented safe cleanup under
+the existing readback guard; that failure was narrowed to registration only,
+rather than weakening the guard. These failed attempts remain in private logs.
+The isolated baseline and candidate logs are `/tmp/rail-reaper-red-isolated.log`
+and `/tmp/rail-reaper-green-isolated.log`. The isolated candidate passes.
+
+Source quality checks and neighboring retention/restart checks are recorded in
+the follow-up validation disposition below. No production install, account login,
+private-task mutation, viewer grant or native provider mutation was performed.
+
+### Follow-up validation disposition
+
+Focused validation passes 45 Rust tests: the new actual-host/SQLite regression,
+native registration/restart/generation/publication reconciliation, finite
+pending-human expiry, retained-link recreation, two startup reaper tests and
+39 help/output tests. Final Cargo format and strict workspace Clippy pass.
+Remote View guidance checks, policy wiring and docs-site build pass. Patch hygiene
+passes. The previous seventeen-check rail/browser/client batch remains applicable:
+this follow-up does not change its collector, dashboard, schema or client code.
+No new live/provider acceptance or production latency evidence is claimed.
+
+Primary review found no additional Standards or Spec defect in the bounded
+adapter change. It preserves observation error reporting, current cleanup guards,
+CAS checks and pending-human retention. Observation errors can now be returned
+after committed cleanup, which is explicitly documented in all user-facing guidance.
+The broad installer fixture recommendations caused by touching shared CLI help
+are excluded: no installer, provisioning, payload, asset or route code changed.
+Shared installed guidance remains unchanged with the installed binary; source
+skill parity is included in the pending candidate rather than published separately.
