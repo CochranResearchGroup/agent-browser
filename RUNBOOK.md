@@ -2,6 +2,14 @@
 
 Updated: 2026-10-14
 
+## Local validation result collection
+
+[The local validation guide](docs/agents/local-validation.md) documents
+`pnpm validation:run`: independent command results and logs survive later
+successes, and any failed or incomplete check prevents a passing batch.
+P246/#295 completes this bounded tooling repair with seven CLI regressions and
+existing tooling/selector gates passing; browser/runtime behavior is unchanged.
+
 ## Current execution
 
 ### 2026-10-14 P244 ordinary denial isolation

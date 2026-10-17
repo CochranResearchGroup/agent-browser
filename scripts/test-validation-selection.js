@@ -171,3 +171,11 @@ expectSelection('toolchain change fails safe to broad presubmit', ['rust-toolcha
 });
 
 console.log('validation selection behavioral fixtures passed');
+
+expectSelection('local validation runner uses repository tooling lane', [
+  'scripts/dev/run-validation.js',
+  'scripts/test-validation-runner.js',
+], {
+  tier: 'repository-tooling',
+  jobs: { repositoryTooling: true, rust: false, dashboard: false, workstation: false },
+});
