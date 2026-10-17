@@ -8,12 +8,15 @@ use std::time::Duration;
 
 const RESPONSE_LIMIT: usize = 4 * 1024 * 1024;
 
-/// Explicit local origin only. No proxy, redirects, credentials or replay.
+/// Explicit local origin only. No proxy, redirects, URL credentials or replay.
+/// Optional control authentication reads the private file named by
+/// AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE; the bearer is never public metadata.
 /// Synchronous callers may already own a Tokio runtime; each request performs
 /// its async I/O on a joined worker, avoiding nested-runtime panics.
 pub(crate) struct RemoteViewApplicationHttp {
     endpoint: reqwest::Url,
     timeout: Duration,
+    authorization: Option<reqwest::header::HeaderValue>,
 }
 impl RemoteViewApplicationHttp {
     pub(crate) fn new(origin: &str, timeout: Duration) -> Result<Self, Error> {
@@ -37,7 +40,11 @@ impl RemoteViewApplicationHttp {
             return Err(Error::Rejected);
         }
         endpoint.set_path("/v1/consumer");
-        Ok(Self { endpoint, timeout })
+        Ok(Self {
+            endpoint,
+            timeout,
+            authorization: control_authorization()?,
+        })
     }
 }
 impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
@@ -50,6 +57,7 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
             .to_owned();
         let endpoint = self.endpoint.clone();
         let timeout = self.timeout;
+        let authorization = self.authorization.clone();
         std::thread::Builder::new()
             .name("remote-view-http".into())
             .spawn(move || {
@@ -67,14 +75,15 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
                         .connect_timeout(timeout)
                         .build()
                         .map_err(|_| Error::Unavailable)?;
-                    let mut response = client
+                    let mut request = client
                         .post(endpoint)
                         .header(reqwest::header::CONTENT_TYPE, "application/json")
                         .header(reqwest::header::CONNECTION, "close")
-                        .body(body)
-                        .send()
-                        .await
-                        .map_err(|_| Error::OutcomeUnknown)?;
+                        .body(body);
+                    if let Some(authorization) = authorization {
+                        request = request.header(reqwest::header::AUTHORIZATION, authorization);
+                    }
+                    let mut response = request.send().await.map_err(|_| Error::OutcomeUnknown)?;
                     let status = response.status();
                     if response
                         .content_length()
@@ -140,6 +149,50 @@ impl RemoteViewApplicationTransport for RemoteViewApplicationHttp {
     }
 }
 
+/// Read once at transport construction; invalid explicit credentials reject
+/// before network effects. A token grants control API admission, not viewer use.
+fn control_authorization() -> Result<Option<reqwest::header::HeaderValue>, Error> {
+    let Some(path) = std::env::var_os("AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE") else {
+        return Ok(None);
+    };
+    let path = std::path::PathBuf::from(path);
+    if !path.is_absolute() {
+        return Err(Error::Rejected);
+    }
+    let mut options = std::fs::OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+    }
+    let file = options.open(path).map_err(|_| Error::Rejected)?;
+    let metadata = file.metadata().map_err(|_| Error::Rejected)?;
+    if !metadata.is_file() || metadata.len() > 257 {
+        return Err(Error::Rejected);
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        if metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o077 != 0 {
+            return Err(Error::Rejected);
+        }
+    }
+    use std::io::Read;
+    let mut raw = String::new();
+    file.take(258)
+        .read_to_string(&mut raw)
+        .map_err(|_| Error::Rejected)?;
+    let token = raw.strip_suffix('\n').unwrap_or(&raw);
+    if !(16..=256).contains(&token.len()) || !token.bytes().all(|b| b.is_ascii_graphic()) {
+        return Err(Error::Rejected);
+    }
+    let mut value = reqwest::header::HeaderValue::from_str(&format!("Bearer {token}"))
+        .map_err(|_| Error::Rejected)?;
+    value.set_sensitive(true);
+    Ok(Some(value))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -148,6 +201,99 @@ mod tests {
         io::{Read, Write},
         net::{TcpListener, TcpStream},
     };
+
+    #[test]
+    fn configured_native_control_token_authenticates_direct_inventory() {
+        use crate::test_utils::EnvGuard;
+        let path =
+            std::env::temp_dir().join(format!("native-control-token-{}", uuid::Uuid::new_v4()));
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(&path).unwrap();
+        file.write_all(b"test-native-control-token-1234567890\n")
+            .unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            path.to_str().unwrap(),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let origin = format!("http://{}", listener.local_addr().unwrap());
+        let server = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let request = read_request(&mut socket);
+            let authorized = request.lines().any(|line| {
+                line.eq_ignore_ascii_case(
+                    "authorization: Bearer test-native-control-token-1234567890",
+                )
+            });
+            let (status, body) = if authorized {
+                ("200 OK", "{\"admitted\":true}")
+            } else {
+                ("401 Unauthorized", "{\"error\":\"control_token_required\"}")
+            };
+            write!(socket, "HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+        });
+        let mut client = RemoteViewApplicationHttp::new(&origin, Duration::from_secs(5)).unwrap();
+        let result = client.request(&envelope());
+        server.join().unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert!(
+            result.is_ok(),
+            "configured private token must reach the native control service without a connector"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn configured_native_control_token_rejects_unsafe_files_before_network() {
+        use crate::test_utils::EnvGuard;
+        use std::os::unix::fs::{symlink, PermissionsExt};
+        let path =
+            std::env::temp_dir().join(format!("native-control-rejection-{}", uuid::Uuid::new_v4()));
+        std::fs::write(&path, "test-private-native-control-token").unwrap();
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let guard = EnvGuard::new(&["AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE"]);
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            path.to_str().unwrap(),
+        );
+        assert!(
+            RemoteViewApplicationHttp::new("http://127.0.0.1:1", Duration::from_secs(1)).is_err()
+        );
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let link = path.with_extension("link");
+        symlink(&path, &link).unwrap();
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            link.to_str().unwrap(),
+        );
+        assert!(
+            RemoteViewApplicationHttp::new("http://127.0.0.1:1", Duration::from_secs(1)).is_err()
+        );
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            path.to_str().unwrap(),
+        );
+        std::fs::write(&path, "token-with-newline\nin-the-middle-of-secret").unwrap();
+        assert!(
+            RemoteViewApplicationHttp::new("http://127.0.0.1:1", Duration::from_secs(1)).is_err()
+        );
+        std::fs::remove_file(link).unwrap();
+        std::fs::remove_file(path).unwrap();
+        guard.set(
+            "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
+            "relative-control.token",
+        );
+        assert!(
+            RemoteViewApplicationHttp::new("http://127.0.0.1:1", Duration::from_secs(1)).is_err()
+        );
+    }
 
     #[test]
     fn idle_retirement_denials_are_scoped_to_prepare_and_exact_pre_effect_errors() {

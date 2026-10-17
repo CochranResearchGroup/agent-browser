@@ -6117,6 +6117,9 @@ resizable rail groups browsers and tabs; selecting a task opens its owned deskto
 through native Remote View authentication. The tab menu provides Properties,
 Copy URL, Share and scoped Close Tab. Handoffs opens retained links and their
 independent policies on demand.
+Tab descriptions use live page titles, then supplied task labels. Opaque data
+URLs use readable document labels; Properties and Copy URL keep the original URL.
+Inventory reads do not select tabs.
 Diagnostics at /service retains Service inspection, Selection, Activity, Chat,
 Console, Network, Storage, Extensions and runtime health. /activity opens its
 Activity tool. Viewing controls return to the same browser workspace.
@@ -6449,6 +6452,7 @@ close preserves peer tabs; closing the final owned tab also closes its browser.
 If close cannot be confirmed, refresh inventory and inspect permission before
 trying again.
 
+Selection and Share run in order on each native desktop.
 Share prepares the exact existing task through the public handoff helper and
 shows its opaque native link in Handoffs. It preserves the selected peer and
 does not navigate the task. Use the small Handoffs rail control to reopen the
@@ -6493,6 +6497,8 @@ Link expiry does not close browsers or disconnect native viewers.
 Upgrades preserve legacy link expiry, including perpetual links.
 Reconnect using the same handoff URL. Opening it restores an idle-cleaned
 retained browser before redirecting to its native desktop, without viewer grants.
+Opening the same handoff uses native authentication before selecting its addressed tab.
+The continuation waits for owner preparation; a delivered request is not replayed.
 Ordinary automation also recovers retained idle browsers without opening the link first.
 On Linux, exact-profile opens reconcile current process and CDP evidence before
 placement. Stale inventory does not require manual attach or revision repair.
@@ -8023,6 +8029,7 @@ Environment:
   AGENT_BROWSER_LAUNCH_PRESSURE_WAIT_MS Memory-pressure wait budget, 0 through 60000 (default: 5000)
   AGENT_BROWSER_RUNTIME_MEMORY_HIGH_BYTES Supervisor soft memory threshold (default: 25% RAM; no hard cap)
   AGENT_BROWSER_TERMINAL_HISTORY_LIMIT Recent unreferenced records per kind in active memory (default: 1000)
+  AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE Absolute private owner-only regular token file for native control authentication (16–256 visible ASCII bytes).
   AGENT_BROWSER_REMOTE_VIEW_ORIGIN Loopback HTTP origin for managed-session Remote View
                                  Configured remote-view open uses managed placement; explicit runtime-profile/profile binds a persistent directory.
                                  Conflicting profile bindings fail. Open reports converging until operator presentation is proved.

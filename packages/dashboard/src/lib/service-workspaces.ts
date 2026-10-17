@@ -1,3 +1,4 @@
+import { tabDescription } from "./tab-description.ts";
 import type { SessionInfo, TabInfo } from "../types.ts";
 import type { ServiceViewStream } from "./service-view-streams.ts";
 import {
@@ -2259,7 +2260,7 @@ function meaningfulPrimaryTabLabel(tab?: WorkspaceNodePrimaryTab | null): string
   const blankUrl = !url || url === "about:blank" || url === "chrome://newtab/";
   const blankTitle = !normalizedTitle || normalizedTitle === "about:blank" || normalizedTitle === "new tab";
   if (!blankTitle) return title;
-  if (!blankUrl) return tab?.url ?? null;
+  if (!blankUrl) return tabDescription({ url: tab?.url });
   return null;
 }
 

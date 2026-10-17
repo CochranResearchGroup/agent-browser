@@ -5,8 +5,9 @@ import { MoreHorizontal } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from "@/components/ui/context-menu";
+import { tabDescription } from "@/lib/tab-description";
 import type { WorkspaceNode, WorkspaceServiceTab } from "@/lib/service-workspaces";
-import { postServiceRequest, requireServiceRequestSuccess, type ServiceTabCloseData } from "@agent-browser/client/service-request";
+import { postServiceRequest, requireServiceRequestSuccess, ServiceOperationError, ServiceRequestHttpError, type ServiceTabCloseData } from "@agent-browser/client/service-request";
 
 const supplied = (value: unknown): string => typeof value === "string" && value.trim() ? value : "Unknown";
 const createdTime = (value: unknown): string => {
@@ -29,7 +30,7 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
   const [copyFeedback, setCopyFeedback] = useState<"copied" | "failed" | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const returnFocus = useRef<HTMLElement | null>(null);
-  const label = tab.title || tab.taskLabel || tab.url || "Untitled tab";
+  const label = tabDescription(tab);
   const metadata = tab.taskMetadata;
   const canClose = tab.managedTask === true && Boolean(tab.browserId && tab.targetId && (tab.ownerSessionId || tab.sessionId));
   const identity = (value: WorkspaceServiceTab) => JSON.stringify([value.id, value.browserId, value.targetId, value.ownerSessionId || value.sessionId]);
@@ -53,8 +54,11 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
       }
       setCloseTarget(null);
       await onClosed?.();
-    } catch {
-      setCloseError("Close could not be confirmed. Refresh browsers and check close permission before trying again.");
+    } catch (error) {
+      const failure = error instanceof ServiceOperationError || error instanceof ServiceRequestHttpError ? error.failure : null;
+      setCloseError(failure?.code === "operator_tab_close_profile_policy_denied" && failure.effectState === "no_effect"
+        ? "This profile does not allow you to close this tab. No tab was closed. Ask the profile owner to review close permission."
+        : "Close could not be confirmed. Refresh browsers and check close permission before trying again.");
     } finally { closePending.current = false; setCloseBusy(false); }
   };
   const copyUrl = async () => {
@@ -126,7 +130,7 @@ export function NativeTabActions({ node, tab, children, onClosed, onShare, share
         <DialogHeader><DialogTitle>Close tab?</DialogTitle>
           <DialogDescription>Other tabs stay open. An owned browser closes when its last live tab ends.</DialogDescription>
         </DialogHeader>
-        <p>{closeTarget?.title || closeTarget?.taskLabel || closeTarget?.url || "Untitled tab"}</p>
+        <p>{closeTarget ? tabDescription(closeTarget) : "Untitled tab"}</p>
         {!closeStillCurrent && closeTarget && <p role="alert">This tab changed. Close this dialog and refresh before trying again.</p>}
         {closeError && <p role="alert">{closeError}</p>}
         {closeBusy && <p role="status">Closing tab…</p>}

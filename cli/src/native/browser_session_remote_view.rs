@@ -38,6 +38,7 @@ pub(super) struct RemoteViewRuntimeContext {
 pub(crate) fn remote_view_settings_present() -> bool {
     [
         "AGENT_BROWSER_REMOTE_VIEW_ORIGIN",
+        "AGENT_BROWSER_REMOTE_VIEW_CONTROL_TOKEN_FILE",
         "AGENT_BROWSER_REMOTE_VIEW_POOL",
         "AGENT_BROWSER_REMOTE_VIEW_APPLICATION",
         "AGENT_BROWSER_REMOTE_VIEW_DESKTOP_COUNT",
@@ -577,6 +578,18 @@ fn read_handoff_desktop_presentation(
         .ok_or("remote_view_tab_handoff_missing")?
         .check_link_at(current_view_time_ms())?;
     let target = resolve_remote_view_tab_handoff(&state, id)?;
+    // A persisted logical target can outlive its browser process. Public
+    // navigation must reach native authentication before owner recovery;
+    // a surviving desktop alone does not make the browser task available.
+    // This absence check grants no custody over a present or reused PID.
+    if include_native_context
+        && matches!(
+            crate::process_identity::observe_process(target.browser.pid),
+            crate::process_identity::ProcessObservation::Missing
+        )
+    {
+        return Err("remote_view_tab_handoff_browser_unavailable".into());
+    }
     let desktop = target
         .browser
         .desktop

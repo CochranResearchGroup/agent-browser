@@ -678,7 +678,8 @@ async fn fixed_input_real_status_producer_and_fallback_data_seams_match() {
     let response = project(ServiceState::default(), false).await;
     let projected = serde_json::to_value(response.clone()).unwrap();
     let control_envelope =
-        crate::native::control_plane::service_status_result_envelope("fixed-status", Ok(response));
+        crate::native::control_plane::service_status_result_envelope("fixed-status", Ok(response))
+            .await;
     // The real producer adds one read-only runtime observation. Freeze that
     // observation once so both transports carry the same complete snapshot.
     let canonical = control_envelope["data"].clone();
